@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -69,6 +70,9 @@ var openaiAllowedHeaders = map[string]bool{
 	"session_id":            true,
 	"x-codex-turn-state":    true,
 	"x-codex-turn-metadata": true,
+	"x-openai-subagent":     true,
+	"traceparent":           true,
+	"tracestate":            true,
 }
 
 // OpenAI passthrough allowed headers whitelist.
@@ -84,7 +88,12 @@ var openaiPassthroughAllowedHeaders = map[string]bool{
 	"session_id":            true,
 	"x-codex-turn-state":    true,
 	"x-codex-turn-metadata": true,
+	"x-openai-subagent":     true,
+	"traceparent":           true,
+	"tracestate":            true,
 }
+
+var openAITraceForwardHeaders = []string{"traceparent", "tracestate", "x-openai-subagent"}
 
 // codex_cli_only 拒绝时记录的请求头白名单（仅用于诊断日志，不参与上游透传）
 var codexCLIOnlyDebugHeaderWhitelist = []string{
@@ -100,6 +109,136 @@ var codexCLIOnlyDebugHeaderWhitelist = []string{
 	"X-Client-Request-ID",
 	"X-Forwarded-For",
 	"X-Real-IP",
+}
+
+type openAIProviderProfile struct {
+	BaseURL        string
+	QueryParams    map[string]string
+	DefaultHeaders http.Header
+	Capabilities   openAIProviderCapabilities
+}
+
+type openAIProviderCapabilities struct {
+	SupportsWS                   bool
+	SupportsCompression          bool
+	SupportsPromptCacheRetention bool
+}
+
+type openAIFinalizedRequest struct {
+	BodyBytes          []byte
+	CanonicalBodyHash  string
+	Headers            http.Header
+	RetryPayload       map[string]any
+	ProviderProfile    *openAIProviderProfile
+	PromptCacheKeyHash string
+	EndpointType       string
+	FailoverCount      int
+
+	ProviderSupportsWS                   bool
+	ProviderSupportsCompression          bool
+	ProviderSupportsPromptCacheRetention bool
+}
+
+func cloneOpenAIHTTPHeader(src http.Header) http.Header {
+	if src == nil {
+		return nil
+	}
+	dst := make(http.Header, len(src))
+	for k, vals := range src {
+		copied := make([]string, len(vals))
+		copy(copied, vals)
+		dst[k] = copied
+	}
+	return dst
+}
+
+func cloneOpenAIMap(src map[string]any) map[string]any {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string]any, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
+}
+
+func hashOpenAIBody(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+	sum := sha256.Sum256(body)
+	return hex.EncodeToString(sum[:])
+}
+
+func hashOpenAIText(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(trimmed))
+	return hex.EncodeToString(sum[:])
+}
+
+func isOpenAITerminalResponseEventType(eventType string) bool {
+	switch strings.TrimSpace(eventType) {
+	case "response.completed", "response.done", "response.incomplete", "response.failed", "response.cancelled", "response.canceled":
+		return true
+	default:
+		return false
+	}
+}
+
+func isOpenAIUsageTerminalResponseEventType(eventType string) bool {
+	switch strings.TrimSpace(eventType) {
+	case "response.completed", "response.done", "response.incomplete", "response.failed":
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *OpenAIGatewayService) resolveOpenAIProviderProfile(account *Account, c *gin.Context) (*openAIProviderProfile, error) {
+	baseURL, err := s.resolveOpenAIResponsesUpstreamURL(account)
+	if err != nil {
+		return nil, err
+	}
+	capabilities := openAIProviderCapabilities{}
+	if account != nil {
+		capabilities.SupportsWS = account.IsOpenAIResponsesWebSocketV2Enabled()
+		capabilities.SupportsPromptCacheRetention = account.Type == AccountTypeOAuth
+	}
+	if c != nil {
+		if decisionRaw, ok := c.Get("openai_ws_transport_decision"); ok {
+			if decision, _ := decisionRaw.(string); strings.TrimSpace(decision) == string(OpenAIUpstreamTransportResponsesWebsocketV2) {
+				capabilities.SupportsWS = true
+			}
+		}
+	}
+	return &openAIProviderProfile{
+		BaseURL:        strings.TrimSpace(baseURL),
+		QueryParams:    map[string]string{},
+		DefaultHeaders: make(http.Header),
+		Capabilities:   capabilities,
+	}, nil
+}
+
+func (s *OpenAIGatewayService) newOpenAIFinalizedRequest(body []byte, headers http.Header, retryPayload map[string]any, profile *openAIProviderProfile, promptCacheKey string) *openAIFinalizedRequest {
+	finalizedBody := append([]byte(nil), body...)
+	finalized := &openAIFinalizedRequest{
+		BodyBytes:          finalizedBody,
+		CanonicalBodyHash:  hashOpenAIBody(finalizedBody),
+		Headers:            cloneOpenAIHTTPHeader(headers),
+		RetryPayload:       cloneOpenAIMap(retryPayload),
+		ProviderProfile:    profile,
+		PromptCacheKeyHash: hashOpenAIText(promptCacheKey),
+	}
+	if profile != nil {
+		finalized.ProviderSupportsWS = profile.Capabilities.SupportsWS
+		finalized.ProviderSupportsCompression = profile.Capabilities.SupportsCompression
+		finalized.ProviderSupportsPromptCacheRetention = profile.Capabilities.SupportsPromptCacheRetention
+	}
+	return finalized
 }
 
 // OpenAICodexUsageSnapshot represents Codex API usage limits from response headers
@@ -214,6 +353,9 @@ type OpenAIForwardResult struct {
 	RequestID string
 	Usage     OpenAIUsage
 	Model     string // 原始模型（用于响应和日志显示）
+	// FinalizedRequest captures normalized upstream request artifacts shared by
+	// HTTP/WS/failover paths.
+	FinalizedRequest *openAIFinalizedRequest
 	// BillingModel is the model used for cost calculation.
 	// When non-empty, CalculateCost uses this instead of Model.
 	// This is set by the Anthropic Messages conversion path where
@@ -235,6 +377,46 @@ type OpenAIForwardResult struct {
 	FirstTokenMs    *int
 	ImageCount      int
 	ImageSize       string
+}
+
+
+type OpenAIFinalizedRequestSnapshot struct {
+	CanonicalBodyHash                 string `json:"canonical_body_hash,omitempty"`
+	PromptCacheKeyHash                string `json:"prompt_cache_key_hash,omitempty"`
+	EndpointType                      string `json:"endpoint_type,omitempty"`
+	FailoverCount                     int    `json:"failover_count,omitempty"`
+	ProviderBaseURL                   string `json:"provider_base_url,omitempty"`
+	ProviderSupportsWS                bool   `json:"provider_supports_ws,omitempty"`
+	ProviderSupportsCompression       bool   `json:"provider_supports_compression,omitempty"`
+	ProviderSupportsPromptCacheRetention bool `json:"provider_supports_prompt_cache_retention,omitempty"`
+}
+
+func (r *OpenAIForwardResult) FinalizedRequestSnapshot() *OpenAIFinalizedRequestSnapshot {
+	if r == nil || r.FinalizedRequest == nil {
+		return nil
+	}
+	finalized := r.FinalizedRequest
+	snapshot := &OpenAIFinalizedRequestSnapshot{
+		CanonicalBodyHash:                   strings.TrimSpace(finalized.CanonicalBodyHash),
+		PromptCacheKeyHash:                  strings.TrimSpace(finalized.PromptCacheKeyHash),
+		EndpointType:                        strings.TrimSpace(finalized.EndpointType),
+		FailoverCount:                       finalized.FailoverCount,
+		ProviderSupportsWS:                  finalized.ProviderSupportsWS,
+		ProviderSupportsCompression:         finalized.ProviderSupportsCompression,
+		ProviderSupportsPromptCacheRetention: finalized.ProviderSupportsPromptCacheRetention,
+	}
+	if finalized.ProviderProfile != nil {
+		snapshot.ProviderBaseURL = strings.TrimSpace(finalized.ProviderProfile.BaseURL)
+	}
+	return snapshot
+}
+
+func (r *OpenAIForwardResult) FinalizedRequestSnapshotJSON() ([]byte, error) {
+	snapshot := r.FinalizedRequestSnapshot()
+	if snapshot == nil {
+		return nil, nil
+	}
+	return json.Marshal(snapshot)
 }
 
 type OpenAIWSRetryMetricsSnapshot struct {
@@ -1082,6 +1264,29 @@ func isOpenAIInstructionsRequiredError(upstreamStatusCode int, upstreamMsg strin
 	return false
 }
 
+type openAIUpstreamAPIErrorSemantic struct {
+	ErrorType            string
+	ErrorCode            string
+	ErrorMessage         string
+	TransientProcessing  bool
+	InstructionsRequired bool
+}
+
+func classifyOpenAIUpstreamAPIErrorSemantic(upstreamStatusCode int, upstreamMsg string, upstreamBody []byte) openAIUpstreamAPIErrorSemantic {
+	semantic := openAIUpstreamAPIErrorSemantic{}
+	if len(upstreamBody) > 0 {
+		semantic.ErrorType = strings.ToLower(strings.TrimSpace(gjson.GetBytes(upstreamBody, "error.type").String()))
+		semantic.ErrorCode = strings.ToLower(strings.TrimSpace(gjson.GetBytes(upstreamBody, "error.code").String()))
+		semantic.ErrorMessage = strings.TrimSpace(gjson.GetBytes(upstreamBody, "error.message").String())
+	}
+	if semantic.ErrorMessage == "" {
+		semantic.ErrorMessage = strings.TrimSpace(upstreamMsg)
+	}
+	semantic.InstructionsRequired = isOpenAIInstructionsRequiredError(upstreamStatusCode, upstreamMsg, upstreamBody)
+	semantic.TransientProcessing = isOpenAITransientProcessingError(upstreamStatusCode, upstreamMsg, upstreamBody)
+	return semantic
+}
+
 func isOpenAITransientProcessingError(upstreamStatusCode int, upstreamMsg string, upstreamBody []byte) bool {
 	if upstreamStatusCode != http.StatusBadRequest {
 		return false
@@ -1106,6 +1311,11 @@ func isOpenAITransientProcessingError(upstreamStatusCode int, upstreamMsg string
 	if len(upstreamBody) == 0 {
 		return false
 	}
+	errCode := strings.ToLower(strings.TrimSpace(gjson.GetBytes(upstreamBody, "error.code").String()))
+	errType := strings.ToLower(strings.TrimSpace(gjson.GetBytes(upstreamBody, "error.type").String()))
+	if errCode == "request_retryable" || errCode == "processing_error" || errType == "server_error" {
+		return true
+	}
 	if match(gjson.GetBytes(upstreamBody, "error.message").String()) {
 		return true
 	}
@@ -1115,32 +1325,11 @@ func isOpenAITransientProcessingError(upstreamStatusCode int, upstreamMsg string
 // ExtractSessionID extracts the raw session ID from headers or body without hashing.
 // Used by ForwardAsAnthropic to pass as prompt_cache_key for upstream cache.
 func (s *OpenAIGatewayService) ExtractSessionID(c *gin.Context, body []byte) string {
-	if c == nil {
-		return ""
-	}
-	sessionID := strings.TrimSpace(c.GetHeader("session_id"))
-	if sessionID == "" {
-		sessionID = strings.TrimSpace(c.GetHeader("conversation_id"))
-	}
-	if sessionID == "" && len(body) > 0 {
-		sessionID = strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
-	}
-	return sessionID
+	return resolveOpenAIPromptCacheKey(c, body)
 }
 
 func explicitOpenAISessionID(c *gin.Context, body []byte) string {
-	if c == nil {
-		return ""
-	}
-
-	sessionID := strings.TrimSpace(c.GetHeader("session_id"))
-	if sessionID == "" {
-		sessionID = strings.TrimSpace(c.GetHeader("conversation_id"))
-	}
-	if sessionID == "" && len(body) > 0 {
-		sessionID = strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
-	}
-	return sessionID
+	return resolveOpenAIPromptCacheKey(c, body)
 }
 
 // GenerateExplicitSessionHash generates a sticky-session hash only from explicit
@@ -1922,11 +2111,41 @@ func (s *OpenAIGatewayService) schedulingConfig() config.GatewaySchedulingConfig
 	}
 }
 
+func resolveOpenAIExperimentToken(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	token := strings.TrimSpace(c.GetHeader("x-openai-experiment-token"))
+	if token == "" {
+		return ""
+	}
+	if strings.HasPrefix(strings.ToLower(token), "bearer ") {
+		token = strings.TrimSpace(token[7:])
+	}
+	return token
+}
+
 // GetAccessToken gets the access token for an OpenAI account
 func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Account) (string, string, error) {
+	return s.GetAccessTokenWithPriority(ctx, nil, account)
+}
+
+// GetAccessTokenWithPriority resolves auth with explicit precedence:
+// static key > experiment token > login token.
+func (s *OpenAIGatewayService) GetAccessTokenWithPriority(ctx context.Context, c *gin.Context, account *Account) (string, string, error) {
+	if account == nil {
+		return "", "", errors.New("account is nil")
+	}
+
+	if staticKey := strings.TrimSpace(account.GetOpenAIApiKey()); staticKey != "" {
+		return staticKey, "apikey", nil
+	}
+	if experimentToken := resolveOpenAIExperimentToken(c); experimentToken != "" {
+		return experimentToken, "experiment", nil
+	}
+
 	switch account.Type {
 	case AccountTypeOAuth:
-		// 使用 TokenProvider 获取缓存的 token
 		if s.openAITokenProvider != nil {
 			accessToken, err := s.openAITokenProvider.GetAccessToken(ctx, account)
 			if err != nil {
@@ -1934,18 +2153,13 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 			}
 			return accessToken, "oauth", nil
 		}
-		// 降级：TokenProvider 未配置时直接从账号读取
 		accessToken := account.GetOpenAIAccessToken()
 		if accessToken == "" {
 			return "", "", errors.New("access_token not found in credentials")
 		}
 		return accessToken, "oauth", nil
 	case AccountTypeAPIKey:
-		apiKey := account.GetOpenAIApiKey()
-		if apiKey == "" {
-			return "", "", errors.New("api_key not found in credentials")
-		}
-		return apiKey, "apikey", nil
+		return "", "", errors.New("api_key not found in credentials")
 	default:
 		return "", "", fmt.Errorf("unsupported account type: %s", account.Type)
 	}
@@ -1964,7 +2178,8 @@ func (s *OpenAIGatewayService) shouldFailoverOpenAIUpstreamResponse(statusCode i
 	if s.shouldFailoverUpstreamError(statusCode) {
 		return true
 	}
-	return isOpenAITransientProcessingError(statusCode, upstreamMsg, upstreamBody)
+	semantic := classifyOpenAIUpstreamAPIErrorSemantic(statusCode, upstreamMsg, upstreamBody)
+	return semantic.TransientProcessing
 }
 
 func (s *OpenAIGatewayService) handleFailoverSideEffects(ctx context.Context, resp *http.Response, account *Account) {
@@ -2045,9 +2260,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		reqStream = v
 	}
 	if promptCacheKey == "" {
-		if v, ok := reqBody["prompt_cache_key"].(string); ok {
-			promptCacheKey = strings.TrimSpace(v)
-		}
+		promptCacheKey = resolveOpenAIPromptCacheKey(c, body)
 	}
 
 	// Track if body needs re-serialization
@@ -2379,7 +2592,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	}
 
 	// Get access token
-	token, _, err := s.GetAccessToken(ctx, account)
+	token, _, err := s.GetAccessTokenWithPriority(ctx, c, account)
 	if err != nil {
 		return nil, err
 	}
@@ -2636,7 +2849,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 					"message": "Upstream request failed",
 				},
 			})
-			return nil, fmt.Errorf("upstream request failed: %s", safeErr)
+			return nil, errors.New("openai upstream transport error: request failed")
 		}
 
 		// Handle error response
@@ -2722,6 +2935,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 
 		reasoningEffort := extractOpenAIReasoningEffort(reqBody, originalModel)
 		serviceTier := extractOpenAIServiceTier(reqBody)
+			providerProfile, _ := s.resolveOpenAIProviderProfile(account, c)
 
 		return &OpenAIForwardResult{
 			RequestID:       resp.Header.Get("x-request-id"),
@@ -2734,6 +2948,13 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			OpenAIWSMode:    false,
 			Duration:        time.Since(startTime),
 			FirstTokenMs:    firstTokenMs,
+			FinalizedRequest: s.newOpenAIFinalizedRequest(
+				body,
+				upstreamReq.Header,
+				nil,
+				providerProfile,
+				promptCacheKey,
+			),
 		}, nil
 	}
 }
@@ -2748,6 +2969,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	reqStream bool,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
+	upstreamPassthroughPromptCacheKey := resolveOpenAIPromptCacheKey(c, body)
 	upstreamPassthroughModel := ""
 	if isOpenAIResponsesCompactPath(c) {
 		compactMappedModel := resolveOpenAICompactForwardModel(account, reqModel)
@@ -2847,7 +3069,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	}
 
 	// Get access token
-	token, _, err := s.GetAccessToken(ctx, account)
+	token, _, err := s.GetAccessTokenWithPriority(ctx, c, account)
 	if err != nil {
 		return nil, err
 	}
@@ -2890,7 +3112,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 				"message": "Upstream request failed",
 			},
 		})
-		return nil, fmt.Errorf("upstream request failed: %s", safeErr)
+		return nil, s.newOpenAITransportError("upstream request failed", safeErr)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -2927,6 +3149,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		usage = &OpenAIUsage{}
 	}
 
+	providerProfile, _ := s.resolveOpenAIProviderProfile(account, c)
 	return &OpenAIForwardResult{
 		RequestID:       resp.Header.Get("x-request-id"),
 		Usage:           *usage,
@@ -2938,6 +3161,13 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		OpenAIWSMode:    false,
 		Duration:        time.Since(startTime),
 		FirstTokenMs:    firstTokenMs,
+		FinalizedRequest: s.newOpenAIFinalizedRequest(
+			body,
+			upstreamReq.Header,
+			nil,
+			providerProfile,
+			upstreamPassthroughPromptCacheKey,
+		),
 	}, nil
 }
 
@@ -2979,21 +3209,13 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	body []byte,
 	token string,
 ) (*http.Request, error) {
-	targetURL := openaiPlatformAPIURL
-	switch account.Type {
-	case AccountTypeOAuth:
-		targetURL = chatgptCodexURL
-	case AccountTypeAPIKey:
-		baseURL := account.GetOpenAIBaseURL()
-		if baseURL != "" {
-			validatedURL, err := s.validateUpstreamBaseURL(baseURL)
-			if err != nil {
-				return nil, err
-			}
-			targetURL = buildOpenAIResponsesURL(validatedURL)
-		}
+	providerProfile, err := s.resolveOpenAIProviderProfile(account, c)
+	if err != nil {
+		return nil, err
 	}
+	targetURL := providerProfile.BaseURL
 	targetURL = appendOpenAIResponsesRequestPathSuffix(targetURL, openAIResponsesRequestPathSuffix(c))
+	targetURL = applyOpenAIProviderQueryParams(targetURL, providerProfile)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
 	if err != nil {
@@ -3013,6 +3235,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 			}
 		}
 	}
+	applyOpenAIForwardTraceHeaders(req.Header, c)
 
 	// 覆盖入站鉴权残留，并注入上游认证
 	req.Header.Del("authorization")
@@ -3022,7 +3245,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 
 	// OAuth 透传到 ChatGPT internal API 时补齐必要头。
 	if account.Type == AccountTypeOAuth {
-		promptCacheKey := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
+		promptCacheKey := resolveOpenAIPromptCacheKey(c, body)
 		req.Host = "chatgpt.com"
 		if chatgptAccountID := account.GetChatGPTAccountID(); chatgptAccountID != "" {
 			req.Header.Set("chatgpt-account-id", chatgptAccountID)
@@ -3079,6 +3302,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	if req.Header.Get("content-type") == "" {
 		req.Header.Set("content-type", "application/json")
 	}
+	applyOpenAIProviderDefaults(req.Header, providerProfile)
 
 	return req, nil
 }
@@ -3662,29 +3886,71 @@ func writeOpenAIPassthroughResponseHeaders(dst http.Header, src http.Header, fil
 	}
 }
 
+func applyOpenAIForwardTraceHeaders(dst http.Header, c *gin.Context) {
+	if dst == nil || c == nil {
+		return
+	}
+	for _, key := range openAITraceForwardHeaders {
+		value := strings.TrimSpace(c.GetHeader(key))
+		if value == "" {
+			continue
+		}
+		dst.Set(key, value)
+	}
+}
+
+func applyOpenAIProviderDefaults(dst http.Header, profile *openAIProviderProfile) {
+	if dst == nil || profile == nil || profile.DefaultHeaders == nil {
+		return
+	}
+	for key, values := range profile.DefaultHeaders {
+		canonical := http.CanonicalHeaderKey(strings.TrimSpace(key))
+		if canonical == "" || len(values) == 0 {
+			continue
+		}
+		if dst.Get(canonical) != "" {
+			continue
+		}
+		for _, v := range values {
+			if strings.TrimSpace(v) != "" {
+				dst.Add(canonical, v)
+			}
+		}
+	}
+}
+
+func applyOpenAIProviderQueryParams(rawURL string, profile *openAIProviderProfile) string {
+	if profile == nil || len(profile.QueryParams) == 0 {
+		return rawURL
+	}
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsed == nil {
+		return rawURL
+	}
+	query := parsed.Query()
+	for key, value := range profile.QueryParams {
+		k := strings.TrimSpace(key)
+		v := strings.TrimSpace(value)
+		if k == "" || v == "" {
+			continue
+		}
+		if query.Get(k) == "" {
+			query.Set(k, v)
+		}
+	}
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
+}
+
 func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token string, isStream bool, promptCacheKey string, isCodexCLI bool) (*http.Request, error) {
 	// Determine target URL based on account type
-	var targetURL string
-	switch account.Type {
-	case AccountTypeOAuth:
-		// OAuth accounts use ChatGPT internal API
-		targetURL = chatgptCodexURL
-	case AccountTypeAPIKey:
-		// API Key accounts use Platform API or custom base URL
-		baseURL := account.GetOpenAIBaseURL()
-		if baseURL == "" {
-			targetURL = openaiPlatformAPIURL
-		} else {
-			validatedURL, err := s.validateUpstreamBaseURL(baseURL)
-			if err != nil {
-				return nil, err
-			}
-			targetURL = buildOpenAIResponsesURL(validatedURL)
-		}
-	default:
-		targetURL = openaiPlatformAPIURL
+	providerProfile, err := s.resolveOpenAIProviderProfile(account, c)
+	if err != nil {
+		return nil, err
 	}
+	targetURL := providerProfile.BaseURL
 	targetURL = appendOpenAIResponsesRequestPathSuffix(targetURL, openAIResponsesRequestPathSuffix(c))
+	targetURL = applyOpenAIProviderQueryParams(targetURL, providerProfile)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(body))
 	if err != nil {
@@ -3714,6 +3980,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			}
 		}
 	}
+	applyOpenAIForwardTraceHeaders(req.Header, c)
 	if account.Type == AccountTypeOAuth {
 		// 清除客户端透传的 session 头，后续用隔离后的值重新设置，防止跨用户会话碰撞。
 		req.Header.Del("conversation_id")
@@ -3755,6 +4022,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	if req.Header.Get("content-type") == "" {
 		req.Header.Set("content-type", "application/json")
 	}
+	applyOpenAIProviderDefaults(req.Header, providerProfile)
 
 	return req, nil
 }
@@ -4018,10 +4286,60 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 	}
 
 	writeError(c, resp.StatusCode, errType, upstreamMsg)
-	return nil, fmt.Errorf("upstream error: %d %s", resp.StatusCode, upstreamMsg)
+	return nil, &openaiAPIError{
+		StatusCode: resp.StatusCode,
+		RequestID:  strings.TrimSpace(resp.Header.Get("x-request-id")),
+		CFRay:      strings.TrimSpace(resp.Header.Get("cf-ray")),
+		Message:    fmt.Sprintf("upstream error: %d %s", resp.StatusCode, upstreamMsg),
+	}
 }
 
 // openaiStreamingResult streaming response result
+type openaiTransportError struct {
+	Message string
+}
+
+func (e *openaiTransportError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return strings.TrimSpace(e.Message)
+}
+
+func (s *OpenAIGatewayService) newOpenAITransportError(prefix, detail string) error {
+	message := strings.TrimSpace(prefix)
+	detail = strings.TrimSpace(detail)
+	if detail != "" {
+		if message != "" {
+			message = message + ": " + detail
+		} else {
+			message = detail
+		}
+	}
+	if message == "" {
+		message = "upstream transport error"
+	}
+	return &openaiTransportError{Message: message}
+}
+
+type openaiAPIError struct {
+	StatusCode int
+	RequestID  string
+	CFRay      string
+	Message    string
+}
+
+func (e *openaiAPIError) Error() string {
+	if e == nil {
+		return ""
+	}
+	msg := strings.TrimSpace(e.Message)
+	if msg == "" {
+		msg = fmt.Sprintf("upstream api error: %d", e.StatusCode)
+	}
+	return msg
+}
+
 type openaiStreamingResult struct {
 	usage        *OpenAIUsage
 	firstTokenMs *int
@@ -5537,8 +5855,30 @@ func extractOpenAIRequestMetaFromBody(body []byte) (model string, stream bool, p
 
 	model = strings.TrimSpace(gjson.GetBytes(body, "model").String())
 	stream = gjson.GetBytes(body, "stream").Bool()
-	promptCacheKey = strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
+	promptCacheKey = resolveOpenAIPromptCacheKeyFromBody(body)
 	return model, stream, promptCacheKey
+}
+
+func resolveOpenAIPromptCacheKeyFromBody(body []byte) string {
+	if len(body) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
+}
+
+func resolveOpenAIPromptCacheKey(c *gin.Context, body []byte) string {
+	if c != nil {
+		if key := strings.TrimSpace(c.GetHeader("prompt_cache_key")); key != "" {
+			return key
+		}
+		if key := strings.TrimSpace(c.GetHeader("session_id")); key != "" {
+			return key
+		}
+		if key := strings.TrimSpace(c.GetHeader("conversation_id")); key != "" {
+			return key
+		}
+	}
+	return resolveOpenAIPromptCacheKeyFromBody(body)
 }
 
 // normalizeOpenAIPassthroughOAuthBody 将透传 OAuth 请求体收敛为旧链路关键行为：
@@ -5784,6 +6124,27 @@ func openAIFastPolicySettingsFromContext(ctx context.Context) *OpenAIFastPolicyS
 // 到了上游可识别值；passthrough（OpenAI 自动透传） / native /responses 等
 // 入口没有这一前置步骤，pass 路径下若不在此处归一化，"fast" 就会被原样
 // 透传到 OpenAI 上游导致 400/拒绝。把归一化收敛到本函数，所有入口行为一致。
+func (s *OpenAIGatewayService) resolveOpenAIResponsesUpstreamURL(account *Account) (string, error) {
+	if account == nil {
+		return "", errors.New("account is nil")
+	}
+	if account.Type == AccountTypeOAuth {
+		return chatgptCodexURL, nil
+	}
+	if account.Type == AccountTypeAPIKey {
+		baseURL := account.GetOpenAIBaseURL()
+		if baseURL == "" {
+			return openaiPlatformAPIURL, nil
+		}
+		validatedURL, err := s.validateUpstreamBaseURL(baseURL)
+		if err != nil {
+			return "", err
+		}
+		return buildOpenAIResponsesURL(validatedURL), nil
+	}
+	return openaiPlatformAPIURL, nil
+}
+
 func (s *OpenAIGatewayService) applyOpenAIFastPolicyToBody(ctx context.Context, account *Account, model string, body []byte) ([]byte, error) {
 	if len(body) == 0 {
 		return body, nil

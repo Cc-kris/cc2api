@@ -67,6 +67,9 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
 
 	promptCacheKey = strings.TrimSpace(promptCacheKey)
+	if promptCacheKey == "" {
+		promptCacheKey = resolveOpenAIPromptCacheKey(c, body)
+	}
 	compatPromptCacheInjected := false
 	if promptCacheKey == "" && account.Type == AccountTypeOAuth && shouldAutoInjectPromptCacheKeyForCompat(upstreamModel) {
 		promptCacheKey = deriveCompatPromptCacheKey(&chatReq, upstreamModel)
@@ -183,7 +186,7 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	responsesBody = updatedBody
 
 	// 5. Get access token
-	token, _, err := s.GetAccessToken(ctx, account)
+	token, _, err := s.GetAccessTokenWithPriority(ctx, c, account)
 	if err != nil {
 		return nil, fmt.Errorf("get access token: %w", err)
 	}
@@ -216,7 +219,7 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 			Message:            safeErr,
 		})
 		writeChatCompletionsError(c, http.StatusBadGateway, "upstream_error", "Upstream request failed")
-		return nil, fmt.Errorf("upstream request failed: %s", safeErr)
+		return nil, errors.New("openai upstream transport error: request failed")
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -270,6 +273,8 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 
 	// Propagate ServiceTier and ReasoningEffort to result for billing
 	if handleErr == nil && result != nil {
+		providerProfile, _ := s.resolveOpenAIProviderProfile(account, c)
+		result.FinalizedRequest = s.newOpenAIFinalizedRequest(responsesBody, upstreamReq.Header, nil, providerProfile, promptCacheKey)
 		if responsesReq.ServiceTier != "" {
 			st := responsesReq.ServiceTier
 			result.ServiceTier = &st
@@ -378,8 +383,7 @@ func (s *OpenAIGatewayService) handleChatBufferedStreamingResponse(
 		// Accumulate delta content for fallback when terminal output is empty.
 		acc.ProcessEvent(&event)
 
-		if (event.Type == "response.completed" || event.Type == "response.done" ||
-			event.Type == "response.incomplete" || event.Type == "response.failed") &&
+		if isOpenAIUsageTerminalResponseEventType(event.Type) &&
 			event.Response != nil {
 			finalResponse = event.Response
 			if event.Response.Usage != nil {
@@ -459,6 +463,9 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 	var usage OpenAIUsage
 	var firstTokenMs *int
 	firstChunk := true
+	sawTerminalEvent := false
+	sawFailedEvent := false
+	failedMessage := ""
 
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
@@ -497,7 +504,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 		}
 
 		// Extract usage from completion events
-		if (event.Type == "response.completed" || event.Type == "response.incomplete" || event.Type == "response.failed") &&
+		if isOpenAIUsageTerminalResponseEventType(event.Type) &&
 			event.Response != nil && event.Response.Usage != nil {
 			usage = OpenAIUsage{
 				InputTokens:  event.Response.Usage.InputTokens,
@@ -505,6 +512,16 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 			}
 			if event.Response.Usage.InputTokensDetails != nil {
 				usage.CacheReadInputTokens = event.Response.Usage.InputTokensDetails.CachedTokens
+			}
+		}
+		if isOpenAITerminalResponseEventType(event.Type) {
+			sawTerminalEvent = true
+			if event.Type == "response.failed" {
+				sawFailedEvent = true
+				failedMessage = strings.TrimSpace(event.Code)
+				if failedMessage == "" {
+					failedMessage = "upstream response failed"
+				}
 			}
 		}
 
@@ -532,6 +549,14 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 	}
 
 	finalizeStream := func() (*OpenAIForwardResult, error) {
+		if !sawTerminalEvent {
+			writeChatCompletionsError(c, http.StatusBadGateway, "api_error", "Upstream stream ended without a terminal response event")
+			return nil, fmt.Errorf("upstream stream ended without terminal event")
+		}
+		if sawFailedEvent {
+			writeChatCompletionsError(c, http.StatusBadGateway, "api_error", failedMessage)
+			return nil, fmt.Errorf("upstream response failed: %s", failedMessage)
+		}
 		if finalChunks := apicompat.FinalizeResponsesChatStream(state); len(finalChunks) > 0 {
 			for _, chunk := range finalChunks {
 				sse, err := apicompat.ChatChunkToSSE(chunk)
@@ -556,21 +581,31 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 		}
 	}
 
-	// Determine keepalive interval
+	// Determine keepalive interval and upstream stream idle timeout.
 	keepaliveInterval := time.Duration(0)
 	if s.cfg != nil && s.cfg.Gateway.StreamKeepaliveInterval > 0 {
 		keepaliveInterval = time.Duration(s.cfg.Gateway.StreamKeepaliveInterval) * time.Second
 	}
+	streamInterval := time.Duration(0)
+	if s.cfg != nil && s.cfg.Gateway.StreamDataIntervalTimeout > 0 {
+		streamInterval = time.Duration(s.cfg.Gateway.StreamDataIntervalTimeout) * time.Second
+	}
 
 	// No keepalive: fast synchronous path
 	if keepaliveInterval <= 0 {
+		lastDataAt := time.Now()
 		for scanner.Scan() {
+			lastDataAt = time.Now()
 			line := scanner.Text()
 			if !strings.HasPrefix(line, "data: ") || line == "data: [DONE]" {
 				continue
 			}
 			if processDataLine(line[6:]) {
-				return resultWithUsage(), nil
+				return finalizeStream()
+			}
+			if streamInterval > 0 && time.Since(lastDataAt) > streamInterval {
+				writeChatCompletionsError(c, http.StatusBadGateway, "api_error", "Upstream stream idle timeout")
+				return nil, fmt.Errorf("upstream stream idle timeout")
 			}
 		}
 		handleScanErr(scanner.Err())
@@ -607,6 +642,15 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 
 	keepaliveTicker := time.NewTicker(keepaliveInterval)
 	defer keepaliveTicker.Stop()
+	var intervalTicker *time.Ticker
+	if streamInterval > 0 {
+		intervalTicker = time.NewTicker(streamInterval)
+		defer intervalTicker.Stop()
+	}
+	var intervalCh <-chan time.Time
+	if intervalTicker != nil {
+		intervalCh = intervalTicker.C
+	}
 	lastDataAt := time.Now()
 
 	for {
@@ -625,7 +669,13 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 				continue
 			}
 			if processDataLine(line[6:]) {
-				return resultWithUsage(), nil
+				return finalizeStream()
+			}
+
+		case <-intervalCh:
+			if streamInterval > 0 && time.Since(lastDataAt) >= streamInterval {
+				writeChatCompletionsError(c, http.StatusBadGateway, "api_error", "Upstream stream idle timeout")
+				return nil, fmt.Errorf("upstream stream idle timeout")
 			}
 
 		case <-keepaliveTicker.C:
