@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -33,14 +34,18 @@ type stubOpenAIAccountRepo struct {
 type snapshotUpdateAccountRepo struct {
 	stubOpenAIAccountRepo
 	updateExtraCalls chan map[string]any
+	lastUpdates      map[string]any
+	updateCount      int
 }
 
 func (r *snapshotUpdateAccountRepo) UpdateExtra(ctx context.Context, id int64, updates map[string]any) error {
+	copied := make(map[string]any, len(updates))
+	for k, v := range updates {
+		copied[k] = v
+	}
+	r.lastUpdates = copied
+	r.updateCount++
 	if r.updateExtraCalls != nil {
-		copied := make(map[string]any, len(updates))
-		for k, v := range updates {
-			copied[k] = v
-		}
 		r.updateExtraCalls <- copied
 	}
 	return nil
@@ -377,6 +382,157 @@ func (c *stubGatewayCache) DeleteSessionAccountID(ctx context.Context, groupID i
 	c.deletedSessions[sessionHash]++
 	delete(c.sessionBindings, sessionHash)
 	return nil
+}
+
+func TestOpenAITerminalEventTypeHelpers(t *testing.T) {
+	require.True(t, isOpenAITerminalResponseEventType("response.completed"))
+	require.True(t, isOpenAITerminalResponseEventType("response.done"))
+	require.True(t, isOpenAITerminalResponseEventType("response.incomplete"))
+	require.True(t, isOpenAITerminalResponseEventType("response.failed"))
+	require.True(t, isOpenAITerminalResponseEventType("response.cancelled"))
+	require.True(t, isOpenAITerminalResponseEventType("response.canceled"))
+	require.False(t, isOpenAITerminalResponseEventType("response.in_progress"))
+
+	require.True(t, isOpenAIUsageTerminalResponseEventType("response.completed"))
+	require.True(t, isOpenAIUsageTerminalResponseEventType("response.done"))
+	require.True(t, isOpenAIUsageTerminalResponseEventType("response.incomplete"))
+	require.True(t, isOpenAIUsageTerminalResponseEventType("response.failed"))
+	require.False(t, isOpenAIUsageTerminalResponseEventType("response.cancelled"))
+	require.False(t, isOpenAIUsageTerminalResponseEventType("response.canceled"))
+}
+
+func TestOpenAIStreamingResponseCanceledEventCountsAsTerminal(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{Gateway: config.GatewayConfig{StreamDataIntervalTimeout: 0, StreamKeepaliveInterval: 0, MaxLineSize: defaultMaxLineSize}}
+	svc := &OpenAIGatewayService{cfg: cfg}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			"event: response.created",
+			`data: {"type":"response.created","response":{"id":"resp_1"}}`,
+			"",
+			"event: response.canceled",
+			`data: {"type":"response.canceled","response":{"id":"resp_1","usage":{"input_tokens":1,"output_tokens":0}}}`,
+			"",
+		}, "\n"))),
+		Header: http.Header{"X-Request-Id": []string{"rid-canceled"}},
+	}
+
+	result, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, &Account{ID: 1, Platform: PlatformOpenAI, Name: "acc"}, time.Now(), "model", "model")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Contains(t, rec.Body.String(), "response.canceled")
+	require.NotContains(t, rec.Body.String(), "stream usage incomplete")
+}
+
+func TestOpenAIFinalizedRequestCarriesProviderCapabilitiesAndHashes(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	profile := &openAIProviderProfile{
+		BaseURL: "https://chatgpt.com/backend-api/codex/responses",
+		Capabilities: openAIProviderCapabilities{
+			SupportsWS:                   true,
+			SupportsCompression:          false,
+			SupportsPromptCacheRetention: true,
+		},
+	}
+	headers := http.Header{"Content-Type": []string{"application/json"}}
+	body := []byte(`{"model":"gpt-5.4","input":"hi"}`)
+	finalized := svc.newOpenAIFinalizedRequest(body, headers, map[string]any{"type": "response.create"}, profile, "sess_abc")
+	require.NotNil(t, finalized)
+	require.NotEmpty(t, finalized.CanonicalBodyHash)
+	require.NotEmpty(t, finalized.PromptCacheKeyHash)
+	require.Equal(t, profile, finalized.ProviderProfile)
+	require.True(t, finalized.ProviderSupportsWS)
+	require.False(t, finalized.ProviderSupportsCompression)
+	require.True(t, finalized.ProviderSupportsPromptCacheRetention)
+	require.Equal(t, "application/json", finalized.Headers.Get("Content-Type"))
+	require.Equal(t, "response.create", finalized.RetryPayload["type"])
+}
+
+
+func TestOpenAIForwardResultFinalizedRequestSnapshot(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	profile := &openAIProviderProfile{
+		BaseURL: "https://chatgpt.com/backend-api/codex/responses",
+		Capabilities: openAIProviderCapabilities{
+			SupportsWS:                   true,
+			SupportsCompression:          false,
+			SupportsPromptCacheRetention: true,
+		},
+	}
+	result := &OpenAIForwardResult{
+		FinalizedRequest: svc.newOpenAIFinalizedRequest(
+			[]byte(`{"model":"gpt-5.4","input":"hi"}`),
+			http.Header{"Content-Type": []string{"application/json"}},
+			nil,
+			profile,
+			"sess_abc",
+		),
+	}
+	result.FinalizedRequest.EndpointType = "responses"
+	result.FinalizedRequest.FailoverCount = 2
+
+	snapshot := result.FinalizedRequestSnapshot()
+	require.NotNil(t, snapshot)
+	require.Equal(t, "responses", snapshot.EndpointType)
+	require.Equal(t, 2, snapshot.FailoverCount)
+	require.NotEmpty(t, snapshot.CanonicalBodyHash)
+	require.NotEmpty(t, snapshot.PromptCacheKeyHash)
+	require.Equal(t, "https://chatgpt.com/backend-api/codex/responses", snapshot.ProviderBaseURL)
+	require.True(t, snapshot.ProviderSupportsWS)
+	require.False(t, snapshot.ProviderSupportsCompression)
+	encoded, err := result.FinalizedRequestSnapshotJSON()
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), "canonical_body_hash")
+	require.Contains(t, string(encoded), "provider_base_url")
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(encoded, &payload))
+	require.Equal(t, float64(2), payload["failover_count"])
+	require.Equal(t, snapshot.PromptCacheKeyHash, payload["prompt_cache_key_hash"])
+	require.Equal(t, snapshot.CanonicalBodyHash, payload["canonical_body_hash"])
+	require.Equal(t, "responses", payload["endpoint_type"])
+
+	accountScoped := map[string]any{
+		"account_id": int64(42),
+		"endpoint":   payload["endpoint_type"],
+	}
+	accountScopedJSON, err := json.Marshal(accountScoped)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"account_id":42,"endpoint":"responses"}`, string(accountScopedJSON))
+}
+
+func TestOpenAIResolvePromptCacheKeyConsistencyAcrossEndpoints(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"prompt_cache_key":"body-key"}`)
+	paths := []string{"/v1/responses", "/v1/chat/completions", "/v1/messages"}
+	for _, path := range paths {
+		rec := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rec)
+		c.Request = httptest.NewRequest(http.MethodPost, path, nil)
+		c.Request.Header.Set("prompt_cache_key", "header-key")
+		c.Request.Header.Set("session_id", "session-key")
+		c.Request.Header.Set("conversation_id", "conversation-key")
+		require.Equal(t, "header-key", resolveOpenAIPromptCacheKey(c, body), "path=%s", path)
+		c.Request.Header.Del("prompt_cache_key")
+		require.Equal(t, "session-key", resolveOpenAIPromptCacheKey(c, body), "path=%s", path)
+		c.Request.Header.Del("session_id")
+		require.Equal(t, "conversation-key", resolveOpenAIPromptCacheKey(c, body), "path=%s", path)
+		c.Request.Header.Del("conversation_id")
+		require.Equal(t, "body-key", resolveOpenAIPromptCacheKey(c, body), "path=%s", path)
+	}
+}
+
+func TestOpenAIForwardResultFinalizedRequestSnapshotJSONNil(t *testing.T) {
+	result := &OpenAIForwardResult{}
+	encoded, err := result.FinalizedRequestSnapshotJSON()
+	require.NoError(t, err)
+	require.Nil(t, encoded)
 }
 
 func TestOpenAISelectAccountWithLoadAwareness_FiltersUnschedulable(t *testing.T) {
@@ -1720,7 +1876,18 @@ func TestOpenAIValidateUpstreamBaseURLEnabledEnforcesAllowlist(t *testing.T) {
 
 func TestOpenAIUpdateCodexUsageSnapshotFromHeaders(t *testing.T) {
 	repo := &snapshotUpdateAccountRepo{updateExtraCalls: make(chan map[string]any, 1)}
-	svc := &OpenAIGatewayService{accountRepo: repo}
+	svc := &OpenAIGatewayService{accountRepo: repo, codexSnapshotThrottle: newAccountWriteThrottle(0)}
+
+	// before: 无有效 codex header，不应写库
+	svc.UpdateCodexUsageSnapshotFromHeaders(context.Background(), 123, http.Header{})
+	select {
+	case <-repo.updateExtraCalls:
+		t.Fatal("unexpected UpdateExtra call for empty headers")
+	default:
+	}
+	require.Equal(t, 0, repo.updateCount)
+	require.Nil(t, repo.lastUpdates)
+
 	headers := http.Header{}
 	headers.Set("x-codex-primary-used-percent", "12")
 	headers.Set("x-codex-secondary-used-percent", "34")
@@ -1740,6 +1907,8 @@ func TestOpenAIUpdateCodexUsageSnapshotFromHeaders(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("expected UpdateExtra to be called")
 	}
+	require.Equal(t, 1, repo.updateCount)
+	require.NotNil(t, repo.lastUpdates)
 }
 
 func TestOpenAIResponsesRequestPathSuffix(t *testing.T) {
@@ -1824,6 +1993,119 @@ func TestOpenAIBuildUpstreamRequestPreservesCompactPathForAPIKeyBaseURL(t *testi
 	req, err := svc.buildUpstreamRequest(c.Request.Context(), c, account, []byte(`{"model":"gpt-5"}`), "token", false, "", false)
 	require.NoError(t, err)
 	require.Equal(t, "https://example.com/v1/responses/compact", req.URL.String())
+}
+
+func TestResolveOpenAIProviderProfile_Basic(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+	svc := &OpenAIGatewayService{cfg: &config.Config{}}
+	oauthAccount := &Account{Type: AccountTypeOAuth, Platform: PlatformOpenAI}
+	profile, err := svc.resolveOpenAIProviderProfile(oauthAccount, c)
+	require.NoError(t, err)
+	require.NotNil(t, profile)
+	require.Equal(t, chatgptCodexURL, profile.BaseURL)
+	require.True(t, profile.Capabilities.SupportsPromptCacheRetention)
+
+	apiKeyAccount := &Account{Type: AccountTypeAPIKey, Platform: PlatformOpenAI, Credentials: map[string]any{"base_url": "https://example.com/v1"}}
+	profile, err = svc.resolveOpenAIProviderProfile(apiKeyAccount, c)
+	require.NoError(t, err)
+	require.NotNil(t, profile)
+	require.Equal(t, "https://example.com/v1/responses", profile.BaseURL)
+	require.False(t, profile.Capabilities.SupportsPromptCacheRetention)
+}
+
+func TestGetAccessTokenWithPriority_Precedence(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
+	c.Request.Header.Set("x-openai-experiment-token", "exp-token")
+
+	svc := &OpenAIGatewayService{}
+
+	accountWithKey := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "sk-static", "access_token": "oauth-token"}}
+	token, source, err := svc.GetAccessTokenWithPriority(context.Background(), c, accountWithKey)
+	require.NoError(t, err)
+	require.Equal(t, "sk-static", token)
+	require.Equal(t, "apikey", source)
+
+	accountWithExperiment := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"access_token": "oauth-token"}}
+	token, source, err = svc.GetAccessTokenWithPriority(context.Background(), c, accountWithExperiment)
+	require.NoError(t, err)
+	require.Equal(t, "exp-token", token)
+	require.Equal(t, "experiment", source)
+
+	c.Request.Header.Del("x-openai-experiment-token")
+	token, source, err = svc.GetAccessTokenWithPriority(context.Background(), c, accountWithExperiment)
+	require.NoError(t, err)
+	require.Equal(t, "oauth-token", token)
+	require.Equal(t, "oauth", source)
+}
+
+func TestResolveOpenAIPromptCacheKey_Priority(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
+
+	body := []byte(`{"prompt_cache_key":"body-key"}`)
+
+	c.Request.Header.Set("prompt_cache_key", "header-prompt")
+	c.Request.Header.Set("session_id", "header-session")
+	c.Request.Header.Set("conversation_id", "header-conversation")
+	require.Equal(t, "header-prompt", resolveOpenAIPromptCacheKey(c, body))
+
+	c.Request.Header.Del("prompt_cache_key")
+	require.Equal(t, "header-session", resolveOpenAIPromptCacheKey(c, body))
+
+	c.Request.Header.Del("session_id")
+	require.Equal(t, "header-conversation", resolveOpenAIPromptCacheKey(c, body))
+
+	c.Request.Header.Del("conversation_id")
+	require.Equal(t, "body-key", resolveOpenAIPromptCacheKey(c, body))
+}
+
+func TestOpenAIBuildUpstreamRequest_ForwardsTraceAndSubagentHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader([]byte(`{"model":"gpt-5"}`)))
+	c.Request.Header.Set("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00")
+	c.Request.Header.Set("tracestate", "rojo=00f067aa0ba902b7")
+	c.Request.Header.Set("x-openai-subagent", "planner")
+
+	svc := &OpenAIGatewayService{cfg: &config.Config{}}
+	svc.cfg.Security.URLAllowlist.Enabled = false
+	account := &Account{Type: AccountTypeAPIKey, Platform: PlatformOpenAI}
+
+	req, err := svc.buildUpstreamRequest(c.Request.Context(), c, account, []byte(`{"model":"gpt-5"}`), "token", false, "", false)
+	require.NoError(t, err)
+	require.Equal(t, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00", req.Header.Get("traceparent"))
+	require.Equal(t, "rojo=00f067aa0ba902b7", req.Header.Get("tracestate"))
+	require.Equal(t, "planner", req.Header.Get("x-openai-subagent"))
+}
+
+func TestOpenAIBuildUpstreamRequestOpenAIPassthrough_ForwardsTraceAndSubagentHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader([]byte(`{"model":"gpt-5"}`)))
+	c.Request.Header.Set("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00")
+	c.Request.Header.Set("tracestate", "rojo=00f067aa0ba902b7")
+	c.Request.Header.Set("x-openai-subagent", "passthrough-worker")
+
+	svc := &OpenAIGatewayService{cfg: &config.Config{}}
+	svc.cfg.Security.URLAllowlist.Enabled = false
+	account := &Account{Type: AccountTypeAPIKey, Platform: PlatformOpenAI}
+
+	req, err := svc.buildUpstreamRequestOpenAIPassthrough(c.Request.Context(), c, account, []byte(`{"model":"gpt-5"}`), "token")
+	require.NoError(t, err)
+	require.Equal(t, "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00", req.Header.Get("traceparent"))
+	require.Equal(t, "rojo=00f067aa0ba902b7", req.Header.Get("tracestate"))
+	require.Equal(t, "passthrough-worker", req.Header.Get("x-openai-subagent"))
 }
 
 func TestOpenAIBuildUpstreamRequestOAuthOfficialClientOriginatorCompatibility(t *testing.T) {
@@ -2090,7 +2372,49 @@ func TestReplaceModelInResponseBody(t *testing.T) {
 	}
 }
 
-func TestExtractOpenAISSEDataLine(t *testing.T) {
+func TestClassifyOpenAIUpstreamAPIErrorSemantic(t *testing.T) {
+	semantic := classifyOpenAIUpstreamAPIErrorSemantic(
+		http.StatusBadRequest,
+		"",
+		[]byte(`{"error":{"type":"server_error","code":"processing_error","message":"An error occurred while processing your request."}}`),
+	)
+	require.Equal(t, "server_error", semantic.ErrorType)
+	require.Equal(t, "processing_error", semantic.ErrorCode)
+	require.True(t, semantic.TransientProcessing)
+	require.False(t, semantic.InstructionsRequired)
+
+	semantic = classifyOpenAIUpstreamAPIErrorSemantic(
+		http.StatusBadRequest,
+		"Required parameter: 'instructions'",
+		nil,
+	)
+	require.True(t, semantic.InstructionsRequired)
+	require.False(t, semantic.TransientProcessing)
+	require.Equal(t, "Required parameter: 'instructions'", semantic.ErrorMessage)
+}
+
+func TestShouldFailoverOpenAIUpstreamResponse_UsesSemanticClassification(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+
+	require.True(t, svc.shouldFailoverOpenAIUpstreamResponse(
+		http.StatusBadRequest,
+		"",
+		[]byte(`{"error":{"type":"server_error","code":"processing_error","message":"retryable"}}`),
+	))
+
+	require.False(t, svc.shouldFailoverOpenAIUpstreamResponse(
+		http.StatusBadRequest,
+		"",
+		[]byte(`{"error":{"type":"invalid_request_error","code":"invalid_prompt","message":"invalid prompt"}}`),
+	))
+
+	require.True(t, svc.shouldFailoverOpenAIUpstreamResponse(
+		http.StatusTooManyRequests,
+		"rate limited",
+		nil,
+	))
+}
+	func TestExtractOpenAISSEDataLine(t *testing.T) {
 	tests := []struct {
 		name     string
 		line     string

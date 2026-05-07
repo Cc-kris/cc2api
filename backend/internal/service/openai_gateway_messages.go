@@ -44,6 +44,11 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	normalizedModel := anthropicReq.Model
 	clientStream := anthropicReq.Stream // client's original stream preference
 
+	promptCacheKey = strings.TrimSpace(promptCacheKey)
+	if promptCacheKey == "" {
+		promptCacheKey = resolveOpenAIPromptCacheKey(c, body)
+	}
+
 	// 2. Convert Anthropic → Responses
 	responsesReq, err := apicompat.AnthropicToResponses(&anthropicReq)
 	if err != nil {
@@ -157,7 +162,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	responsesBody = updatedBody
 
 	// 5. Get access token
-	token, _, err := s.GetAccessToken(ctx, account)
+	token, _, err := s.GetAccessTokenWithPriority(ctx, c, account)
 	if err != nil {
 		return nil, fmt.Errorf("get access token: %w", err)
 	}
@@ -193,7 +198,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 			Message:            safeErr,
 		})
 		writeAnthropicError(c, http.StatusBadGateway, "api_error", "Upstream request failed")
-		return nil, fmt.Errorf("upstream request failed: %s", safeErr)
+		return nil, errors.New("openai upstream transport error: request failed")
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -250,6 +255,8 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 
 	// Propagate ServiceTier and ReasoningEffort to result for billing
 	if handleErr == nil && result != nil {
+		providerProfile, _ := s.resolveOpenAIProviderProfile(account, c)
+		result.FinalizedRequest = s.newOpenAIFinalizedRequest(responsesBody, upstreamReq.Header, nil, providerProfile, promptCacheKey)
 		if responsesReq.ServiceTier != "" {
 			st := responsesReq.ServiceTier
 			result.ServiceTier = &st
@@ -328,8 +335,7 @@ func (s *OpenAIGatewayService) handleAnthropicBufferedStreamingResponse(
 		acc.ProcessEvent(&event)
 
 		// Terminal events carry the complete ResponsesResponse with output + usage.
-		if (event.Type == "response.completed" || event.Type == "response.done" ||
-			event.Type == "response.incomplete" || event.Type == "response.failed") &&
+		if isOpenAIUsageTerminalResponseEventType(event.Type) &&
 			event.Response != nil {
 			finalResponse = event.Response
 			if event.Response.Usage != nil {

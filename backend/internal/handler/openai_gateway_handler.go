@@ -428,6 +428,37 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	}
 }
 
+func openAIFinalizedObservabilityFields(result *service.OpenAIForwardResult) []zap.Field {
+	if result == nil || result.FinalizedRequest == nil {
+		return nil
+	}
+	finalized := result.FinalizedRequest
+	fields := []zap.Field{
+		zap.String("finalized_endpoint_type", strings.TrimSpace(finalized.EndpointType)),
+		zap.Int("finalized_failover_count", finalized.FailoverCount),
+		zap.String("finalized_canonical_body_hash", strings.TrimSpace(finalized.CanonicalBodyHash)),
+		zap.String("finalized_prompt_cache_key_hash", strings.TrimSpace(finalized.PromptCacheKeyHash)),
+		zap.Bool("finalized_provider_supports_ws", finalized.ProviderSupportsWS),
+		zap.Bool("finalized_provider_supports_compression", finalized.ProviderSupportsCompression),
+		zap.Bool("finalized_provider_supports_prompt_cache_retention", finalized.ProviderSupportsPromptCacheRetention),
+	}
+	if finalized.ProviderProfile != nil {
+		fields = append(fields, zap.String("finalized_provider_base_url", strings.TrimSpace(finalized.ProviderProfile.BaseURL)))
+	}
+	return fields
+}
+
+func attachOpenAIFinalizedObservability(result *service.OpenAIForwardResult, inboundEndpoint string, failoverCount int) {
+	if result == nil || result.FinalizedRequest == nil {
+		return
+	}
+	result.FinalizedRequest.EndpointType = strings.TrimSpace(inboundEndpoint)
+	if failoverCount < 0 {
+		failoverCount = 0
+	}
+	result.FinalizedRequest.FailoverCount = failoverCount
+}
+
 func isOpenAIRemoteCompactPath(c *gin.Context) bool {
 	if c == nil || c.Request == nil || c.Request.URL == nil {
 		return false

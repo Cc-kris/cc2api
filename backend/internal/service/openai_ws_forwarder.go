@@ -284,6 +284,9 @@ func resolveOpenAIWSSessionHeaders(c *gin.Context, promptCacheKey string) openAI
 	}
 
 	cacheKey := strings.TrimSpace(promptCacheKey)
+	if cacheKey == "" {
+		cacheKey = resolveOpenAIPromptCacheKey(c, nil)
+	}
 	if cacheKey != "" {
 		if resolution.SessionID == "" {
 			resolution.SessionID = cacheKey
@@ -1069,24 +1072,11 @@ func (s *OpenAIGatewayService) buildOpenAIResponsesWSURL(account *Account) (stri
 	if account == nil {
 		return "", errors.New("account is nil")
 	}
-	var targetURL string
-	switch account.Type {
-	case AccountTypeOAuth:
-		targetURL = chatgptCodexURL
-	case AccountTypeAPIKey:
-		baseURL := account.GetOpenAIBaseURL()
-		if baseURL == "" {
-			targetURL = openaiPlatformAPIURL
-		} else {
-			validatedURL, err := s.validateUpstreamBaseURL(baseURL)
-			if err != nil {
-				return "", err
-			}
-			targetURL = buildOpenAIResponsesURL(validatedURL)
-		}
-	default:
-		targetURL = openaiPlatformAPIURL
+	providerProfile, err := s.resolveOpenAIProviderProfile(account, nil)
+	if err != nil {
+		return "", err
 	}
+	targetURL := providerProfile.BaseURL
 
 	parsed, err := url.Parse(strings.TrimSpace(targetURL))
 	if err != nil {
@@ -1124,6 +1114,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 			headers.Set("accept-language", v)
 		}
 	}
+	applyOpenAIForwardTraceHeaders(headers, c)
 	// OAuth 账号：将 apiKeyID 混入 session 标识符，防止跨用户会话碰撞。
 	if account != nil && account.Type == AccountTypeOAuth {
 		apiKeyID := getAPIKeyIDFromContext(c)
@@ -2324,6 +2315,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		clientDisconnected,
 	)
 
+	providerProfile, _ := s.resolveOpenAIProviderProfile(account, c)
 	return &OpenAIForwardResult{
 		RequestID:       responseID,
 		Usage:           *usage,
@@ -2336,6 +2328,13 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		ResponseHeaders: lease.HandshakeHeaders(),
 		Duration:        time.Since(startTime),
 		FirstTokenMs:    firstTokenMs,
+		FinalizedRequest: s.newOpenAIFinalizedRequest(
+			payloadAsJSONBytes(payload),
+			wsHeaders,
+			reqBody,
+			providerProfile,
+			promptCacheKey,
+		),
 	}, nil
 }
 
@@ -2983,19 +2982,27 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 						clientDisconnected,
 					)
 				}
-				return &OpenAIForwardResult{
-					RequestID:       responseID,
-					Usage:           usage,
-					Model:           originalModel,
-					UpstreamModel:   mappedModel,
-					ServiceTier:     extractOpenAIServiceTierFromBody(payload),
-					ReasoningEffort: extractOpenAIReasoningEffortFromBody(payload, originalModel),
-					Stream:          reqStream,
-					OpenAIWSMode:    true,
-					ResponseHeaders: lease.HandshakeHeaders(),
-					Duration:        time.Since(turnStart),
-					FirstTokenMs:    firstTokenMs,
-				}, nil
+					providerProfile, _ := s.resolveOpenAIProviderProfile(account, c)
+					return &OpenAIForwardResult{
+						RequestID:       responseID,
+						Usage:           usage,
+						Model:           originalModel,
+						UpstreamModel:   mappedModel,
+						ServiceTier:     extractOpenAIServiceTierFromBody(payload),
+						ReasoningEffort: extractOpenAIReasoningEffortFromBody(payload, originalModel),
+						Stream:          reqStream,
+						OpenAIWSMode:    true,
+						ResponseHeaders: lease.HandshakeHeaders(),
+						Duration:        time.Since(turnStart),
+						FirstTokenMs:    firstTokenMs,
+						FinalizedRequest: s.newOpenAIFinalizedRequest(
+							append([]byte(nil), payload...),
+							lease.HandshakeHeaders(),
+							nil,
+							providerProfile,
+							openAIWSPayloadStringFromRaw(payload, "prompt_cache_key"),
+						),
+					}, nil
 			}
 		}
 	}
