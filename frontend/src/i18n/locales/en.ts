@@ -5829,6 +5829,7 @@ export default {
     refresh: 'Refresh',
     sourceMode: 'Source Build',
     sourceModeHint: 'Source build, use git pull to update',
+    manualUpdateHint: 'This release does not support in-place update; download and install the latest version manually',
     updateNow: 'Update Now',
     updating: 'Updating...',
     updateComplete: 'Update Complete',

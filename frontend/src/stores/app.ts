@@ -40,6 +40,8 @@ export const useAppStore = defineStore('app', () => {
   const latestVersion = ref<string>('')
   const hasUpdate = ref<boolean>(false)
   const buildType = ref<string>('source')
+  const autoUpdateSupported = ref<boolean>(false)
+  const updateDisabledReason = ref<string>('')
   const releaseInfo = ref<ReleaseInfo | null>(null)
 
   // Auto-incrementing ID for toasts
@@ -246,6 +248,8 @@ export const useAppStore = defineStore('app', () => {
         latest_version: latestVersion.value,
         has_update: hasUpdate.value,
         build_type: buildType.value,
+        auto_update_supported: autoUpdateSupported.value,
+        update_disabled_reason: updateDisabledReason.value || undefined,
         release_info: releaseInfo.value || undefined,
         cached: true
       }
@@ -263,6 +267,8 @@ export const useAppStore = defineStore('app', () => {
       latestVersion.value = data.latest_version
       hasUpdate.value = data.has_update
       buildType.value = data.build_type || 'source'
+      autoUpdateSupported.value = data.auto_update_supported ?? buildType.value === 'release'
+      updateDisabledReason.value = data.update_disabled_reason || ''
       releaseInfo.value = data.release_info || null
       versionLoaded.value = true
       return data
@@ -280,6 +286,8 @@ export const useAppStore = defineStore('app', () => {
   function clearVersionCache(): void {
     versionLoaded.value = false
     hasUpdate.value = false
+    autoUpdateSupported.value = false
+    updateDisabledReason.value = ''
   }
 
   // ==================== Public Settings Management ====================
@@ -424,6 +432,8 @@ export const useAppStore = defineStore('app', () => {
     latestVersion,
     hasUpdate,
     buildType,
+    autoUpdateSupported,
+    updateDisabledReason,
     releaseInfo,
 
     // Computed

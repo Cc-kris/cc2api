@@ -65,13 +65,15 @@ func NewUpdateService(cache UpdateCache, githubClient GitHubReleaseClient, versi
 
 // UpdateInfo contains update information
 type UpdateInfo struct {
-	CurrentVersion string       `json:"current_version"`
-	LatestVersion  string       `json:"latest_version"`
-	HasUpdate      bool         `json:"has_update"`
-	ReleaseInfo    *ReleaseInfo `json:"release_info,omitempty"`
-	Cached         bool         `json:"cached"`
-	Warning        string       `json:"warning,omitempty"`
-	BuildType      string       `json:"build_type"` // "source" or "release"
+	CurrentVersion       string       `json:"current_version"`
+	LatestVersion        string       `json:"latest_version"`
+	HasUpdate            bool         `json:"has_update"`
+	ReleaseInfo          *ReleaseInfo `json:"release_info,omitempty"`
+	Cached               bool         `json:"cached"`
+	Warning              string       `json:"warning,omitempty"`
+	BuildType            string       `json:"build_type"`
+	AutoUpdateSupported  bool         `json:"auto_update_supported"`
+	UpdateDisabledReason string       `json:"update_disabled_reason,omitempty"`
 }
 
 // ReleaseInfo contains GitHub release details
@@ -106,6 +108,58 @@ type GitHubAsset struct {
 	Size               int64  `json:"size"`
 }
 
+func (s *UpdateService) CurrentVersion() string {
+	return s.currentVersion
+}
+
+type releaseAssetSet struct {
+	archive     *Asset
+	archiveURL  string
+	checksumURL string
+}
+
+func (s *UpdateService) resolveReleaseAssets(releaseInfo *ReleaseInfo) releaseAssetSet {
+	if releaseInfo == nil {
+		return releaseAssetSet{}
+	}
+
+	archiveName := s.getArchiveName()
+	assets := releaseAssetSet{}
+	for i := range releaseInfo.Assets {
+		asset := releaseInfo.Assets[i]
+		if asset.Name == "checksums.txt" {
+			assets.checksumURL = asset.DownloadURL
+			continue
+		}
+		if strings.Contains(asset.Name, archiveName) && !strings.HasSuffix(asset.Name, ".txt") {
+			assets.archive = &releaseInfo.Assets[i]
+			assets.archiveURL = asset.DownloadURL
+		}
+	}
+	return assets
+}
+
+func (s *UpdateService) autoUpdateSupport(releaseInfo *ReleaseInfo) (bool, string) {
+	if s.buildType != "release" {
+		return false, "source builds must be updated manually"
+	}
+	if runtime.GOOS == "windows" {
+		return false, "automatic update is not supported on windows"
+	}
+	if releaseInfo == nil {
+		return false, "release information is unavailable"
+	}
+
+	assets := s.resolveReleaseAssets(releaseInfo)
+	if assets.archive == nil || assets.archiveURL == "" {
+		return false, fmt.Sprintf("no installable archive for %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
+	if assets.checksumURL == "" {
+		return false, "checksums.txt is missing for this release"
+	}
+	return true, ""
+}
+
 // CheckUpdate checks for available updates
 func (s *UpdateService) CheckUpdate(ctx context.Context, force bool) (*UpdateInfo, error) {
 	// Try cache first
@@ -124,11 +178,13 @@ func (s *UpdateService) CheckUpdate(ctx context.Context, force bool) (*UpdateInf
 			return cached, nil
 		}
 		return &UpdateInfo{
-			CurrentVersion: s.currentVersion,
-			LatestVersion:  s.currentVersion,
-			HasUpdate:      false,
-			Warning:        err.Error(),
-			BuildType:      s.buildType,
+			CurrentVersion:       s.currentVersion,
+			LatestVersion:        s.currentVersion,
+			HasUpdate:            false,
+			Warning:              err.Error(),
+			BuildType:            s.buildType,
+			AutoUpdateSupported:  false,
+			UpdateDisabledReason: "release information is unavailable",
 		}, nil
 	}
 
@@ -148,33 +204,22 @@ func (s *UpdateService) PerformUpdate(ctx context.Context) error {
 	if !info.HasUpdate {
 		return fmt.Errorf("no update available")
 	}
-
-	// Find matching archive and checksum for current platform
-	archiveName := s.getArchiveName()
-	var downloadURL string
-	var checksumURL string
-
-	for _, asset := range info.ReleaseInfo.Assets {
-		if strings.Contains(asset.Name, archiveName) && !strings.HasSuffix(asset.Name, ".txt") {
-			downloadURL = asset.DownloadURL
+	if !info.AutoUpdateSupported {
+		if info.UpdateDisabledReason != "" {
+			return fmt.Errorf("automatic update is unavailable: %s", info.UpdateDisabledReason)
 		}
-		if asset.Name == "checksums.txt" {
-			checksumURL = asset.DownloadURL
-		}
+		return fmt.Errorf("automatic update is unavailable")
 	}
 
-	if downloadURL == "" {
-		return fmt.Errorf("no compatible release found for %s/%s", runtime.GOOS, runtime.GOARCH)
-	}
+	assets := s.resolveReleaseAssets(info.ReleaseInfo)
+	downloadURL := assets.archiveURL
+	checksumURL := assets.checksumURL
 
-	// SECURITY: Validate download URL is from trusted domain
 	if err := validateDownloadURL(downloadURL); err != nil {
 		return fmt.Errorf("invalid download URL: %w", err)
 	}
-	if checksumURL != "" {
-		if err := validateDownloadURL(checksumURL); err != nil {
-			return fmt.Errorf("invalid checksum URL: %w", err)
-		}
+	if err := validateDownloadURL(checksumURL); err != nil {
+		return fmt.Errorf("invalid checksum URL: %w", err)
 	}
 
 	// Get current executable path
@@ -203,11 +248,8 @@ func (s *UpdateService) PerformUpdate(ctx context.Context) error {
 		return fmt.Errorf("download failed: %w", err)
 	}
 
-	// Verify checksum if available
-	if checksumURL != "" {
-		if err := s.verifyChecksum(ctx, archivePath, checksumURL); err != nil {
-			return fmt.Errorf("checksum verification failed: %w", err)
-		}
+	if err := s.verifyChecksum(ctx, archivePath, checksumURL); err != nil {
+		return fmt.Errorf("checksum verification failed: %w", err)
 	}
 
 	// Extract binary from archive
@@ -244,8 +286,6 @@ func (s *UpdateService) PerformUpdate(ctx context.Context) error {
 		return fmt.Errorf("replace failed (restored backup): %w", err)
 	}
 
-	// Success - backup file is kept for rollback capability
-	// It will be cleaned up on next successful update
 	return nil
 }
 
@@ -290,19 +330,23 @@ func (s *UpdateService) fetchLatestRelease(ctx context.Context) (*UpdateInfo, er
 		}
 	}
 
+	releaseInfo := &ReleaseInfo{
+		Name:        release.Name,
+		Body:        release.Body,
+		PublishedAt: release.PublishedAt,
+		HTMLURL:     release.HTMLURL,
+		Assets:      assets,
+	}
+	supported, reason := s.autoUpdateSupport(releaseInfo)
 	return &UpdateInfo{
-		CurrentVersion: s.currentVersion,
-		LatestVersion:  latestVersion,
-		HasUpdate:      compareVersions(s.currentVersion, latestVersion) < 0,
-		ReleaseInfo: &ReleaseInfo{
-			Name:        release.Name,
-			Body:        release.Body,
-			PublishedAt: release.PublishedAt,
-			HTMLURL:     release.HTMLURL,
-			Assets:      assets,
-		},
-		Cached:    false,
-		BuildType: s.buildType,
+		CurrentVersion:       s.currentVersion,
+		LatestVersion:        latestVersion,
+		HasUpdate:            compareVersions(s.currentVersion, latestVersion) < 0,
+		ReleaseInfo:          releaseInfo,
+		Cached:               false,
+		BuildType:            s.buildType,
+		AutoUpdateSupported:  supported,
+		UpdateDisabledReason: reason,
 	}, nil
 }
 
@@ -486,13 +530,16 @@ func (s *UpdateService) getFromCache(ctx context.Context) (*UpdateInfo, error) {
 		return nil, fmt.Errorf("cache expired")
 	}
 
+	supported, reason := s.autoUpdateSupport(cached.ReleaseInfo)
 	return &UpdateInfo{
-		CurrentVersion: s.currentVersion,
-		LatestVersion:  cached.Latest,
-		HasUpdate:      compareVersions(s.currentVersion, cached.Latest) < 0,
-		ReleaseInfo:    cached.ReleaseInfo,
-		Cached:         true,
-		BuildType:      s.buildType,
+		CurrentVersion:       s.currentVersion,
+		LatestVersion:        cached.Latest,
+		HasUpdate:            compareVersions(s.currentVersion, cached.Latest) < 0,
+		ReleaseInfo:          cached.ReleaseInfo,
+		Cached:               true,
+		BuildType:            s.buildType,
+		AutoUpdateSupported:  supported,
+		UpdateDisabledReason: reason,
 	}, nil
 }
 

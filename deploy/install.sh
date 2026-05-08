@@ -2,7 +2,7 @@
 #
 # Sub2API Installation Script
 # Sub2API 安装脚本
-# Usage: curl -sSL https://raw.githubusercontent.com/Wei-Shaw/sub2api/main/deploy/install.sh | bash
+# Usage: curl -sSL https://raw.githubusercontent.com/Cc-kris/sub2apis/main/deploy/install.sh | bash
 #
 
 set -e
@@ -16,7 +16,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuration
-GITHUB_REPO="Wei-Shaw/sub2api"
+GITHUB_REPO="Cc-kris/sub2apis"
 INSTALL_DIR="/opt/sub2api"
 SERVICE_NAME="sub2api"
 SERVICE_USER="sub2api"
@@ -104,6 +104,7 @@ declare -A MSG_ZH=(
     # Version install
     ["installing_version"]="正在安装指定版本"
     ["version_not_found"]="指定版本不存在"
+    ["version_not_installable"]="该版本不包含当前平台可安装二进制，请选择其他 release 或手动安装"
     ["same_version"]="已经是该版本，无需操作"
     ["rollback_complete"]="版本回退完成！"
     ["install_version_complete"]="指定版本安装完成！"
@@ -229,6 +230,7 @@ declare -A MSG_EN=(
     # Version install
     ["installing_version"]="Installing specified version"
     ["version_not_found"]="Specified version not found"
+    ["version_not_installable"]="This release does not contain an installable binary for the current platform"
     ["same_version"]="Already at this version, no action needed"
     ["rollback_complete"]="Version rollback completed!"
     ["install_version_complete"]="Specified version installed!"
@@ -465,18 +467,51 @@ check_dependencies() {
     fi
 }
 
-# Get latest release version
+# Fetch recent release tags
+fetch_release_versions() {
+    curl -s --connect-timeout 10 --max-time 30 "https://api.github.com/repos/${GITHUB_REPO}/releases" 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' | head -20
+}
+
+archive_name_for_version() {
+    local version="$1"
+    local version_num=${version#v}
+    echo "sub2api_${version_num}_${OS}_${ARCH}.tar.gz"
+}
+
+release_archive_exists() {
+    local version="$1"
+    local archive_name
+    archive_name=$(archive_name_for_version "$version")
+    local download_url="https://github.com/${GITHUB_REPO}/releases/download/${version}/${archive_name}"
+    local http_code
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 "$download_url" 2>/dev/null)
+    [ "$http_code" = "200" ] || [ "$http_code" = "302" ]
+}
+
+# Get latest installable release version
 get_latest_version() {
     print_info "$(msg 'fetching_version')"
-    LATEST_VERSION=$(curl -s --connect-timeout 10 --max-time 30 "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
 
-    if [ -z "$LATEST_VERSION" ]; then
+    local versions
+    versions=$(fetch_release_versions)
+    if [ -z "$versions" ]; then
         print_error "$(msg 'failed_get_version')"
         print_info "Please check your network connection or try again later."
         exit 1
     fi
 
-    print_info "$(msg 'latest_version'): $LATEST_VERSION"
+    while read -r version; do
+        [ -z "$version" ] && continue
+        if release_archive_exists "$version"; then
+            LATEST_VERSION="$version"
+            print_info "$(msg 'latest_version'): $LATEST_VERSION"
+            return 0
+        fi
+    done <<< "$versions"
+
+    print_error "$(msg 'failed_get_version')"
+    print_info "No installable release found for ${OS}_${ARCH}."
+    exit 1
 }
 
 # List available versions
@@ -484,7 +519,7 @@ list_versions() {
     print_info "$(msg 'fetching_versions')"
 
     local versions
-    versions=$(curl -s --connect-timeout 10 --max-time 30 "https://api.github.com/repos/${GITHUB_REPO}/releases" 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' | head -20)
+    versions=$(fetch_release_versions)
 
     if [ -z "$versions" ]; then
         print_error "$(msg 'failed_get_version')"
@@ -502,7 +537,7 @@ list_versions() {
     echo ""
 }
 
-# Validate if a version exists
+# Validate if a version exists and is installable for current platform
 validate_version() {
     local version="$1"
 
@@ -523,7 +558,6 @@ validate_version() {
     local http_code
     http_code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${version}" 2>/dev/null)
 
-    # Check for network errors (empty or non-numeric response)
     if [ -z "$http_code" ] || ! [[ "$http_code" =~ ^[0-9]+$ ]]; then
         print_error "Network error: Failed to connect to GitHub API" >&2
         exit 1
@@ -536,7 +570,11 @@ validate_version() {
         exit 1
     fi
 
-    # Return the normalized version (to stdout)
+    if ! release_archive_exists "$version"; then
+        print_error "$(msg 'version_not_installable'): $version (${OS}_${ARCH})" >&2
+        exit 1
+    fi
+
     echo "$version"
 }
 
@@ -553,7 +591,8 @@ get_current_version() {
 # Download and extract
 download_and_extract() {
     local version_num=${LATEST_VERSION#v}
-    local archive_name="sub2api_${version_num}_${OS}_${ARCH}.tar.gz"
+    local archive_name
+    archive_name=$(archive_name_for_version "$LATEST_VERSION")
     local download_url="https://github.com/${GITHUB_REPO}/releases/download/${LATEST_VERSION}/${archive_name}"
     local checksum_url="https://github.com/${GITHUB_REPO}/releases/download/${LATEST_VERSION}/checksums.txt"
 
@@ -655,7 +694,7 @@ install_service() {
     cat > /etc/systemd/system/sub2api.service << EOF
 [Unit]
 Description=Sub2API - AI API Gateway Platform
-Documentation=https://github.com/Wei-Shaw/sub2api
+Documentation=https://github.com/Cc-kris/sub2apis
 After=network.target postgresql.service redis.service
 Wants=postgresql.service redis.service
 
