@@ -313,14 +313,14 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 
 		// First request to populate cache and get ETag
 		w1 := httptest.NewRecorder()
-		req1 := httptest.NewRequest(http.MethodGet, "/", nil)
+		req1 := httptest.NewRequest(http.MethodGet, "/login", nil)
 		router.ServeHTTP(w1, req1)
 		etag := w1.Header().Get("ETag")
 		require.NotEmpty(t, etag)
 
 		// Second request with If-None-Match
 		w2 := httptest.NewRecorder()
-		req2 := httptest.NewRequest(http.MethodGet, "/", nil)
+		req2 := httptest.NewRequest(http.MethodGet, "/login", nil)
 		req2.Header.Set("If-None-Match", etag)
 		router.ServeHTTP(w2, req2)
 
@@ -488,7 +488,7 @@ func TestFrontendServer_Middleware(t *testing.T) {
 		assert.JSONEq(t, `{"ok":true}`, w.Body.String())
 	})
 
-	t.Run("serves_index_for_spa_routes", func(t *testing.T) {
+	t.Run("serves_index_for_public_spa_routes", func(t *testing.T) {
 		provider := &mockSettingsProvider{
 			settings: map[string]string{"test": "value"},
 		}
@@ -503,14 +503,14 @@ func TestFrontendServer_Middleware(t *testing.T) {
 		})
 		router.Use(server.Middleware())
 
-		spaPaths := []string{
-			"/",
-			"/dashboard",
-			"/users/123",
-			"/settings/profile",
+		publicPaths := []string{
+			"/login",
+			"/legal/terms",
+			"/auth/oidc/callback",
+			"/payment/result",
 		}
 
-		for _, path := range spaPaths {
+		for _, path := range publicPaths {
 			t.Run(path, func(t *testing.T) {
 				w := httptest.NewRecorder()
 				req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -518,6 +518,41 @@ func TestFrontendServer_Middleware(t *testing.T) {
 
 				assert.Equal(t, http.StatusOK, w.Code)
 				assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
+				assert.Equal(t, robotsNoIndexHeader, w.Header().Get("X-Robots-Tag"))
+			})
+		}
+	})
+
+	t.Run("redirects_private_spa_routes_to_login", func(t *testing.T) {
+		provider := &mockSettingsProvider{
+			settings: map[string]string{"test": "value"},
+		}
+
+		server, err := NewFrontendServer(provider)
+		require.NoError(t, err)
+
+		router := gin.New()
+		router.Use(server.Middleware())
+
+		privatePaths := []string{
+			"/",
+			"/home",
+			"/dashboard",
+			"/users/123",
+			"/settings/profile",
+			"/admin/dashboard",
+			"/payment/qrcode",
+		}
+
+		for _, path := range privatePaths {
+			t.Run(path, func(t *testing.T) {
+				w := httptest.NewRecorder()
+				req := httptest.NewRequest(http.MethodGet, path, nil)
+				router.ServeHTTP(w, req)
+
+				assert.Equal(t, http.StatusFound, w.Code)
+				assert.Equal(t, frontendLoginPath, w.Header().Get("Location"))
+				assert.Equal(t, robotsNoIndexHeader, w.Header().Get("X-Robots-Tag"))
 			})
 		}
 	})
@@ -596,7 +631,7 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 		assert.Contains(t, w.Header().Get("Content-Type"), "image/png")
 	})
 
-	t.Run("serves_index_html_for_root", func(t *testing.T) {
+	t.Run("redirects_root_to_login", func(t *testing.T) {
 		middleware := ServeEmbeddedFrontend()
 
 		router := gin.New()
@@ -606,18 +641,18 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
-		assert.Contains(t, w.Body.String(), "<!doctype html>")
+		assert.Equal(t, http.StatusFound, w.Code)
+		assert.Equal(t, frontendLoginPath, w.Header().Get("Location"))
+		assert.Equal(t, robotsNoIndexHeader, w.Header().Get("X-Robots-Tag"))
 	})
 
-	t.Run("serves_index_html_for_spa_routes", func(t *testing.T) {
+	t.Run("serves_index_html_for_public_spa_routes", func(t *testing.T) {
 		middleware := ServeEmbeddedFrontend()
 
 		router := gin.New()
 		router.Use(middleware)
 
-		spaPaths := []string{"/dashboard", "/users/123", "/settings"}
+		spaPaths := []string{"/login", "/legal/terms", "/auth/wechat/callback", "/payment/result"}
 
 		for _, path := range spaPaths {
 			t.Run(path, func(t *testing.T) {
@@ -627,6 +662,28 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 
 				assert.Equal(t, http.StatusOK, w.Code)
 				assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
+				assert.Equal(t, robotsNoIndexHeader, w.Header().Get("X-Robots-Tag"))
+			})
+		}
+	})
+
+	t.Run("redirects_private_spa_routes_to_login", func(t *testing.T) {
+		middleware := ServeEmbeddedFrontend()
+
+		router := gin.New()
+		router.Use(middleware)
+
+		spaPaths := []string{"/dashboard", "/users/123", "/settings", "/admin/dashboard", "/payment/qrcode"}
+
+		for _, path := range spaPaths {
+			t.Run(path, func(t *testing.T) {
+				w := httptest.NewRecorder()
+				req := httptest.NewRequest(http.MethodGet, path, nil)
+				router.ServeHTTP(w, req)
+
+				assert.Equal(t, http.StatusFound, w.Code)
+				assert.Equal(t, frontendLoginPath, w.Header().Get("Location"))
+				assert.Equal(t, robotsNoIndexHeader, w.Header().Get("X-Robots-Tag"))
 			})
 		}
 	})

@@ -22,6 +22,8 @@ import (
 const (
 	// NonceHTMLPlaceholder is the placeholder for nonce in HTML script tags
 	NonceHTMLPlaceholder = "__CSP_NONCE_VALUE__"
+	frontendLoginPath    = "/login"
+	robotsNoIndexHeader  = "noindex, nofollow, noarchive"
 )
 
 //go:embed all:dist
@@ -99,6 +101,10 @@ func (s *FrontendServer) Middleware() gin.HandlerFunc {
 
 		// For index.html or SPA routes, serve with injected settings
 		if cleanPath == "index.html" || !s.fileExists(cleanPath) {
+			if shouldRedirectFrontendRouteToLogin(path) {
+				redirectFrontendRouteToLogin(c)
+				return
+			}
 			s.serveIndexHTML(c)
 			return
 		}
@@ -158,6 +164,7 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 
 		c.Header("ETag", cached.ETag)
 		c.Header("Cache-Control", "no-cache") // Must revalidate
+		c.Header("X-Robots-Tag", robotsNoIndexHeader)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 		c.Abort()
 		return
@@ -170,6 +177,7 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	settings, err := s.settings.GetPublicSettingsForInjection(ctx)
 	if err != nil {
 		// Fallback: serve without injection
+		c.Header("X-Robots-Tag", robotsNoIndexHeader)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
 		c.Abort()
 		return
@@ -178,6 +186,7 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	settingsJSON, err := json.Marshal(settings)
 	if err != nil {
 		// Fallback: serve without injection
+		c.Header("X-Robots-Tag", robotsNoIndexHeader)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
 		c.Abort()
 		return
@@ -194,6 +203,7 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 		c.Header("ETag", cached.ETag)
 	}
 	c.Header("Cache-Control", "no-cache")
+	c.Header("X-Robots-Tag", robotsNoIndexHeader)
 	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 	c.Abort()
 }
@@ -266,6 +276,15 @@ func ServeEmbeddedFrontend() gin.HandlerFunc {
 			cleanPath = "index.html"
 		}
 
+		if cleanPath == "index.html" {
+			if shouldRedirectFrontendRouteToLogin(path) {
+				redirectFrontendRouteToLogin(c)
+				return
+			}
+			serveIndexHTML(c, distFS)
+			return
+		}
+
 		if file, err := distFS.Open(cleanPath); err == nil {
 			_ = file.Close()
 			// Try local override first
@@ -274,6 +293,11 @@ func ServeEmbeddedFrontend() gin.HandlerFunc {
 			}
 			fileServer.ServeHTTP(c.Writer, c.Request)
 			c.Abort()
+			return
+		}
+
+		if shouldRedirectFrontendRouteToLogin(path) {
+			redirectFrontendRouteToLogin(c)
 			return
 		}
 
@@ -310,6 +334,59 @@ func shouldBypassEmbeddedFrontend(path string) bool {
 		strings.HasPrefix(trimmed, "/images/")
 }
 
+func shouldRedirectFrontendRouteToLogin(path string) bool {
+	return !isPublicFrontendRoute(path)
+}
+
+func isPublicFrontendRoute(path string) bool {
+	normalized := normalizeFrontendRoutePath(path)
+	if normalized == "" {
+		normalized = "/"
+	}
+
+	switch normalized {
+	case frontendLoginPath,
+		"/setup",
+		"/email-verify",
+		"/auth/callback",
+		"/auth/oauth/callback",
+		"/auth/linuxdo/callback",
+		"/auth/wechat/callback",
+		"/auth/wechat/payment/callback",
+		"/auth/oidc/callback",
+		"/forgot-password",
+		"/reset-password",
+		"/key-usage",
+		"/payment/result",
+		"/payment/stripe",
+		"/payment/airwallex",
+		"/payment/stripe-popup":
+		return true
+	}
+
+	return normalized == "/legal" || strings.HasPrefix(normalized, "/legal/")
+}
+
+func normalizeFrontendRoutePath(path string) string {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(trimmed, "/") {
+		trimmed = "/" + trimmed
+	}
+	if trimmed != "/" {
+		trimmed = strings.TrimRight(trimmed, "/")
+	}
+	return trimmed
+}
+
+func redirectFrontendRouteToLogin(c *gin.Context) {
+	c.Header("X-Robots-Tag", robotsNoIndexHeader)
+	c.Redirect(http.StatusFound, frontendLoginPath)
+	c.Abort()
+}
+
 func serveIndexHTML(c *gin.Context, fsys fs.FS) {
 	file, err := fsys.Open("index.html")
 	if err != nil {
@@ -326,6 +403,7 @@ func serveIndexHTML(c *gin.Context, fsys fs.FS) {
 		return
 	}
 
+	c.Header("X-Robots-Tag", robotsNoIndexHeader)
 	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 	c.Abort()
 }
