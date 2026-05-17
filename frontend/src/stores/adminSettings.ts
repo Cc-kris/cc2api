@@ -48,6 +48,7 @@ export const useAdminSettingsStore = defineStore('adminSettings', () => {
   const opsMonitoringEnabled = ref(readCachedBool('ops_monitoring_enabled_cached', true))
   const opsRealtimeMonitoringEnabled = ref(readCachedBool('ops_realtime_monitoring_enabled_cached', true))
   const opsQueryModeDefault = ref(readCachedString('ops_query_mode_default_cached', 'auto'))
+  const channelMonitorEnabled = ref(readCachedBool('channel_monitor_enabled_cached', true))
   const paymentEnabled = ref(readCachedBool('payment_enabled_cached', false))
   const customMenuItems = ref<CustomMenuItem[]>([])
 
@@ -69,6 +70,9 @@ export const useAdminSettingsStore = defineStore('adminSettings', () => {
 
       opsQueryModeDefault.value = settings.ops_query_mode_default || 'auto'
       writeCachedString('ops_query_mode_default_cached', opsQueryModeDefault.value)
+
+      channelMonitorEnabled.value = settings.channel_monitor_enabled ?? true
+      writeCachedBool('channel_monitor_enabled_cached', channelMonitorEnabled.value)
 
       customMenuItems.value = Array.isArray(settings.custom_menu_items) ? settings.custom_menu_items : []
 
@@ -100,6 +104,12 @@ export const useAdminSettingsStore = defineStore('adminSettings', () => {
   function setPaymentEnabledLocal(value: boolean) {
     paymentEnabled.value = value
     writeCachedBool('payment_enabled_cached', value)
+    loaded.value = true
+  }
+
+  function setChannelMonitorEnabledLocal(value: boolean) {
+    channelMonitorEnabled.value = value
+    writeCachedBool('channel_monitor_enabled_cached', value)
     loaded.value = true
   }
 
@@ -139,12 +149,14 @@ export const useAdminSettingsStore = defineStore('adminSettings', () => {
     opsMonitoringEnabled,
     opsRealtimeMonitoringEnabled,
     opsQueryModeDefault,
+    channelMonitorEnabled,
     paymentEnabled,
     customMenuItems,
     fetch,
     setOpsMonitoringEnabledLocal,
     setOpsRealtimeMonitoringEnabledLocal,
     setPaymentEnabledLocal,
+    setChannelMonitorEnabledLocal,
     setOpsQueryModeDefaultLocal
   }
 })
