@@ -27,7 +27,7 @@
  *
  *   - **`opt-out`** (default enabled) — menu visible when settings unloaded,
  *     hidden only when the backend explicitly sends `false`. Use for features
- *     that ship enabled by default (Channel Monitor, Payment).
+ *     that ship enabled by default (Payment).
  *   - **`opt-in`**  (default disabled) — menu hidden when settings unloaded,
  *     visible only when the backend explicitly sends `true`. Use for features
  *     that ship disabled (Available Channels).
@@ -95,8 +95,8 @@ function defineFlag<K extends keyof PublicSettings>(
  */
 export const FeatureFlags = {
   channelMonitor: defineFlag({
-    key: 'channel_monitor_enabled',
-    mode: 'opt-out',
+    key: 'channel_monitor_public_enabled',
+    mode: 'opt-in',
     label: 'Channel Monitor',
   }),
   availableChannels: defineFlag({

@@ -5098,12 +5098,14 @@ export default {
       features: {
         channelMonitor: {
           title: 'Channel Monitor',
-          description: 'Periodically probe configured channels and surface availability / latency to users. Turning it off stops the scheduler and returns an empty list on the user page.',
+          description: 'Periodically probe configured channels for admin availability and latency checks. Customer visibility is controlled separately.',
           configureLink: 'Configure monitors in Channel Management > Channel Monitor',
           enabled: 'Enable Channel Monitor',
           enabledHint: 'Disabling stops background checks; existing history is preserved.',
           defaultInterval: 'Default check interval (seconds)',
           defaultIntervalHint: 'Pre-fills the interval when creating a new monitor; each monitor can override it. Range 15 – 3600.',
+          publicEnabled: 'Show Channel Status to customers',
+          publicEnabledHint: 'When off, the customer sidebar hides Channel Status and user APIs return empty results; admins can still view monitors.',
         },
         availableChannels: {
           title: 'Available Channels',

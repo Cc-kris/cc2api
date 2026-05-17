@@ -18,7 +18,7 @@ type ChannelMonitorUserHandler struct {
 }
 
 // NewChannelMonitorUserHandler 创建 handler。
-// settingService 用于每次请求前读取功能开关；关闭时 List/GetStatus 直接返回空/404。
+// settingService 用于每次请求前读取客户可见性开关；关闭时 List/GetStatus 直接返回空/404。
 func NewChannelMonitorUserHandler(
 	monitorService *service.ChannelMonitorService,
 	settingService *service.SettingService,
@@ -29,13 +29,13 @@ func NewChannelMonitorUserHandler(
 	}
 }
 
-// featureEnabled 返回当前渠道监控功能是否开启。
+// featureEnabled 返回当前客户侧渠道监控状态页是否开启。
 // settingService 为 nil（测试场景）视为启用。
 func (h *ChannelMonitorUserHandler) featureEnabled(c *gin.Context) bool {
 	if h.settingService == nil {
 		return true
 	}
-	return h.settingService.GetChannelMonitorRuntime(c.Request.Context()).Enabled
+	return h.settingService.GetChannelMonitorPublicRuntime(c.Request.Context()).Enabled
 }
 
 // --- Response ---

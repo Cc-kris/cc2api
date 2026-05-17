@@ -5261,12 +5261,14 @@ export default {
       features: {
         channelMonitor: {
           title: '渠道监控',
-          description: '定期对配置的渠道发起健康检查，向用户展示可用性与延迟。关闭后调度器停止扫描，用户端列表为空。',
+          description: '定期对配置的渠道发起健康检查，管理员可查看可用性与延迟。客户侧展示由独立开关控制。',
           configureLink: '前往 渠道管理 > 渠道监控 配置监控项',
           enabled: '启用渠道监控',
           enabledHint: '关闭后后台不再执行定时检测，已有数据保留。',
           defaultInterval: '默认检测间隔（秒）',
           defaultIntervalHint: '新建渠道监控时表单的默认值，可被单个渠道覆盖。范围 15 – 3600 秒。',
+          publicEnabled: '向客户展示渠道状态',
+          publicEnabledHint: '关闭后客户侧边栏隐藏“渠道状态”，用户接口返回空列表；管理员仍可查看监控。',
         },
         availableChannels: {
           title: '可用渠道',
