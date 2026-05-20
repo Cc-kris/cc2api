@@ -66,7 +66,12 @@ func (h *SystemHandler) PerformUpdate(c *gin.Context) {
 			release(releaseReason, succeeded)
 		}()
 
-		if err := h.updateSvc.PerformUpdate(ctx); err != nil {
+		// The update downloads a release archive and replaces the running binary.
+		// Keep it alive even if the browser or a reverse proxy closes the request
+		// while the download is still in progress.
+		updateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Minute)
+		defer cancel()
+		if err := h.updateSvc.PerformUpdate(updateCtx); err != nil {
 			releaseReason = "SYSTEM_UPDATE_FAILED"
 			return nil, err
 		}

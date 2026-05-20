@@ -50,7 +50,9 @@ export interface UpdateResult {
  * Downloads and applies the latest version
  */
 export async function performUpdate(): Promise<UpdateResult> {
-  const { data } = await apiClient.post<UpdateResult>('/admin/system/update')
+  const { data } = await apiClient.post<UpdateResult>('/admin/system/update', undefined, {
+    timeout: 10 * 60 * 1000
+  })
   return data
 }
 
