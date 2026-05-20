@@ -3229,6 +3229,14 @@ export default {
       poolModeRetryCount: 'Same-Account Retries',
       poolModeRetryCountHint:
         'Only applies in pool mode. Use 0 to disable in-place retry. Default {default}, maximum {max}.',
+      upstreamPrepaidAmount: 'Upstream Prepaid Amount',
+      upstreamPrepaidAmountHint: 'USD amount remaining in the upstream pool. Account spending deducts this value in real time.',
+      upstreamWarningAmount: 'Warning Amount',
+      upstreamWarningAmountHint: 'Send an alert when the upstream prepaid amount falls below this USD amount.',
+      upstreamNotifyEnabled: 'Email notification when the amount falls below the warning amount',
+      upstreamPrepaidAmountRequired: 'Please enter the upstream prepaid amount',
+      upstreamWarningAmountRequired: 'Please enter the warning amount',
+      upstreamWarningAmountMustBeLess: 'Warning amount must be less than upstream prepaid amount',
       customErrorCodes: 'Custom Error Codes',
       customErrorCodesHint: 'Only stop scheduling for selected error codes',
       customErrorCodesWarning:

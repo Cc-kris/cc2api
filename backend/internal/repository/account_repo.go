@@ -1939,6 +1939,13 @@ func (r *accountRepository) IncrementQuotaUsed(ctx context.Context, id int64, am
 			COALESCE(extra, '{}'::jsonb)
 			-- 总额度：始终递增
 			|| jsonb_build_object('quota_used', COALESCE((extra->>'quota_used')::numeric, 0) + $1)
+			-- 池模式上游预存余额：按账号实际花费实时扣减
+			|| CASE WHEN COALESCE((extra->>'upstream_prepaid_amount')::numeric, 0) > 0 AND COALESCE((credentials->>'pool_mode')::boolean, false) THEN
+				jsonb_build_object(
+					'upstream_prepaid_amount',
+					GREATEST(COALESCE((extra->>'upstream_prepaid_amount')::numeric, 0) - $1, 0)
+				)
+			ELSE '{}'::jsonb END
 			-- 日额度：仅在 quota_daily_limit > 0 时处理
 			|| CASE WHEN COALESCE((extra->>'quota_daily_limit')::numeric, 0) > 0 THEN
 				jsonb_build_object(
@@ -1977,16 +1984,20 @@ func (r *accountRepository) IncrementQuotaUsed(ctx context.Context, id int64, am
 		WHERE id = $2 AND deleted_at IS NULL
 		RETURNING
 			COALESCE((extra->>'quota_used')::numeric, 0),
-			COALESCE((extra->>'quota_limit')::numeric, 0)`,
+			COALESCE((extra->>'quota_limit')::numeric, 0),
+			COALESCE((extra->>'upstream_prepaid_amount')::numeric, 0),
+			COALESCE((extra->>'upstream_warning_amount')::numeric, 0),
+			COALESCE((extra->>'upstream_notify_enabled')::boolean, false)`,
 		amount, id)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = rows.Close() }()
 
-	var newUsed, limit float64
+	var newUsed, limit, upstreamPrepaid, upstreamWarning float64
+	var upstreamNotifyEnabled bool
 	if rows.Next() {
-		if err := rows.Scan(&newUsed, &limit); err != nil {
+		if err := rows.Scan(&newUsed, &limit, &upstreamPrepaid, &upstreamWarning, &upstreamNotifyEnabled); err != nil {
 			return err
 		}
 	}
@@ -1995,7 +2006,8 @@ func (r *accountRepository) IncrementQuotaUsed(ctx context.Context, id int64, am
 	}
 
 	// 任一维度配额刚超限时触发调度快照刷新
-	if limit > 0 && newUsed >= limit && (newUsed-amount) < limit {
+	prepaidCrossed := upstreamNotifyEnabled && upstreamWarning > 0 && upstreamPrepaid < upstreamWarning && (upstreamPrepaid+amount) >= upstreamWarning
+	if (limit > 0 && newUsed >= limit && (newUsed-amount) < limit) || prepaidCrossed {
 		if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
 			logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue quota exceeded failed: account=%d err=%v", id, err)
 		}

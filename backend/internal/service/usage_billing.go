@@ -109,6 +109,12 @@ type AccountQuotaState struct {
 	DailyLimit  float64
 	WeeklyUsed  float64
 	WeeklyLimit float64
+
+	// Pool-mode upstream prepaid balance. UpstreamPrepaidAmount is the post-deduction
+	// remaining amount in USD.
+	UpstreamPrepaidAmount float64
+	UpstreamWarningAmount float64
+	UpstreamNotifyEnabled bool
 }
 
 type UsageBillingApplyResult struct {

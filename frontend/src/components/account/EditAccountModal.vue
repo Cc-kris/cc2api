@@ -266,6 +266,7 @@
             </div>
             <button
               type="button"
+              data-testid="pool-mode-toggle"
               @click="poolModeEnabled = !poolModeEnabled"
               :class="[
                 'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
@@ -286,24 +287,69 @@
               {{ t('admin.accounts.poolModeInfo') }}
             </p>
           </div>
-          <div v-if="poolModeEnabled" class="mt-3">
-            <label class="input-label">{{ t('admin.accounts.poolModeRetryCount') }}</label>
-            <input
-              v-model.number="poolModeRetryCount"
-              type="number"
-              min="0"
-              :max="MAX_POOL_MODE_RETRY_COUNT"
-              step="1"
-              class="input"
-            />
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {{
-                t('admin.accounts.poolModeRetryCountHint', {
-                  default: DEFAULT_POOL_MODE_RETRY_COUNT,
-                  max: MAX_POOL_MODE_RETRY_COUNT
-                })
-              }}
-            </p>
+          <div v-if="poolModeEnabled" class="mt-3 space-y-3">
+            <div>
+              <label class="input-label">{{ t('admin.accounts.poolModeRetryCount') }}</label>
+              <input
+                v-model.number="poolModeRetryCount"
+                type="number"
+                min="0"
+                :max="MAX_POOL_MODE_RETRY_COUNT"
+                step="1"
+                class="input"
+              />
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{
+                  t('admin.accounts.poolModeRetryCountHint', {
+                    default: DEFAULT_POOL_MODE_RETRY_COUNT,
+                    max: MAX_POOL_MODE_RETRY_COUNT
+                  })
+                }}
+              </p>
+            </div>
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div>
+                <label class="input-label">{{ t('admin.accounts.upstreamPrepaidAmount') }}</label>
+                <div class="relative">
+                  <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">$</span>
+                  <input
+                    v-model.number="upstreamPrepaidAmount"
+                    type="number"
+                    min="0"
+                    step="0.000001"
+                    required
+                    class="input pl-7"
+                    data-testid="upstream-prepaid-amount"
+                  />
+                </div>
+                <p class="input-hint">{{ t('admin.accounts.upstreamPrepaidAmountHint') }}</p>
+              </div>
+              <div>
+                <label class="input-label">{{ t('admin.accounts.upstreamWarningAmount') }}</label>
+                <div class="relative">
+                  <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">$</span>
+                  <input
+                    v-model.number="upstreamWarningAmount"
+                    type="number"
+                    min="0"
+                    step="0.000001"
+                    required
+                    class="input pl-7"
+                    data-testid="upstream-warning-amount"
+                  />
+                </div>
+                <p class="input-hint">{{ t('admin.accounts.upstreamWarningAmountHint') }}</p>
+              </div>
+            </div>
+            <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input
+                v-model="upstreamNotifyEnabled"
+                type="checkbox"
+                class="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                data-testid="upstream-notify-enabled"
+              />
+              <span>{{ t('admin.accounts.upstreamNotifyEnabled') }}</span>
+            </label>
           </div>
         </div>
 
@@ -934,6 +980,7 @@
             </div>
             <button
               type="button"
+              data-testid="pool-mode-toggle"
               @click="poolModeEnabled = !poolModeEnabled"
               :class="[
                 'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
@@ -954,24 +1001,69 @@
               {{ t('admin.accounts.poolModeInfo') }}
             </p>
           </div>
-          <div v-if="poolModeEnabled" class="mt-3">
-            <label class="input-label">{{ t('admin.accounts.poolModeRetryCount') }}</label>
-            <input
-              v-model.number="poolModeRetryCount"
-              type="number"
-              min="0"
-              :max="MAX_POOL_MODE_RETRY_COUNT"
-              step="1"
-              class="input"
-            />
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {{
-                t('admin.accounts.poolModeRetryCountHint', {
-                  default: DEFAULT_POOL_MODE_RETRY_COUNT,
-                  max: MAX_POOL_MODE_RETRY_COUNT
-                })
-              }}
-            </p>
+          <div v-if="poolModeEnabled" class="mt-3 space-y-3">
+            <div>
+              <label class="input-label">{{ t('admin.accounts.poolModeRetryCount') }}</label>
+              <input
+                v-model.number="poolModeRetryCount"
+                type="number"
+                min="0"
+                :max="MAX_POOL_MODE_RETRY_COUNT"
+                step="1"
+                class="input"
+              />
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{
+                  t('admin.accounts.poolModeRetryCountHint', {
+                    default: DEFAULT_POOL_MODE_RETRY_COUNT,
+                    max: MAX_POOL_MODE_RETRY_COUNT
+                  })
+                }}
+              </p>
+            </div>
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div>
+                <label class="input-label">{{ t('admin.accounts.upstreamPrepaidAmount') }}</label>
+                <div class="relative">
+                  <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">$</span>
+                  <input
+                    v-model.number="upstreamPrepaidAmount"
+                    type="number"
+                    min="0"
+                    step="0.000001"
+                    required
+                    class="input pl-7"
+                    data-testid="upstream-prepaid-amount"
+                  />
+                </div>
+                <p class="input-hint">{{ t('admin.accounts.upstreamPrepaidAmountHint') }}</p>
+              </div>
+              <div>
+                <label class="input-label">{{ t('admin.accounts.upstreamWarningAmount') }}</label>
+                <div class="relative">
+                  <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">$</span>
+                  <input
+                    v-model.number="upstreamWarningAmount"
+                    type="number"
+                    min="0"
+                    step="0.000001"
+                    required
+                    class="input pl-7"
+                    data-testid="upstream-warning-amount"
+                  />
+                </div>
+                <p class="input-hint">{{ t('admin.accounts.upstreamWarningAmountHint') }}</p>
+              </div>
+            </div>
+            <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input
+                v-model="upstreamNotifyEnabled"
+                type="checkbox"
+                class="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                data-testid="upstream-notify-enabled"
+              />
+              <span>{{ t('admin.accounts.upstreamNotifyEnabled') }}</span>
+            </label>
           </div>
         </div>
       </div>
@@ -2278,6 +2370,9 @@ const DEFAULT_POOL_MODE_RETRY_COUNT = 3
 const MAX_POOL_MODE_RETRY_COUNT = 10
 const poolModeEnabled = ref(false)
 const poolModeRetryCount = ref(DEFAULT_POOL_MODE_RETRY_COUNT)
+const upstreamPrepaidAmount = ref<number | null>(null)
+const upstreamWarningAmount = ref<number | null>(null)
+const upstreamNotifyEnabled = ref(false)
 const customErrorCodesEnabled = ref(false)
 const selectedErrorCodes = ref<number[]>([])
 const customErrorCodeInput = ref<number | null>(null)
@@ -2542,6 +2637,56 @@ const normalizePoolModeRetryCount = (value: number) => {
   return normalized
 }
 
+const toPositiveAmount = (value: unknown) => {
+  const amount = Number(value)
+  return Number.isFinite(amount) && amount > 0 ? amount : null
+}
+
+const resetUpstreamPrepaidState = () => {
+  upstreamPrepaidAmount.value = null
+  upstreamWarningAmount.value = null
+  upstreamNotifyEnabled.value = false
+}
+
+const loadUpstreamPrepaidState = (extra?: Record<string, unknown>) => {
+  upstreamPrepaidAmount.value = toPositiveAmount(extra?.upstream_prepaid_amount)
+  upstreamWarningAmount.value = toPositiveAmount(extra?.upstream_warning_amount)
+  upstreamNotifyEnabled.value = extra?.upstream_notify_enabled === true
+}
+
+const applyUpstreamPrepaidToExtra = (extra: Record<string, unknown>) => {
+  if (!poolModeEnabled.value) {
+    delete extra.upstream_prepaid_amount
+    delete extra.upstream_warning_amount
+    delete extra.upstream_notify_enabled
+    return true
+  }
+
+  const prepaid = toPositiveAmount(upstreamPrepaidAmount.value)
+  const warning = toPositiveAmount(upstreamWarningAmount.value)
+  if (prepaid == null) {
+    appStore.showError(t('admin.accounts.upstreamPrepaidAmountRequired'))
+    return false
+  }
+  if (warning == null) {
+    appStore.showError(t('admin.accounts.upstreamWarningAmountRequired'))
+    return false
+  }
+  if (warning >= prepaid) {
+    appStore.showError(t('admin.accounts.upstreamWarningAmountMustBeLess'))
+    return false
+  }
+
+  extra.upstream_prepaid_amount = prepaid
+  extra.upstream_warning_amount = warning
+  if (upstreamNotifyEnabled.value) {
+    extra.upstream_notify_enabled = true
+  } else {
+    delete extra.upstream_notify_enabled
+  }
+  return true
+}
+
 const syncFormFromAccount = (newAccount: Account | null) => {
   if (!newAccount) {
     return
@@ -2743,6 +2888,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     poolModeRetryCount.value = normalizePoolModeRetryCount(
       Number(credentials.pool_mode_retry_count ?? DEFAULT_POOL_MODE_RETRY_COUNT)
     )
+    loadUpstreamPrepaidState(extra)
 
     // Load custom error codes
     customErrorCodesEnabled.value = credentials.custom_error_codes_enabled === true
@@ -2754,6 +2900,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     }
   } else if (newAccount.type === 'bedrock' && newAccount.credentials) {
     const bedrockCreds = newAccount.credentials as Record<string, unknown>
+    const bedrockExtra = (newAccount.extra as Record<string, unknown>) || {}
     const authMode = (bedrockCreds.auth_mode as string) || 'sigv4'
     editBedrockRegion.value = (bedrockCreds.aws_region as string) || ''
     editBedrockForceGlobal.value = (bedrockCreds.aws_force_global as string) === 'true'
@@ -2770,9 +2917,9 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     poolModeEnabled.value = bedrockCreds.pool_mode === true
     const retryCount = bedrockCreds.pool_mode_retry_count
     poolModeRetryCount.value = (typeof retryCount === 'number' && retryCount >= 0) ? retryCount : DEFAULT_POOL_MODE_RETRY_COUNT
+    loadUpstreamPrepaidState(bedrockExtra)
 
     // Load quota limits for bedrock
-    const bedrockExtra = (newAccount.extra as Record<string, unknown>) || {}
     editQuotaLimit.value = typeof bedrockExtra.quota_limit === 'number' ? bedrockExtra.quota_limit : null
     editQuotaDailyLimit.value = typeof bedrockExtra.quota_daily_limit === 'number' ? bedrockExtra.quota_daily_limit : null
     editQuotaWeeklyLimit.value = typeof bedrockExtra.quota_weekly_limit === 'number' ? bedrockExtra.quota_weekly_limit : null
@@ -2863,6 +3010,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     }
     poolModeEnabled.value = false
     poolModeRetryCount.value = DEFAULT_POOL_MODE_RETRY_COUNT
+    resetUpstreamPrepaidState()
     customErrorCodesEnabled.value = false
     selectedErrorCodes.value = []
   }
@@ -3794,6 +3942,9 @@ const handleSubmit = async () => {
       }
       // Quota notify config
       writeQuotaNotifyToExtra(newExtra, 'update')
+      if (!applyUpstreamPrepaidToExtra(newExtra)) {
+        return
+      }
       updatePayload.extra = newExtra
     }
 

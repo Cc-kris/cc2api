@@ -1892,9 +1892,30 @@ func ValidateQuotaResetConfig(extra map[string]any) error {
 	return nil
 }
 
-// HasAnyQuotaLimit 检查是否配置了任一维度的配额限制
+// GetUpstreamPrepaidAmount 获取池模式上游预存余额（美元）。
+// 该值代表当前剩余金额，会在账号产生花费后实时扣减。
+func (a *Account) GetUpstreamPrepaidAmount() float64 {
+	return a.getExtraFloat64("upstream_prepaid_amount")
+}
+
+// GetUpstreamWarningAmount 获取池模式上游预存余额预警金额（美元）。
+func (a *Account) GetUpstreamWarningAmount() float64 {
+	return a.getExtraFloat64("upstream_warning_amount")
+}
+
+// IsUpstreamPrepaidNotifyEnabled 返回池模式上游预存余额邮件通知开关。
+func (a *Account) IsUpstreamPrepaidNotifyEnabled() bool {
+	return a.getExtraBool("upstream_notify_enabled")
+}
+
+// HasUpstreamPrepaidBalance 检查账号是否启用池模式上游预存余额扣减。
+func (a *Account) HasUpstreamPrepaidBalance() bool {
+	return a != nil && a.IsPoolMode() && a.GetUpstreamPrepaidAmount() > 0
+}
+
+// HasAnyQuotaLimit 检查是否配置了任一维度的配额限制或池模式上游预存余额。
 func (a *Account) HasAnyQuotaLimit() bool {
-	return a.GetQuotaLimit() > 0 || a.GetQuotaDailyLimit() > 0 || a.GetQuotaWeeklyLimit() > 0
+	return a.GetQuotaLimit() > 0 || a.GetQuotaDailyLimit() > 0 || a.GetQuotaWeeklyLimit() > 0 || a.HasUpstreamPrepaidBalance()
 }
 
 // isPeriodExpired 检查指定周期（自 periodStart 起经过 dur）是否已过期

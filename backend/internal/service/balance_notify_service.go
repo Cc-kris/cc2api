@@ -172,6 +172,30 @@ func buildQuotaDimsFromState(account *Account, state *AccountQuotaState) []quota
 	}
 }
 
+type upstreamPrepaidNotifyState struct {
+	enabled   bool
+	amount    float64
+	threshold float64
+}
+
+func buildUpstreamPrepaidNotifyState(account *Account, quotaState *AccountQuotaState) upstreamPrepaidNotifyState {
+	if quotaState != nil {
+		return upstreamPrepaidNotifyState{
+			enabled:   quotaState.UpstreamNotifyEnabled,
+			amount:    quotaState.UpstreamPrepaidAmount,
+			threshold: quotaState.UpstreamWarningAmount,
+		}
+	}
+	if account == nil {
+		return upstreamPrepaidNotifyState{}
+	}
+	return upstreamPrepaidNotifyState{
+		enabled:   account.IsUpstreamPrepaidNotifyEnabled(),
+		amount:    account.GetUpstreamPrepaidAmount(),
+		threshold: account.GetUpstreamWarningAmount(),
+	}
+}
+
 // CheckAccountQuotaAfterIncrement checks if any quota dimension crossed above its notify threshold.
 // When quotaState is non-nil (from DB transaction RETURNING), it is used directly for threshold
 // checking, avoiding a separate DB read. Otherwise it falls back to fetching fresh account data.
@@ -189,14 +213,18 @@ func (s *BalanceNotifyService) CheckAccountQuotaAfterIncrement(ctx context.Conte
 
 	siteName := s.getSiteName(ctx)
 	var dims []quotaDim
+	var upstreamState upstreamPrepaidNotifyState
 	if quotaState != nil {
 		dims = buildQuotaDimsFromState(account, quotaState)
+		upstreamState = buildUpstreamPrepaidNotifyState(account, quotaState)
 	} else {
 		freshAccount := s.fetchFreshAccount(ctx, account)
 		dims = buildQuotaDims(freshAccount)
+		upstreamState = buildUpstreamPrepaidNotifyState(freshAccount, nil)
 		account = freshAccount // use fresh data for alert metadata
 	}
 	s.checkQuotaDimCrossings(account, dims, cost, adminEmails, siteName)
+	s.checkUpstreamPrepaidCrossing(account, upstreamState, cost, adminEmails, siteName)
 }
 
 // fetchFreshAccount loads the latest account from DB; falls back to the snapshot on error.
@@ -232,6 +260,17 @@ func (s *BalanceNotifyService) checkQuotaDimCrossings(account *Account, dims []q
 	}
 }
 
+func (s *BalanceNotifyService) checkUpstreamPrepaidCrossing(account *Account, state upstreamPrepaidNotifyState, cost float64, adminEmails []string, siteName string) {
+	if account == nil || !state.enabled || state.threshold <= 0 {
+		return
+	}
+	newAmount := state.amount
+	oldAmount := newAmount + cost
+	if crossedDownward(oldAmount, newAmount, state.threshold) {
+		s.asyncSendUpstreamPrepaidAlert(adminEmails, account.ID, account.Name, account.Platform, newAmount, state.threshold, siteName)
+	}
+}
+
 // asyncSendQuotaAlert sends quota alert email in a goroutine with panic recovery.
 func (s *BalanceNotifyService) asyncSendQuotaAlert(adminEmails []string, accountID int64, accountName, platform string, dim quotaDim, newUsed, effectiveThreshold float64, siteName string) {
 	go func() {
@@ -241,6 +280,17 @@ func (s *BalanceNotifyService) asyncSendQuotaAlert(adminEmails []string, account
 			}
 		}()
 		s.sendQuotaAlertEmails(adminEmails, accountID, accountName, platform, dim, newUsed, siteName)
+	}()
+}
+
+func (s *BalanceNotifyService) asyncSendUpstreamPrepaidAlert(adminEmails []string, accountID int64, accountName, platform string, amount, threshold float64, siteName string) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("panic in upstream prepaid notification", "recover", r)
+			}
+		}()
+		s.sendUpstreamPrepaidAlertEmails(adminEmails, accountID, accountName, platform, amount, threshold, siteName)
 	}()
 }
 
@@ -374,6 +424,12 @@ func (s *BalanceNotifyService) sendQuotaAlertEmails(adminEmails []string, accoun
 	s.sendEmails(adminEmails, subject, body, "account", accountName, "dimension", dim.name)
 }
 
+func (s *BalanceNotifyService) sendUpstreamPrepaidAlertEmails(adminEmails []string, accountID int64, accountName, platform string, amount, threshold float64, siteName string) {
+	subject := fmt.Sprintf("[%s] 上游预存金额预警 / Upstream Prepaid Alert - %s", sanitizeEmailHeader(siteName), sanitizeEmailHeader(accountName))
+	body := s.buildUpstreamPrepaidAlertEmailBody(accountID, html.EscapeString(accountName), html.EscapeString(platform), amount, threshold, html.EscapeString(siteName))
+	s.sendEmails(adminEmails, subject, body, "account", accountName, "upstream_prepaid_amount", amount)
+}
+
 // sanitizeEmailHeader removes CR/LF characters to prevent SMTP header injection.
 func sanitizeEmailHeader(s string) string {
 	return strings.NewReplacer("\r", "", "\n", "").Replace(s)
@@ -460,6 +516,45 @@ const quotaAlertEmailTemplate = `<!DOCTYPE html>
 </body>
 </html>`
 
+// upstreamPrepaidAlertEmailTemplate is the HTML template for pool-mode upstream prepaid alerts.
+// Format args: siteName, accountID, accountName, platform, amount, threshold.
+const upstreamPrepaidAlertEmailTemplate = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f5f5f5; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header { background: linear-gradient(135deg, #f59e0b 0%%, #d97706 100%%); color: white; padding: 30px; text-align: center; }
+        .header h1 { margin: 0; font-size: 24px; }
+        .content { padding: 40px 30px; }
+        .metric { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; }
+        .metric-label { color: #666; }
+        .metric-value { font-weight: bold; color: #333; }
+        .warning { color: #dc2626; font-size: 14px; line-height: 1.6; margin-top: 20px; text-align: center; }
+        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #999; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header"><h1>%s</h1></div>
+        <div class="content">
+            <p style="font-size: 18px; color: #333; text-align: center;">上游预存金额预警 / Upstream Prepaid Alert</p>
+            <div class="metric"><span class="metric-label">账号 ID / Account ID</span><span class="metric-value">#%d</span></div>
+            <div class="metric"><span class="metric-label">账号 / Account</span><span class="metric-value">%s</span></div>
+            <div class="metric"><span class="metric-label">平台 / Platform</span><span class="metric-value">%s</span></div>
+            <div class="metric"><span class="metric-label">当前上游预存金额 / Current Amount</span><span class="metric-value">$%.2f</span></div>
+            <div class="metric"><span class="metric-label">预警金额 / Warning Amount</span><span class="metric-value">$%.2f</span></div>
+            <div class="warning">
+                <p>账号上游预存金额已低于预警金额，请及时处理。</p>
+                <p>The account upstream prepaid amount has fallen below the warning amount.</p>
+            </div>
+        </div>
+        <div class="footer"><p>此邮件由系统自动发送，请勿回复。</p></div>
+    </div>
+</body>
+</html>`
+
 // buildBalanceLowEmailBody builds HTML email for balance low notification.
 func (s *BalanceNotifyService) buildBalanceLowEmailBody(userName string, balance, threshold float64, siteName, rechargeURL string) string {
 	rechargeBlock := ""
@@ -476,4 +571,8 @@ func (s *BalanceNotifyService) buildQuotaAlertEmailBody(accountID int64, account
 		limitStr = "无限制 / Unlimited"
 	}
 	return fmt.Sprintf(quotaAlertEmailTemplate, siteName, accountID, accountName, platform, dimLabel, used, limitStr, remaining, thresholdDisplay)
+}
+
+func (s *BalanceNotifyService) buildUpstreamPrepaidAlertEmailBody(accountID int64, accountName, platform string, amount, threshold float64, siteName string) string {
+	return fmt.Sprintf(upstreamPrepaidAlertEmailTemplate, siteName, accountID, accountName, platform, amount, threshold)
 }

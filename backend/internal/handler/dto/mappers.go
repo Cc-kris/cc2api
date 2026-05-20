@@ -354,6 +354,15 @@ func AccountFromServiceShallow(a *service.Account) *Account {
 		if threshold := a.GetQuotaNotifyTotalThreshold(); threshold > 0 {
 			out.QuotaNotifyTotalThreshold = &threshold
 		}
+		if amount := a.GetUpstreamPrepaidAmount(); amount > 0 {
+			out.UpstreamPrepaidAmount = &amount
+		}
+		if threshold := a.GetUpstreamWarningAmount(); threshold > 0 {
+			out.UpstreamWarningAmount = &threshold
+		}
+		if enabled := a.IsUpstreamPrepaidNotifyEnabled(); enabled {
+			out.UpstreamNotifyEnabled = &enabled
+		}
 	}
 
 	return out

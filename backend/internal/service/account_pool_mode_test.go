@@ -115,3 +115,26 @@ func TestGetPoolModeRetryCount(t *testing.T) {
 		})
 	}
 }
+
+func TestHasUpstreamPrepaidBalanceRequiresPoolModeAndAmount(t *testing.T) {
+	account := &Account{
+		Type:     AccountTypeAPIKey,
+		Platform: PlatformOpenAI,
+		Credentials: map[string]any{
+			"pool_mode": true,
+		},
+		Extra: map[string]any{
+			"upstream_prepaid_amount": 25.5,
+			"upstream_warning_amount": 5.0,
+			"upstream_notify_enabled": true,
+		},
+	}
+
+	require.True(t, account.HasUpstreamPrepaidBalance())
+	require.Equal(t, 25.5, account.GetUpstreamPrepaidAmount())
+	require.Equal(t, 5.0, account.GetUpstreamWarningAmount())
+	require.True(t, account.IsUpstreamPrepaidNotifyEnabled())
+
+	account.Credentials["pool_mode"] = false
+	require.False(t, account.HasUpstreamPrepaidBalance())
+}

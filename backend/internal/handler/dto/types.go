@@ -244,6 +244,11 @@ type Account struct {
 	QuotaNotifyTotalEnabled    *bool    `json:"quota_notify_total_enabled,omitempty"`
 	QuotaNotifyTotalThreshold  *float64 `json:"quota_notify_total_threshold,omitempty"`
 
+	// 池模式上游预存金额控制
+	UpstreamPrepaidAmount *float64 `json:"upstream_prepaid_amount,omitempty"`
+	UpstreamWarningAmount *float64 `json:"upstream_warning_amount,omitempty"`
+	UpstreamNotifyEnabled *bool    `json:"upstream_notify_enabled,omitempty"`
+
 	Proxy         *Proxy         `json:"proxy,omitempty"`
 	AccountGroups []AccountGroup `json:"account_groups,omitempty"`
 

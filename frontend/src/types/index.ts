@@ -870,6 +870,11 @@ export interface Account {
   quota_weekly_limit?: number | null
   quota_weekly_used?: number | null
 
+  // 池模式上游预存金额控制
+  upstream_prepaid_amount?: number | null
+  upstream_warning_amount?: number | null
+  upstream_notify_enabled?: boolean | null
+
   // 配额固定时间重置配置
   quota_daily_reset_mode?: 'rolling' | 'fixed' | null
   quota_daily_reset_hour?: number | null
