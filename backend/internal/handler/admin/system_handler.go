@@ -7,10 +7,12 @@ import (
 	"strings"
 	"time"
 
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/sysutil"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
 
 	"github.com/gin-gonic/gin"
 )
@@ -73,7 +75,7 @@ func (h *SystemHandler) PerformUpdate(c *gin.Context) {
 		defer cancel()
 		if err := h.updateSvc.PerformUpdate(updateCtx); err != nil {
 			releaseReason = "SYSTEM_UPDATE_FAILED"
-			return nil, err
+			return nil, systemUpdateFailedError(err)
 		}
 		succeeded = true
 
@@ -162,6 +164,17 @@ func (h *SystemHandler) acquireSystemLock(
 		_ = h.lockSvc.Release(releaseCtx, lock, succeeded, reason)
 	}
 	return lock, release, nil
+}
+
+func systemUpdateFailedError(err error) error {
+	if err == nil {
+		return nil
+	}
+	message := strings.TrimSpace(logredact.RedactText(err.Error()))
+	if message == "" {
+		message = "unknown error"
+	}
+	return infraerrors.InternalServer("SYSTEM_UPDATE_FAILED", "System update failed: "+message).WithCause(err)
 }
 
 func buildSystemOperationID(c *gin.Context, operation string) string {
