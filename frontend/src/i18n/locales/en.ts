@@ -4957,7 +4957,7 @@ export default {
         enableAlert: 'Enable Alerts',
         alertRecipients: 'Alert Recipient Emails',
         emailPlaceholder: 'Enter email address',
-        recipientsHint: 'If empty, the system will use the first admin email as default recipient',
+        recipientsHint: 'Click Add after entering an email; saving will also add the current email input automatically',
         minSeverity: 'Minimum Severity',
         reportConfig: 'Report Configuration',
         enableReport: 'Enable Reports',

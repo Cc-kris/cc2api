@@ -5119,7 +5119,7 @@ export default {
         enableAlert: '开启预警',
         alertRecipients: '预警接收邮箱',
         emailPlaceholder: '输入邮箱地址',
-        recipientsHint: '若为空，系统将使用第一个管理员邮箱作为默认收件人',
+        recipientsHint: '输入邮箱后点击添加；直接保存时也会自动加入当前输入的邮箱',
         minSeverity: '最低级别',
         reportConfig: '评估报告配置',
         enableReport: '开启评估报告',

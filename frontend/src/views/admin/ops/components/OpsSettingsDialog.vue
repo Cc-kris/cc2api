@@ -91,15 +91,23 @@ function isValidEmailAddress(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
-// 添加收件人
-function addRecipient(target: 'alert' | 'report') {
-  if (!emailConfig.value) return
-  const raw = (target === 'alert' ? alertRecipientInput.value : reportRecipientInput.value).trim()
-  if (!raw) return
+function getPendingRecipientInput(target: 'alert' | 'report') {
+  return (target === 'alert' ? alertRecipientInput.value : reportRecipientInput.value).trim()
+}
+
+function setPendingRecipientInput(target: 'alert' | 'report', value: string) {
+  if (target === 'alert') alertRecipientInput.value = value
+  else reportRecipientInput.value = value
+}
+
+function commitRecipientInput(target: 'alert' | 'report', showError = true): boolean {
+  if (!emailConfig.value) return true
+  const raw = getPendingRecipientInput(target)
+  if (!raw) return true
 
   if (!isValidEmailAddress(raw)) {
-    appStore.showError(t('common.invalidEmail'))
-    return
+    if (showError) appStore.showError(t('common.invalidEmail'))
+    return false
   }
 
   const normalized = raw.toLowerCase()
@@ -107,8 +115,13 @@ function addRecipient(target: 'alert' | 'report') {
   if (!list.includes(normalized)) {
     list.push(normalized)
   }
-  if (target === 'alert') alertRecipientInput.value = ''
-  else reportRecipientInput.value = ''
+  setPendingRecipientInput(target, '')
+  return true
+}
+
+// 添加收件人
+function addRecipient(target: 'alert' | 'report') {
+  commitRecipientInput(target)
 }
 
 // 移除收件人
@@ -131,7 +144,23 @@ const validation = computed(() => {
     }
   }
 
-  // 邮件配置: 启用但无收件人时不阻断保存, 保存时会自动禁用
+  if (emailConfig.value) {
+    const pendingAlert = getPendingRecipientInput('alert')
+    const pendingReport = getPendingRecipientInput('report')
+
+    if (pendingAlert && !isValidEmailAddress(pendingAlert)) {
+      errors.push(t('common.invalidEmail'))
+    }
+    if (pendingReport && !isValidEmailAddress(pendingReport)) {
+      errors.push(t('common.invalidEmail'))
+    }
+    if (emailConfig.value.alert.enabled && emailConfig.value.alert.recipients.length === 0 && !pendingAlert) {
+      errors.push(t('admin.ops.email.validation.alertRecipientsRequired'))
+    }
+    if (emailConfig.value.report.enabled && emailConfig.value.report.recipients.length === 0 && !pendingReport) {
+      errors.push(t('admin.ops.email.validation.reportRecipientsRequired'))
+    }
+  }
 
   // 验证高级设置
   if (advancedSettings.value) {
@@ -171,17 +200,17 @@ async function saveAllSettings() {
     return
   }
 
+  if (!commitRecipientInput('alert') || !commitRecipientInput('report')) {
+    return
+  }
+
+  if (!validation.value.valid) {
+    appStore.showError(validation.value.errors[0])
+    return
+  }
+
   saving.value = true
   try {
-    // 无收件人时自动禁用邮件通知
-    if (emailConfig.value) {
-      if (emailConfig.value.alert.enabled && emailConfig.value.alert.recipients.length === 0) {
-        emailConfig.value.alert.enabled = false
-      }
-      if (emailConfig.value.report.enabled && emailConfig.value.report.recipients.length === 0) {
-        emailConfig.value.report.enabled = false
-      }
-    }
     await Promise.all([
       runtimeSettings.value ? opsAPI.updateAlertRuntimeSettings(runtimeSettings.value) : Promise.resolve(),
       emailConfig.value ? opsAPI.updateEmailNotificationConfig(emailConfig.value) : Promise.resolve(),
