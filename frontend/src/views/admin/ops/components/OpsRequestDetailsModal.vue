@@ -237,8 +237,8 @@ const kindBadgeClass = (kind: string) => {
                   <td class="max-w-[240px] truncate px-4 py-3 text-xs text-gray-600 dark:text-gray-300" :title="row.model || ''">
                     {{ row.model || '-' }}
                   </td>
-                  <td class="max-w-[180px] truncate px-4 py-3 text-xs text-gray-600 dark:text-gray-300" :title="row.account_name || (row.account_id != null ? String(row.account_id) : '')">
-                    {{ row.account_name || (row.account_id != null ? `#${row.account_id}` : '-') }}
+                  <td class="max-w-[180px] truncate px-4 py-3 text-xs text-gray-600 dark:text-gray-300" :title="row.user_email || (row.user_id != null ? String(row.user_id) : '')">
+                    {{ row.user_email || (row.user_id != null ? `#${row.user_id}` : '-') }}
                   </td>
                   <td class="whitespace-nowrap px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
                     {{ typeof row.duration_ms === 'number' ? `${row.duration_ms} ms` : '-' }}

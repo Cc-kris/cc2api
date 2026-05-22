@@ -181,6 +181,7 @@ export interface OpsRequestDetail {
   message?: string
 
   user_id?: number | null
+  user_email?: string
   api_key_id?: number | null
   account_id?: number | null
   account_name?: string

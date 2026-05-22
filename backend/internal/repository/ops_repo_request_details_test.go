@@ -27,10 +27,10 @@ func TestListRequestDetails_ReturnsAccountName(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{
 		"kind", "created_at", "request_id", "platform", "model", "duration_ms", "status_code", "error_id",
-		"phase", "severity", "message", "user_id", "api_key_id", "account_id", "account_name", "group_id", "stream",
+		"phase", "severity", "message", "user_id", "user_email", "api_key_id", "account_id", "account_name", "group_id", "stream",
 	}).AddRow(
 		"success", createdAt, "req-1", "openai", "gpt-5.4", 123, nil, nil,
-		nil, nil, nil, int64(11), int64(22), int64(42), "主账号", int64(33), false,
+		nil, nil, nil, int64(11), "user@example.com", int64(22), int64(42), "上游账号", int64(33), false,
 	)
 	mock.ExpectQuery("(?s)SELECT\\s+kind,.*account_name.*FROM combined").
 		WithArgs(start, end, 10, 0).
@@ -47,7 +47,8 @@ func TestListRequestDetails_ReturnsAccountName(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.Equal(t, int64(1), total)
 	require.Len(t, got, 1)
-	require.Equal(t, "主账号", got[0].AccountName)
+	require.Equal(t, "user@example.com", got[0].UserEmail)
+	require.Equal(t, "上游账号", got[0].AccountName)
 	require.NotNil(t, got[0].AccountID)
 	require.Equal(t, int64(42), *got[0].AccountID)
 }
