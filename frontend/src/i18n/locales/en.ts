@@ -4695,6 +4695,7 @@ export default {
           kind: 'Kind',
           platform: 'Platform',
           model: 'Model',
+          account: 'Request Account',
           duration: 'Duration',
           status: 'Status',
           requestId: 'Request ID',

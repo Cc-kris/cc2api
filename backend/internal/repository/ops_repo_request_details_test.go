@@ -1,0 +1,53 @@
+package repository
+
+import (
+	"context"
+	"regexp"
+	"testing"
+	"time"
+
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/stretchr/testify/require"
+)
+
+func TestListRequestDetails_ReturnsAccountName(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	repo := &opsRepository{db: db}
+	start := time.Date(2026, 5, 22, 1, 0, 0, 0, time.UTC)
+	end := start.Add(time.Hour)
+	createdAt := start.Add(5 * time.Minute)
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(1) FROM combined")).
+		WithArgs(start, end).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
+
+	rows := sqlmock.NewRows([]string{
+		"kind", "created_at", "request_id", "platform", "model", "duration_ms", "status_code", "error_id",
+		"phase", "severity", "message", "user_id", "api_key_id", "account_id", "account_name", "group_id", "stream",
+	}).AddRow(
+		"success", createdAt, "req-1", "openai", "gpt-5.4", 123, nil, nil,
+		nil, nil, nil, int64(11), int64(22), int64(42), "主账号", int64(33), false,
+	)
+	mock.ExpectQuery("(?s)SELECT\\s+kind,.*account_name.*FROM combined").
+		WithArgs(start, end, 10, 0).
+		WillReturnRows(rows)
+
+	got, total, err := repo.ListRequestDetails(context.Background(), &service.OpsRequestDetailFilter{
+		StartTime: &start,
+		EndTime:   &end,
+		Page:      1,
+		PageSize:  10,
+	})
+
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+	require.Equal(t, int64(1), total)
+	require.Len(t, got, 1)
+	require.Equal(t, "主账号", got[0].AccountName)
+	require.NotNil(t, got[0].AccountID)
+	require.Equal(t, int64(42), *got[0].AccountID)
+}

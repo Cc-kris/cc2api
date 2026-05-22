@@ -360,6 +360,24 @@ func setOpsEndpointContext(c *gin.Context, upstreamModel string, requestType int
 	c.Set(opsRequestTypeKey, requestType)
 }
 
+func fillOpsAccountFromUpstreamEvents(entry *service.OpsInsertErrorLogInput, events []*service.OpsUpstreamErrorEvent) {
+	if entry == nil || entry.AccountID != nil || len(events) == 0 {
+		return
+	}
+	for i := len(events) - 1; i >= 0; i-- {
+		ev := events[i]
+		if ev == nil || ev.AccountID <= 0 {
+			continue
+		}
+		v := ev.AccountID
+		entry.AccountID = &v
+		if strings.TrimSpace(entry.Platform) == "" {
+			entry.Platform = strings.TrimSpace(ev.Platform)
+		}
+		return
+	}
+}
+
 func attachOpsRequestBodyToEntry(c *gin.Context, entry *service.OpsInsertErrorLogInput) {
 	if c == nil || entry == nil {
 		return
@@ -874,6 +892,7 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 			if v, ok := c.Get(service.OpsUpstreamErrorsKey); ok {
 				if events, ok := v.([]*service.OpsUpstreamErrorEvent); ok && len(events) > 0 {
 					entry.UpstreamErrors = events
+					fillOpsAccountFromUpstreamEvents(entry, events)
 					// Best-effort backfill the single upstream fields from the last event when missing.
 					last := events[len(events)-1]
 					if last != nil {

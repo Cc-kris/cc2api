@@ -87,6 +87,32 @@ func TestAttachOpsRequestBodyToEntry_InvalidJSONKeepsSize(t *testing.T) {
 	require.Equal(t, int64(1), OpsErrorLogSanitizedTotal())
 }
 
+func TestFillOpsAccountFromUpstreamEvents_BackfillsMissingAccount(t *testing.T) {
+	entry := &service.OpsInsertErrorLogInput{}
+	events := []*service.OpsUpstreamErrorEvent{
+		{AccountID: 0, Platform: "anthropic"},
+		{AccountID: 42, Platform: "openai"},
+	}
+
+	fillOpsAccountFromUpstreamEvents(entry, events)
+
+	require.NotNil(t, entry.AccountID)
+	require.Equal(t, int64(42), *entry.AccountID)
+	require.Equal(t, "openai", entry.Platform)
+}
+
+func TestFillOpsAccountFromUpstreamEvents_PreservesExistingAccount(t *testing.T) {
+	existing := int64(7)
+	entry := &service.OpsInsertErrorLogInput{AccountID: &existing, Platform: "anthropic"}
+	events := []*service.OpsUpstreamErrorEvent{{AccountID: 42, Platform: "openai"}}
+
+	fillOpsAccountFromUpstreamEvents(entry, events)
+
+	require.NotNil(t, entry.AccountID)
+	require.Equal(t, int64(7), *entry.AccountID)
+	require.Equal(t, "anthropic", entry.Platform)
+}
+
 func TestEnqueueOpsErrorLog_QueueFullDrop(t *testing.T) {
 	resetOpsErrorLoggerStateForTest(t)
 
