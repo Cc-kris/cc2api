@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
 
-const { updateAccountMock, checkMixedChannelRiskMock } = vi.hoisted(() => ({
+const { updateAccountMock, checkMixedChannelRiskMock, fetchUpstreamModelsMock } = vi.hoisted(() => ({
   updateAccountMock: vi.fn(),
-  checkMixedChannelRiskMock: vi.fn()
+  checkMixedChannelRiskMock: vi.fn(),
+  fetchUpstreamModelsMock: vi.fn()
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -25,7 +26,8 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
       update: updateAccountMock,
-      checkMixedChannelRisk: checkMixedChannelRiskMock
+      checkMixedChannelRisk: checkMixedChannelRiskMock,
+      fetchUpstreamModels: fetchUpstreamModelsMock
     },
     settings: {
       getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }),
@@ -262,6 +264,90 @@ describe('EditAccountModal', () => {
     expect(payload?.extra?.upstream_prepaid_amount).toBe(120)
     expect(payload?.extra?.upstream_warning_amount).toBe(30)
     expect(payload?.extra?.upstream_notify_enabled).toBe(true)
+  })
+
+  it('fetches upstream models and saves identity model mappings', async () => {
+    const account = buildAccount()
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    fetchUpstreamModelsMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+    fetchUpstreamModelsMock.mockResolvedValue([
+      { id: 'z-model', type: 'model', display_name: 'z-model', created_at: '' },
+      { id: 'a-model', type: 'model', display_name: 'a-model', created_at: '' },
+      { id: 'z-model', type: 'model', display_name: 'z-model', created_at: '' }
+    ])
+
+    const wrapper = mountModal(account)
+
+    await wrapper.findAll('button').find((button) => button.text().includes('admin.accounts.modelMapping'))!.trigger('click')
+    const fetchButton = wrapper.findAll('button').find((button) => button.text().includes('admin.accounts.fetchUpstreamModels'))
+    expect(fetchButton).toBeTruthy()
+    await fetchButton!.trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(fetchUpstreamModelsMock).toHaveBeenCalledWith(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.model_mapping).toEqual({
+      'z-model': 'z-model',
+      'a-model': 'a-model'
+    })
+  })
+
+
+  it('fetches upstream models and saves mappings for Anthropic setup token accounts', async () => {
+    const account = buildAccount()
+    account.id = 2
+    account.name = 'Anthropic Setup Token'
+    account.platform = 'anthropic'
+    account.type = 'setup-token'
+    account.credentials = {
+      access_token: 'claude-token',
+      model_mapping: {
+        'claude-old': 'claude-new'
+      }
+    }
+    account.extra = {}
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    fetchUpstreamModelsMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+    fetchUpstreamModelsMock.mockResolvedValue([
+      { id: 'claude-opus-4-1', type: 'model', display_name: 'claude-opus-4-1', created_at: '' },
+      { id: 'claude-sonnet-4-5', type: 'model', display_name: 'claude-sonnet-4-5', created_at: '' }
+    ])
+
+    const wrapper = mountModal(account)
+
+    await wrapper.findAll('button').find((button) => button.text().includes('admin.accounts.modelMapping'))!.trigger('click')
+    const fetchButton = wrapper.findAll('button').find((button) => button.text().includes('admin.accounts.fetchUpstreamModels'))
+    expect(fetchButton).toBeTruthy()
+    await fetchButton!.trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(fetchUpstreamModelsMock).toHaveBeenCalledWith(2)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.model_mapping).toEqual({
+      'claude-opus-4-1': 'claude-opus-4-1',
+      'claude-sonnet-4-5': 'claude-sonnet-4-5'
+    })
+  })
+
+  it('does not fetch upstream models when OpenAI passthrough is enabled', async () => {
+    const account = buildAccount()
+    account.extra = { openai_passthrough: true }
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    fetchUpstreamModelsMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+
+    const text = wrapper.text()
+    expect(text).toContain('admin.accounts.openai.modelRestrictionDisabledByPassthrough')
+    expect(text).not.toContain('admin.accounts.fetchUpstreamModels')
+    expect(fetchUpstreamModelsMock).not.toHaveBeenCalled()
   })
 
 })

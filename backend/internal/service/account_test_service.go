@@ -93,6 +93,12 @@ func NewAccountTestService(
 	}
 }
 
+// ValidateUpstreamBaseURL validates an account upstream base URL using the same
+// security policy as account connection tests.
+func (s *AccountTestService) ValidateUpstreamBaseURL(raw string) (string, error) {
+	return s.validateUpstreamBaseURL(raw)
+}
+
 func (s *AccountTestService) validateUpstreamBaseURL(raw string) (string, error) {
 	if s.cfg == nil {
 		return "", errors.New("config is not available")

@@ -446,6 +446,16 @@ export async function getAvailableModels(id: number): Promise<ClaudeModel[]> {
   return data
 }
 
+/**
+ * Fetch supported models directly from the upstream account credentials.
+ * @param id - Account ID
+ * @returns List of upstream supported models
+ */
+export async function fetchUpstreamModels(id: number): Promise<ClaudeModel[]> {
+  const { data } = await apiClient.post<ClaudeModel[]>(`/admin/accounts/${id}/upstream-models`)
+  return data
+}
+
 export interface CRSPreviewAccount {
   crs_account_id: string
   kind: string
@@ -660,6 +670,7 @@ export const accountsAPI = {
   resetTempUnschedulable,
   setSchedulable,
   getAvailableModels,
+  fetchUpstreamModels,
   generateAuthUrl,
   exchangeCode,
   refreshOpenAIToken,

@@ -2,15 +2,19 @@
 package admin
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -53,6 +57,10 @@ type AccountHandler struct {
 	rateLimitService        *service.RateLimitService
 	accountUsageService     *service.AccountUsageService
 	accountTestService      *service.AccountTestService
+	geminiTokenProvider     *service.GeminiTokenProvider
+	claudeTokenProvider     *service.ClaudeTokenProvider
+	antigravityGateway      *service.AntigravityGatewayService
+	httpUpstream            service.HTTPUpstream
 	concurrencyService      *service.ConcurrencyService
 	crsSyncService          *service.CRSSyncService
 	sessionLimitCache       service.SessionLimitCache
@@ -70,6 +78,10 @@ func NewAccountHandler(
 	rateLimitService *service.RateLimitService,
 	accountUsageService *service.AccountUsageService,
 	accountTestService *service.AccountTestService,
+	geminiTokenProvider *service.GeminiTokenProvider,
+	claudeTokenProvider *service.ClaudeTokenProvider,
+	antigravityGateway *service.AntigravityGatewayService,
+	httpUpstream service.HTTPUpstream,
 	concurrencyService *service.ConcurrencyService,
 	crsSyncService *service.CRSSyncService,
 	sessionLimitCache service.SessionLimitCache,
@@ -85,6 +97,10 @@ func NewAccountHandler(
 		rateLimitService:        rateLimitService,
 		accountUsageService:     accountUsageService,
 		accountTestService:      accountTestService,
+		geminiTokenProvider:     geminiTokenProvider,
+		claudeTokenProvider:     claudeTokenProvider,
+		antigravityGateway:      antigravityGateway,
+		httpUpstream:            httpUpstream,
 		concurrencyService:      concurrencyService,
 		crsSyncService:          crsSyncService,
 		sessionLimitCache:       sessionLimitCache,
@@ -1992,6 +2008,526 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 	}
 
 	response.Success(c, models)
+}
+
+type upstreamModelInfo struct {
+	ID          string `json:"id"`
+	Type        string `json:"type"`
+	DisplayName string `json:"display_name"`
+	CreatedAt   string `json:"created_at"`
+}
+
+func (h *AccountHandler) validateUpstreamModelBaseURL(raw string) (string, error) {
+	if h.accountTestService != nil {
+		return h.accountTestService.ValidateUpstreamBaseURL(raw)
+	}
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return "", err
+	}
+	if parsed.Scheme != "https" && parsed.Scheme != "http" {
+		return "", errors.New("invalid upstream URL scheme")
+	}
+	if strings.TrimSpace(parsed.Host) == "" {
+		return "", errors.New("invalid upstream URL host")
+	}
+	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+func (h *AccountHandler) FetchUpstreamModels(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+
+	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.NotFound(c, "Account not found")
+		return
+	}
+
+	models, err := h.fetchUpstreamModels(c.Request.Context(), account)
+	if err != nil {
+		response.Error(c, http.StatusBadGateway, err.Error())
+		return
+	}
+	if len(models) == 0 {
+		response.Error(c, http.StatusBadGateway, "No upstream models returned")
+		return
+	}
+	response.Success(c, models)
+}
+
+func (h *AccountHandler) fetchUpstreamModels(ctx context.Context, account *service.Account) ([]upstreamModelInfo, error) {
+	if account == nil {
+		return nil, errors.New("account is nil")
+	}
+	if account.Platform == service.PlatformOpenAI && account.IsOpenAIPassthroughEnabled() {
+		return nil, errors.New("automatic passthrough is enabled; model mapping is disabled")
+	}
+	if account.Platform == service.PlatformAnthropic && account.IsAnthropicAPIKeyPassthroughEnabled() {
+		return nil, errors.New("automatic passthrough is enabled; model mapping is disabled")
+	}
+
+	switch account.Platform {
+	case service.PlatformOpenAI:
+		return h.fetchOpenAIUpstreamModels(ctx, account)
+	case service.PlatformGemini:
+		return h.fetchGeminiUpstreamModels(ctx, account)
+	case service.PlatformAntigravity:
+		return h.fetchAntigravityUpstreamModels(ctx, account)
+	case service.PlatformAnthropic:
+		if account.IsBedrock() {
+			return h.fetchBedrockUpstreamModels(ctx, account)
+		}
+		if account.Type == service.AccountTypeServiceAccount {
+			return h.fetchVertexAnthropicUpstreamModels(ctx, account)
+		}
+		return h.fetchAnthropicUpstreamModels(ctx, account)
+	default:
+		return nil, fmt.Errorf("unsupported account platform: %s", account.Platform)
+	}
+}
+
+func (h *AccountHandler) fetchOpenAIUpstreamModels(ctx context.Context, account *service.Account) ([]upstreamModelInfo, error) {
+	if h.httpUpstream == nil {
+		return nil, errors.New("http upstream is not configured")
+	}
+	var apiURL string
+	var token string
+	if account.Type == service.AccountTypeAPIKey {
+		token = strings.TrimSpace(account.GetOpenAIApiKey())
+		if token == "" {
+			return nil, errors.New("openai api key is not configured")
+		}
+		baseURL := account.GetOpenAIBaseURL()
+		normalizedBaseURL, err := h.validateUpstreamModelBaseURL(baseURL)
+		if err != nil {
+			return nil, err
+		}
+		apiURL = strings.TrimRight(strings.TrimSpace(normalizedBaseURL), "/")
+		if strings.HasSuffix(apiURL, "/v1") {
+			apiURL += "/models"
+		} else {
+			apiURL += "/v1/models"
+		}
+	} else if account.IsOpenAIOAuth() || account.Type == service.AccountTypeSetupToken {
+		token = strings.TrimSpace(account.GetOpenAIAccessToken())
+		if token == "" {
+			return nil, errors.New("openai access token is not configured")
+		}
+		apiURL = "https://api.openai.com/v1/models"
+	} else {
+		return nil, fmt.Errorf("unsupported openai account type: %s", account.Type)
+	}
+	return h.fetchOpenAICompatibleModelList(ctx, account, apiURL, token)
+}
+
+func (h *AccountHandler) fetchOpenAICompatibleModelList(ctx context.Context, account *service.Account, apiURL string, token string) ([]upstreamModelInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/json")
+	return h.doAndParseModelList(ctx, account, req, "data")
+}
+
+func (h *AccountHandler) fetchAnthropicUpstreamModels(ctx context.Context, account *service.Account) ([]upstreamModelInfo, error) {
+	if h.httpUpstream == nil {
+		return nil, errors.New("http upstream is not configured")
+	}
+	var apiURL string
+	var token string
+	useBearer := false
+	switch account.Type {
+	case service.AccountTypeAPIKey:
+		token = strings.TrimSpace(account.GetCredential("api_key"))
+		if token == "" {
+			return nil, errors.New("anthropic api key is not configured")
+		}
+		baseURL := account.GetBaseURL()
+		normalizedBaseURL, err := h.validateUpstreamModelBaseURL(baseURL)
+		if err != nil {
+			return nil, err
+		}
+		apiURL = strings.TrimRight(strings.TrimSpace(normalizedBaseURL), "/") + "/v1/models"
+	case service.AccountTypeOAuth, service.AccountTypeSetupToken:
+		token = strings.TrimSpace(account.GetCredential("access_token"))
+		if token == "" {
+			return nil, errors.New("anthropic access token is not configured")
+		}
+		apiURL = "https://api.anthropic.com/v1/models"
+		useBearer = true
+	default:
+		return nil, fmt.Errorf("unsupported anthropic account type: %s", account.Type)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("anthropic-version", "2023-06-01")
+	if useBearer {
+		req.Header.Set("Authorization", "Bearer "+token)
+	} else {
+		req.Header.Set("x-api-key", token)
+	}
+	return h.doAndParseModelList(ctx, account, req, "data")
+}
+
+func (h *AccountHandler) fetchGeminiUpstreamModels(ctx context.Context, account *service.Account) ([]upstreamModelInfo, error) {
+	if h.httpUpstream == nil {
+		return nil, errors.New("http upstream is not configured")
+	}
+	switch account.Type {
+	case service.AccountTypeAPIKey:
+		baseURL := account.GetGeminiBaseURL(geminicli.AIStudioBaseURL)
+		normalizedBaseURL, err := h.validateUpstreamModelBaseURL(baseURL)
+		if err != nil {
+			return nil, err
+		}
+		apiURL := strings.TrimRight(strings.TrimSpace(normalizedBaseURL), "/") + "/v1beta/models"
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		apiKey := strings.TrimSpace(account.GetCredential("api_key"))
+		if apiKey == "" {
+			return nil, errors.New("gemini api key is not configured")
+		}
+		req.Header.Set("x-goog-api-key", apiKey)
+		return h.doAndParseModelList(ctx, account, req, "models")
+	case service.AccountTypeOAuth:
+		if account.IsGeminiCodeAssist() || account.GetCredential("auto_detect_project_id") == "true" {
+			return h.fetchGeminiCodeAssistUpstreamModels(ctx, account)
+		}
+		return h.fetchGeminiAIStudioOAuthUpstreamModels(ctx, account)
+	case service.AccountTypeServiceAccount:
+		return h.fetchVertexGeminiUpstreamModels(ctx, account)
+	default:
+		return nil, fmt.Errorf("unsupported gemini account type: %s", account.Type)
+	}
+}
+
+func (h *AccountHandler) fetchGeminiAIStudioOAuthUpstreamModels(ctx context.Context, account *service.Account) ([]upstreamModelInfo, error) {
+	if h.geminiTokenProvider == nil {
+		return nil, errors.New("gemini token provider is not configured")
+	}
+	accessToken, err := h.geminiTokenProvider.GetAccessToken(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	baseURL := account.GetGeminiBaseURL(geminicli.AIStudioBaseURL)
+	normalizedBaseURL, err := h.validateUpstreamModelBaseURL(baseURL)
+	if err != nil {
+		return nil, err
+	}
+	apiURL := strings.TrimRight(strings.TrimSpace(normalizedBaseURL), "/") + "/v1beta/models"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	return h.doAndParseModelList(ctx, account, req, "models")
+}
+
+func (h *AccountHandler) fetchGeminiCodeAssistUpstreamModels(ctx context.Context, account *service.Account) ([]upstreamModelInfo, error) {
+	if h.geminiTokenProvider == nil {
+		return nil, errors.New("gemini token provider is not configured")
+	}
+	accessToken, err := h.geminiTokenProvider.GetAccessToken(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	projectID := strings.TrimSpace(account.GetCredential("project_id"))
+	if projectID == "" {
+		return nil, errors.New("gemini code assist project id is not configured")
+	}
+	body, err := json.Marshal(map[string]string{"project": projectID})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, geminicli.GeminiCliBaseURL+"/v1internal:fetchAvailableModels", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", antigravity.GetUserAgentForContext(ctx))
+	return h.doAndParseModelMap(ctx, account, req, "models")
+}
+
+func (h *AccountHandler) fetchVertexGeminiUpstreamModels(ctx context.Context, account *service.Account) ([]upstreamModelInfo, error) {
+	if h.httpUpstream == nil {
+		return nil, errors.New("http upstream is not configured")
+	}
+	if h.geminiTokenProvider == nil {
+		return nil, errors.New("gemini token provider is not configured")
+	}
+	projectID := strings.TrimSpace(account.VertexProjectID())
+	if projectID == "" {
+		return nil, errors.New("vertex project id is not configured")
+	}
+	accessToken, err := h.geminiTokenProvider.GetAccessToken(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	apiURL := fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models",
+		account.VertexLocation(""), url.PathEscape(projectID), account.VertexLocation(""))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	return h.doAndParseModelList(ctx, account, req, "models")
+}
+
+func (h *AccountHandler) fetchVertexAnthropicUpstreamModels(ctx context.Context, account *service.Account) ([]upstreamModelInfo, error) {
+	if h.httpUpstream == nil {
+		return nil, errors.New("http upstream is not configured")
+	}
+	if h.claudeTokenProvider == nil {
+		return nil, errors.New("claude token provider is not configured")
+	}
+	projectID := strings.TrimSpace(account.VertexProjectID())
+	if projectID == "" {
+		return nil, errors.New("vertex project id is not configured")
+	}
+	accessToken, err := h.claudeTokenProvider.GetAccessToken(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	location := account.VertexLocation("")
+	apiURL := fmt.Sprintf("https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/anthropic/models",
+		location, url.PathEscape(projectID), location)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	return h.doAndParseModelList(ctx, account, req, "models")
+}
+
+func (h *AccountHandler) fetchBedrockUpstreamModels(ctx context.Context, account *service.Account) ([]upstreamModelInfo, error) {
+	if h.httpUpstream == nil {
+		return nil, errors.New("http upstream is not configured")
+	}
+	region := strings.TrimSpace(account.GetCredential("aws_region"))
+	if region == "" {
+		region = "us-east-1"
+	}
+	apiURL := fmt.Sprintf("https://bedrock.%s.amazonaws.com/foundation-models", region)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	if account.IsBedrockAPIKey() {
+		apiKey := strings.TrimSpace(account.GetCredential("api_key"))
+		if apiKey == "" {
+			return nil, errors.New("bedrock api key is not configured")
+		}
+		req.Header.Set("Authorization", "Bearer "+apiKey)
+	} else {
+		signer, err := service.NewBedrockSignerFromAccount(account)
+		if err != nil {
+			return nil, err
+		}
+		if err := signer.SignRequest(ctx, req, nil); err != nil {
+			return nil, err
+		}
+	}
+	models, err := h.doAndParseModelList(ctx, account, req, "modelSummaries")
+	if err != nil {
+		return nil, err
+	}
+	return models, nil
+}
+
+func (h *AccountHandler) fetchAntigravityUpstreamModels(ctx context.Context, account *service.Account) ([]upstreamModelInfo, error) {
+	if account.Type == service.AccountTypeAPIKey {
+		return h.fetchGeminiUpstreamModels(ctx, account)
+	}
+	if account.Type == service.AccountTypeUpstream {
+		return h.fetchAntigravityStaticUpstreamModels(ctx, account)
+	}
+	if h.antigravityGateway == nil || h.antigravityGateway.GetTokenProvider() == nil {
+		return nil, errors.New("antigravity token provider is not configured")
+	}
+	accessToken, err := h.antigravityGateway.GetTokenProvider().GetAccessToken(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	projectID := strings.TrimSpace(account.GetCredential("project_id"))
+	if projectID == "" {
+		return nil, errors.New("antigravity project id is not configured")
+	}
+	proxyURL := ""
+	if account.ProxyID != nil && account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+	client, err := antigravity.NewClient(proxyURL)
+	if err != nil {
+		return nil, err
+	}
+	resp, _, err := client.FetchAvailableModels(ctx, accessToken, projectID)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(resp.Models))
+	for id := range resp.Models {
+		ids = append(ids, normalizeModelID(id))
+	}
+	return modelInfosFromIDs(ids), nil
+}
+
+func (h *AccountHandler) fetchAntigravityStaticUpstreamModels(ctx context.Context, account *service.Account) ([]upstreamModelInfo, error) {
+	if h.httpUpstream == nil {
+		return nil, errors.New("http upstream is not configured")
+	}
+	apiKey := strings.TrimSpace(account.GetCredential("api_key"))
+	if apiKey == "" {
+		return nil, errors.New("antigravity upstream api key is not configured")
+	}
+	baseURL := strings.TrimSpace(account.GetCredential("base_url"))
+	if baseURL == "" {
+		return nil, errors.New("antigravity upstream base url is not configured")
+	}
+	normalizedBaseURL, err := h.validateUpstreamModelBaseURL(baseURL)
+	if err != nil {
+		return nil, err
+	}
+	apiURL := strings.TrimRight(normalizedBaseURL, "/") + "/v1/models"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("Accept", "application/json")
+	return h.doAndParseModelList(ctx, account, req, "data")
+}
+
+func (h *AccountHandler) doAndParseModelList(ctx context.Context, account *service.Account, req *http.Request, arrayKey string) ([]upstreamModelInfo, error) {
+	proxyURL := ""
+	if account.ProxyID != nil && account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+	resp, err := h.httpUpstream.Do(req.WithContext(ctx), proxyURL, account.ID, account.Concurrency)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("upstream returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return parseModelList(body, arrayKey)
+}
+
+func (h *AccountHandler) doAndParseModelMap(ctx context.Context, account *service.Account, req *http.Request, mapKey string) ([]upstreamModelInfo, error) {
+	proxyURL := ""
+	if account.ProxyID != nil && account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+	resp, err := h.httpUpstream.Do(req.WithContext(ctx), proxyURL, account.ID, account.Concurrency)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("upstream returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return parseModelMap(body, mapKey)
+}
+
+func parseModelMap(body []byte, mapKey string) ([]upstreamModelInfo, error) {
+	var raw map[string]any
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, err
+	}
+	value := raw[mapKey]
+	if value == nil && mapKey != "data" {
+		value = raw["data"]
+	}
+	items, ok := value.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("upstream response does not contain %s object", mapKey)
+	}
+	ids := make([]string, 0, len(items))
+	for id := range items {
+		ids = append(ids, id)
+	}
+	return modelInfosFromIDs(ids), nil
+}
+
+func parseModelList(body []byte, arrayKey string) ([]upstreamModelInfo, error) {
+	var raw map[string]any
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, err
+	}
+	value := raw[arrayKey]
+	if value == nil && arrayKey != "data" {
+		value = raw["data"]
+	}
+	items, ok := value.([]any)
+	if !ok {
+		return nil, fmt.Errorf("upstream response does not contain %s array", arrayKey)
+	}
+
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		model, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		id := firstString(model["id"], model["name"], model["modelId"], model["model_id"])
+		id = normalizeModelID(id)
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return modelInfosFromIDs(ids), nil
+}
+
+func firstString(values ...any) string {
+	for _, v := range values {
+		if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+func normalizeModelID(id string) string {
+	id = strings.TrimSpace(id)
+	id = strings.TrimPrefix(id, "models/")
+	if strings.Contains(id, "/") {
+		parts := strings.Split(id, "/")
+		id = parts[len(parts)-1]
+	}
+	return strings.TrimSpace(id)
+}
+
+func modelInfosFromIDs(ids []string) []upstreamModelInfo {
+	seen := make(map[string]struct{}, len(ids))
+	out := make([]upstreamModelInfo, 0, len(ids))
+	for _, id := range ids {
+		id = normalizeModelID(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, upstreamModelInfo{ID: id, Type: "model", DisplayName: id, CreatedAt: ""})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
 }
 
 // SetPrivacy handles setting privacy for a single OpenAI/Antigravity OAuth account
