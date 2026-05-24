@@ -114,8 +114,9 @@ func ProvideHTTPServer(cfg *config.Config, router *gin.Engine) *http.Server {
 	// 根据配置决定是否启用 H2C
 	if cfg.Server.H2C.Enabled {
 		h2cConfig := cfg.Server.H2C
+		h2cHandler := httpHandler
 		//nolint:staticcheck // Keep existing h2c behavior while x/net deprecates this wrapper.
-		httpHandler = h2c.NewHandler(router, &http2.Server{
+		httpHandler = h2c.NewHandler(h2cHandler, &http2.Server{
 			MaxConcurrentStreams:         h2cConfig.MaxConcurrentStreams,
 			IdleTimeout:                  time.Duration(h2cConfig.IdleTimeout) * time.Second,
 			MaxReadFrameSize:             uint32(h2cConfig.MaxReadFrameSize),
