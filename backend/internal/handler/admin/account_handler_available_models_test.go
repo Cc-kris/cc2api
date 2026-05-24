@@ -173,6 +173,193 @@ func TestAccountHandlerFetchUpstreamModels_OpenAIAPIKeyUsesUpstreamList(t *testi
 	require.Equal(t, []string{"a-model", "z-model"}, []string{resp.Data[0].ID, resp.Data[1].ID})
 }
 
+func TestAccountHandlerFetchUpstreamModels_OpenAIFiltersCrossPlatformModels(t *testing.T) {
+	svc := &availableModelsAdminService{
+		stubAdminService: newStubAdminService(),
+		account: service.Account{
+			ID:       48,
+			Name:     "openai-key",
+			Platform: service.PlatformOpenAI,
+			Type:     service.AccountTypeAPIKey,
+			Status:   service.StatusActive,
+			Credentials: map[string]any{
+				"api_key":  "sk-test",
+				"base_url": "https://upstream.example",
+			},
+		},
+	}
+	upstream := &upstreamModelsHTTPStub{response: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body: io.NopCloser(strings.NewReader(`{"data":[
+			{"id":"gpt-5.4"},
+			{"id":"claude-sonnet-4-6"},
+			{"id":"models/gemini-2.5-pro"},
+			{"id":"custom-openai-compatible"}
+		]}`)),
+	}}
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	handler := NewAccountHandler(svc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, upstream, nil, nil, nil, nil, nil)
+	router.POST("/api/v1/admin/accounts/:id/upstream-models", handler.FetchUpstreamModels)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/48/upstream-models", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	var ids []string
+	for _, model := range resp.Data {
+		ids = append(ids, model.ID)
+	}
+	require.Equal(t, []string{"custom-openai-compatible", "gpt-5.4"}, ids)
+}
+
+func TestAccountHandlerFetchUpstreamModels_AnthropicFiltersCrossPlatformModels(t *testing.T) {
+	svc := &availableModelsAdminService{
+		stubAdminService: newStubAdminService(),
+		account: service.Account{
+			ID:       49,
+			Name:     "anthropic-key",
+			Platform: service.PlatformAnthropic,
+			Type:     service.AccountTypeAPIKey,
+			Status:   service.StatusActive,
+			Credentials: map[string]any{
+				"api_key":  "sk-ant-test",
+				"base_url": "https://anthropic.example",
+			},
+		},
+	}
+	upstream := &upstreamModelsHTTPStub{response: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body: io.NopCloser(strings.NewReader(`{"data":[
+			{"id":"claude-sonnet-4-6"},
+			{"id":"gpt-5.4"},
+			{"id":"gemini-2.5-pro"}
+		]}`)),
+	}}
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	handler := NewAccountHandler(svc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, upstream, nil, nil, nil, nil, nil)
+	router.POST("/api/v1/admin/accounts/:id/upstream-models", handler.FetchUpstreamModels)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/49/upstream-models", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Data, 1)
+	require.Equal(t, "claude-sonnet-4-6", resp.Data[0].ID)
+}
+
+func TestAccountHandlerFetchUpstreamModels_GeminiFiltersCrossPlatformModels(t *testing.T) {
+	svc := &availableModelsAdminService{
+		stubAdminService: newStubAdminService(),
+		account: service.Account{
+			ID:       50,
+			Name:     "gemini-key",
+			Platform: service.PlatformGemini,
+			Type:     service.AccountTypeAPIKey,
+			Status:   service.StatusActive,
+			Credentials: map[string]any{
+				"api_key":  "gemini-test",
+				"base_url": "https://gemini.example",
+			},
+		},
+	}
+	upstream := &upstreamModelsHTTPStub{response: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body: io.NopCloser(strings.NewReader(`{"models":[
+			{"name":"models/gemini-2.5-pro"},
+			{"name":"claude-sonnet-4-6"},
+			{"name":"gpt-5.4"}
+		]}`)),
+	}}
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	handler := NewAccountHandler(svc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, upstream, nil, nil, nil, nil, nil)
+	router.POST("/api/v1/admin/accounts/:id/upstream-models", handler.FetchUpstreamModels)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/50/upstream-models", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Data, 1)
+	require.Equal(t, "gemini-2.5-pro", resp.Data[0].ID)
+}
+
+func TestAccountHandlerFetchUpstreamModels_AntigravityAllowsMixedModels(t *testing.T) {
+	svc := &availableModelsAdminService{
+		stubAdminService: newStubAdminService(),
+		account: service.Account{
+			ID:       51,
+			Name:     "antigravity-upstream",
+			Platform: service.PlatformAntigravity,
+			Type:     service.AccountTypeUpstream,
+			Status:   service.StatusActive,
+			Credentials: map[string]any{
+				"api_key":  "ag-test",
+				"base_url": "https://antigravity.example",
+			},
+		},
+	}
+	upstream := &upstreamModelsHTTPStub{response: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body: io.NopCloser(strings.NewReader(`{"data":[
+			{"id":"claude-sonnet-4-6"},
+			{"id":"models/gemini-2.5-pro"},
+			{"id":"gpt-oss-120b-medium"}
+		]}`)),
+	}}
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	handler := NewAccountHandler(svc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, upstream, nil, nil, nil, nil, nil)
+	router.POST("/api/v1/admin/accounts/:id/upstream-models", handler.FetchUpstreamModels)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/51/upstream-models", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	var ids []string
+	for _, model := range resp.Data {
+		ids = append(ids, model.ID)
+	}
+	require.Equal(t, []string{"claude-sonnet-4-6", "gemini-2.5-pro", "gpt-oss-120b-medium"}, ids)
+}
+
 func TestAccountHandlerFetchUpstreamModels_OpenAISetupTokenUsesAccessToken(t *testing.T) {
 	svc := &availableModelsAdminService{
 		stubAdminService: newStubAdminService(),

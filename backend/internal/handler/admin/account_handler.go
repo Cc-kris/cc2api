@@ -2070,24 +2070,30 @@ func (h *AccountHandler) fetchUpstreamModels(ctx context.Context, account *servi
 		return nil, errors.New("automatic passthrough is enabled; model mapping is disabled")
 	}
 
+	var models []upstreamModelInfo
+	var err error
 	switch account.Platform {
 	case service.PlatformOpenAI:
-		return h.fetchOpenAIUpstreamModels(ctx, account)
+		models, err = h.fetchOpenAIUpstreamModels(ctx, account)
 	case service.PlatformGemini:
-		return h.fetchGeminiUpstreamModels(ctx, account)
+		models, err = h.fetchGeminiUpstreamModels(ctx, account)
 	case service.PlatformAntigravity:
-		return h.fetchAntigravityUpstreamModels(ctx, account)
+		models, err = h.fetchAntigravityUpstreamModels(ctx, account)
 	case service.PlatformAnthropic:
 		if account.IsBedrock() {
-			return h.fetchBedrockUpstreamModels(ctx, account)
+			models, err = h.fetchBedrockUpstreamModels(ctx, account)
+		} else if account.Type == service.AccountTypeServiceAccount {
+			models, err = h.fetchVertexAnthropicUpstreamModels(ctx, account)
+		} else {
+			models, err = h.fetchAnthropicUpstreamModels(ctx, account)
 		}
-		if account.Type == service.AccountTypeServiceAccount {
-			return h.fetchVertexAnthropicUpstreamModels(ctx, account)
-		}
-		return h.fetchAnthropicUpstreamModels(ctx, account)
 	default:
 		return nil, fmt.Errorf("unsupported account platform: %s", account.Platform)
 	}
+	if err != nil {
+		return nil, err
+	}
+	return filterUpstreamModelsForPlatform(account.Platform, models), nil
 }
 
 func (h *AccountHandler) fetchOpenAIUpstreamModels(ctx context.Context, account *service.Account) ([]upstreamModelInfo, error) {
@@ -2528,6 +2534,43 @@ func modelInfosFromIDs(ids []string) []upstreamModelInfo {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
+}
+
+func filterUpstreamModelsForPlatform(platform string, models []upstreamModelInfo) []upstreamModelInfo {
+	filtered := make([]upstreamModelInfo, 0, len(models))
+	for _, model := range models {
+		if isUpstreamModelAllowedForPlatform(platform, model.ID) {
+			filtered = append(filtered, model)
+		}
+	}
+	return filtered
+}
+
+func isUpstreamModelAllowedForPlatform(platform string, modelID string) bool {
+	normalized := strings.ToLower(normalizeModelID(modelID))
+	switch platform {
+	case service.PlatformOpenAI:
+		return !isAnthropicModelFamily(normalized) && !isGeminiModelFamily(normalized)
+	case service.PlatformGemini:
+		return isGeminiModelFamily(normalized)
+	case service.PlatformAnthropic:
+		return isAnthropicModelFamily(normalized)
+	default:
+		return true
+	}
+}
+
+func isAnthropicModelFamily(modelID string) bool {
+	modelID = strings.ToLower(strings.TrimSpace(modelID))
+	return strings.Contains(modelID, "claude") ||
+		strings.Contains(modelID, "anthropic")
+}
+
+func isGeminiModelFamily(modelID string) bool {
+	modelID = strings.ToLower(strings.TrimSpace(modelID))
+	return strings.HasPrefix(modelID, "gemini-") ||
+		strings.Contains(modelID, ".gemini-") ||
+		strings.Contains(modelID, "google.gemini")
 }
 
 // SetPrivacy handles setting privacy for a single OpenAI/Antigravity OAuth account
