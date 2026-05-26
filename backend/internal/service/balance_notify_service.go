@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"html"
 	"log/slog"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -79,35 +78,6 @@ func NewBalanceNotifyService(emailService *EmailService, settingRepo SettingRepo
 	}
 }
 
-// resolveBalanceThreshold returns the effective balance threshold.
-// For percentage type, it computes threshold = totalRecharged * percentage / 100.
-func normalizeBalanceLowNotifyExcludedUserIDs(values []int64) []int64 {
-	if len(values) == 0 {
-		return nil
-	}
-	seen := make(map[int64]struct{}, len(values))
-	normalized := make([]int64, 0, len(values))
-	for _, value := range values {
-		if value <= 0 {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		normalized = append(normalized, value)
-	}
-	sort.Slice(normalized, func(i, j int) bool { return normalized[i] < normalized[j] })
-	return normalized
-}
-
-func resolveBalanceThreshold(threshold float64, thresholdType string, totalRecharged float64) float64 {
-	if thresholdType == thresholdTypePercentage && totalRecharged > 0 {
-		return totalRecharged * threshold / 100
-	}
-	return threshold
-}
-
 // CheckBalanceAfterDeduction is kept for compatibility with older callers.
 // Balance low notifications are now driven by the global scanner so user-level
 // notification preferences and verified extra emails no longer control sending.
@@ -116,35 +86,6 @@ func (s *BalanceNotifyService) CheckBalanceAfterDeduction(ctx context.Context, u
 	_ = user
 	_ = oldBalance
 	_ = cost
-}
-
-// canNotifyBalance checks nil guards and user-level toggle.
-func (s *BalanceNotifyService) canNotifyBalance(user *User) bool {
-	if user == nil || s.emailService == nil || s.settingRepo == nil {
-		return false
-	}
-	return user.BalanceNotifyEnabled
-}
-
-// resolveUserEffectiveThreshold reads global + user config, returns the effective threshold.
-// Returns ok=false when notifications should be skipped.
-func (s *BalanceNotifyService) resolveUserEffectiveThreshold(ctx context.Context, user *User) (effectiveThreshold float64, rechargeURL string, ok bool) {
-	globalEnabled, globalThreshold, rechargeURL := s.getBalanceNotifyConfig(ctx)
-	if !globalEnabled {
-		return 0, "", false
-	}
-	threshold := globalThreshold
-	if user.BalanceNotifyThreshold != nil {
-		threshold = *user.BalanceNotifyThreshold
-	}
-	if threshold <= 0 {
-		return 0, "", false
-	}
-	effectiveThreshold = resolveBalanceThreshold(threshold, user.BalanceNotifyThresholdType, user.TotalRecharged)
-	if effectiveThreshold <= 0 {
-		return 0, "", false
-	}
-	return effectiveThreshold, rechargeURL, true
 }
 
 // crossedDownward returns true when oldV was at-or-above threshold but newV dropped below it.
@@ -196,22 +137,6 @@ func (s *BalanceNotifyService) ScanBalanceLowUsers(ctx context.Context) (Balance
 		stats.Sent++
 	}
 	return stats, nil
-}
-
-// dispatchBalanceLowEmail collects recipients and sends the alert in a goroutine.
-func (s *BalanceNotifyService) dispatchBalanceLowEmail(ctx context.Context, user *User, newBalance, threshold float64, rechargeURL string) {
-	siteName := s.getSiteName(ctx)
-	recipients := s.collectBalanceNotifyRecipients(user)
-	slog.Info("CheckBalanceAfterDeduction: sending notification",
-		"user_id", user.ID, "recipients", recipients, "new_balance", newBalance, "threshold", threshold)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				slog.Error("panic in balance notification", "recover", r)
-			}
-		}()
-		s.sendBalanceLowEmails(recipients, user.Username, user.Email, newBalance, threshold, siteName, rechargeURL)
-	}()
 }
 
 // quotaDim describes one quota dimension for notification checking.
@@ -467,12 +392,6 @@ func filterVerifiedEmails(entries []NotifyEmailEntry) []string {
 		recipients = append(recipients, email)
 	}
 	return recipients
-}
-
-// collectBalanceNotifyRecipients returns verified, non-disabled email recipients.
-// Only emails with verified=true and disabled=false are included.
-func (s *BalanceNotifyService) collectBalanceNotifyRecipients(user *User) []string {
-	return filterVerifiedEmails(user.BalanceNotifyExtraEmails)
 }
 
 // sendEmails sends an email to all recipients with shared timeout and error logging.

@@ -32,7 +32,7 @@ func (r *balanceLowNotifyRepository) ListUsersBelowBalanceThreshold(ctx context.
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	users := make([]service.BalanceLowNotifyUser, 0)
 	for rows.Next() {

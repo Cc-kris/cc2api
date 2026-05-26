@@ -10,9 +10,7 @@ import (
 )
 
 // newBalanceNotifyServiceForTest constructs a BalanceNotifyService with an
-// in-memory settings repo and a non-nil emailService so that the guard-clause
-// nil-checks pass. The emailService is intentionally minimal — tests must
-// avoid crossing scenarios that would actually dispatch emails.
+// in-memory settings repo and a non-nil emailService for notification tests.
 func newBalanceNotifyServiceForTest() (*BalanceNotifyService, *mockSettingRepo) {
 	repo := newMockSettingRepo()
 	// EmailService is a concrete type; construct with the same repo so that
@@ -35,7 +33,7 @@ func TestCheckBalanceAfterDeduction_UserNotifyDisabled(t *testing.T) {
 	repo.data[SettingKeyBalanceLowNotifyEnabled] = "true"
 	repo.data[SettingKeyBalanceLowNotifyThreshold] = "10"
 	u := &User{ID: 1, BalanceNotifyEnabled: false}
-	// Even with a crossing, disabled flag short-circuits.
+	// Legacy deduction hook is disabled; this should not panic.
 	s.CheckBalanceAfterDeduction(context.Background(), u, 20, 15)
 }
 
@@ -64,8 +62,7 @@ func TestCheckBalanceAfterDeduction_UserThresholdOverride(t *testing.T) {
 		BalanceNotifyEnabled:   true,
 		BalanceNotifyThreshold: &customThreshold,
 	}
-	// User's 5.0 threshold takes precedence over global 100. 20 -> 15 does not
-	// cross 5, so nothing fires (verified by absence of panic).
+	// Legacy deduction hook is disabled; this should not panic.
 	s.CheckBalanceAfterDeduction(context.Background(), u, 20, 15)
 }
 
@@ -75,10 +72,8 @@ func TestCheckBalanceAfterDeduction_NoCrossingNotFired(t *testing.T) {
 	repo.data[SettingKeyBalanceLowNotifyThreshold] = "10"
 	u := &User{ID: 1, BalanceNotifyEnabled: true}
 
-	// 100 -> 95, both remain above threshold=10, no crossing.
+	// Legacy deduction hook is disabled; both calls should not panic.
 	s.CheckBalanceAfterDeduction(context.Background(), u, 100, 5)
-	// 5 -> 3, both already below threshold, no crossing (only fires on first
-	// cross from above-to-below).
 	s.CheckBalanceAfterDeduction(context.Background(), u, 5, 2)
 }
 
