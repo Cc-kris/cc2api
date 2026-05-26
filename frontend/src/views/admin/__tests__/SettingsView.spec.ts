@@ -19,6 +19,8 @@ const {
   getGroups,
   listProxies,
   getProviders,
+  getUserById,
+  listUsers,
   updateProvider,
   createProvider,
   deleteProvider,
@@ -41,6 +43,8 @@ const {
   getGroups: vi.fn(),
   listProxies: vi.fn(),
   getProviders: vi.fn(),
+  getUserById: vi.fn(),
+  listUsers: vi.fn(),
   updateProvider: vi.fn(),
   createProvider: vi.fn(),
   deleteProvider: vi.fn(),
@@ -72,6 +76,10 @@ vi.mock("@/api", () => ({
     },
     proxies: {
       list: listProxies,
+    },
+    users: {
+      getById: getUserById,
+      list: listUsers,
     },
     payment: {
       getProviders,
@@ -163,6 +171,10 @@ vi.mock("vue-i18n", async () => {
     "admin.settings.openaiExperimentalScheduler.description": "默认关闭。开启后仅影响本网关在 OpenAI 账号间的实验性调度选择逻辑，不代表上游 OpenAI 官方能力。",
     "admin.settings.site.uploadImage": "上传图片",
     "admin.settings.site.remove": "移除",
+    "admin.settings.balanceNotify.excludedUsers": "排除名单",
+    "admin.settings.balanceNotify.searchPlaceholder": "输入用户邮箱或用户名添加排除账号",
+    "admin.settings.balanceNotify.excludedUsersEmpty": "暂无排除账号",
+    "common.delete": "删除",
   };
   return {
     ...actual,
@@ -399,6 +411,7 @@ const baseSettingsResponse = {
   balance_low_notify_enabled: false,
   balance_low_notify_threshold: 0,
   balance_low_notify_recharge_url: "",
+  balance_low_notify_excluded_user_ids: [],
   account_quota_notify_enabled: false,
   account_quota_notify_emails: [],
 };
@@ -444,6 +457,16 @@ async function openSecurityTab(wrapper: ReturnType<typeof mountView>) {
   await flushPromises();
 }
 
+async function openEmailTab(wrapper: ReturnType<typeof mountView>) {
+  const emailTabButton = wrapper
+    .findAll("button")
+    .find((node) => node.text().includes("admin.settings.tabs.email"));
+
+  expect(emailTabButton).toBeDefined();
+  await emailTabButton?.trigger("click");
+  await flushPromises();
+}
+
 async function openUsersTab(wrapper: ReturnType<typeof mountView>) {
   const usersTabButton = wrapper
     .findAll("button")
@@ -470,6 +493,8 @@ describe("admin SettingsView payment visible method controls", () => {
     getGroups.mockReset();
     listProxies.mockReset();
     getProviders.mockReset();
+    getUserById.mockReset();
+    listUsers.mockReset();
     updateProvider.mockReset();
     createProvider.mockReset();
     deleteProvider.mockReset();
@@ -529,6 +554,8 @@ describe("admin SettingsView payment visible method controls", () => {
     getProviders.mockResolvedValue({
       data: [],
     });
+    getUserById.mockRejectedValue(new Error("not found"));
+    listUsers.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 10 });
     fetchPublicSettings.mockResolvedValue(undefined);
     adminSettingsFetch.mockResolvedValue(undefined);
   });
@@ -643,6 +670,94 @@ describe("admin SettingsView payment visible method controls", () => {
     );
   });
 
+  it("manages balance low notification excluded users", async () => {
+    vi.useFakeTimers();
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      balance_low_notify_enabled: true,
+      balance_low_notify_excluded_user_ids: [7],
+    });
+    getUserById.mockResolvedValueOnce({
+      id: 7,
+      email: "blocked@example.com",
+      username: "blocked",
+      balance: 2,
+      role: "user",
+      status: "active",
+      concurrency: 1,
+      allowed_groups: null,
+      balance_notify_enabled: true,
+      balance_notify_threshold: null,
+      balance_notify_extra_emails: [],
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      notes: "",
+    });
+    listUsers.mockResolvedValueOnce({
+      items: [
+        {
+          id: 8,
+          email: "candidate@example.com",
+          username: "candidate",
+          balance: 1.5,
+          role: "user",
+          status: "active",
+          concurrency: 1,
+          allowed_groups: null,
+          balance_notify_enabled: true,
+          balance_notify_threshold: null,
+          balance_notify_extra_emails: [],
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+          notes: "",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 10,
+    });
+
+    try {
+      const wrapper = mountView();
+      await flushPromises();
+      await openEmailTab(wrapper);
+
+      expect(getUserById).toHaveBeenCalledWith(7);
+      expect(wrapper.text()).toContain("blocked@example.com");
+
+      const searchInput = wrapper.find('input[placeholder="输入用户邮箱或用户名添加排除账号"]');
+      await searchInput.setValue("candidate");
+      vi.advanceTimersByTime(300);
+      await flushPromises();
+      expect(listUsers).toHaveBeenCalledWith(1, 10, {
+        search: "candidate",
+        sort_by: "id",
+        sort_order: "asc",
+      });
+
+      const candidateButton = wrapper.findAll("button").find((node) => node.text().includes("candidate@example.com"));
+      expect(candidateButton).toBeDefined();
+      await candidateButton?.trigger("click");
+      await flushPromises();
+      expect(wrapper.text()).toContain("candidate@example.com");
+
+      const blockedRow = wrapper.findAll("div").find((node) => node.text().includes("blocked@example.com"));
+      const removeButton = blockedRow?.findAll("button").find((node) => node.text().includes("删除"));
+      expect(removeButton).toBeDefined();
+      await removeButton?.trigger("click");
+      await wrapper.find("form").trigger("submit.prevent");
+      await flushPromises();
+
+      expect(updateSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          balance_low_notify_excluded_user_ids: [8],
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("updates provider enablement immediately and reloads providers", async () => {
     const provider = {
       id: 7,
@@ -753,6 +868,8 @@ describe("admin SettingsView wechat connect controls", () => {
     getGroups.mockReset();
     listProxies.mockReset();
     getProviders.mockReset();
+    getUserById.mockReset();
+    listUsers.mockReset();
     updateProvider.mockReset();
     createProvider.mockReset();
     deleteProvider.mockReset();
@@ -815,6 +932,8 @@ describe("admin SettingsView wechat connect controls", () => {
     getProviders.mockResolvedValue({
       data: [],
     });
+    getUserById.mockRejectedValue(new Error("not found"));
+    listUsers.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 10 });
     fetchPublicSettings.mockResolvedValue(undefined);
     adminSettingsFetch.mockResolvedValue(undefined);
   });

@@ -5974,6 +5974,74 @@
                   {{ t("admin.settings.balanceNotify.rechargeUrlHint") }}
                 </p>
               </div>
+              <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-700">
+                <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t("admin.settings.balanceNotify.excludedUsers") }}
+                </label>
+                <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.balanceNotify.excludedUsersHint") }}
+                </p>
+                <div class="relative">
+                  <input
+                    v-model="balanceNotifyUserSearch"
+                    type="text"
+                    class="input"
+                    :placeholder="t('admin.settings.balanceNotify.searchPlaceholder')"
+                    @input="onBalanceNotifyUserSearchInput"
+                  />
+                  <div
+                    v-if="balanceNotifySearchLoading"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400"
+                  >
+                    {{ t("common.loading") }}
+                  </div>
+                </div>
+                <div
+                  v-if="balanceNotifySearchResults.length > 0"
+                  class="mt-2 max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-800"
+                >
+                  <button
+                    v-for="candidate in balanceNotifySearchResults"
+                    :key="candidate.id"
+                    type="button"
+                    class="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-dark-700"
+                    @click="addBalanceNotifyExcludedUser(candidate)"
+                  >
+                    <span>
+                      <span class="font-medium text-gray-900 dark:text-white">{{ candidate.email }}</span>
+                      <span class="ml-2 text-gray-500 dark:text-gray-400">{{ candidate.username || ('#' + candidate.id) }}</span>
+                    </span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">{{ formatBalanceNotifyAmount(candidate.balance) }}</span>
+                  </button>
+                </div>
+                <div class="mt-3 space-y-2">
+                  <div
+                    v-for="user in balanceNotifyExcludedUsers"
+                    :key="user.id"
+                    class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm dark:bg-dark-800"
+                  >
+                    <div>
+                      <div class="font-medium text-gray-900 dark:text-white">{{ user.email }}</div>
+                      <div class="text-xs text-gray-500 dark:text-gray-400">
+                        #{{ user.id }} · {{ user.username || '-' }} · {{ formatBalanceNotifyAmount(user.balance) }}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      class="text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400"
+                      @click="removeBalanceNotifyExcludedUser(user.id)"
+                    >
+                      {{ t("common.delete") }}
+                    </button>
+                  </div>
+                  <p
+                    v-if="balanceNotifyExcludedUsers.length === 0"
+                    class="text-xs text-gray-500 dark:text-gray-400"
+                  >
+                    {{ t("admin.settings.balanceNotify.excludedUsersEmpty") }}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -6157,6 +6225,7 @@ import type {
 } from "@/api/admin/settings";
 import type {
   AdminGroup,
+  AdminUser,
   LoginAgreementDocument,
   NotifyEmailEntry,
   Proxy,
@@ -6618,6 +6687,7 @@ const form = reactive<SettingsForm>({
   balance_low_notify_enabled: false,
   balance_low_notify_threshold: 0,
   balance_low_notify_recharge_url: "",
+  balance_low_notify_excluded_user_ids: [] as number[],
   account_quota_notify_enabled: false,
   account_quota_notify_emails: [] as NotifyEmailEntry[],
   // Channel Monitor feature switch
@@ -6675,6 +6745,11 @@ const authSourceDefaultsMeta = computed(() => [
 
 // Proxies for web search emulation ProxySelector
 const webSearchProxies = ref<Proxy[]>([]);
+const balanceNotifyExcludedUsers = ref<AdminUser[]>([]);
+const balanceNotifyUserSearch = ref("");
+const balanceNotifySearchResults = ref<AdminUser[]>([]);
+const balanceNotifySearchLoading = ref(false);
+const balanceNotifySearchState = { searchTimer: null as number | null };
 
 // Web Search Emulation config (loaded/saved separately)
 const DEFAULT_WEB_SEARCH_QUOTA_LIMIT = 1000;
@@ -7209,6 +7284,62 @@ function parseTablePageSizeOptionsInput(raw: string): number[] | null {
   return deduped;
 }
 
+function formatBalanceNotifyAmount(value: number | null | undefined): string {
+  const amount = Number(value ?? 0);
+  return `$${amount.toFixed(2)}`;
+}
+
+async function loadBalanceNotifyExcludedUsers() {
+  const ids = Array.from(new Set(form.balance_low_notify_excluded_user_ids || [])).filter((id) => id > 0);
+  form.balance_low_notify_excluded_user_ids = ids;
+  if (ids.length === 0) {
+    balanceNotifyExcludedUsers.value = [];
+    return;
+  }
+  const users = await Promise.all(
+    ids.map((id) => adminAPI.users.getById(id).catch(() => null)),
+  );
+  balanceNotifyExcludedUsers.value = users.filter((user): user is AdminUser => Boolean(user));
+  form.balance_low_notify_excluded_user_ids = balanceNotifyExcludedUsers.value.map((user) => user.id);
+}
+
+async function searchBalanceNotifyUsers() {
+  const search = balanceNotifyUserSearch.value.trim();
+  if (!search) {
+    balanceNotifySearchResults.value = [];
+    return;
+  }
+  balanceNotifySearchLoading.value = true;
+  try {
+    const res = await adminAPI.users.list(1, 10, { search, sort_by: "id", sort_order: "asc" });
+    const excluded = new Set(form.balance_low_notify_excluded_user_ids || []);
+    balanceNotifySearchResults.value = (res.items || []).filter((user) => !excluded.has(user.id));
+  } catch (err) {
+    appStore.showError(extractApiErrorMessage(err, t("common.error")));
+  } finally {
+    balanceNotifySearchLoading.value = false;
+  }
+}
+
+function onBalanceNotifyUserSearchInput() {
+  debounceTimer(balanceNotifySearchState, 300, searchBalanceNotifyUsers);
+}
+
+function addBalanceNotifyExcludedUser(user: AdminUser) {
+  if ((form.balance_low_notify_excluded_user_ids || []).includes(user.id)) {
+    return;
+  }
+  form.balance_low_notify_excluded_user_ids = [...(form.balance_low_notify_excluded_user_ids || []), user.id];
+  balanceNotifyExcludedUsers.value = [...balanceNotifyExcludedUsers.value, user];
+  balanceNotifySearchResults.value = balanceNotifySearchResults.value.filter((item) => item.id !== user.id);
+  balanceNotifyUserSearch.value = "";
+}
+
+function removeBalanceNotifyExcludedUser(userId: number) {
+  form.balance_low_notify_excluded_user_ids = (form.balance_low_notify_excluded_user_ids || []).filter((id) => id !== userId);
+  balanceNotifyExcludedUsers.value = balanceNotifyExcludedUsers.value.filter((user) => user.id !== userId);
+}
+
 async function loadSettings() {
   loading.value = true;
   loadFailed.value = false;
@@ -7222,6 +7353,10 @@ async function loadSettings() {
         (form as Record<string, unknown>)[key] = value;
       }
     }
+    form.balance_low_notify_excluded_user_ids = Array.isArray(settings.balance_low_notify_excluded_user_ids)
+      ? [...settings.balance_low_notify_excluded_user_ids]
+      : [];
+    await loadBalanceNotifyExcludedUsers();
     form.login_agreement_mode =
       settings.login_agreement_mode === "checkbox" ? "checkbox" : "modal";
     form.login_agreement_updated_at =
@@ -7722,6 +7857,9 @@ async function saveSettings() {
         Number(form.balance_low_notify_threshold) || 0,
       balance_low_notify_recharge_url: (form.balance_low_notify_recharge_url =
         form.balance_low_notify_recharge_url || currentOrigin),
+      balance_low_notify_excluded_user_ids: [
+        ...new Set(form.balance_low_notify_excluded_user_ids || []),
+      ],
       account_quota_notify_enabled: form.account_quota_notify_enabled,
       account_quota_notify_emails: (
         form.account_quota_notify_emails || []

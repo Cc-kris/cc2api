@@ -167,12 +167,10 @@ const (
 
 // UpdateProfileRequest 更新用户资料请求
 type UpdateProfileRequest struct {
-	Email                  *string  `json:"email"`
-	Username               *string  `json:"username"`
-	AvatarURL              *string  `json:"avatar_url"`
-	Concurrency            *int     `json:"concurrency"`
-	BalanceNotifyEnabled   *bool    `json:"balance_notify_enabled"`
-	BalanceNotifyThreshold *float64 `json:"balance_notify_threshold"`
+	Email       *string `json:"email"`
+	Username    *string `json:"username"`
+	AvatarURL   *string `json:"avatar_url"`
+	Concurrency *int    `json:"concurrency"`
 }
 
 type UserAvatar struct {
@@ -438,17 +436,6 @@ func (s *UserService) updateProfile(ctx context.Context, userID int64, req Updat
 
 	if req.Concurrency != nil {
 		user.Concurrency = *req.Concurrency
-	}
-
-	if req.BalanceNotifyEnabled != nil {
-		user.BalanceNotifyEnabled = *req.BalanceNotifyEnabled
-	}
-	if req.BalanceNotifyThreshold != nil {
-		if *req.BalanceNotifyThreshold <= 0 {
-			user.BalanceNotifyThreshold = nil // clear to system default
-		} else {
-			user.BalanceNotifyThreshold = req.BalanceNotifyThreshold
-		}
 	}
 
 	if err := s.userRepo.Update(ctx, user); err != nil {

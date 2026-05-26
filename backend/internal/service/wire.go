@@ -517,6 +517,7 @@ var ProviderSet = wire.NewSet(
 	NewPaymentService,
 	ProvidePaymentOrderExpiryService,
 	ProvideBalanceNotifyService,
+	ProvideBalanceLowNotifyScanner,
 	ProvideChannelMonitorService,
 	ProvideChannelMonitorRunner,
 	NewChannelMonitorRequestTemplateService,
@@ -529,8 +530,15 @@ func ProvidePaymentConfigService(entClient *dbent.Client, settingRepo SettingRep
 }
 
 // ProvideBalanceNotifyService creates BalanceNotifyService
-func ProvideBalanceNotifyService(emailService *EmailService, settingRepo SettingRepository, accountRepo AccountRepository) *BalanceNotifyService {
-	return NewBalanceNotifyService(emailService, settingRepo, accountRepo)
+func ProvideBalanceNotifyService(emailService *EmailService, settingRepo SettingRepository, accountRepo AccountRepository, balanceLowRepo BalanceLowNotifyRepository) *BalanceNotifyService {
+	return NewBalanceNotifyService(emailService, settingRepo, accountRepo, balanceLowRepo)
+}
+
+// ProvideBalanceLowNotifyScanner creates and starts BalanceLowNotifyScanner.
+func ProvideBalanceLowNotifyScanner(balanceNotify *BalanceNotifyService) *BalanceLowNotifyScanner {
+	scanner := NewBalanceLowNotifyScanner(balanceNotify, 5*time.Minute)
+	scanner.Start()
+	return scanner
 }
 
 // ProvidePaymentOrderExpiryService creates and starts PaymentOrderExpiryService.

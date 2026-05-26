@@ -380,9 +380,10 @@ const (
 	SettingKeyAntigravityUserAgentVersion = "antigravity_user_agent_version"
 
 	// Balance Low Notification
-	SettingKeyBalanceLowNotifyEnabled     = "balance_low_notify_enabled"      // 全局开关
-	SettingKeyBalanceLowNotifyThreshold   = "balance_low_notify_threshold"    // 默认阈值（USD）
-	SettingKeyBalanceLowNotifyRechargeURL = "balance_low_notify_recharge_url" // 充值页面 URL
+	SettingKeyBalanceLowNotifyEnabled         = "balance_low_notify_enabled"           // 全局开关
+	SettingKeyBalanceLowNotifyThreshold       = "balance_low_notify_threshold"         // 默认阈值（USD）
+	SettingKeyBalanceLowNotifyRechargeURL     = "balance_low_notify_recharge_url"      // 充值页面 URL
+	SettingKeyBalanceLowNotifyExcludedUserIDs = "balance_low_notify_excluded_user_ids" // 排除用户 ID 列表（JSON 数组）
 
 	// Account Quota Notification
 	SettingKeyAccountQuotaNotifyEnabled = "account_quota_notify_enabled" // 全局开关

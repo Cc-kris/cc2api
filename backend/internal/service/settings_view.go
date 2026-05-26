@@ -189,9 +189,10 @@ type SystemSettings struct {
 	OpenAIAdvancedSchedulerEnabled bool
 
 	// Balance low notification
-	BalanceLowNotifyEnabled     bool
-	BalanceLowNotifyThreshold   float64
-	BalanceLowNotifyRechargeURL string
+	BalanceLowNotifyEnabled         bool
+	BalanceLowNotifyThreshold       float64
+	BalanceLowNotifyRechargeURL     string
+	BalanceLowNotifyExcludedUserIDs []int64
 
 	// Account quota notification
 	AccountQuotaNotifyEnabled bool

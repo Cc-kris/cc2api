@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -37,24 +38,69 @@ type AccountQuotaReader interface {
 	GetByID(ctx context.Context, id int64) (*Account, error)
 }
 
+// BalanceLowNotifyUser is a user eligible for global low balance notification.
+type BalanceLowNotifyUser struct {
+	ID       int64
+	Email    string
+	Username string
+	Balance  float64
+}
+
+// BalanceLowNotifyRepository provides persistence for global low balance notification scans.
+type BalanceLowNotifyRepository interface {
+	ListUsersBelowBalanceThreshold(ctx context.Context, threshold float64, excludedUserIDs []int64) ([]BalanceLowNotifyUser, error)
+	ResetUsersAtOrAboveBalanceThreshold(ctx context.Context, threshold float64, excludedUserIDs []int64) (int64, error)
+	MarkBalanceLowNotified(ctx context.Context, userID int64) (bool, error)
+}
+
+// BalanceLowScanStats describes one global balance low scan result.
+type BalanceLowScanStats struct {
+	Recovered int64
+	Matched   int
+	Marked    int
+	Sent      int
+}
+
 // BalanceNotifyService handles balance and quota threshold notifications.
 type BalanceNotifyService struct {
-	emailService *EmailService
-	settingRepo  SettingRepository
-	accountRepo  AccountQuotaReader
+	emailService       *EmailService
+	settingRepo        SettingRepository
+	accountRepo        AccountQuotaReader
+	balanceLowUserRepo BalanceLowNotifyRepository
 }
 
 // NewBalanceNotifyService creates a new BalanceNotifyService.
-func NewBalanceNotifyService(emailService *EmailService, settingRepo SettingRepository, accountRepo AccountQuotaReader) *BalanceNotifyService {
+func NewBalanceNotifyService(emailService *EmailService, settingRepo SettingRepository, accountRepo AccountQuotaReader, balanceLowUserRepo BalanceLowNotifyRepository) *BalanceNotifyService {
 	return &BalanceNotifyService{
-		emailService: emailService,
-		settingRepo:  settingRepo,
-		accountRepo:  accountRepo,
+		emailService:       emailService,
+		settingRepo:        settingRepo,
+		accountRepo:        accountRepo,
+		balanceLowUserRepo: balanceLowUserRepo,
 	}
 }
 
 // resolveBalanceThreshold returns the effective balance threshold.
 // For percentage type, it computes threshold = totalRecharged * percentage / 100.
+func normalizeBalanceLowNotifyExcludedUserIDs(values []int64) []int64 {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[int64]struct{}, len(values))
+	normalized := make([]int64, 0, len(values))
+	for _, value := range values {
+		if value <= 0 {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	sort.Slice(normalized, func(i, j int) bool { return normalized[i] < normalized[j] })
+	return normalized
+}
+
 func resolveBalanceThreshold(threshold float64, thresholdType string, totalRecharged float64) float64 {
 	if thresholdType == thresholdTypePercentage && totalRecharged > 0 {
 		return totalRecharged * threshold / 100
@@ -62,21 +108,14 @@ func resolveBalanceThreshold(threshold float64, thresholdType string, totalRecha
 	return threshold
 }
 
-// CheckBalanceAfterDeduction checks if balance crossed below threshold after deduction.
-// Notification is sent only on first crossing: oldBalance >= threshold && newBalance < threshold.
+// CheckBalanceAfterDeduction is kept for compatibility with older callers.
+// Balance low notifications are now driven by the global scanner so user-level
+// notification preferences and verified extra emails no longer control sending.
 func (s *BalanceNotifyService) CheckBalanceAfterDeduction(ctx context.Context, user *User, oldBalance, cost float64) {
-	if !s.canNotifyBalance(user) {
-		return
-	}
-	effectiveThreshold, rechargeURL, ok := s.resolveUserEffectiveThreshold(ctx, user)
-	if !ok {
-		return
-	}
-	newBalance := oldBalance - cost
-	if !crossedDownward(oldBalance, newBalance, effectiveThreshold) {
-		return
-	}
-	s.dispatchBalanceLowEmail(ctx, user, newBalance, effectiveThreshold, rechargeURL)
+	_ = ctx
+	_ = user
+	_ = oldBalance
+	_ = cost
 }
 
 // canNotifyBalance checks nil guards and user-level toggle.
@@ -111,6 +150,52 @@ func (s *BalanceNotifyService) resolveUserEffectiveThreshold(ctx context.Context
 // crossedDownward returns true when oldV was at-or-above threshold but newV dropped below it.
 func crossedDownward(oldV, newV, threshold float64) bool {
 	return oldV >= threshold && newV < threshold
+}
+
+// ScanBalanceLowUsers scans active users and sends one low-balance email per low-balance episode.
+func (s *BalanceNotifyService) ScanBalanceLowUsers(ctx context.Context) (BalanceLowScanStats, error) {
+	var stats BalanceLowScanStats
+	if s == nil || s.balanceLowUserRepo == nil {
+		return stats, nil
+	}
+	enabled, threshold, rechargeURL := s.getBalanceNotifyConfig(ctx)
+	if !enabled || threshold <= 0 {
+		return stats, nil
+	}
+	excludedUserIDs := s.getBalanceLowNotifyExcludedUserIDs(ctx)
+	recovered, err := s.balanceLowUserRepo.ResetUsersAtOrAboveBalanceThreshold(ctx, threshold, excludedUserIDs)
+	if err != nil {
+		return stats, fmt.Errorf("reset balance low notification states: %w", err)
+	}
+	stats.Recovered = recovered
+
+	users, err := s.balanceLowUserRepo.ListUsersBelowBalanceThreshold(ctx, threshold, excludedUserIDs)
+	if err != nil {
+		return stats, fmt.Errorf("list low balance users: %w", err)
+	}
+	stats.Matched = len(users)
+	if len(users) == 0 {
+		return stats, nil
+	}
+	siteName := s.getSiteName(ctx)
+	for _, user := range users {
+		marked, err := s.balanceLowUserRepo.MarkBalanceLowNotified(ctx, user.ID)
+		if err != nil {
+			slog.Error("mark balance low notified failed", "user_id", user.ID, "error", err)
+			continue
+		}
+		if !marked {
+			continue
+		}
+		stats.Marked++
+		email := strings.TrimSpace(user.Email)
+		if email == "" {
+			continue
+		}
+		s.sendBalanceLowEmails([]string{email}, user.Username, email, user.Balance, threshold, siteName, rechargeURL)
+		stats.Sent++
+	}
+	return stats, nil
 }
 
 // dispatchBalanceLowEmail collects recipients and sends the alert in a goroutine.
@@ -309,6 +394,23 @@ func (s *BalanceNotifyService) getBalanceNotifyConfig(ctx context.Context) (enab
 	}
 	rechargeURL = settings[SettingKeyBalanceLowNotifyRechargeURL]
 	return
+}
+
+func (s *BalanceNotifyService) getBalanceLowNotifyExcludedUserIDs(ctx context.Context) []int64 {
+	if s == nil || s.settingRepo == nil {
+		return nil
+	}
+	setting, err := s.settingRepo.Get(ctx, SettingKeyBalanceLowNotifyExcludedUserIDs)
+	if err != nil {
+		if err != ErrSettingNotFound {
+			slog.Warn("[BalanceNotify] Failed to load balance low notify excluded users", "error", err)
+		}
+		return nil
+	}
+	if setting == nil {
+		return nil
+	}
+	return ParseBalanceLowNotifyExcludedUserIDs(setting.Value)
 }
 
 // isAccountQuotaNotifyEnabled checks the global account quota notification toggle.
