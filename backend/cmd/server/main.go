@@ -116,11 +116,16 @@ func runSetupServer() {
 	log.Printf("Setup wizard available at http://%s", addr)
 	log.Println("Complete the setup wizard to configure Sub2API")
 
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
+
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           h2c.NewHandler(r, &http2.Server{}), //nolint:staticcheck // Keep existing h2c behavior while x/net deprecates this wrapper.
 		ReadHeaderTimeout: 30 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		Protocols:         protocols,
 	}
 
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
