@@ -83,15 +83,6 @@ func (s *BalanceNotifyService) SetNotificationEmailService(notificationEmailServ
 	s.notificationEmailService = notificationEmailService
 }
 
-// resolveBalanceThreshold returns the effective balance threshold.
-// For percentage type, it computes threshold = totalRecharged * percentage / 100.
-func resolveBalanceThreshold(threshold float64, thresholdType string, totalRecharged float64) float64 {
-	if thresholdType == thresholdTypePercentage && totalRecharged > 0 {
-		return totalRecharged * threshold / 100
-	}
-	return threshold
-}
-
 // CheckBalanceAfterDeduction is kept for compatibility with older callers.
 // Balance low notifications are now driven by the global scanner so user-level
 // notification preferences and verified extra emails no longer control sending.
