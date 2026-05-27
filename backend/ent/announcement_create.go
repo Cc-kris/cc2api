@@ -134,6 +134,20 @@ func (_c *AnnouncementCreate) SetNillableUpdatedBy(v *int64) *AnnouncementCreate
 	return _c
 }
 
+// SetEmailSentAt sets the "email_sent_at" field.
+func (_c *AnnouncementCreate) SetEmailSentAt(v time.Time) *AnnouncementCreate {
+	_c.mutation.SetEmailSentAt(v)
+	return _c
+}
+
+// SetNillableEmailSentAt sets the "email_sent_at" field if the given value is not nil.
+func (_c *AnnouncementCreate) SetNillableEmailSentAt(v *time.Time) *AnnouncementCreate {
+	if v != nil {
+		_c.SetEmailSentAt(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *AnnouncementCreate) SetCreatedAt(v time.Time) *AnnouncementCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -332,6 +346,10 @@ func (_c *AnnouncementCreate) createSpec() (*Announcement, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.UpdatedBy(); ok {
 		_spec.SetField(announcement.FieldUpdatedBy, field.TypeInt64, value)
 		_node.UpdatedBy = &value
+	}
+	if value, ok := _c.mutation.EmailSentAt(); ok {
+		_spec.SetField(announcement.FieldEmailSentAt, field.TypeTime, value)
+		_node.EmailSentAt = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(announcement.FieldCreatedAt, field.TypeTime, value)
@@ -556,6 +574,24 @@ func (u *AnnouncementUpsert) AddUpdatedBy(v int64) *AnnouncementUpsert {
 // ClearUpdatedBy clears the value of the "updated_by" field.
 func (u *AnnouncementUpsert) ClearUpdatedBy() *AnnouncementUpsert {
 	u.SetNull(announcement.FieldUpdatedBy)
+	return u
+}
+
+// SetEmailSentAt sets the "email_sent_at" field.
+func (u *AnnouncementUpsert) SetEmailSentAt(v time.Time) *AnnouncementUpsert {
+	u.Set(announcement.FieldEmailSentAt, v)
+	return u
+}
+
+// UpdateEmailSentAt sets the "email_sent_at" field to the value that was provided on create.
+func (u *AnnouncementUpsert) UpdateEmailSentAt() *AnnouncementUpsert {
+	u.SetExcluded(announcement.FieldEmailSentAt)
+	return u
+}
+
+// ClearEmailSentAt clears the value of the "email_sent_at" field.
+func (u *AnnouncementUpsert) ClearEmailSentAt() *AnnouncementUpsert {
+	u.SetNull(announcement.FieldEmailSentAt)
 	return u
 }
 
@@ -788,6 +824,27 @@ func (u *AnnouncementUpsertOne) UpdateUpdatedBy() *AnnouncementUpsertOne {
 func (u *AnnouncementUpsertOne) ClearUpdatedBy() *AnnouncementUpsertOne {
 	return u.Update(func(s *AnnouncementUpsert) {
 		s.ClearUpdatedBy()
+	})
+}
+
+// SetEmailSentAt sets the "email_sent_at" field.
+func (u *AnnouncementUpsertOne) SetEmailSentAt(v time.Time) *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetEmailSentAt(v)
+	})
+}
+
+// UpdateEmailSentAt sets the "email_sent_at" field to the value that was provided on create.
+func (u *AnnouncementUpsertOne) UpdateEmailSentAt() *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateEmailSentAt()
+	})
+}
+
+// ClearEmailSentAt clears the value of the "email_sent_at" field.
+func (u *AnnouncementUpsertOne) ClearEmailSentAt() *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.ClearEmailSentAt()
 	})
 }
 
@@ -1188,6 +1245,27 @@ func (u *AnnouncementUpsertBulk) UpdateUpdatedBy() *AnnouncementUpsertBulk {
 func (u *AnnouncementUpsertBulk) ClearUpdatedBy() *AnnouncementUpsertBulk {
 	return u.Update(func(s *AnnouncementUpsert) {
 		s.ClearUpdatedBy()
+	})
+}
+
+// SetEmailSentAt sets the "email_sent_at" field.
+func (u *AnnouncementUpsertBulk) SetEmailSentAt(v time.Time) *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetEmailSentAt(v)
+	})
+}
+
+// UpdateEmailSentAt sets the "email_sent_at" field to the value that was provided on create.
+func (u *AnnouncementUpsertBulk) UpdateEmailSentAt() *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateEmailSentAt()
+	})
+}
+
+// ClearEmailSentAt clears the value of the "email_sent_at" field.
+func (u *AnnouncementUpsertBulk) ClearEmailSentAt() *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.ClearEmailSentAt()
 	})
 }
 

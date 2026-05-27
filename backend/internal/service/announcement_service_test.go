@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,6 +31,14 @@ func (s *announcementRepoStub) Update(_ context.Context, a *Announcement) error 
 	return nil
 }
 
+func (s *announcementRepoStub) MarkEmailSentIfUnset(_ context.Context, _ int64, sentAt time.Time) (bool, error) {
+	if s.item == nil || s.item.EmailSentAt != nil {
+		return false, nil
+	}
+	s.item.EmailSentAt = &sentAt
+	return true, nil
+}
+
 func (*announcementRepoStub) Delete(context.Context, int64) error {
 	return nil
 }
@@ -42,9 +51,22 @@ func (*announcementRepoStub) ListActive(context.Context, time.Time) ([]Announcem
 	return nil, nil
 }
 
+type announcementUserRepoStub struct {
+	UserRepository
+	pages [][]User
+}
+
+func (s *announcementUserRepoStub) ListWithFilters(_ context.Context, params pagination.PaginationParams, _ UserListFilters) ([]User, *pagination.PaginationResult, error) {
+	index := params.Page - 1
+	if index < 0 || index >= len(s.pages) {
+		return []User{}, &pagination.PaginationResult{Page: params.Page, PageSize: params.PageSize, Pages: len(s.pages)}, nil
+	}
+	return s.pages[index], &pagination.PaginationResult{Page: params.Page, PageSize: params.PageSize, Pages: len(s.pages)}, nil
+}
+
 func TestAnnouncementServiceCreateRejectsEqualStartEndTimes(t *testing.T) {
 	repo := &announcementRepoStub{}
-	svc := NewAnnouncementService(repo, nil, nil, nil)
+	svc := NewAnnouncementService(repo, nil, nil, nil, nil, nil)
 	now := time.Unix(1776790020, 0)
 
 	_, err := svc.Create(context.Background(), &CreateAnnouncementInput{
@@ -68,7 +90,7 @@ func TestAnnouncementServiceUpdateRejectsEqualStartEndTimes(t *testing.T) {
 			NotifyMode: AnnouncementNotifyModePopup,
 		},
 	}
-	svc := NewAnnouncementService(repo, nil, nil, nil)
+	svc := NewAnnouncementService(repo, nil, nil, nil, nil, nil)
 	now := time.Unix(1776790020, 0)
 	startsAt := &now
 	endsAt := &now
@@ -78,4 +100,43 @@ func TestAnnouncementServiceUpdateRejectsEqualStartEndTimes(t *testing.T) {
 		EndsAt:   &endsAt,
 	})
 	require.ErrorIs(t, err, ErrAnnouncementInvalidSchedule)
+}
+
+func TestAnnouncementEmailRecipientsUseAnnouncementTargeting(t *testing.T) {
+	svc := NewAnnouncementService(&announcementRepoStub{}, nil, &announcementUserRepoStub{
+		pages: [][]User{
+			{
+				{ID: 1, Email: "low@example.com", Balance: 1},
+				{ID: 2, Email: "match@example.com", Balance: 20},
+				{ID: 3, Email: "match@example.com", Balance: 30},
+			},
+		},
+	}, nil, nil, nil)
+
+	recipients, err := svc.listAnnouncementEmailRecipients(context.Background(), AnnouncementTargeting{
+		AnyOf: []AnnouncementConditionGroup{{
+			AllOf: []AnnouncementCondition{{
+				Type:     AnnouncementConditionTypeBalance,
+				Operator: AnnouncementOperatorGTE,
+				Value:    10,
+			}},
+		}},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"match@example.com"}, recipients)
+}
+
+func TestAnnouncementEmailBodyEscapesContentAndLinksHome(t *testing.T) {
+	svc := NewAnnouncementService(&announcementRepoStub{}, nil, nil, nil, nil, nil)
+
+	body := svc.buildAnnouncementEmailBody(&Announcement{
+		Title:   `<script>alert("x")</script>`,
+		Content: "第一行\n<a>第二行</a>",
+	})
+
+	require.Contains(t, body, "&lt;script&gt;")
+	require.Contains(t, body, "第一行<br>&lt;a&gt;第二行&lt;/a&gt;")
+	require.Contains(t, body, `href="/"`)
+	require.False(t, strings.Contains(body, `<script>alert("x")</script>`))
 }

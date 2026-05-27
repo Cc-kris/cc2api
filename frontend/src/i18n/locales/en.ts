@@ -4151,7 +4151,10 @@ export default {
         conditionBalance: 'Balance',
         operator: 'Operator',
         balanceValue: 'Balance threshold',
-        selectPackages: 'Select packages'
+        selectPackages: 'Select packages',
+        sendEmail: 'Send email notification',
+        sendEmailHint: 'After saving, an email will be sent immediately to users matching the targeting rules. Each announcement is sent only once.',
+        emailAlreadySentHint: 'This announcement has already sent email; later edits will not send it again.'
       },
       operators: {
         gt: '>',

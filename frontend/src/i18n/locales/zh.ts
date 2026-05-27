@@ -4307,7 +4307,10 @@ export default {
         conditionBalance: '余额',
         operator: '运算符',
         balanceValue: '余额阈值',
-        selectPackages: '选择套餐'
+        selectPackages: '选择套餐',
+        sendEmail: '发送邮件通知',
+        sendEmailHint: '保存后会立即向符合当前展示条件的用户逐一发送邮件；每个公告只会发送一次。',
+        emailAlreadySentHint: '该公告已经发送过邮件，后续修改不会再次发送。'
       },
       operators: {
         gt: '>',

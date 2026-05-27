@@ -34,6 +34,7 @@ type CreateAnnouncementRequest struct {
 	Targeting  service.AnnouncementTargeting `json:"targeting"`
 	StartsAt   *int64                        `json:"starts_at"` // Unix seconds, 0/empty = immediate
 	EndsAt     *int64                        `json:"ends_at"`   // Unix seconds, 0/empty = never
+	SendEmail  bool                          `json:"send_email"`
 }
 
 type UpdateAnnouncementRequest struct {
@@ -44,6 +45,7 @@ type UpdateAnnouncementRequest struct {
 	Targeting  *service.AnnouncementTargeting `json:"targeting"`
 	StartsAt   *int64                         `json:"starts_at"` // Unix seconds, 0 = clear
 	EndsAt     *int64                         `json:"ends_at"`   // Unix seconds, 0 = clear
+	SendEmail  bool                           `json:"send_email"`
 }
 
 // List handles listing announcements with filters
@@ -122,6 +124,7 @@ func (h *AnnouncementHandler) Create(c *gin.Context) {
 		NotifyMode: req.NotifyMode,
 		Targeting:  req.Targeting,
 		ActorID:    &subject.UserID,
+		SendEmail:  req.SendEmail,
 	}
 
 	if req.StartsAt != nil && *req.StartsAt > 0 {
@@ -170,6 +173,7 @@ func (h *AnnouncementHandler) Update(c *gin.Context) {
 		NotifyMode: req.NotifyMode,
 		Targeting:  req.Targeting,
 		ActorID:    &subject.UserID,
+		SendEmail:  req.SendEmail,
 	}
 
 	if req.StartsAt != nil {

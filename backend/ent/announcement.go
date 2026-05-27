@@ -37,6 +37,8 @@ type Announcement struct {
 	CreatedBy *int64 `json:"created_by,omitempty"`
 	// 更新人用户ID（管理员）
 	UpdatedBy *int64 `json:"updated_by,omitempty"`
+	// 公告邮件通知发送时间（为空表示未发送）
+	EmailSentAt *time.Time `json:"email_sent_at,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -76,7 +78,7 @@ func (*Announcement) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case announcement.FieldTitle, announcement.FieldContent, announcement.FieldStatus, announcement.FieldNotifyMode:
 			values[i] = new(sql.NullString)
-		case announcement.FieldStartsAt, announcement.FieldEndsAt, announcement.FieldCreatedAt, announcement.FieldUpdatedAt:
+		case announcement.FieldStartsAt, announcement.FieldEndsAt, announcement.FieldEmailSentAt, announcement.FieldCreatedAt, announcement.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -158,6 +160,13 @@ func (_m *Announcement) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.UpdatedBy = new(int64)
 				*_m.UpdatedBy = value.Int64
+			}
+		case announcement.FieldEmailSentAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field email_sent_at", values[i])
+			} else if value.Valid {
+				_m.EmailSentAt = new(time.Time)
+				*_m.EmailSentAt = value.Time
 			}
 		case announcement.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -245,6 +254,11 @@ func (_m *Announcement) String() string {
 	if v := _m.UpdatedBy; v != nil {
 		builder.WriteString("updated_by=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.EmailSentAt; v != nil {
+		builder.WriteString("email_sent_at=")
+		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")

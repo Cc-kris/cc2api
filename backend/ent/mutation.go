@@ -5201,6 +5201,7 @@ type AnnouncementMutation struct {
 	addcreated_by *int64
 	updated_by    *int64
 	addupdated_by *int64
+	email_sent_at *time.Time
 	created_at    *time.Time
 	updated_at    *time.Time
 	clearedFields map[string]struct{}
@@ -5741,6 +5742,55 @@ func (m *AnnouncementMutation) ResetUpdatedBy() {
 	delete(m.clearedFields, announcement.FieldUpdatedBy)
 }
 
+// SetEmailSentAt sets the "email_sent_at" field.
+func (m *AnnouncementMutation) SetEmailSentAt(t time.Time) {
+	m.email_sent_at = &t
+}
+
+// EmailSentAt returns the value of the "email_sent_at" field in the mutation.
+func (m *AnnouncementMutation) EmailSentAt() (r time.Time, exists bool) {
+	v := m.email_sent_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEmailSentAt returns the old "email_sent_at" field's value of the Announcement entity.
+// If the Announcement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementMutation) OldEmailSentAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEmailSentAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEmailSentAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEmailSentAt: %w", err)
+	}
+	return oldValue.EmailSentAt, nil
+}
+
+// ClearEmailSentAt clears the value of the "email_sent_at" field.
+func (m *AnnouncementMutation) ClearEmailSentAt() {
+	m.email_sent_at = nil
+	m.clearedFields[announcement.FieldEmailSentAt] = struct{}{}
+}
+
+// EmailSentAtCleared returns if the "email_sent_at" field was cleared in this mutation.
+func (m *AnnouncementMutation) EmailSentAtCleared() bool {
+	_, ok := m.clearedFields[announcement.FieldEmailSentAt]
+	return ok
+}
+
+// ResetEmailSentAt resets all changes to the "email_sent_at" field.
+func (m *AnnouncementMutation) ResetEmailSentAt() {
+	m.email_sent_at = nil
+	delete(m.clearedFields, announcement.FieldEmailSentAt)
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *AnnouncementMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -5901,7 +5951,7 @@ func (m *AnnouncementMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AnnouncementMutation) Fields() []string {
-	fields := make([]string, 0, 11)
+	fields := make([]string, 0, 12)
 	if m.title != nil {
 		fields = append(fields, announcement.FieldTitle)
 	}
@@ -5928,6 +5978,9 @@ func (m *AnnouncementMutation) Fields() []string {
 	}
 	if m.updated_by != nil {
 		fields = append(fields, announcement.FieldUpdatedBy)
+	}
+	if m.email_sent_at != nil {
+		fields = append(fields, announcement.FieldEmailSentAt)
 	}
 	if m.created_at != nil {
 		fields = append(fields, announcement.FieldCreatedAt)
@@ -5961,6 +6014,8 @@ func (m *AnnouncementMutation) Field(name string) (ent.Value, bool) {
 		return m.CreatedBy()
 	case announcement.FieldUpdatedBy:
 		return m.UpdatedBy()
+	case announcement.FieldEmailSentAt:
+		return m.EmailSentAt()
 	case announcement.FieldCreatedAt:
 		return m.CreatedAt()
 	case announcement.FieldUpdatedAt:
@@ -5992,6 +6047,8 @@ func (m *AnnouncementMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldCreatedBy(ctx)
 	case announcement.FieldUpdatedBy:
 		return m.OldUpdatedBy(ctx)
+	case announcement.FieldEmailSentAt:
+		return m.OldEmailSentAt(ctx)
 	case announcement.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case announcement.FieldUpdatedAt:
@@ -6067,6 +6124,13 @@ func (m *AnnouncementMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUpdatedBy(v)
+		return nil
+	case announcement.FieldEmailSentAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEmailSentAt(v)
 		return nil
 	case announcement.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -6154,6 +6218,9 @@ func (m *AnnouncementMutation) ClearedFields() []string {
 	if m.FieldCleared(announcement.FieldUpdatedBy) {
 		fields = append(fields, announcement.FieldUpdatedBy)
 	}
+	if m.FieldCleared(announcement.FieldEmailSentAt) {
+		fields = append(fields, announcement.FieldEmailSentAt)
+	}
 	return fields
 }
 
@@ -6182,6 +6249,9 @@ func (m *AnnouncementMutation) ClearField(name string) error {
 		return nil
 	case announcement.FieldUpdatedBy:
 		m.ClearUpdatedBy()
+		return nil
+	case announcement.FieldEmailSentAt:
+		m.ClearEmailSentAt()
 		return nil
 	}
 	return fmt.Errorf("unknown Announcement nullable field %s", name)
@@ -6217,6 +6287,9 @@ func (m *AnnouncementMutation) ResetField(name string) error {
 		return nil
 	case announcement.FieldUpdatedBy:
 		m.ResetUpdatedBy()
+		return nil
+	case announcement.FieldEmailSentAt:
+		m.ResetEmailSentAt()
 		return nil
 	case announcement.FieldCreatedAt:
 		m.ResetCreatedAt()

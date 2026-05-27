@@ -95,6 +95,11 @@ func UpdatedBy(v int64) predicate.Announcement {
 	return predicate.Announcement(sql.FieldEQ(FieldUpdatedBy, v))
 }
 
+// EmailSentAt applies equality check predicate on the "email_sent_at" field. It's identical to EmailSentAtEQ.
+func EmailSentAt(v time.Time) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldEmailSentAt, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.Announcement {
 	return predicate.Announcement(sql.FieldEQ(FieldCreatedAt, v))
@@ -573,6 +578,56 @@ func UpdatedByIsNil() predicate.Announcement {
 // UpdatedByNotNil applies the NotNil predicate on the "updated_by" field.
 func UpdatedByNotNil() predicate.Announcement {
 	return predicate.Announcement(sql.FieldNotNull(FieldUpdatedBy))
+}
+
+// EmailSentAtEQ applies the EQ predicate on the "email_sent_at" field.
+func EmailSentAtEQ(v time.Time) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldEmailSentAt, v))
+}
+
+// EmailSentAtNEQ applies the NEQ predicate on the "email_sent_at" field.
+func EmailSentAtNEQ(v time.Time) predicate.Announcement {
+	return predicate.Announcement(sql.FieldNEQ(FieldEmailSentAt, v))
+}
+
+// EmailSentAtIn applies the In predicate on the "email_sent_at" field.
+func EmailSentAtIn(vs ...time.Time) predicate.Announcement {
+	return predicate.Announcement(sql.FieldIn(FieldEmailSentAt, vs...))
+}
+
+// EmailSentAtNotIn applies the NotIn predicate on the "email_sent_at" field.
+func EmailSentAtNotIn(vs ...time.Time) predicate.Announcement {
+	return predicate.Announcement(sql.FieldNotIn(FieldEmailSentAt, vs...))
+}
+
+// EmailSentAtGT applies the GT predicate on the "email_sent_at" field.
+func EmailSentAtGT(v time.Time) predicate.Announcement {
+	return predicate.Announcement(sql.FieldGT(FieldEmailSentAt, v))
+}
+
+// EmailSentAtGTE applies the GTE predicate on the "email_sent_at" field.
+func EmailSentAtGTE(v time.Time) predicate.Announcement {
+	return predicate.Announcement(sql.FieldGTE(FieldEmailSentAt, v))
+}
+
+// EmailSentAtLT applies the LT predicate on the "email_sent_at" field.
+func EmailSentAtLT(v time.Time) predicate.Announcement {
+	return predicate.Announcement(sql.FieldLT(FieldEmailSentAt, v))
+}
+
+// EmailSentAtLTE applies the LTE predicate on the "email_sent_at" field.
+func EmailSentAtLTE(v time.Time) predicate.Announcement {
+	return predicate.Announcement(sql.FieldLTE(FieldEmailSentAt, v))
+}
+
+// EmailSentAtIsNil applies the IsNil predicate on the "email_sent_at" field.
+func EmailSentAtIsNil() predicate.Announcement {
+	return predicate.Announcement(sql.FieldIsNull(FieldEmailSentAt))
+}
+
+// EmailSentAtNotNil applies the NotNil predicate on the "email_sent_at" field.
+func EmailSentAtNotNil() predicate.Announcement {
+	return predicate.Announcement(sql.FieldNotNull(FieldEmailSentAt))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"html"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -16,6 +18,8 @@ type AnnouncementService struct {
 	readRepo         AnnouncementReadRepository
 	userRepo         UserRepository
 	userSubRepo      UserSubscriptionRepository
+	emailService     *EmailService
+	settingService   *SettingService
 }
 
 func NewAnnouncementService(
@@ -23,12 +27,16 @@ func NewAnnouncementService(
 	readRepo AnnouncementReadRepository,
 	userRepo UserRepository,
 	userSubRepo UserSubscriptionRepository,
+	emailService *EmailService,
+	settingService *SettingService,
 ) *AnnouncementService {
 	return &AnnouncementService{
 		announcementRepo: announcementRepo,
 		readRepo:         readRepo,
 		userRepo:         userRepo,
 		userSubRepo:      userSubRepo,
+		emailService:     emailService,
+		settingService:   settingService,
 	}
 }
 
@@ -41,6 +49,7 @@ type CreateAnnouncementInput struct {
 	StartsAt   *time.Time
 	EndsAt     *time.Time
 	ActorID    *int64 // 管理员用户ID
+	SendEmail  bool
 }
 
 type UpdateAnnouncementInput struct {
@@ -52,6 +61,7 @@ type UpdateAnnouncementInput struct {
 	StartsAt   **time.Time
 	EndsAt     **time.Time
 	ActorID    *int64 // 管理员用户ID
+	SendEmail  bool
 }
 
 type UserAnnouncement struct {
@@ -126,6 +136,15 @@ func (s *AnnouncementService) Create(ctx context.Context, input *CreateAnnouncem
 	if err := s.announcementRepo.Create(ctx, a); err != nil {
 		return nil, fmt.Errorf("create announcement: %w", err)
 	}
+	if input.SendEmail {
+		if err := s.sendAnnouncementEmailNotifications(ctx, a); err != nil {
+			return nil, err
+		}
+		refreshed, err := s.announcementRepo.GetByID(ctx, a.ID)
+		if err == nil {
+			a = refreshed
+		}
+	}
 	return a, nil
 }
 
@@ -196,6 +215,15 @@ func (s *AnnouncementService) Update(ctx context.Context, id int64, input *Updat
 
 	if err := s.announcementRepo.Update(ctx, a); err != nil {
 		return nil, fmt.Errorf("update announcement: %w", err)
+	}
+	if input.SendEmail {
+		if err := s.sendAnnouncementEmailNotifications(ctx, a); err != nil {
+			return nil, err
+		}
+		refreshed, err := s.announcementRepo.GetByID(ctx, a.ID)
+		if err == nil {
+			a = refreshed
+		}
 	}
 	return a, nil
 }
@@ -386,6 +414,142 @@ func (s *AnnouncementService) ListUserReadStatus(
 
 	return out, page, nil
 }
+
+func (s *AnnouncementService) sendAnnouncementEmailNotifications(ctx context.Context, a *Announcement) error {
+	if s == nil || a == nil || a.ID <= 0 {
+		return nil
+	}
+	if s.userRepo == nil {
+		return fmt.Errorf("announcement user repository is not configured")
+	}
+	if s.announcementRepo == nil {
+		return fmt.Errorf("announcement repository is not configured")
+	}
+
+	marked, err := s.announcementRepo.MarkEmailSentIfUnset(ctx, a.ID, time.Now())
+	if err != nil {
+		return fmt.Errorf("mark announcement email sent: %w", err)
+	}
+	if !marked {
+		return nil
+	}
+
+	recipients, err := s.listAnnouncementEmailRecipients(ctx, a.Targeting)
+	if err != nil {
+		return err
+	}
+	if len(recipients) == 0 {
+		slog.Info("announcement email skipped: no matching recipients", "announcement_id", a.ID)
+		return nil
+	}
+	if s.emailService == nil {
+		return fmt.Errorf("announcement email service is not configured")
+	}
+	smtpConfig, err := s.emailService.GetSMTPConfig(ctx)
+	if err != nil {
+		return fmt.Errorf("get announcement email smtp config: %w", err)
+	}
+
+	subject := strings.TrimSpace(a.Title)
+	if subject == "" {
+		subject = "Announcement"
+	}
+	body := s.buildAnnouncementEmailBody(a)
+	for _, to := range recipients {
+		if err := s.emailService.SendEmailWithConfig(smtpConfig, to, subject, body); err != nil {
+			slog.Error("failed to send announcement email", "announcement_id", a.ID, "to", to, "error", err)
+			continue
+		}
+		slog.Info("announcement email sent", "announcement_id", a.ID, "to", to)
+	}
+	return nil
+}
+
+func (s *AnnouncementService) listAnnouncementEmailRecipients(ctx context.Context, targeting AnnouncementTargeting) ([]string, error) {
+	const pageSize = 1000
+	recipients := make([]string, 0)
+	seen := make(map[string]struct{})
+	loadSubs := true
+
+	for page := 1; ; page++ {
+		users, result, err := s.userRepo.ListWithFilters(ctx, pagination.PaginationParams{
+			Page:      page,
+			PageSize:  pageSize,
+			SortBy:    "id",
+			SortOrder: pagination.SortOrderAsc,
+		}, UserListFilters{IncludeSubscriptions: &loadSubs})
+		if err != nil {
+			return nil, fmt.Errorf("list announcement email recipients: %w", err)
+		}
+		if len(users) == 0 {
+			break
+		}
+
+		for i := range users {
+			u := users[i]
+			activeGroupIDs := make(map[int64]struct{}, len(u.Subscriptions))
+			for j := range u.Subscriptions {
+				if u.Subscriptions[j].Status == SubscriptionStatusActive {
+					activeGroupIDs[u.Subscriptions[j].GroupID] = struct{}{}
+				}
+			}
+			if !targeting.Matches(u.Balance, activeGroupIDs) {
+				continue
+			}
+			email := strings.TrimSpace(u.Email)
+			if email == "" {
+				continue
+			}
+			key := strings.ToLower(email)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			recipients = append(recipients, email)
+		}
+
+		if result == nil || page >= result.Pages || len(users) < pageSize {
+			break
+		}
+	}
+
+	return recipients, nil
+}
+
+func (s *AnnouncementService) buildAnnouncementEmailBody(a *Announcement) string {
+	homeURL := "/"
+	if s != nil && s.settingService != nil {
+		if value := strings.TrimSpace(s.settingService.GetFrontendURL(context.Background())); value != "" {
+			homeURL = value
+		}
+	}
+	title := html.EscapeString(a.Title)
+	content := html.EscapeString(a.Content)
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	content = strings.ReplaceAll(content, "\n", "<br>")
+	return fmt.Sprintf(announcementEmailTemplate, title, content, html.EscapeString(homeURL))
+}
+
+const announcementEmailTemplate = `<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.6; color: #111827; background: #f3f4f6; margin: 0; padding: 24px; }
+    .card { max-width: 640px; margin: 0 auto; background: #ffffff; border-radius: 14px; padding: 28px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); }
+    h1 { margin: 0 0 18px; font-size: 22px; color: #111827; }
+    .content { color: #374151; font-size: 15px; margin-bottom: 24px; }
+    .button { display: inline-block; padding: 11px 18px; border-radius: 10px; background: #2563eb; color: #ffffff !important; text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>%s</h1>
+    <div class="content">%s</div>
+    <a class="button" href="%s">马上查看</a>
+  </div>
+</body>
+</html>`
 
 func isValidAnnouncementStatus(status string) bool {
 	switch status {

@@ -200,6 +200,26 @@ func (_u *AnnouncementUpdate) ClearUpdatedBy() *AnnouncementUpdate {
 	return _u
 }
 
+// SetEmailSentAt sets the "email_sent_at" field.
+func (_u *AnnouncementUpdate) SetEmailSentAt(v time.Time) *AnnouncementUpdate {
+	_u.mutation.SetEmailSentAt(v)
+	return _u
+}
+
+// SetNillableEmailSentAt sets the "email_sent_at" field if the given value is not nil.
+func (_u *AnnouncementUpdate) SetNillableEmailSentAt(v *time.Time) *AnnouncementUpdate {
+	if v != nil {
+		_u.SetEmailSentAt(*v)
+	}
+	return _u
+}
+
+// ClearEmailSentAt clears the value of the "email_sent_at" field.
+func (_u *AnnouncementUpdate) ClearEmailSentAt() *AnnouncementUpdate {
+	_u.mutation.ClearEmailSentAt()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *AnnouncementUpdate) SetUpdatedAt(v time.Time) *AnnouncementUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -367,6 +387,12 @@ func (_u *AnnouncementUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if _u.mutation.UpdatedByCleared() {
 		_spec.ClearField(announcement.FieldUpdatedBy, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.EmailSentAt(); ok {
+		_spec.SetField(announcement.FieldEmailSentAt, field.TypeTime, value)
+	}
+	if _u.mutation.EmailSentAtCleared() {
+		_spec.ClearField(announcement.FieldEmailSentAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(announcement.FieldUpdatedAt, field.TypeTime, value)
@@ -606,6 +632,26 @@ func (_u *AnnouncementUpdateOne) ClearUpdatedBy() *AnnouncementUpdateOne {
 	return _u
 }
 
+// SetEmailSentAt sets the "email_sent_at" field.
+func (_u *AnnouncementUpdateOne) SetEmailSentAt(v time.Time) *AnnouncementUpdateOne {
+	_u.mutation.SetEmailSentAt(v)
+	return _u
+}
+
+// SetNillableEmailSentAt sets the "email_sent_at" field if the given value is not nil.
+func (_u *AnnouncementUpdateOne) SetNillableEmailSentAt(v *time.Time) *AnnouncementUpdateOne {
+	if v != nil {
+		_u.SetEmailSentAt(*v)
+	}
+	return _u
+}
+
+// ClearEmailSentAt clears the value of the "email_sent_at" field.
+func (_u *AnnouncementUpdateOne) ClearEmailSentAt() *AnnouncementUpdateOne {
+	_u.mutation.ClearEmailSentAt()
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *AnnouncementUpdateOne) SetUpdatedAt(v time.Time) *AnnouncementUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
@@ -803,6 +849,12 @@ func (_u *AnnouncementUpdateOne) sqlSave(ctx context.Context) (_node *Announceme
 	}
 	if _u.mutation.UpdatedByCleared() {
 		_spec.ClearField(announcement.FieldUpdatedBy, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.EmailSentAt(); ok {
+		_spec.SetField(announcement.FieldEmailSentAt, field.TypeTime, value)
+	}
+	if _u.mutation.EmailSentAtCleared() {
+		_spec.ClearField(announcement.FieldEmailSentAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(announcement.FieldUpdatedAt, field.TypeTime, value)

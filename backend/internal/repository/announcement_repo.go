@@ -42,6 +42,9 @@ func (r *announcementRepository) Create(ctx context.Context, a *service.Announce
 	if a.UpdatedBy != nil {
 		builder.SetUpdatedBy(*a.UpdatedBy)
 	}
+	if a.EmailSentAt != nil {
+		builder.SetEmailSentAt(*a.EmailSentAt)
+	}
 
 	created, err := builder.Save(ctx)
 	if err != nil {
@@ -91,6 +94,11 @@ func (r *announcementRepository) Update(ctx context.Context, a *service.Announce
 	} else {
 		builder.ClearUpdatedBy()
 	}
+	if a.EmailSentAt != nil {
+		builder.SetEmailSentAt(*a.EmailSentAt)
+	} else {
+		builder.ClearEmailSentAt()
+	}
 
 	updated, err := builder.Save(ctx)
 	if err != nil {
@@ -99,6 +107,18 @@ func (r *announcementRepository) Update(ctx context.Context, a *service.Announce
 
 	a.UpdatedAt = updated.UpdatedAt
 	return nil
+}
+
+func (r *announcementRepository) MarkEmailSentIfUnset(ctx context.Context, id int64, sentAt time.Time) (bool, error) {
+	client := clientFromContext(ctx, r.client)
+	affected, err := client.Announcement.Update().
+		Where(announcement.IDEQ(id), announcement.EmailSentAtIsNil()).
+		SetEmailSentAt(sentAt).
+		Save(ctx)
+	if err != nil {
+		return false, translatePersistenceError(err, service.ErrAnnouncementNotFound, nil)
+	}
+	return affected > 0, nil
 }
 
 func (r *announcementRepository) Delete(ctx context.Context, id int64) error {
@@ -227,18 +247,19 @@ func announcementEntityToService(m *dbent.Announcement) *service.Announcement {
 		return nil
 	}
 	return &service.Announcement{
-		ID:         m.ID,
-		Title:      m.Title,
-		Content:    m.Content,
-		Status:     m.Status,
-		NotifyMode: m.NotifyMode,
-		Targeting:  m.Targeting,
-		StartsAt:   m.StartsAt,
-		EndsAt:     m.EndsAt,
-		CreatedBy:  m.CreatedBy,
-		UpdatedBy:  m.UpdatedBy,
-		CreatedAt:  m.CreatedAt,
-		UpdatedAt:  m.UpdatedAt,
+		ID:          m.ID,
+		Title:       m.Title,
+		Content:     m.Content,
+		Status:      m.Status,
+		NotifyMode:  m.NotifyMode,
+		Targeting:   m.Targeting,
+		StartsAt:    m.StartsAt,
+		EndsAt:      m.EndsAt,
+		CreatedBy:   m.CreatedBy,
+		UpdatedBy:   m.UpdatedBy,
+		EmailSentAt: m.EmailSentAt,
+		CreatedAt:   m.CreatedAt,
+		UpdatedAt:   m.UpdatedAt,
 	}
 }
 

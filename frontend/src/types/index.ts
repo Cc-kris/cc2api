@@ -313,6 +313,7 @@ export interface Announcement {
   ends_at?: string
   created_by?: number
   updated_by?: number
+  email_sent_at?: string
   created_at: string
   updated_at: string
 }
@@ -337,6 +338,7 @@ export interface CreateAnnouncementRequest {
   targeting: AnnouncementTargeting
   starts_at?: number
   ends_at?: number
+  send_email?: boolean
 }
 
 export interface UpdateAnnouncementRequest {
@@ -347,6 +349,7 @@ export interface UpdateAnnouncementRequest {
   targeting?: AnnouncementTargeting
   starts_at?: number
   ends_at?: number
+  send_email?: boolean
 }
 
 export interface AnnouncementUserReadStatus {

@@ -67,6 +67,11 @@ func (Announcement) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("更新人用户ID（管理员）"),
+		field.Time("email_sent_at").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}).
+			Comment("公告邮件通知发送时间（为空表示未发送）"),
 		field.Time("created_at").
 			Immutable().
 			Default(time.Now).
@@ -90,5 +95,6 @@ func (Announcement) Indexes() []ent.Index {
 		index.Fields("created_at"),
 		index.Fields("starts_at"),
 		index.Fields("ends_at"),
+		index.Fields("email_sent_at"),
 	}
 }

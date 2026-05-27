@@ -71,6 +71,7 @@ type AnnouncementRepository interface {
 	Create(ctx context.Context, a *Announcement) error
 	GetByID(ctx context.Context, id int64) (*Announcement, error)
 	Update(ctx context.Context, a *Announcement) error
+	MarkEmailSentIfUnset(ctx context.Context, id int64, sentAt time.Time) (bool, error)
 	Delete(ctx context.Context, id int64) error
 
 	List(ctx context.Context, params pagination.PaginationParams, filters AnnouncementListFilters) ([]Announcement, *pagination.PaginationResult, error)

@@ -204,6 +204,23 @@
           </div>
         </div>
 
+        <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-700">
+          <label class="flex items-start gap-3">
+            <input
+              v-model="form.send_email"
+              type="checkbox"
+              class="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              :disabled="Boolean(editingAnnouncement?.email_sent_at)"
+            />
+            <span>
+              <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.announcements.form.sendEmail') }}</span>
+              <span class="block text-sm text-gray-500 dark:text-dark-400">
+                {{ editingAnnouncement?.email_sent_at ? t('admin.announcements.form.emailAlreadySentHint') : t('admin.announcements.form.sendEmailHint') }}
+              </span>
+            </span>
+          </label>
+        </div>
+
         <AnnouncementTargetingEditor
           v-model="form.targeting"
           :groups="subscriptionGroups"
@@ -420,7 +437,8 @@ const form = reactive({
   notify_mode: 'silent',
   starts_at_str: '',
   ends_at_str: '',
-  targeting: { any_of: [] } as AnnouncementTargeting
+  targeting: { any_of: [] } as AnnouncementTargeting,
+  send_email: false
 })
 
 const subscriptionGroups = ref<AdminGroup[]>([])
@@ -443,6 +461,7 @@ function resetForm() {
   form.starts_at_str = ''
   form.ends_at_str = ''
   form.targeting = { any_of: [] }
+  form.send_email = false
 }
 
 function fillFormFromAnnouncement(a: Announcement) {
@@ -456,6 +475,7 @@ function fillFormFromAnnouncement(a: Announcement) {
   form.ends_at_str = a.ends_at ? formatDateTimeLocalInput(Math.floor(new Date(a.ends_at).getTime() / 1000)) : ''
 
   form.targeting = a.targeting ?? { any_of: [] }
+  form.send_email = false
 }
 
 function openCreateDialog() {
@@ -485,6 +505,7 @@ function buildCreatePayload() {
     status: form.status as any,
     notify_mode: form.notify_mode as any,
     targeting: form.targeting,
+    send_email: form.send_email,
     starts_at: startsAt ?? undefined,
     ends_at: endsAt ?? undefined
   }
@@ -515,6 +536,9 @@ function buildUpdatePayload(original: Announcement) {
   // targeting: do shallow compare by JSON
   if (JSON.stringify(form.targeting ?? {}) !== JSON.stringify(original.targeting ?? {})) {
     payload.targeting = form.targeting
+  }
+  if (form.send_email && !original.email_sent_at) {
+    payload.send_email = true
   }
 
   return payload

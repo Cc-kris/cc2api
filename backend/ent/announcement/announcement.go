@@ -32,6 +32,8 @@ const (
 	FieldCreatedBy = "created_by"
 	// FieldUpdatedBy holds the string denoting the updated_by field in the database.
 	FieldUpdatedBy = "updated_by"
+	// FieldEmailSentAt holds the string denoting the email_sent_at field in the database.
+	FieldEmailSentAt = "email_sent_at"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -61,6 +63,7 @@ var Columns = []string{
 	FieldEndsAt,
 	FieldCreatedBy,
 	FieldUpdatedBy,
+	FieldEmailSentAt,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -142,6 +145,11 @@ func ByCreatedBy(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedBy orders the results by the updated_by field.
 func ByUpdatedBy(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedBy, opts...).ToFunc()
+}
+
+// ByEmailSentAt orders the results by the email_sent_at field.
+func ByEmailSentAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEmailSentAt, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.
