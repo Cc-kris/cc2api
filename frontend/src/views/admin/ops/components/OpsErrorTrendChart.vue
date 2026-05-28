@@ -40,21 +40,30 @@ const colors = computed(() => ({
   redAlpha: '#ef444420',
   purple: '#8b5cf6',
   purpleAlpha: '#8b5cf620',
+  blue: '#3b82f6',
+  blueAlpha: '#3b82f620',
+  amber: '#f59e0b',
+  amberAlpha: '#f59e0b20',
   gray: '#9ca3af',
   grid: isDarkMode.value ? '#374151' : '#f3f4f6',
   text: isDarkMode.value ? '#9ca3af' : '#6b7280'
 }))
 
-const totalRequestErrors = computed(() => sumNumbers(props.points.map((p) => p.error_count_sla ?? 0)))
+const totalRequestErrors = computed(() => sumNumbers(props.points.map((p) => p.client_error_count ?? 0)))
 
-const totalUpstreamErrors = computed(() =>
-  sumNumbers(
-    props.points.map((p) => (p.upstream_error_count_excl_429_529 ?? 0) + (p.upstream_429_count ?? 0) + (p.upstream_529_count ?? 0))
-  )
-)
+const totalUpstreamErrors = computed(() => sumNumbers(props.points.map((p) => (p.upstream_error_count ?? 0) + (p.upstream_limited_count ?? 0))))
 
 const totalDisplayed = computed(() =>
-  sumNumbers(props.points.map((p) => (p.error_count_sla ?? 0) + (p.upstream_error_count_excl_429_529 ?? 0) + (p.business_limited_count ?? 0)))
+  sumNumbers(
+    props.points.map(
+      (p) =>
+        (p.platform_error_count ?? 0) +
+        (p.upstream_error_count ?? 0) +
+        (p.upstream_limited_count ?? 0) +
+        (p.client_error_count ?? 0) +
+        (p.business_limited_count ?? 0)
+    )
+  )
 )
 
 const hasRequestErrors = computed(() => totalRequestErrors.value > 0)
@@ -66,8 +75,8 @@ const chartData = computed(() => {
     labels: props.points.map((p) => formatHistoryLabel(p.bucket_start, props.timeRange)),
     datasets: [
       {
-        label: t('admin.ops.errorsSla'),
-        data: props.points.map((p) => p.error_count_sla ?? 0),
+        label: t('admin.ops.platformErrors'),
+        data: props.points.map((p) => p.platform_error_count ?? 0),
         borderColor: colors.value.red,
         backgroundColor: colors.value.redAlpha,
         fill: true,
@@ -76,10 +85,30 @@ const chartData = computed(() => {
         pointHitRadius: 10
       },
       {
-        label: t('admin.ops.upstreamExcl429529'),
-        data: props.points.map((p) => p.upstream_error_count_excl_429_529 ?? 0),
+        label: t('admin.ops.upstreamErrors'),
+        data: props.points.map((p) => p.upstream_error_count ?? 0),
         borderColor: colors.value.purple,
         backgroundColor: colors.value.purpleAlpha,
+        fill: true,
+        tension: 0.35,
+        pointRadius: 0,
+        pointHitRadius: 10
+      },
+      {
+        label: t('admin.ops.upstreamLimited'),
+        data: props.points.map((p) => p.upstream_limited_count ?? 0),
+        borderColor: colors.value.amber,
+        backgroundColor: colors.value.amberAlpha,
+        fill: true,
+        tension: 0.35,
+        pointRadius: 0,
+        pointHitRadius: 10
+      },
+      {
+        label: t('admin.ops.clientErrors'),
+        data: props.points.map((p) => p.client_error_count ?? 0),
+        borderColor: colors.value.blue,
+        backgroundColor: colors.value.blueAlpha,
         fill: true,
         tension: 0.35,
         pointRadius: 0,
@@ -174,7 +203,7 @@ const options = computed(() => {
           :disabled="!hasRequestErrors"
           @click="emit('openRequestErrors')"
         >
-          {{ t('admin.ops.errorDetails.requestErrors') }}
+          {{ t('admin.ops.clientErrors') }}
         </button>
         <button
           type="button"

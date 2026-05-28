@@ -82,15 +82,17 @@ const globalStubs = {
 }
 
 describe('Ops SLA-scoped error charts', () => {
-  it('错误分布图按 SLA 错误数统计，不把业务限制错误算进请求错误分布', () => {
+  it('错误分布图按错误归属拆分展示客户端、上游、平台与业务限制', () => {
     const wrapper = mount(OpsErrorDistributionChart, {
       props: {
         loading: false,
         data: {
           total: 10,
           items: [
-            { status_code: 400, total: 7, sla: 2, business_limited: 5 },
-            { status_code: 503, total: 3, sla: 0, business_limited: 3 },
+            { status_code: 400, total: 2, sla: 0, business_limited: 0, category: 'client_error' },
+            { status_code: 503, total: 3, sla: 3, business_limited: 0, category: 'upstream_error' },
+            { status_code: 500, total: 1, sla: 1, business_limited: 0, category: 'platform_error' },
+            { status_code: 429, total: 4, sla: 0, business_limited: 4, category: 'business_limited' },
           ],
         },
       },
@@ -100,25 +102,29 @@ describe('Ops SLA-scoped error charts', () => {
     const doughnut = wrapper.findComponent({ name: 'Doughnut' })
     expect(doughnut.exists()).toBe(true)
     expect(doughnut.props('data')).toMatchObject({
-      labels: ['admin.ops.client'],
-      datasets: [{ data: [2] }],
+      labels: ['admin.ops.platformErrors', 'admin.ops.upstreamErrors', 'admin.ops.clientErrors', 'admin.ops.businessLimitedDetails'],
+      datasets: [{ data: [1, 3, 2, 4] }],
     })
   })
 
-  it('错误分布图在只有业务限制错误时显示为空态', () => {
+  it('错误分布图在只有业务限制错误时仍展示独立业务限制分布', () => {
     const wrapper = mount(OpsErrorDistributionChart, {
       props: {
         loading: false,
         data: {
           total: 4,
-          items: [{ status_code: 500, total: 4, sla: 0, business_limited: 4 }],
+          items: [{ status_code: 429, total: 4, sla: 0, business_limited: 4, category: 'business_limited' }],
         },
       },
       global: globalStubs,
     })
 
-    expect(wrapper.findComponent({ name: 'Doughnut' }).exists()).toBe(false)
-    expect(wrapper.find('.empty-state-stub').exists()).toBe(true)
+    const doughnut = wrapper.findComponent({ name: 'Doughnut' })
+    expect(doughnut.exists()).toBe(true)
+    expect(doughnut.props('data')).toMatchObject({
+      labels: ['admin.ops.businessLimitedDetails'],
+      datasets: [{ data: [4] }],
+    })
   })
 
   it('错误趋势图的请求错误详情按钮只按 SLA 错误启用', () => {

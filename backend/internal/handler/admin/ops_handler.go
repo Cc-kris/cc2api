@@ -68,6 +68,40 @@ func parseOpsViewParam(c *gin.Context) string {
 	}
 }
 
+func applyOpsErrorExtraFilters(c *gin.Context, filter *service.OpsErrorLogFilter) bool {
+	if c == nil || filter == nil {
+		return true
+	}
+	filter.Category = strings.TrimSpace(c.Query("category"))
+	if v := strings.TrimSpace(c.Query("impact_platform_sla")); v != "" {
+		switch strings.ToLower(v) {
+		case "1", "true", "yes":
+			b := true
+			filter.ImpactPlatformSLA = &b
+		case "0", "false", "no":
+			b := false
+			filter.ImpactPlatformSLA = &b
+		default:
+			response.BadRequest(c, "Invalid impact_platform_sla")
+			return false
+		}
+	}
+	if v := strings.TrimSpace(c.Query("client_failed")); v != "" {
+		switch strings.ToLower(v) {
+		case "1", "true", "yes":
+			b := true
+			filter.ClientFailed = &b
+		case "0", "false", "no":
+			b := false
+			filter.ClientFailed = &b
+		default:
+			response.BadRequest(c, "Invalid client_failed")
+			return false
+		}
+	}
+	return true
+}
+
 func NewOpsHandler(opsService *service.OpsService) *OpsHandler {
 	return &OpsHandler{opsService: opsService}
 }
@@ -110,6 +144,9 @@ func (h *OpsHandler) GetErrorLogs(c *gin.Context) {
 	filter.Source = strings.TrimSpace(c.Query("error_source"))
 	filter.Query = strings.TrimSpace(c.Query("q"))
 	filter.UserQuery = strings.TrimSpace(c.Query("user_query"))
+	if !applyOpsErrorExtraFilters(c, filter) {
+		return
+	}
 
 	// Force request errors: client-visible status >= 400.
 	// buildOpsErrorLogsWhere already applies this for non-upstream phase.
@@ -211,6 +248,9 @@ func (h *OpsHandler) ListRequestErrors(c *gin.Context) {
 	filter.Source = strings.TrimSpace(c.Query("error_source"))
 	filter.Query = strings.TrimSpace(c.Query("q"))
 	filter.UserQuery = strings.TrimSpace(c.Query("user_query"))
+	if !applyOpsErrorExtraFilters(c, filter) {
+		return
+	}
 
 	// Force request errors: client-visible status >= 400.
 	// buildOpsErrorLogsWhere already applies this for non-upstream phase.
@@ -343,6 +383,9 @@ func (h *OpsHandler) ListRequestErrorUpstreamErrors(c *gin.Context) {
 	filter.Owner = "provider"
 	filter.Source = strings.TrimSpace(c.Query("error_source"))
 	filter.Query = strings.TrimSpace(c.Query("q"))
+	if !applyOpsErrorExtraFilters(c, filter) {
+		return
+	}
 
 	if platform := strings.TrimSpace(c.Query("platform")); platform != "" {
 		filter.Platform = platform
@@ -423,6 +466,9 @@ func (h *OpsHandler) ListUpstreamErrors(c *gin.Context) {
 	filter.Owner = "provider"
 	filter.Source = strings.TrimSpace(c.Query("error_source"))
 	filter.Query = strings.TrimSpace(c.Query("q"))
+	if !applyOpsErrorExtraFilters(c, filter) {
+		return
+	}
 
 	if platform := strings.TrimSpace(c.Query("platform")); platform != "" {
 		filter.Platform = platform

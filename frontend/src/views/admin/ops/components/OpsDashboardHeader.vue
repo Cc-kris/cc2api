@@ -8,6 +8,7 @@ import Icon from '@/components/icons/Icon.vue'
 import { adminAPI } from '@/api'
 import { opsAPI, type OpsDashboardOverview, type OpsMetricThresholds, type OpsRealtimeTrafficSummary } from '@/api/admin/ops'
 import type { OpsRequestDetailsPreset } from './OpsRequestDetailsModal.vue'
+import type { OpsErrorDetailsPreset } from './OpsErrorDetailsModal.vue'
 import { useAdminSettingsStore } from '@/stores'
 import { formatNumber } from '@/utils/format'
 
@@ -37,7 +38,7 @@ interface Emits {
   (e: 'update:customTimeRange', startTime: string, endTime: string): void
   (e: 'refresh'): void
   (e: 'openRequestDetails', preset?: OpsRequestDetailsPreset): void
-  (e: 'openErrorDetails', kind: 'request' | 'upstream'): void
+  (e: 'openErrorDetails', kind: 'request' | 'upstream', preset?: OpsErrorDetailsPreset): void
   (e: 'openSettings'): void
   (e: 'openAlertRules'): void
   (e: 'enterFullscreen'): void
@@ -212,8 +213,32 @@ function openDetails(preset?: OpsRequestDetailsPreset) {
   emit('openRequestDetails', preset)
 }
 
-function openErrorDetails(kind: 'request' | 'upstream') {
-  emit('openErrorDetails', kind)
+function openErrorDetails(kind: 'request' | 'upstream', preset?: OpsErrorDetailsPreset) {
+  emit('openErrorDetails', kind, preset)
+}
+
+function openPlatformSLAErrors() {
+  openErrorDetails('request', { title: t('admin.ops.platformSlaErrors'), impactPlatformSla: true, view: 'all' })
+}
+
+function openClientErrors() {
+  openErrorDetails('request', { title: t('admin.ops.clientErrors'), category: 'client_error', owner: 'client', view: 'all' })
+}
+
+function openBusinessLimitedErrors() {
+  openErrorDetails('request', { title: t('admin.ops.businessLimitedDetails'), category: 'business_limited', view: 'all' })
+}
+
+function openPlatformErrors() {
+  openErrorDetails('request', { title: t('admin.ops.platformErrors'), category: 'platform_error', owner: 'platform', view: 'all' })
+}
+
+function openUpstreamErrorsOnly() {
+  openErrorDetails('upstream', { title: t('admin.ops.upstreamErrors'), category: 'upstream_error', clientFailed: true, view: 'all' })
+}
+
+function openUpstreamLimited() {
+  openErrorDetails('upstream', { title: t('admin.ops.upstreamLimited'), category: 'upstream_limited', clientFailed: true, view: 'all' })
 }
 
 // --- Threshold checking helpers ---
@@ -395,14 +420,26 @@ const slaPercent = computed(() => {
   return v * 100
 })
 
-const errorRatePercent = computed(() => {
-  const v = overview.value?.error_rate
+const userSuccessRatePercent = computed(() => {
+  const v = overview.value?.user_success_rate
+  if (typeof v !== 'number') return null
+  return v * 100
+})
+
+const clientErrorRatePercent = computed(() => {
+  const v = overview.value?.client_error_rate
   if (typeof v !== 'number') return null
   return v * 100
 })
 
 const upstreamErrorRatePercent = computed(() => {
   const v = overview.value?.upstream_error_rate
+  if (typeof v !== 'number') return null
+  return v * 100
+})
+
+const upstreamLimitedRatePercent = computed(() => {
+  const v = overview.value?.upstream_limited_rate
   if (typeof v !== 'number') return null
   return v * 100
 })
@@ -1248,7 +1285,7 @@ function handleToolbarRefresh() {
         <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-900" style="order: 2;">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <span class="text-[10px] font-bold uppercase text-gray-400">{{ t('admin.ops.sla') }}</span>
+              <span class="text-[10px] font-bold uppercase text-gray-400">{{ t('admin.ops.platformSla') }}</span>
               <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.tooltips.sla')" />
               <span class="h-1.5 w-1.5 rounded-full" :class="getSLAThresholdLevel(slaPercent) === 'critical' ? 'bg-red-500' : getSLAThresholdLevel(slaPercent) === 'warning' ? 'bg-yellow-500' : 'bg-green-500'"></span>
             </div>
@@ -1256,7 +1293,7 @@ function handleToolbarRefresh() {
               v-if="!props.fullscreen"
               class="text-[10px] font-bold text-blue-500 hover:underline"
               type="button"
-              @click="openDetails({ title: t('admin.ops.requestDetails.title'), kind: 'error' })"
+              @click="openPlatformSLAErrors"
             >
               {{ t('admin.ops.requestDetails.details') }}
             </button>
@@ -1270,7 +1307,34 @@ function handleToolbarRefresh() {
           <div class="mt-3 text-xs">
             <div class="flex justify-between">
               <span class="text-gray-500">{{ t('admin.ops.exceptions') }}:</span>
-              <span class="font-bold text-red-600 dark:text-red-400">{{ formatNumber((overview.request_count_sla ?? 0) - (overview.success_count ?? 0)) }}</span>
+              <span class="font-bold text-red-600 dark:text-red-400">{{ formatNumber(overview.platform_sla_error_count ?? ((overview.request_count_sla ?? 0) - (overview.success_count ?? 0))) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 7: User Success Rate -->
+        <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-900" style="order: 3;">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-bold uppercase text-gray-400">{{ t('admin.ops.userSuccessRate') }}</span>
+              <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.tooltips.userSuccessRate')" />
+            </div>
+            <button
+              v-if="!props.fullscreen"
+              class="text-[10px] font-bold text-blue-500 hover:underline"
+              type="button"
+              @click="openDetails({ title: t('admin.ops.requestDetails.title'), kind: 'all' })"
+            >
+              {{ t('admin.ops.requestDetails.details') }}
+            </button>
+          </div>
+          <div class="mt-2 text-3xl font-black text-gray-900 dark:text-white">
+            {{ userSuccessRatePercent == null ? '-' : `${userSuccessRatePercent.toFixed(2)}%` }}
+          </div>
+          <div class="mt-3 space-y-1 text-xs">
+            <div class="flex justify-between">
+              <span class="text-gray-500">{{ t('admin.ops.totalFailures') }}:</span>
+              <span class="font-bold text-gray-900 dark:text-white">{{ formatNumber((overview.request_count_total ?? 0) - (overview.success_count ?? 0)) }}</span>
             </div>
           </div>
         </div>
@@ -1377,29 +1441,33 @@ function handleToolbarRefresh() {
           </div>
         </div>
 
-        <!-- Card 3: Request Errors -->
-        <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-900" style="order: 3;">
+        <!-- Card 3: Client / Business / Platform Errors -->
+        <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-900" style="order: 7;">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-1">
-              <span class="text-[10px] font-bold uppercase text-gray-400">{{ t('admin.ops.requestErrors') }}</span>
+              <span class="text-[10px] font-bold uppercase text-gray-400">{{ t('admin.ops.clientErrors') }}</span>
               <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.tooltips.errors')" />
             </div>
-            <button v-if="!props.fullscreen" class="text-[10px] font-bold text-blue-500 hover:underline" type="button" @click="openErrorDetails('request')">
+            <button v-if="!props.fullscreen" class="text-[10px] font-bold text-blue-500 hover:underline" type="button" @click="openClientErrors">
               {{ t('admin.ops.requestDetails.details') }}
             </button>
           </div>
-          <div class="mt-2 text-3xl font-black" :class="getThresholdColorClass(getRequestErrorRateThresholdLevel(errorRatePercent))">
-            {{ errorRatePercent == null ? '-' : `${errorRatePercent.toFixed(2)}%` }}
+          <div class="mt-2 text-3xl font-black" :class="getThresholdColorClass(getRequestErrorRateThresholdLevel(clientErrorRatePercent))">
+            {{ clientErrorRatePercent == null ? '-' : `${clientErrorRatePercent.toFixed(2)}%` }}
           </div>
           <div class="mt-3 space-y-1 text-xs">
-            <div class="flex justify-between">
-              <span class="text-gray-500">{{ t('admin.ops.errorCount') }}:</span>
-              <span class="font-bold text-gray-900 dark:text-white">{{ formatNumber(overview.error_count_sla ?? 0) }}</span>
-            </div>
-            <div class="flex justify-between">
+            <button type="button" class="flex w-full justify-between text-left hover:text-blue-600 dark:hover:text-blue-300" @click="openClientErrors">
+              <span class="text-gray-500">{{ t('admin.ops.clientErrors') }}:</span>
+              <span class="font-bold text-gray-900 dark:text-white">{{ formatNumber(overview.client_error_count ?? 0) }}</span>
+            </button>
+            <button type="button" class="flex w-full justify-between text-left hover:text-blue-600 dark:hover:text-blue-300" @click="openBusinessLimitedErrors">
               <span class="text-gray-500">{{ t('admin.ops.businessLimited') }}:</span>
               <span class="font-bold text-gray-900 dark:text-white">{{ formatNumber(overview.business_limited_count ?? 0) }}</span>
-            </div>
+            </button>
+            <button type="button" class="flex w-full justify-between text-left hover:text-blue-600 dark:hover:text-blue-300" @click="openPlatformErrors">
+              <span class="text-gray-500">{{ t('admin.ops.platformErrors') }}:</span>
+              <span class="font-bold text-gray-900 dark:text-white">{{ formatNumber(overview.platform_error_count ?? 0) }}</span>
+            </button>
           </div>
         </div>
 
@@ -1410,7 +1478,7 @@ function handleToolbarRefresh() {
               <span class="text-[10px] font-bold uppercase text-gray-400">{{ t('admin.ops.upstreamErrors') }}</span>
               <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.tooltips.upstreamErrors')" />
             </div>
-            <button v-if="!props.fullscreen" class="text-[10px] font-bold text-blue-500 hover:underline" type="button" @click="openErrorDetails('upstream')">
+            <button v-if="!props.fullscreen" class="text-[10px] font-bold text-blue-500 hover:underline" type="button" @click="openUpstreamErrorsOnly">
               {{ t('admin.ops.requestDetails.details') }}
             </button>
           </div>
@@ -1418,14 +1486,17 @@ function handleToolbarRefresh() {
             {{ upstreamErrorRatePercent == null ? '-' : `${upstreamErrorRatePercent.toFixed(2)}%` }}
           </div>
           <div class="mt-3 space-y-1 text-xs">
-            <div class="flex justify-between">
-              <span class="text-gray-500">{{ t('admin.ops.errorCountExcl429529') }}:</span>
-              <span class="font-bold text-gray-900 dark:text-white">{{ formatNumber(overview.upstream_error_count_excl_429_529 ?? 0) }}</span>
-            </div>
-            <div class="flex justify-between">
-              <span class="text-gray-500">429/529:</span>
-              <span class="font-bold text-gray-900 dark:text-white">{{ formatNumber((overview.upstream_429_count ?? 0) + (overview.upstream_529_count ?? 0)) }}</span>
-            </div>
+            <button type="button" class="flex w-full justify-between text-left hover:text-blue-600 dark:hover:text-blue-300" @click="openUpstreamErrorsOnly">
+              <span class="text-gray-500">{{ t('admin.ops.upstreamErrors') }}:</span>
+              <span class="font-bold text-gray-900 dark:text-white">{{ formatNumber(overview.upstream_error_count ?? overview.upstream_error_count_excl_429_529 ?? 0) }}</span>
+            </button>
+            <button type="button" class="flex w-full justify-between text-left hover:text-blue-600 dark:hover:text-blue-300" @click="openUpstreamLimited">
+              <span class="text-gray-500">{{ t('admin.ops.upstreamLimited') }}:</span>
+              <span class="font-bold text-gray-900 dark:text-white">
+                {{ formatNumber(overview.upstream_limited_count ?? ((overview.upstream_429_count ?? 0) + (overview.upstream_529_count ?? 0))) }}
+                <span v-if="upstreamLimitedRatePercent != null" class="ml-1 text-gray-400">({{ upstreamLimitedRatePercent.toFixed(2) }}%)</span>
+              </span>
+            </button>
           </div>
         </div>
       </div>

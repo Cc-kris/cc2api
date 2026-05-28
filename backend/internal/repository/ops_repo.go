@@ -875,10 +875,38 @@ func buildOpsErrorLogsWhere(filter *service.OpsErrorLogFilter) (string, []any) {
 		args = append(args, *resolvedFilter)
 		clauses = append(clauses, "COALESCE(e.resolved,false) = $"+itoa(len(args)))
 	}
+	if filter != nil {
+		if filter.ClientFailed != nil {
+			if *filter.ClientFailed {
+				clauses = append(clauses, "COALESCE(e.status_code, 0) >= 400")
+			} else {
+				clauses = append(clauses, "COALESCE(e.status_code, 0) < 400")
+			}
+		}
+		if filter.ImpactPlatformSLA != nil {
+			condition := opsPlatformSLAErrorCondition()
+			if *filter.ImpactPlatformSLA {
+				clauses = append(clauses, condition)
+			} else {
+				clauses = append(clauses, "NOT ("+condition+")")
+			}
+		}
+		switch strings.TrimSpace(strings.ToLower(filter.Category)) {
+		case "client_error":
+			clauses = append(clauses, opsClientErrorCondition())
+		case "platform_error":
+			clauses = append(clauses, opsPlatformErrorCondition())
+		case "upstream_error":
+			clauses = append(clauses, opsUpstreamErrorCondition())
+		case "upstream_limited":
+			clauses = append(clauses, opsUpstreamLimitedCondition())
+		case "business_limited":
+			clauses = append(clauses, "COALESCE(e.is_business_limited,false) = true")
+		}
+	}
 
 	// View filter: errors vs excluded vs all.
 	// Excluded = business-limited errors (quota/concurrency/billing).
-	// Upstream 429/529 are included in errors view to match SLA calculation.
 	view := ""
 	if filter != nil {
 		view = strings.ToLower(strings.TrimSpace(filter.View))

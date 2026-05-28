@@ -4,7 +4,18 @@ import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
 import OpsErrorLogTable from './OpsErrorLogTable.vue'
-import { opsAPI, type OpsErrorLog } from '@/api/admin/ops'
+import { opsAPI, type OpsErrorLog, type OpsErrorListView } from '@/api/admin/ops'
+
+export interface OpsErrorDetailsPreset {
+  title?: string
+  category?: string
+  impactPlatformSla?: boolean
+  phase?: string
+  owner?: string
+  view?: OpsErrorListView
+  statusCodes?: string
+  clientFailed?: boolean
+}
 
 interface Props {
   show: boolean
@@ -12,6 +23,7 @@ interface Props {
   platform?: string
   groupId?: number | null
   errorType: 'request' | 'upstream'
+  preset?: OpsErrorDetailsPreset | null
 }
 
 const props = defineProps<Props>()
@@ -37,6 +49,7 @@ const viewMode = ref<'errors' | 'excluded' | 'all'>('errors')
 
 
 const modalTitle = computed(() => {
+  if (props.preset?.title) return props.preset.title
   return props.errorType === 'upstream' ? t('admin.ops.errorDetails.upstreamErrors') : t('admin.ops.errorDetails.requestErrors')
 })
 
@@ -110,6 +123,11 @@ async function fetchErrorLogs() {
     const ownerVal = String(errorOwner.value || '').trim()
     if (ownerVal) params.error_owner = ownerVal
 
+    const preset = props.preset
+    if (preset?.category) params.category = preset.category
+    if (typeof preset?.impactPlatformSla === 'boolean') params.impact_platform_sla = preset.impactPlatformSla ? '1' : '0'
+    if (typeof preset?.clientFailed === 'boolean') params.client_failed = preset.clientFailed ? '1' : '0'
+    if (preset?.statusCodes && !params.status_codes && !params.status_codes_other) params.status_codes = preset.statusCodes
 
     const res = props.errorType === 'upstream'
       ? await opsAPI.listUpstreamErrors(params)
@@ -125,15 +143,16 @@ async function fetchErrorLogs() {
   }
 }
 
-  function resetFilters() {
-    q.value = ''
-    statusCode.value = null
-    phase.value = props.errorType === 'upstream' ? 'upstream' : ''
-    errorOwner.value = ''
-    viewMode.value = 'errors'
-    page.value = 1
-    fetchErrorLogs()
-  }
+function resetFilters() {
+  const preset = props.preset
+  q.value = ''
+  statusCode.value = null
+  phase.value = preset?.phase ?? (props.errorType === 'upstream' ? 'upstream' : '')
+  errorOwner.value = preset?.owner ?? ''
+  viewMode.value = preset?.view ?? 'errors'
+  page.value = 1
+  fetchErrorLogs()
+}
 
 
 watch(
@@ -147,11 +166,11 @@ watch(
 )
 
 watch(
-  () => [props.timeRange, props.platform, props.groupId] as const,
+  () => [props.timeRange, props.platform, props.groupId, props.errorType, props.preset?.category, props.preset?.impactPlatformSla, props.preset?.clientFailed, props.preset?.phase, props.preset?.owner, props.preset?.view, props.preset?.statusCodes] as const,
   () => {
     if (!props.show) return
     page.value = 1
-    fetchErrorLogs()
+    resetFilters()
   }
 )
 

@@ -30,11 +30,11 @@ const colors = computed(() => ({
   text: isDarkMode.value ? '#9ca3af' : '#6b7280'
 }))
 
-const totalSlaErrors = computed(() =>
-  (props.data?.items ?? []).reduce((total, item) => total + Number(item.sla || 0), 0)
+const totalErrors = computed(() =>
+  (props.data?.items ?? []).reduce((total, item) => total + Number(item.total || 0), 0)
 )
 
-const hasData = computed(() => totalSlaErrors.value > 0)
+const hasData = computed(() => totalErrors.value > 0)
 
 const state = computed<ChartState>(() => {
   if (hasData.value) return 'ready'
@@ -51,26 +51,43 @@ interface ErrorCategory {
 const categories = computed<ErrorCategory[]>(() => {
   if (!props.data) return []
 
-  let upstream = 0 // 502, 503, 504
-  let client = 0 // 4xx
-  let system = 0 // 500
+  let upstream = 0
+  let upstreamLimited = 0
+  let client = 0
+  let platform = 0
+  let business = 0
   let other = 0
 
   for (const item of props.data.items || []) {
-    const code = Number(item.status_code || 0)
-    const count = Number(item.sla || 0)
-    if (!Number.isFinite(code) || !Number.isFinite(count)) continue
-
-    if ([502, 503, 504].includes(code)) upstream += count
-    else if (code >= 400 && code < 500) client += count
-    else if (code === 500) system += count
-    else other += count
+    const count = Number(item.total || 0)
+    if (!Number.isFinite(count)) continue
+    switch (String(item.category || '')) {
+      case 'upstream_error':
+        upstream += count
+        break
+      case 'upstream_limited':
+        upstreamLimited += count
+        break
+      case 'client_error':
+        client += count
+        break
+      case 'platform_error':
+        platform += count
+        break
+      case 'business_limited':
+        business += count
+        break
+      default:
+        other += count
+    }
   }
 
   const out: ErrorCategory[] = []
-  if (upstream > 0) out.push({ label: t('admin.ops.upstream'), count: upstream, color: colors.value.orange })
-  if (client > 0) out.push({ label: t('admin.ops.client'), count: client, color: colors.value.blue })
-  if (system > 0) out.push({ label: t('admin.ops.system'), count: system, color: colors.value.red })
+  if (platform > 0) out.push({ label: t('admin.ops.platformErrors'), count: platform, color: colors.value.red })
+  if (upstream > 0) out.push({ label: t('admin.ops.upstreamErrors'), count: upstream, color: colors.value.orange })
+  if (upstreamLimited > 0) out.push({ label: t('admin.ops.upstreamLimited'), count: upstreamLimited, color: colors.value.gray })
+  if (client > 0) out.push({ label: t('admin.ops.clientErrors'), count: client, color: colors.value.blue })
+  if (business > 0) out.push({ label: t('admin.ops.businessLimitedDetails'), count: business, color: colors.value.gray })
   if (other > 0) out.push({ label: t('admin.ops.other'), count: other, color: colors.value.gray })
   return out
 })

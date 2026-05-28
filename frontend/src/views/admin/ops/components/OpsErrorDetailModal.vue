@@ -29,9 +29,9 @@
         </div>
 
         <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
-          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.user') }}</div>
+          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.requestAccount') }}</div>
           <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-            {{ detail.user_email || (detail.user_id != null ? String(detail.user_id) : '—') }}
+            {{ formatRequestAccount(detail) || '—' }}
           </div>
         </div>
 
@@ -46,6 +46,27 @@
           <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.group') }}</div>
           <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
             {{ detail.group_name || (detail.group_id != null ? String(detail.group_id) : '—') }}
+          </div>
+        </div>
+
+        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
+          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.upstreamAccount') }}</div>
+          <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+            {{ detail.account_name || (detail.account_id != null ? String(detail.account_id) : '—') }}
+          </div>
+        </div>
+
+        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
+          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.specificReason') }}</div>
+          <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
+            {{ specificReason }}
+          </div>
+        </div>
+
+        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
+          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.platformSlaImpact') }}</div>
+          <div class="mt-1 text-sm font-medium" :class="impactsPlatformSla ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'">
+            {{ impactsPlatformSla ? t('common.yes') : t('common.no') }}
           </div>
         </div>
 
@@ -227,6 +248,46 @@ const title = computed(() => {
 
 const emptyText = computed(() => t('admin.ops.errorDetail.noErrorSelected'))
 
+
+function formatRequestAccount(d: OpsErrorDetail | null): string {
+  if (!d) return ''
+  if (d.user_email) return d.user_email
+  if (d.user_id != null) return `user:${d.user_id}`
+  if (d.api_key_id != null) return `key:${d.api_key_id}`
+  return ''
+}
+
+const impactsPlatformSla = computed(() => {
+  const d = detail.value
+  if (!d) return false
+  const owner = String(d.error_owner || '').toLowerCase()
+  const clientStatus = Number(d.status_code ?? 0)
+  const code = Number(d.upstream_status_code ?? d.status_code ?? 0)
+  const msg = `${d.message || ''} ${d.upstream_error_message || ''} ${d.upstream_error_detail || ''}`.toLowerCase()
+  const upstreamLimited = owner === 'provider' && (code === 429 || (code < 500 && (msg.includes('insufficient balance') || msg.includes('quota') || msg.includes('usage limit') || msg.includes('subscription') || msg.includes('额度') || msg.includes('余额'))))
+  return clientStatus >= 400 && !d.is_business_limited && (owner === 'platform' || (owner === 'provider' && !upstreamLimited))
+})
+
+const specificReason = computed(() => {
+  const d = detail.value
+  if (!d) return ''
+  const phase = String(d.phase || '').toLowerCase()
+  const owner = String(d.error_owner || '').toLowerCase()
+  const msg = `${d.message || ''} ${d.upstream_error_message || ''} ${d.upstream_error_detail || ''}`.toLowerCase()
+  const code = Number(d.upstream_status_code ?? d.status_code ?? 0)
+  if (d.type === 'billing_error' || msg.includes('insufficient balance') || msg.includes('余额')) return t('admin.ops.errorReasons.balanceInsufficient')
+  if (msg.includes('subscription')) return t('admin.ops.errorReasons.subscriptionInvalid')
+  if (msg.includes('quota') || msg.includes('usage limit') || msg.includes('额度')) return t('admin.ops.errorReasons.quotaExceeded')
+  if (owner === 'provider' && code === 429) return t('admin.ops.errorReasons.upstreamRateLimited')
+  if (owner === 'provider' && code === 529) return t('admin.ops.errorReasons.upstreamOverloaded')
+  if (owner === 'provider' && msg.includes('timeout')) return t('admin.ops.errorReasons.upstreamTimeout')
+  if (owner === 'provider') return t('admin.ops.errorReasons.upstreamError')
+  if (owner === 'platform' && phase === 'routing') return t('admin.ops.errorReasons.routingFailed')
+  if (owner === 'platform') return t('admin.ops.errorReasons.platformError')
+  if (owner === 'client' && phase === 'auth') return t('admin.ops.errorReasons.clientAuthError')
+  if (owner === 'client') return t('admin.ops.errorReasons.clientRequestError')
+  return d.message || t('admin.ops.errorReasons.other')
+})
 
 function formatRequestTypeLabel(type: number | null | undefined): string {
   switch (type) {

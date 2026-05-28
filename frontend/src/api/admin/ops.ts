@@ -46,8 +46,17 @@ export interface OpsDashboardOverview {
   token_consumed: number
 
   sla: number
+  user_success_rate?: number
   error_rate: number
+  platform_sla_error_count?: number
+  client_error_count?: number
+  platform_error_count?: number
+  upstream_error_count?: number
+  upstream_limited_count?: number
+  platform_error_rate?: number
+  client_error_rate?: number
   upstream_error_rate: number
+  upstream_limited_rate?: number
   upstream_error_count_excl_429_529: number
   upstream_429_count: number
   upstream_529_count: number
@@ -183,6 +192,11 @@ export interface OpsErrorTrendPoint {
   error_count_total: number
   business_limited_count: number
   error_count_sla: number
+  platform_sla_error_count?: number
+  client_error_count?: number
+  platform_error_count?: number
+  upstream_error_count?: number
+  upstream_limited_count?: number
   upstream_error_count_excl_429_529: number
   upstream_429_count: number
   upstream_529_count: number
@@ -195,6 +209,8 @@ export interface OpsErrorTrendResponse {
 
 export interface OpsErrorDistributionItem {
   status_code: number
+  category?: string
+  reason?: string
   total: number
   sla: number
   business_limited: number
@@ -1077,6 +1093,9 @@ export type OpsErrorListQueryParams = {
   error_source?: string
   resolved?: string
   view?: OpsErrorListView
+  category?: string
+  impact_platform_sla?: string
+  client_failed?: string
 
   q?: string
   status_codes?: string

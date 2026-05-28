@@ -74,6 +74,10 @@ func (r *opsRepository) getDashboardOverviewRaw(ctx context.Context, filter *ser
 	if err != nil {
 		return nil, err
 	}
+	scopeCounts, err := r.queryErrorScopeCounts(ctx, filter, start, end)
+	if err != nil {
+		return nil, err
+	}
 
 	windowSeconds := end.Sub(start).Seconds()
 	if windowSeconds <= 0 {
@@ -81,11 +85,15 @@ func (r *opsRepository) getDashboardOverviewRaw(ctx context.Context, filter *ser
 	}
 
 	requestCountTotal := successCount + errorTotal
-	requestCountSLA := successCount + errorCountSLA
+	requestCountSLA := successCount + scopeCounts.platformSLAError
 
 	sla := safeDivideFloat64(float64(successCount), float64(requestCountSLA))
-	errorRate := safeDivideFloat64(float64(errorCountSLA), float64(requestCountSLA))
-	upstreamErrorRate := safeDivideFloat64(float64(upstreamExcl), float64(requestCountSLA))
+	userSuccessRate := safeDivideFloat64(float64(successCount), float64(requestCountTotal))
+	errorRate := safeDivideFloat64(float64(scopeCounts.platformSLAError), float64(requestCountSLA))
+	clientErrorRate := safeDivideFloat64(float64(scopeCounts.clientError), float64(requestCountTotal))
+	platformErrorRate := safeDivideFloat64(float64(scopeCounts.platformError), float64(requestCountSLA))
+	upstreamErrorRate := safeDivideFloat64(float64(scopeCounts.upstreamError), float64(requestCountSLA))
+	upstreamLimitedRate := safeDivideFloat64(float64(scopeCounts.upstreamLimited), float64(requestCountTotal))
 
 	qpsCurrent, tpsCurrent, err := r.queryCurrentRates(ctx, filter, end)
 	if err != nil {
@@ -138,9 +146,20 @@ func (r *opsRepository) getDashboardOverviewRaw(ctx context.Context, filter *ser
 		RequestCountSLA:      requestCountSLA,
 		TokenConsumed:        tokenConsumed,
 
-		SLA:                          roundTo4DP(sla),
-		ErrorRate:                    roundTo4DP(errorRate),
-		UpstreamErrorRate:            roundTo4DP(upstreamErrorRate),
+		SLA:             roundTo4DP(sla),
+		UserSuccessRate: roundTo4DP(userSuccessRate),
+		ErrorRate:       roundTo4DP(errorRate),
+
+		PlatformSLAErrorCount: scopeCounts.platformSLAError,
+		ClientErrorCount:      scopeCounts.clientError,
+		PlatformErrorCount:    scopeCounts.platformError,
+		UpstreamErrorCount:    scopeCounts.upstreamError,
+		UpstreamLimitedCount:  scopeCounts.upstreamLimited,
+		PlatformErrorRate:     roundTo4DP(platformErrorRate),
+		ClientErrorRate:       roundTo4DP(clientErrorRate),
+		UpstreamErrorRate:     roundTo4DP(upstreamErrorRate),
+		UpstreamLimitedRate:   roundTo4DP(upstreamLimitedRate),
+
 		UpstreamErrorCountExcl429529: upstreamExcl,
 		Upstream429Count:             upstream429,
 		Upstream529Count:             upstream529,
@@ -159,6 +178,63 @@ func (r *opsRepository) getDashboardOverviewRaw(ctx context.Context, filter *ser
 		Duration: duration,
 		TTFT:     ttft,
 	}, nil
+}
+
+type opsErrorScopeCounts struct {
+	platformSLAError int64
+	clientError      int64
+	platformError    int64
+	upstreamError    int64
+	upstreamLimited  int64
+}
+
+func opsEffectiveStatusExpr() string {
+	return "COALESCE(upstream_status_code, status_code, 0)"
+}
+
+func opsUpstreamLimitedCondition() string {
+	effectiveStatus := opsEffectiveStatusExpr()
+	textExpr := "LOWER(COALESCE(error_message,'') || ' ' || COALESCE(upstream_error_message,'') || ' ' || COALESCE(upstream_error_detail,''))"
+	return "error_owner = 'provider' AND NOT COALESCE(is_business_limited,false) AND (" + effectiveStatus + " = 429 OR (" + effectiveStatus + " < 500 AND (" + textExpr + " LIKE '%insufficient balance%' OR " + textExpr + " LIKE '%quota%' OR " + textExpr + " LIKE '%usage limit%' OR " + textExpr + " LIKE '%subscription%' OR " + textExpr + " LIKE '%额度%' OR " + textExpr + " LIKE '%余额%')))"
+}
+
+func opsUpstreamErrorCondition() string {
+	return "error_owner = 'provider' AND NOT COALESCE(is_business_limited,false) AND NOT (" + opsUpstreamLimitedCondition() + ")"
+}
+
+func opsPlatformErrorCondition() string {
+	return "error_owner = 'platform' AND NOT COALESCE(is_business_limited,false)"
+}
+
+func opsClientErrorCondition() string {
+	return "error_owner = 'client' AND NOT COALESCE(is_business_limited,false)"
+}
+
+func opsPlatformSLAErrorCondition() string {
+	return "COALESCE(status_code, 0) >= 400 AND (" + opsPlatformErrorCondition() + " OR " + opsUpstreamErrorCondition() + ")"
+}
+
+func opsErrorCategoryCaseExpr() string {
+	return "CASE WHEN COALESCE(is_business_limited,false) THEN 'business_limited' WHEN " + opsUpstreamLimitedCondition() + " THEN 'upstream_limited' WHEN " + opsUpstreamErrorCondition() + " THEN 'upstream_error' WHEN " + opsPlatformErrorCondition() + " THEN 'platform_error' WHEN " + opsClientErrorCondition() + " THEN 'client_error' ELSE 'other' END"
+}
+
+func opsErrorReasonCaseExpr() string {
+	effectiveStatus := opsEffectiveStatusExpr()
+	textExpr := "LOWER(COALESCE(error_message,'') || ' ' || COALESCE(upstream_error_message,'') || ' ' || COALESCE(upstream_error_detail,''))"
+	return "CASE" +
+		" WHEN COALESCE(is_business_limited,false) AND (" + textExpr + " LIKE '%balance%' OR " + textExpr + " LIKE '%余额%') THEN 'balance_insufficient'" +
+		" WHEN COALESCE(is_business_limited,false) AND (" + textExpr + " LIKE '%subscription%') THEN 'subscription_invalid'" +
+		" WHEN COALESCE(is_business_limited,false) THEN 'business_limited'" +
+		" WHEN " + opsUpstreamLimitedCondition() + " AND " + effectiveStatus + " = 429 THEN 'upstream_rate_limited'" +
+		" WHEN " + opsUpstreamLimitedCondition() + " THEN 'upstream_resource_limited'" +
+		" WHEN error_owner = 'provider' AND " + effectiveStatus + " = 529 THEN 'upstream_overloaded'" +
+		" WHEN error_owner = 'provider' AND " + textExpr + " LIKE '%timeout%' THEN 'upstream_timeout'" +
+		" WHEN error_owner = 'provider' THEN 'upstream_error'" +
+		" WHEN error_owner = 'platform' AND error_phase = 'routing' THEN 'routing_failed'" +
+		" WHEN error_owner = 'platform' THEN 'platform_error'" +
+		" WHEN error_owner = 'client' AND error_phase = 'auth' THEN 'client_auth_error'" +
+		" WHEN error_owner = 'client' THEN 'client_request_error'" +
+		" ELSE 'other' END"
 }
 
 type opsDashboardPartial struct {
@@ -231,11 +307,14 @@ func (r *opsRepository) getDashboardOverviewPreaggregated(ctx context.Context, f
 	successCount := preagg.successCount + head.successCount + tail.successCount
 	errorTotal := preagg.errorCountTotal + head.errorCountTotal + tail.errorCountTotal
 	businessLimited := preagg.businessLimitedCount + head.businessLimitedCount + tail.businessLimitedCount
-	errorCountSLA := preagg.errorCountSLA + head.errorCountSLA + tail.errorCountSLA
-
 	upstreamExcl := preagg.upstreamErrorCountExcl429529 + head.upstreamErrorCountExcl429529 + tail.upstreamErrorCountExcl429529
 	upstream429 := preagg.upstream429Count + head.upstream429Count + tail.upstream429Count
 	upstream529 := preagg.upstream529Count + head.upstream529Count + tail.upstream529Count
+
+	scopeCounts, err := r.queryErrorScopeCounts(ctx, filter, start, end)
+	if err != nil {
+		return nil, err
+	}
 
 	tokenConsumed := preagg.tokenConsumed + head.tokenConsumed + tail.tokenConsumed
 
@@ -259,11 +338,15 @@ func (r *opsRepository) getDashboardOverviewPreaggregated(ctx context.Context, f
 	}
 
 	requestCountTotal := successCount + errorTotal
-	requestCountSLA := successCount + errorCountSLA
+	requestCountSLA := successCount + scopeCounts.platformSLAError
 
 	sla := safeDivideFloat64(float64(successCount), float64(requestCountSLA))
-	errorRate := safeDivideFloat64(float64(errorCountSLA), float64(requestCountSLA))
-	upstreamErrorRate := safeDivideFloat64(float64(upstreamExcl), float64(requestCountSLA))
+	userSuccessRate := safeDivideFloat64(float64(successCount), float64(requestCountTotal))
+	errorRate := safeDivideFloat64(float64(scopeCounts.platformSLAError), float64(requestCountSLA))
+	clientErrorRate := safeDivideFloat64(float64(scopeCounts.clientError), float64(requestCountTotal))
+	platformErrorRate := safeDivideFloat64(float64(scopeCounts.platformError), float64(requestCountSLA))
+	upstreamErrorRate := safeDivideFloat64(float64(scopeCounts.upstreamError), float64(requestCountSLA))
+	upstreamLimitedRate := safeDivideFloat64(float64(scopeCounts.upstreamLimited), float64(requestCountTotal))
 	degraded := false
 
 	// Keep "current" rates as raw, to preserve realtime semantics.
@@ -313,14 +396,25 @@ func (r *opsRepository) getDashboardOverviewPreaggregated(ctx context.Context, f
 		SuccessCount:         successCount,
 		ErrorCountTotal:      errorTotal,
 		BusinessLimitedCount: businessLimited,
-		ErrorCountSLA:        errorCountSLA,
+		ErrorCountSLA:        scopeCounts.platformSLAError,
 		RequestCountTotal:    requestCountTotal,
 		RequestCountSLA:      requestCountSLA,
 		TokenConsumed:        tokenConsumed,
 
-		SLA:                          roundTo4DP(sla),
-		ErrorRate:                    roundTo4DP(errorRate),
-		UpstreamErrorRate:            roundTo4DP(upstreamErrorRate),
+		SLA:             roundTo4DP(sla),
+		UserSuccessRate: roundTo4DP(userSuccessRate),
+		ErrorRate:       roundTo4DP(errorRate),
+
+		PlatformSLAErrorCount: scopeCounts.platformSLAError,
+		ClientErrorCount:      scopeCounts.clientError,
+		PlatformErrorCount:    scopeCounts.platformError,
+		UpstreamErrorCount:    scopeCounts.upstreamError,
+		UpstreamLimitedCount:  scopeCounts.upstreamLimited,
+		PlatformErrorRate:     roundTo4DP(platformErrorRate),
+		ClientErrorRate:       roundTo4DP(clientErrorRate),
+		UpstreamErrorRate:     roundTo4DP(upstreamErrorRate),
+		UpstreamLimitedRate:   roundTo4DP(upstreamLimitedRate),
+
 		UpstreamErrorCountExcl429529: upstreamExcl,
 		Upstream429Count:             upstream429,
 		Upstream529Count:             upstream529,
@@ -865,7 +959,7 @@ func (r *opsRepository) queryErrorCounts(ctx context.Context, filter *service.Op
 SELECT
   COALESCE(COUNT(*) FILTER (WHERE COALESCE(status_code, 0) >= 400), 0) AS error_total,
   COALESCE(COUNT(*) FILTER (WHERE COALESCE(status_code, 0) >= 400 AND is_business_limited), 0) AS business_limited,
-  COALESCE(COUNT(*) FILTER (WHERE COALESCE(status_code, 0) >= 400 AND NOT is_business_limited), 0) AS error_sla,
+  COALESCE(COUNT(*) FILTER (WHERE ` + opsPlatformSLAErrorCondition() + `), 0) AS error_sla,
   COALESCE(COUNT(*) FILTER (WHERE error_owner = 'provider' AND NOT is_business_limited AND COALESCE(upstream_status_code, status_code, 0) NOT IN (429, 529)), 0) AS upstream_excl,
   COALESCE(COUNT(*) FILTER (WHERE error_owner = 'provider' AND NOT is_business_limited AND COALESCE(upstream_status_code, status_code, 0) = 429), 0) AS upstream_429,
   COALESCE(COUNT(*) FILTER (WHERE error_owner = 'provider' AND NOT is_business_limited AND COALESCE(upstream_status_code, status_code, 0) = 529), 0) AS upstream_529
@@ -883,6 +977,30 @@ FROM ops_error_logs
 		return 0, 0, 0, 0, 0, 0, err
 	}
 	return errorTotal, businessLimited, errorCountSLA, upstreamExcl429529, upstream429, upstream529, nil
+}
+
+func (r *opsRepository) queryErrorScopeCounts(ctx context.Context, filter *service.OpsDashboardFilter, start, end time.Time) (*opsErrorScopeCounts, error) {
+	where, args, _ := buildErrorWhere(filter, start, end, 1)
+	q := `
+SELECT
+  COALESCE(COUNT(*) FILTER (WHERE ` + opsPlatformSLAErrorCondition() + `), 0) AS platform_sla_error,
+  COALESCE(COUNT(*) FILTER (WHERE COALESCE(status_code, 0) >= 400 AND ` + opsClientErrorCondition() + `), 0) AS client_error,
+  COALESCE(COUNT(*) FILTER (WHERE COALESCE(status_code, 0) >= 400 AND ` + opsPlatformErrorCondition() + `), 0) AS platform_error,
+  COALESCE(COUNT(*) FILTER (WHERE COALESCE(status_code, 0) >= 400 AND ` + opsUpstreamErrorCondition() + `), 0) AS upstream_error,
+  COALESCE(COUNT(*) FILTER (WHERE COALESCE(status_code, 0) >= 400 AND ` + opsUpstreamLimitedCondition() + `), 0) AS upstream_limited
+FROM ops_error_logs
+` + where
+	out := &opsErrorScopeCounts{}
+	if err := r.db.QueryRowContext(ctx, q, args...).Scan(
+		&out.platformSLAError,
+		&out.clientError,
+		&out.platformError,
+		&out.upstreamError,
+		&out.upstreamLimited,
+	); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (r *opsRepository) queryCurrentRates(ctx context.Context, filter *service.OpsDashboardFilter, end time.Time) (qpsCurrent float64, tpsCurrent float64, err error) {

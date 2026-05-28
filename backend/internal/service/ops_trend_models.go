@@ -43,6 +43,12 @@ type OpsErrorTrendPoint struct {
 	BusinessLimitedCount int64 `json:"business_limited_count"`
 	ErrorCountSLA        int64 `json:"error_count_sla"`
 
+	PlatformSLAErrorCount int64 `json:"platform_sla_error_count"`
+	ClientErrorCount      int64 `json:"client_error_count"`
+	PlatformErrorCount    int64 `json:"platform_error_count"`
+	UpstreamErrorCount    int64 `json:"upstream_error_count"`
+	UpstreamLimitedCount  int64 `json:"upstream_limited_count"`
+
 	UpstreamErrorCountExcl429529 int64 `json:"upstream_error_count_excl_429_529"`
 	Upstream429Count             int64 `json:"upstream_429_count"`
 	Upstream529Count             int64 `json:"upstream_529_count"`
@@ -54,10 +60,12 @@ type OpsErrorTrendResponse struct {
 }
 
 type OpsErrorDistributionItem struct {
-	StatusCode      int   `json:"status_code"`
-	Total           int64 `json:"total"`
-	SLA             int64 `json:"sla"`
-	BusinessLimited int64 `json:"business_limited"`
+	StatusCode      int    `json:"status_code"`
+	Category        string `json:"category"`
+	Reason          string `json:"reason"`
+	Total           int64  `json:"total"`
+	SLA             int64  `json:"sla"`
+	BusinessLimited int64  `json:"business_limited"`
 }
 
 type OpsErrorDistributionResponse struct {

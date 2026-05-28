@@ -73,14 +73,14 @@
         <OpsErrorDistributionChart
           :data="errorDistribution"
           :loading="loadingErrorDistribution"
-          @open-details="openErrorDetails('request')"
+          @open-details="openErrorDetails('request', { title: t('admin.ops.errorDistribution'), view: 'all' })"
         />
         <OpsErrorTrendChart
           :points="errorTrend?.points ?? []"
           :loading="loadingErrorTrend"
           :time-range="timeRange"
-          @open-request-errors="openErrorDetails('request')"
-          @open-upstream-errors="openErrorDetails('upstream')"
+          @open-request-errors="openErrorDetails('request', { title: t('admin.ops.clientErrors'), category: 'client_error', view: 'all' })"
+          @open-upstream-errors="openErrorDetails('upstream', { title: t('admin.ops.upstreamErrors'), category: 'upstream_error', clientFailed: true, view: 'all' })"
         />
       </div>
 
@@ -117,6 +117,7 @@
           :platform="platform"
           :group-id="groupId"
           :error-type="errorDetailsType"
+          :preset="errorDetailsPreset"
           @update:show="showErrorDetails = $event"
           @openErrorDetail="openError"
         />
@@ -158,7 +159,7 @@ import OpsDashboardSkeleton from './components/OpsDashboardSkeleton.vue'
 import OpsConcurrencyCard from './components/OpsConcurrencyCard.vue'
 import OpsErrorDetailModal from './components/OpsErrorDetailModal.vue'
 import OpsErrorDistributionChart from './components/OpsErrorDistributionChart.vue'
-import OpsErrorDetailsModal from './components/OpsErrorDetailsModal.vue'
+import OpsErrorDetailsModal, { type OpsErrorDetailsPreset } from './components/OpsErrorDetailsModal.vue'
 import OpsErrorTrendChart from './components/OpsErrorTrendChart.vue'
 import OpsLatencyChart from './components/OpsLatencyChart.vue'
 import OpsThroughputTrendChart from './components/OpsThroughputTrendChart.vue'
@@ -367,6 +368,7 @@ const showErrorModal = ref(false)
 
 const showErrorDetails = ref(false)
 const errorDetailsType = ref<'request' | 'upstream'>('request')
+const errorDetailsPreset = ref<OpsErrorDetailsPreset | null>(null)
 
 const showRequestDetails = ref(false)
 const requestDetailsPreset = ref<OpsRequestDetailsPreset>({
@@ -454,8 +456,9 @@ function handleOpenRequestDetails(preset?: OpsRequestDetailsPreset) {
   showRequestDetails.value = true
 }
 
-function openErrorDetails(kind: 'request' | 'upstream') {
+function openErrorDetails(kind: 'request' | 'upstream', preset?: OpsErrorDetailsPreset) {
   errorDetailsType.value = kind
+  errorDetailsPreset.value = preset ?? null
   // Ensure only one modal visible at a time.
   showRequestDetails.value = false
   showErrorModal.value = false

@@ -30,7 +30,10 @@
                 {{ t('admin.ops.errorLog.group') }}
               </th>
               <th class="border-b border-gray-200 px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:border-dark-700 dark:text-dark-400">
-                {{ t('admin.ops.errorLog.user') }}
+                {{ t('admin.ops.errorLog.requestAccount') }}
+              </th>
+              <th class="border-b border-gray-200 px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:border-dark-700 dark:text-dark-400">
+                {{ t('admin.ops.errorLog.upstreamAccount') }}
               </th>
               <th class="border-b border-gray-200 px-4 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:border-dark-700 dark:text-dark-400">
                 {{ t('admin.ops.errorLog.status') }}
@@ -45,7 +48,7 @@
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
             <tr v-if="rows.length === 0">
-              <td colspan="10" class="py-12 text-center text-sm text-gray-400 dark:text-dark-500">
+              <td colspan="11" class="py-12 text-center text-sm text-gray-400 dark:text-dark-500">
                 {{ t('admin.ops.errorLog.noErrors') }}
               </td>
             </tr>
@@ -127,11 +130,21 @@
                 <span v-else class="text-xs text-gray-400">-</span>
               </td>
 
-              <!-- User -->
+              <!-- Request Account -->
               <td class="px-4 py-2">
-                <el-tooltip v-if="log.user_id" :content="t('admin.ops.errorLog.userId') + ' ' + log.user_id" placement="top" :show-after="500">
-                  <span class="max-w-[100px] truncate text-xs font-medium text-gray-900 dark:text-gray-200">
-                    {{ log.user_email || '-' }}
+                <el-tooltip v-if="log.user_id || log.api_key_id" :content="formatRequestAccountTooltip(log)" placement="top" :show-after="500">
+                  <span class="max-w-[120px] truncate text-xs font-medium text-gray-900 dark:text-gray-200">
+                    {{ formatRequestAccount(log) }}
+                  </span>
+                </el-tooltip>
+                <span v-else class="text-xs text-gray-400">-</span>
+              </td>
+
+              <!-- Upstream Account -->
+              <td class="px-4 py-2">
+                <el-tooltip v-if="log.account_id" :content="t('admin.ops.errorLog.accountId') + ' ' + log.account_id" placement="top" :show-after="500">
+                  <span class="max-w-[120px] truncate text-xs font-medium text-gray-900 dark:text-gray-200">
+                    {{ log.account_name || log.account_id }}
                   </span>
                 </el-tooltip>
                 <span v-else class="text-xs text-gray-400">-</span>
@@ -166,8 +179,9 @@
               <!-- Message (Response Content) -->
               <td class="px-4 py-2">
                 <div class="max-w-[200px]">
-                  <p class="truncate text-[11px] font-medium text-gray-600 dark:text-gray-400" :title="log.message">
-                    {{ formatSmartMessage(log.message) || '-' }}
+                  <p class="truncate text-[11px] font-medium text-gray-600 dark:text-gray-400" :title="`${formatSpecificReason(log)}
+${log.message || ''}`">
+                    {{ formatSpecificReason(log) || '-' }}
                   </p>
                 </div>
               </td>
@@ -298,6 +312,39 @@ function getStatusClass(code: number): string {
   if (code === 429) return 'bg-purple-50 text-purple-700 ring-purple-600/20 dark:bg-purple-900/30 dark:text-purple-400 dark:ring-purple-500/30'
   if (code >= 400) return 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-500/30'
   return 'bg-gray-50 text-gray-700 ring-gray-600/20 dark:bg-gray-900/30 dark:text-gray-400 dark:ring-gray-500/30'
+}
+
+function formatRequestAccount(log: OpsErrorLog): string {
+  if (log.user_email) return log.user_email
+  if (log.user_id != null) return `user:${log.user_id}`
+  if (log.api_key_id != null) return `key:${log.api_key_id}`
+  return ''
+}
+
+function formatRequestAccountTooltip(log: OpsErrorLog): string {
+  const parts: string[] = []
+  if (log.user_id != null) parts.push(`${t('admin.ops.errorLog.userId')} ${log.user_id}`)
+  if (log.api_key_id != null) parts.push(`API Key ${log.api_key_id}`)
+  return parts.join('\n')
+}
+
+function formatSpecificReason(log: OpsErrorLog): string {
+  const phase = String(log.phase || '').toLowerCase()
+  const owner = String(log.error_owner || '').toLowerCase()
+  const msg = String(log.message || '').toLowerCase()
+  const code = Number(log.status_code || 0)
+  if (log.type === 'billing_error' || msg.includes('insufficient balance') || msg.includes('余额')) return t('admin.ops.errorReasons.balanceInsufficient')
+  if (msg.includes('subscription')) return t('admin.ops.errorReasons.subscriptionInvalid')
+  if (msg.includes('quota') || msg.includes('usage limit') || msg.includes('额度')) return t('admin.ops.errorReasons.quotaExceeded')
+  if (owner === 'provider' && code === 429) return t('admin.ops.errorReasons.upstreamRateLimited')
+  if (owner === 'provider' && code === 529) return t('admin.ops.errorReasons.upstreamOverloaded')
+  if (owner === 'provider' && msg.includes('timeout')) return t('admin.ops.errorReasons.upstreamTimeout')
+  if (owner === 'provider') return t('admin.ops.errorReasons.upstreamError')
+  if (owner === 'platform' && phase === 'routing') return t('admin.ops.errorReasons.routingFailed')
+  if (owner === 'platform') return t('admin.ops.errorReasons.platformError')
+  if (owner === 'client' && phase === 'auth') return t('admin.ops.errorReasons.clientAuthError')
+  if (owner === 'client') return t('admin.ops.errorReasons.clientRequestError')
+  return formatSmartMessage(log.message)
 }
 
 function formatSmartMessage(msg: string): string {
