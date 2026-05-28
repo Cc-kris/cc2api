@@ -230,8 +230,8 @@ function isUpstreamRow(log: OpsErrorLog): boolean {
 
 function formatEndpointTooltip(log: OpsErrorLog): string {
   const parts: string[] = []
-  if (log.inbound_endpoint) parts.push(`Inbound: ${log.inbound_endpoint}`)
-  if (log.upstream_endpoint) parts.push(`Upstream: ${log.upstream_endpoint}`)
+  if (log.inbound_endpoint) parts.push(`${t('admin.ops.errorDetail.inboundEndpoint')}：${log.inbound_endpoint}`)
+  if (log.upstream_endpoint) parts.push(`${t('admin.ops.errorDetail.upstreamEndpoint')}：${log.upstream_endpoint}`)
   return parts.join('\n') || ''
 }
 
@@ -316,15 +316,15 @@ function getStatusClass(code: number): string {
 
 function formatRequestAccount(log: OpsErrorLog): string {
   if (log.user_email) return log.user_email
-  if (log.user_id != null) return `user:${log.user_id}`
-  if (log.api_key_id != null) return `key:${log.api_key_id}`
+  if (log.user_id != null) return `${t('admin.ops.errorLog.userId')} ${log.user_id}`
+  if (log.api_key_id != null) return `${t('admin.ops.errorLog.apiKeyId')} ${log.api_key_id}`
   return ''
 }
 
 function formatRequestAccountTooltip(log: OpsErrorLog): string {
   const parts: string[] = []
   if (log.user_id != null) parts.push(`${t('admin.ops.errorLog.userId')} ${log.user_id}`)
-  if (log.api_key_id != null) parts.push(`API Key ${log.api_key_id}`)
+  if (log.api_key_id != null) parts.push(`${t('admin.ops.errorLog.apiKeyId')} ${log.api_key_id}`)
   return parts.join('\n')
 }
 

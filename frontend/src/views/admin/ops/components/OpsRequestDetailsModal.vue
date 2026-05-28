@@ -142,6 +142,38 @@ function openErrorDetail(errorId: number | null | undefined) {
   emit('openErrorDetail', errorId)
 }
 
+function openRowErrorDetail(row: OpsRequestDetail) {
+  if (row.kind !== 'error' || !row.error_id) return
+  openErrorDetail(row.error_id)
+}
+
+function requestAccountLabel(row: OpsRequestDetail): string {
+  if (row.user_email) return row.user_email
+  if (row.user_id != null) return t('admin.ops.requestDetails.accountUser', { id: row.user_id })
+  if (row.api_key_id != null) return t('admin.ops.requestDetails.accountApiKey', { id: row.api_key_id })
+  return '-'
+}
+
+function upstreamAccountLabel(row: OpsRequestDetail): string {
+  if (row.account_name) return row.account_name
+  if (row.account_id != null) return t('admin.ops.requestDetails.upstreamAccountId', { id: row.account_id })
+  return '-'
+}
+
+function groupLabel(row: OpsRequestDetail): string {
+  if (row.group_name) return row.group_name
+  if (row.group_id != null) return t('admin.ops.requestDetails.groupId', { id: row.group_id })
+  return '-'
+}
+
+function requestedModelLabel(row: OpsRequestDetail): string {
+  return row.requested_model || row.model || '-'
+}
+
+function upstreamModelLabel(row: OpsRequestDetail): string {
+  return row.upstream_model || row.model || '-'
+}
+
 const kindBadgeClass = (kind: string) => {
   if (kind === 'error') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
   return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
@@ -202,10 +234,19 @@ const kindBadgeClass = (kind: string) => {
                     {{ t('admin.ops.requestDetails.table.platform') }}
                   </th>
                   <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                    {{ t('admin.ops.requestDetails.table.model') }}
+                    {{ t('admin.ops.requestDetails.table.requestedModel') }}
                   </th>
                   <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                    {{ t('admin.ops.requestDetails.table.account') }}
+                    {{ t('admin.ops.requestDetails.table.upstreamModel') }}
+                  </th>
+                  <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    {{ t('admin.ops.requestDetails.table.group') }}
+                  </th>
+                  <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    {{ t('admin.ops.requestDetails.table.requestAccount') }}
+                  </th>
+                  <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    {{ t('admin.ops.requestDetails.table.upstreamAccount') }}
                   </th>
                   <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                     {{ t('admin.ops.requestDetails.table.duration') }}
@@ -222,7 +263,15 @@ const kindBadgeClass = (kind: string) => {
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-200 bg-white dark:divide-dark-700 dark:bg-dark-800">
-                <tr v-for="(row, idx) in items" :key="idx" class="hover:bg-gray-50 dark:hover:bg-dark-700/50">
+                <tr
+                  v-for="(row, idx) in items"
+                  :key="idx"
+                  :class="[
+                    'hover:bg-gray-50 dark:hover:bg-dark-700/50',
+                    row.kind === 'error' && row.error_id ? 'cursor-pointer' : ''
+                  ]"
+                  @click="openRowErrorDetail(row)"
+                >
                   <td class="whitespace-nowrap px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
                     {{ formatDateTime(row.created_at) }}
                   </td>
@@ -234,11 +283,20 @@ const kindBadgeClass = (kind: string) => {
                   <td class="whitespace-nowrap px-4 py-3 text-xs font-medium text-gray-700 dark:text-gray-200">
                     {{ (row.platform || 'unknown').toUpperCase() }}
                   </td>
-                  <td class="max-w-[240px] truncate px-4 py-3 text-xs text-gray-600 dark:text-gray-300" :title="row.model || ''">
-                    {{ row.model || '-' }}
+                  <td class="max-w-[180px] truncate px-4 py-3 font-mono text-[11px] text-gray-600 dark:text-gray-300" :title="requestedModelLabel(row)">
+                    {{ requestedModelLabel(row) }}
                   </td>
-                  <td class="max-w-[180px] truncate px-4 py-3 text-xs text-gray-600 dark:text-gray-300" :title="row.user_email || (row.user_id != null ? String(row.user_id) : '')">
-                    {{ row.user_email || (row.user_id != null ? `#${row.user_id}` : '-') }}
+                  <td class="max-w-[180px] truncate px-4 py-3 font-mono text-[11px] text-gray-600 dark:text-gray-300" :title="upstreamModelLabel(row)">
+                    {{ upstreamModelLabel(row) }}
+                  </td>
+                  <td class="max-w-[160px] truncate px-4 py-3 text-xs text-gray-600 dark:text-gray-300" :title="groupLabel(row)">
+                    {{ groupLabel(row) }}
+                  </td>
+                  <td class="max-w-[180px] truncate px-4 py-3 text-xs text-gray-600 dark:text-gray-300" :title="requestAccountLabel(row)">
+                    {{ requestAccountLabel(row) }}
+                  </td>
+                  <td class="max-w-[180px] truncate px-4 py-3 text-xs text-gray-600 dark:text-gray-300" :title="upstreamAccountLabel(row)">
+                    {{ upstreamAccountLabel(row) }}
                   </td>
                   <td class="whitespace-nowrap px-4 py-3 text-xs text-gray-600 dark:text-gray-300">
                     {{ typeof row.duration_ms === 'number' ? `${row.duration_ms} ms` : '-' }}
@@ -253,7 +311,7 @@ const kindBadgeClass = (kind: string) => {
                       </span>
                       <button
                         class="rounded-md bg-gray-100 px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-200 dark:bg-dark-700 dark:text-gray-300 dark:hover:bg-dark-600"
-                        @click="handleCopyRequestId(row.request_id)"
+                        @click.stop="handleCopyRequestId(row.request_id)"
                       >
                         {{ t('admin.ops.requestDetails.copy') }}
                       </button>
@@ -264,7 +322,7 @@ const kindBadgeClass = (kind: string) => {
                     <button
                       v-if="row.kind === 'error' && row.error_id"
                       class="rounded-lg bg-red-50 px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/30"
-                      @click="openErrorDetail(row.error_id)"
+                      @click.stop="openErrorDetail(row.error_id)"
                     >
                       {{ t('admin.ops.requestDetails.viewError') }}
                     </button>

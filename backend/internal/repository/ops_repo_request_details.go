@@ -55,7 +55,7 @@ func (r *opsRepository) ListRequestDetails(ctx context.Context, filter *service.
 		}
 
 		if model := strings.TrimSpace(filter.Model); model != "" {
-			addCondition(fmt.Sprintf("model = $%d", len(args)+1), model)
+			addCondition(fmt.Sprintf("(model = $%d OR requested_model = $%d OR upstream_model = $%d)", len(args)+1, len(args)+2, len(args)+3), model, model, model)
 		}
 		if requestID := strings.TrimSpace(filter.RequestID); requestID != "" {
 			addCondition(fmt.Sprintf("request_id = $%d", len(args)+1), requestID)
@@ -64,10 +64,10 @@ func (r *opsRepository) ListRequestDetails(ctx context.Context, filter *service.
 			like := "%" + strings.ToLower(q) + "%"
 			startIdx := len(args) + 1
 			addCondition(
-				fmt.Sprintf("(LOWER(COALESCE(request_id,'')) LIKE $%d OR LOWER(COALESCE(model,'')) LIKE $%d OR LOWER(COALESCE(message,'')) LIKE $%d OR LOWER(COALESCE(user_email,'')) LIKE $%d OR LOWER(COALESCE(account_name,'')) LIKE $%d)",
-					startIdx, startIdx+1, startIdx+2, startIdx+3, startIdx+4,
+				fmt.Sprintf("(LOWER(COALESCE(request_id,'')) LIKE $%d OR LOWER(COALESCE(model,'')) LIKE $%d OR LOWER(COALESCE(message,'')) LIKE $%d OR LOWER(COALESCE(user_email,'')) LIKE $%d OR LOWER(COALESCE(account_name,'')) LIKE $%d OR LOWER(COALESCE(group_name,'')) LIKE $%d OR LOWER(COALESCE(requested_model,'')) LIKE $%d OR LOWER(COALESCE(upstream_model,'')) LIKE $%d)",
+					startIdx, startIdx+1, startIdx+2, startIdx+3, startIdx+4, startIdx+5, startIdx+6, startIdx+7,
 				),
-				like, like, like, like, like,
+				like, like, like, like, like, like, like, like,
 			)
 		}
 
@@ -92,6 +92,8 @@ WITH combined AS (
     ul.request_id AS request_id,
     COALESCE(NULLIF(g.platform, ''), NULLIF(a.platform, ''), '') AS platform,
     ul.model AS model,
+    COALESCE(NULLIF(ul.requested_model, ''), NULLIF(ul.model, ''), '') AS requested_model,
+    COALESCE(NULLIF(ul.upstream_model, ''), '') AS upstream_model,
     ul.duration_ms AS duration_ms,
     NULL::INT AS status_code,
     NULL::BIGINT AS error_id,
@@ -104,6 +106,7 @@ WITH combined AS (
     ul.account_id AS account_id,
     COALESCE(a.name, '') AS account_name,
     ul.group_id AS group_id,
+    COALESCE(g.name, '') AS group_name,
     ul.stream AS stream
   FROM usage_logs ul
   LEFT JOIN groups g ON g.id = ul.group_id
@@ -119,6 +122,8 @@ WITH combined AS (
     COALESCE(NULLIF(o.request_id,''), NULLIF(o.client_request_id,''), '') AS request_id,
     COALESCE(NULLIF(o.platform, ''), NULLIF(g.platform, ''), NULLIF(a.platform, ''), '') AS platform,
     o.model AS model,
+    COALESCE(NULLIF(o.requested_model, ''), NULLIF(o.model, ''), '') AS requested_model,
+    COALESCE(NULLIF(o.upstream_model, ''), '') AS upstream_model,
     o.duration_ms AS duration_ms,
     o.status_code AS status_code,
     o.id AS error_id,
@@ -131,6 +136,7 @@ WITH combined AS (
     o.account_id AS account_id,
     COALESCE(a.name, '') AS account_name,
     o.group_id AS group_id,
+    COALESCE(g.name, '') AS group_name,
     o.stream AS stream
   FROM ops_error_logs o
   LEFT JOIN groups g ON g.id = o.group_id
@@ -171,6 +177,8 @@ SELECT
   request_id,
   platform,
   model,
+  requested_model,
+  upstream_model,
   duration_ms,
   status_code,
   error_id,
@@ -183,6 +191,7 @@ SELECT
   account_id,
   account_name,
   group_id,
+  group_name,
   stream
 FROM combined
 %s
@@ -215,11 +224,13 @@ LIMIT $%d OFFSET $%d
 	out := make([]*service.OpsRequestDetail, 0, pageSize)
 	for rows.Next() {
 		var (
-			kind      string
-			createdAt time.Time
-			requestID sql.NullString
-			platform  sql.NullString
-			model     sql.NullString
+			kind           string
+			createdAt      time.Time
+			requestID      sql.NullString
+			platform       sql.NullString
+			model          sql.NullString
+			requestedModel sql.NullString
+			upstreamModel  sql.NullString
 
 			durationMs sql.NullInt64
 			statusCode sql.NullInt64
@@ -235,6 +246,7 @@ LIMIT $%d OFFSET $%d
 			accountID   sql.NullInt64
 			accountName sql.NullString
 			groupID     sql.NullInt64
+			groupName   sql.NullString
 
 			stream bool
 		)
@@ -245,6 +257,8 @@ LIMIT $%d OFFSET $%d
 			&requestID,
 			&platform,
 			&model,
+			&requestedModel,
+			&upstreamModel,
 			&durationMs,
 			&statusCode,
 			&errorID,
@@ -257,17 +271,20 @@ LIMIT $%d OFFSET $%d
 			&accountID,
 			&accountName,
 			&groupID,
+			&groupName,
 			&stream,
 		); err != nil {
 			return nil, 0, err
 		}
 
 		item := &service.OpsRequestDetail{
-			Kind:      service.OpsRequestKind(kind),
-			CreatedAt: createdAt,
-			RequestID: strings.TrimSpace(requestID.String),
-			Platform:  strings.TrimSpace(platform.String),
-			Model:     strings.TrimSpace(model.String),
+			Kind:           service.OpsRequestKind(kind),
+			CreatedAt:      createdAt,
+			RequestID:      strings.TrimSpace(requestID.String),
+			Platform:       strings.TrimSpace(platform.String),
+			Model:          strings.TrimSpace(model.String),
+			RequestedModel: strings.TrimSpace(requestedModel.String),
+			UpstreamModel:  strings.TrimSpace(upstreamModel.String),
 
 			DurationMs: toIntPtr(durationMs),
 			StatusCode: toIntPtr(statusCode),
@@ -282,6 +299,7 @@ LIMIT $%d OFFSET $%d
 			AccountID:   toInt64Ptr(accountID),
 			AccountName: strings.TrimSpace(accountName.String),
 			GroupID:     toInt64Ptr(groupID),
+			GroupName:   strings.TrimSpace(groupName.String),
 
 			Stream: stream,
 		}

@@ -19,8 +19,10 @@ type OpsRequestDetail struct {
 	CreatedAt time.Time      `json:"created_at"`
 	RequestID string         `json:"request_id"`
 
-	Platform string `json:"platform,omitempty"`
-	Model    string `json:"model,omitempty"`
+	Platform       string `json:"platform,omitempty"`
+	Model          string `json:"model,omitempty"`
+	RequestedModel string `json:"requested_model,omitempty"`
+	UpstreamModel  string `json:"upstream_model,omitempty"`
 
 	DurationMs *int `json:"duration_ms,omitempty"`
 	StatusCode *int `json:"status_code,omitempty"`
@@ -38,6 +40,7 @@ type OpsRequestDetail struct {
 	AccountID   *int64 `json:"account_id,omitempty"`
 	AccountName string `json:"account_name,omitempty"`
 	GroupID     *int64 `json:"group_id,omitempty"`
+	GroupName   string `json:"group_name,omitempty"`
 
 	Stream bool `json:"stream"`
 }

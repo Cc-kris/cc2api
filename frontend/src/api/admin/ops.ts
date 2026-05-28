@@ -125,6 +125,8 @@ export interface OpsRequestDetail {
 
   platform?: string
   model?: string
+  requested_model?: string
+  upstream_model?: string
   duration_ms?: number | null
   status_code?: number | null
 
@@ -139,6 +141,7 @@ export interface OpsRequestDetail {
   account_id?: number | null
   account_name?: string
   group_id?: number | null
+  group_name?: string
 
   stream?: boolean
 }
