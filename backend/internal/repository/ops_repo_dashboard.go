@@ -188,30 +188,62 @@ type opsErrorScopeCounts struct {
 	upstreamLimited  int64
 }
 
+func opsColumn(alias, name string) string {
+	alias = strings.TrimSpace(alias)
+	if alias == "" {
+		return name
+	}
+	return alias + "." + name
+}
+
 func opsEffectiveStatusExpr() string {
-	return "COALESCE(upstream_status_code, status_code, 0)"
+	return opsEffectiveStatusExprFor("")
+}
+
+func opsEffectiveStatusExprFor(alias string) string {
+	return "COALESCE(" + opsColumn(alias, "upstream_status_code") + ", " + opsColumn(alias, "status_code") + ", 0)"
 }
 
 func opsUpstreamLimitedCondition() string {
-	effectiveStatus := opsEffectiveStatusExpr()
-	textExpr := "LOWER(COALESCE(error_message,'') || ' ' || COALESCE(upstream_error_message,'') || ' ' || COALESCE(upstream_error_detail,''))"
-	return "error_owner = 'provider' AND NOT COALESCE(is_business_limited,false) AND (" + effectiveStatus + " = 429 OR (" + effectiveStatus + " < 500 AND (" + textExpr + " LIKE '%insufficient balance%' OR " + textExpr + " LIKE '%quota%' OR " + textExpr + " LIKE '%usage limit%' OR " + textExpr + " LIKE '%subscription%' OR " + textExpr + " LIKE '%额度%' OR " + textExpr + " LIKE '%余额%')))"
+	return opsUpstreamLimitedConditionFor("")
+}
+
+func opsUpstreamLimitedConditionFor(alias string) string {
+	effectiveStatus := opsEffectiveStatusExprFor(alias)
+	textExpr := "LOWER(COALESCE(" + opsColumn(alias, "error_message") + ",'') || ' ' || COALESCE(" + opsColumn(alias, "upstream_error_message") + ",'') || ' ' || COALESCE(" + opsColumn(alias, "upstream_error_detail") + ",''))"
+	return opsColumn(alias, "error_owner") + " = 'provider' AND NOT COALESCE(" + opsColumn(alias, "is_business_limited") + ",false) AND (" + effectiveStatus + " = 429 OR (" + effectiveStatus + " < 500 AND (" + textExpr + " LIKE '%insufficient balance%' OR " + textExpr + " LIKE '%quota%' OR " + textExpr + " LIKE '%usage limit%' OR " + textExpr + " LIKE '%subscription%' OR " + textExpr + " LIKE '%额度%' OR " + textExpr + " LIKE '%余额%')))"
 }
 
 func opsUpstreamErrorCondition() string {
-	return "error_owner = 'provider' AND NOT COALESCE(is_business_limited,false) AND NOT (" + opsUpstreamLimitedCondition() + ")"
+	return opsUpstreamErrorConditionFor("")
+}
+
+func opsUpstreamErrorConditionFor(alias string) string {
+	return opsColumn(alias, "error_owner") + " = 'provider' AND NOT COALESCE(" + opsColumn(alias, "is_business_limited") + ",false) AND NOT (" + opsUpstreamLimitedConditionFor(alias) + ")"
 }
 
 func opsPlatformErrorCondition() string {
-	return "error_owner = 'platform' AND NOT COALESCE(is_business_limited,false)"
+	return opsPlatformErrorConditionFor("")
+}
+
+func opsPlatformErrorConditionFor(alias string) string {
+	return opsColumn(alias, "error_owner") + " = 'platform' AND NOT COALESCE(" + opsColumn(alias, "is_business_limited") + ",false)"
 }
 
 func opsClientErrorCondition() string {
-	return "error_owner = 'client' AND NOT COALESCE(is_business_limited,false)"
+	return opsClientErrorConditionFor("")
+}
+
+func opsClientErrorConditionFor(alias string) string {
+	return opsColumn(alias, "error_owner") + " = 'client' AND NOT COALESCE(" + opsColumn(alias, "is_business_limited") + ",false)"
 }
 
 func opsPlatformSLAErrorCondition() string {
-	return "COALESCE(status_code, 0) >= 400 AND (" + opsPlatformErrorCondition() + " OR " + opsUpstreamErrorCondition() + ")"
+	return opsPlatformSLAErrorConditionFor("")
+}
+
+func opsPlatformSLAErrorConditionFor(alias string) string {
+	return "COALESCE(" + opsColumn(alias, "status_code") + ", 0) >= 400 AND (" + opsPlatformErrorConditionFor(alias) + " OR " + opsUpstreamErrorConditionFor(alias) + ")"
 }
 
 func opsErrorCategoryCaseExpr() string {

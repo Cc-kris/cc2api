@@ -51,7 +51,7 @@ const rangeLabel = computed(() => {
 })
 
 function buildTimeParams(): Pick<OpsRequestDetailsParams, 'start_time' | 'end_time'> {
-  if (props.timeRange === 'custom' && props.customStartTime && props.customEndTime) {
+  if (props.customStartTime && props.customEndTime) {
     return {
       start_time: props.customStartTime,
       end_time: props.customEndTime

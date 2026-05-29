@@ -21,7 +21,7 @@ func TestListErrorLogs_PlatformSLADetailsScansRows(t *testing.T) {
 	createdAt := start.Add(10 * time.Minute)
 	impactSLA := true
 
-	mock.ExpectQuery(`(?s)SELECT COUNT\(\*\) FROM ops_error_logs e .*COALESCE\(status_code, 0\) >= 400 AND \(error_owner = 'platform'.*error_owner = 'provider'`).
+	mock.ExpectQuery(`(?s)SELECT COUNT\(\*\) FROM ops_error_logs e .*COALESCE\(e\.status_code, 0\) >= 400 AND \(e\.error_owner = 'platform'.*e\.error_owner = 'provider'`).
 		WithArgs(start, end).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
@@ -36,7 +36,7 @@ func TestListErrorLogs_PlatformSLADetailsScansRows(t *testing.T) {
 		int64(11), "user@example.com", int64(22), int64(42), "上游账号A", int64(33), "默认分组", "127.0.0.1", "/v1/chat/completions", true,
 		"/v1/chat/completions", "/v1/responses", "gpt-5.4", "gpt-5.4-upstream", int64(2),
 	)
-	mock.ExpectQuery(`(?s)SELECT\s+e\.id,.*e\.api_key_id.*e\.account_id.*COALESCE\(a\.name, ''\).*e\.group_id.*COALESCE\(g\.name, ''\).*COALESCE\(e\.inbound_endpoint, ''\).*COALESCE\(e\.upstream_endpoint, ''\).*COALESCE\(e\.requested_model, ''\).*COALESCE\(e\.upstream_model, ''\).*e\.request_type.*FROM ops_error_logs e .*COALESCE\(status_code, 0\) >= 400 AND \(error_owner = 'platform'.*error_owner = 'provider'`).
+	mock.ExpectQuery(`(?s)SELECT\s+e\.id,.*e\.api_key_id.*e\.account_id.*COALESCE\(a\.name, ''\).*e\.group_id.*COALESCE\(g\.name, ''\).*COALESCE\(e\.inbound_endpoint, ''\).*COALESCE\(e\.upstream_endpoint, ''\).*COALESCE\(e\.requested_model, ''\).*COALESCE\(e\.upstream_model, ''\).*e\.request_type.*FROM ops_error_logs e .*COALESCE\(e\.status_code, 0\) >= 400 AND \(e\.error_owner = 'platform'.*e\.error_owner = 'provider'`).
 		WithArgs(start, end, 10, 0).
 		WillReturnRows(rows)
 

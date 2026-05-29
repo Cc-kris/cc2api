@@ -116,8 +116,8 @@
           :time-range="timeRange"
           :platform="platform"
           :group-id="groupId"
-          :custom-start-time="customStartTime"
-          :custom-end-time="customEndTime"
+          :custom-start-time="detailStartTime"
+          :custom-end-time="detailEndTime"
           :error-type="errorDetailsType"
           :preset="errorDetailsPreset"
           @update:show="showErrorDetails = $event"
@@ -132,8 +132,8 @@
           :preset="requestDetailsPreset"
           :platform="platform"
           :group-id="groupId"
-          :custom-start-time="customStartTime"
-          :custom-end-time="customEndTime"
+          :custom-start-time="detailStartTime"
+          :custom-end-time="detailEndTime"
           @openErrorDetail="openError"
         />
       </template>
@@ -350,6 +350,8 @@ const syncQueryToRoute = useDebounceFn(async () => {
 }, 250)
 
 const overview = ref<OpsDashboardOverview | null>(null)
+const detailStartTime = computed(() => timeRange.value === 'custom' ? customStartTime.value : overview.value?.start_time ?? null)
+const detailEndTime = computed(() => timeRange.value === 'custom' ? customEndTime.value : overview.value?.end_time ?? null)
 const metricThresholds = ref<OpsMetricThresholds | null>(null)
 
 const throughputTrend = ref<OpsThroughputTrendResponse | null>(null)

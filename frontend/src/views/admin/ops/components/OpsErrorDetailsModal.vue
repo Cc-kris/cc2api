@@ -110,7 +110,7 @@ async function fetchErrorLogs() {
       view: viewMode.value
     }
 
-    if (props.timeRange === 'custom' && props.customStartTime && props.customEndTime) {
+    if (props.customStartTime && props.customEndTime) {
       params.start_time = props.customStartTime
       params.end_time = props.customEndTime
     } else {

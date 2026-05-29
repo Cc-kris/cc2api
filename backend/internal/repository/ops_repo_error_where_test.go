@@ -52,16 +52,19 @@ func TestBuildOpsErrorLogsWhere_SemanticFiltersDoNotAddGenericClientStatus(t *te
 	if strings.Contains(where, "COALESCE(e.status_code, 0) >= 400") {
 		t.Fatalf("category drill-down should not add generic client status filter: %s", where)
 	}
-	if !strings.Contains(where, "error_owner = 'provider'") {
+	if !strings.Contains(where, "e.error_owner = 'provider'") {
 		t.Fatalf("upstream category condition missing: %s", where)
+	}
+	if strings.Contains(where, " COALESCE(error_message") || strings.Contains(where, " error_owner =") {
+		t.Fatalf("semantic drill-down condition should qualify ops_error_logs columns: %s", where)
 	}
 
 	impact := true
 	where, _ = buildOpsErrorLogsWhere(&service.OpsErrorLogFilter{ImpactPlatformSLA: &impact, View: "all"})
-	if strings.Contains(where, "COALESCE(e.status_code, 0) >= 400 AND COALESCE(status_code, 0) >= 400") {
+	if strings.Count(where, "COALESCE(e.status_code, 0) >= 400") > 1 {
 		t.Fatalf("SLA drill-down should not duplicate generic client status filter: %s", where)
 	}
-	if !strings.Contains(where, "COALESCE(status_code, 0) >= 400") {
+	if !strings.Contains(where, "COALESCE(e.status_code, 0) >= 400") {
 		t.Fatalf("SLA condition should still enforce client-visible status: %s", where)
 	}
 }

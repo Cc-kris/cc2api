@@ -896,7 +896,7 @@ func buildOpsErrorLogsWhere(filter *service.OpsErrorLogFilter) (string, []any) {
 			}
 		}
 		if filter.ImpactPlatformSLA != nil {
-			condition := opsPlatformSLAErrorCondition()
+			condition := opsPlatformSLAErrorConditionFor("e")
 			if *filter.ImpactPlatformSLA {
 				clauses = append(clauses, condition)
 			} else {
@@ -905,13 +905,13 @@ func buildOpsErrorLogsWhere(filter *service.OpsErrorLogFilter) (string, []any) {
 		}
 		switch categoryFilter {
 		case "client_error":
-			clauses = append(clauses, opsClientErrorCondition())
+			clauses = append(clauses, opsClientErrorConditionFor("e"))
 		case "platform_error":
-			clauses = append(clauses, opsPlatformErrorCondition())
+			clauses = append(clauses, opsPlatformErrorConditionFor("e"))
 		case "upstream_error":
-			clauses = append(clauses, opsUpstreamErrorCondition())
+			clauses = append(clauses, opsUpstreamErrorConditionFor("e"))
 		case "upstream_limited":
-			clauses = append(clauses, opsUpstreamLimitedCondition())
+			clauses = append(clauses, opsUpstreamLimitedConditionFor("e"))
 		case "business_limited":
 			clauses = append(clauses, "COALESCE(e.is_business_limited,false) = true")
 		}
