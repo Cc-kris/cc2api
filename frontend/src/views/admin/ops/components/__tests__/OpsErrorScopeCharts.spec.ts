@@ -105,7 +105,7 @@ const EmptyStateStub = defineComponent({
 })
 
 const SelectStub = defineComponent({
-  name: 'Select',
+  name: 'SelectStub',
   props: {
     modelValue: { type: [String, Number, Boolean, null], default: null },
     options: { type: Array, default: () => [] },
