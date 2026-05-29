@@ -95,6 +95,25 @@ func wrapOpenAIWSFallback(reason string, err error) error {
 	return &openAIWSFallbackError{Reason: strings.TrimSpace(reason), Err: err}
 }
 
+// IsOpenAIWSHTTPFallbackSafe reports whether an ingress WS failure happened
+// before downstream data was produced and can be retried through HTTP.
+func IsOpenAIWSHTTPFallbackSafe(err error) bool {
+	if err == nil {
+		return false
+	}
+	var fallbackErr *openAIWSFallbackError
+	if !errors.As(err, &fallbackErr) || fallbackErr == nil {
+		return false
+	}
+	reason := strings.TrimPrefix(strings.TrimSpace(fallbackErr.Reason), "prewarm_")
+	switch reason {
+	case "upgrade_required", "ws_unsupported", "dial_failed", "upstream_4xx", "upstream_5xx", "acquire_conn", "acquire_timeout":
+		return true
+	default:
+		return false
+	}
+}
+
 // OpenAIWSClientCloseError 表示应以指定 WebSocket close code 主动关闭客户端连接的错误。
 type OpenAIWSClientCloseError struct {
 	statusCode coderws.StatusCode

@@ -68,3 +68,29 @@ func TestBuildOpsErrorLogsWhere_SemanticFiltersDoNotAddGenericClientStatus(t *te
 		t.Fatalf("SLA condition should still enforce client-visible status: %s", where)
 	}
 }
+
+func TestOpsErrorReasonCaseExprForUsesQualifiedColumns(t *testing.T) {
+	expr := opsErrorReasonCaseExprFor("e")
+	for _, want := range []string{
+		"e.error_message",
+		"e.upstream_error_message",
+		"e.upstream_error_detail",
+		"e.error_owner",
+		"e.error_phase",
+		"e.is_business_limited",
+	} {
+		if !strings.Contains(expr, want) {
+			t.Fatalf("reason expression should include %s: %s", want, expr)
+		}
+	}
+	for _, bad := range []string{
+		"COALESCE(error_message",
+		" COALESCE(is_business_limited",
+		" WHEN error_owner",
+		" AND error_phase",
+	} {
+		if strings.Contains(expr, bad) {
+			t.Fatalf("reason expression should not contain unqualified %q: %s", bad, expr)
+		}
+	}
+}

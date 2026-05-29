@@ -160,6 +160,47 @@ func TestResolveOpenAIWSFallbackErrorResponse(t *testing.T) {
 	})
 }
 
+func TestResolveOpenAIWSFallbackErrorResponse_AllowsHTTPFallbackForUnsupportedWS(t *testing.T) {
+	for _, reason := range []string{"upgrade_required", "ws_unsupported", "dial_failed", "upstream_4xx"} {
+		t.Run(reason, func(t *testing.T) {
+			_, _, _, _, ok := resolveOpenAIWSFallbackErrorResponse(wrapOpenAIWSFallback(reason, errors.New(reason)))
+			require.False(t, ok)
+		})
+	}
+}
+
+func TestIsOpenAIWSHTTPFallbackSafe(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "nil", err: nil, want: false},
+		{name: "plain", err: errors.New("plain"), want: false},
+		{name: "upgrade_required", err: wrapOpenAIWSFallback("upgrade_required", errors.New("426")), want: true},
+		{name: "prewarm_upstream_4xx", err: wrapOpenAIWSFallback("prewarm_upstream_4xx", errors.New("404")), want: true},
+		{name: "auth_failed", err: wrapOpenAIWSFallback("auth_failed", errors.New("401")), want: false},
+		{name: "policy_violation", err: wrapOpenAIWSFallback("policy_violation", errors.New("policy")), want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, IsOpenAIWSHTTPFallbackSafe(tt.err))
+		})
+	}
+}
+
+func TestOpenAIHTTPStreamRetryOnce(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	err := &UpstreamFailoverError{StatusCode: http.StatusBadGateway, RetryableOnSameAccount: true}
+	require.True(t, svc.shouldRetryOpenAIHTTPStreamFailover(7, err))
+	require.False(t, svc.shouldRetryOpenAIHTTPStreamFailover(7, err), "same account should only retry once until cleared")
+	svc.clearOpenAIHTTPStreamRetry(7)
+	require.True(t, svc.shouldRetryOpenAIHTTPStreamFailover(7, err))
+	require.False(t, svc.shouldRetryOpenAIHTTPStreamFailover(8, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, RetryableOnSameAccount: true}))
+	require.False(t, svc.shouldRetryOpenAIHTTPStreamFailover(8, &UpstreamFailoverError{StatusCode: http.StatusBadGateway, RetryableOnSameAccount: false}))
+	require.False(t, svc.shouldRetryOpenAIHTTPStreamFailover(8, errors.New("plain")))
+}
+
 func TestOpenAIWSFallbackCooling(t *testing.T) {
 	svc := &OpenAIGatewayService{cfg: &config.Config{}}
 	svc.cfg.Gateway.OpenAIWS.FallbackCooldownSeconds = 1

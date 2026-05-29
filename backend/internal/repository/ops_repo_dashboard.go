@@ -251,21 +251,27 @@ func opsErrorCategoryCaseExpr() string {
 }
 
 func opsErrorReasonCaseExpr() string {
-	effectiveStatus := opsEffectiveStatusExpr()
-	textExpr := "LOWER(COALESCE(error_message,'') || ' ' || COALESCE(upstream_error_message,'') || ' ' || COALESCE(upstream_error_detail,''))"
+	return opsErrorReasonCaseExprFor("")
+}
+
+func opsErrorReasonCaseExprFor(alias string) string {
+	effectiveStatus := opsEffectiveStatusExprFor(alias)
+	textExpr := "LOWER(COALESCE(" + opsColumn(alias, "error_message") + ",'') || ' ' || COALESCE(" + opsColumn(alias, "upstream_error_message") + ",'') || ' ' || COALESCE(" + opsColumn(alias, "upstream_error_detail") + ",''))"
+	errorOwner := opsColumn(alias, "error_owner")
+	errorPhase := opsColumn(alias, "error_phase")
 	return "CASE" +
-		" WHEN COALESCE(is_business_limited,false) AND (" + textExpr + " LIKE '%balance%' OR " + textExpr + " LIKE '%余额%') THEN 'balance_insufficient'" +
-		" WHEN COALESCE(is_business_limited,false) AND (" + textExpr + " LIKE '%subscription%') THEN 'subscription_invalid'" +
-		" WHEN COALESCE(is_business_limited,false) THEN 'business_limited'" +
-		" WHEN " + opsUpstreamLimitedCondition() + " AND " + effectiveStatus + " = 429 THEN 'upstream_rate_limited'" +
-		" WHEN " + opsUpstreamLimitedCondition() + " THEN 'upstream_resource_limited'" +
-		" WHEN error_owner = 'provider' AND " + effectiveStatus + " = 529 THEN 'upstream_overloaded'" +
-		" WHEN error_owner = 'provider' AND " + textExpr + " LIKE '%timeout%' THEN 'upstream_timeout'" +
-		" WHEN error_owner = 'provider' THEN 'upstream_error'" +
-		" WHEN error_owner = 'platform' AND error_phase = 'routing' THEN 'routing_failed'" +
-		" WHEN error_owner = 'platform' THEN 'platform_error'" +
-		" WHEN error_owner = 'client' AND error_phase = 'auth' THEN 'client_auth_error'" +
-		" WHEN error_owner = 'client' THEN 'client_request_error'" +
+		" WHEN COALESCE(" + opsColumn(alias, "is_business_limited") + ",false) AND (" + textExpr + " LIKE '%balance%' OR " + textExpr + " LIKE '%余额%') THEN 'balance_insufficient'" +
+		" WHEN COALESCE(" + opsColumn(alias, "is_business_limited") + ",false) AND (" + textExpr + " LIKE '%subscription%') THEN 'subscription_invalid'" +
+		" WHEN COALESCE(" + opsColumn(alias, "is_business_limited") + ",false) THEN 'business_limited'" +
+		" WHEN " + opsUpstreamLimitedConditionFor(alias) + " AND " + effectiveStatus + " = 429 THEN 'upstream_rate_limited'" +
+		" WHEN " + opsUpstreamLimitedConditionFor(alias) + " THEN 'upstream_resource_limited'" +
+		" WHEN " + errorOwner + " = 'provider' AND " + effectiveStatus + " = 529 THEN 'upstream_overloaded'" +
+		" WHEN " + errorOwner + " = 'provider' AND " + textExpr + " LIKE '%timeout%' THEN 'upstream_timeout'" +
+		" WHEN " + errorOwner + " = 'provider' THEN 'upstream_error'" +
+		" WHEN " + errorOwner + " = 'platform' AND " + errorPhase + " = 'routing' THEN 'routing_failed'" +
+		" WHEN " + errorOwner + " = 'platform' THEN 'platform_error'" +
+		" WHEN " + errorOwner + " = 'client' AND " + errorPhase + " = 'auth' THEN 'client_auth_error'" +
+		" WHEN " + errorOwner + " = 'client' THEN 'client_request_error'" +
 		" ELSE 'other' END"
 }
 

@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,6 +26,54 @@ import (
 	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
 )
+
+type openAIHTTPFallbackRecorder struct {
+	code int
+	head http.Header
+	body bytes.Buffer
+}
+
+func newOpenAIHTTPFallbackRecorder() *openAIHTTPFallbackRecorder {
+	return &openAIHTTPFallbackRecorder{
+		head: make(http.Header),
+	}
+}
+
+func (r *openAIHTTPFallbackRecorder) Header() http.Header {
+	if r.head == nil {
+		r.head = make(http.Header)
+	}
+	return r.head
+}
+
+func (r *openAIHTTPFallbackRecorder) WriteHeader(code int) {
+	if r.code == 0 {
+		r.code = code
+	}
+}
+
+func (r *openAIHTTPFallbackRecorder) Write(p []byte) (int, error) {
+	if r.code == 0 {
+		r.code = http.StatusOK
+	}
+	return r.body.Write(p)
+}
+
+func (r *openAIHTTPFallbackRecorder) Code() int {
+	if r == nil || r.code == 0 {
+		return http.StatusOK
+	}
+	return r.code
+}
+
+func (r *openAIHTTPFallbackRecorder) BodyBytes() []byte {
+	if r == nil {
+		return nil
+	}
+	return r.body.Bytes()
+}
+
+func (r *openAIHTTPFallbackRecorder) Flush() {}
 
 // OpenAIGatewayHandler handles OpenAI API gateway requests
 type OpenAIGatewayHandler struct {
@@ -1435,10 +1485,135 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			closeOpenAIClientWS(wsConn, closeErr.StatusCode(), closeErr.Reason())
 			return
 		}
+		if service.IsOpenAIWSHTTPFallbackSafe(err) && h.tryFallbackOpenAIWebSocketIngressToHTTP(c, wsConn, reqLog, apiKey, account, wsFirstMessage, channelMappingWS) {
+			return
+		}
 		closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "upstream websocket proxy failed")
 		return
 	}
 	reqLog.Info("openai.websocket_ingress_closed", zap.Int64("account_id", account.ID))
+}
+
+func (h *OpenAIGatewayHandler) tryFallbackOpenAIWebSocketIngressToHTTP(
+	c *gin.Context,
+	wsConn *coderws.Conn,
+	reqLog *zap.Logger,
+	apiKey *service.APIKey,
+	account *service.Account,
+	body []byte,
+	channelMappingWS service.ChannelMappingResult,
+) bool {
+	if h == nil || h.gatewayService == nil || c == nil || wsConn == nil || account == nil {
+		return false
+	}
+	body = bytes.TrimSpace(body)
+	if len(body) == 0 || !gjson.ValidBytes(body) {
+		return false
+	}
+	if strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String()) != "" {
+		return false
+	}
+
+	fallbackRecorder := newOpenAIHTTPFallbackRecorder()
+	fallbackCtx, _ := gin.CreateTestContext(fallbackRecorder)
+	fallbackCtx.Request = c.Request.Clone(c.Request.Context())
+	fallbackCtx.Request.Body = nil
+	for key, value := range c.Keys {
+		if key == service.OpenAIParsedRequestBodyKey {
+			continue
+		}
+		fallbackCtx.Set(key, value)
+	}
+	setOpenAIClientTransportHTTP(fallbackCtx)
+	result, err := h.gatewayService.Forward(fallbackCtx.Request.Context(), fallbackCtx, account, body)
+	if err != nil {
+		if reqLog != nil {
+			reqLog.Warn("openai.websocket_http_fallback_failed", zap.Int64("account_id", account.ID), zap.Error(err))
+		}
+		return false
+	}
+	if result == nil {
+		return false
+	}
+	if !writeOpenAIHTTPFallbackBodyToWS(c.Request.Context(), wsConn, fallbackRecorder) {
+		return false
+	}
+	if reqLog != nil {
+		reqLog.Info("openai.websocket_http_fallback_succeeded",
+			zap.Int64("account_id", account.ID),
+			zap.String("request_id", result.RequestID),
+		)
+	}
+	h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, result.FirstTokenMs)
+	if apiKey != nil {
+		inboundEndpoint := GetInboundEndpoint(c)
+		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
+		h.submitOpenAIUsageRecordTask(result, func(taskCtx context.Context) {
+			if err := h.gatewayService.RecordUsage(taskCtx, &service.OpenAIRecordUsageInput{
+				Result:             result,
+				APIKey:             apiKey,
+				User:               apiKey.User,
+				Account:            account,
+				InboundEndpoint:    inboundEndpoint,
+				UpstreamEndpoint:   upstreamEndpoint,
+				UserAgent:          strings.TrimSpace(c.GetHeader("User-Agent")),
+				IPAddress:          ip.GetClientIP(c),
+				RequestPayloadHash: service.HashUsageRequestPayload(body),
+				APIKeyService:      h.apiKeyService,
+				ChannelUsageFields: channelMappingWS.ToUsageFields(gjson.GetBytes(body, "model").String(), result.UpstreamModel),
+			}); err != nil && reqLog != nil {
+				reqLog.Error("openai.websocket_http_fallback_record_usage_failed", zap.Int64("account_id", account.ID), zap.Error(err))
+			}
+		})
+	}
+	closeOpenAIClientWS(wsConn, coderws.StatusNormalClosure, "fallback to http completed")
+	return true
+}
+
+func writeOpenAIHTTPFallbackBodyToWS(ctx context.Context, wsConn *coderws.Conn, recorder *openAIHTTPFallbackRecorder) bool {
+	if wsConn == nil || recorder == nil {
+		return false
+	}
+	body := recorder.BodyBytes()
+	if recorder.Code() >= 400 {
+		msg := strings.TrimSpace(gjson.GetBytes(body, "error.message").String())
+		if msg == "" {
+			msg = http.StatusText(recorder.Code())
+		}
+		payload := fmt.Sprintf(`{"type":"response.failed","error":{"type":"upstream_error","message":%q}}`, msg)
+		return wsConn.Write(ctx, coderws.MessageText, []byte(payload)) == nil
+	}
+	contentType := strings.ToLower(recorder.Header().Get("Content-Type"))
+	if strings.Contains(contentType, "text/event-stream") || bytes.Contains(body, []byte("data:")) {
+		scanner := bufio.NewScanner(bytes.NewReader(body))
+		buf := make([]byte, 0, 64*1024)
+		scanner.Buffer(buf, 16*1024*1024)
+		wrote := false
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if !strings.HasPrefix(line, "data:") {
+				continue
+			}
+			payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			if payload == "" || payload == "[DONE]" {
+				continue
+			}
+			if err := wsConn.Write(ctx, coderws.MessageText, []byte(payload)); err != nil {
+				return false
+			}
+			wrote = true
+		}
+		return wrote && scanner.Err() == nil
+	}
+	trimmedBody := bytes.TrimSpace(body)
+	if len(trimmedBody) == 0 || !gjson.ValidBytes(trimmedBody) {
+		return false
+	}
+	if eventType := strings.TrimSpace(gjson.GetBytes(trimmedBody, "type").String()); strings.HasPrefix(eventType, "response.") {
+		return wsConn.Write(ctx, coderws.MessageText, trimmedBody) == nil
+	}
+	payload := []byte(`{"type":"response.completed","response":` + string(trimmedBody) + `}`)
+	return wsConn.Write(ctx, coderws.MessageText, payload) == nil
 }
 
 func (h *OpenAIGatewayHandler) recoverResponsesPanic(c *gin.Context, streamStarted *bool) {

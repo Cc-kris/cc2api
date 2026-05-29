@@ -356,6 +356,7 @@ type OpenAIGatewayService struct {
 	openaiAccountStats            *openAIAccountRuntimeStats
 
 	openaiWSFallbackUntil               sync.Map // key: int64(accountID), value: time.Time
+	openaiHTTPRetryOnce                 sync.Map // key: int64(accountID), value: struct{}; prevents recursive stream reconnect retry
 	openaiAccountRuntimeBlockUntil      sync.Map // key: int64(accountID), value: time.Time
 	openaiOAuth429WindowStartUnixNano   atomic.Int64
 	openaiOAuth429WindowCount           atomic.Int64
@@ -679,14 +680,8 @@ func resolveOpenAIWSFallbackErrorResponse(err error) (statusCode int, errType st
 		if upstreamMessage == "" {
 			upstreamMessage = "previous response not found"
 		}
-	case "upgrade_required":
-		if statusCode == 0 {
-			statusCode = http.StatusUpgradeRequired
-		}
-	case "ws_unsupported":
-		if statusCode == 0 {
-			statusCode = http.StatusBadRequest
-		}
+	case "upgrade_required", "ws_unsupported", "dial_failed", "upstream_4xx":
+		return 0, "", "", "", false
 	case "auth_failed":
 		if statusCode == 0 {
 			statusCode = http.StatusUnauthorized
@@ -2067,6 +2062,28 @@ func (s *OpenAIGatewayService) shouldFailoverOpenAIUpstreamResponse(statusCode i
 	return isOpenAITransientProcessingError(statusCode, upstreamMsg, upstreamBody)
 }
 
+func (s *OpenAIGatewayService) shouldRetryOpenAIHTTPStreamFailover(accountID int64, err error) bool {
+	if s == nil || accountID <= 0 || err == nil {
+		return false
+	}
+	var failoverErr *UpstreamFailoverError
+	if !errors.As(err, &failoverErr) || failoverErr == nil || !failoverErr.RetryableOnSameAccount {
+		return false
+	}
+	if failoverErr.StatusCode != 0 && failoverErr.StatusCode != http.StatusBadGateway {
+		return false
+	}
+	_, loaded := s.openaiHTTPRetryOnce.LoadOrStore(accountID, struct{}{})
+	return !loaded
+}
+
+func (s *OpenAIGatewayService) clearOpenAIHTTPStreamRetry(accountID int64) {
+	if s == nil || accountID <= 0 {
+		return
+	}
+	s.openaiHTTPRetryOnce.Delete(accountID)
+}
+
 func (s *OpenAIGatewayService) handleFailoverSideEffects(ctx context.Context, resp *http.Response, account *Account) {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body)
@@ -2764,8 +2781,18 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			}
 			return wsResult, nil
 		}
-		s.writeOpenAIWSFallbackErrorResponse(c, account, wsErr)
-		return nil, wsErr
+		if s.writeOpenAIWSFallbackErrorResponse(c, account, wsErr) {
+			return nil, wsErr
+		}
+		if c == nil || c.Writer == nil || c.Writer.Written() || !IsOpenAIWSHTTPFallbackSafe(wsErr) {
+			return nil, wsErr
+		}
+		s.markOpenAIWSFallbackCooling(account.ID, wsLastFailureReason)
+		logOpenAIWSModeInfo(
+			"fallback_to_http account_id=%d reason=%s",
+			account.ID,
+			normalizeOpenAIWSLogValue(wsLastFailureReason),
+		)
 	}
 
 	httpInvalidEncryptedContentRetryTried := false
@@ -2873,8 +2900,14 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if reqStream {
 			streamResult, err := s.handleStreamingResponse(ctx, resp, c, account, startTime, originalModel, upstreamModel)
 			if err != nil {
+				if s.shouldRetryOpenAIHTTPStreamFailover(account.ID, err) {
+					logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying HTTP stream once after upstream disconnect before client output (account: %s)", account.Name)
+					continue
+				}
+				s.clearOpenAIHTTPStreamRetry(account.ID)
 				return nil, err
 			}
+			s.clearOpenAIHTTPStreamRetry(account.ID)
 			usage = streamResult.usage
 			firstTokenMs = streamResult.firstTokenMs
 			imageCount = streamResult.imageCount
@@ -3583,8 +3616,9 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
 		},
 	})
 	return &UpstreamFailoverError{
-		StatusCode:   http.StatusBadGateway,
-		ResponseBody: body,
+		StatusCode:             http.StatusBadGateway,
+		ResponseBody:           body,
+		RetryableOnSameAccount: account != nil && account.IsPoolMode(),
 	}
 }
 

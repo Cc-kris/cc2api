@@ -62,6 +62,66 @@ func (u *httpUpstreamSequenceRecorder) DoWithTLS(req *http.Request, proxyURL str
 	return u.Do(req, proxyURL, accountID, accountConcurrency)
 }
 
+func TestOpenAIGatewayService_Forward_HTTPStreamReadErrorRetriesOnceSameAccount(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
+	c.Request.Header.Set("User-Agent", "custom-client/1.0")
+
+	upstream := &httpUpstreamRecorder{
+		responses: []*http.Response{
+			{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body:       &streamReadCloser{err: io.ErrUnexpectedEOF},
+			},
+			{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body: io.NopCloser(strings.NewReader(
+					"data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n" +
+						"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_retry\",\"usage\":{\"input_tokens\":2,\"output_tokens\":1}}}\n\n" +
+						"data: [DONE]\n\n",
+				)),
+			},
+		},
+	}
+
+	cfg := &config.Config{}
+	cfg.Security.URLAllowlist.Enabled = false
+	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
+	cfg.Gateway.OpenAIWS.Enabled = false
+
+	svc := &OpenAIGatewayService{
+		cfg:              cfg,
+		httpUpstream:     upstream,
+		openaiWSResolver: NewOpenAIWSProtocolResolver(cfg),
+		toolCorrector:    NewCodexToolCorrector(),
+	}
+
+	account := &Account{
+		ID:          9801,
+		Name:        "openai-apikey-pool",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"api_key":   "sk-test",
+			"base_url":  "https://api.openai.com/v1/responses",
+			"pool_mode": true,
+		},
+	}
+
+	body := []byte(`{"model":"gpt-5.3-codex","stream":true,"input":[{"type":"input_text","text":"hello"}]}`)
+	result, err := svc.Forward(context.Background(), c, account, body)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, upstream.requests, 2)
+	require.Contains(t, rec.Body.String(), "response.completed")
+}
+
 func TestOpenAIGatewayService_Forward_PreservePreviousResponseIDWhenWSEnabled(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	wsFallbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -115,9 +175,10 @@ func TestOpenAIGatewayService_Forward_PreservePreviousResponseIDWhenWSEnabled(t 
 
 	body := []byte(`{"model":"gpt-5.1","stream":false,"previous_response_id":"resp_123","input":[{"type":"input_text","text":"hello"}]}`)
 	result, err := svc.Forward(context.Background(), c, account, body)
-	require.Error(t, err)
-	require.Nil(t, result)
-	require.Nil(t, upstream.lastReq, "WS 模式下失败时不应回退 HTTP")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, upstream.lastReq, "上游 WS 不支持时应回退 HTTP")
+	require.True(t, gjson.GetBytes(upstream.lastBody, "previous_response_id").Exists())
 }
 
 func TestOpenAIGatewayService_Forward_HTTPIngressStaysHTTPWhenWSEnabled(t *testing.T) {
@@ -467,12 +528,11 @@ func TestOpenAIGatewayService_Forward_WSv2Dial426FallbackHTTP(t *testing.T) {
 
 	body := []byte(`{"model":"gpt-5.1","stream":false,"previous_response_id":"resp_426","input":[{"type":"input_text","text":"hello"}]}`)
 	result, err := svc.Forward(context.Background(), c, account, body)
-	require.Error(t, err)
-	require.Nil(t, result)
-	require.Contains(t, err.Error(), "upgrade_required")
-	require.Nil(t, upstream.lastReq, "WS 模式下不应再回退 HTTP")
-	require.Equal(t, http.StatusUpgradeRequired, rec.Code)
-	require.Contains(t, rec.Body.String(), "426")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, upstream.lastReq, "WS 426 时应回退 HTTP")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "usage")
 }
 
 func TestOpenAIGatewayService_Forward_WSv2FallbackCoolingSkipWS(t *testing.T) {
@@ -530,9 +590,9 @@ func TestOpenAIGatewayService_Forward_WSv2FallbackCoolingSkipWS(t *testing.T) {
 	svc.markOpenAIWSFallbackCooling(account.ID, "upgrade_required")
 	body := []byte(`{"model":"gpt-5.1","stream":false,"previous_response_id":"resp_cooling","input":[{"type":"input_text","text":"hello"}]}`)
 	result, err := svc.Forward(context.Background(), c, account, body)
-	require.Error(t, err)
-	require.Nil(t, result)
-	require.Nil(t, upstream.lastReq, "WS 模式下不应再回退 HTTP")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, upstream.lastReq, "冷却标记不应阻止上游不支持时回退 HTTP")
 
 	_, ok := c.Get("openai_ws_fallback_cooling")
 	require.False(t, ok, "已移除 fallback cooling 快捷回退路径")
@@ -858,7 +918,7 @@ func TestOpenAIGatewayService_Forward_WSv2RetryFiveTimesThenFallbackHTTP(t *test
 	result, err := svc.Forward(context.Background(), c, account, body)
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Nil(t, upstream.lastReq, "WS 重连耗尽后不应再回退 HTTP")
+	require.Nil(t, upstream.lastReq, "WS 读失败仍不应回退 HTTP")
 	require.Equal(t, int32(openAIWSReconnectRetryLimit+1), wsAttempts.Load())
 }
 
