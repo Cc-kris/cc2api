@@ -194,7 +194,7 @@ const kindBadgeClass = (kind: string) => {
 <template>
   <BaseDialog :show="modelValue" :title="props.preset.title || t('admin.ops.requestDetails.title')" width="full" @close="close">
     <template #default>
-      <div class="flex h-full min-h-0 flex-col">
+      <div class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
         <div class="mb-4 flex flex-shrink-0 items-center justify-between">
           <div class="text-xs text-gray-500 dark:text-gray-400">
             {{ t('admin.ops.requestDetails.rangeLabel', { range: rangeLabel }) }}
@@ -224,15 +224,15 @@ const kindBadgeClass = (kind: string) => {
         </div>
 
         <!-- Table -->
-        <div v-else class="flex min-h-0 flex-1 flex-col">
+        <div v-else class="flex min-h-0 min-w-0 flex-1 flex-col">
           <div v-if="items.length === 0" class="rounded-xl border border-dashed border-gray-200 p-10 text-center dark:border-dark-700">
             <div class="text-sm font-medium text-gray-600 dark:text-gray-300">{{ t('admin.ops.requestDetails.empty') }}</div>
             <div class="mt-1 text-xs text-gray-400">{{ t('admin.ops.requestDetails.emptyHint') }}</div>
           </div>
 
-          <div v-else class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700">
-            <div class="min-h-0 flex-1 overflow-auto">
-              <table class="min-w-[1520px] divide-y divide-gray-200 dark:divide-dark-700">
+          <div v-else class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700">
+            <div class="min-h-0 min-w-0 flex-1 overflow-auto">
+              <table class="min-w-[2200px] divide-y divide-gray-200 dark:divide-dark-700">
                 <thead class="sticky top-0 z-10 bg-gray-50 dark:bg-dark-900">
                 <tr>
                   <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">

@@ -404,7 +404,7 @@
   .modal-body {
     @apply px-4 py-3;
     @apply sm:px-6 sm:py-4;
-    @apply flex-1 overflow-y-auto;
+    @apply min-h-0 min-w-0 flex-1 overflow-auto;
   }
 
   .modal-footer {

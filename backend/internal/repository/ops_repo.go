@@ -831,8 +831,20 @@ func buildOpsErrorLogsWhere(filter *service.OpsErrorLogFilter) (string, []any) {
 	if filter != nil {
 		resolvedFilter = filter.Resolved
 	}
-	// Keep list endpoints scoped to client errors unless explicitly filtering upstream phase.
-	if phaseFilter != "upstream" {
+	categoryFilter := ""
+	hasImpactPlatformSLAFilter := false
+	hasClientFailedFilter := false
+	if filter != nil {
+		categoryFilter = strings.TrimSpace(strings.ToLower(filter.Category))
+		hasImpactPlatformSLAFilter = filter.ImpactPlatformSLA != nil
+		hasClientFailedFilter = filter.ClientFailed != nil
+	}
+
+	// Keep generic request-error lists scoped to client-visible errors.
+	// Semantic detail filters (SLA/category/client_failed) define their own status scope,
+	// so applying the generic status filter here can make drill-down lists disagree
+	// with the cards that opened them.
+	if phaseFilter != "upstream" && categoryFilter == "" && !hasImpactPlatformSLAFilter && !hasClientFailedFilter {
 		clauses = append(clauses, "COALESCE(e.status_code, 0) >= 400")
 	}
 
@@ -891,7 +903,7 @@ func buildOpsErrorLogsWhere(filter *service.OpsErrorLogFilter) (string, []any) {
 				clauses = append(clauses, "NOT ("+condition+")")
 			}
 		}
-		switch strings.TrimSpace(strings.ToLower(filter.Category)) {
+		switch categoryFilter {
 		case "client_error":
 			clauses = append(clauses, opsClientErrorCondition())
 		case "platform_error":

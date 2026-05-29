@@ -80,7 +80,7 @@
           :loading="loadingErrorTrend"
           :time-range="timeRange"
           @open-request-errors="openErrorDetails('request', { title: t('admin.ops.clientErrors'), category: 'client_error', view: 'all' })"
-          @open-upstream-errors="openErrorDetails('upstream', { title: t('admin.ops.upstreamErrors'), category: 'upstream_error', clientFailed: true, view: 'all' })"
+          @open-upstream-errors="openErrorDetails('upstream', { title: t('admin.ops.upstreamErrors'), category: 'upstream_error', view: 'all' })"
         />
       </div>
 

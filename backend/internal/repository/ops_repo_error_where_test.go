@@ -46,3 +46,22 @@ func TestBuildOpsErrorLogsWhere_UserQueryUsesExistsSubquery(t *testing.T) {
 		t.Fatalf("where should include EXISTS user email condition: %s", where)
 	}
 }
+
+func TestBuildOpsErrorLogsWhere_SemanticFiltersDoNotAddGenericClientStatus(t *testing.T) {
+	where, _ := buildOpsErrorLogsWhere(&service.OpsErrorLogFilter{Category: "upstream_error", View: "all"})
+	if strings.Contains(where, "COALESCE(e.status_code, 0) >= 400") {
+		t.Fatalf("category drill-down should not add generic client status filter: %s", where)
+	}
+	if !strings.Contains(where, "error_owner = 'provider'") {
+		t.Fatalf("upstream category condition missing: %s", where)
+	}
+
+	impact := true
+	where, _ = buildOpsErrorLogsWhere(&service.OpsErrorLogFilter{ImpactPlatformSLA: &impact, View: "all"})
+	if strings.Contains(where, "COALESCE(e.status_code, 0) >= 400 AND COALESCE(status_code, 0) >= 400") {
+		t.Fatalf("SLA drill-down should not duplicate generic client status filter: %s", where)
+	}
+	if !strings.Contains(where, "COALESCE(status_code, 0) >= 400") {
+		t.Fatalf("SLA condition should still enforce client-visible status: %s", where)
+	}
+}

@@ -215,7 +215,7 @@ watch(
 
 <template>
   <BaseDialog :show="show" :title="modalTitle" width="full" @close="close">
-    <div class="flex h-full min-h-0 flex-col">
+    <div class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       <!-- Filters -->
       <div class="mb-4 flex-shrink-0 border-b border-gray-200 pb-4 dark:border-dark-700">
         <div class="grid grid-cols-8 gap-2">
@@ -267,13 +267,13 @@ watch(
       </div>
 
       <!-- Body -->
-      <div class="flex min-h-0 flex-1 flex-col">
+      <div class="flex min-h-0 min-w-0 flex-1 flex-col">
         <div class="mb-2 flex-shrink-0 text-xs text-gray-500 dark:text-gray-400">
           {{ t('admin.ops.errorDetails.total') }} {{ total }}
         </div>
 
           <OpsErrorLogTable
-            class="min-h-0 flex-1"
+            class="min-h-0 min-w-0 flex-1"
             :rows="rows"
             :total="total"
             :loading="loading"

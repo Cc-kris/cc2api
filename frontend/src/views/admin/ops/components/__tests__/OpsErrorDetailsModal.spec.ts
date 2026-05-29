@@ -116,7 +116,6 @@ describe('OpsErrorDetailsModal', () => {
         preset: {
           title: '上游错误',
           category: 'upstream_error',
-          clientFailed: true,
           view: 'all',
         },
       },
@@ -135,9 +134,10 @@ describe('OpsErrorDetailsModal', () => {
     expect(opsAPI.listUpstreamErrors).toHaveBeenCalledWith(expect.objectContaining({
       time_range: '1h',
       category: 'upstream_error',
-      client_failed: '1',
       view: 'all',
     }))
-    expect(vi.mocked(opsAPI.listUpstreamErrors).mock.calls[0][0]).not.toHaveProperty('phase', 'upstream')
+    const params = vi.mocked(opsAPI.listUpstreamErrors).mock.calls[0][0]
+    expect(params).not.toHaveProperty('phase', 'upstream')
+    expect(params).not.toHaveProperty('client_failed', '1')
   })
 })

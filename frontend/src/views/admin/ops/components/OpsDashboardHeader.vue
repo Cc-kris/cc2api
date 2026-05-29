@@ -234,11 +234,11 @@ function openPlatformErrors() {
 }
 
 function openUpstreamErrorsOnly() {
-  openErrorDetails('upstream', { title: t('admin.ops.upstreamErrors'), category: 'upstream_error', clientFailed: true, view: 'all' })
+  openErrorDetails('upstream', { title: t('admin.ops.upstreamErrors'), category: 'upstream_error', view: 'all' })
 }
 
 function openUpstreamLimited() {
-  openErrorDetails('upstream', { title: t('admin.ops.upstreamLimited'), category: 'upstream_limited', clientFailed: true, view: 'all' })
+  openErrorDetails('upstream', { title: t('admin.ops.upstreamLimited'), category: 'upstream_limited', view: 'all' })
 }
 
 // --- Threshold checking helpers ---
