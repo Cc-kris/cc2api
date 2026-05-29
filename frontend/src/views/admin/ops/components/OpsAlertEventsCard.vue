@@ -393,8 +393,8 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
     </div>
 
     <div v-else class="overflow-hidden rounded-xl border border-gray-200 dark:border-dark-700">
-      <div class="max-h-[600px] overflow-y-auto" @scroll="onScroll">
-        <table class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
+      <div class="max-h-[600px] overflow-auto" @scroll="onScroll">
+        <table class="min-w-[1180px] divide-y divide-gray-200 dark:divide-dark-700">
           <thead class="sticky top-0 z-10 bg-gray-50 dark:bg-dark-900">
             <tr>
               <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -613,8 +613,8 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
           <div v-else-if="history.length === 0" class="py-6 text-center text-xs text-gray-500 dark:text-gray-400">
             {{ t('admin.ops.alertEvents.detail.historyEmpty') }}
           </div>
-          <div v-else class="overflow-hidden rounded-lg border border-gray-100 dark:border-dark-700">
-            <table class="min-w-full divide-y divide-gray-100 dark:divide-dark-700">
+          <div v-else class="overflow-auto rounded-lg border border-gray-100 dark:border-dark-700">
+            <table class="min-w-[900px] divide-y divide-gray-100 dark:divide-dark-700">
               <thead class="bg-gray-50 dark:bg-dark-900">
                 <tr>
                   <th class="px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">{{ t('admin.ops.alertEvents.table.time') }}</th>

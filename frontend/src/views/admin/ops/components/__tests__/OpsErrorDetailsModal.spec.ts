@@ -96,4 +96,48 @@ describe('OpsErrorDetailsModal', () => {
     }))
     expect(vi.mocked(opsAPI.listRequestErrors).mock.calls[0][0]).not.toHaveProperty('time_range', 'custom')
   })
+
+  it('上游错误明细默认不按 upstream 阶段过滤', async () => {
+    vi.mocked(opsAPI.listUpstreamErrors).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 10,
+      pages: 1,
+    } as any)
+
+    const wrapper = mount(OpsErrorDetailsModal, {
+      props: {
+        show: false,
+        timeRange: '1h',
+        platform: '',
+        groupId: null,
+        errorType: 'upstream',
+        preset: {
+          title: '上游错误',
+          category: 'upstream_error',
+          clientFailed: true,
+          view: 'all',
+        },
+      },
+      global: {
+        stubs: {
+          BaseDialog: BaseDialogStub,
+          Select: SelectStub,
+          OpsErrorLogTable: OpsErrorLogTableStub,
+        },
+      },
+    })
+
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+
+    expect(opsAPI.listUpstreamErrors).toHaveBeenCalledWith(expect.objectContaining({
+      time_range: '1h',
+      category: 'upstream_error',
+      client_failed: '1',
+      view: 'all',
+    }))
+    expect(vi.mocked(opsAPI.listUpstreamErrors).mock.calls[0][0]).not.toHaveProperty('phase', 'upstream')
+  })
 })

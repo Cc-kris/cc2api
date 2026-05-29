@@ -71,3 +71,16 @@ func TestListErrorLogs_PlatformSLADetailsScansRows(t *testing.T) {
 	require.NotNil(t, item.AccountID)
 	require.Equal(t, int64(42), *item.AccountID)
 }
+
+func TestBuildOpsErrorLogsWhere_ProviderOwnerDoesNotForceUpstreamPhase(t *testing.T) {
+	filter := &service.OpsErrorLogFilter{
+		Owner: "provider",
+		View:  "all",
+	}
+
+	where, args := buildOpsErrorLogsWhere(filter)
+
+	require.Contains(t, where, "LOWER(COALESCE(e.error_owner,'')) = $1")
+	require.NotContains(t, where, "e.error_phase")
+	require.Equal(t, []any{"provider"}, args)
+}

@@ -155,7 +155,7 @@ function resetFilters() {
   const preset = props.preset
   q.value = ''
   statusCode.value = null
-  phase.value = preset?.phase ?? (props.errorType === 'upstream' ? 'upstream' : '')
+  phase.value = preset?.phase ?? ''
   errorOwner.value = preset?.owner ?? ''
   viewMode.value = preset?.view ?? 'errors'
   page.value = 1
