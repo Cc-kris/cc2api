@@ -196,10 +196,6 @@ func opsColumn(alias, name string) string {
 	return alias + "." + name
 }
 
-func opsEffectiveStatusExpr() string {
-	return opsEffectiveStatusExprFor("")
-}
-
 func opsEffectiveStatusExprFor(alias string) string {
 	return "COALESCE(" + opsColumn(alias, "upstream_status_code") + ", " + opsColumn(alias, "status_code") + ", 0)"
 }
