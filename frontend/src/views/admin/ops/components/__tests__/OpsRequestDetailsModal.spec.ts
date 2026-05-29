@@ -123,4 +123,44 @@ describe('OpsRequestDetailsModal', () => {
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([false])
     expect(wrapper.emitted('openErrorDetail')?.at(-1)).toEqual([99])
   })
+
+  it('自定义时间范围下使用 start_time/end_time 拉取请求明细', async () => {
+    vi.mocked(opsAPI.listRequestDetails).mockResolvedValueOnce({
+      items: [],
+      total: 0,
+      page: 1,
+      page_size: 10,
+      pages: 1,
+    } as any)
+
+    const wrapper = mount(OpsRequestDetailsModal, {
+      props: {
+        modelValue: false,
+        timeRange: 'custom',
+        customStartTime: '2026-05-28T00:00:00.000Z',
+        customEndTime: '2026-05-28T01:00:00.000Z',
+        preset: { title: '请求明细', kind: 'all' },
+        platform: 'openai',
+        groupId: 12,
+      },
+      global: {
+        stubs: {
+          BaseDialog: BaseDialogStub,
+          Pagination: PaginationStub,
+        },
+      },
+    })
+
+    await wrapper.setProps({ modelValue: true })
+    await flushPromises()
+
+    expect(opsAPI.listRequestDetails).toHaveBeenCalledWith(expect.objectContaining({
+      start_time: '2026-05-28T00:00:00.000Z',
+      end_time: '2026-05-28T01:00:00.000Z',
+      platform: 'openai',
+      group_id: 12,
+      kind: 'all',
+    }))
+    expect(vi.mocked(opsAPI.listRequestDetails).mock.calls[0][0]).not.toHaveProperty('time_range', 'custom')
+  })
 })

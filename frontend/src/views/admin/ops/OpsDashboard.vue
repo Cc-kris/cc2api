@@ -116,6 +116,8 @@
           :time-range="timeRange"
           :platform="platform"
           :group-id="groupId"
+          :custom-start-time="customStartTime"
+          :custom-end-time="customEndTime"
           :error-type="errorDetailsType"
           :preset="errorDetailsPreset"
           @update:show="showErrorDetails = $event"
@@ -130,6 +132,8 @@
           :preset="requestDetailsPreset"
           :platform="platform"
           :group-id="groupId"
+          :custom-start-time="customStartTime"
+          :custom-end-time="customEndTime"
           @openErrorDetail="openError"
         />
       </template>

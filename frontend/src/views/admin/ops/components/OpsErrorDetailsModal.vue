@@ -22,6 +22,8 @@ interface Props {
   timeRange: string
   platform?: string
   groupId?: number | null
+  customStartTime?: string | null
+  customEndTime?: string | null
   errorType: 'request' | 'upstream'
   preset?: OpsErrorDetailsPreset | null
 }
@@ -105,8 +107,14 @@ async function fetchErrorLogs() {
     const params: Record<string, any> = {
       page: page.value,
       page_size: pageSize.value,
-      time_range: props.timeRange,
       view: viewMode.value
+    }
+
+    if (props.timeRange === 'custom' && props.customStartTime && props.customEndTime) {
+      params.start_time = props.customStartTime
+      params.end_time = props.customEndTime
+    } else {
+      params.time_range = props.timeRange === 'custom' ? '1h' : props.timeRange
     }
 
     const platform = String(props.platform || '').trim()
@@ -166,7 +174,7 @@ watch(
 )
 
 watch(
-  () => [props.timeRange, props.platform, props.groupId, props.errorType, props.preset?.category, props.preset?.impactPlatformSla, props.preset?.clientFailed, props.preset?.phase, props.preset?.owner, props.preset?.view, props.preset?.statusCodes] as const,
+  () => [props.timeRange, props.customStartTime, props.customEndTime, props.platform, props.groupId, props.errorType, props.preset?.category, props.preset?.impactPlatformSla, props.preset?.clientFailed, props.preset?.phase, props.preset?.owner, props.preset?.view, props.preset?.statusCodes] as const,
   () => {
     if (!props.show) return
     page.value = 1
