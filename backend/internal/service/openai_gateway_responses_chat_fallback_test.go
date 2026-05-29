@@ -53,6 +53,37 @@ func TestForwardResponses_ForceChatCompletionsRoutesNonStreamingToChatCompletion
 	require.False(t, result.Stream)
 }
 
+func TestForwardResponses_ForceChatCompletionsReasoningOnlyNonStreamingVisible(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"model":"qwen-reasoner","input":"hello","stream":false}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}, "x-request-id": []string{"rid_resp_chat_reasoning_json"}},
+		Body: io.NopCloser(strings.NewReader(
+			`{"id":"chatcmpl_reasoning_json","object":"chat.completion","model":"qwen-reasoner","choices":[{"index":0,"message":{"role":"assistant","reasoning_content":"reasoning only answer","content":""},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5}}`,
+		)),
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:          rawChatCompletionsTestConfig(),
+		httpUpstream: upstream,
+	}
+
+	result, err := svc.Forward(context.Background(), c, forceChatResponsesFallbackAccount(), body)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "http://upstream.example/v1/chat/completions", upstream.lastReq.URL.String())
+	require.Equal(t, "reasoning", gjson.Get(rec.Body.String(), "output.0.type").String())
+	require.Equal(t, "message", gjson.Get(rec.Body.String(), "output.1.type").String())
+	require.Equal(t, "reasoning only answer", gjson.Get(rec.Body.String(), "output.1.content.0.text").String())
+	require.False(t, result.Stream)
+}
+
 func TestForwardResponses_ForceChatCompletionsRoutesStreamingToChatCompletions(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -96,6 +127,68 @@ func TestForwardResponses_ForceChatCompletionsRoutesStreamingToChatCompletions(t
 	require.Contains(t, rec.Body.String(), "event: response.completed")
 	require.Contains(t, rec.Body.String(), `"input_tokens":4`)
 	require.Contains(t, rec.Body.String(), "data: [DONE]")
+	require.Equal(t, 4, result.Usage.InputTokens)
+	require.Equal(t, 3, result.Usage.OutputTokens)
+	require.True(t, result.Stream)
+	require.NotNil(t, result.FirstTokenMs)
+}
+
+func TestForwardResponses_ForceChatCompletionsReasoningOnlyStreamingVisible(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"model":"qwen-reasoner","input":"hello","stream":true}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	upstreamBody := strings.Join([]string{
+		`data: {"id":"chatcmpl_reasoning_stream","object":"chat.completion.chunk","model":"qwen-reasoner","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}`,
+		"",
+		`data: {"id":"chatcmpl_reasoning_stream","object":"chat.completion.chunk","model":"qwen-reasoner","choices":[{"index":0,"delta":{"reasoning_content":"stream reasoning only answer"},"finish_reason":null}]}`,
+		"",
+		`data: {"id":"chatcmpl_reasoning_stream","object":"chat.completion.chunk","model":"qwen-reasoner","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`,
+		"",
+		`data: {"id":"chatcmpl_reasoning_stream","object":"chat.completion.chunk","model":"qwen-reasoner","choices":[],"usage":{"prompt_tokens":4,"completion_tokens":3,"total_tokens":7}}`,
+		"",
+		"data: [DONE]",
+		"",
+	}, "\n")
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_resp_chat_reasoning_stream"}},
+		Body:       io.NopCloser(strings.NewReader(upstreamBody)),
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:          rawChatCompletionsTestConfig(),
+		httpUpstream: upstream,
+	}
+
+	result, err := svc.Forward(context.Background(), c, forceChatResponsesFallbackAccount(), body)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "http://upstream.example/v1/chat/completions", upstream.lastReq.URL.String())
+	require.Contains(t, rec.Body.String(), "event: response.reasoning_summary_text.delta")
+	require.Contains(t, rec.Body.String(), "event: response.output_text.delta")
+	require.Contains(t, rec.Body.String(), `"delta":"stream reasoning only answer"`)
+	require.Contains(t, rec.Body.String(), `"text":"stream reasoning only answer"`)
+	require.Contains(t, rec.Body.String(), "event: response.completed")
+	require.Contains(t, rec.Body.String(), "data: [DONE]")
+	bodyText := rec.Body.String()
+	outputItemAddedAt := strings.Index(bodyText, "event: response.output_item.added")
+	outputTextDeltaAt := strings.Index(bodyText, "event: response.output_text.delta")
+	outputTextDoneAt := strings.Index(bodyText, "event: response.output_text.done")
+	outputItemDoneAt := strings.Index(bodyText, "event: response.output_item.done")
+	completedAt := strings.Index(bodyText, "event: response.completed")
+	require.NotEqual(t, -1, outputItemAddedAt)
+	require.NotEqual(t, -1, outputTextDeltaAt)
+	require.NotEqual(t, -1, outputTextDoneAt)
+	require.NotEqual(t, -1, outputItemDoneAt)
+	require.NotEqual(t, -1, completedAt)
+	require.Less(t, outputItemAddedAt, outputTextDeltaAt)
+	require.Less(t, outputTextDeltaAt, outputTextDoneAt)
+	require.Less(t, outputTextDoneAt, outputItemDoneAt)
+	require.Less(t, outputItemDoneAt, completedAt)
 	require.Equal(t, 4, result.Usage.InputTokens)
 	require.Equal(t, 3, result.Usage.OutputTokens)
 	require.True(t, result.Stream)

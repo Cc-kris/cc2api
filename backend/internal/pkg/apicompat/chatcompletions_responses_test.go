@@ -484,6 +484,131 @@ func TestChatCompletionsToResponses_AssistantReasoningContentPreserved(t *testin
 	assert.Contains(t, parts[0].Text, "final answer")
 }
 
+func TestChatCompletionsResponseToResponses_ReasoningOnlyBecomesVisibleText(t *testing.T) {
+	resp := &ChatCompletionsResponse{
+		ID:    "chatcmpl_reasoning_only",
+		Model: "qwen-reasoner",
+		Choices: []ChatChoice{{
+			Index: 0,
+			Message: ChatMessage{
+				Role:             "assistant",
+				ReasoningContent: "reasoning only answer",
+				Content:          json.RawMessage(`""`),
+			},
+			FinishReason: "stop",
+		}},
+	}
+
+	converted := ChatCompletionsResponseToResponses(resp, "qwen-reasoner")
+	require.NotNil(t, converted)
+	require.Len(t, converted.Output, 2)
+	assert.Equal(t, "reasoning", converted.Output[0].Type)
+	assert.Equal(t, "message", converted.Output[1].Type)
+	require.Len(t, converted.Output[1].Content, 1)
+	assert.Equal(t, "output_text", converted.Output[1].Content[0].Type)
+	assert.Equal(t, "reasoning only answer", converted.Output[1].Content[0].Text)
+}
+
+func TestChatCompletionsResponseToResponses_ReasoningDoesNotOverrideVisibleContent(t *testing.T) {
+	resp := &ChatCompletionsResponse{
+		ID:    "chatcmpl_reasoning_with_content",
+		Model: "qwen-reasoner",
+		Choices: []ChatChoice{{
+			Index: 0,
+			Message: ChatMessage{
+				Role:             "assistant",
+				ReasoningContent: "internal reasoning",
+				Content:          json.RawMessage(`"final answer"`),
+			},
+			FinishReason: "stop",
+		}},
+	}
+
+	converted := ChatCompletionsResponseToResponses(resp, "qwen-reasoner")
+	require.NotNil(t, converted)
+	require.Len(t, converted.Output, 2)
+	assert.Equal(t, "reasoning", converted.Output[0].Type)
+	assert.Equal(t, "message", converted.Output[1].Type)
+	require.Len(t, converted.Output[1].Content, 1)
+	assert.Equal(t, "final answer", converted.Output[1].Content[0].Text)
+}
+
+func TestChatCompletionsResponseToResponses_ReasoningWithToolCallsDoesNotCreateVisibleMessage(t *testing.T) {
+	resp := &ChatCompletionsResponse{
+		ID:    "chatcmpl_reasoning_tool_call",
+		Model: "qwen-reasoner",
+		Choices: []ChatChoice{{
+			Index: 0,
+			Message: ChatMessage{
+				Role:             "assistant",
+				ReasoningContent: "internal reasoning",
+				Content:          json.RawMessage(`""`),
+				ToolCalls: []ChatToolCall{{
+					ID:   "call_1",
+					Type: "function",
+					Function: ChatFunctionCall{
+						Name:      "lookup",
+						Arguments: `{"q":"x"}`,
+					},
+				}},
+			},
+			FinishReason: "tool_calls",
+		}},
+	}
+
+	converted := ChatCompletionsResponseToResponses(resp, "qwen-reasoner")
+	require.NotNil(t, converted)
+	require.Len(t, converted.Output, 2)
+	assert.Equal(t, "reasoning", converted.Output[0].Type)
+	assert.Equal(t, "function_call", converted.Output[1].Type)
+	for _, output := range converted.Output {
+		assert.NotEqual(t, "message", output.Type)
+	}
+}
+
+func TestFinalizeChatCompletionsResponsesStream_ReasoningOnlyEmitsVisibleText(t *testing.T) {
+	state := NewChatCompletionsToResponsesStreamState("qwen-reasoner")
+	reasoning := "stream reasoning only answer"
+	events := ChatCompletionsChunkToResponsesEvents(&ChatCompletionsChunk{
+		ID:    "chatcmpl_reasoning_stream",
+		Model: "qwen-reasoner",
+		Choices: []ChatChunkChoice{{
+			Index: 0,
+			Delta: ChatDelta{ReasoningContent: &reasoning},
+		}},
+	}, state)
+	require.NotEmpty(t, events)
+
+	var sawReasoningDelta bool
+	for _, event := range events {
+		if event.Type == "response.reasoning_summary_text.delta" && event.Delta == reasoning {
+			sawReasoningDelta = true
+		}
+	}
+	require.True(t, sawReasoningDelta)
+
+	finalEvents := FinalizeChatCompletionsResponsesStream(state)
+	require.NotEmpty(t, finalEvents)
+
+	var sawTextDelta bool
+	var completed *ResponsesResponse
+	for _, event := range finalEvents {
+		if event.Type == "response.output_text.delta" && event.Delta == reasoning {
+			sawTextDelta = true
+		}
+		if event.Type == "response.completed" {
+			completed = event.Response
+		}
+	}
+	require.True(t, sawTextDelta)
+	require.NotNil(t, completed)
+	require.Len(t, completed.Output, 2)
+	assert.Equal(t, "reasoning", completed.Output[0].Type)
+	assert.Equal(t, "message", completed.Output[1].Type)
+	require.Len(t, completed.Output[1].Content, 1)
+	assert.Equal(t, reasoning, completed.Output[1].Content[0].Text)
+}
+
 // ---------------------------------------------------------------------------
 // ResponsesToChatCompletions tests
 // ---------------------------------------------------------------------------

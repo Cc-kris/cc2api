@@ -353,6 +353,9 @@ func chatMessageToResponsesOutput(message ChatMessage) []ResponsesOutput {
 	}
 
 	text := chatMessageContentText(message.Content)
+	if fallback, ok := reasoningOnlyVisibleText(text, message.ReasoningContent, len(message.ToolCalls)); ok {
+		text = fallback
+	}
 	if text != "" || len(message.ToolCalls) == 0 {
 		outputs = append(outputs, ResponsesOutput{
 			Type: "message",
@@ -565,11 +568,22 @@ func FinalizeChatCompletionsResponsesStream(state *ChatCompletionsToResponsesStr
 	}
 	var events []ResponsesStreamEvent
 	events = append(events, ensureChatToResponsesCreated(state)...)
+	if fallback, ok := state.reasoningOnlyVisibleText(); ok {
+		events = append(events, ensureChatToResponsesMessageItem(state)...)
+		state.Text.Reset()
+		_, _ = state.Text.WriteString(fallback)
+		events = append(events, chatToResponsesEvent(state, "response.output_text.delta", &ResponsesStreamEvent{
+			OutputIndex:  0,
+			ContentIndex: 0,
+			Delta:        fallback,
+			ItemID:       state.MessageItemID,
+		}))
+	}
 	if state.MessageItemID != "" {
 		events = append(events, chatToResponsesEvent(state, "response.output_text.done", &ResponsesStreamEvent{
 			OutputIndex:  0,
 			ContentIndex: 0,
-			Text:         state.Text.String(),
+			Text:         state.visibleText(),
 			ItemID:       state.MessageItemID,
 		}))
 		events = append(events, chatToResponsesEvent(state, "response.output_item.done", &ResponsesStreamEvent{
@@ -656,7 +670,7 @@ func (state *ChatCompletionsToResponsesStreamState) chatOutput() []ResponsesOutp
 			Role: "assistant",
 			Content: []ResponsesContentPart{{
 				Type: "output_text",
-				Text: state.Text.String(),
+				Text: state.visibleText(),
 			}},
 			Status: "completed",
 		})
@@ -680,6 +694,33 @@ func (state *ChatCompletionsToResponsesStreamState) chatOutput() []ResponsesOutp
 		})
 	}
 	return outputs
+}
+
+func (state *ChatCompletionsToResponsesStreamState) visibleText() string {
+	if state == nil {
+		return ""
+	}
+	if fallback, ok := state.reasoningOnlyVisibleText(); ok {
+		return fallback
+	}
+	return state.Text.String()
+}
+
+func (state *ChatCompletionsToResponsesStreamState) reasoningOnlyVisibleText() (string, bool) {
+	if state == nil {
+		return "", false
+	}
+	return reasoningOnlyVisibleText(state.Text.String(), state.Reasoning.String(), len(state.ToolCalls))
+}
+
+func reasoningOnlyVisibleText(text string, reasoning string, toolCallCount int) (string, bool) {
+	if toolCallCount > 0 {
+		return "", false
+	}
+	if strings.TrimSpace(text) != "" || strings.TrimSpace(reasoning) == "" {
+		return "", false
+	}
+	return reasoning, true
 }
 
 func chatToResponsesEvent(
