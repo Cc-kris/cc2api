@@ -611,6 +611,31 @@ func TestOpenAIResponsesWebSocket_InvalidUpgradeDoesNotSetTransport(t *testing.T
 	require.Equal(t, service.OpenAIClientTransportUnknown, service.GetOpenAIClientTransport(c))
 }
 
+func TestOpenAIResponsesWebSocket_DisablesDownstreamCompressionNegotiation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyAPIKey), &service.APIKey{ID: 101, User: &service.User{ID: 1}})
+		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 1, Concurrency: 1})
+		c.Next()
+	})
+	h := newOpenAIHandlerForPreviousResponseIDValidation(t, nil)
+	router.GET("/openai/v1/responses", h.ResponsesWebSocket)
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	conn, resp, err := coderws.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http")+"/openai/v1/responses", &coderws.DialOptions{
+		CompressionMode: coderws.CompressionContextTakeover,
+	})
+	cancel()
+	require.NoError(t, err)
+	defer func() { _ = conn.CloseNow() }()
+	require.NotNil(t, resp)
+	require.Empty(t, resp.Header.Get("Sec-WebSocket-Extensions"))
+}
+
 func TestOpenAIResponsesWebSocket_RejectsMessageIDAsPreviousResponseID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

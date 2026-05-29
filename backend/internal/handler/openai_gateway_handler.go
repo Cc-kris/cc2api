@@ -1128,8 +1128,12 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	clientIP := ip.GetClientIP(c)
 	userAgent := strings.TrimSpace(c.GetHeader("User-Agent"))
 
+	// Keep downstream Codex WebSocket frames uncompressed. Some entry proxies and
+	// clients advertise permessage-deflate but close the tunnel before the first
+	// response.create frame is delivered. Disabling negotiation avoids that
+	// fragile hop while preserving the WebSocket protocol itself.
 	wsConn, err := coderws.Accept(c.Writer, c.Request, &coderws.AcceptOptions{
-		CompressionMode: coderws.CompressionContextTakeover,
+		CompressionMode: coderws.CompressionDisabled,
 	})
 	if err != nil {
 		reqLog.Warn("openai.websocket_accept_failed",

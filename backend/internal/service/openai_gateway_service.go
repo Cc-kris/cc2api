@@ -3808,6 +3808,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	if originalModel != "" && mappedModel != "" && originalModel != mappedModel {
 		body = s.replaceModelInResponseBody(body, mappedModel, originalModel)
 	}
+	body = normalizeOpenAICompactResponseBody(c, body)
 	c.Data(resp.StatusCode, contentType, body)
 	return &openaiNonStreamingResultPassthrough{
 		OpenAIUsage:      usage,
@@ -3843,6 +3844,7 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 		if originalModel != "" && mappedModel != "" && originalModel != mappedModel {
 			body = s.replaceModelInResponseBody(body, mappedModel, originalModel)
 		}
+		body = normalizeOpenAICompactResponseBody(c, body)
 		// Correct tool calls in final response
 		body = s.correctToolCallsInResponseBody(body)
 	} else {
@@ -4933,6 +4935,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 	if originalModel != mappedModel {
 		body = s.replaceModelInResponseBody(body, mappedModel, originalModel)
 	}
+	body = normalizeOpenAICompactResponseBody(c, body)
 
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 
@@ -4981,6 +4984,7 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 		if originalModel != mappedModel {
 			body = s.replaceModelInResponseBody(body, mappedModel, originalModel)
 		}
+		body = normalizeOpenAICompactResponseBody(c, body)
 		// Correct tool calls in final response
 		body = s.correctToolCallsInResponseBody(body)
 	} else {
@@ -5300,6 +5304,34 @@ func sanitizeEncryptedReasoningInputItem(item any) (next any, changed bool, keep
 		return nil, true, false
 	}
 	return inputItem, true, true
+}
+
+func normalizeOpenAICompactResponseBody(c *gin.Context, body []byte) []byte {
+	if !isOpenAIResponsesCompactPath(c) || len(body) == 0 || !gjson.ValidBytes(body) {
+		return body
+	}
+	value := gjson.ParseBytes(body)
+	if !value.IsObject() {
+		return body
+	}
+
+	patched := body
+	if !gjson.GetBytes(patched, "object").Exists() {
+		if next, err := sjson.SetBytes(patched, "object", "response"); err == nil {
+			patched = next
+		}
+	}
+	if !gjson.GetBytes(patched, "status").Exists() {
+		if next, err := sjson.SetBytes(patched, "status", "completed"); err == nil {
+			patched = next
+		}
+	}
+	if !gjson.GetBytes(patched, "output").Exists() {
+		if next, err := sjson.SetRawBytes(patched, "output", []byte("[]")); err == nil {
+			patched = next
+		}
+	}
+	return patched
 }
 
 func IsOpenAIResponsesCompactPathForTest(c *gin.Context) bool {
