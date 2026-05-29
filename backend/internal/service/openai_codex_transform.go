@@ -706,6 +706,16 @@ func ensureOpenAIResponsesImageGenerationTool(reqBody map[string]any) bool {
 	return true
 }
 
+func shouldInjectCodexImageGenerationTool(reqBody map[string]any, requestedModel string) bool {
+	if len(reqBody) == 0 || hasOpenAIImageGenerationTool(reqBody) {
+		return false
+	}
+	if isOpenAIImageGenerationModel(requestedModel) || isOpenAIImageGenerationModel(firstNonEmptyString(reqBody["model"])) {
+		return true
+	}
+	return openAIAnyToolChoiceSelectsImageGeneration(reqBody["tool_choice"])
+}
+
 func applyCodexImageGenerationBridgeInstructions(reqBody map[string]any) bool {
 	if len(reqBody) == 0 || !hasOpenAIImageGenerationTool(reqBody) {
 		return false

@@ -2231,7 +2231,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		markPatchSet("instructions", "You are a helpful coding assistant.")
 	}
 
-	if codexImageGenerationBridgeEnabled && ensureOpenAIResponsesImageGenerationTool(reqBody) {
+	if codexImageGenerationBridgeEnabled && shouldInjectCodexImageGenerationTool(reqBody, reqModel) && ensureOpenAIResponsesImageGenerationTool(reqBody) {
 		bodyModified = true
 		disablePatch()
 		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Injected /responses image_generation tool for Codex client")

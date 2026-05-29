@@ -617,6 +617,59 @@ func TestEnsureOpenAIResponsesImageGenerationTool_PreservesExistingImageTool(t *
 	require.Equal(t, "webp", tool["output_format"])
 }
 
+func TestShouldInjectCodexImageGenerationTool_RequiresExplicitImageSignal(t *testing.T) {
+	tests := []struct {
+		name           string
+		requestedModel string
+		reqBody        map[string]any
+		want           bool
+	}{
+		{
+			name:           "plain text request",
+			requestedModel: "gpt-5.4",
+			reqBody: map[string]any{
+				"model": "gpt-5.4",
+				"input": "write code",
+			},
+			want: false,
+		},
+		{
+			name:           "explicit tool choice",
+			requestedModel: "gpt-5.4",
+			reqBody: map[string]any{
+				"model":       "gpt-5.4",
+				"input":       "draw a cat",
+				"tool_choice": map[string]any{"type": "image_generation"},
+			},
+			want: true,
+		},
+		{
+			name:           "image model",
+			requestedModel: "gpt-image-2",
+			reqBody: map[string]any{
+				"model": "gpt-image-2",
+				"input": "draw a cat",
+			},
+			want: true,
+		},
+		{
+			name:           "existing image tool does not need injection",
+			requestedModel: "gpt-5.4",
+			reqBody: map[string]any{
+				"model": "gpt-5.4",
+				"tools": []any{map[string]any{"type": "image_generation"}},
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, shouldInjectCodexImageGenerationTool(tt.reqBody, tt.requestedModel))
+		})
+	}
+}
+
 func TestApplyCodexImageGenerationBridgeInstructions_AppendsBridgeOnce(t *testing.T) {
 	reqBody := map[string]any{
 		"model":        "gpt-5.4",
