@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -59,16 +62,21 @@ type ChannelMonitorRepository interface {
 
 // ChannelMonitorService 渠道监控管理服务。
 type ChannelMonitorService struct {
-	repo      ChannelMonitorRepository
-	encryptor SecretEncryptor
+	repo        ChannelMonitorRepository
+	accountRepo AccountRepository
+	encryptor   SecretEncryptor
 	// scheduler 由 wire 通过 SetScheduler 注入；CRUD 后调用对应钩子即时同步任务。
 	// 测试或未注入场景下保持 nil，所有钩子调用变为 no-op。
 	scheduler MonitorScheduler
 }
 
 // NewChannelMonitorService 创建渠道监控服务实例。
-func NewChannelMonitorService(repo ChannelMonitorRepository, encryptor SecretEncryptor) *ChannelMonitorService {
-	return &ChannelMonitorService{repo: repo, encryptor: encryptor}
+func NewChannelMonitorService(repo ChannelMonitorRepository, encryptor SecretEncryptor, accountRepos ...AccountRepository) *ChannelMonitorService {
+	svc := &ChannelMonitorService{repo: repo, encryptor: encryptor}
+	if len(accountRepos) > 0 {
+		svc.accountRepo = accountRepos[0]
+	}
+	return svc
 }
 
 // ---------- CRUD ----------
@@ -144,6 +152,222 @@ func (s *ChannelMonitorService) Create(ctx context.Context, p ChannelMonitorCrea
 		s.scheduler.Schedule(m)
 	}
 	return m, nil
+}
+
+// CreateFromAccounts 批量把账号列表中可转换的上游凭证创建为渠道监控。
+// 去重口径为 provider + endpoint(origin) + api_key：已有相同上游或本次导入中重复的账号不会再次创建。
+func (s *ChannelMonitorService) CreateFromAccounts(ctx context.Context, createdBy int64) (*ChannelMonitorImportAccountsResult, error) {
+	if s.accountRepo == nil {
+		return nil, fmt.Errorf("account repository is not configured")
+	}
+
+	accounts, err := s.listAllAccounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := &ChannelMonitorImportAccountsResult{TotalAccounts: len(accounts)}
+
+	existing, err := s.existingMonitorDedupeKeys(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range accounts {
+		spec, ok := monitorSpecFromAccount(&accounts[i])
+		if !ok {
+			result.SkippedUnsupported++
+			continue
+		}
+		key := monitorDedupeKey(spec.Provider, spec.Endpoint, spec.APIKey)
+		if _, ok := existing[key]; ok {
+			result.SkippedDuplicate++
+			continue
+		}
+		_, err := s.Create(ctx, ChannelMonitorCreateParams{
+			Name:            spec.Name,
+			Provider:        spec.Provider,
+			APIMode:         spec.APIMode,
+			Endpoint:        spec.Endpoint,
+			APIKey:          spec.APIKey,
+			PrimaryModel:    spec.PrimaryModel,
+			Enabled:         true,
+			IntervalSeconds: monitorImportDefaultIntervalSeconds,
+			CreatedBy:       createdBy,
+		})
+		if err != nil {
+			return nil, err
+		}
+		existing[key] = struct{}{}
+		result.Created++
+	}
+	return result, nil
+}
+
+func (s *ChannelMonitorService) listAllAccounts(ctx context.Context) ([]Account, error) {
+	var out []Account
+	for page := 1; ; page++ {
+		items, pg, err := s.accountRepo.List(ctx, pagination.PaginationParams{Page: page, PageSize: monitorImportPageSize})
+		if err != nil {
+			return nil, fmt.Errorf("list accounts for channel monitor import: %w", err)
+		}
+		out = append(out, items...)
+		if pg == nil || len(out) >= int(pg.Total) || len(items) == 0 {
+			break
+		}
+	}
+	return out, nil
+}
+
+func (s *ChannelMonitorService) existingMonitorDedupeKeys(ctx context.Context) (map[string]struct{}, error) {
+	keys := make(map[string]struct{})
+	loaded := 0
+	for page := 1; ; page++ {
+		items, total, err := s.repo.List(ctx, ChannelMonitorListParams{Page: page, PageSize: monitorImportPageSize})
+		if err != nil {
+			return nil, fmt.Errorf("list channel monitors for account import: %w", err)
+		}
+		for _, m := range items {
+			s.decryptInPlace(m)
+			if strings.TrimSpace(m.APIKey) == "" || strings.TrimSpace(m.Endpoint) == "" || strings.TrimSpace(m.Provider) == "" {
+				continue
+			}
+			keys[monitorDedupeKey(m.Provider, m.Endpoint, m.APIKey)] = struct{}{}
+		}
+		loaded += len(items)
+		if int64(loaded) >= total || len(items) == 0 {
+			break
+		}
+	}
+	return keys, nil
+}
+
+type accountMonitorSpec struct {
+	Name         string
+	Provider     string
+	APIMode      string
+	Endpoint     string
+	APIKey       string
+	PrimaryModel string
+}
+
+func monitorSpecFromAccount(a *Account) (accountMonitorSpec, bool) {
+	if a == nil {
+		return accountMonitorSpec{}, false
+	}
+	provider, ok := monitorProviderFromAccountPlatform(a.Platform)
+	if !ok {
+		return accountMonitorSpec{}, false
+	}
+	apiKey := monitorAPIKeyFromAccount(provider, a)
+	if apiKey == "" {
+		return accountMonitorSpec{}, false
+	}
+	endpoint, ok := monitorEndpointFromAccount(provider, a)
+	if !ok {
+		return accountMonitorSpec{}, false
+	}
+	name := strings.TrimSpace(a.Name)
+	if name == "" {
+		name = fmt.Sprintf("Account #%d", a.ID)
+	}
+	return accountMonitorSpec{
+		Name:         name,
+		Provider:     provider,
+		APIMode:      monitorAPIModeFromAccount(provider, a),
+		Endpoint:     endpoint,
+		APIKey:       apiKey,
+		PrimaryModel: monitorPrimaryModelForProvider(provider),
+	}, true
+}
+
+func monitorProviderFromAccountPlatform(platform string) (string, bool) {
+	switch strings.TrimSpace(platform) {
+	case PlatformOpenAI:
+		return MonitorProviderOpenAI, true
+	case PlatformAnthropic:
+		return MonitorProviderAnthropic, true
+	case PlatformGemini:
+		return MonitorProviderGemini, true
+	default:
+		return "", false
+	}
+}
+
+func monitorAPIKeyFromAccount(provider string, a *Account) string {
+	_ = provider
+	if a == nil {
+		return ""
+	}
+	return strings.TrimSpace(a.GetCredential("api_key"))
+}
+
+func monitorEndpointFromAccount(provider string, a *Account) (string, bool) {
+	raw := ""
+	switch provider {
+	case MonitorProviderOpenAI:
+		raw = a.GetOpenAIBaseURL()
+	case MonitorProviderAnthropic:
+		raw = strings.TrimSpace(a.GetCredential("base_url"))
+		if raw == "" {
+			raw = "https://api.anthropic.com"
+		}
+	case MonitorProviderGemini:
+		raw = a.GetGeminiBaseURL("https://generativelanguage.googleapis.com")
+	default:
+		return "", false
+	}
+	endpoint, ok := monitorEndpointOrigin(raw)
+	if !ok || validateEndpoint(endpoint) != nil {
+		return "", false
+	}
+	return endpoint, true
+}
+
+func monitorAPIModeFromAccount(provider string, a *Account) string {
+	if provider != MonitorProviderOpenAI || a == nil {
+		return MonitorAPIModeChatCompletions
+	}
+	if openAIBaseURLTargetsResponses(a.GetOpenAIBaseURL()) {
+		return MonitorAPIModeResponses
+	}
+	if openai_compat.ShouldUseResponsesAPI(a.Extra) {
+		return MonitorAPIModeResponses
+	}
+	return MonitorAPIModeChatCompletions
+}
+
+func openAIBaseURLTargetsResponses(raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	path := strings.ToLower(strings.TrimRight(u.EscapedPath(), "/"))
+	return path == "/v1/responses" || strings.HasSuffix(path, "/responses")
+}
+
+func monitorEndpointOrigin(raw string) (string, bool) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "", false
+	}
+	return strings.TrimRight((&url.URL{Scheme: u.Scheme, Host: u.Host}).String(), "/"), true
+}
+
+func monitorPrimaryModelForProvider(provider string) string {
+	switch provider {
+	case MonitorProviderOpenAI:
+		return "gpt-5.4-mini"
+	case MonitorProviderAnthropic:
+		return "claude-haiku-4-5"
+	case MonitorProviderGemini:
+		return "gemini-3-flash"
+	default:
+		return ""
+	}
+}
+
+func monitorDedupeKey(provider, endpoint, apiKey string) string {
+	return strings.TrimSpace(provider) + "\x00" + strings.TrimRight(strings.TrimSpace(endpoint), "/") + "\x00" + strings.TrimSpace(apiKey)
 }
 
 // validateCreateParams 把 Create 入参的所有校验聚拢为一个函数，避免 Create 主体超过 30 行。

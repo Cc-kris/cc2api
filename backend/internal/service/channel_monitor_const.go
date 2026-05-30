@@ -70,6 +70,11 @@ const (
 	monitorAvailability15Days = 15
 	monitorAvailability30Days = 30
 
+	// monitorImportDefaultIntervalSeconds 一键从账号创建监控时使用的固定检测间隔。
+	monitorImportDefaultIntervalSeconds = 1800
+	// monitorImportPageSize 一键导入时分页拉取账号和已有监控的批大小。
+	monitorImportPageSize = 1000
+
 	// MonitorHistoryDefaultLimit 历史查询默认返回条数（handler 层共享）。
 	MonitorHistoryDefaultLimit = 100
 	// MonitorHistoryMaxLimit 历史查询最大返回条数（handler 层共享）。

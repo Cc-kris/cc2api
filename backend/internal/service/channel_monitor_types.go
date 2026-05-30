@@ -83,6 +83,14 @@ type ChannelMonitorCreateParams struct {
 	BodyOverride     map[string]any
 }
 
+// ChannelMonitorImportAccountsResult 一键从账号创建渠道监控的结果汇总。
+type ChannelMonitorImportAccountsResult struct {
+	TotalAccounts      int
+	Created            int
+	SkippedDuplicate   int
+	SkippedUnsupported int
+}
+
 // ChannelMonitorUpdateParams 更新参数（指针字段表示"未提供则不更新"）。
 type ChannelMonitorUpdateParams struct {
 	Name            *string

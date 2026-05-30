@@ -117,6 +117,13 @@ type channelMonitorHistoryItemResponse struct {
 	CheckedAt     string `json:"checked_at"`
 }
 
+type channelMonitorImportAccountsResponse struct {
+	TotalAccounts      int `json:"total_accounts"`
+	Created            int `json:"created"`
+	SkippedDuplicate   int `json:"skipped_duplicate"`
+	SkippedUnsupported int `json:"skipped_unsupported"`
+}
+
 // maskAPIKey 对 API Key 明文做脱敏：前 4 字符 + "***"，长度 ≤ 4 时只显示 "***"。
 func maskAPIKey(plain string) string {
 	if len(plain) <= monitorAPIKeyMaskPrefix {
@@ -326,6 +333,22 @@ func (h *ChannelMonitorHandler) Create(c *gin.Context) {
 		return
 	}
 	response.Created(c, channelMonitorToResponse(m))
+}
+
+// CreateFromAccounts POST /api/v1/admin/channel-monitors/import-accounts
+func (h *ChannelMonitorHandler) CreateFromAccounts(c *gin.Context) {
+	subject, _ := middleware2.GetAuthSubjectFromContext(c)
+	result, err := h.monitorService.CreateFromAccounts(c.Request.Context(), subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, channelMonitorImportAccountsResponse{
+		TotalAccounts:      result.TotalAccounts,
+		Created:            result.Created,
+		SkippedDuplicate:   result.SkippedDuplicate,
+		SkippedUnsupported: result.SkippedUnsupported,
+	})
 }
 
 // Update PUT /api/v1/admin/channel-monitors/:id

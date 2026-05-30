@@ -123,6 +123,13 @@ export interface HistoryResponse {
   items: HistoryItem[]
 }
 
+export interface ImportAccountsResponse {
+  total_accounts: number
+  created: number
+  skipped_duplicate: number
+  skipped_unsupported: number
+}
+
 /**
  * List channel monitors with pagination and filters
  */
@@ -150,6 +157,14 @@ export async function get(id: number): Promise<ChannelMonitor> {
  */
 export async function create(params: CreateParams): Promise<ChannelMonitor> {
   const { data } = await apiClient.post<ChannelMonitor>('/admin/channel-monitors', params)
+  return data
+}
+
+/**
+ * Create channel monitors from existing upstream accounts.
+ */
+export async function importAccounts(): Promise<ImportAccountsResponse> {
+  const { data } = await apiClient.post<ImportAccountsResponse>('/admin/channel-monitors/import-accounts')
   return data
 }
 
@@ -196,6 +211,7 @@ export const channelMonitorAPI = {
   list,
   get,
   create,
+  importAccounts,
   update,
   del,
   runNow,

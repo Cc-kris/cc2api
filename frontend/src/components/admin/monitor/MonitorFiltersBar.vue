@@ -52,6 +52,14 @@
         <Icon name="cog" size="md" class="mr-2" />
         {{ t('admin.channelMonitor.template.manageButton') }}
       </button>
+      <button
+        @click="$emit('import-accounts')"
+        :disabled="loading || importingAccounts"
+        class="btn btn-secondary"
+      >
+        <Icon name="plus" size="md" class="mr-2" />
+        {{ t('admin.channelMonitor.importAccountsButton') }}
+      </button>
       <button @click="$emit('create')" class="btn btn-primary">
         <Icon name="plus" size="md" class="mr-2" />
         {{ t('admin.channelMonitor.createButton') }}
@@ -74,12 +82,14 @@ import {
 
 defineProps<{
   loading: boolean
+  importingAccounts?: boolean
 }>()
 
 defineEmits<{
   (e: 'reload'): void
   (e: 'create'): void
   (e: 'manage-templates'): void
+  (e: 'import-accounts'): void
   (e: 'search-input'): void
 }>()
 

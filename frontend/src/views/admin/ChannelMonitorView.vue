@@ -7,9 +7,11 @@
           v-model:provider="providerFilter"
           v-model:enabled="enabledFilter"
           :loading="loading"
+          :importing-accounts="importingAccounts"
           @reload="reload"
           @create="openCreateDialog"
           @manage-templates="showTemplateManager = true"
+          @import-accounts="handleImportAccounts"
           @search-input="handleSearch"
         />
       </template>
@@ -154,6 +156,7 @@ const {
 
 const monitors = ref<ChannelMonitor[]>([])
 const loading = ref(false)
+const importingAccounts = ref(false)
 const runningId = ref<number | null>(null)
 const searchQuery = ref('')
 const providerFilter = ref<Provider | ''>('')
@@ -249,6 +252,26 @@ function openEditDialog(row: ChannelMonitor) {
 function closeDialog() {
   showDialog.value = false
   editing.value = null
+}
+
+async function handleImportAccounts() {
+  if (importingAccounts.value) return
+  importingAccounts.value = true
+  try {
+    const res = await adminAPI.channelMonitor.importAccounts()
+    appStore.showSuccess(t('admin.channelMonitor.importAccountsSuccess', {
+      created: res.created,
+      duplicate: res.skipped_duplicate,
+      unsupported: res.skipped_unsupported,
+      total: res.total_accounts,
+    }))
+    pagination.page = 1
+    await reload()
+  } catch (err: unknown) {
+    appStore.showError(extractApiErrorMessage(err, t('admin.channelMonitor.importAccountsFailed')))
+  } finally {
+    importingAccounts.value = false
+  }
 }
 
 async function toggleEnabled(row: ChannelMonitor) {
