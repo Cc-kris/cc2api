@@ -617,6 +617,12 @@ download_and_extract() {
         cp -r "$TEMP_DIR/deploy/"* "$INSTALL_DIR/" 2>/dev/null || true
     fi
 
+    # Copy optional public resources if they exist in the archive
+    if [ -d "$TEMP_DIR/backend/resources" ]; then
+        mkdir -p "$INSTALL_DIR/resources"
+        cp -r "$TEMP_DIR/backend/resources/"* "$INSTALL_DIR/resources/" 2>/dev/null || true
+    fi
+
     print_success "$(msg 'binary_installed') $INSTALL_DIR/sub2api"
 }
 
