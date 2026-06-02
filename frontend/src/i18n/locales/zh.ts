@@ -741,11 +741,11 @@ export default {
       noGroupDescription:
         '此 API 密钥尚未分配分组，请先在密钥列表中点击分组列进行分配，然后才能查看使用配置。',
       openai: {
-        description: '将以下配置文件添加到 Codex CLI 配置目录中。',
-        configTomlHint: '请确保以下内容位于 config.toml 文件的开头部分',
-        note: '请确保配置目录存在。macOS/Linux 用户可运行 mkdir -p ~/.codex 创建目录。',
+        description: '只需将以下内容写入 Codex CLI 配置目录中的 config.toml 文件即可使用 API。',
+        configTomlHint: '只需修改 config.toml，将 API 密钥写入 experimental_bearer_token',
+        note: '请确保配置目录存在。macOS/Linux 用户可运行 mkdir -p ~/.codex 创建目录，然后将内容写入 ~/.codex/config.toml。',
         noteWindows:
-          '按 Win+R，输入 %userprofile%\\.codex 打开配置目录。如目录不存在，请先手动创建。'
+          '按 Win+R，输入 %userprofile%\\.codex 打开配置目录。如目录不存在，请先手动创建，然后将内容写入 config.toml。'
       },
       cliTabs: {
         claudeCode: 'Claude Code',

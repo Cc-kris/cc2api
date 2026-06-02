@@ -309,11 +309,11 @@ const openaiTabs: TabConfig[] = [
   { id: 'windows', label: 'Windows', icon: WindowsIcon }
 ]
 
-const showShellTabs = computed(() => activeClientTab.value !== 'opencode')
+const showShellTabs = computed(() => props.platform === 'openai' || activeClientTab.value !== 'opencode')
 
 const currentTabs = computed(() => {
   if (!showShellTabs.value) return []
-  if (activeClientTab.value === 'codex' || activeClientTab.value === 'codex-ws') {
+  if (props.platform === 'openai') {
     return openaiTabs
   }
   return shellTabs
@@ -322,9 +322,6 @@ const currentTabs = computed(() => {
 const platformDescription = computed(() => {
   switch (props.platform) {
     case 'openai':
-      if (activeClientTab.value === 'claude') {
-        return t('keys.useKeyModal.description')
-      }
       return t('keys.useKeyModal.openai.description')
     case 'gemini':
       return t('keys.useKeyModal.gemini.description')
@@ -338,9 +335,6 @@ const platformDescription = computed(() => {
 const platformNote = computed(() => {
   switch (props.platform) {
     case 'openai':
-      if (activeClientTab.value === 'claude') {
-        return t('keys.useKeyModal.note')
-      }
       return activeTab.value === 'windows'
         ? t('keys.useKeyModal.openai.noteWindows')
         : t('keys.useKeyModal.openai.note')
@@ -355,7 +349,7 @@ const platformNote = computed(() => {
   }
 })
 
-const showPlatformNote = computed(() => activeClientTab.value !== 'opencode')
+const showPlatformNote = computed(() => props.platform === 'openai' || activeClientTab.value !== 'opencode')
 
 const escapeHtml = (value: string) => value
   .replace(/&/g, '&amp;')
@@ -396,10 +390,10 @@ const currentFiles = computed((): FileConfig[] => {
 
   if (activeClientTab.value === 'opencode') {
     switch (props.platform) {
+      case 'openai':
+        return generateOpenAIFiles(apiKey)
       case 'anthropic':
         return [generateOpenCodeConfig('anthropic', apiBase, apiKey)]
-      case 'openai':
-        return [generateOpenCodeConfig('openai', apiBase, apiKey)]
       case 'gemini':
         return [generateOpenCodeConfig('gemini', geminiBase, apiKey)]
       case 'antigravity':
@@ -414,13 +408,10 @@ const currentFiles = computed((): FileConfig[] => {
 
   switch (props.platform) {
     case 'openai':
-      if (activeClientTab.value === 'claude') {
-        return generateAnthropicFiles(baseUrl, apiKey)
-      }
       if (activeClientTab.value === 'codex-ws') {
-        return generateOpenAIWsFiles(baseUrl, apiKey)
+        return generateOpenAIWsFiles(apiKey)
       }
-      return generateOpenAIFiles(baseUrl, apiKey)
+      return generateOpenAIFiles(apiKey)
     case 'gemini':
       return [generateGeminiCliContent(baseUrl, apiKey)]
     case 'antigravity':
@@ -525,86 +516,51 @@ ${keyword('$env:')}${variable('GEMINI_MODEL')}${operator('=')}${string(`"${model
   return { path, content, highlighted }
 }
 
-function generateOpenAIFiles(baseUrl: string, apiKey: string): FileConfig[] {
+function generateOpenAIFiles(apiKey: string): FileConfig[] {
   const isWindows = activeTab.value === 'windows'
-  const configDir = isWindows ? '%userprofile%\\.codex' : '~/.codex'
+  const configPath = isWindows ? '%userprofile%\\.codex\\config.toml' : '~/.codex/config.toml'
 
   // config.toml content
-  const configContent = `model_provider = "OpenAI"
-model = "gpt-5.4"
-review_model = "gpt-5.4"
-model_reasoning_effort = "xhigh"
-disable_response_storage = true
-network_access = "enabled"
-windows_wsl_setup_acknowledged = true
-model_context_window = 1000000
-model_auto_compact_token_limit = 900000
+  const configContent = `model_reasoning_effort = "high"
 
-[model_providers.OpenAI]
+approval_policy = "never"
+model = "gpt-5.5"
+model_auto_compact_token_limit = 945000
+model_context_window = 1050000
+model_provider = "ccai"
+personality = "pragmatic"
+sandbox_mode = "danger-full-access"
+tool_output_token_limit = 6000
+
+[model_providers.ccai]
+base_url = "https://cc-ai.xyz"
 name = "OpenAI"
-base_url = "${baseUrl}"
+experimental_bearer_token = "${apiKey}"
 wire_api = "responses"
-requires_openai_auth = true`
+requires_openai_auth = false
+supports_websockets = true
 
-  // auth.json content
-  const authContent = `{
-  "OPENAI_API_KEY": "${apiKey}"
-}`
+[features]
+goals = true
+multi_agent = true
+image_generation = true
+
+child_agents_md = true
+hooks = true
+suppress_unstable_features_warning = true
+memories = true`
 
   return [
     {
-      path: `${configDir}/config.toml`,
+      path: configPath,
       content: configContent,
       hint: t('keys.useKeyModal.openai.configTomlHint')
-    },
-    {
-      path: `${configDir}/auth.json`,
-      content: authContent
     }
   ]
 }
 
-function generateOpenAIWsFiles(baseUrl: string, apiKey: string): FileConfig[] {
-  const isWindows = activeTab.value === 'windows'
-  const configDir = isWindows ? '%userprofile%\\.codex' : '~/.codex'
-
-  // config.toml content with WebSocket v2
-  const configContent = `model_provider = "OpenAI"
-model = "gpt-5.4"
-review_model = "gpt-5.4"
-model_reasoning_effort = "xhigh"
-disable_response_storage = true
-network_access = "enabled"
-windows_wsl_setup_acknowledged = true
-model_context_window = 1000000
-model_auto_compact_token_limit = 900000
-
-[model_providers.OpenAI]
-name = "OpenAI"
-base_url = "${baseUrl}"
-wire_api = "responses"
-supports_websockets = true
-requires_openai_auth = true
-
-[features]
-responses_websockets_v2 = true`
-
-  // auth.json content
-  const authContent = `{
-  "OPENAI_API_KEY": "${apiKey}"
-}`
-
-  return [
-    {
-      path: `${configDir}/config.toml`,
-      content: configContent,
-      hint: t('keys.useKeyModal.openai.configTomlHint')
-    },
-    {
-      path: `${configDir}/auth.json`,
-      content: authContent
-    }
-  ]
+function generateOpenAIWsFiles(apiKey: string): FileConfig[] {
+  return generateOpenAIFiles(apiKey)
 }
 
 function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: string, pathLabel?: string): FileConfig {

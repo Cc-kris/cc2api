@@ -742,10 +742,10 @@ export default {
       noGroupTitle: 'Please assign a group first',
       noGroupDescription: 'This API key has not been assigned to a group. Please click the group column in the key list to assign one before viewing the configuration.',
       openai: {
-        description: 'Add the following configuration files to your Codex CLI config directory.',
-        configTomlHint: 'Make sure the following content is at the beginning of the config.toml file',
-        note: 'Make sure the config directory exists. macOS/Linux users can run mkdir -p ~/.codex to create it.',
-        noteWindows: 'Press Win+R and enter %userprofile%\\.codex to open the config directory. Create it manually if it does not exist.',
+        description: 'Write the following content to the Codex CLI config.toml file to use the API.',
+        configTomlHint: 'Only config.toml is required. Put the API key in experimental_bearer_token.',
+        note: 'Make sure the config directory exists. macOS/Linux users can run mkdir -p ~/.codex, then write this content to ~/.codex/config.toml.',
+        noteWindows: 'Press Win+R and enter %userprofile%\\.codex to open the config directory. Create it manually if it does not exist, then write this content to config.toml.',
       },
       cliTabs: {
         claudeCode: 'Claude Code',
