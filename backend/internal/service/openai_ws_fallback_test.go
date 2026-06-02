@@ -290,3 +290,45 @@ func TestShouldLogOpenAIWSPayloadSchema(t *testing.T) {
 	svc.cfg.Gateway.OpenAIWS.PayloadLogSampleRate = 1
 	require.True(t, svc.shouldLogOpenAIWSPayloadSchema(2))
 }
+
+func TestIsOpenAIWSSilentRetrySafe_DialStatuses(t *testing.T) {
+	cases := []struct {
+		name       string
+		statusCode int
+		want       bool
+	}{
+		{name: "upgrade required", statusCode: 426, want: true},
+		{name: "rate limited", statusCode: 429, want: true},
+		{name: "bad gateway", statusCode: 502, want: true},
+		{name: "unauthorized", statusCode: 401, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := NewOpenAIWSClientCloseError(1008, "handshake rejected", &openAIWSDialError{StatusCode: tc.statusCode, Err: errors.New("dial failed")})
+			if got := IsOpenAIWSSilentRetrySafe(err); got != tc.want {
+				t.Fatalf("IsOpenAIWSSilentRetrySafe=%v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsOpenAIWSSilentRetrySafe_TurnErrorRequiresNoDownstream(t *testing.T) {
+	if !IsOpenAIWSSilentRetrySafe(wrapOpenAIWSIngressTurnError("read_upstream", errors.New("EOF"), false)) {
+		t.Fatal("read_upstream before downstream should be retry safe")
+	}
+	if IsOpenAIWSSilentRetrySafe(wrapOpenAIWSIngressTurnError("read_upstream", errors.New("EOF"), true)) {
+		t.Fatal("read_upstream after downstream should not be retry safe")
+	}
+}
+
+func TestIsOpenAIWSSilentRetrySafe_WrappedFallbacks(t *testing.T) {
+	if !IsOpenAIWSSilentRetrySafe(wrapOpenAIWSFallback("upstream_rate_limited", &openAIWSDialError{StatusCode: http.StatusTooManyRequests, Err: errors.New("rate limited")})) {
+		t.Fatal("wrapped 429 dial failure should be retry safe")
+	}
+	if IsOpenAIWSSilentRetrySafe(wrapOpenAIWSFallback("invalid_state", errors.New("invalid state"))) {
+		t.Fatal("invalid local state should not be retry safe")
+	}
+	if IsOpenAIWSSilentRetrySafe(NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "client canceled", context.Canceled)) {
+		t.Fatal("client cancellation should not be hidden as a silent retry")
+	}
+}

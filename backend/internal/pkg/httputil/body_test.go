@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"compress/zlib"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -139,5 +140,63 @@ func TestReadRequestBodyWithPrealloc_RespectsIdentityEncoding(t *testing.T) {
 	}
 	if string(got) != samplePayload {
 		t.Fatalf("body mismatch: got %q", got)
+	}
+}
+
+type failingBody struct {
+	data []byte
+	err  error
+}
+
+func (b *failingBody) Read(p []byte) (int, error) {
+	if len(b.data) > 0 {
+		n := copy(p, b.data)
+		b.data = b.data[n:]
+		return n, nil
+	}
+	return 0, b.err
+}
+
+func (b *failingBody) Close() error { return nil }
+
+func TestReadRequestBodyWithPrealloc_ClassifiesIncompleteBody(t *testing.T) {
+	req := newRequestWithBody(t, nil, "")
+	req.Body = &failingBody{data: []byte("partial"), err: io.ErrUnexpectedEOF}
+	req.ContentLength = 100
+
+	_, err := ReadRequestBodyWithPrealloc(req)
+	if err == nil {
+		t.Fatal("expected read error")
+	}
+	info, ok := RequestBodyReadErrorInfo(err)
+	if !ok {
+		t.Fatalf("expected RequestBodyReadError, got %T", err)
+	}
+	if info.Kind != RequestBodyReadIncompleteBody {
+		t.Fatalf("kind mismatch: %s", info.Kind)
+	}
+	if info.BytesRead != int64(len("partial")) {
+		t.Fatalf("bytes read mismatch: %d", info.BytesRead)
+	}
+	if info.ContentLength != 100 {
+		t.Fatalf("content length mismatch: %d", info.ContentLength)
+	}
+}
+
+func TestReadRequestBodyWithPrealloc_ClassifiesUnsupportedEncoding(t *testing.T) {
+	req := newRequestWithBody(t, []byte(samplePayload), "br")
+	_, err := ReadRequestBodyWithPrealloc(req)
+	if err == nil {
+		t.Fatal("expected unsupported encoding error")
+	}
+	info, ok := RequestBodyReadErrorInfo(err)
+	if !ok {
+		t.Fatalf("expected RequestBodyReadError, got %T", err)
+	}
+	if info.Kind != RequestBodyUnsupportedEncoding {
+		t.Fatalf("kind mismatch: %s", info.Kind)
+	}
+	if info.Encoding != "br" {
+		t.Fatalf("encoding mismatch: %q", info.Encoding)
 	}
 }

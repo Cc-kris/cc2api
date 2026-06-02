@@ -114,6 +114,64 @@ func IsOpenAIWSHTTPFallbackSafe(err error) bool {
 	}
 }
 
+// IsOpenAIWSSilentRetrySafe reports whether a WS ingress failure can be hidden
+// from the downstream client and retried with a different upstream account.
+// It is intentionally stricter than HTTP fallback: callers must still verify
+// request-level state such as previous_response_id before replaying.
+func IsOpenAIWSSilentRetrySafe(err error) bool {
+	if err == nil {
+		return false
+	}
+	if IsOpenAIWSHTTPFallbackSafe(err) {
+		return true
+	}
+	if isOpenAIWSIngressTurnRetryable(err) {
+		return true
+	}
+	var turnErr *openAIWSIngressTurnError
+	if errors.As(err, &turnErr) && turnErr != nil {
+		return !turnErr.wroteDownstream && isOpenAIWSSilentRetryStage(turnErr.stage)
+	}
+	var closeErr *OpenAIWSClientCloseError
+	if errors.As(err, &closeErr) && closeErr != nil {
+		if errors.Is(closeErr.err, context.Canceled) {
+			return false
+		}
+		var dialErr *openAIWSDialError
+		if errors.As(closeErr.err, &dialErr) && dialErr != nil {
+			return isOpenAIWSSilentRetryableStatus(dialErr.StatusCode)
+		}
+		return closeErr.StatusCode() == coderws.StatusTryAgainLater
+	}
+	var dialErr *openAIWSDialError
+	if errors.As(err, &dialErr) && dialErr != nil {
+		return isOpenAIWSSilentRetryableStatus(dialErr.StatusCode)
+	}
+	return false
+}
+
+func isOpenAIWSSilentRetryStage(stage string) bool {
+	switch strings.TrimSpace(stage) {
+	case "write_upstream", "read_upstream", "acquire_conn", "acquire_timeout":
+		return true
+	default:
+		return false
+	}
+}
+
+func isOpenAIWSSilentRetryableStatus(statusCode int) bool {
+	switch {
+	case statusCode == http.StatusTooManyRequests:
+		return true
+	case statusCode == http.StatusUpgradeRequired:
+		return true
+	case statusCode >= http.StatusInternalServerError && statusCode <= 599:
+		return true
+	default:
+		return false
+	}
+}
+
 // OpenAIWSClientCloseError 表示应以指定 WebSocket close code 主动关闭客户端连接的错误。
 type OpenAIWSClientCloseError struct {
 	statusCode coderws.StatusCode

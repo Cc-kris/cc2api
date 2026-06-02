@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"compress/zlib"
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 
@@ -20,6 +22,50 @@ const (
 	// to prevent decompression bomb attacks.
 	maxDecompressedBodySize = 64 << 20
 )
+
+type RequestBodyReadErrorKind string
+
+const (
+	RequestBodyReadFailed             RequestBodyReadErrorKind = "read_failed"
+	RequestBodyReadClientDisconnected RequestBodyReadErrorKind = "client_disconnected"
+	RequestBodyReadIncompleteBody     RequestBodyReadErrorKind = "incomplete_body"
+	RequestBodyReadTimeout            RequestBodyReadErrorKind = "read_timeout"
+	RequestBodyDecodeFailed           RequestBodyReadErrorKind = "decode_failed"
+	RequestBodyUnsupportedEncoding    RequestBodyReadErrorKind = "unsupported_encoding"
+)
+
+type RequestBodyReadError struct {
+	Kind          RequestBodyReadErrorKind
+	BytesRead     int64
+	ContentLength int64
+	Encoding      string
+	Err           error
+}
+
+func (e *RequestBodyReadError) Error() string {
+	if e == nil {
+		return "request body read failed"
+	}
+	if e.Err == nil {
+		return string(e.Kind)
+	}
+	return fmt.Sprintf("%s: %v", e.Kind, e.Err)
+}
+
+func (e *RequestBodyReadError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
+func RequestBodyReadErrorInfo(err error) (*RequestBodyReadError, bool) {
+	var readErr *RequestBodyReadError
+	if errors.As(err, &readErr) && readErr != nil {
+		return readErr, true
+	}
+	return nil, false
+}
 
 // ReadRequestBodyWithPrealloc reads request body with preallocated buffer based
 // on content length, transparently decoding any Content-Encoding the upstream
@@ -42,8 +88,15 @@ func ReadRequestBodyWithPrealloc(req *http.Request) ([]byte, error) {
 	}
 
 	buf := bytes.NewBuffer(make([]byte, 0, capHint))
-	if _, err := io.Copy(buf, req.Body); err != nil {
-		return nil, err
+	bytesRead, err := io.Copy(buf, req.Body)
+	if err != nil {
+		return nil, &RequestBodyReadError{
+			Kind:          classifyRequestBodyReadError(err),
+			BytesRead:     bytesRead,
+			ContentLength: req.ContentLength,
+			Encoding:      strings.ToLower(strings.TrimSpace(req.Header.Get("Content-Encoding"))),
+			Err:           err,
+		}
 	}
 	raw := buf.Bytes()
 
@@ -54,7 +107,13 @@ func ReadRequestBodyWithPrealloc(req *http.Request) ([]byte, error) {
 
 	decoded, err := decompressRequestBody(enc, raw)
 	if err != nil {
-		return nil, fmt.Errorf("decode Content-Encoding %q: %w", enc, err)
+		return nil, &RequestBodyReadError{
+			Kind:          classifyRequestBodyDecodeError(enc, err),
+			BytesRead:     bytesRead,
+			ContentLength: req.ContentLength,
+			Encoding:      enc,
+			Err:           fmt.Errorf("decode Content-Encoding %q: %w", enc, err),
+		}
 	}
 
 	req.Header.Del("Content-Encoding")
@@ -62,6 +121,50 @@ func ReadRequestBodyWithPrealloc(req *http.Request) ([]byte, error) {
 	req.ContentLength = int64(len(decoded))
 
 	return decoded, nil
+}
+
+func classifyRequestBodyReadError(err error) RequestBodyReadErrorKind {
+	if err == nil {
+		return RequestBodyReadFailed
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, net.ErrClosed) {
+		return RequestBodyReadClientDisconnected
+	}
+	if errors.Is(err, context.DeadlineExceeded) || isNetTimeout(err) {
+		return RequestBodyReadTimeout
+	}
+	if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
+		return RequestBodyReadIncompleteBody
+	}
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "client disconnected"), strings.Contains(msg, "connection reset by peer"), strings.Contains(msg, "broken pipe"), strings.Contains(msg, "use of closed network connection"):
+		return RequestBodyReadClientDisconnected
+	case strings.Contains(msg, "timeout"), strings.Contains(msg, "deadline exceeded"):
+		return RequestBodyReadTimeout
+	case strings.Contains(msg, "unexpected eof"), strings.Contains(msg, "early eof"):
+		return RequestBodyReadIncompleteBody
+	default:
+		return RequestBodyReadFailed
+	}
+}
+
+func classifyRequestBodyDecodeError(encoding string, err error) RequestBodyReadErrorKind {
+	if strings.EqualFold(strings.TrimSpace(encoding), "") {
+		return RequestBodyDecodeFailed
+	}
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "unsupported content-encoding") {
+		return RequestBodyUnsupportedEncoding
+	}
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "unsupported") {
+		return RequestBodyUnsupportedEncoding
+	}
+	return RequestBodyDecodeFailed
+}
+
+func isNetTimeout(err error) bool {
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 func decompressRequestBody(encoding string, raw []byte) ([]byte, error) {

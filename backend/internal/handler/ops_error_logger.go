@@ -814,6 +814,11 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 
 		phase, isBusinessLimited, errorOwner, errorSource := classifyOpsErrorLog(c, normalizedType, parsed.Message, parsed.Code, status)
 
+		errorBody := string(body)
+		if diagnostics, ok := c.Get(opsRequestBodyDiagnosticsKey); ok {
+			errorBody = requestBodyDiagnosticsErrorBody(errorBody, diagnostics)
+		}
+
 		entry := &service.OpsInsertErrorLogInput{
 			RequestID:       requestID,
 			ClientRequestID: clientRequestID,
@@ -862,8 +867,10 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 
 			ErrorMessage: parsed.Message,
 			// Keep the full captured error body (capture is already capped at 64KB) so the
-			// service layer can sanitize JSON before truncating for storage.
-			ErrorBody:   string(body),
+			// service layer can sanitize JSON before truncating for storage. Request body
+			// read failures attach internal diagnostics here without changing the client
+			// response shape.
+			ErrorBody:   errorBody,
 			ErrorSource: errorSource,
 			ErrorOwner:  errorOwner,
 

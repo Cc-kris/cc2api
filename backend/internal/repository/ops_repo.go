@@ -217,7 +217,7 @@ SELECT
   COALESCE(e.client_request_id, ''),
   COALESCE(e.request_id, ''),
   COALESCE(e.error_message, ''),
-  e.user_id,
+  COALESCE(e.user_id, ak.user_id),
   COALESCE(u.email, ''),
   e.api_key_id,
   e.account_id,
@@ -235,7 +235,8 @@ SELECT
 FROM ops_error_logs e
 LEFT JOIN accounts a ON e.account_id = a.id
 LEFT JOIN groups g ON e.group_id = g.id
-LEFT JOIN users u ON e.user_id = u.id
+LEFT JOIN api_keys ak ON e.api_key_id = ak.id
+LEFT JOIN users u ON COALESCE(e.user_id, ak.user_id) = u.id
 LEFT JOIN users u2 ON e.resolved_by_user_id = u2.id
 ` + where + `
 ORDER BY e.created_at DESC
@@ -382,7 +383,7 @@ SELECT
   COALESCE(e.upstream_error_detail, ''),
   COALESCE(e.upstream_errors::text, ''),
   e.is_business_limited,
-  e.user_id,
+  COALESCE(e.user_id, ak.user_id),
   COALESCE(u.email, ''),
   e.api_key_id,
   e.account_id,
@@ -404,7 +405,8 @@ SELECT
   e.response_latency_ms,
   e.time_to_first_token_ms
 FROM ops_error_logs e
-LEFT JOIN users u ON e.user_id = u.id
+LEFT JOIN api_keys ak ON e.api_key_id = ak.id
+LEFT JOIN users u ON COALESCE(e.user_id, ak.user_id) = u.id
 LEFT JOIN accounts a ON e.account_id = a.id
 LEFT JOIN groups g ON e.group_id = g.id
 WHERE e.id = $1
@@ -964,7 +966,7 @@ func buildOpsErrorLogsWhere(filter *service.OpsErrorLogFilter) (string, []any) {
 		like := "%" + userQuery + "%"
 		args = append(args, like)
 		n := itoa(len(args))
-		clauses = append(clauses, "EXISTS (SELECT 1 FROM users u WHERE u.id = e.user_id AND u.email ILIKE $"+n+")")
+		clauses = append(clauses, "EXISTS (SELECT 1 FROM users u WHERE u.id = COALESCE(e.user_id, (SELECT ak.user_id FROM api_keys ak WHERE ak.id = e.api_key_id)) AND u.email ILIKE $"+n+")")
 	}
 
 	return "WHERE " + strings.Join(clauses, " AND "), args

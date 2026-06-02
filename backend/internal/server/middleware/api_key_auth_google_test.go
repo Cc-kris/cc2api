@@ -431,6 +431,130 @@ func TestApiKeyAuthWithSubscriptionGoogle_DisabledKey(t *testing.T) {
 	require.Equal(t, "UNAUTHENTICATED", resp.Error.Status)
 }
 
+func TestAPIKeyAuthWithSubscriptionGoogleSetsIdentityContextBeforeUnavailableGroupAbort(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	groupID := int64(101)
+	user := &service.User{
+		ID:          7,
+		Role:        service.RoleUser,
+		Status:      service.StatusActive,
+		Balance:     10,
+		Concurrency: 3,
+	}
+	apiKey := &service.APIKey{
+		ID:      100,
+		UserID:  user.ID,
+		GroupID: &groupID,
+		Key:     "test-key",
+		Status:  service.StatusActive,
+		User:    user,
+		Group:   nil,
+	}
+	repo := fakeAPIKeyRepo{
+		getByKey: func(ctx context.Context, key string) (*service.APIKey, error) {
+			if key != apiKey.Key {
+				return nil, service.ErrAPIKeyNotFound
+			}
+			clone := *apiKey
+			return &clone, nil
+		},
+	}
+	cfg := &config.Config{RunMode: config.RunModeStandard}
+	apiKeyService := newTestAPIKeyService(repo)
+
+	router := gin.New()
+	var capturedAPIKey *service.APIKey
+	var capturedSubject AuthSubject
+	var capturedSubjectOK bool
+	router.Use(func(c *gin.Context) {
+		c.Next()
+		capturedAPIKey, _ = GetAPIKeyFromContext(c)
+		capturedSubject, capturedSubjectOK = GetAuthSubjectFromContext(c)
+	})
+	router.Use(APIKeyAuthWithSubscriptionGoogle(apiKeyService, nil, cfg))
+	router.GET("/t", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/t", nil)
+	req.Header.Set("x-goog-api-key", apiKey.Key)
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.Contains(t, w.Body.String(), "API Key 所属分组已删除")
+	require.NotNil(t, capturedAPIKey)
+	require.Equal(t, apiKey.ID, capturedAPIKey.ID)
+	require.True(t, capturedSubjectOK)
+	require.Equal(t, user.ID, capturedSubject.UserID)
+}
+
+func TestAPIKeyAuthWithSubscriptionGoogleSetsIdentityContextBeforeQuotaExhaustedAbort(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	groupID := int64(101)
+	user := &service.User{
+		ID:          7,
+		Role:        service.RoleUser,
+		Status:      service.StatusActive,
+		Balance:     10,
+		Concurrency: 3,
+	}
+	apiKey := &service.APIKey{
+		ID:      100,
+		UserID:  user.ID,
+		GroupID: &groupID,
+		Key:     "test-key",
+		Status:  service.StatusAPIKeyQuotaExhausted,
+		User:    user,
+		Group: &service.Group{
+			ID:       groupID,
+			Name:     "active",
+			Status:   service.StatusActive,
+			Platform: service.PlatformOpenAI,
+			Hydrated: true,
+		},
+	}
+	repo := fakeAPIKeyRepo{
+		getByKey: func(ctx context.Context, key string) (*service.APIKey, error) {
+			if key != apiKey.Key {
+				return nil, service.ErrAPIKeyNotFound
+			}
+			clone := *apiKey
+			return &clone, nil
+		},
+	}
+	cfg := &config.Config{RunMode: config.RunModeStandard}
+	apiKeyService := newTestAPIKeyService(repo)
+
+	router := gin.New()
+	var capturedAPIKey *service.APIKey
+	var capturedSubject AuthSubject
+	var capturedSubjectOK bool
+	router.Use(func(c *gin.Context) {
+		c.Next()
+		capturedAPIKey, _ = GetAPIKeyFromContext(c)
+		capturedSubject, capturedSubjectOK = GetAuthSubjectFromContext(c)
+	})
+	router.Use(APIKeyAuthWithSubscriptionGoogle(apiKeyService, nil, cfg))
+	router.GET("/t", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/t", nil)
+	req.Header.Set("x-goog-api-key", apiKey.Key)
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusTooManyRequests, w.Code)
+	require.Contains(t, w.Body.String(), "API key 额度已用完")
+	require.NotNil(t, capturedAPIKey)
+	require.Equal(t, apiKey.ID, capturedAPIKey.ID)
+	require.True(t, capturedSubjectOK)
+	require.Equal(t, user.ID, capturedSubject.UserID)
+}
+
 func TestApiKeyAuthWithSubscriptionGoogle_InsufficientBalance(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

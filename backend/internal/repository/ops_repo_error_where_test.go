@@ -42,7 +42,7 @@ func TestBuildOpsErrorLogsWhere_UserQueryUsesExistsSubquery(t *testing.T) {
 	if len(args) != 1 {
 		t.Fatalf("args len = %d, want 1", len(args))
 	}
-	if !strings.Contains(where, "EXISTS (SELECT 1 FROM users u WHERE u.id = e.user_id AND u.email ILIKE $") {
+	if !strings.Contains(where, "EXISTS (SELECT 1 FROM users u WHERE u.id = COALESCE(e.user_id, (SELECT ak.user_id FROM api_keys ak WHERE ak.id = e.api_key_id)) AND u.email ILIKE $") {
 		t.Fatalf("where should include EXISTS user email condition: %s", where)
 	}
 }

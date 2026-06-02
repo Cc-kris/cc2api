@@ -1,11 +1,15 @@
 package handler
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
@@ -163,6 +167,79 @@ func TestOpsErrorLoggerMiddleware_DoesNotBreakOuterMiddlewares(t *testing.T) {
 		r.ServeHTTP(rec, req)
 	})
 	require.Equal(t, http.StatusNoContent, rec.Code)
+}
+
+func TestOpsErrorLoggerMiddleware_WritesRequestBodyDiagnosticsToErrorBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	resetOpsErrorLoggerStateForTest(t)
+	t.Cleanup(func() {
+		resetOpsErrorLoggerStateForTest(t)
+	})
+
+	captured := make(chan *service.OpsInsertErrorLogInput, 1)
+	ops := service.NewOpsService(&opsErrorLoggerRepoStub{
+		insertErrorLogFn: func(ctx context.Context, input *service.OpsInsertErrorLogInput) (int64, error) {
+			captured <- input
+			return 1, nil
+		},
+	}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	r := gin.New()
+	r.Use(OpsErrorLoggerMiddleware(ops))
+	r.POST("/v1/responses", func(c *gin.Context) {
+		setOpsRequestBodyDiagnostics(c, &httputil.RequestBodyReadError{
+			Kind:          httputil.RequestBodyReadIncompleteBody,
+			BytesRead:     12,
+			ContentLength: 128,
+			Err:           context.Canceled,
+		}, 35*time.Millisecond)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"type":    "invalid_request_error",
+				"message": "Request body is incomplete",
+			},
+		})
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	r.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var entry *service.OpsInsertErrorLogInput
+	select {
+	case entry = <-captured:
+	case <-time.After(time.Second):
+		t.Fatal("等待 ops error log 写入超时")
+	}
+	require.NotNil(t, entry)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(entry.ErrorBody), &payload))
+	diagnostics, ok := payload["diagnostics"].(map[string]any)
+	require.True(t, ok, "missing diagnostics in error_body: %s", entry.ErrorBody)
+	require.Equal(t, "incomplete_body", diagnostics["kind"])
+	require.Equal(t, float64(12), diagnostics["bytes_read"])
+	require.Equal(t, float64(128), diagnostics["content_length"])
+	require.Equal(t, float64(35), diagnostics["read_duration_ms"])
+
+	response, ok := payload["response"].(map[string]any)
+	require.True(t, ok, "missing original response in error_body: %s", entry.ErrorBody)
+	responseErr, ok := response["error"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "Request body is incomplete", responseErr["message"])
+}
+
+type opsErrorLoggerRepoStub struct {
+	service.OpsRepository
+	insertErrorLogFn func(ctx context.Context, input *service.OpsInsertErrorLogInput) (int64, error)
+}
+
+func (s *opsErrorLoggerRepoStub) InsertErrorLog(ctx context.Context, input *service.OpsInsertErrorLogInput) (int64, error) {
+	if s.insertErrorLogFn != nil {
+		return s.insertErrorLogFn(ctx, input)
+	}
+	return 1, nil
 }
 
 func TestIsKnownOpsErrorType(t *testing.T) {

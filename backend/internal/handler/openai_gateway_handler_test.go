@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1100,6 +1101,35 @@ func (s *openAIWSUsageHandlerAccountRepoStub) GetByID(ctx context.Context, id in
 	return &account, nil
 }
 
+type openAIWSSilentRetryAccountRepoStub struct {
+	service.AccountRepository
+	accounts []service.Account
+}
+
+func (s *openAIWSSilentRetryAccountRepoStub) ListSchedulableByPlatform(ctx context.Context, platform string) ([]service.Account, error) {
+	accounts := make([]service.Account, 0, len(s.accounts))
+	for _, account := range s.accounts {
+		if account.Platform == platform {
+			accounts = append(accounts, account)
+		}
+	}
+	return accounts, nil
+}
+
+func (s *openAIWSSilentRetryAccountRepoStub) ListSchedulableByGroupIDAndPlatform(ctx context.Context, groupID int64, platform string) ([]service.Account, error) {
+	return s.ListSchedulableByPlatform(ctx, platform)
+}
+
+func (s *openAIWSSilentRetryAccountRepoStub) GetByID(ctx context.Context, id int64) (*service.Account, error) {
+	for _, account := range s.accounts {
+		if account.ID == id {
+			accountCopy := account
+			return &accountCopy, nil
+		}
+	}
+	return nil, nil
+}
+
 type openAIWSUsageHandlerUsageLogRepoStub struct {
 	service.UsageLogRepository
 	created chan *service.UsageLog
@@ -1110,6 +1140,268 @@ func (s *openAIWSUsageHandlerUsageLogRepoStub) Create(ctx context.Context, log *
 		s.created <- log
 	}
 	return true, nil
+}
+
+func TestOpenAIResponsesWebSocket_SilentRetrySwitchesAccountBeforeDownstream(t *testing.T) {
+	var failedHits int32
+	failedUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&failedHits, 1)
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+	}))
+	defer failedUpstream.Close()
+
+	var successHits int32
+	successUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&successHits, 1)
+		conn, err := coderws.Accept(w, r, nil)
+		require.NoError(t, err)
+		defer func() { _ = conn.CloseNow() }()
+
+		readCtx, cancelRead := context.WithTimeout(r.Context(), 3*time.Second)
+		_, _, err = conn.Read(readCtx)
+		cancelRead()
+		require.NoError(t, err)
+
+		writeCtx, cancelWrite := context.WithTimeout(r.Context(), 3*time.Second)
+		err = conn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"response.completed","response":{"id":"resp_switched","model":"gpt-5.4","usage":{"input_tokens":2,"output_tokens":1}}}`))
+		cancelWrite()
+		require.NoError(t, err)
+		_ = conn.Close(coderws.StatusNormalClosure, "done")
+	}))
+	defer successUpstream.Close()
+
+	usageRepo := &openAIWSUsageHandlerUsageLogRepoStub{created: make(chan *service.UsageLog, 2)}
+	server := newOpenAIWSSilentRetryHandlerTestServer(t, []service.Account{
+		newOpenAIWSSilentRetryAccount(9101, "ws-first-fails", failedUpstream.URL, 0),
+		newOpenAIWSSilentRetryAccount(9102, "ws-second-succeeds", successUpstream.URL, 1),
+	}, usageRepo)
+	defer server.Close()
+
+	clientConn := dialOpenAIWSTestClient(t, server.URL)
+	defer func() { _ = clientConn.CloseNow() }()
+	writeOpenAIWSTestPayload(t, clientConn, `{"type":"response.create","model":"gpt-5.4","input":"hello","stream":true}`)
+
+	_, event, err := readOpenAIWSTestMessage(t, clientConn)
+	require.NoError(t, err)
+	require.Equal(t, "response.completed", gjson.GetBytes(event, "type").String())
+	_ = clientConn.Close(coderws.StatusNormalClosure, "done")
+
+	require.Eventually(t, func() bool { return atomic.LoadInt32(&failedHits) == 1 }, time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool { return atomic.LoadInt32(&successHits) == 1 }, time.Second, 10*time.Millisecond)
+
+	var usageLog *service.UsageLog
+	select {
+	case usageLog = <-usageRepo.created:
+		require.NotNil(t, usageLog)
+	case <-time.After(3 * time.Second):
+		t.Fatal("等待 WebSocket usage log 写入超时")
+	}
+	require.Equal(t, int64(9102), usageLog.AccountID)
+	select {
+	case extra := <-usageRepo.created:
+		t.Fatalf("unexpected duplicate usage log: %+v", extra)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestOpenAIResponsesWebSocket_SilentRetryDoesNotSwitchWithPreviousResponseID(t *testing.T) {
+	var failedHits int32
+	failedUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&failedHits, 1)
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+	}))
+	defer failedUpstream.Close()
+
+	var secondHits int32
+	secondUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&secondHits, 1)
+		http.Error(w, "should not be selected", http.StatusInternalServerError)
+	}))
+	defer secondUpstream.Close()
+
+	server := newOpenAIWSSilentRetryHandlerTestServer(t, []service.Account{
+		newOpenAIWSSilentRetryAccount(9201, "ws-prev-first-fails", failedUpstream.URL, 0),
+		newOpenAIWSSilentRetryAccount(9202, "ws-prev-second-blocked", secondUpstream.URL, 1),
+	}, &openAIWSUsageHandlerUsageLogRepoStub{created: make(chan *service.UsageLog, 1)})
+	defer server.Close()
+
+	clientConn := dialOpenAIWSTestClient(t, server.URL)
+	defer func() { _ = clientConn.CloseNow() }()
+	writeOpenAIWSTestPayload(t, clientConn, `{"type":"response.create","model":"gpt-5.4","previous_response_id":"resp_existing","input":"hello","stream":true}`)
+
+	_, _, err := readOpenAIWSTestMessage(t, clientConn)
+	require.Error(t, err)
+	require.Eventually(t, func() bool { return atomic.LoadInt32(&failedHits) == 1 }, time.Second, 10*time.Millisecond)
+	require.Equal(t, int32(0), atomic.LoadInt32(&secondHits))
+}
+
+func TestOpenAIResponsesWebSocket_SilentRetryDoesNotSwitchAfterDownstreamWrite(t *testing.T) {
+	var firstHits int32
+	firstUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&firstHits, 1)
+		conn, err := coderws.Accept(w, r, nil)
+		require.NoError(t, err)
+		defer func() { _ = conn.CloseNow() }()
+
+		readCtx, cancelRead := context.WithTimeout(r.Context(), 3*time.Second)
+		_, _, err = conn.Read(readCtx)
+		cancelRead()
+		require.NoError(t, err)
+
+		writeCtx, cancelWrite := context.WithTimeout(r.Context(), 3*time.Second)
+		err = conn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"response.created","response":{"id":"resp_partial","model":"gpt-5.4"}}`))
+		cancelWrite()
+		require.NoError(t, err)
+	}))
+	defer firstUpstream.Close()
+
+	var secondHits int32
+	secondUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&secondHits, 1)
+		http.Error(w, "should not be selected", http.StatusInternalServerError)
+	}))
+	defer secondUpstream.Close()
+
+	server := newOpenAIWSSilentRetryHandlerTestServer(t, []service.Account{
+		newOpenAIWSSilentRetryAccount(9301, "ws-partial-first", firstUpstream.URL, 0),
+		newOpenAIWSSilentRetryAccount(9302, "ws-partial-second-blocked", secondUpstream.URL, 1),
+	}, &openAIWSUsageHandlerUsageLogRepoStub{created: make(chan *service.UsageLog, 1)})
+	defer server.Close()
+
+	clientConn := dialOpenAIWSTestClient(t, server.URL)
+	defer func() { _ = clientConn.CloseNow() }()
+	writeOpenAIWSTestPayload(t, clientConn, `{"type":"response.create","model":"gpt-5.4","input":"hello","stream":true}`)
+
+	_, event, err := readOpenAIWSTestMessage(t, clientConn)
+	require.NoError(t, err)
+	require.Equal(t, "response.created", gjson.GetBytes(event, "type").String())
+
+	_, _, err = readOpenAIWSTestMessage(t, clientConn)
+	require.Error(t, err)
+	require.Eventually(t, func() bool { return atomic.LoadInt32(&firstHits) == 1 }, time.Second, 10*time.Millisecond)
+	require.Equal(t, int32(0), atomic.LoadInt32(&secondHits))
+}
+
+func newOpenAIWSSilentRetryAccount(id int64, name string, upstreamBaseURL string, priority int) service.Account {
+	return service.Account{
+		ID:          id,
+		Name:        name,
+		Platform:    service.PlatformOpenAI,
+		Type:        service.AccountTypeAPIKey,
+		Status:      service.StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Priority:    priority,
+		Credentials: map[string]any{
+			"api_key":  "sk-test",
+			"base_url": upstreamBaseURL,
+		},
+		Extra: map[string]any{
+			"openai_apikey_responses_websockets_v2_enabled": true,
+			"openai_apikey_responses_websockets_v2_mode":    service.OpenAIWSIngressModePassthrough,
+		},
+	}
+}
+
+func newOpenAIWSSilentRetryHandlerTestServer(t *testing.T, accounts []service.Account, usageRepo *openAIWSUsageHandlerUsageLogRepoStub) *httptest.Server {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{}
+	cfg.RunMode = config.RunModeSimple
+	cfg.Default.RateMultiplier = 1
+	cfg.Security.URLAllowlist.Enabled = false
+	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
+	cfg.Gateway.OpenAIWS.Enabled = true
+	cfg.Gateway.OpenAIWS.APIKeyEnabled = true
+	cfg.Gateway.OpenAIWS.ResponsesWebsocketsV2 = true
+	cfg.Gateway.OpenAIWS.ModeRouterV2Enabled = true
+	cfg.Gateway.OpenAIWS.DialTimeoutSeconds = 3
+	cfg.Gateway.OpenAIWS.ReadTimeoutSeconds = 1
+	cfg.Gateway.OpenAIWS.WriteTimeoutSeconds = 3
+
+	billingCacheSvc := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
+	gatewaySvc := service.NewOpenAIGatewayService(
+		&openAIWSSilentRetryAccountRepoStub{accounts: accounts},
+		usageRepo,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		cfg,
+		nil,
+		nil,
+		service.NewBillingService(cfg, nil),
+		nil,
+		billingCacheSvc,
+		nil,
+		&service.DeferredService{},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	cache := &concurrencyCacheMock{
+		acquireUserSlotFn: func(ctx context.Context, userID int64, maxConcurrency int, requestID string) (bool, error) {
+			return true, nil
+		},
+		acquireAccountSlotFn: func(ctx context.Context, accountID int64, maxConcurrency int, requestID string) (bool, error) {
+			return true, nil
+		},
+	}
+	h := &OpenAIGatewayHandler{
+		gatewayService:      gatewaySvc,
+		billingCacheService: billingCacheSvc,
+		apiKeyService:       &service.APIKeyService{},
+		concurrencyHelper:   NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second),
+	}
+
+	groupID := int64(4301)
+	apiKey := &service.APIKey{
+		ID:      1901,
+		GroupID: &groupID,
+		User:    &service.User{ID: 1902, Status: service.StatusActive},
+	}
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyAPIKey), apiKey)
+		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: apiKey.User.ID, Concurrency: 1})
+		c.Next()
+	})
+	router.GET("/openai/v1/responses", h.ResponsesWebSocket)
+	return httptest.NewServer(router)
+}
+
+func dialOpenAIWSTestClient(t *testing.T, serverURL string) *coderws.Conn {
+	t.Helper()
+	dialCtx, cancelDial := context.WithTimeout(context.Background(), 3*time.Second)
+	clientConn, _, err := coderws.Dial(
+		dialCtx,
+		"ws"+strings.TrimPrefix(serverURL, "http")+"/openai/v1/responses",
+		&coderws.DialOptions{CompressionMode: coderws.CompressionContextTakeover},
+	)
+	cancelDial()
+	require.NoError(t, err)
+	return clientConn
+}
+
+func writeOpenAIWSTestPayload(t *testing.T, clientConn *coderws.Conn, payload string) {
+	t.Helper()
+	writeCtx, cancelWrite := context.WithTimeout(context.Background(), 3*time.Second)
+	err := clientConn.Write(writeCtx, coderws.MessageText, []byte(payload))
+	cancelWrite()
+	require.NoError(t, err)
+}
+
+func readOpenAIWSTestMessage(t *testing.T, clientConn *coderws.Conn) (coderws.MessageType, []byte, error) {
+	t.Helper()
+	readCtx, cancelRead := context.WithTimeout(context.Background(), 3*time.Second)
+	msgType, event, err := clientConn.Read(readCtx)
+	cancelRead()
+	return msgType, event, err
 }
 
 type openAIWSUsageHandlerChannelRepoStub struct {

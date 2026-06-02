@@ -68,8 +68,88 @@ func TestListErrorLogs_PlatformSLADetailsScansRows(t *testing.T) {
 	require.Equal(t, int16(2), *item.RequestType)
 	require.NotNil(t, item.UserID)
 	require.Equal(t, int64(11), *item.UserID)
+	require.Equal(t, "user@example.com", item.UserEmail)
 	require.NotNil(t, item.AccountID)
 	require.Equal(t, int64(42), *item.AccountID)
+}
+
+func TestListErrorLogs_BackfillsRequesterFromAPIKey(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	repo := &opsRepository{db: db}
+	createdAt := time.Date(2026, 6, 2, 6, 30, 0, 0, time.UTC)
+
+	mock.ExpectQuery(`(?s)SELECT COUNT\(\*\) FROM ops_error_logs e .*COALESCE\(e\.status_code, 0\) >= 400`).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+	rows := sqlmock.NewRows([]string{
+		"id", "created_at", "error_phase", "error_type", "error_owner", "error_source", "severity", "status_code", "platform", "model",
+		"resolved", "resolved_at", "resolved_by_user_id", "resolved_by_user_email", "client_request_id", "request_id", "error_message",
+		"user_id", "user_email", "api_key_id", "account_id", "account_name", "group_id", "group_name", "client_ip", "request_path", "stream",
+		"inbound_endpoint", "upstream_endpoint", "requested_model", "upstream_model", "request_type",
+	}).AddRow(
+		int64(8), createdAt, "routing", "forbidden_error", "platform", "gateway", "error", 403, "openai", "",
+		false, nil, nil, "", "client-req-2", "req-2", "API Key 所属分组已删除",
+		int64(11), "3238607507@qq.com", int64(95), nil, "", nil, "", "127.0.0.1", "/v1/responses", false,
+		"/v1/responses", "", "", "", nil,
+	)
+	mock.ExpectQuery(`(?s)SELECT\s+e\.id,.*COALESCE\(e\.user_id, ak\.user_id\).*COALESCE\(u\.email, ''\).*LEFT JOIN api_keys ak ON e\.api_key_id = ak\.id.*LEFT JOIN users u ON COALESCE\(e\.user_id, ak\.user_id\) = u\.id`).
+		WithArgs(20, 0).
+		WillReturnRows(rows)
+
+	got, err := repo.ListErrorLogs(context.Background(), &service.OpsErrorLogFilter{Page: 1, PageSize: 20})
+
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+	require.NotNil(t, got)
+	require.Len(t, got.Errors, 1)
+	item := got.Errors[0]
+	require.NotNil(t, item.UserID)
+	require.Equal(t, int64(11), *item.UserID)
+	require.Equal(t, "3238607507@qq.com", item.UserEmail)
+	require.NotNil(t, item.APIKeyID)
+	require.Equal(t, int64(95), *item.APIKeyID)
+}
+
+func TestGetErrorLogByID_BackfillsRequesterFromAPIKey(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	repo := &opsRepository{db: db}
+	createdAt := time.Date(2026, 6, 2, 6, 45, 0, 0, time.UTC)
+
+	rows := sqlmock.NewRows([]string{
+		"id", "created_at", "error_phase", "error_type", "error_owner", "error_source", "severity", "status_code", "platform", "model",
+		"resolved", "resolved_at", "resolved_by_user_id", "client_request_id", "request_id", "error_message", "error_body",
+		"upstream_status_code", "upstream_error_message", "upstream_error_detail", "upstream_errors", "is_business_limited",
+		"user_id", "user_email", "api_key_id", "account_id", "account_name", "group_id", "group_name", "client_ip",
+		"request_path", "stream", "inbound_endpoint", "upstream_endpoint", "requested_model", "upstream_model", "request_type", "user_agent",
+		"auth_latency_ms", "routing_latency_ms", "upstream_latency_ms", "response_latency_ms", "time_to_first_token_ms",
+	}).AddRow(
+		int64(8), createdAt, "routing", "forbidden_error", "platform", "gateway", "error", 403, "openai", "",
+		false, nil, nil, "client-req-2", "req-2", "API Key 所属分组已删除", "{}",
+		nil, "", "", "", false,
+		int64(11), "3238607507@qq.com", int64(95), nil, "", nil, "", "127.0.0.1",
+		"/v1/responses", false, "/v1/responses", "", "", "", nil, "codex",
+		nil, nil, nil, nil, nil,
+	)
+	mock.ExpectQuery(`(?s)SELECT\s+e\.id,.*COALESCE\(e\.user_id, ak\.user_id\).*COALESCE\(u\.email, ''\).*FROM ops_error_logs e.*LEFT JOIN api_keys ak ON e\.api_key_id = ak\.id.*LEFT JOIN users u ON COALESCE\(e\.user_id, ak\.user_id\) = u\.id.*WHERE e\.id = \$1`).
+		WithArgs(int64(8)).
+		WillReturnRows(rows)
+
+	got, err := repo.GetErrorLogByID(context.Background(), 8)
+
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+	require.NotNil(t, got)
+	require.NotNil(t, got.UserID)
+	require.Equal(t, int64(11), *got.UserID)
+	require.Equal(t, "3238607507@qq.com", got.UserEmail)
+	require.NotNil(t, got.APIKeyID)
+	require.Equal(t, int64(95), *got.APIKeyID)
 }
 
 func TestBuildOpsErrorLogsWhere_ProviderOwnerDoesNotForceUpstreamPhase(t *testing.T) {
