@@ -6,60 +6,107 @@
   <meta name="robots" content="noindex,nofollow,noarchive">
   <title>客户端配置说明</title>
   <style>
-:root { color-scheme: light; --bg:#f5f7fb; --panel:#fff; --text:#1c2430; --muted:#627084; --line:#dbe2ec; --accent:#1466d9; --accent-soft:#e8f1ff; --code-bg:#111827; --code-text:#edf2f7; }
-* { box-sizing:border-box; } html { scroll-behavior:smooth; }
-body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,"Noto Sans SC",sans-serif; background:var(--bg); color:var(--text); line-height:1.65; }
-.shell { min-height:100vh; display:grid; grid-template-columns:280px minmax(0,1fr); }
-.sidebar { position:sticky; top:0; height:100vh; padding:24px 18px; background:#fff; border-right:1px solid var(--line); overflow-y:auto; }
-.brand { padding:0 10px 18px; border-bottom:1px solid var(--line); margin-bottom:16px; }
-.brand h1 { margin:0 0 6px; font-size:20px; line-height:1.25; } .brand p { margin:0; color:var(--muted); font-size:13px; }
-.nav { display:grid; gap:6px; } .nav a { color:var(--text); text-decoration:none; padding:10px 12px; border-radius:8px; font-size:15px; border:1px solid transparent; } .nav a:hover { color:var(--accent); background:var(--accent-soft); border-color:#cfe0ff; }
-.content { width:min(1040px,100%); padding:32px 36px 72px; } .intro { margin:0 0 20px; color:var(--muted); }
-.section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:28px; margin:0 0 20px; scroll-margin-top:20px; } .section>h2 { margin:0 0 18px; padding-bottom:14px; border-bottom:1px solid var(--line); font-size:28px; line-height:1.25; }
-h3 { margin:26px 0 10px; font-size:20px; line-height:1.35; } p { margin:8px 0; color:#273244; }
-code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace; font-size:.92em; background:#eef2f7; color:#0f172a; padding:2px 5px; border-radius:5px; }
-pre { margin:12px 0 16px; padding:16px; overflow-x:auto; background:var(--code-bg); color:var(--code-text); border-radius:8px; } pre code { background:transparent; color:inherit; padding:0; border-radius:0; font-size:13px; line-height:1.55; }
-.table-wrap { overflow-x:auto; margin:12px 0 16px; border:1px solid var(--line); border-radius:8px; } table { width:100%; border-collapse:collapse; min-width:560px; background:#fff; } th,td { text-align:left; vertical-align:top; padding:10px 12px; border-bottom:1px solid var(--line); } th { background:#f0f4fa; font-weight:650; } tr:last-child td { border-bottom:0; }
-@media (max-width:820px) { .shell { display:block; } .sidebar { position:static; height:auto; } .content { padding:20px 16px 48px; } table { min-width:0; } }
+:root {
+  color-scheme: light;
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --text: #1c2430;
+  --muted: #627084;
+  --line: #dbe2ec;
+  --accent: #1466d9;
+  --accent-soft: #e8f1ff;
+  --warn: #fff7ed;
+  --warn-line: #fed7aa;
+  --code-bg: #111827;
+  --code-text: #edf2f7;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, "Noto Sans SC", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.65;
+}
+.shell { min-height: 100vh; display: grid; grid-template-columns: 280px minmax(0, 1fr); }
+.sidebar { position: sticky; top: 0; height: 100vh; padding: 24px 18px; background: #fff; border-right: 1px solid var(--line); overflow-y: auto; }
+.brand { padding: 0 10px 18px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.brand h1 { margin: 0 0 6px; font-size: 20px; line-height: 1.25; }
+.brand p { margin: 0; color: var(--muted); font-size: 13px; }
+.nav { display: grid; gap: 6px; }
+.nav a { color: var(--text); text-decoration: none; padding: 10px 12px; border-radius: 8px; font-size: 15px; border: 1px solid transparent; }
+.nav a:hover, .nav a.active { color: var(--accent); background: var(--accent-soft); border-color: #cfe0ff; }
+.content { width: min(1040px, 100%); padding: 32px 36px 72px; }
+.intro { margin: 0 0 20px; color: var(--muted); }
+.section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 28px; margin: 0 0 20px; scroll-margin-top: 20px; }
+.section > h2 { margin: 0 0 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line); font-size: 28px; line-height: 1.25; }
+h3 { margin: 26px 0 10px; font-size: 20px; line-height: 1.35; }
+h4 { margin: 20px 0 8px; font-size: 16px; line-height: 1.35; }
+p { margin: 8px 0; color: #273244; }
+.notice { margin: 12px 0 16px; padding: 12px 14px; border: 1px solid var(--warn-line); border-radius: 8px; background: var(--warn); color: #7c2d12; }
+.notice strong { color: #9a3412; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-size: .92em; background: #eef2f7; color: #0f172a; padding: 2px 5px; border-radius: 5px; }
+pre { position: relative; margin: 12px 0 16px; padding: 16px; overflow-x: auto; background: var(--code-bg); color: var(--code-text); border-radius: 8px; }
+pre code { background: transparent; color: inherit; padding: 0; border-radius: 0; font-size: 13px; line-height: 1.55; }
+.copy { position: absolute; top: 8px; right: 8px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: #fff; border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
+.table-wrap { overflow-x: auto; margin: 12px 0 16px; border: 1px solid var(--line); border-radius: 8px; }
+table { width: 100%; border-collapse: collapse; min-width: 560px; background: #fff; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+th { background: #f0f4fa; font-weight: 650; }
+tr:last-child td { border-bottom: 0; }
+ol, ul { padding-left: 22px; }
+li { margin: 6px 0; }
+.topbar { display: none; position: sticky; top: 0; z-index: 10; background: #fff; border-bottom: 1px solid var(--line); padding: 12px 16px; }
+.topbar select { width: 100%; height: 40px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--text); padding: 0 10px; font-size: 15px; }
+@media (max-width: 860px) { .shell { display: block; } .sidebar { display: none; } .topbar { display: block; } .content { padding: 20px 14px 48px; } .section { padding: 20px 16px; } .section > h2 { font-size: 24px; } table { min-width: 480px; } }
   </style>
 </head>
 <body>
+  <div class="topbar"><select id="sectionSelect" aria-label="选择客户端"><option value="#codex-app">Codex APP</option><option value="#codex-cli">Codex CLI</option><option value="#claude-code">Claude Code</option><option value="#opencode">OpenCode</option><option value="#ccswitch">CC Switch</option></select></div>
   <div class="shell">
-    <aside class="sidebar"><div class="brand"><h1>客户端配置说明</h1><p>所有客户端统一使用 config.toml</p></div><nav class="nav">
-        <a href="#codex-app">Codex APP 配置说明</a>
-        <a href="#codex-cli">Codex CLI 配置说明</a>
-        <a href="#claude-code">Claude Code 配置说明</a>
-        <a href="#opencode">OpenCode 配置说明</a>
-        <a href="#ccswitch">CC Switch 配置说明</a>
-      </nav></aside>
+    <aside class="sidebar">
+      <div class="brand"><h1>客户端配置说明</h1><p>cc-ai 中转配置文档</p></div>
+      <nav class="nav" aria-label="配置目录"><a href="#codex-app">Codex APP</a><a href="#codex-cli">Codex CLI</a><a href="#claude-code">Claude Code</a><a href="#opencode">OpenCode</a><a href="#ccswitch">CC Switch</a></nav>
+    </aside>
     <main class="content">
-      <p class="intro">选择左侧客户端查看配置。所有入口都使用同一份 <code>config.toml</code>，API 密钥填写在 <code>experimental_bearer_token</code>。</p>
+      <p class="intro">选择左侧客户端查看对应配置。不同客户端使用不同配置文件，请只看自己正在使用的客户端章节；页面里的 <code>填写API秘钥</code> 需要替换成你在 cc-ai 创建的真实 API Key。</p>
+
       <section class="section" id="codex-app">
         <h2>Codex APP 配置说明</h2>
-        <h3>统一使用 config.toml</h3>
-        <p>这个客户端入口统一使用同一份 <code>config.toml</code>。只需要修改配置目录中的 <code>config.toml</code>，并把 API 密钥填写到 <code>experimental_bearer_token</code>。</p>
-        <div class="table-wrap"><table>
-          <tr><th>系统</th><th>配置文件路径</th><th>处理方式</th></tr>
-          <tr><td>macOS / Linux</td><td><code>~/.codex/config.toml</code></td><td>创建或覆盖 config.toml</td></tr>
-          <tr><td>Windows</td><td><code>%userprofile%\.codex\config.toml</code></td><td>创建或覆盖 config.toml</td></tr>
-        </table></div>
-        <h3>config.toml 内容</h3>
-        <pre><code>model_reasoning_effort = &quot;high&quot;
+        <h3>一、这一节适合谁</h3>
+        <p>如果你使用的是桌面版 Codex APP，并且希望通过 cc-ai 使用 <code>gpt-5.5</code>，就按这一节操作。</p>
+        <div class="notice"><strong>重点：</strong>Codex APP 只需要修改 <code>config.toml</code>。不要去改认证文件，也不要再额外添加环境变量。</div>
+        <div class="table-wrap"><table><tr><th>系统</th><th>配置文件路径</th><th>要做什么</th></tr><tr><td>macOS / Linux</td><td><code>~/.codex/config.toml</code></td><td>创建或打开这个文件，把下方内容写进去。</td></tr><tr><td>Windows</td><td><code>%userprofile%\.codex\config.toml</code></td><td>创建或打开这个文件，把下方内容写进去。</td></tr></table></div>
+        <h3>二、先准备 API Key</h3>
+        <ol><li>登录 <code>https://cc-ai.xyz</code>。</li><li>进入 API Key 页面。</li><li>创建一个新的 API Key。</li><li>复制完整 Key，后面要替换示例里的 <code>填写API秘钥</code>。</li></ol>
+        <h3>三、找到配置目录</h3>
+        <h4>macOS / Linux</h4>
+        <ol><li>打开终端。</li><li>执行 <code>mkdir -p ~/.codex</code>，确保目录存在。</li><li>用编辑器打开 <code>~/.codex/config.toml</code>。如果文件不存在，就新建一个。</li></ol>
+        <h4>Windows</h4>
+        <ol><li>按 <code>Win + R</code>。</li><li>输入 <code>%userprofile%\.codex</code> 并回车。</li><li>如果没有 <code>.codex</code> 文件夹，就在用户目录下新建。</li><li>在里面新建或打开 <code>config.toml</code>。</li></ol>
+        <h3>四、改之前先备份</h3>
+        <p>如果你之前已经能正常使用 Codex APP，先做一个备份，这样改错时可以快速恢复。</p>
+        <ol><li>在同一个目录里找到 <code>config.toml</code>。</li><li>复制一份，命名为 <code>config.toml.bak</code>。</li><li>确认备份文件和原文件在同一个目录。</li><li>再开始修改原来的 <code>config.toml</code>。</li></ol>
+        <div class="table-wrap"><table><tr><th>不要做的事</th><th>原因</th></tr><tr><td>不要只改备份文件</td><td>Codex APP 读取的是 <code>config.toml</code>，不是 <code>config.toml.bak</code>。</td></tr><tr><td>不要把文件命名成 <code>config.toml.txt</code></td><td>Windows 可能隐藏扩展名，新手容易误建成文本文件。</td></tr><tr><td>不要把示例里的 API Key 占位文字留着</td><td>必须换成你自己的真实 API Key 才能通过验证。</td></tr></table></div>
+        <h3>五、写入 config.toml</h3>
+        <p>复制下面整段内容，替换原来的 Codex 配置。然后把 <code>填写API秘钥</code> 换成你的真实 API Key。</p>
+        <pre><code>model_reasoning_effort = "high"
 
-approval_policy = &quot;never&quot;
-model = &quot;gpt-5.5&quot;
+approval_policy = "never"
+model = "gpt-5.5"
 model_auto_compact_token_limit = 945000
 model_context_window = 1050000
-model_provider = &quot;ccai&quot;
-personality = &quot;pragmatic&quot;
-sandbox_mode = &quot;danger-full-access&quot;
+model_provider = "ccai"
+personality = "pragmatic"
+sandbox_mode = "danger-full-access"
 tool_output_token_limit = 6000
 
 [model_providers.ccai]
-base_url = &quot;https://cc-ai.xyz&quot;
-name = &quot;OpenAI&quot;
-experimental_bearer_token = &quot;填写API秘钥&quot;
-wire_api = &quot;responses&quot;
+base_url = "https://cc-ai.xyz"
+name = "OpenAI"
+experimental_bearer_token = "填写API秘钥"
+wire_api = "responses"
 requires_openai_auth = false
 supports_websockets = true
 
@@ -72,43 +119,44 @@ child_agents_md = true
 hooks = true
 suppress_unstable_features_warning = true
 memories = true</code></pre>
-        <h3>完成检查</h3>
-        <div class="table-wrap"><table>
-          <tr><th>检查项</th><th>正确结果</th></tr>
-          <tr><td>模型</td><td><code>gpt-5.5</code></td></tr>
-          <tr><td>Provider</td><td><code>ccai</code></td></tr>
-          <tr><td>Base URL</td><td><code>https://cc-ai.xyz</code></td></tr>
-          <tr><td>密钥字段</td><td><code>experimental_bearer_token</code> 已填写真实 API 密钥</td></tr>
-          <tr><td>认证开关</td><td><code>requires_openai_auth = false</code></td></tr>
-          <tr><td>WebSocket</td><td><code>supports_websockets = true</code></td></tr>
-        </table></div>
+        <h3>六、保存并重启</h3>
+        <ol><li>保存 <code>config.toml</code>。</li><li>完全退出 Codex APP。</li><li>重新打开 Codex APP。</li><li>发起一次简单对话，确认可以正常返回。</li></ol>
+        <h3>七、检查清单</h3>
+        <div class="table-wrap"><table><tr><th>检查项</th><th>结果</th></tr><tr><td><code>config.toml</code> 已保存到正确目录</td><td>是</td></tr><tr><td><code>experimental_bearer_token</code> 已替换成真实 API Key</td><td>是</td></tr><tr><td><code>model</code> 是 <code>gpt-5.5</code></td><td>是</td></tr><tr><td><code>model_provider</code> 是 <code>ccai</code></td><td>是</td></tr><tr><td><code>base_url</code> 是 <code>https://cc-ai.xyz</code></td><td>是</td></tr><tr><td>Codex APP 已完全重启</td><td>是</td></tr></table></div>
+        <h3>八、常见问题</h3>
+        <h4>1. 文件夹不存在怎么办？</h4><p>直接新建即可。Codex 不要求这个目录提前存在。</p>
+        <h4>2. 提示鉴权失败怎么办？</h4><p>先检查 <code>experimental_bearer_token</code> 是否还是示例文字，或者复制 Key 时是否漏了一段。</p>
+        <h4>3. 需要再配置其他密钥文件吗？</h4><p>不需要。这个版本的说明只要求写 <code>config.toml</code>。</p>
       </section>
+
       <section class="section" id="codex-cli">
         <h2>Codex CLI 配置说明</h2>
-        <h3>统一使用 config.toml</h3>
-        <p>这个客户端入口统一使用同一份 <code>config.toml</code>。只需要修改配置目录中的 <code>config.toml</code>，并把 API 密钥填写到 <code>experimental_bearer_token</code>。</p>
-        <div class="table-wrap"><table>
-          <tr><th>系统</th><th>配置文件路径</th><th>处理方式</th></tr>
-          <tr><td>macOS / Linux</td><td><code>~/.codex/config.toml</code></td><td>创建或覆盖 config.toml</td></tr>
-          <tr><td>Windows</td><td><code>%userprofile%\.codex\config.toml</code></td><td>创建或覆盖 config.toml</td></tr>
-        </table></div>
-        <h3>config.toml 内容</h3>
-        <pre><code>model_reasoning_effort = &quot;high&quot;
+        <h3>一、这一节适合谁</h3>
+        <p>如果你使用的是命令行里的 Codex CLI，就按这一节操作。CLI 和桌面版使用同一套 <code>.codex/config.toml</code> 配置。</p>
+        <div class="notice"><strong>重点：</strong>Codex CLI 也只需要修改 <code>config.toml</code>。不要把 API Key 写到其他认证文件里。</div>
+        <h3>二、确认路径</h3>
+        <div class="table-wrap"><table><tr><th>系统</th><th>路径</th><th>说明</th></tr><tr><td>macOS / Linux</td><td><code>~/.codex/config.toml</code></td><td>终端默认会读取这个用户目录下的配置。</td></tr><tr><td>Windows</td><td><code>%userprofile%\.codex\config.toml</code></td><td>在当前 Windows 用户目录下创建或修改。</td></tr></table></div>
+        <h3>三、先确认你正在改当前用户的配置</h3>
+        <p>Codex CLI 读取的是当前系统用户目录下的配置。如果你用管理员窗口、远程服务器或不同系统用户运行 CLI，要确认配置写在运行 CLI 的那个用户目录里。</p>
+        <div class="table-wrap"><table><tr><th>场景</th><th>检查方法</th></tr><tr><td>macOS / Linux</td><td>在终端执行 <code>echo $HOME</code>，确认这里就是你要配置的用户目录。</td></tr><tr><td>Windows</td><td>在命令行执行 <code>echo %userprofile%</code>，确认显示的是当前用户目录。</td></tr><tr><td>远程服务器</td><td>在远程服务器里创建配置，不是在本机电脑里创建。</td></tr></table></div>
+        <h3>四、写入配置</h3>
+        <p>复制下方内容到 <code>config.toml</code>。如果你已有其他 Codex 配置，先备份旧文件，再整体替换，避免新手合并时漏字段。</p>
+        <pre><code>model_reasoning_effort = "high"
 
-approval_policy = &quot;never&quot;
-model = &quot;gpt-5.5&quot;
+approval_policy = "never"
+model = "gpt-5.5"
 model_auto_compact_token_limit = 945000
 model_context_window = 1050000
-model_provider = &quot;ccai&quot;
-personality = &quot;pragmatic&quot;
-sandbox_mode = &quot;danger-full-access&quot;
+model_provider = "ccai"
+personality = "pragmatic"
+sandbox_mode = "danger-full-access"
 tool_output_token_limit = 6000
 
 [model_providers.ccai]
-base_url = &quot;https://cc-ai.xyz&quot;
-name = &quot;OpenAI&quot;
-experimental_bearer_token = &quot;填写API秘钥&quot;
-wire_api = &quot;responses&quot;
+base_url = "https://cc-ai.xyz"
+name = "OpenAI"
+experimental_bearer_token = "填写API秘钥"
+wire_api = "responses"
 requires_openai_auth = false
 supports_websockets = true
 
@@ -121,165 +169,177 @@ child_agents_md = true
 hooks = true
 suppress_unstable_features_warning = true
 memories = true</code></pre>
-        <h3>完成检查</h3>
-        <div class="table-wrap"><table>
-          <tr><th>检查项</th><th>正确结果</th></tr>
-          <tr><td>模型</td><td><code>gpt-5.5</code></td></tr>
-          <tr><td>Provider</td><td><code>ccai</code></td></tr>
-          <tr><td>Base URL</td><td><code>https://cc-ai.xyz</code></td></tr>
-          <tr><td>密钥字段</td><td><code>experimental_bearer_token</code> 已填写真实 API 密钥</td></tr>
-          <tr><td>认证开关</td><td><code>requires_openai_auth = false</code></td></tr>
-          <tr><td>WebSocket</td><td><code>supports_websockets = true</code></td></tr>
-        </table></div>
+        <h3>五、命令行验证</h3>
+        <ol><li>保存文件后关闭当前终端窗口。</li><li>重新打开一个新终端。</li><li>运行 Codex CLI。</li><li>输入一个简单任务，例如“用一句话介绍当前模型”。</li></ol>
+        <h3>六、排错顺序</h3>
+        <div class="table-wrap"><table><tr><th>现象</th><th>先检查什么</th></tr><tr><td>提示 Key 无效</td><td>检查 <code>experimental_bearer_token</code> 是否是完整 API Key。</td></tr><tr><td>提示模型不可用</td><td>检查 <code>model = "gpt-5.5"</code> 是否写错。</td></tr><tr><td>提示连接失败</td><td>检查 <code>base_url = "https://cc-ai.xyz"</code> 是否多写了路径或斜杠。</td></tr><tr><td>修改后没有变化</td><td>确认改的是当前用户目录下的 <code>config.toml</code>，并且已重新打开终端。</td></tr></table></div>
+        <h3>七、新手最容易改错的地方</h3>
+        <ul><li>把配置写到了项目目录，但 CLI 实际读取的是用户目录。</li><li>复制配置时漏掉了 <code>[model_providers.ccai]</code> 这一行。</li><li>把 <code>base_url</code> 写成了带 <code>/v1</code> 的地址。Codex 这里按示例保持 <code>https://cc-ai.xyz</code>。</li><li>终端没有重新打开，旧进程还在使用旧配置。</li></ul>
       </section>
+
       <section class="section" id="claude-code">
         <h2>Claude Code 配置说明</h2>
-        <h3>统一使用 config.toml</h3>
-        <p>这个客户端入口统一使用同一份 <code>config.toml</code>。只需要修改配置目录中的 <code>config.toml</code>，并把 API 密钥填写到 <code>experimental_bearer_token</code>。</p>
-        <div class="table-wrap"><table>
-          <tr><th>系统</th><th>配置文件路径</th><th>处理方式</th></tr>
-          <tr><td>macOS / Linux</td><td><code>~/.codex/config.toml</code></td><td>创建或覆盖 config.toml</td></tr>
-          <tr><td>Windows</td><td><code>%userprofile%\.codex\config.toml</code></td><td>创建或覆盖 config.toml</td></tr>
-        </table></div>
-        <h3>config.toml 内容</h3>
-        <pre><code>model_reasoning_effort = &quot;high&quot;
-
-approval_policy = &quot;never&quot;
-model = &quot;gpt-5.5&quot;
-model_auto_compact_token_limit = 945000
-model_context_window = 1050000
-model_provider = &quot;ccai&quot;
-personality = &quot;pragmatic&quot;
-sandbox_mode = &quot;danger-full-access&quot;
-tool_output_token_limit = 6000
-
-[model_providers.ccai]
-base_url = &quot;https://cc-ai.xyz&quot;
-name = &quot;OpenAI&quot;
-experimental_bearer_token = &quot;填写API秘钥&quot;
-wire_api = &quot;responses&quot;
-requires_openai_auth = false
-supports_websockets = true
-
-[features]
-goals = true
-multi_agent = true
-image_generation = true
-
-child_agents_md = true
-hooks = true
-suppress_unstable_features_warning = true
-memories = true</code></pre>
-        <h3>完成检查</h3>
-        <div class="table-wrap"><table>
-          <tr><th>检查项</th><th>正确结果</th></tr>
-          <tr><td>模型</td><td><code>gpt-5.5</code></td></tr>
-          <tr><td>Provider</td><td><code>ccai</code></td></tr>
-          <tr><td>Base URL</td><td><code>https://cc-ai.xyz</code></td></tr>
-          <tr><td>密钥字段</td><td><code>experimental_bearer_token</code> 已填写真实 API 密钥</td></tr>
-          <tr><td>认证开关</td><td><code>requires_openai_auth = false</code></td></tr>
-          <tr><td>WebSocket</td><td><code>supports_websockets = true</code></td></tr>
-        </table></div>
+        <h3>一、这一节适合谁</h3>
+        <p>如果你使用 Claude Code，需要按 Claude Code 自己的配置方式来写。它不是 Codex 客户端，所以不要使用 Codex 的配置目录。</p>
+        <div class="notice"><strong>重点：</strong>Claude Code 使用 <code>~/.claude/settings.json</code> 里的 <code>env</code> 配置。</div>
+        <h3>二、配置文件路径</h3>
+        <div class="table-wrap"><table><tr><th>系统</th><th>路径</th><th>说明</th></tr><tr><td>macOS / Linux</td><td><code>~/.claude/settings.json</code></td><td>没有文件就新建。</td></tr><tr><td>Windows</td><td><code>%userprofile%\.claude\settings.json</code></td><td>没有文件就新建。</td></tr></table></div>
+        <h3>三、改之前先备份</h3>
+        <p>如果 <code>settings.json</code> 已经存在，先复制一份命名为 <code>settings.json.bak</code>。Claude Code 的配置通常还包含主题、通知、权限等内容，备份可以避免误删。</p>
+        <h3>四、第一次配置时写入</h3>
+        <p>如果你的 <code>settings.json</code> 原来是空的，直接写入下面内容，并把 <code>填写API秘钥</code> 替换成真实 API Key。</p>
+        <pre><code>{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://cc-ai.xyz",
+    "ANTHROPIC_AUTH_TOKEN": "填写API秘钥",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0"
+  }
+}</code></pre>
+        <h3>五、已有其他配置时怎么合并</h3>
+        <p>如果文件里已经有主题、通知等设置，不要删除原字段，只需要增加或更新 <code>env</code>。示例：</p>
+        <pre><code>{
+  "theme": "dark",
+  "notifications": true,
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://cc-ai.xyz",
+    "ANTHROPIC_AUTH_TOKEN": "填写API秘钥",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0"
+  }
+}</code></pre>
+        <h3>六、保存并重启</h3>
+        <ol><li>保存 <code>settings.json</code>。</li><li>完全退出 Claude Code。</li><li>重新打开 Claude Code。</li><li>发起一次简单请求验证。</li></ol>
+        <h3>七、检查清单</h3>
+        <div class="table-wrap"><table><tr><th>检查项</th><th>结果</th></tr><tr><td><code>ANTHROPIC_BASE_URL</code> 是 <code>https://cc-ai.xyz</code></td><td>是</td></tr><tr><td><code>ANTHROPIC_AUTH_TOKEN</code> 已替换成真实 API Key</td><td>是</td></tr><tr><td>JSON 使用英文双引号和英文冒号</td><td>是</td></tr><tr><td>Claude Code 已完全重启</td><td>是</td></tr></table></div>
+        <h3>八、常见问题</h3>
+        <h4>1. 保存后还是不生效怎么办？</h4><p>先确认 Claude Code 已完全退出再打开。只关闭窗口但进程还在时，配置可能没有重新加载。</p>
+        <h4>2. JSON 报错怎么办？</h4><p>检查逗号、双引号和大括号。中文引号会导致配置无法识别。</p>
+        <h3>九、字段解释</h3>
+        <div class="table-wrap"><table><tr><th>字段</th><th>作用</th></tr><tr><td><code>ANTHROPIC_BASE_URL</code></td><td>告诉 Claude Code 请求发到 cc-ai。</td></tr><tr><td><code>ANTHROPIC_AUTH_TOKEN</code></td><td>你的 cc-ai API Key。</td></tr><tr><td><code>CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC</code></td><td>减少非必要外部流量。</td></tr><tr><td><code>CLAUDE_CODE_ATTRIBUTION_HEADER</code></td><td>关闭额外标识头，保持请求更干净。</td></tr></table></div>
       </section>
+
       <section class="section" id="opencode">
         <h2>OpenCode 配置说明</h2>
-        <h3>统一使用 config.toml</h3>
-        <p>这个客户端入口统一使用同一份 <code>config.toml</code>。只需要修改配置目录中的 <code>config.toml</code>，并把 API 密钥填写到 <code>experimental_bearer_token</code>。</p>
-        <div class="table-wrap"><table>
-          <tr><th>系统</th><th>配置文件路径</th><th>处理方式</th></tr>
-          <tr><td>macOS / Linux</td><td><code>~/.codex/config.toml</code></td><td>创建或覆盖 config.toml</td></tr>
-          <tr><td>Windows</td><td><code>%userprofile%\.codex\config.toml</code></td><td>创建或覆盖 config.toml</td></tr>
-        </table></div>
-        <h3>config.toml 内容</h3>
-        <pre><code>model_reasoning_effort = &quot;high&quot;
-
-approval_policy = &quot;never&quot;
-model = &quot;gpt-5.5&quot;
-model_auto_compact_token_limit = 945000
-model_context_window = 1050000
-model_provider = &quot;ccai&quot;
-personality = &quot;pragmatic&quot;
-sandbox_mode = &quot;danger-full-access&quot;
-tool_output_token_limit = 6000
-
-[model_providers.ccai]
-base_url = &quot;https://cc-ai.xyz&quot;
-name = &quot;OpenAI&quot;
-experimental_bearer_token = &quot;填写API秘钥&quot;
-wire_api = &quot;responses&quot;
-requires_openai_auth = false
-supports_websockets = true
-
-[features]
-goals = true
-multi_agent = true
-image_generation = true
-
-child_agents_md = true
-hooks = true
-suppress_unstable_features_warning = true
-memories = true</code></pre>
-        <h3>完成检查</h3>
-        <div class="table-wrap"><table>
-          <tr><th>检查项</th><th>正确结果</th></tr>
-          <tr><td>模型</td><td><code>gpt-5.5</code></td></tr>
-          <tr><td>Provider</td><td><code>ccai</code></td></tr>
-          <tr><td>Base URL</td><td><code>https://cc-ai.xyz</code></td></tr>
-          <tr><td>密钥字段</td><td><code>experimental_bearer_token</code> 已填写真实 API 密钥</td></tr>
-          <tr><td>认证开关</td><td><code>requires_openai_auth = false</code></td></tr>
-          <tr><td>WebSocket</td><td><code>supports_websockets = true</code></td></tr>
-        </table></div>
+        <h3>一、这一节适合谁</h3>
+        <p>如果你使用 OpenCode，需要按 OpenCode 自己的配置文件来写。它不是 Codex 客户端，所以不要去改 Codex 的配置目录。</p>
+        <div class="notice"><strong>重点：</strong>OpenCode 只改 <code>opencode.json</code> 或 <code>opencode.jsonc</code>。这里把 API Key 直接写进配置文件，不需要再走客户端里的连接命令。</div>
+        <h3>二、选择全局配置还是项目配置</h3>
+        <div class="table-wrap"><table><tr><th>使用场景</th><th>文件路径</th><th>适合谁</th></tr><tr><td>所有项目都使用 cc-ai</td><td><code>~/.config/opencode/opencode.json</code></td><td>新手推荐。</td></tr><tr><td>Windows 全局配置</td><td><code>%USERPROFILE%\.config\opencode\opencode.json</code></td><td>Windows 用户。</td></tr><tr><td>只让某一个项目使用 cc-ai</td><td><code>项目根目录/opencode.json</code></td><td>多个项目要用不同 Provider 时使用。</td></tr></table></div>
+        <h3>三、全局和项目配置怎么选</h3>
+        <p>新手直接用全局配置。只有当你明确知道“这个项目要用 cc-ai，另一个项目不用 cc-ai”时，再使用项目根目录里的配置。</p>
+        <div class="table-wrap"><table><tr><th>选择</th><th>优点</th><th>风险</th></tr><tr><td>全局配置</td><td>配置一次，所有项目都能用。</td><td>所有 OpenCode 项目都会默认走 cc-ai。</td></tr><tr><td>项目配置</td><td>只影响当前项目。</td><td>换项目后需要重新配置。</td></tr></table></div>
+        <h3>四、创建配置文件</h3>
+        <ol><li>先决定使用全局配置还是项目配置。</li><li>如果目录不存在，先手动创建目录。</li><li>新建 <code>opencode.json</code>。</li><li>把下面整段 JSON 写进去。</li></ol>
+        <h3>五、写入 opencode.json</h3>
+        <p>把 <code>填写API秘钥</code> 替换成真实 API Key。<code>baseURL</code> 保持 <code>https://cc-ai.xyz/v1</code>。</p>
+        <pre><code>{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "ccai": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "cc-ai",
+      "options": {
+        "baseURL": "https://cc-ai.xyz/v1",
+        "apiKey": "填写API秘钥"
+      },
+      "models": {
+        "gpt-5.5": {
+          "name": "GPT-5.5",
+          "limit": {
+            "context": 1050000,
+            "output": 128000
+          },
+          "options": {
+            "store": false
+          },
+          "variants": {
+            "low": {},
+            "medium": {},
+            "high": {},
+            "xhigh": {}
+          }
+        }
+      }
+    }
+  },
+  "model": "ccai/gpt-5.5",
+  "agent": {
+    "build": {
+      "options": {
+        "store": false
+      }
+    },
+    "plan": {
+      "options": {
+        "store": false
+      }
+    }
+  }
+}</code></pre>
+        <h3>六、保存并重启</h3>
+        <ol><li>保存 <code>opencode.json</code>。</li><li>完全退出 OpenCode。</li><li>重新打开 OpenCode。</li><li>确认当前模型是 <code>ccai/gpt-5.5</code>。</li><li>发起一次简单请求验证。</li></ol>
+        <h3>七、检查清单</h3>
+        <div class="table-wrap"><table><tr><th>检查项</th><th>结果</th></tr><tr><td><code>opencode.json</code> 已创建或已修改</td><td>是</td></tr><tr><td><code>provider</code> 里有 <code>ccai</code></td><td>是</td></tr><tr><td><code>baseURL</code> 是 <code>https://cc-ai.xyz/v1</code></td><td>是</td></tr><tr><td><code>apiKey</code> 已替换成真实 API Key</td><td>是</td></tr><tr><td><code>model</code> 是 <code>ccai/gpt-5.5</code></td><td>是</td></tr><tr><td>OpenCode 已完全重启</td><td>是</td></tr></table></div>
+        <h3>八、常见问题</h3>
+        <h4>1. 全局配置和项目配置同时存在时用哪个？</h4><p>项目根目录里的 <code>opencode.json</code> 优先级更高，会覆盖全局配置。</p>
+        <h4>2. 可以写成 <code>https://cc-ai.xyz</code> 吗？</h4><p>OpenCode 这里按 OpenAI-compatible 方式接入，推荐写完整的 <code>https://cc-ai.xyz/v1</code>。</p>
+        <h4>3. 需要再执行连接命令吗？</h4><p>不需要。本说明采用“只改配置文件”的方式，API Key 已在 <code>opencode.json</code> 里填写。</p>
+        <h3>九、OpenCode 常见错误</h3>
+        <div class="table-wrap"><table><tr><th>错误</th><th>处理方式</th></tr><tr><td>JSON 末尾多了逗号</td><td>删除最后一个字段后面的逗号。</td></tr><tr><td><code>baseURL</code> 少了 <code>/v1</code></td><td>按示例改成 <code>https://cc-ai.xyz/v1</code>。</td></tr><tr><td>模型写成 <code>gpt-5.5</code></td><td>OpenCode 当前示例里要写完整的 <code>ccai/gpt-5.5</code>。</td></tr><tr><td>配置了全局文件但项目里还有旧配置</td><td>项目配置优先级更高，先检查项目根目录是否还有旧 <code>opencode.json</code>。</td></tr></table></div>
       </section>
+
       <section class="section" id="ccswitch">
         <h2>CC Switch 配置说明</h2>
-        <h3>统一使用 config.toml</h3>
-        <p>这个客户端入口统一使用同一份 <code>config.toml</code>。只需要修改配置目录中的 <code>config.toml</code>，并把 API 密钥填写到 <code>experimental_bearer_token</code>。</p>
-        <div class="table-wrap"><table>
-          <tr><th>系统</th><th>配置文件路径</th><th>处理方式</th></tr>
-          <tr><td>macOS / Linux</td><td><code>~/.codex/config.toml</code></td><td>创建或覆盖 config.toml</td></tr>
-          <tr><td>Windows</td><td><code>%userprofile%\.codex\config.toml</code></td><td>创建或覆盖 config.toml</td></tr>
-        </table></div>
-        <h3>config.toml 内容</h3>
-        <pre><code>model_reasoning_effort = &quot;high&quot;
-
-approval_policy = &quot;never&quot;
-model = &quot;gpt-5.5&quot;
-model_auto_compact_token_limit = 945000
-model_context_window = 1050000
-model_provider = &quot;ccai&quot;
-personality = &quot;pragmatic&quot;
-sandbox_mode = &quot;danger-full-access&quot;
-tool_output_token_limit = 6000
-
-[model_providers.ccai]
-base_url = &quot;https://cc-ai.xyz&quot;
-name = &quot;OpenAI&quot;
-experimental_bearer_token = &quot;填写API秘钥&quot;
-wire_api = &quot;responses&quot;
-requires_openai_auth = false
-supports_websockets = true
-
-[features]
-goals = true
-multi_agent = true
-image_generation = true
-
-child_agents_md = true
-hooks = true
-suppress_unstable_features_warning = true
-memories = true</code></pre>
-        <h3>完成检查</h3>
-        <div class="table-wrap"><table>
-          <tr><th>检查项</th><th>正确结果</th></tr>
-          <tr><td>模型</td><td><code>gpt-5.5</code></td></tr>
-          <tr><td>Provider</td><td><code>ccai</code></td></tr>
-          <tr><td>Base URL</td><td><code>https://cc-ai.xyz</code></td></tr>
-          <tr><td>密钥字段</td><td><code>experimental_bearer_token</code> 已填写真实 API 密钥</td></tr>
-          <tr><td>认证开关</td><td><code>requires_openai_auth = false</code></td></tr>
-          <tr><td>WebSocket</td><td><code>supports_websockets = true</code></td></tr>
-        </table></div>
+        <h3>一、这一节适合谁</h3>
+        <p>如果你使用 CC Switch 这类图形界面工具，请按界面里的 Provider 表单填写。它不需要改 Codex 或 OpenCode 的配置文件。</p>
+        <div class="notice"><strong>重点：</strong>CC Switch 是图形界面配置，按字段填写 Provider、保存、启用即可。</div>
+        <h3>二、新增 Provider</h3>
+        <ol><li>打开 CC Switch。</li><li>进入 Providers 或 Provider 管理页面。</li><li>点击 New / Add / Custom Provider。</li><li>Provider Name 填 <code>cc-ai</code> 或 <code>ccai</code>。</li></ol>
+        <h3>三、填写接口信息</h3>
+        <div class="table-wrap"><table><tr><th>字段名</th><th>填写内容</th><th>说明</th></tr><tr><td>Provider Name</td><td><code>cc-ai</code></td><td>方便后续识别。</td></tr><tr><td>Base URL</td><td><code>https://cc-ai.xyz</code></td><td>如果界面要求 OpenAI-compatible 地址，可填 <code>https://cc-ai.xyz/v1</code>。</td></tr><tr><td>API Key</td><td><code>填写API秘钥</code></td><td>替换成你创建的真实 API Key。</td></tr><tr><td>Default Model</td><td><code>gpt-5.5</code></td><td>默认模型。</td></tr></table></div>
+        <h3>四、先确认协议类型</h3>
+        <p>不同版本的 CC Switch 字段名称可能不完全一样。看到 OpenAI、OpenAI-compatible、Custom OpenAI 时，Base URL 通常填写带 <code>/v1</code> 的地址；看到 Claude、Anthropic 时，Base URL 通常填写不带 <code>/v1</code> 的地址。</p>
+        <h3>五、保存并启用</h3>
+        <ol><li>点击 Save 保存 Provider。</li><li>在 Provider 列表中选择刚刚创建的 <code>cc-ai</code>。</li><li>点击 Activate / Enable / Use，确保当前启用的是这个 Provider。</li><li>发起一次简单请求验证。</li></ol>
+        <h3>六、如果界面分 Claude / OpenAI 两种 Provider</h3>
+        <p>如果 CC Switch 让你选择协议类型：</p>
+        <div class="table-wrap"><table><tr><th>协议类型</th><th>Base URL</th><th>Key 字段</th><th>模型</th></tr><tr><td>OpenAI-compatible</td><td><code>https://cc-ai.xyz/v1</code></td><td><code>API Key</code></td><td><code>gpt-5.5</code></td></tr><tr><td>Claude / Anthropic</td><td><code>https://cc-ai.xyz</code></td><td><code>ANTHROPIC_AUTH_TOKEN</code></td><td>选择界面支持的 Claude 模型</td></tr></table></div>
+        <h3>七、检查清单</h3>
+        <div class="table-wrap"><table><tr><th>检查项</th><th>结果</th></tr><tr><td>CC Switch 中能看到新 Provider</td><td>是</td></tr><tr><td>Base URL 已按协议类型填写</td><td>是</td></tr><tr><td>API Key 已替换成真实 API Key</td><td>是</td></tr><tr><td>默认模型已设置</td><td>是</td></tr><tr><td>已点击 Save</td><td>是</td></tr><tr><td>已点击 Activate / Enable</td><td>是</td></tr></table></div>
+        <h3>八、常见问题</h3>
+        <h4>1. 保存成功但没有走中转怎么办？</h4><p>先确认当前启用的是刚刚保存的 Provider，再确认 Base URL 是否填在正确的协议类型下。</p>
+        <h4>2. Base URL 到底要不要带 <code>/v1</code>？</h4><p>OpenAI-compatible 通常带 <code>/v1</code>；Claude / Anthropic 风格通常不带。界面如果有明确示例，以界面要求为准。</p>
+        <h4>3. 可以截图让别人帮忙检查吗？</h4><p>可以截图字段名和 Base URL，但不要把真实 API Key 截进去。</p>
       </section>
     </main>
   </div>
+  <script>
+const links = Array.from(document.querySelectorAll('.nav a'));
+const sections = links.map(link => document.querySelector(link.getAttribute('href'))).filter(Boolean);
+const setActive = () => {
+  let current = sections[0]?.id;
+  for (const section of sections) { if (section.getBoundingClientRect().top <= 120) current = section.id; }
+  links.forEach(link => link.classList.toggle('active', link.getAttribute('href') === `#${current}`));
+};
+document.addEventListener('scroll', setActive, { passive: true });
+setActive();
+document.querySelector('#sectionSelect')?.addEventListener('change', event => {
+  const target = document.querySelector(event.target.value);
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+document.querySelectorAll('pre').forEach(pre => {
+  const button = document.createElement('button');
+  button.className = 'copy';
+  button.type = 'button';
+  button.textContent = '复制';
+  button.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(pre.innerText.replace('复制', '').trim());
+    button.textContent = '已复制';
+    setTimeout(() => button.textContent = '复制', 1200);
+  });
+  pre.appendChild(button);
+});
+  </script>
 </body>
 </html>

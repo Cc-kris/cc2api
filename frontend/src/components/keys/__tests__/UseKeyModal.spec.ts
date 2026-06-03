@@ -94,12 +94,12 @@ describe('UseKeyModal', () => {
     expect(configText).not.toContain('OPENAI_API_KEY')
   })
 
-  it('renders every OpenAI client tab as the same single config.toml style', async () => {
+  it('keeps OpenAI Claude Code tab on Claude settings instead of Codex config', async () => {
     const wrapper = mount(UseKeyModal, {
       props: {
         show: true,
-        apiKey: 'sk-all-clients',
-        baseUrl: 'https://example.com/v1',
+        apiKey: 'sk-claude-client',
+        baseUrl: 'https://cc-ai.xyz/v1',
         platform: 'openai',
         allowMessagesDispatch: true
       },
@@ -115,33 +115,67 @@ describe('UseKeyModal', () => {
       }
     })
 
-    const clientTabKeys = [
-      'keys.useKeyModal.cliTabs.codexCli',
-      'keys.useKeyModal.cliTabs.codexCliWs',
-      'keys.useKeyModal.cliTabs.claudeCode',
-      'keys.useKeyModal.cliTabs.opencode'
-    ]
+    const claudeTab = wrapper.findAll('button').find((button) =>
+      button.text().includes('keys.useKeyModal.cliTabs.claudeCode')
+    )
+    expect(claudeTab).toBeDefined()
+    await claudeTab!.trigger('click')
+    await nextTick()
 
-    for (const tabKey of clientTabKeys) {
-      const tab = wrapper.findAll('button').find((button) => button.text().includes(tabKey))
-      expect(tab, tabKey).toBeDefined()
-      await tab!.trigger('click')
-      await nextTick()
+    const codeBlocks = wrapper.findAll('pre code')
+    expect(codeBlocks).toHaveLength(2)
+    expect(wrapper.text()).toContain('~/.claude/settings.json')
+    expect(wrapper.text()).not.toContain('~/.codex/config.toml')
+    expect(wrapper.text()).not.toContain('auth.json')
 
-      const codeBlocks = wrapper.findAll('pre code')
-      expect(codeBlocks, tabKey).toHaveLength(1)
-      expect(wrapper.text(), tabKey).toContain('~/.codex/config.toml')
-      expect(wrapper.text(), tabKey).not.toContain('auth.json')
+    const configText = codeBlocks.map((block) => block.text()).join('\n')
+    expect(configText).toContain('ANTHROPIC_BASE_URL="https://cc-ai.xyz"')
+    expect(configText).toContain('ANTHROPIC_AUTH_TOKEN="sk-claude-client"')
+    expect(configText).not.toContain('experimental_bearer_token')
+    expect(configText).not.toContain('OPENAI_API_KEY')
+  })
 
-      const configText = codeBlocks[0].text()
-      expect(configText, tabKey).toContain('model_reasoning_effort = "high"')
-      expect(configText, tabKey).toContain('model = "gpt-5.5"')
-      expect(configText, tabKey).toContain('model_provider = "ccai"')
-      expect(configText, tabKey).toContain('experimental_bearer_token = "sk-all-clients"')
-      expect(configText, tabKey).toContain('requires_openai_auth = false')
-      expect(configText, tabKey).not.toContain('OPENAI_API_KEY')
-      expect(configText, tabKey).not.toContain('ANTHROPIC_AUTH_TOKEN')
-    }
+  it('keeps OpenAI OpenCode tab on opencode.json instead of Codex config', async () => {
+    const wrapper = mount(UseKeyModal, {
+      props: {
+        show: true,
+        apiKey: 'sk-opencode-client',
+        baseUrl: 'https://cc-ai.xyz/v1',
+        platform: 'openai',
+        allowMessagesDispatch: true
+      },
+      global: {
+        stubs: {
+          BaseDialog: {
+            template: '<div><slot /><slot name="footer" /></div>'
+          },
+          Icon: {
+            template: '<span />'
+          }
+        }
+      }
+    })
+
+    const opencodeTab = wrapper.findAll('button').find((button) =>
+      button.text().includes('keys.useKeyModal.cliTabs.opencode')
+    )
+    expect(opencodeTab).toBeDefined()
+    await opencodeTab!.trigger('click')
+    await nextTick()
+
+    const codeBlocks = wrapper.findAll('pre code')
+    expect(codeBlocks).toHaveLength(1)
+    expect(wrapper.text()).toContain('opencode.json')
+    expect(wrapper.text()).not.toContain('~/.codex/config.toml')
+    expect(wrapper.text()).not.toContain('auth.json')
+
+    const configText = codeBlocks[0].text()
+    expect(configText).toContain('"ccai"')
+    expect(configText).toContain('"baseURL": "https://cc-ai.xyz/v1"')
+    expect(configText).toContain('"apiKey": "sk-opencode-client"')
+    expect(configText).toContain('"model": "ccai/gpt-5.5"')
+    expect(configText).not.toContain('experimental_bearer_token')
+    expect(configText).not.toContain('OPENAI_API_KEY')
   })
 
   it('renders OpenAI Windows config path with Windows separators', async () => {

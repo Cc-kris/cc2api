@@ -769,7 +769,7 @@ export default {
       opencode: {
         title: 'OpenCode Example',
         subtitle: 'opencode.json',
-        hint: 'Config path: ~/.config/opencode/opencode.json (or opencode.jsonc), create if not exists. Use default providers (openai/anthropic/google) or custom provider_id. API Key can be configured directly or via /connect command. This is an example, adjust models and options as needed.',
+        hint: 'Config path: ~/.config/opencode/opencode.json (or opencode.jsonc), create it if missing. This example uses the ccai provider and writes the API key directly in the config file, so /connect is not required.',
       },
     },
     customKeyLabel: 'Custom Key',

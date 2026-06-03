@@ -309,20 +309,30 @@ const openaiTabs: TabConfig[] = [
   { id: 'windows', label: 'Windows', icon: WindowsIcon }
 ]
 
-const showShellTabs = computed(() => props.platform === 'openai' || activeClientTab.value !== 'opencode')
+const showShellTabs = computed(() => activeClientTab.value !== 'opencode')
 
 const currentTabs = computed(() => {
   if (!showShellTabs.value) return []
-  if (props.platform === 'openai') {
+  if (
+    props.platform === 'openai' &&
+    (activeClientTab.value === 'codex' || activeClientTab.value === 'codex-ws')
+  ) {
     return openaiTabs
   }
   return shellTabs
 })
 
 const platformDescription = computed(() => {
+  if (props.platform === 'openai') {
+    if (activeClientTab.value === 'claude') {
+      return t('keys.useKeyModal.description')
+    }
+    if (activeClientTab.value === 'opencode') {
+      return t('keys.useKeyModal.opencode.hint')
+    }
+    return t('keys.useKeyModal.openai.description')
+  }
   switch (props.platform) {
-    case 'openai':
-      return t('keys.useKeyModal.openai.description')
     case 'gemini':
       return t('keys.useKeyModal.gemini.description')
     case 'antigravity':
@@ -333,11 +343,15 @@ const platformDescription = computed(() => {
 })
 
 const platformNote = computed(() => {
+  if (props.platform === 'openai') {
+    if (activeClientTab.value === 'claude') {
+      return t('keys.useKeyModal.note')
+    }
+    return activeTab.value === 'windows'
+      ? t('keys.useKeyModal.openai.noteWindows')
+      : t('keys.useKeyModal.openai.note')
+  }
   switch (props.platform) {
-    case 'openai':
-      return activeTab.value === 'windows'
-        ? t('keys.useKeyModal.openai.noteWindows')
-        : t('keys.useKeyModal.openai.note')
     case 'gemini':
       return t('keys.useKeyModal.gemini.note')
     case 'antigravity':
@@ -349,7 +363,7 @@ const platformNote = computed(() => {
   }
 })
 
-const showPlatformNote = computed(() => props.platform === 'openai' || activeClientTab.value !== 'opencode')
+const showPlatformNote = computed(() => activeClientTab.value !== 'opencode')
 
 const escapeHtml = (value: string) => value
   .replace(/&/g, '&amp;')
@@ -391,7 +405,7 @@ const currentFiles = computed((): FileConfig[] => {
   if (activeClientTab.value === 'opencode') {
     switch (props.platform) {
       case 'openai':
-        return generateOpenAIFiles(apiKey)
+        return [generateOpenCodeConfig('ccai', apiBase, apiKey)]
       case 'anthropic':
         return [generateOpenCodeConfig('anthropic', apiBase, apiKey)]
       case 'gemini':
@@ -408,6 +422,9 @@ const currentFiles = computed((): FileConfig[] => {
 
   switch (props.platform) {
     case 'openai':
+      if (activeClientTab.value === 'claude') {
+        return generateAnthropicFiles(baseRoot, apiKey)
+      }
       if (activeClientTab.value === 'codex-ws') {
         return generateOpenAIWsFiles(apiKey)
       }
@@ -971,12 +988,16 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
     provider[platform].npm = '@ai-sdk/google'
     provider[platform].name = 'Antigravity (Gemini)'
     provider[platform].models = antigravityGeminiModels
-  } else if (platform === 'openai') {
+  } else if (platform === 'openai' || platform === 'ccai') {
+    if (platform === 'ccai') {
+      provider[platform].npm = '@ai-sdk/openai-compatible'
+      provider[platform].name = 'cc-ai'
+    }
     provider[platform].models = openaiModels
   }
 
   const agent =
-    platform === 'openai'
+    (platform === 'openai' || platform === 'ccai')
       ? {
           build: {
             options: {
@@ -994,6 +1015,7 @@ function generateOpenCodeConfig(platform: string, baseUrl: string, apiKey: strin
   const content = JSON.stringify(
     {
       provider,
+      ...(platform === 'openai' || platform === 'ccai' ? { model: `${platform}/gpt-5.5` } : {}),
       ...(agent ? { agent } : {}),
       $schema: 'https://opencode.ai/config.json'
     },
