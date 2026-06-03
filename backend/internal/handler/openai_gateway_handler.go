@@ -300,6 +300,17 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 
+	localCacheLookup := service.LocalResponseCacheLookup{Reason: "image_intent"}
+	localCacheCfg := service.DefaultLocalResponseCacheConfig()
+	var localCacheCapture *localResponseCacheCaptureWriter
+	if !imageIntent {
+		localCacheLookup, localCacheCfg = h.prepareLocalResponseCache(c, apiKey, EndpointResponses, reqModel, body)
+		if h.tryWriteLocalResponseCacheHit(c, localCacheLookup, reqLog) {
+			return
+		}
+		localCacheCapture = h.installLocalResponseCacheCapture(c, localCacheLookup, localCacheCfg)
+	}
+
 	// Generate session hash (header first; fallback to prompt_cache_key)
 	sessionHash := h.gatewayService.GenerateSessionHash(c, sessionHashBody)
 	requireCompact := isOpenAIRemoteCompactPath(c)
@@ -475,6 +486,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		} else {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, nil)
 		}
+		h.persistLocalResponseCache(c, localCacheLookup, localCacheCfg, localCacheCapture, nil, reqLog)
 
 		// 捕获请求信息（用于异步记录，避免在 goroutine 中访问 gin.Context）
 		userAgent := c.GetHeader("User-Agent")
@@ -703,6 +715,12 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		return
 	}
 
+	localCacheLookup, localCacheCfg := h.prepareLocalResponseCache(c, apiKey, EndpointMessages, reqModel, body)
+	if h.tryWriteLocalResponseCacheHit(c, localCacheLookup, reqLog) {
+		return
+	}
+	localCacheCapture := h.installLocalResponseCacheCapture(c, localCacheLookup, localCacheCfg)
+
 	sessionHash := h.gatewayService.GenerateSessionHash(c, body)
 	promptCacheKey := h.gatewayService.ExtractSessionID(c, body)
 	sessionHash, promptCacheKey = resolveOpenAIMessagesMetadataSession(sessionHash, promptCacheKey, reqModel, body)
@@ -859,6 +877,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		} else {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, nil)
 		}
+		h.persistLocalResponseCache(c, localCacheLookup, localCacheCfg, localCacheCapture, nil, reqLog)
 
 		userAgent := c.GetHeader("User-Agent")
 		clientIP := ip.GetClientIP(c)

@@ -113,6 +113,12 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		return
 	}
 
+	localCacheLookup, localCacheCfg := h.prepareLocalResponseCache(c, apiKey, EndpointChatCompletions, reqModel, body)
+	if h.tryWriteLocalResponseCacheHit(c, localCacheLookup, reqLog) {
+		return
+	}
+	localCacheCapture := h.installLocalResponseCacheCapture(c, localCacheLookup, localCacheCfg)
+
 	sessionHash := h.gatewayService.GenerateSessionHash(c, body)
 	promptCacheKey := h.gatewayService.ExtractSessionID(c, body)
 
@@ -264,6 +270,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		} else {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, nil)
 		}
+		h.persistLocalResponseCache(c, localCacheLookup, localCacheCfg, localCacheCapture, nil, reqLog)
 
 		userAgent := c.GetHeader("User-Agent")
 		clientIP := ip.GetClientIP(c)

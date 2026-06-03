@@ -558,6 +558,7 @@ export interface SystemSettings {
   enable_cch_signing: boolean;
   enable_anthropic_cache_ttl_1h_injection: boolean;
   rewrite_message_cache_control: boolean;
+  local_response_cache_enabled: boolean;
   antigravity_user_agent_version: string;
   openai_codex_user_agent: string;
   web_search_emulation_enabled?: boolean;
@@ -792,6 +793,7 @@ export interface UpdateSettingsRequest {
   enable_cch_signing?: boolean;
   enable_anthropic_cache_ttl_1h_injection?: boolean;
   rewrite_message_cache_control?: boolean;
+  local_response_cache_enabled?: boolean;
   antigravity_user_agent_version?: string;
   openai_codex_user_agent?: string;
   // Payment configuration

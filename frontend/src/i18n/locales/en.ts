@@ -5669,6 +5669,9 @@ export default {
         backendMode: 'Backend Mode',
         backendModeDescription:
           'Disables user registration, public site, and self-service features. Only admin can log in and manage the platform.',
+        localResponseCache: 'Local Response Cache',
+        localResponseCacheDescription:
+          'When enabled, repeated OpenAI requests within the same API key and group prefer exact local cache hits, including streaming replay. Disabled by default.',
         siteName: 'Site Name',
         siteNamePlaceholder: 'Sub2API',
         siteNameHint: 'Displayed in emails and page titles',

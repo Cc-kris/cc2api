@@ -5826,6 +5826,9 @@ export default {
         backendMode: 'Backend 模式',
         backendModeDescription:
           '禁用用户注册、公开页面和自助服务功能。仅管理员可以登录和管理平台。',
+        localResponseCache: '本地响应缓存',
+        localResponseCacheDescription:
+          '开启后，同一 API Key 和分组内的重复 OpenAI 请求会优先命中本地精确缓存，包含流式响应回放。默认关闭。',
         siteName: '站点名称',
         siteNameHint: '显示在邮件和页面标题中',
         siteNamePlaceholder: 'Sub2API',

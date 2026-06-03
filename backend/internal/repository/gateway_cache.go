@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -50,4 +51,36 @@ func (c *gatewayCache) RefreshSessionTTL(ctx context.Context, groupID int64, ses
 func (c *gatewayCache) DeleteSessionAccountID(ctx context.Context, groupID int64, sessionHash string) error {
 	key := buildSessionKey(groupID, sessionHash)
 	return c.rdb.Del(ctx, key).Err()
+}
+
+const localResponseCachePrefix = "local_response_cache:v1:"
+
+func buildLocalResponseCacheKey(hash string) string {
+	return localResponseCachePrefix + hash
+}
+
+func (c *gatewayCache) GetLocalResponse(ctx context.Context, key string) (*service.LocalResponseCacheEntry, error) {
+	if c == nil || c.rdb == nil {
+		return nil, redis.Nil
+	}
+	payload, err := c.rdb.Get(ctx, buildLocalResponseCacheKey(key)).Bytes()
+	if err != nil {
+		return nil, err
+	}
+	var entry service.LocalResponseCacheEntry
+	if err := json.Unmarshal(payload, &entry); err != nil {
+		return nil, err
+	}
+	return &entry, nil
+}
+
+func (c *gatewayCache) SetLocalResponse(ctx context.Context, key string, entry *service.LocalResponseCacheEntry, ttl time.Duration) error {
+	if c == nil || c.rdb == nil || entry == nil {
+		return nil
+	}
+	payload, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	return c.rdb.Set(ctx, buildLocalResponseCacheKey(key), payload, ttl).Err()
 }

@@ -392,6 +392,7 @@ const baseSettingsResponse = {
   enable_cch_signing: false,
   enable_anthropic_cache_ttl_1h_injection: false,
   rewrite_message_cache_control: false,
+  local_response_cache_enabled: false,
   antigravity_user_agent_version: "",
   openai_codex_user_agent: "",
   payment_enabled: true,
@@ -649,10 +650,11 @@ describe("admin SettingsView payment visible method controls", () => {
     );
   });
 
-  it("submits message cache_control rewrite gateway setting", async () => {
+  it("submits message cache_control rewrite and local response cache gateway settings", async () => {
     getSettings.mockResolvedValueOnce({
       ...baseSettingsResponse,
       rewrite_message_cache_control: true,
+      local_response_cache_enabled: true,
     });
 
     const wrapper = mountView();
@@ -665,6 +667,7 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(updateSettings).toHaveBeenCalledWith(
       expect.objectContaining({
         rewrite_message_cache_control: true,
+        local_response_cache_enabled: true,
       }),
     );
   });
