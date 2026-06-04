@@ -616,6 +616,23 @@ export interface SystemSettings {
   openai_fast_policy_settings?: OpenAIFastPolicySettings;
 }
 
+export interface LocalResponseCacheStats {
+  enabled: boolean;
+  entries: number;
+  bytes: number;
+  lookup_hit: number;
+  lookup_miss: number;
+  lookup_error: number;
+  store_success: number;
+  store_failed: number;
+  bypass_total: number;
+  store_skip_total: number;
+  hit_rate: number;
+  bypass_reasons: Record<string, number>;
+  store_skip_reasons: Record<string, number>;
+  counters: Record<string, number>;
+}
+
 export interface UpdateSettingsRequest {
   registration_enabled?: boolean;
   email_verify_enabled?: boolean;
@@ -868,6 +885,13 @@ export async function updateSettings(
   const { data } = await apiClient.put<SystemSettings>(
     "/admin/settings",
     settings,
+  );
+  return data;
+}
+
+export async function getLocalResponseCacheStats(): Promise<LocalResponseCacheStats> {
+  const { data } = await apiClient.get<LocalResponseCacheStats>(
+    "/admin/settings/local-response-cache/stats",
   );
   return data;
 }
@@ -1332,6 +1356,7 @@ export async function resetWebSearchUsage(payload: {
 export const settingsAPI = {
   getSettings,
   updateSettings,
+  getLocalResponseCacheStats,
   testSmtpConnection,
   sendTestEmail,
   getEmailTemplates,

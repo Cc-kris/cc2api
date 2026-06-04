@@ -22,6 +22,11 @@ const (
 	DefaultLocalResponseCacheMaxRequestBytes = 256 * 1024
 	DefaultLocalResponseCacheMaxBodyBytes    = 512 * 1024
 	DefaultLocalResponseCacheMaxTemperature  = 0.3
+
+	localResponseCacheStatsQueueSize     = 4096
+	localResponseCacheStatsFlushBatch    = 128
+	localResponseCacheStatsFlushInterval = time.Second
+	localResponseCacheStatsFlushTimeout  = 500 * time.Millisecond
 )
 
 type LocalResponseCacheConfig struct {
@@ -52,6 +57,17 @@ type LocalResponseCacheEntry struct {
 type LocalResponseCacheStore interface {
 	GetLocalResponse(ctx context.Context, key string) (*LocalResponseCacheEntry, error)
 	SetLocalResponse(ctx context.Context, key string, entry *LocalResponseCacheEntry, ttl time.Duration) error
+}
+
+type LocalResponseCacheStatsStore interface {
+	IncrLocalResponseCacheStats(ctx context.Context, field string, delta int64) error
+	GetLocalResponseCacheStats(ctx context.Context) (*LocalResponseCacheStats, error)
+}
+
+type LocalResponseCacheStats struct {
+	Entries  int64            `json:"entries"`
+	Bytes    int64            `json:"bytes"`
+	Counters map[string]int64 `json:"counters"`
 }
 
 type LocalResponseCacheLookup struct {
@@ -88,6 +104,78 @@ func (s *OpenAIGatewayService) SetLocalResponseCache(ctx context.Context, key st
 		return nil
 	}
 	return store.SetLocalResponse(ctx, key, entry, ttl)
+}
+
+func (s *OpenAIGatewayService) RecordLocalResponseCacheStat(ctx context.Context, field string) {
+	field = strings.TrimSpace(field)
+	if s == nil || s.cache == nil || field == "" {
+		return
+	}
+	store, ok := s.cache.(LocalResponseCacheStatsStore)
+	if !ok {
+		return
+	}
+	s.localResponseCacheStatsOnce.Do(func() {
+		s.localResponseCacheStatsQueue = make(chan string, localResponseCacheStatsQueueSize)
+		go s.runLocalResponseCacheStatsWriter(store)
+	})
+	select {
+	case s.localResponseCacheStatsQueue <- field:
+	default:
+	}
+}
+
+func (s *OpenAIGatewayService) runLocalResponseCacheStatsWriter(store LocalResponseCacheStatsStore) {
+	ticker := time.NewTicker(localResponseCacheStatsFlushInterval)
+	defer ticker.Stop()
+	pending := map[string]int64{}
+	flush := func() {
+		if len(pending) == 0 {
+			return
+		}
+		batch := pending
+		pending = map[string]int64{}
+		ctx, cancel := context.WithTimeout(context.Background(), localResponseCacheStatsFlushTimeout)
+		defer cancel()
+		for field, delta := range batch {
+			_ = store.IncrLocalResponseCacheStats(ctx, field, delta)
+			if ctx.Err() != nil {
+				return
+			}
+		}
+	}
+	for {
+		select {
+		case field := <-s.localResponseCacheStatsQueue:
+			if strings.TrimSpace(field) == "" {
+				continue
+			}
+			pending[field]++
+			if len(pending) >= localResponseCacheStatsFlushBatch {
+				flush()
+			}
+		case <-ticker.C:
+			flush()
+		}
+	}
+}
+
+func (s *OpenAIGatewayService) GetLocalResponseCacheStats(ctx context.Context) (*LocalResponseCacheStats, error) {
+	if s == nil || s.cache == nil {
+		return &LocalResponseCacheStats{Counters: map[string]int64{}}, nil
+	}
+	store, ok := s.cache.(LocalResponseCacheStatsStore)
+	if !ok {
+		return &LocalResponseCacheStats{Counters: map[string]int64{}}, nil
+	}
+	stats, err := store.GetLocalResponseCacheStats(ctx)
+	if stats == nil {
+		stats = &LocalResponseCacheStats{Counters: map[string]int64{}}
+	}
+	if stats.Counters == nil {
+		stats.Counters = map[string]int64{}
+	}
+	return stats, err
 }
 
 func BuildLocalResponseCacheLookup(cfg LocalResponseCacheConfig, apiKeyID int64, groupID *int64, endpoint, platform, model string, body []byte, explicitBypass bool) LocalResponseCacheLookup {

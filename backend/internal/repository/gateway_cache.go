@@ -54,6 +54,7 @@ func (c *gatewayCache) DeleteSessionAccountID(ctx context.Context, groupID int64
 }
 
 const localResponseCachePrefix = "local_response_cache:v1:"
+const localResponseCacheStatsKey = "local_response_cache:stats:v1:counters"
 
 func buildLocalResponseCacheKey(hash string) string {
 	return localResponseCachePrefix + hash
@@ -83,4 +84,45 @@ func (c *gatewayCache) SetLocalResponse(ctx context.Context, key string, entry *
 		return err
 	}
 	return c.rdb.Set(ctx, buildLocalResponseCacheKey(key), payload, ttl).Err()
+}
+
+func (c *gatewayCache) IncrLocalResponseCacheStats(ctx context.Context, field string, delta int64) error {
+	if c == nil || c.rdb == nil || field == "" || delta == 0 {
+		return nil
+	}
+	return c.rdb.HIncrBy(ctx, localResponseCacheStatsKey, field, delta).Err()
+}
+
+func (c *gatewayCache) GetLocalResponseCacheStats(ctx context.Context) (*service.LocalResponseCacheStats, error) {
+	stats := &service.LocalResponseCacheStats{Counters: map[string]int64{}}
+	if c == nil || c.rdb == nil {
+		return stats, nil
+	}
+	counters, err := c.rdb.HGetAll(ctx, localResponseCacheStatsKey).Result()
+	if err != nil && err != redis.Nil {
+		return stats, err
+	}
+	for field, raw := range counters {
+		var value int64
+		if _, scanErr := fmt.Sscan(raw, &value); scanErr == nil {
+			stats.Counters[field] = value
+		}
+	}
+
+	iter := c.rdb.Scan(ctx, 0, localResponseCachePrefix+"*", 100).Iterator()
+	for iter.Next(ctx) {
+		key := iter.Val()
+		if key == localResponseCacheStatsKey {
+			continue
+		}
+		stats.Entries++
+		bytes, memErr := c.rdb.MemoryUsage(ctx, key).Result()
+		if memErr == nil && bytes > 0 {
+			stats.Bytes += bytes
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return stats, err
+	}
+	return stats, nil
 }

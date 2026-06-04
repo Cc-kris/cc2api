@@ -85,6 +85,9 @@ func (h *OpenAIGatewayHandler) prepareLocalResponseCache(c *gin.Context, apiKey 
 	lookup := service.BuildLocalResponseCacheLookup(cfg, apiKey.ID, apiKey.GroupID, endpoint, service.PlatformOpenAI, model, body, explicitBypass)
 	if lookup.Key == "" {
 		c.Header(service.LocalResponseCacheHeader, service.LocalResponseCacheHeaderBypass)
+		if cfg.Enabled {
+			h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "lookup_bypass:"+lookup.Reason)
+		}
 	}
 	return lookup, cfg
 }
@@ -98,9 +101,15 @@ func (h *OpenAIGatewayHandler) tryWriteLocalResponseCacheHit(c *gin.Context, loo
 		if !errors.Is(err, redis.Nil) && reqLog != nil {
 			reqLog.Warn("local_response_cache.get_failed", zap.Error(err))
 		}
+		if errors.Is(err, redis.Nil) {
+			h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "lookup_miss")
+		} else {
+			h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "lookup_error")
+		}
 		return false
 	}
 	if entry == nil || len(entry.Body) == 0 {
+		h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "lookup_miss")
 		return false
 	}
 	for k, v := range entry.Headers {
@@ -117,6 +126,7 @@ func (h *OpenAIGatewayHandler) tryWriteLocalResponseCacheHit(c *gin.Context, loo
 	if flusher, ok := c.Writer.(http.Flusher); ok {
 		flusher.Flush()
 	}
+	h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "lookup_hit")
 	return true
 }
 
@@ -131,11 +141,28 @@ func (h *OpenAIGatewayHandler) installLocalResponseCacheCapture(c *gin.Context, 
 }
 
 func (h *OpenAIGatewayHandler) persistLocalResponseCache(c *gin.Context, lookup service.LocalResponseCacheLookup, cfg service.LocalResponseCacheConfig, capture *localResponseCacheCaptureWriter, err error, reqLog *zap.Logger) {
-	if lookup.Key == "" || capture == nil || err != nil || capture.overLimit || capture.writeErr != nil {
+	if lookup.Key == "" || capture == nil {
+		return
+	}
+	if err != nil {
+		h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_skip:forward_error")
+		return
+	}
+	if capture.overLimit {
+		h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_skip:body_too_large")
+		return
+	}
+	if capture.writeErr != nil {
+		h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_skip:write_error")
 		return
 	}
 	status := capture.StatusCode()
 	if status != http.StatusOK || capture.body.Len() == 0 {
+		if status != http.StatusOK {
+			h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_skip:status_not_ok")
+		} else {
+			h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_skip:empty_body")
+		}
 		return
 	}
 	contentType := c.Writer.Header().Get("Content-Type")
@@ -143,9 +170,11 @@ func (h *OpenAIGatewayHandler) persistLocalResponseCache(c *gin.Context, lookup 
 		contentType = c.GetHeader("Content-Type")
 	}
 	if !isLocalResponseCacheableContentType(contentType) {
+		h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_skip:content_type")
 		return
 	}
 	if isLocalResponseCacheStreamingContentType(contentType) && !isLocalResponseCacheCompleteSSE(capture.body.Bytes()) {
+		h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_skip:stream_incomplete")
 		return
 	}
 	entry := &service.LocalResponseCacheEntry{
@@ -157,10 +186,14 @@ func (h *OpenAIGatewayHandler) persistLocalResponseCache(c *gin.Context, lookup 
 		},
 		CreatedAt: time.Now(),
 	}
-	if setErr := h.gatewayService.SetLocalResponseCache(c.Request.Context(), lookup.Key, entry, cfg.TTL); setErr != nil && reqLog != nil {
-		reqLog.Warn("local_response_cache.set_failed", zap.Error(setErr))
+	if setErr := h.gatewayService.SetLocalResponseCache(c.Request.Context(), lookup.Key, entry, cfg.TTL); setErr != nil {
+		if reqLog != nil {
+			reqLog.Warn("local_response_cache.set_failed", zap.Error(setErr))
+		}
+		h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_failed")
 		return
 	}
+	h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_success")
 }
 
 func isLocalResponseCacheableContentType(contentType string) bool {
