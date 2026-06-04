@@ -41,6 +41,7 @@ const (
 	openAIWSBufferLogEveryN     = 20
 	openAIWSPrewarmEventLogHead = 10
 	openAIWSPayloadKeySizeTopN  = 6
+	openAIWSToolCallLogIDLimit  = 8
 
 	openAIWSPayloadSizeEstimateDepth    = 3
 	openAIWSPayloadSizeEstimateMaxBytes = 64 * 1024
@@ -470,6 +471,131 @@ func openAIWSMessageLikelyContainsToolCalls(message []byte) bool {
 	return bytes.Contains(message, []byte(`"tool_calls"`)) ||
 		bytes.Contains(message, []byte(`"tool_call"`)) ||
 		bytes.Contains(message, []byte(`"function_call"`))
+}
+
+type openAIWSToolCallTrace struct {
+	FunctionCallOutputCallIDs []string
+	ToolCallContextCallIDs    []string
+	ItemReferenceIDs          []string
+}
+
+func (t openAIWSToolCallTrace) hasClientContinuationSignal() bool {
+	return len(t.FunctionCallOutputCallIDs) > 0 ||
+		len(t.ToolCallContextCallIDs) > 0 ||
+		len(t.ItemReferenceIDs) > 0
+}
+
+func openAIWSToolCallTraceFromRawPayload(payload []byte) openAIWSToolCallTrace {
+	trace := openAIWSToolCallTrace{}
+	if len(payload) == 0 || !bytes.Contains(payload, []byte(`"input"`)) {
+		return trace
+	}
+	input := gjson.GetBytes(payload, "input")
+	if !input.IsArray() {
+		return trace
+	}
+	for _, item := range input.Array() {
+		itemType := item.Get("type").String()
+		switch {
+		case isCodexToolCallOutputItemType(itemType):
+			trace.FunctionCallOutputCallIDs = appendOpenAIWSTraceID(trace.FunctionCallOutputCallIDs, item.Get("call_id").String())
+		case isCodexToolCallContextItemType(itemType):
+			trace.ToolCallContextCallIDs = appendOpenAIWSTraceID(trace.ToolCallContextCallIDs, item.Get("call_id").String())
+		case strings.TrimSpace(itemType) == "item_reference":
+			trace.ItemReferenceIDs = appendOpenAIWSTraceID(trace.ItemReferenceIDs, item.Get("id").String())
+		}
+	}
+	return trace
+}
+
+func openAIWSUpstreamToolCallIDsFromRawMessage(message []byte) []string {
+	if len(message) == 0 || !openAIWSMessageLikelyContainsToolCalls(message) {
+		return nil
+	}
+	return collectOpenAIWSUpstreamToolCallIDs(gjson.ParseBytes(message), nil)
+}
+
+func collectOpenAIWSUpstreamToolCallIDs(value gjson.Result, ids []string) []string {
+	if value.IsArray() {
+		for _, item := range value.Array() {
+			ids = collectOpenAIWSUpstreamToolCallIDs(item, ids)
+		}
+		return ids
+	}
+	if !value.IsObject() {
+		return ids
+	}
+	if itemType := value.Get("type").String(); isCodexToolCallContextItemType(itemType) {
+		ids = appendOpenAIWSTraceID(ids, value.Get("call_id").String())
+	}
+	toolCalls := value.Get("tool_calls")
+	if toolCalls.IsArray() {
+		for _, item := range toolCalls.Array() {
+			ids = appendOpenAIWSTraceID(ids, item.Get("call_id").String())
+			ids = appendOpenAIWSTraceID(ids, item.Get("id").String())
+		}
+	}
+	value.ForEach(func(key, item gjson.Result) bool {
+		if key.String() != "tool_calls" {
+			ids = collectOpenAIWSUpstreamToolCallIDs(item, ids)
+		}
+		return true
+	})
+	return ids
+}
+
+func appendOpenAIWSTraceID(ids []string, value string) []string {
+	id := strings.TrimSpace(value)
+	if id == "" {
+		return ids
+	}
+	for _, existing := range ids {
+		if existing == id {
+			return ids
+		}
+	}
+	return append(ids, id)
+}
+
+func summarizeOpenAIWSTraceIDs(ids []string) string {
+	if len(ids) == 0 {
+		return "-"
+	}
+	limit := len(ids)
+	if limit > openAIWSToolCallLogIDLimit {
+		limit = openAIWSToolCallLogIDLimit
+	}
+	head := make([]string, 0, limit)
+	for _, id := range ids[:limit] {
+		head = append(head, truncateOpenAIWSLogValue(id, openAIWSIDValueMaxLen))
+	}
+	return truncateOpenAIWSLogValue(fmt.Sprintf("count=%d,ids=%s", len(ids), strings.Join(head, ",")), openAIWSLogValueMaxLen)
+}
+
+func extractOpenAIWSMissingToolCallID(message string) string {
+	const marker = "call_id "
+	idx := strings.Index(message, marker)
+	if idx < 0 {
+		return ""
+	}
+	start := idx + len(marker)
+	end := start
+	for end < len(message) {
+		ch := message[end]
+		if (ch >= 'a' && ch <= 'z') ||
+			(ch >= 'A' && ch <= 'Z') ||
+			(ch >= '0' && ch <= '9') ||
+			ch == '_' ||
+			ch == '-' {
+			end++
+			continue
+		}
+		break
+	}
+	if end <= start {
+		return ""
+	}
+	return strings.TrimSpace(message[start:end])
 }
 
 func parseOpenAIWSResponseUsageFromCompletedEvent(message []byte, usage *OpenAIUsage) {
@@ -2955,6 +3081,22 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		turnPromptCacheKey := openAIWSPayloadStringFromRaw(payload, "prompt_cache_key")
 		turnStoreDisabled := s.isOpenAIWSStoreDisabledInRequestRaw(payload, account)
 		turnHasFunctionCallOutput := openAIWSRawPayloadHasToolCallOutput(payload)
+		turnToolCallTrace := openAIWSToolCallTraceFromRawPayload(payload)
+		if turnToolCallTrace.hasClientContinuationSignal() {
+			logOpenAIWSModeInfo(
+				"ingress_ws_client_tool_call_trace account_id=%d turn=%d conn_id=%s previous_response_id=%s previous_response_id_kind=%s function_call_output_call_ids=%s tool_call_context_call_ids=%s item_reference_ids=%s store_disabled=%v has_prompt_cache_key=%v",
+				account.ID,
+				turn,
+				truncateOpenAIWSLogValue(lease.ConnID(), openAIWSIDValueMaxLen),
+				truncateOpenAIWSLogValue(turnPreviousResponseID, openAIWSIDValueMaxLen),
+				normalizeOpenAIWSLogValue(turnPreviousResponseIDKind),
+				summarizeOpenAIWSTraceIDs(turnToolCallTrace.FunctionCallOutputCallIDs),
+				summarizeOpenAIWSTraceIDs(turnToolCallTrace.ToolCallContextCallIDs),
+				summarizeOpenAIWSTraceIDs(turnToolCallTrace.ItemReferenceIDs),
+				turnStoreDisabled,
+				turnPromptCacheKey != "",
+			)
+		}
 		eventCount := 0
 		tokenEventCount := 0
 		terminalEventCount := 0
@@ -2998,6 +3140,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				s.persistOpenAIWSRateLimitSignal(ctx, account, lease.HandshakeHeaders(), upstreamMessage, errCodeRaw, errTypeRaw, errMsgRaw)
 				fallbackReason, _ := classifyOpenAIWSErrorEventFromRaw(errCodeRaw, errTypeRaw, errMsgRaw)
 				errCode, errType, errMessage := summarizeOpenAIWSErrorEventFieldsFromRaw(errCodeRaw, errTypeRaw, errMsgRaw)
+				missingToolCallID := extractOpenAIWSMissingToolCallID(errMsgRaw)
 				recoverablePrevNotFound := fallbackReason == openAIWSIngressStagePreviousResponseNotFound &&
 					turnPreviousResponseID != "" &&
 					!turnHasFunctionCallOutput &&
@@ -3006,7 +3149,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				if recoverablePrevNotFound {
 					// 可恢复场景使用非 error 关键字日志，避免被 LegacyPrintf 误判为 ERROR 级别。
 					logOpenAIWSModeInfo(
-						"ingress_ws_prev_response_recoverable account_id=%d turn=%d conn_id=%s idx=%d reason=%s code=%s type=%s message=%s previous_response_id=%s previous_response_id_kind=%s response_id=%s store_disabled=%v has_prompt_cache_key=%v",
+						"ingress_ws_prev_response_recoverable account_id=%d turn=%d conn_id=%s idx=%d reason=%s code=%s type=%s message=%s previous_response_id=%s previous_response_id_kind=%s response_id=%s missing_call_id=%s function_call_output_call_ids=%s tool_call_context_call_ids=%s item_reference_ids=%s store_disabled=%v has_prompt_cache_key=%v",
 						account.ID,
 						turn,
 						truncateOpenAIWSLogValue(lease.ConnID(), openAIWSIDValueMaxLen),
@@ -3018,12 +3161,16 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 						truncateOpenAIWSLogValue(turnPreviousResponseID, openAIWSIDValueMaxLen),
 						normalizeOpenAIWSLogValue(turnPreviousResponseIDKind),
 						truncateOpenAIWSLogValue(responseID, openAIWSIDValueMaxLen),
+						truncateOpenAIWSLogValue(missingToolCallID, openAIWSIDValueMaxLen),
+						summarizeOpenAIWSTraceIDs(turnToolCallTrace.FunctionCallOutputCallIDs),
+						summarizeOpenAIWSTraceIDs(turnToolCallTrace.ToolCallContextCallIDs),
+						summarizeOpenAIWSTraceIDs(turnToolCallTrace.ItemReferenceIDs),
 						turnStoreDisabled,
 						turnPromptCacheKey != "",
 					)
 				} else {
 					logOpenAIWSModeInfo(
-						"ingress_ws_error_event account_id=%d turn=%d conn_id=%s idx=%d fallback_reason=%s err_code=%s err_type=%s err_message=%s previous_response_id=%s previous_response_id_kind=%s response_id=%s store_disabled=%v has_prompt_cache_key=%v",
+						"ingress_ws_error_event account_id=%d turn=%d conn_id=%s idx=%d fallback_reason=%s err_code=%s err_type=%s err_message=%s previous_response_id=%s previous_response_id_kind=%s response_id=%s missing_call_id=%s function_call_output_call_ids=%s tool_call_context_call_ids=%s item_reference_ids=%s store_disabled=%v has_prompt_cache_key=%v",
 						account.ID,
 						turn,
 						truncateOpenAIWSLogValue(lease.ConnID(), openAIWSIDValueMaxLen),
@@ -3035,6 +3182,10 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 						truncateOpenAIWSLogValue(turnPreviousResponseID, openAIWSIDValueMaxLen),
 						normalizeOpenAIWSLogValue(turnPreviousResponseIDKind),
 						truncateOpenAIWSLogValue(responseID, openAIWSIDValueMaxLen),
+						truncateOpenAIWSLogValue(missingToolCallID, openAIWSIDValueMaxLen),
+						summarizeOpenAIWSTraceIDs(turnToolCallTrace.FunctionCallOutputCallIDs),
+						summarizeOpenAIWSTraceIDs(turnToolCallTrace.ToolCallContextCallIDs),
+						summarizeOpenAIWSTraceIDs(turnToolCallTrace.ItemReferenceIDs),
 						turnStoreDisabled,
 						turnPromptCacheKey != "",
 					)
@@ -3076,8 +3227,26 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					upstreamMessage = replaceOpenAIWSMessageModel(upstreamMessage, mappedModel, originalModel)
 				}
 				if openAIWSEventMayContainToolCalls(eventType) && openAIWSMessageLikelyContainsToolCalls(upstreamMessage) {
+					upstreamToolCallIDs := openAIWSUpstreamToolCallIDsFromRawMessage(upstreamMessage)
+					toolCallCorrected := false
 					if corrected, changed := s.toolCorrector.CorrectToolCallsInSSEBytes(upstreamMessage); changed {
 						upstreamMessage = corrected
+						toolCallCorrected = true
+					}
+					if len(upstreamToolCallIDs) > 0 || toolCallCorrected {
+						logOpenAIWSModeInfo(
+							"ingress_ws_upstream_tool_call_trace account_id=%d turn=%d conn_id=%s idx=%d event_type=%s response_id=%s upstream_function_call_ids=%s corrected=%v previous_response_id=%s store_disabled=%v",
+							account.ID,
+							turn,
+							truncateOpenAIWSLogValue(lease.ConnID(), openAIWSIDValueMaxLen),
+							eventCount,
+							truncateOpenAIWSLogValue(eventType, openAIWSLogValueMaxLen),
+							truncateOpenAIWSLogValue(responseID, openAIWSIDValueMaxLen),
+							summarizeOpenAIWSTraceIDs(upstreamToolCallIDs),
+							toolCallCorrected,
+							truncateOpenAIWSLogValue(turnPreviousResponseID, openAIWSIDValueMaxLen),
+							turnStoreDisabled,
+						)
 					}
 				}
 				if err := writeClientMessage(upstreamMessage); err != nil {

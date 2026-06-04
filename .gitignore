@@ -131,6 +131,8 @@ docs/*
 !docs/PAYMENT.md
 !docs/PAYMENT_CN.md
 !docs/ADMIN_PAYMENT_INTEGRATION_API.md
+!docs/sub2api-ws-tool-call-diagnostics-and-login-agreement-prd-20260604.md
+!docs/sub2api-ws-tool-call-diagnostics-and-login-agreement-tech-plan-20260604.md
 .serena/
 .codex/
 frontend/coverage/

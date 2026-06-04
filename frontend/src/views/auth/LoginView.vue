@@ -28,7 +28,7 @@
               required
               autofocus
               autocomplete="email"
-              :disabled="authActionDisabled"
+              :disabled="loginFormDisabled"
               class="input pl-11"
               :class="{ 'input-error': errors.email }"
               :placeholder="t('auth.emailPlaceholder')"
@@ -51,7 +51,7 @@
               :type="showPassword ? 'text' : 'password'"
               required
               autocomplete="current-password"
-              :disabled="authActionDisabled"
+              :disabled="loginFormDisabled"
               class="input pl-11 pr-11"
               :class="{ 'input-error': errors.password }"
               :placeholder="t('auth.passwordPlaceholder')"
@@ -59,7 +59,7 @@
             <button
               type="button"
               @click="showPassword = !showPassword"
-              :disabled="authActionDisabled"
+              :disabled="loginFormDisabled"
               class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-400 transition-colors hover:text-gray-600 dark:hover:text-dark-300"
             >
               <Icon v-if="showPassword" name="eyeOff" size="md" />
@@ -92,7 +92,7 @@
         <!-- Submit Button -->
         <button
           type="submit"
-          :disabled="authActionDisabled || (turnstileEnabled && !turnstileToken)"
+          :disabled="loginFormDisabled || (turnstileEnabled && !turnstileToken)"
           class="btn btn-primary w-full"
         >
           <svg
@@ -286,6 +286,10 @@ const authActionDisabled = computed(
   () => isLoading.value || !publicSettingsLoaded.value || agreementGateActive.value
 )
 
+const loginFormDisabled = computed(
+  () => isLoading.value || !publicSettingsLoaded.value
+)
+
 const showOAuthLogin = computed(
   () =>
     !backendModeEnabled.value &&
@@ -359,8 +363,7 @@ function applyLoginAgreementSettings(settings: {
     `${loginAgreementUpdatedAt.value}:${documents.map((doc) => `${doc.id}:${doc.title}`).join('|')}`
 
   agreementAccepted.value = !loginAgreementEnabled.value || hasAcceptedLoginAgreement(loginAgreementRevision.value)
-  showAgreementModal.value =
-    loginAgreementEnabled.value && !agreementAccepted.value && loginAgreementMode.value !== 'checkbox'
+  showAgreementModal.value = false
 }
 
 function hasAcceptedLoginAgreement(revision: string): boolean {
@@ -397,7 +400,7 @@ function rejectLoginAgreement(): void {
   localStorage.removeItem(LOGIN_AGREEMENT_STORAGE_KEY)
   agreementAccepted.value = false
   showAgreementModal.value = false
-  appStore.showWarning('未同意最新条款前，无法输入账号密码或使用快捷登录。')
+  appStore.showWarning('未同意最新条款前，点击登录时需要先勾选并同意。')
 }
 
 // ==================== Turnstile Handlers ====================

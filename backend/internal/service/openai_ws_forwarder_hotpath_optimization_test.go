@@ -66,6 +66,46 @@ func TestOpenAIWSMessageLikelyContainsToolCalls(t *testing.T) {
 	require.True(t, openAIWSMessageLikelyContainsToolCalls([]byte(`{"type":"response.output_item.added","item":{"type":"function_call"}}`)))
 }
 
+func TestOpenAIWSToolCallTraceFromRawPayload(t *testing.T) {
+	trace := openAIWSToolCallTraceFromRawPayload([]byte(`{
+		"input":[
+			{"type":"function_call_output","call_id":"call_output_1","output":"ok"},
+			{"type":"tool_search_output","call_id":"call_search_1","output":"ok"},
+			{"type":"function_call","call_id":"call_context_1","name":"shell"},
+			{"type":"item_reference","id":"call_output_1"},
+			{"type":"function_call_output","call_id":"call_output_1","output":"duplicate"}
+		]
+	}`))
+
+	require.ElementsMatch(t, []string{"call_output_1", "call_search_1"}, trace.FunctionCallOutputCallIDs)
+	require.Equal(t, []string{"call_context_1"}, trace.ToolCallContextCallIDs)
+	require.Equal(t, []string{"call_output_1"}, trace.ItemReferenceIDs)
+	require.True(t, trace.hasClientContinuationSignal())
+}
+
+func TestOpenAIWSUpstreamToolCallIDsFromRawMessage(t *testing.T) {
+	ids := openAIWSUpstreamToolCallIDsFromRawMessage([]byte(`{
+		"type":"response.completed",
+		"response":{
+			"output":[
+				{"type":"function_call","call_id":"call_func_1","name":"shell"},
+				{"type":"message","content":[{"tool_calls":[{"id":"tool_call_1"},{"call_id":"tool_call_2"}]}]}
+			]
+		}
+	}`))
+
+	require.ElementsMatch(t, []string{"call_func_1", "tool_call_1", "tool_call_2"}, ids)
+}
+
+func TestExtractOpenAIWSMissingToolCallID(t *testing.T) {
+	require.Equal(
+		t,
+		"call_fJVa2JveU2XClWb5mUnQ3KSm",
+		extractOpenAIWSMissingToolCallID("No tool call found for function call output with call_id call_fJVa2JveU2XClWb5mUnQ3KSm."),
+	)
+	require.Empty(t, extractOpenAIWSMissingToolCallID("invalid request"))
+}
+
 func TestReplaceOpenAIWSMessageModel_OptimizedStillCorrect(t *testing.T) {
 	noModel := []byte(`{"type":"response.output_text.delta","delta":"hello"}`)
 	require.Equal(t, string(noModel), string(replaceOpenAIWSMessageModel(noModel, "gpt-5.1", "custom-model")))
