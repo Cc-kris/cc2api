@@ -62,18 +62,7 @@ var validOpsAlertSeveritySet = func() map[string]struct{} {
 	return set
 }()
 
-var validOpsAlertErrorCategories = []string{
-	"client",
-	"platform",
-	"upstream",
-	"account_pool",
-	"rate_limit",
-	"permission",
-	"balance",
-	"config",
-	"slow_request",
-	"unknown",
-}
+var validOpsAlertErrorCategories = service.AllOpsErrorCategories
 
 var validOpsAlertErrorCategorySet = func() map[string]struct{} {
 	set := make(map[string]struct{}, len(validOpsAlertErrorCategories))

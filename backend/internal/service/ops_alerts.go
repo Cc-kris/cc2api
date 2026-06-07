@@ -257,12 +257,7 @@ func validateCompoundAlertRuleForSave(rule *OpsAlertRule) error {
 }
 
 func isValidOpsAlertErrorCategory(category string) bool {
-	switch category {
-	case "client", "platform", "upstream", "account_pool", "rate_limit", "permission", "balance", "config", "slow_request", "unknown":
-		return true
-	default:
-		return false
-	}
+	return IsValidOpsErrorCategory(category)
 }
 
 func normalizeAlertTriggerLevel(level string) string {

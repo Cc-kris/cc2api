@@ -87,32 +87,32 @@ func buildCompoundAlertCategoryWhere(categories []string) string {
 			cleaned[category] = struct{}{}
 		}
 	}
-	if len(cleaned) == 0 || len(cleaned) >= 9 {
+	if len(cleaned) == 0 || len(cleaned) >= len(service.AllOpsErrorCategories) {
 		return ""
 	}
 
 	parts := []string{}
 	for category := range cleaned {
 		switch category {
-		case "client":
+		case service.OpsErrorCategoryClient:
 			parts = append(parts, "(LOWER(COALESCE(e.error_source,'')) = 'client' OR LOWER(COALESCE(e.error_owner,'')) = 'client' OR (COALESCE(e.status_code,0) BETWEEN 400 AND 499 AND COALESCE(e.upstream_status_code,0) = 0))")
-		case "platform":
+		case service.OpsErrorCategoryPlatform:
 			parts = append(parts, "(LOWER(COALESCE(e.error_source,'')) = 'platform' OR LOWER(COALESCE(e.error_owner,'')) = 'platform')")
-		case "upstream":
+		case service.OpsErrorCategoryUpstream:
 			parts = append(parts, "(LOWER(COALESCE(e.error_source,'')) IN ('upstream','upstream_http') OR LOWER(COALESCE(e.error_owner,'')) IN ('upstream','provider') OR e.upstream_status_code IS NOT NULL)")
-		case "account_pool":
+		case service.OpsErrorCategoryAccountPool:
 			parts = append(parts, "(LOWER(COALESCE(e.error_message,'')) LIKE '%account%' OR LOWER(COALESCE(e.error_type,'')) LIKE '%account%')")
-		case "rate_limit":
+		case service.OpsErrorCategoryRateLimit:
 			parts = append(parts, "(COALESCE(e.status_code,0) = 429 OR COALESCE(e.upstream_status_code,0) = 429 OR LOWER(COALESCE(e.error_type,'')) LIKE '%rate%' OR LOWER(COALESCE(e.error_message,'')) LIKE '%rate%')")
-		case "permission":
+		case service.OpsErrorCategoryPermission:
 			parts = append(parts, "(COALESCE(e.status_code,0) IN (401,403) OR COALESCE(e.upstream_status_code,0) IN (401,403) OR LOWER(COALESCE(e.error_type,'')) LIKE '%permission%' OR LOWER(COALESCE(e.error_message,'')) LIKE '%permission%' OR LOWER(COALESCE(e.error_message,'')) LIKE '%auth%')")
-		case "balance":
+		case service.OpsErrorCategoryBalance:
 			parts = append(parts, "(LOWER(COALESCE(e.error_type,'')) LIKE '%balance%' OR LOWER(COALESCE(e.error_message,'')) LIKE '%balance%' OR LOWER(COALESCE(e.error_message,'')) LIKE '%quota%' OR LOWER(COALESCE(e.error_message,'')) LIKE '%credit%')")
-		case "config":
+		case service.OpsErrorCategoryConfig:
 			parts = append(parts, "(LOWER(COALESCE(e.error_type,'')) LIKE '%config%' OR LOWER(COALESCE(e.error_message,'')) LIKE '%config%')")
-		case "slow_request":
+		case service.OpsErrorCategorySlowRequest:
 			parts = append(parts, "(LOWER(COALESCE(e.error_type,'')) LIKE '%slow%' OR LOWER(COALESCE(e.error_message,'')) LIKE '%slow%' OR LOWER(COALESCE(e.error_message,'')) LIKE '%timeout%')")
-		case "unknown":
+		case service.OpsErrorCategoryUnknown:
 			parts = append(parts, "(COALESCE(e.error_type,'') = '' AND COALESCE(e.error_source,'') = '' AND COALESCE(e.error_owner,'') = '')")
 		}
 	}

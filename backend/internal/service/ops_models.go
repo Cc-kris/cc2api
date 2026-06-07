@@ -31,6 +31,13 @@ type OpsErrorLog struct {
 	Owner  string `json:"error_owner"`
 	Source string `json:"error_source"`
 
+	ErrorCategory                 string   `json:"error_category"`
+	ErrorSubcategory              string   `json:"error_subcategory"`
+	ClientErrorSubcategory        *string  `json:"client_error_subcategory"`
+	ClassificationConfidence      string   `json:"classification_confidence,omitempty"`
+	ClassificationReason          string   `json:"classification_reason,omitempty"`
+	ClassificationMissingEvidence []string `json:"classification_missing_evidence,omitempty"`
+
 	Severity string `json:"severity"`
 
 	StatusCode int    `json:"status_code"`

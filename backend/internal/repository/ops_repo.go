@@ -231,7 +231,18 @@ SELECT
   COALESCE(e.upstream_endpoint, ''),
   COALESCE(e.requested_model, ''),
   COALESCE(e.upstream_model, ''),
-  e.request_type
+  e.request_type,
+  e.upstream_status_code,
+  COALESCE(e.error_body, ''),
+  COALESCE(e.upstream_error_message, ''),
+  COALESCE(e.upstream_error_detail, ''),
+  COALESCE(e.upstream_errors::text, ''),
+  COALESCE(e.is_business_limited, false),
+  e.auth_latency_ms,
+  e.routing_latency_ms,
+  e.upstream_latency_ms,
+  e.response_latency_ms,
+  e.time_to_first_token_ms
 FROM ops_error_logs e
 LEFT JOIN accounts a ON e.account_id = a.id
 LEFT JOIN groups g ON e.group_id = g.id
@@ -264,6 +275,17 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 		var resolvedBy sql.NullInt64
 		var resolvedByName string
 		var requestType sql.NullInt64
+		var upstreamStatusCode sql.NullInt64
+		var errorBody string
+		var upstreamErrorMessage string
+		var upstreamErrorDetail string
+		var upstreamErrors string
+		var isBusinessLimited bool
+		var authLatency sql.NullInt64
+		var routingLatency sql.NullInt64
+		var upstreamLatency sql.NullInt64
+		var responseLatency sql.NullInt64
+		var ttft sql.NullInt64
 		if err := rows.Scan(
 			&item.ID,
 			&item.CreatedAt,
@@ -297,6 +319,17 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 			&item.RequestedModel,
 			&item.UpstreamModel,
 			&requestType,
+			&upstreamStatusCode,
+			&errorBody,
+			&upstreamErrorMessage,
+			&upstreamErrorDetail,
+			&upstreamErrors,
+			&isBusinessLimited,
+			&authLatency,
+			&routingLatency,
+			&upstreamLatency,
+			&responseLatency,
+			&ttft,
 		); err != nil {
 			return nil, err
 		}
@@ -337,6 +370,38 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 			v := int16(requestType.Int64)
 			item.RequestType = &v
 		}
+
+		var upstreamStatusCodePtr *int
+		if upstreamStatusCode.Valid && upstreamStatusCode.Int64 > 0 {
+			v := int(upstreamStatusCode.Int64)
+			upstreamStatusCodePtr = &v
+		}
+		classification := service.ClassifyOpsError(service.OpsErrorClassificationInput{
+			StatusCode:           item.StatusCode,
+			UpstreamStatusCode:   upstreamStatusCodePtr,
+			ErrorType:            item.Type,
+			ErrorPhase:           item.Phase,
+			ErrorSource:          item.Source,
+			ErrorOwner:           item.Owner,
+			ErrorMessage:         item.Message,
+			ErrorBody:            errorBody,
+			UpstreamErrorMessage: upstreamErrorMessage,
+			UpstreamErrorDetail:  upstreamErrorDetail,
+			UpstreamErrors:       normalizedOpsErrorJSONText(upstreamErrors),
+			RequestPath:          item.RequestPath,
+			InboundEndpoint:      item.InboundEndpoint,
+			UpstreamEndpoint:     item.UpstreamEndpoint,
+			RequestedModel:       item.RequestedModel,
+			UpstreamModel:        item.UpstreamModel,
+			Model:                item.Model,
+			IsBusinessLimited:    isBusinessLimited,
+			AuthLatencyMs:        sqlNullInt64Ptr(authLatency),
+			RoutingLatencyMs:     sqlNullInt64Ptr(routingLatency),
+			UpstreamLatencyMs:    sqlNullInt64Ptr(upstreamLatency),
+			ResponseLatencyMs:    sqlNullInt64Ptr(responseLatency),
+			TimeToFirstTokenMs:   sqlNullInt64Ptr(ttft),
+		})
+		item.SetClassification(classification)
 		out = append(out, &item)
 	}
 	if err := rows.Err(); err != nil {
@@ -537,10 +602,8 @@ LIMIT 1`
 	}
 
 	// Normalize upstream_errors to empty string when stored as JSON null.
-	out.UpstreamErrors = strings.TrimSpace(out.UpstreamErrors)
-	if out.UpstreamErrors == "null" {
-		out.UpstreamErrors = ""
-	}
+	out.UpstreamErrors = normalizedOpsErrorJSONText(out.UpstreamErrors)
+	service.ApplyOpsErrorClassificationToDetail(&out)
 
 	return &out, nil
 }
@@ -1059,6 +1122,22 @@ func buildOpsSystemLogsCleanupWhere(filter *service.OpsSystemLogCleanupFilter) (
 		Query:           filter.Query,
 	}
 	return buildOpsSystemLogsWhere(listFilter)
+}
+
+func normalizedOpsErrorJSONText(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "null" {
+		return ""
+	}
+	return v
+}
+
+func sqlNullInt64Ptr(v sql.NullInt64) *int64 {
+	if !v.Valid {
+		return nil
+	}
+	out := v.Int64
+	return &out
 }
 
 // Helpers for nullable args
