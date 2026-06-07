@@ -33,6 +33,22 @@ type OpsAlertRule struct {
 
 	Filters map[string]any `json:"filters,omitempty"`
 
+	// v2 compound alert rule fields. They coexist with legacy metric/operator/threshold
+	// fields until the evaluator migration is complete.
+	RuleVersion                string         `json:"rule_version"`
+	ErrorCategories            []string       `json:"error_categories"`
+	TriggerLevel               string         `json:"trigger_level"`
+	MinFinalFailures           int            `json:"min_final_failures"`
+	MinFailureRate             float64        `json:"min_failure_rate"`
+	MinSampleCount             int            `json:"min_sample_count"`
+	ImpactScope                map[string]int `json:"impact_scope"`
+	RecoveredFluctuationPolicy string         `json:"recovered_fluctuation_policy"`
+	MinRecoveredFluctuations   int            `json:"min_recovered_fluctuations"`
+	AutoAIAnalysis             bool           `json:"auto_ai_analysis"`
+	NotificationChannels       []string       `json:"notification_channels"`
+	SilenceMinutes             int            `json:"silence_minutes"`
+	MigrationState             string         `json:"migration_state"`
+
 	LastTriggeredAt *time.Time `json:"last_triggered_at,omitempty"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`

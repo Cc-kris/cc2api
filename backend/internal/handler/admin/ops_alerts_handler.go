@@ -20,6 +20,8 @@ var validOpsAlertMetricTypes = []string{
 	"success_rate",
 	"error_rate",
 	"upstream_error_rate",
+	"p95_latency_ms",
+	"p99_latency_ms",
 	"cpu_usage_percent",
 	"memory_usage_percent",
 	"concurrency_queue_depth",
@@ -60,6 +62,57 @@ var validOpsAlertSeveritySet = func() map[string]struct{} {
 	return set
 }()
 
+var validOpsAlertErrorCategories = []string{
+	"client",
+	"platform",
+	"upstream",
+	"account_pool",
+	"rate_limit",
+	"permission",
+	"balance",
+	"config",
+	"slow_request",
+	"unknown",
+}
+
+var validOpsAlertErrorCategorySet = func() map[string]struct{} {
+	set := make(map[string]struct{}, len(validOpsAlertErrorCategories))
+	for _, v := range validOpsAlertErrorCategories {
+		set[v] = struct{}{}
+	}
+	return set
+}()
+
+var validOpsAlertTriggerLevels = []string{"P0", "P1", "P2", "observe"}
+
+var validOpsAlertTriggerLevelSet = func() map[string]struct{} {
+	set := make(map[string]struct{}, len(validOpsAlertTriggerLevels))
+	for _, v := range validOpsAlertTriggerLevels {
+		set[v] = struct{}{}
+	}
+	return set
+}()
+
+var validOpsAlertRecoveredPolicies = []string{"record_only", "observe_only", "alert"}
+
+var validOpsAlertRecoveredPolicySet = func() map[string]struct{} {
+	set := make(map[string]struct{}, len(validOpsAlertRecoveredPolicies))
+	for _, v := range validOpsAlertRecoveredPolicies {
+		set[v] = struct{}{}
+	}
+	return set
+}()
+
+var validOpsAlertNotificationChannels = []string{"in_app", "email", "none"}
+
+var validOpsAlertNotificationChannelSet = func() map[string]struct{} {
+	set := make(map[string]struct{}, len(validOpsAlertNotificationChannels))
+	for _, v := range validOpsAlertNotificationChannels {
+		set[v] = struct{}{}
+	}
+	return set
+}()
+
 type opsAlertRuleValidatedInput struct {
 	Name       string
 	MetricType string
@@ -75,12 +128,19 @@ type opsAlertRuleValidatedInput struct {
 	Enabled     bool
 	NotifyEmail bool
 
-	WindowProvided    bool
-	SustainedProvided bool
-	CooldownProvided  bool
-	SeverityProvided  bool
-	EnabledProvided   bool
-	NotifyProvided    bool
+	RuleVersion                string
+	ErrorCategories            []string
+	TriggerLevel               string
+	MinFinalFailures           int
+	MinFailureRate             float64
+	MinSampleCount             int
+	ImpactScope                map[string]int
+	RecoveredFluctuationPolicy string
+	MinRecoveredFluctuations   int
+	AutoAIAnalysis             bool
+	NotificationChannels       []string
+	SilenceMinutes             int
+	MigrationState             string
 }
 
 func isPercentOrRateMetric(metricType string) bool {
@@ -103,7 +163,220 @@ func validateOpsAlertRulePayload(raw map[string]json.RawMessage) (*opsAlertRuleV
 	if raw == nil {
 		return nil, fmt.Errorf("invalid request body")
 	}
+	if isOpsAlertRuleV2Payload(raw) {
+		return validateOpsAlertRuleV2Payload(raw)
+	}
+	return validateOpsAlertRuleLegacyPayload(raw)
+}
 
+func isOpsAlertRuleV2Payload(raw map[string]json.RawMessage) bool {
+	for _, field := range []string{
+		"time_window",
+		"error_categories",
+		"trigger_level",
+		"min_final_failures",
+		"min_failure_rate",
+		"min_sample_count",
+		"impact_scope",
+		"recovered_fluctuation_policy",
+		"auto_ai_analysis",
+		"notification_channels",
+		"silence_minutes",
+	} {
+		if _, ok := raw[field]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func validateOpsAlertRuleV2Payload(raw map[string]json.RawMessage) (*opsAlertRuleValidatedInput, error) {
+	name, err := parseOpsAlertRequiredString(raw, "name", "请输入规则名称")
+	if err != nil {
+		return nil, err
+	}
+	if l := len([]rune(name)); l < 2 || l > 50 {
+		return nil, fmt.Errorf("规则名称需为 2～50 字")
+	}
+
+	enabled := true
+	if v, ok := raw["enabled"]; ok {
+		if err := json.Unmarshal(v, &enabled); err != nil {
+			return nil, fmt.Errorf("enabled must be a boolean")
+		}
+	}
+
+	windowMinutes := 1
+	if v, ok := raw["time_window"]; ok {
+		var timeWindow string
+		if err := json.Unmarshal(v, &timeWindow); err != nil {
+			return nil, fmt.Errorf("time_window must be a string")
+		}
+		if strings.TrimSpace(timeWindow) != "1m" {
+			return nil, fmt.Errorf("本版本固定 1 分钟窗口")
+		}
+	} else if v, ok := raw["window_minutes"]; ok {
+		if err := json.Unmarshal(v, &windowMinutes); err != nil {
+			return nil, fmt.Errorf("window_minutes must be an integer")
+		}
+		if windowMinutes != 1 {
+			return nil, fmt.Errorf("本版本固定 1 分钟窗口")
+		}
+	}
+
+	errorCategories, err := parseOpsAlertStringList(raw, "error_categories", true, "请选择错误分类")
+	if err != nil {
+		return nil, err
+	}
+	if len(errorCategories) > 20 {
+		return nil, fmt.Errorf("错误分类最多选择 20 项")
+	}
+	for _, category := range errorCategories {
+		if _, ok := validOpsAlertErrorCategorySet[category]; !ok {
+			return nil, fmt.Errorf("错误分类必须为：%s", strings.Join(validOpsAlertErrorCategories, ", "))
+		}
+	}
+
+	triggerLevel, err := parseOpsAlertRequiredString(raw, "trigger_level", "trigger_level is required")
+	if err != nil {
+		return nil, err
+	}
+	triggerLevel = normalizeOpsAlertTriggerLevel(triggerLevel)
+	if _, ok := validOpsAlertTriggerLevelSet[triggerLevel]; !ok {
+		return nil, fmt.Errorf("trigger_level must be one of: %s", strings.Join(validOpsAlertTriggerLevels, ", "))
+	}
+
+	minFinalFailures, err := parseOpsAlertRequiredInt(raw, "min_final_failures", "min_final_failures is required")
+	if err != nil {
+		return nil, err
+	}
+	if minFinalFailures < 1 || minFinalFailures > 100000 {
+		return nil, fmt.Errorf("最小最终失败数需为 1～100000 的整数")
+	}
+
+	minFailureRate, err := parseOpsAlertRequiredFloat(raw, "min_failure_rate", "min_failure_rate is required")
+	if err != nil {
+		return nil, err
+	}
+	if minFailureRate < 0 || minFailureRate > 100 || math.Round(minFailureRate*100) != minFailureRate*100 {
+		return nil, fmt.Errorf("请输入 0～100 的百分比")
+	}
+
+	minSampleCount, err := parseOpsAlertRequiredInt(raw, "min_sample_count", "min_sample_count is required")
+	if err != nil {
+		return nil, err
+	}
+	if minSampleCount < 1 || minSampleCount > 1000000 {
+		return nil, fmt.Errorf("请输入大于 0 的整数")
+	}
+	if minFailureRate > 0 && minFinalFailures > minSampleCount {
+		return nil, fmt.Errorf("最小最终失败数不能大于最小样本量")
+	}
+	if minFailureRate > 0 && (minFinalFailures <= 0 || minSampleCount <= 0) {
+		return nil, fmt.Errorf("百分比规则必须配置最小失败数和最小样本量")
+	}
+
+	impactScope, err := parseOpsAlertImpactScope(raw["impact_scope"])
+	if err != nil {
+		return nil, err
+	}
+
+	recoveredPolicy := "record_only"
+	if v, ok := raw["recovered_fluctuation_policy"]; ok {
+		if err := json.Unmarshal(v, &recoveredPolicy); err != nil {
+			return nil, fmt.Errorf("recovered_fluctuation_policy must be a string")
+		}
+		recoveredPolicy = strings.TrimSpace(recoveredPolicy)
+	}
+	if _, ok := validOpsAlertRecoveredPolicySet[recoveredPolicy]; !ok {
+		return nil, fmt.Errorf("recovered_fluctuation_policy must be one of: %s", strings.Join(validOpsAlertRecoveredPolicies, ", "))
+	}
+
+	minRecovered := 0
+	if v, ok := raw["min_recovered_fluctuations"]; ok {
+		if err := json.Unmarshal(v, &minRecovered); err != nil {
+			return nil, fmt.Errorf("min_recovered_fluctuations must be an integer")
+		}
+	}
+	if recoveredPolicy != "record_only" {
+		if minRecovered < 1 || minRecovered > 100000 {
+			return nil, fmt.Errorf("已恢复波动参与告警需配置最小波动数")
+		}
+	} else if minRecovered < 0 || minRecovered > 100000 {
+		return nil, fmt.Errorf("min_recovered_fluctuations must be between 0 and 100000")
+	}
+
+	autoAIAnalysis := triggerLevel == "P0" || triggerLevel == "P1"
+	if v, ok := raw["auto_ai_analysis"]; ok {
+		if err := json.Unmarshal(v, &autoAIAnalysis); err != nil {
+			return nil, fmt.Errorf("auto_ai_analysis must be a boolean")
+		}
+	}
+
+	notificationChannels, err := parseOpsAlertStringList(raw, "notification_channels", false, "")
+	if err != nil {
+		return nil, err
+	}
+	if len(notificationChannels) == 0 {
+		notificationChannels = []string{"in_app"}
+	}
+	for _, channel := range notificationChannels {
+		if _, ok := validOpsAlertNotificationChannelSet[channel]; !ok {
+			return nil, fmt.Errorf("notification_channels must be one of: %s", strings.Join(validOpsAlertNotificationChannels, ", "))
+		}
+	}
+	if containsString(notificationChannels, "none") && len(notificationChannels) > 1 {
+		return nil, fmt.Errorf("notification_channels 选择 none 时不能同时选择其他方式")
+	}
+
+	silenceMinutes := 10
+	if v, ok := raw["silence_minutes"]; ok {
+		if err := json.Unmarshal(v, &silenceMinutes); err != nil {
+			return nil, fmt.Errorf("silence_minutes must be an integer")
+		}
+	}
+	if silenceMinutes < 0 || silenceMinutes > 1440 {
+		return nil, fmt.Errorf("请输入 0～1440 的整数分钟")
+	}
+
+	description := ""
+	if v, ok := raw["description"]; ok {
+		if err := json.Unmarshal(v, &description); err != nil {
+			return nil, fmt.Errorf("description must be a string")
+		}
+		if len([]rune(strings.TrimSpace(description))) > 500 {
+			return nil, fmt.Errorf("最多 500 字")
+		}
+	}
+
+	return &opsAlertRuleValidatedInput{
+		Name:                       name,
+		MetricType:                 "compound_rule",
+		Operator:                   ">=",
+		Threshold:                  float64(minFinalFailures),
+		Severity:                   opsAlertSeverityFromTriggerLevel(triggerLevel),
+		WindowMinutes:              windowMinutes,
+		SustainedMinutes:           1,
+		CooldownMinutes:            silenceMinutes,
+		Enabled:                    enabled,
+		NotifyEmail:                containsString(notificationChannels, "email"),
+		RuleVersion:                "v2",
+		ErrorCategories:            errorCategories,
+		TriggerLevel:               triggerLevel,
+		MinFinalFailures:           minFinalFailures,
+		MinFailureRate:             minFailureRate,
+		MinSampleCount:             minSampleCount,
+		ImpactScope:                impactScope,
+		RecoveredFluctuationPolicy: recoveredPolicy,
+		MinRecoveredFluctuations:   minRecovered,
+		AutoAIAnalysis:             autoAIAnalysis,
+		NotificationChannels:       notificationChannels,
+		SilenceMinutes:             silenceMinutes,
+		MigrationState:             "normal",
+	}, nil
+}
+
+func validateOpsAlertRuleLegacyPayload(raw map[string]json.RawMessage) (*opsAlertRuleValidatedInput, error) {
 	requiredFields := []string{"name", "metric_type", "operator", "threshold"}
 	for _, field := range requiredFields {
 		if _, ok := raw[field]; !ok {
@@ -116,6 +389,9 @@ func validateOpsAlertRulePayload(raw map[string]json.RawMessage) (*opsAlertRuleV
 		return nil, fmt.Errorf("name is required")
 	}
 	name = strings.TrimSpace(name)
+	if l := len([]rune(name)); l < 2 || l > 50 {
+		return nil, fmt.Errorf("规则名称需为 2～50 字")
+	}
 
 	var metricType string
 	if err := json.Unmarshal(raw["metric_type"], &metricType); err != nil || strings.TrimSpace(metricType) == "" {
@@ -151,14 +427,24 @@ func validateOpsAlertRulePayload(raw map[string]json.RawMessage) (*opsAlertRuleV
 	}
 
 	validated := &opsAlertRuleValidatedInput{
-		Name:       name,
-		MetricType: metricType,
-		Operator:   operator,
-		Threshold:  threshold,
+		Name:                       name,
+		MetricType:                 metricType,
+		Operator:                   operator,
+		Threshold:                  threshold,
+		RuleVersion:                "v1",
+		ErrorCategories:            []string{},
+		TriggerLevel:               "P2",
+		MinFinalFailures:           1,
+		MinFailureRate:             0,
+		MinSampleCount:             1,
+		ImpactScope:                map[string]int{},
+		RecoveredFluctuationPolicy: "record_only",
+		NotificationChannels:       []string{"in_app"},
+		SilenceMinutes:             0,
+		MigrationState:             "readonly_legacy",
 	}
 
 	if v, ok := raw["severity"]; ok {
-		validated.SeverityProvided = true
 		var sev string
 		if err := json.Unmarshal(v, &sev); err != nil {
 			return nil, fmt.Errorf("severity must be a string")
@@ -169,6 +455,7 @@ func validateOpsAlertRulePayload(raw map[string]json.RawMessage) (*opsAlertRuleV
 				return nil, fmt.Errorf("severity must be one of: %s", strings.Join(validOpsAlertSeverities, ", "))
 			}
 			validated.Severity = sev
+			validated.TriggerLevel = triggerLevelFromOpsAlertSeverity(sev)
 		}
 	}
 	if validated.Severity == "" {
@@ -176,7 +463,6 @@ func validateOpsAlertRulePayload(raw map[string]json.RawMessage) (*opsAlertRuleV
 	}
 
 	if v, ok := raw["enabled"]; ok {
-		validated.EnabledProvided = true
 		if err := json.Unmarshal(v, &validated.Enabled); err != nil {
 			return nil, fmt.Errorf("enabled must be a boolean")
 		}
@@ -185,16 +471,17 @@ func validateOpsAlertRulePayload(raw map[string]json.RawMessage) (*opsAlertRuleV
 	}
 
 	if v, ok := raw["notify_email"]; ok {
-		validated.NotifyProvided = true
 		if err := json.Unmarshal(v, &validated.NotifyEmail); err != nil {
 			return nil, fmt.Errorf("notify_email must be a boolean")
 		}
 	} else {
 		validated.NotifyEmail = true
 	}
+	if validated.NotifyEmail {
+		validated.NotificationChannels = []string{"in_app", "email"}
+	}
 
 	if v, ok := raw["window_minutes"]; ok {
-		validated.WindowProvided = true
 		if err := json.Unmarshal(v, &validated.WindowMinutes); err != nil {
 			return nil, fmt.Errorf("window_minutes must be an integer")
 		}
@@ -208,7 +495,6 @@ func validateOpsAlertRulePayload(raw map[string]json.RawMessage) (*opsAlertRuleV
 	}
 
 	if v, ok := raw["sustained_minutes"]; ok {
-		validated.SustainedProvided = true
 		if err := json.Unmarshal(v, &validated.SustainedMinutes); err != nil {
 			return nil, fmt.Errorf("sustained_minutes must be an integer")
 		}
@@ -220,7 +506,6 @@ func validateOpsAlertRulePayload(raw map[string]json.RawMessage) (*opsAlertRuleV
 	}
 
 	if v, ok := raw["cooldown_minutes"]; ok {
-		validated.CooldownProvided = true
 		if err := json.Unmarshal(v, &validated.CooldownMinutes); err != nil {
 			return nil, fmt.Errorf("cooldown_minutes must be an integer")
 		}
@@ -230,8 +515,135 @@ func validateOpsAlertRulePayload(raw map[string]json.RawMessage) (*opsAlertRuleV
 	} else {
 		validated.CooldownMinutes = 0
 	}
+	validated.SilenceMinutes = validated.CooldownMinutes
 
 	return validated, nil
+}
+
+func parseOpsAlertRequiredString(raw map[string]json.RawMessage, field string, message string) (string, error) {
+	v, ok := raw[field]
+	if !ok {
+		return "", fmt.Errorf("%s", message)
+	}
+	var out string
+	if err := json.Unmarshal(v, &out); err != nil || strings.TrimSpace(out) == "" {
+		return "", fmt.Errorf("%s", message)
+	}
+	return strings.TrimSpace(out), nil
+}
+
+func parseOpsAlertRequiredInt(raw map[string]json.RawMessage, field string, message string) (int, error) {
+	v, ok := raw[field]
+	if !ok {
+		return 0, fmt.Errorf("%s", message)
+	}
+	var out int
+	if err := json.Unmarshal(v, &out); err != nil {
+		return 0, fmt.Errorf("%s must be an integer", field)
+	}
+	return out, nil
+}
+
+func parseOpsAlertRequiredFloat(raw map[string]json.RawMessage, field string, message string) (float64, error) {
+	v, ok := raw[field]
+	if !ok {
+		return 0, fmt.Errorf("%s", message)
+	}
+	var out float64
+	if err := json.Unmarshal(v, &out); err != nil || math.IsNaN(out) || math.IsInf(out, 0) {
+		return 0, fmt.Errorf("%s must be a finite number", field)
+	}
+	return out, nil
+}
+
+func parseOpsAlertStringList(raw map[string]json.RawMessage, field string, required bool, requiredMessage string) ([]string, error) {
+	v, ok := raw[field]
+	if !ok {
+		if required {
+			return nil, fmt.Errorf("%s", requiredMessage)
+		}
+		return []string{}, nil
+	}
+	var values []string
+	if err := json.Unmarshal(v, &values); err != nil {
+		return nil, fmt.Errorf("%s must be a string array", field)
+	}
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	if required && len(out) == 0 {
+		return nil, fmt.Errorf("%s", requiredMessage)
+	}
+	return out, nil
+}
+
+func parseOpsAlertImpactScope(raw json.RawMessage) (map[string]int, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return map[string]int{}, nil
+	}
+	var scope map[string]int
+	if err := json.Unmarshal(raw, &scope); err != nil {
+		return nil, fmt.Errorf("impact_scope must be an object")
+	}
+	validKeys := map[string]struct{}{
+		"affected_users":             {},
+		"affected_api_keys":          {},
+		"affected_groups":            {},
+		"affected_models":            {},
+		"affected_upstream_accounts": {},
+	}
+	out := map[string]int{}
+	for key, value := range scope {
+		if _, ok := validKeys[key]; !ok {
+			return nil, fmt.Errorf("impact_scope contains unsupported key: %s", key)
+		}
+		if value < 1 || value > 100000 {
+			return nil, fmt.Errorf("impact_scope values must be between 1 and 100000")
+		}
+		out[key] = value
+	}
+	return out, nil
+}
+
+func normalizeOpsAlertTriggerLevel(v string) string {
+	v = strings.TrimSpace(v)
+	if strings.EqualFold(v, "observe") || v == "观察" {
+		return "observe"
+	}
+	return strings.ToUpper(v)
+}
+
+func opsAlertSeverityFromTriggerLevel(level string) string {
+	if level == "observe" {
+		return "P3"
+	}
+	return level
+}
+
+func triggerLevelFromOpsAlertSeverity(severity string) string {
+	if strings.EqualFold(severity, "P3") {
+		return "observe"
+	}
+	return strings.ToUpper(strings.TrimSpace(severity))
+}
+
+func containsString(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
 }
 
 // ListAlertRules returns all ops alert rules.
@@ -293,6 +705,19 @@ func (h *OpsHandler) CreateAlertRule(c *gin.Context) {
 	rule.Severity = validated.Severity
 	rule.Enabled = validated.Enabled
 	rule.NotifyEmail = validated.NotifyEmail
+	rule.RuleVersion = validated.RuleVersion
+	rule.ErrorCategories = validated.ErrorCategories
+	rule.TriggerLevel = validated.TriggerLevel
+	rule.MinFinalFailures = validated.MinFinalFailures
+	rule.MinFailureRate = validated.MinFailureRate
+	rule.MinSampleCount = validated.MinSampleCount
+	rule.ImpactScope = validated.ImpactScope
+	rule.RecoveredFluctuationPolicy = validated.RecoveredFluctuationPolicy
+	rule.MinRecoveredFluctuations = validated.MinRecoveredFluctuations
+	rule.AutoAIAnalysis = validated.AutoAIAnalysis
+	rule.NotificationChannels = validated.NotificationChannels
+	rule.SilenceMinutes = validated.SilenceMinutes
+	rule.MigrationState = validated.MigrationState
 
 	created, err := h.opsService.CreateAlertRule(c.Request.Context(), &rule)
 	if err != nil {
@@ -348,6 +773,19 @@ func (h *OpsHandler) UpdateAlertRule(c *gin.Context) {
 	rule.Severity = validated.Severity
 	rule.Enabled = validated.Enabled
 	rule.NotifyEmail = validated.NotifyEmail
+	rule.RuleVersion = validated.RuleVersion
+	rule.ErrorCategories = validated.ErrorCategories
+	rule.TriggerLevel = validated.TriggerLevel
+	rule.MinFinalFailures = validated.MinFinalFailures
+	rule.MinFailureRate = validated.MinFailureRate
+	rule.MinSampleCount = validated.MinSampleCount
+	rule.ImpactScope = validated.ImpactScope
+	rule.RecoveredFluctuationPolicy = validated.RecoveredFluctuationPolicy
+	rule.MinRecoveredFluctuations = validated.MinRecoveredFluctuations
+	rule.AutoAIAnalysis = validated.AutoAIAnalysis
+	rule.NotificationChannels = validated.NotificationChannels
+	rule.SilenceMinutes = validated.SilenceMinutes
+	rule.MigrationState = validated.MigrationState
 
 	updated, err := h.opsService.UpdateAlertRule(c.Request.Context(), &rule)
 	if err != nil {

@@ -14,6 +14,9 @@ type opsRepoMock struct {
 	GetDashboardOverviewFn        func(ctx context.Context, filter *OpsDashboardFilter) (*OpsDashboardOverview, error)
 	GetIncidentImpactFn           func(ctx context.Context, filter *OpsDashboardFilter) (*OpsIncidentImpact, error)
 	ListAlertEventsFn             func(ctx context.Context, filter *OpsAlertEventFilter) ([]*OpsAlertEvent, error)
+	ListAlertRulesFn              func(ctx context.Context) ([]*OpsAlertRule, error)
+	CreateAlertRuleFn             func(ctx context.Context, input *OpsAlertRule) (*OpsAlertRule, error)
+	UpdateAlertRuleFn             func(ctx context.Context, input *OpsAlertRule) (*OpsAlertRule, error)
 	DeleteSystemLogsFn            func(ctx context.Context, filter *OpsSystemLogCleanupFilter) (int64, error)
 	InsertSystemLogCleanupAuditFn func(ctx context.Context, input *OpsSystemLogCleanupAudit) error
 }
@@ -135,14 +138,23 @@ func (m *opsRepoMock) ListJobHeartbeats(ctx context.Context) ([]*OpsJobHeartbeat
 }
 
 func (m *opsRepoMock) ListAlertRules(ctx context.Context) ([]*OpsAlertRule, error) {
+	if m.ListAlertRulesFn != nil {
+		return m.ListAlertRulesFn(ctx)
+	}
 	return []*OpsAlertRule{}, nil
 }
 
 func (m *opsRepoMock) CreateAlertRule(ctx context.Context, input *OpsAlertRule) (*OpsAlertRule, error) {
+	if m.CreateAlertRuleFn != nil {
+		return m.CreateAlertRuleFn(ctx, input)
+	}
 	return input, nil
 }
 
 func (m *opsRepoMock) UpdateAlertRule(ctx context.Context, input *OpsAlertRule) (*OpsAlertRule, error) {
+	if m.UpdateAlertRuleFn != nil {
+		return m.UpdateAlertRuleFn(ctx, input)
+	}
 	return input, nil
 }
 

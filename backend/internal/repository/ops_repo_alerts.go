@@ -31,6 +31,19 @@ SELECT
   cooldown_minutes,
   COALESCE(notify_email, true),
   filters,
+  COALESCE(rule_version, 'v1'),
+  COALESCE(error_categories, '[]'::jsonb),
+  COALESCE(trigger_level, ''),
+  COALESCE(min_final_failures, 1),
+  COALESCE(min_failure_rate, 0),
+  COALESCE(min_sample_count, 1),
+  COALESCE(impact_scope, '{}'::jsonb),
+  COALESCE(recovered_fluctuation_policy, 'record_only'),
+  COALESCE(min_recovered_fluctuations, 0),
+  COALESCE(auto_ai_analysis, false),
+  COALESCE(notification_channels, '["in_app"]'::jsonb),
+  COALESCE(silence_minutes, 10),
+  COALESCE(migration_state, 'normal'),
   last_triggered_at,
   created_at,
   updated_at
@@ -47,6 +60,9 @@ ORDER BY id DESC`
 	for rows.Next() {
 		var rule service.OpsAlertRule
 		var filtersRaw []byte
+		var errorCategoriesRaw []byte
+		var impactScopeRaw []byte
+		var notificationChannelsRaw []byte
 		var lastTriggeredAt sql.NullTime
 		if err := rows.Scan(
 			&rule.ID,
@@ -62,6 +78,19 @@ ORDER BY id DESC`
 			&rule.CooldownMinutes,
 			&rule.NotifyEmail,
 			&filtersRaw,
+			&rule.RuleVersion,
+			&errorCategoriesRaw,
+			&rule.TriggerLevel,
+			&rule.MinFinalFailures,
+			&rule.MinFailureRate,
+			&rule.MinSampleCount,
+			&impactScopeRaw,
+			&rule.RecoveredFluctuationPolicy,
+			&rule.MinRecoveredFluctuations,
+			&rule.AutoAIAnalysis,
+			&notificationChannelsRaw,
+			&rule.SilenceMinutes,
+			&rule.MigrationState,
 			&lastTriggeredAt,
 			&rule.CreatedAt,
 			&rule.UpdatedAt,
@@ -72,6 +101,7 @@ ORDER BY id DESC`
 			v := lastTriggeredAt.Time
 			rule.LastTriggeredAt = &v
 		}
+		decodeOpsAlertRuleJSONFields(&rule, errorCategoriesRaw, impactScopeRaw, notificationChannelsRaw)
 		if len(filtersRaw) > 0 && string(filtersRaw) != "null" {
 			var decoded map[string]any
 			if err := json.Unmarshal(filtersRaw, &decoded); err == nil {
@@ -98,6 +128,18 @@ func (r *opsRepository) CreateAlertRule(ctx context.Context, input *service.OpsA
 	if err != nil {
 		return nil, err
 	}
+	errorCategoriesArg, err := opsJSONValue(input.ErrorCategories)
+	if err != nil {
+		return nil, err
+	}
+	impactScopeArg, err := opsJSONValue(input.ImpactScope)
+	if err != nil {
+		return nil, err
+	}
+	notificationChannelsArg, err := opsJSONValue(input.NotificationChannels)
+	if err != nil {
+		return nil, err
+	}
 
 	q := `
 INSERT INTO ops_alert_rules (
@@ -113,10 +155,23 @@ INSERT INTO ops_alert_rules (
   cooldown_minutes,
   notify_email,
   filters,
+  rule_version,
+  error_categories,
+  trigger_level,
+  min_final_failures,
+  min_failure_rate,
+  min_sample_count,
+  impact_scope,
+  recovered_fluctuation_policy,
+  min_recovered_fluctuations,
+  auto_ai_analysis,
+  notification_channels,
+  silence_minutes,
+  migration_state,
   created_at,
   updated_at
 ) VALUES (
-  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW()
+  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,NOW(),NOW()
 )
 RETURNING
   id,
@@ -132,12 +187,28 @@ RETURNING
   cooldown_minutes,
   COALESCE(notify_email, true),
   filters,
+  COALESCE(rule_version, 'v1'),
+  COALESCE(error_categories, '[]'::jsonb),
+  COALESCE(trigger_level, ''),
+  COALESCE(min_final_failures, 1),
+  COALESCE(min_failure_rate, 0),
+  COALESCE(min_sample_count, 1),
+  COALESCE(impact_scope, '{}'::jsonb),
+  COALESCE(recovered_fluctuation_policy, 'record_only'),
+  COALESCE(min_recovered_fluctuations, 0),
+  COALESCE(auto_ai_analysis, false),
+  COALESCE(notification_channels, '["in_app"]'::jsonb),
+  COALESCE(silence_minutes, 10),
+  COALESCE(migration_state, 'normal'),
   last_triggered_at,
   created_at,
   updated_at`
 
 	var out service.OpsAlertRule
 	var filtersRaw []byte
+	var errorCategoriesRaw []byte
+	var impactScopeRaw []byte
+	var notificationChannelsRaw []byte
 	var lastTriggeredAt sql.NullTime
 
 	if err := r.db.QueryRowContext(
@@ -155,6 +226,19 @@ RETURNING
 		input.CooldownMinutes,
 		input.NotifyEmail,
 		filtersArg,
+		strings.TrimSpace(input.RuleVersion),
+		errorCategoriesArg,
+		strings.TrimSpace(input.TriggerLevel),
+		input.MinFinalFailures,
+		input.MinFailureRate,
+		input.MinSampleCount,
+		impactScopeArg,
+		strings.TrimSpace(input.RecoveredFluctuationPolicy),
+		input.MinRecoveredFluctuations,
+		input.AutoAIAnalysis,
+		notificationChannelsArg,
+		input.SilenceMinutes,
+		strings.TrimSpace(input.MigrationState),
 	).Scan(
 		&out.ID,
 		&out.Name,
@@ -169,6 +253,19 @@ RETURNING
 		&out.CooldownMinutes,
 		&out.NotifyEmail,
 		&filtersRaw,
+		&out.RuleVersion,
+		&errorCategoriesRaw,
+		&out.TriggerLevel,
+		&out.MinFinalFailures,
+		&out.MinFailureRate,
+		&out.MinSampleCount,
+		&impactScopeRaw,
+		&out.RecoveredFluctuationPolicy,
+		&out.MinRecoveredFluctuations,
+		&out.AutoAIAnalysis,
+		&notificationChannelsRaw,
+		&out.SilenceMinutes,
+		&out.MigrationState,
 		&lastTriggeredAt,
 		&out.CreatedAt,
 		&out.UpdatedAt,
@@ -179,6 +276,7 @@ RETURNING
 		v := lastTriggeredAt.Time
 		out.LastTriggeredAt = &v
 	}
+	decodeOpsAlertRuleJSONFields(&out, errorCategoriesRaw, impactScopeRaw, notificationChannelsRaw)
 	if len(filtersRaw) > 0 && string(filtersRaw) != "null" {
 		var decoded map[string]any
 		if err := json.Unmarshal(filtersRaw, &decoded); err == nil {
@@ -204,6 +302,18 @@ func (r *opsRepository) UpdateAlertRule(ctx context.Context, input *service.OpsA
 	if err != nil {
 		return nil, err
 	}
+	errorCategoriesArg, err := opsJSONValue(input.ErrorCategories)
+	if err != nil {
+		return nil, err
+	}
+	impactScopeArg, err := opsJSONValue(input.ImpactScope)
+	if err != nil {
+		return nil, err
+	}
+	notificationChannelsArg, err := opsJSONValue(input.NotificationChannels)
+	if err != nil {
+		return nil, err
+	}
 
 	q := `
 UPDATE ops_alert_rules
@@ -220,6 +330,19 @@ SET
   cooldown_minutes = $11,
   notify_email = $12,
   filters = $13,
+  rule_version = $14,
+  error_categories = $15,
+  trigger_level = $16,
+  min_final_failures = $17,
+  min_failure_rate = $18,
+  min_sample_count = $19,
+  impact_scope = $20,
+  recovered_fluctuation_policy = $21,
+  min_recovered_fluctuations = $22,
+  auto_ai_analysis = $23,
+  notification_channels = $24,
+  silence_minutes = $25,
+  migration_state = $26,
   updated_at = NOW()
 WHERE id = $1
 RETURNING
@@ -236,12 +359,28 @@ RETURNING
   cooldown_minutes,
   COALESCE(notify_email, true),
   filters,
+  COALESCE(rule_version, 'v1'),
+  COALESCE(error_categories, '[]'::jsonb),
+  COALESCE(trigger_level, ''),
+  COALESCE(min_final_failures, 1),
+  COALESCE(min_failure_rate, 0),
+  COALESCE(min_sample_count, 1),
+  COALESCE(impact_scope, '{}'::jsonb),
+  COALESCE(recovered_fluctuation_policy, 'record_only'),
+  COALESCE(min_recovered_fluctuations, 0),
+  COALESCE(auto_ai_analysis, false),
+  COALESCE(notification_channels, '["in_app"]'::jsonb),
+  COALESCE(silence_minutes, 10),
+  COALESCE(migration_state, 'normal'),
   last_triggered_at,
   created_at,
   updated_at`
 
 	var out service.OpsAlertRule
 	var filtersRaw []byte
+	var errorCategoriesRaw []byte
+	var impactScopeRaw []byte
+	var notificationChannelsRaw []byte
 	var lastTriggeredAt sql.NullTime
 
 	if err := r.db.QueryRowContext(
@@ -260,6 +399,19 @@ RETURNING
 		input.CooldownMinutes,
 		input.NotifyEmail,
 		filtersArg,
+		strings.TrimSpace(input.RuleVersion),
+		errorCategoriesArg,
+		strings.TrimSpace(input.TriggerLevel),
+		input.MinFinalFailures,
+		input.MinFailureRate,
+		input.MinSampleCount,
+		impactScopeArg,
+		strings.TrimSpace(input.RecoveredFluctuationPolicy),
+		input.MinRecoveredFluctuations,
+		input.AutoAIAnalysis,
+		notificationChannelsArg,
+		input.SilenceMinutes,
+		strings.TrimSpace(input.MigrationState),
 	).Scan(
 		&out.ID,
 		&out.Name,
@@ -274,6 +426,19 @@ RETURNING
 		&out.CooldownMinutes,
 		&out.NotifyEmail,
 		&filtersRaw,
+		&out.RuleVersion,
+		&errorCategoriesRaw,
+		&out.TriggerLevel,
+		&out.MinFinalFailures,
+		&out.MinFailureRate,
+		&out.MinSampleCount,
+		&impactScopeRaw,
+		&out.RecoveredFluctuationPolicy,
+		&out.MinRecoveredFluctuations,
+		&out.AutoAIAnalysis,
+		&notificationChannelsRaw,
+		&out.SilenceMinutes,
+		&out.MigrationState,
 		&lastTriggeredAt,
 		&out.CreatedAt,
 		&out.UpdatedAt,
@@ -285,6 +450,7 @@ RETURNING
 		v := lastTriggeredAt.Time
 		out.LastTriggeredAt = &v
 	}
+	decodeOpsAlertRuleJSONFields(&out, errorCategoriesRaw, impactScopeRaw, notificationChannelsRaw)
 	if len(filtersRaw) > 0 && string(filtersRaw) != "null" {
 		var decoded map[string]any
 		if err := json.Unmarshal(filtersRaw, &decoded); err == nil {
@@ -741,6 +907,50 @@ LIMIT 1`
 		return false, err
 	}
 	return true, nil
+}
+
+func decodeOpsAlertRuleJSONFields(rule *service.OpsAlertRule, errorCategoriesRaw, impactScopeRaw, notificationChannelsRaw []byte) {
+	if rule == nil {
+		return
+	}
+	if len(errorCategoriesRaw) > 0 && string(errorCategoriesRaw) != "null" {
+		var decoded []string
+		if err := json.Unmarshal(errorCategoriesRaw, &decoded); err == nil {
+			rule.ErrorCategories = decoded
+		}
+	}
+	if rule.ErrorCategories == nil {
+		rule.ErrorCategories = []string{}
+	}
+	if len(impactScopeRaw) > 0 && string(impactScopeRaw) != "null" {
+		var decoded map[string]int
+		if err := json.Unmarshal(impactScopeRaw, &decoded); err == nil {
+			rule.ImpactScope = decoded
+		}
+	}
+	if rule.ImpactScope == nil {
+		rule.ImpactScope = map[string]int{}
+	}
+	if len(notificationChannelsRaw) > 0 && string(notificationChannelsRaw) != "null" {
+		var decoded []string
+		if err := json.Unmarshal(notificationChannelsRaw, &decoded); err == nil {
+			rule.NotificationChannels = decoded
+		}
+	}
+	if rule.NotificationChannels == nil {
+		rule.NotificationChannels = []string{}
+	}
+}
+
+func opsJSONValue(v any) (any, error) {
+	if v == nil {
+		return "null", nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
 }
 
 func scanOpsAlertEvent(row opsAlertEventRow) (*service.OpsAlertEvent, error) {

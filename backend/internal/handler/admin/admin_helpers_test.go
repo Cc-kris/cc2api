@@ -211,6 +211,22 @@ func TestOpsAlertRuleValidation(t *testing.T) {
 	require.False(t, isPercentOrRateMetric("concurrency_queue_depth"))
 }
 
+func TestOpsAlertRuleValidationLegacyLatencyMetrics(t *testing.T) {
+	for _, metricType := range []string{"p95_latency_ms", "p99_latency_ms"} {
+		t.Run(metricType, func(t *testing.T) {
+			raw := map[string]json.RawMessage{
+				"name":        json.RawMessage(`"High latency"`),
+				"metric_type": json.RawMessage(`"` + metricType + `"`),
+				"operator":    json.RawMessage(`">"`),
+				"threshold":   json.RawMessage(`3000`),
+			}
+			validated, err := validateOpsAlertRulePayload(raw)
+			require.NoError(t, err)
+			require.Equal(t, metricType, validated.MetricType)
+		})
+	}
+}
+
 func TestOpsWSHelpers(t *testing.T) {
 	prefixes, invalid := parseTrustedProxyList("10.0.0.0/8,invalid")
 	require.Len(t, prefixes, 1)
@@ -285,4 +301,76 @@ func TestOpenAIFastPolicySettingsFromDTO_NormalizesServiceTier(t *testing.T) {
 		require.Equal(t, service.OpenAIFastTierFlex, out.Rules[1].ServiceTier)
 		require.Equal(t, service.OpenAIFastTierAny, out.Rules[2].ServiceTier)
 	})
+}
+
+func TestOpsAlertRuleValidationV2CompoundRule(t *testing.T) {
+	raw := map[string]json.RawMessage{
+		"name":                         json.RawMessage(`"上游账号集中失败"`),
+		"enabled":                      json.RawMessage(`true`),
+		"time_window":                  json.RawMessage(`"1m"`),
+		"error_categories":             json.RawMessage(`["upstream","permission"]`),
+		"trigger_level":                json.RawMessage(`"P1"`),
+		"min_final_failures":           json.RawMessage(`5`),
+		"min_failure_rate":             json.RawMessage(`10.5`),
+		"min_sample_count":             json.RawMessage(`50`),
+		"impact_scope":                 json.RawMessage(`{"affected_users":2,"affected_upstream_accounts":1}`),
+		"recovered_fluctuation_policy": json.RawMessage(`"observe_only"`),
+		"min_recovered_fluctuations":   json.RawMessage(`10`),
+		"auto_ai_analysis":             json.RawMessage(`true`),
+		"notification_channels":        json.RawMessage(`["in_app","email"]`),
+		"silence_minutes":              json.RawMessage(`10`),
+	}
+
+	validated, err := validateOpsAlertRulePayload(raw)
+	require.NoError(t, err)
+	require.Equal(t, "v2", validated.RuleVersion)
+	require.Equal(t, "P1", validated.TriggerLevel)
+	require.Equal(t, "P1", validated.Severity)
+	require.Equal(t, []string{"upstream", "permission"}, validated.ErrorCategories)
+	require.Equal(t, 5, validated.MinFinalFailures)
+	require.InDelta(t, 10.5, validated.MinFailureRate, 0.001)
+	require.Equal(t, 50, validated.MinSampleCount)
+	require.Equal(t, map[string]int{"affected_users": 2, "affected_upstream_accounts": 1}, validated.ImpactScope)
+	require.True(t, validated.NotifyEmail)
+}
+
+func TestOpsAlertRuleValidationV2RejectsInvalidRules(t *testing.T) {
+	base := map[string]json.RawMessage{
+		"name":                         json.RawMessage(`"上游账号集中失败"`),
+		"time_window":                  json.RawMessage(`"1m"`),
+		"error_categories":             json.RawMessage(`["upstream"]`),
+		"trigger_level":                json.RawMessage(`"P1"`),
+		"min_final_failures":           json.RawMessage(`5`),
+		"min_failure_rate":             json.RawMessage(`10`),
+		"min_sample_count":             json.RawMessage(`50`),
+		"recovered_fluctuation_policy": json.RawMessage(`"record_only"`),
+		"notification_channels":        json.RawMessage(`["in_app"]`),
+		"silence_minutes":              json.RawMessage(`10`),
+	}
+
+	cases := []struct {
+		name  string
+		patch map[string]json.RawMessage
+		want  string
+	}{
+		{name: "empty categories", patch: map[string]json.RawMessage{"error_categories": json.RawMessage(`[]`)}, want: "请选择错误分类"},
+		{name: "bad time window", patch: map[string]json.RawMessage{"time_window": json.RawMessage(`"5m"`)}, want: "本版本固定 1 分钟窗口"},
+		{name: "bad trigger", patch: map[string]json.RawMessage{"trigger_level": json.RawMessage(`"P4"`)}, want: "trigger_level"},
+		{name: "failures greater than sample", patch: map[string]json.RawMessage{"min_final_failures": json.RawMessage(`51`)}, want: "最小最终失败数不能大于最小样本量"},
+		{name: "none with email", patch: map[string]json.RawMessage{"notification_channels": json.RawMessage(`["none","email"]`)}, want: "none"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			raw := map[string]json.RawMessage{}
+			for k, v := range base {
+				raw[k] = v
+			}
+			for k, v := range tt.patch {
+				raw[k] = v
+			}
+			_, err := validateOpsAlertRulePayload(raw)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tt.want)
+		})
+	}
 }
