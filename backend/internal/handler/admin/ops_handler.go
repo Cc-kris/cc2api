@@ -1059,6 +1059,29 @@ func canOperateOpsAIAnalysis(c *gin.Context) bool {
 	return canExportOpsUnifiedErrors(c)
 }
 
+func canFeedbackOpsAIAnalysis(c *gin.Context) bool {
+	role, ok := middleware.GetUserRoleFromContext(c)
+	if !ok {
+		return false
+	}
+	return isOpsAIAnalysisFeedbackRole(role)
+}
+
+func isOpsAIAnalysisFeedbackRole(role string) bool {
+	role = strings.TrimSpace(role)
+	return role == service.RoleAdmin ||
+		strings.EqualFold(role, "ops") ||
+		strings.EqualFold(role, "operation") ||
+		strings.EqualFold(role, "operator") ||
+		strings.EqualFold(role, "operations") ||
+		strings.EqualFold(role, "customer_service") ||
+		strings.EqualFold(role, "customer-service") ||
+		strings.EqualFold(role, "customerService") ||
+		strings.EqualFold(role, "support") ||
+		strings.EqualFold(role, "service") ||
+		strings.EqualFold(role, "cs")
+}
+
 func opsJoinInts(values []int) string {
 	if len(values) == 0 {
 		return ""

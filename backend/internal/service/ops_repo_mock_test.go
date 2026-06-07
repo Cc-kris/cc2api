@@ -17,6 +17,7 @@ type opsRepoMock struct {
 	UpdateAIAnalysisTaskFn           func(ctx context.Context, taskID int64, update *OpsAIAnalysisTaskUpdate) (*OpsAIAnalysisTask, error)
 	GetAIAnalysisTaskFn              func(ctx context.Context, taskID int64) (*OpsAIAnalysisTask, error)
 	GetAIAnalysisReportFn            func(ctx context.Context, taskID int64) (*OpsAIAnalysisReport, error)
+	UpdateAIAnalysisReportFeedbackFn func(ctx context.Context, input *OpsAIAnalysisFeedbackInput) (*OpsAIAnalysisReport, error)
 	GetErrorLogByIDFn                func(ctx context.Context, id int64) (*OpsErrorLogDetail, error)
 	BatchInsertSystemLogsFn          func(ctx context.Context, inputs []*OpsInsertSystemLogInput) (int64, error)
 	ListSystemLogsFn                 func(ctx context.Context, filter *OpsSystemLogFilter) (*OpsSystemLogList, error)
@@ -102,6 +103,14 @@ func (m *opsRepoMock) GetAIAnalysisReport(ctx context.Context, taskID int64) (*O
 		return m.GetAIAnalysisReportFn(ctx, taskID)
 	}
 	return nil, sql.ErrNoRows
+}
+
+func (m *opsRepoMock) UpdateAIAnalysisReportFeedback(ctx context.Context, input *OpsAIAnalysisFeedbackInput) (*OpsAIAnalysisReport, error) {
+	if m.UpdateAIAnalysisReportFeedbackFn != nil {
+		return m.UpdateAIAnalysisReportFeedbackFn(ctx, input)
+	}
+	now := time.Now()
+	return &OpsAIAnalysisReport{TaskID: input.TaskID, FeedbackStatus: input.FeedbackStatus, FeedbackNote: input.FeedbackNote, FeedbackUserID: &input.FeedbackUserID, FeedbackAt: &now, CreatedAt: now, UpdatedAt: now}, nil
 }
 
 func (m *opsRepoMock) GetErrorLogByID(ctx context.Context, id int64) (*OpsErrorLogDetail, error) {

@@ -577,6 +577,41 @@ POST /api/v1/admin/ops/ai-analysis/tasks/{id}/feedback
 }
 ```
 
+字段规则：
+
+| 字段 | 类型 | 必填 | 规则 |
+|---|---|---:|---|
+| feedback_status | string | 是 | `none`、`useful`、`not_useful`、`wrong_category` |
+| feedback_note | string | 否 | 自动去除首尾空白，最多 500 个字符 |
+
+响应：
+
+```json
+{
+  "task_id": 123,
+  "feedback_status": "useful",
+  "feedback_note": "判断准确",
+  "feedback_user_id": 7,
+  "feedback_at": "2026-06-08T12:00:00Z"
+}
+```
+
+错误：
+
+| HTTP | reason | 场景 |
+|---:|---|---|
+| 400 | OPS_AI_ANALYSIS_INVALID_TASK_ID | 任务 ID 非法 |
+| 400 | OPS_AI_ANALYSIS_INVALID_FEEDBACK_STATUS | 反馈状态非法 |
+| 400 | OPS_AI_ANALYSIS_FEEDBACK_NOTE_TOO_LONG | 反馈说明超过 500 个字符 |
+| 404 | OPS_AI_ANALYSIS_REPORT_NOT_FOUND | 任务尚未生成报告或报告不存在 |
+
+保存规则：
+
+1. 反馈写入 `ops_ai_analysis_reports` 当前任务对应报告。
+2. 每个报告保留一份最新反馈，重复提交会覆盖 `feedback_status`、`feedback_note`、`feedback_user_id`、`feedback_at`。
+3. `feedback_user_id` 和 `feedback_at` 必须记录，用于满足人工反馈审计要求。
+4. 反馈只记录人工评价，不自动修改历史报告结论、根因、证据和建议动作。
+
 ## 7. 缓存管理 API
 
 ### 7.1 获取缓存配置

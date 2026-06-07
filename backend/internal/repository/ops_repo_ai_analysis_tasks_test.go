@@ -199,8 +199,8 @@ func TestGetAIAnalysisTaskAndReport(t *testing.T) {
 
 	mock.ExpectQuery(`(?s)SELECT task_id, summary, COALESCE\(root_cause,''\), impact_scope::text, evidence::text,.*FROM ops_ai_analysis_reports\s+WHERE task_id = \$1`).
 		WithArgs(int64(77)).
-		WillReturnRows(sqlmock.NewRows([]string{"task_id", "summary", "root_cause", "impact_scope", "evidence", "suggested_actions", "error_breakdown", "confidence", "feedback_status", "feedback_note", "created_at", "updated_at"}).
-			AddRow(int64(77), "上游错误", "账号限流", `{"affected_users":2}`, `[{"text":"e1"}]`, `["切换账号"]`, `{"upstream":1}`, "high", "none", "", start, finishedAt))
+		WillReturnRows(aiReportRows().
+			AddRow(int64(77), "上游错误", "账号限流", `{"affected_users":2}`, `[{"text":"e1"}]`, `["切换账号"]`, `{"upstream":1}`, "high", "none", "", nil, nil, start, finishedAt))
 
 	report, err := repo.GetAIAnalysisReport(context.Background(), 77)
 	require.NoError(t, err)
@@ -209,5 +209,35 @@ func TestGetAIAnalysisTaskAndReport(t *testing.T) {
 	require.Equal(t, "high", report.Confidence)
 	require.NotEmpty(t, report.ImpactScope)
 	require.NotEmpty(t, report.Evidence)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func aiReportRows() *sqlmock.Rows {
+	return sqlmock.NewRows([]string{"task_id", "summary", "root_cause", "impact_scope", "evidence", "suggested_actions", "error_breakdown", "confidence", "feedback_status", "feedback_note", "feedback_user_id", "feedback_at", "created_at", "updated_at"})
+}
+
+func TestUpdateAIAnalysisReportFeedback(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	repo := &opsRepository{db: db}
+	createdAt := time.Date(2026, 6, 8, 10, 0, 0, 0, time.UTC)
+	feedbackAt := createdAt.Add(2 * time.Minute)
+	input := &service.OpsAIAnalysisFeedbackInput{TaskID: 77, FeedbackStatus: service.OpsAIAnalysisFeedbackWrongCategory, FeedbackNote: "主因判断错误", FeedbackUserID: 9}
+
+	mock.ExpectQuery(`(?s)UPDATE ops_ai_analysis_reports\s+SET feedback_status = \$2,.*feedback_user_id = \$4,.*WHERE task_id = \$1.*RETURNING task_id`).
+		WithArgs(input.TaskID, input.FeedbackStatus, input.FeedbackNote, input.FeedbackUserID).
+		WillReturnRows(aiReportRows().AddRow(input.TaskID, "上游错误", "账号限流", `{}`, `[]`, `[]`, `{}`, "medium", input.FeedbackStatus, input.FeedbackNote, input.FeedbackUserID, feedbackAt, createdAt, feedbackAt))
+
+	report, err := repo.UpdateAIAnalysisReportFeedback(context.Background(), input)
+	require.NoError(t, err)
+	require.Equal(t, input.TaskID, report.TaskID)
+	require.Equal(t, input.FeedbackStatus, report.FeedbackStatus)
+	require.Equal(t, input.FeedbackNote, report.FeedbackNote)
+	require.NotNil(t, report.FeedbackUserID)
+	require.Equal(t, input.FeedbackUserID, *report.FeedbackUserID)
+	require.NotNil(t, report.FeedbackAt)
+	require.True(t, report.FeedbackAt.Equal(feedbackAt))
 	require.NoError(t, mock.ExpectationsWereMet())
 }

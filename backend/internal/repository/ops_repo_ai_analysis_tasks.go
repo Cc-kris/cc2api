@@ -255,9 +255,35 @@ func (r *opsRepository) GetAIAnalysisReport(ctx context.Context, taskID int64) (
 	row := r.db.QueryRowContext(ctx, `
 SELECT task_id, summary, COALESCE(root_cause,''), impact_scope::text, evidence::text,
        suggested_actions::text, error_breakdown::text, confidence, feedback_status,
-       COALESCE(feedback_note,''), created_at, updated_at
+       COALESCE(feedback_note,''), feedback_user_id, feedback_at, created_at, updated_at
 FROM ops_ai_analysis_reports
 WHERE task_id = $1`, taskID)
+	return scanOpsAIAnalysisReport(row)
+}
+
+func (r *opsRepository) UpdateAIAnalysisReportFeedback(ctx context.Context, input *service.OpsAIAnalysisFeedbackInput) (*service.OpsAIAnalysisReport, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("nil ops repository")
+	}
+	if input == nil || input.TaskID <= 0 {
+		return nil, errors.New("invalid AI analysis task id")
+	}
+	row := r.db.QueryRowContext(ctx, `
+UPDATE ops_ai_analysis_reports
+SET feedback_status = $2,
+    feedback_note = NULLIF($3, ''),
+    feedback_user_id = $4,
+    feedback_at = NOW(),
+    updated_at = NOW()
+WHERE task_id = $1
+RETURNING task_id, summary, COALESCE(root_cause,''), impact_scope::text, evidence::text,
+          suggested_actions::text, error_breakdown::text, confidence, feedback_status,
+          COALESCE(feedback_note,''), feedback_user_id, feedback_at, created_at, updated_at`,
+		input.TaskID,
+		input.FeedbackStatus,
+		input.FeedbackNote,
+		input.FeedbackUserID,
+	)
 	return scanOpsAIAnalysisReport(row)
 }
 
@@ -278,6 +304,8 @@ func scanOpsAIAnalysisReport(row opsAIAnalysisReportScanner) (*service.OpsAIAnal
 		&report.Confidence,
 		&report.FeedbackStatus,
 		&report.FeedbackNote,
+		&report.FeedbackUserID,
+		&report.FeedbackAt,
 		&report.CreatedAt,
 		&report.UpdatedAt,
 	); err != nil {

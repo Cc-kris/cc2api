@@ -232,6 +232,44 @@ func (h *OpsHandler) GetAIAnalysisTask(c *gin.Context) {
 	response.Success(c, result)
 }
 
+// UpdateAIAnalysisReportFeedback saves operator feedback for an AI analysis report.
+// POST /api/v1/admin/ops/ai-analysis/tasks/:id/feedback
+func (h *OpsHandler) UpdateAIAnalysisReportFeedback(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if !canFeedbackOpsAIAnalysis(c) {
+		response.Forbidden(c, "无权限反馈 AI 分析报告")
+		return
+	}
+	id, err := strconv.ParseInt(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || id <= 0 {
+		response.ErrorFrom(c, infraerrors.BadRequest("OPS_AI_ANALYSIS_INVALID_TASK_ID", "invalid task id"))
+		return
+	}
+	var req service.OpsAIAnalysisFeedbackRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request body")
+		return
+	}
+	subject, ok := middleware.GetAuthSubjectFromContext(c)
+	if !ok || subject.UserID <= 0 {
+		response.Forbidden(c, "无权限反馈 AI 分析报告")
+		return
+	}
+	result, err := h.opsService.UpdateAIAnalysisReportFeedback(c.Request.Context(), &req, id, subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
 // GetRuntimeLogConfig returns runtime log config (DB-backed).
 // GET /api/v1/admin/ops/runtime/logging
 func (h *OpsHandler) GetRuntimeLogConfig(c *gin.Context) {

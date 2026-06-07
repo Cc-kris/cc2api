@@ -162,6 +162,8 @@ Storage
 | confidence | string | high/medium/low |
 | feedback_status | string | none/useful/not_useful/wrong_category |
 | feedback_note | text | 反馈说明 |
+| feedback_user_id | bigint | 最近一次反馈人用户 ID |
+| feedback_at | datetime | 最近一次反馈时间 |
 
 ### 5.4 缓存统计分钟聚合
 

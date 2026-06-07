@@ -207,15 +207,42 @@ func validateJWTForAdmin(
 
 func allowOpsRoleForAdminPath(role, method, path string) bool {
 	role = strings.TrimSpace(role)
-	if role != "ops" && !strings.EqualFold(role, "operation") && !strings.EqualFold(role, "operator") {
-		return false
-	}
 	method = strings.ToUpper(strings.TrimSpace(method))
 	path = strings.TrimSpace(path)
 	path = strings.TrimRight(path, "/")
+	if method == http.MethodPost && isOpsAIAnalysisTaskFeedbackPath(path) {
+		return isOpsAIAnalysisFeedbackRole(role)
+	}
+	if !isOpsAIAnalysisOperatorRole(role) {
+		return false
+	}
 	return (method == http.MethodGet && path == "/api/v1/admin/ops/unified-errors/export") ||
 		(method == http.MethodPost && path == "/api/v1/admin/ops/ai-analysis/tasks") ||
 		(method == http.MethodGet && isOpsAIAnalysisTaskDetailPath(path))
+}
+
+func isOpsAIAnalysisOperatorRole(role string) bool {
+	role = strings.TrimSpace(role)
+	return role == "ops" || strings.EqualFold(role, "operation") || strings.EqualFold(role, "operator") || strings.EqualFold(role, "operations")
+}
+
+func isOpsAIAnalysisFeedbackRole(role string) bool {
+	role = strings.TrimSpace(role)
+	return isOpsAIAnalysisOperatorRole(role) ||
+		strings.EqualFold(role, "customer_service") ||
+		strings.EqualFold(role, "customer-service") ||
+		strings.EqualFold(role, "customerService") ||
+		strings.EqualFold(role, "support") ||
+		strings.EqualFold(role, "service") ||
+		strings.EqualFold(role, "cs")
+}
+
+func isOpsAIAnalysisTaskFeedbackPath(path string) bool {
+	const suffix = "/feedback"
+	if !strings.HasSuffix(path, suffix) {
+		return false
+	}
+	return isOpsAIAnalysisTaskDetailPath(strings.TrimSuffix(path, suffix))
 }
 
 func isOpsAIAnalysisTaskDetailPath(path string) bool {

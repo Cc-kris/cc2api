@@ -365,6 +365,21 @@ func TestMigration146CreatesOpsAIAnalysisReports(t *testing.T) {
 	require.NotContains(t, sql, "TRUNCATE")
 }
 
+func TestMigration153AddsOpsAIAnalysisReportFeedbackAuditFields(t *testing.T) {
+	content, err := FS.ReadFile("153_ops_ai_analysis_report_feedback_audit.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS feedback_user_id BIGINT")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS feedback_at TIMESTAMPTZ")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_ai_analysis_reports_feedback_user_id")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_ai_analysis_reports_feedback_at")
+	require.NotContains(t, sql, "DROP TABLE")
+	require.NotContains(t, sql, "DROP COLUMN")
+	require.NotContains(t, sql, "DELETE FROM ops_ai_analysis_reports")
+	require.NotContains(t, sql, "TRUNCATE")
+}
+
 func TestMigration147CreatesOpsCacheMinuteStats(t *testing.T) {
 	content, err := FS.ReadFile("147_ops_cache_minute_stats.sql")
 	require.NoError(t, err)

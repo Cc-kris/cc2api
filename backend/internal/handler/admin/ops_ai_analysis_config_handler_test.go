@@ -2,12 +2,14 @@ package admin
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
@@ -34,11 +36,15 @@ func (opsAIHandlerEncryptorStub) Decrypt(ciphertext string) (string, error) {
 }
 
 func newOpsAIAnalysisConfigRouter(handler *OpsHandler) *gin.Engine {
+	return newOpsAIAnalysisConfigRouterWithRole(handler, service.RoleAdmin)
+}
+
+func newOpsAIAnalysisConfigRouterWithRole(handler *OpsHandler, role string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 7})
-		c.Set(string(middleware.ContextKeyUserRole), service.RoleAdmin)
+		c.Set(string(middleware.ContextKeyUserRole), role)
 		c.Next()
 	})
 	r.GET("/ai-analysis/config", handler.GetAIAnalysisConfig)
@@ -46,14 +52,19 @@ func newOpsAIAnalysisConfigRouter(handler *OpsHandler) *gin.Engine {
 	r.POST("/ai-analysis/test", handler.TestAIAnalysisConnection)
 	r.POST("/ai-analysis/tasks", handler.CreateAIAnalysisTask)
 	r.GET("/ai-analysis/tasks/:id", handler.GetAIAnalysisTask)
+	r.POST("/ai-analysis/tasks/:id/feedback", handler.UpdateAIAnalysisReportFeedback)
 	return r
 }
 
 func newOpsAIAnalysisConfigHandler(repo *testSettingRepo) *OpsHandler {
+	return newOpsAIAnalysisConfigHandlerWithOpsRepo(repo, nil)
+}
+
+func newOpsAIAnalysisConfigHandlerWithOpsRepo(repo *testSettingRepo, opsRepo service.OpsRepository) *OpsHandler {
 	if repo == nil {
 		repo = newTestSettingRepo()
 	}
-	svc := service.NewOpsService(nil, repo, &config.Config{Ops: config.OpsConfig{Enabled: true}}, nil, nil, nil, nil, nil, nil, nil, nil)
+	svc := service.NewOpsService(opsRepo, repo, &config.Config{Ops: config.OpsConfig{Enabled: true}}, nil, nil, nil, nil, nil, nil, nil, nil)
 	svc.SetSecretEncryptor(opsAIHandlerEncryptorStub{})
 	return NewOpsHandler(svc)
 }
@@ -237,4 +248,69 @@ func TestOpsAIAnalysisConfigHandler_GetAIAnalysisTaskInvalidID(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("GET invalid status = %d, body=%s", w.Code, w.Body.String())
 	}
+}
+
+func TestOpsAIAnalysisConfigHandler_UpdateAIAnalysisReportFeedback(t *testing.T) {
+	h := newOpsAIAnalysisConfigHandlerWithOpsRepo(newTestSettingRepo(), &opsAIHandlerRepoStub{})
+	r := newOpsAIAnalysisConfigRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/ai-analysis/tasks/77/feedback", bytes.NewBufferString(`{"feedback_status":"useful","feedback_note":"判断准确"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST feedback status = %d, body=%s", w.Code, w.Body.String())
+	}
+	data := decodeOpsAIResponse(t, w)
+	if data["task_id"] != float64(77) || data["feedback_status"] != service.OpsAIAnalysisFeedbackUseful || data["feedback_note"] != "判断准确" || data["feedback_user_id"] != float64(7) {
+		t.Fatalf("unexpected feedback response: %+v; body=%s", data, w.Body.String())
+	}
+}
+
+func TestOpsAIAnalysisConfigHandler_UpdateAIAnalysisReportFeedbackSupportRole(t *testing.T) {
+	h := newOpsAIAnalysisConfigHandlerWithOpsRepo(newTestSettingRepo(), &opsAIHandlerRepoStub{})
+	r := newOpsAIAnalysisConfigRouterWithRole(h, "customer_service")
+
+	req := httptest.NewRequest(http.MethodPost, "/ai-analysis/tasks/77/feedback", bytes.NewBufferString(`{"feedback_status":"wrong_category","feedback_note":"主因不准确"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST feedback support role status = %d, body=%s", w.Code, w.Body.String())
+	}
+	data := decodeOpsAIResponse(t, w)
+	if data["feedback_status"] != service.OpsAIAnalysisFeedbackWrongCategory || data["feedback_note"] != "主因不准确" {
+		t.Fatalf("unexpected support feedback response: %+v; body=%s", data, w.Body.String())
+	}
+}
+
+func TestOpsAIAnalysisConfigHandler_UpdateAIAnalysisReportFeedbackInvalidPayloads(t *testing.T) {
+	h := newOpsAIAnalysisConfigHandlerWithOpsRepo(newTestSettingRepo(), &opsAIHandlerRepoStub{})
+	r := newOpsAIAnalysisConfigRouter(h)
+
+	for _, tc := range []struct {
+		path string
+		body string
+	}{
+		{path: "/ai-analysis/tasks/bad/feedback", body: `{"feedback_status":"useful"}`},
+		{path: "/ai-analysis/tasks/77/feedback", body: `{`},
+		{path: "/ai-analysis/tasks/77/feedback", body: `{"feedback_status":"bad"}`},
+	} {
+		req := httptest.NewRequest(http.MethodPost, tc.path, bytes.NewBufferString(tc.body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("POST %s status = %d, body=%s", tc.path, w.Code, w.Body.String())
+		}
+	}
+}
+
+type opsAIHandlerRepoStub struct {
+	service.OpsRepository
+}
+
+func (opsAIHandlerRepoStub) UpdateAIAnalysisReportFeedback(ctx context.Context, input *service.OpsAIAnalysisFeedbackInput) (*service.OpsAIAnalysisReport, error) {
+	now := time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)
+	return &service.OpsAIAnalysisReport{TaskID: input.TaskID, FeedbackStatus: input.FeedbackStatus, FeedbackNote: input.FeedbackNote, FeedbackUserID: &input.FeedbackUserID, FeedbackAt: &now, CreatedAt: now, UpdatedAt: now}, nil
 }

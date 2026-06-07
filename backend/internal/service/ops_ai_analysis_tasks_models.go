@@ -15,6 +15,11 @@ const (
 	OpsAIAnalysisStatusCompleted = "completed"
 	OpsAIAnalysisStatusFailed    = "failed"
 	OpsAIAnalysisStatusExpired   = "expired"
+
+	OpsAIAnalysisFeedbackNone          = "none"
+	OpsAIAnalysisFeedbackUseful        = "useful"
+	OpsAIAnalysisFeedbackNotUseful     = "not_useful"
+	OpsAIAnalysisFeedbackWrongCategory = "wrong_category"
 )
 
 type OpsAIAnalysisTask struct {
@@ -109,22 +114,44 @@ type OpsAIAnalysisSample struct {
 }
 
 type OpsAIAnalysisReport struct {
-	TaskID           int64     `json:"task_id"`
-	Summary          string    `json:"summary"`
-	RootCause        string    `json:"root_cause,omitempty"`
-	ImpactScopeJSON  string    `json:"-"`
-	EvidenceJSON     string    `json:"-"`
-	ActionsJSON      string    `json:"-"`
-	BreakdownJSON    string    `json:"-"`
-	ImpactScope      any       `json:"impact_scope"`
-	Evidence         any       `json:"evidence"`
-	SuggestedActions any       `json:"suggested_actions"`
-	ErrorBreakdown   any       `json:"error_breakdown"`
-	Confidence       string    `json:"confidence"`
-	FeedbackStatus   string    `json:"feedback_status"`
-	FeedbackNote     string    `json:"feedback_note,omitempty"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	TaskID           int64      `json:"task_id"`
+	Summary          string     `json:"summary"`
+	RootCause        string     `json:"root_cause,omitempty"`
+	ImpactScopeJSON  string     `json:"-"`
+	EvidenceJSON     string     `json:"-"`
+	ActionsJSON      string     `json:"-"`
+	BreakdownJSON    string     `json:"-"`
+	ImpactScope      any        `json:"impact_scope"`
+	Evidence         any        `json:"evidence"`
+	SuggestedActions any        `json:"suggested_actions"`
+	ErrorBreakdown   any        `json:"error_breakdown"`
+	Confidence       string     `json:"confidence"`
+	FeedbackStatus   string     `json:"feedback_status"`
+	FeedbackNote     string     `json:"feedback_note,omitempty"`
+	FeedbackUserID   *int64     `json:"feedback_user_id,omitempty"`
+	FeedbackAt       *time.Time `json:"feedback_at,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+}
+
+type OpsAIAnalysisFeedbackRequest struct {
+	FeedbackStatus string `json:"feedback_status"`
+	FeedbackNote   string `json:"feedback_note"`
+}
+
+type OpsAIAnalysisFeedbackInput struct {
+	TaskID         int64
+	FeedbackStatus string
+	FeedbackNote   string
+	FeedbackUserID int64
+}
+
+type OpsAIAnalysisFeedbackResponse struct {
+	TaskID         int64     `json:"task_id"`
+	FeedbackStatus string    `json:"feedback_status"`
+	FeedbackNote   string    `json:"feedback_note,omitempty"`
+	FeedbackUserID int64     `json:"feedback_user_id"`
+	FeedbackAt     time.Time `json:"feedback_at"`
 }
 
 type OpsAIAnalysisTaskDetailResponse struct {
