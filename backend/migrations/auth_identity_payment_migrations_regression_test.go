@@ -363,3 +363,50 @@ func TestMigration146CreatesOpsAIAnalysisReports(t *testing.T) {
 	require.NotContains(t, sql, "DELETE FROM ops_ai_analysis_reports")
 	require.NotContains(t, sql, "TRUNCATE")
 }
+
+func TestMigration147CreatesOpsCacheMinuteStats(t *testing.T) {
+	content, err := FS.ReadFile("147_ops_cache_minute_stats.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "CREATE TABLE IF NOT EXISTS ops_cache_minute_stats")
+	for _, column := range []string{
+		"minute_at TIMESTAMPTZ NOT NULL",
+		"platform VARCHAR(32) NOT NULL",
+		"model VARCHAR(128) NOT NULL",
+		"group_id BIGINT",
+		"api_key_id BIGINT",
+		"cache_type VARCHAR(16) NOT NULL",
+		"total_requests BIGINT NOT NULL DEFAULT 0",
+		"candidate_requests BIGINT NOT NULL DEFAULT 0",
+		"hit_requests BIGINT NOT NULL DEFAULT 0",
+		"bypass_requests BIGINT NOT NULL DEFAULT 0",
+		"store_success BIGINT NOT NULL DEFAULT 0",
+		"store_skip BIGINT NOT NULL DEFAULT 0",
+		"input_tokens BIGINT NOT NULL DEFAULT 0",
+		"output_tokens BIGINT NOT NULL DEFAULT 0",
+		"hit_tokens BIGINT NOT NULL DEFAULT 0",
+		"candidate_tokens BIGINT NOT NULL DEFAULT 0",
+		"all_request_tokens BIGINT NOT NULL DEFAULT 0",
+		"bypass_reasons JSONB NOT NULL DEFAULT '{}'::jsonb",
+		"store_skip_reasons JSONB NOT NULL DEFAULT '{}'::jsonb",
+		"estimated_saved_amount DECIMAL(20,8) NOT NULL DEFAULT 0",
+	} {
+		require.Contains(t, sql, column)
+	}
+	require.Contains(t, sql, "CHECK (cache_type IN ('exact', 'semantic'))")
+	require.Contains(t, sql, "total_requests >= 0")
+	require.Contains(t, sql, "group_id IS NULL OR group_id >= 0")
+	require.Contains(t, sql, "api_key_id IS NULL OR api_key_id >= 0")
+	require.Contains(t, sql, "CREATE UNIQUE INDEX IF NOT EXISTS idx_ops_cache_minute_stats_unique_bucket")
+	require.Contains(t, sql, "COALESCE(group_id, -1)")
+	require.Contains(t, sql, "COALESCE(api_key_id, -1)")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_cache_minute_stats_time")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_cache_minute_stats_platform_model_time")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_cache_minute_stats_group_time")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_cache_minute_stats_api_key_time")
+	require.NotContains(t, sql, "DROP TABLE")
+	require.NotContains(t, sql, "DROP COLUMN")
+	require.NotContains(t, sql, "DELETE FROM ops_cache_minute_stats")
+	require.NotContains(t, sql, "TRUNCATE")
+}
