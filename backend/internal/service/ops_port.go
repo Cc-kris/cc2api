@@ -10,6 +10,7 @@ type OpsRepository interface {
 	BatchInsertErrorLogs(ctx context.Context, inputs []*OpsInsertErrorLogInput) (int64, error)
 	ListErrorLogs(ctx context.Context, filter *OpsErrorLogFilter) (*OpsErrorLogList, error)
 	ListUnifiedErrors(ctx context.Context, filter *OpsUnifiedErrorListFilter) (*OpsUnifiedErrorList, error)
+	ListUnifiedErrorsForAIAnalysis(ctx context.Context, filter *OpsUnifiedErrorListFilter, maxSamples int) (*OpsUnifiedErrorList, error)
 	CreateAIAnalysisTaskIfAllowed(ctx context.Context, input *OpsAIAnalysisTaskCreateInput, maxActive int) (*OpsAIAnalysisTask, OpsAIAnalysisTaskCreateResult, error)
 	ClaimNextAIAnalysisTask(ctx context.Context) (*OpsAIAnalysisTask, error)
 	UpdateAIAnalysisTask(ctx context.Context, taskID int64, update *OpsAIAnalysisTaskUpdate) (*OpsAIAnalysisTask, error)

@@ -492,6 +492,8 @@ HTTP/1.1 202 Accepted
 
 Worker 状态流转：后台 Worker 以 `FOR UPDATE SKIP LOCKED` 原子领取最早 `pending` 任务并置为 `running`；执行成功后置为 `completed` 并写入 `sample_count`、`finished_at`；执行失败后置为 `failed` 并写入脱敏后的 `error_message`、`finished_at`。服务停止或上下文取消时保持 `running`，不误标失败。
 
+AI 样本上下文：Worker 按任务保存的筛选快照取样，最大样本数使用 AI 配置 `max_samples`。上下文只包含错误分类、结果、严重级别、状态码、平台、模型、用户/API Key/分组/上游账号 ID、脱敏摘要、同类数量等必要字段；不得包含完整邮箱、完整 API Key、Authorization、Cookie、Token、代理地址、完整请求正文或完整响应正文。
+
 权限：平台所有者、管理员、运维角色可调用；其它后台角色返回 403。
 
 ### 6.5 获取 AI 分析任务和报告

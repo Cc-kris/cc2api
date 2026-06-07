@@ -169,3 +169,12 @@ func TestUpdateAIAnalysisTask(t *testing.T) {
 	require.Equal(t, message, got.ErrorMessage)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestNormalizeUnifiedErrorAIAnalysisLimit(t *testing.T) {
+	require.Equal(t, 50, normalizeUnifiedErrorAIAnalysisLimit(0))
+	require.Equal(t, 1, normalizeUnifiedErrorAIAnalysisLimit(1))
+	require.Equal(t, 10, normalizeUnifiedErrorAIAnalysisLimit(10))
+	require.Equal(t, 200, normalizeUnifiedErrorAIAnalysisLimit(200))
+	require.Equal(t, 500, normalizeUnifiedErrorAIAnalysisLimit(500))
+	require.Equal(t, 500, normalizeUnifiedErrorAIAnalysisLimit(501))
+}

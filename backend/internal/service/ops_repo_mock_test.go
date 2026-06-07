@@ -7,30 +7,31 @@ import (
 
 // opsRepoMock is a test-only OpsRepository implementation with optional function hooks.
 type opsRepoMock struct {
-	InsertErrorLogFn                func(ctx context.Context, input *OpsInsertErrorLogInput) (int64, error)
-	BatchInsertErrorLogsFn          func(ctx context.Context, inputs []*OpsInsertErrorLogInput) (int64, error)
-	ListUnifiedErrorsFn             func(ctx context.Context, filter *OpsUnifiedErrorListFilter) (*OpsUnifiedErrorList, error)
-	CreateAIAnalysisTaskIfAllowedFn func(ctx context.Context, input *OpsAIAnalysisTaskCreateInput, maxActive int) (*OpsAIAnalysisTask, OpsAIAnalysisTaskCreateResult, error)
-	ClaimNextAIAnalysisTaskFn       func(ctx context.Context) (*OpsAIAnalysisTask, error)
-	UpdateAIAnalysisTaskFn          func(ctx context.Context, taskID int64, update *OpsAIAnalysisTaskUpdate) (*OpsAIAnalysisTask, error)
-	GetErrorLogByIDFn               func(ctx context.Context, id int64) (*OpsErrorLogDetail, error)
-	BatchInsertSystemLogsFn         func(ctx context.Context, inputs []*OpsInsertSystemLogInput) (int64, error)
-	ListSystemLogsFn                func(ctx context.Context, filter *OpsSystemLogFilter) (*OpsSystemLogList, error)
-	GetDashboardOverviewFn          func(ctx context.Context, filter *OpsDashboardFilter) (*OpsDashboardOverview, error)
-	GetIncidentImpactFn             func(ctx context.Context, filter *OpsDashboardFilter) (*OpsIncidentImpact, error)
-	ListAlertEventsFn               func(ctx context.Context, filter *OpsAlertEventFilter) ([]*OpsAlertEvent, error)
-	ListAlertRulesFn                func(ctx context.Context) ([]*OpsAlertRule, error)
-	CreateAlertRuleFn               func(ctx context.Context, input *OpsAlertRule) (*OpsAlertRule, error)
-	UpdateAlertRuleFn               func(ctx context.Context, input *OpsAlertRule) (*OpsAlertRule, error)
-	GetActiveAlertEventFn           func(ctx context.Context, ruleID int64) (*OpsAlertEvent, error)
-	GetLatestAlertEventFn           func(ctx context.Context, ruleID int64) (*OpsAlertEvent, error)
-	GetMergeableAlertEventFn        func(ctx context.Context, eventKey string, since time.Time) (*OpsAlertEvent, error)
-	GetCompoundAlertStatsFn         func(ctx context.Context, filter *OpsCompoundAlertStatsFilter) (*OpsCompoundAlertStats, error)
-	CreateAlertEventFn              func(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error)
-	MergeAlertEventFn               func(ctx context.Context, eventID int64, event *OpsAlertEvent) (*OpsAlertEvent, error)
-	UpdateAlertEventStatusFn        func(ctx context.Context, eventID int64, status string, note string, processingAction string, operatorID *int64, resolvedAt *time.Time) error
-	DeleteSystemLogsFn              func(ctx context.Context, filter *OpsSystemLogCleanupFilter) (int64, error)
-	InsertSystemLogCleanupAuditFn   func(ctx context.Context, input *OpsSystemLogCleanupAudit) error
+	InsertErrorLogFn                 func(ctx context.Context, input *OpsInsertErrorLogInput) (int64, error)
+	BatchInsertErrorLogsFn           func(ctx context.Context, inputs []*OpsInsertErrorLogInput) (int64, error)
+	ListUnifiedErrorsFn              func(ctx context.Context, filter *OpsUnifiedErrorListFilter) (*OpsUnifiedErrorList, error)
+	ListUnifiedErrorsForAIAnalysisFn func(ctx context.Context, filter *OpsUnifiedErrorListFilter, maxSamples int) (*OpsUnifiedErrorList, error)
+	CreateAIAnalysisTaskIfAllowedFn  func(ctx context.Context, input *OpsAIAnalysisTaskCreateInput, maxActive int) (*OpsAIAnalysisTask, OpsAIAnalysisTaskCreateResult, error)
+	ClaimNextAIAnalysisTaskFn        func(ctx context.Context) (*OpsAIAnalysisTask, error)
+	UpdateAIAnalysisTaskFn           func(ctx context.Context, taskID int64, update *OpsAIAnalysisTaskUpdate) (*OpsAIAnalysisTask, error)
+	GetErrorLogByIDFn                func(ctx context.Context, id int64) (*OpsErrorLogDetail, error)
+	BatchInsertSystemLogsFn          func(ctx context.Context, inputs []*OpsInsertSystemLogInput) (int64, error)
+	ListSystemLogsFn                 func(ctx context.Context, filter *OpsSystemLogFilter) (*OpsSystemLogList, error)
+	GetDashboardOverviewFn           func(ctx context.Context, filter *OpsDashboardFilter) (*OpsDashboardOverview, error)
+	GetIncidentImpactFn              func(ctx context.Context, filter *OpsDashboardFilter) (*OpsIncidentImpact, error)
+	ListAlertEventsFn                func(ctx context.Context, filter *OpsAlertEventFilter) ([]*OpsAlertEvent, error)
+	ListAlertRulesFn                 func(ctx context.Context) ([]*OpsAlertRule, error)
+	CreateAlertRuleFn                func(ctx context.Context, input *OpsAlertRule) (*OpsAlertRule, error)
+	UpdateAlertRuleFn                func(ctx context.Context, input *OpsAlertRule) (*OpsAlertRule, error)
+	GetActiveAlertEventFn            func(ctx context.Context, ruleID int64) (*OpsAlertEvent, error)
+	GetLatestAlertEventFn            func(ctx context.Context, ruleID int64) (*OpsAlertEvent, error)
+	GetMergeableAlertEventFn         func(ctx context.Context, eventKey string, since time.Time) (*OpsAlertEvent, error)
+	GetCompoundAlertStatsFn          func(ctx context.Context, filter *OpsCompoundAlertStatsFilter) (*OpsCompoundAlertStats, error)
+	CreateAlertEventFn               func(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error)
+	MergeAlertEventFn                func(ctx context.Context, eventID int64, event *OpsAlertEvent) (*OpsAlertEvent, error)
+	UpdateAlertEventStatusFn         func(ctx context.Context, eventID int64, status string, note string, processingAction string, operatorID *int64, resolvedAt *time.Time) error
+	DeleteSystemLogsFn               func(ctx context.Context, filter *OpsSystemLogCleanupFilter) (int64, error)
+	InsertSystemLogCleanupAuditFn    func(ctx context.Context, input *OpsSystemLogCleanupAudit) error
 }
 
 func (m *opsRepoMock) InsertErrorLog(ctx context.Context, input *OpsInsertErrorLogInput) (int64, error) {
@@ -56,6 +57,13 @@ func (m *opsRepoMock) ListUnifiedErrors(ctx context.Context, filter *OpsUnifiedE
 		return m.ListUnifiedErrorsFn(ctx, filter)
 	}
 	return &OpsUnifiedErrorList{Items: []*OpsUnifiedErrorItem{}, Page: 1, PageSize: 20}, nil
+}
+
+func (m *opsRepoMock) ListUnifiedErrorsForAIAnalysis(ctx context.Context, filter *OpsUnifiedErrorListFilter, maxSamples int) (*OpsUnifiedErrorList, error) {
+	if m.ListUnifiedErrorsForAIAnalysisFn != nil {
+		return m.ListUnifiedErrorsForAIAnalysisFn(ctx, filter, maxSamples)
+	}
+	return m.ListUnifiedErrors(ctx, filter)
 }
 
 func (m *opsRepoMock) CreateAIAnalysisTaskIfAllowed(ctx context.Context, input *OpsAIAnalysisTaskCreateInput, maxActive int) (*OpsAIAnalysisTask, OpsAIAnalysisTaskCreateResult, error) {

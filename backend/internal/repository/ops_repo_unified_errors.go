@@ -38,13 +38,22 @@ type opsUnifiedErrorCandidate struct {
 }
 
 func (r *opsRepository) ListUnifiedErrors(ctx context.Context, filter *service.OpsUnifiedErrorListFilter) (*service.OpsUnifiedErrorList, error) {
+	page, pageSize := normalizeUnifiedErrorPagination(filter.Page, filter.PageSize)
+	return r.listUnifiedErrorsWithPagination(ctx, filter, page, pageSize)
+}
+
+func (r *opsRepository) ListUnifiedErrorsForAIAnalysis(ctx context.Context, filter *service.OpsUnifiedErrorListFilter, maxSamples int) (*service.OpsUnifiedErrorList, error) {
+	pageSize := normalizeUnifiedErrorAIAnalysisLimit(maxSamples)
+	return r.listUnifiedErrorsWithPagination(ctx, filter, 1, pageSize)
+}
+
+func (r *opsRepository) listUnifiedErrorsWithPagination(ctx context.Context, filter *service.OpsUnifiedErrorListFilter, page, pageSize int) (*service.OpsUnifiedErrorList, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil ops repository")
 	}
 	if filter == nil {
 		filter = &service.OpsUnifiedErrorListFilter{}
 	}
-	page, pageSize := normalizeUnifiedErrorPagination(filter.Page, filter.PageSize)
 	baseWhere, args := buildUnifiedErrorCandidateWhere(filter)
 	classifiedWhere, args := buildUnifiedErrorClassifiedWhere(filter, args)
 	sortExpr := unifiedErrorSortExpr(filter.SortBy)
@@ -511,6 +520,16 @@ func applyUnifiedErrorClassification(c *opsUnifiedErrorCandidate) {
 	c.item.ErrorResult = unifiedErrorResultFor(c.clientStatusCode, classification)
 	c.item.Severity = unifiedSeverityFor(c.rawSeverity, c.item.StatusCode)
 	c.item.Summary = unifiedErrorSummary(classification.ClassificationReason, c.message, c.upstreamErrorMessage)
+}
+
+func normalizeUnifiedErrorAIAnalysisLimit(maxSamples int) int {
+	if maxSamples <= 0 {
+		return 50
+	}
+	if maxSamples > 500 {
+		return 500
+	}
+	return maxSamples
 }
 
 func normalizeUnifiedErrorPagination(page, pageSize int) (int, int) {

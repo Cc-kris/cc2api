@@ -285,7 +285,7 @@ Storage
 | 自动分析 | P0/P1 默认触发，遵守同类去重间隔和全局频率限制 |
 | 手动分析 | 对当前筛选时间段和错误集合创建任务 |
 | Worker | 后台轮询 pending 任务，使用 `FOR UPDATE SKIP LOCKED` 原子领取并置为 running；成功置 completed，失败置 failed，服务停止不误标失败 |
-| 脱敏 | AI 输入只包含脱敏摘要和必要上下文 |
+| 脱敏 | AI 输入只包含脱敏摘要和必要上下文；样本仅包含错误分类、状态、平台、模型、实体 ID、脱敏摘要和同类数量，不传完整邮箱、API Key、Token、代理地址、请求正文或响应正文 |
 | 反馈 | 保存有用、无用、错误归因、补充说明 |
 
 ### 7.5 LocalResponseCacheService

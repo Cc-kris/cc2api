@@ -82,3 +82,28 @@ type OpsAIAnalysisTaskUpdate struct {
 	StartedAt    *time.Time
 	FinishedAt   *time.Time
 }
+
+type OpsAIAnalysisContext struct {
+	Task    *OpsAIAnalysisTask     `json:"task"`
+	Samples []*OpsAIAnalysisSample `json:"samples"`
+	Total   int                    `json:"total"`
+}
+
+type OpsAIAnalysisSample struct {
+	ID                     int64     `json:"id"`
+	OccurredAt             time.Time `json:"occurred_at"`
+	ErrorCategory          string    `json:"error_category"`
+	ErrorSubcategory       string    `json:"error_subcategory"`
+	ClientErrorSubcategory *string   `json:"client_error_subcategory,omitempty"`
+	ErrorResult            string    `json:"error_result"`
+	Severity               string    `json:"severity"`
+	StatusCode             int       `json:"status_code"`
+	Platform               string    `json:"platform"`
+	Model                  string    `json:"model"`
+	GroupID                *int64    `json:"group_id,omitempty"`
+	APIKeyID               *int64    `json:"api_key_id,omitempty"`
+	UserID                 *int64    `json:"user_id,omitempty"`
+	UpstreamAccountID      *int64    `json:"upstream_account_id,omitempty"`
+	Summary                string    `json:"summary"`
+	SameKindCount          int       `json:"same_kind_count"`
+}
