@@ -107,3 +107,27 @@ type OpsAIAnalysisSample struct {
 	Summary                string    `json:"summary"`
 	SameKindCount          int       `json:"same_kind_count"`
 }
+
+type OpsAIAnalysisReport struct {
+	TaskID           int64     `json:"task_id"`
+	Summary          string    `json:"summary"`
+	RootCause        string    `json:"root_cause,omitempty"`
+	ImpactScopeJSON  string    `json:"-"`
+	EvidenceJSON     string    `json:"-"`
+	ActionsJSON      string    `json:"-"`
+	BreakdownJSON    string    `json:"-"`
+	ImpactScope      any       `json:"impact_scope"`
+	Evidence         any       `json:"evidence"`
+	SuggestedActions any       `json:"suggested_actions"`
+	ErrorBreakdown   any       `json:"error_breakdown"`
+	Confidence       string    `json:"confidence"`
+	FeedbackStatus   string    `json:"feedback_status"`
+	FeedbackNote     string    `json:"feedback_note,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+type OpsAIAnalysisTaskDetailResponse struct {
+	Task   *OpsAIAnalysisTask   `json:"task"`
+	Report *OpsAIAnalysisReport `json:"report,omitempty"`
+}

@@ -2,7 +2,10 @@ package admin
 
 import (
 	"net/http"
+	"strconv"
+	"strings"
 
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -199,6 +202,34 @@ func (h *OpsHandler) CreateAIAnalysisTask(c *gin.Context) {
 		return
 	}
 	response.Accepted(c, result)
+}
+
+// GetAIAnalysisTask returns AI analysis task status and report when available.
+// GET /api/v1/admin/ops/ai-analysis/tasks/:id
+func (h *OpsHandler) GetAIAnalysisTask(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if !canOperateOpsAIAnalysis(c) {
+		response.Forbidden(c, "无权限查看 AI 分析任务")
+		return
+	}
+	id, err := strconv.ParseInt(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || id <= 0 {
+		response.ErrorFrom(c, infraerrors.BadRequest("OPS_AI_ANALYSIS_INVALID_TASK_ID", "invalid task id"))
+		return
+	}
+	result, err := h.opsService.GetAIAnalysisTaskDetail(c.Request.Context(), id)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
 }
 
 // GetRuntimeLogConfig returns runtime log config (DB-backed).

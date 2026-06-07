@@ -214,5 +214,23 @@ func allowOpsRoleForAdminPath(role, method, path string) bool {
 	path = strings.TrimSpace(path)
 	path = strings.TrimRight(path, "/")
 	return (method == http.MethodGet && path == "/api/v1/admin/ops/unified-errors/export") ||
-		(method == http.MethodPost && path == "/api/v1/admin/ops/ai-analysis/tasks")
+		(method == http.MethodPost && path == "/api/v1/admin/ops/ai-analysis/tasks") ||
+		(method == http.MethodGet && isOpsAIAnalysisTaskDetailPath(path))
+}
+
+func isOpsAIAnalysisTaskDetailPath(path string) bool {
+	const prefix = "/api/v1/admin/ops/ai-analysis/tasks/"
+	if !strings.HasPrefix(path, prefix) {
+		return false
+	}
+	id := strings.TrimPrefix(path, prefix)
+	if id == "" {
+		return false
+	}
+	for _, r := range id {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }

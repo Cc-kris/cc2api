@@ -161,6 +161,13 @@ func TestAdminAuthAllowsOpsRoleOnlyForAllowedOpsEndpoints(t *testing.T) {
 	router.GET("/api/v1/admin/ops/ai-analysis/tasks", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
+	router.GET("/api/v1/admin/ops/ai-analysis/tasks/77", func(c *gin.Context) {
+		role, _ := GetUserRoleFromContext(c)
+		c.JSON(http.StatusOK, gin.H{"role": role})
+	})
+	router.GET("/api/v1/admin/ops/ai-analysis/tasks/not-number", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
 	router.GET("/api/v1/admin/users", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
@@ -186,6 +193,26 @@ func TestAdminAuthAllowsOpsRoleOnlyForAllowedOpsEndpoints(t *testing.T) {
 
 		require.Equal(t, http.StatusAccepted, w.Code)
 		require.Contains(t, w.Body.String(), `"role":"ops"`)
+	})
+
+	t.Run("ops_role_can_enter_ai_task_detail_path", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/ops/ai-analysis/tasks/77", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Contains(t, w.Body.String(), `"role":"ops"`)
+	})
+
+	t.Run("ops_role_cannot_enter_ai_task_detail_non_numeric_path", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/ops/ai-analysis/tasks/not-number", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Contains(t, w.Body.String(), "FORBIDDEN")
 	})
 
 	t.Run("ops_role_cannot_enter_manual_ai_task_read_with_wrong_method", func(t *testing.T) {

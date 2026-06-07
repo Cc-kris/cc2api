@@ -178,3 +178,36 @@ func TestNormalizeUnifiedErrorAIAnalysisLimit(t *testing.T) {
 	require.Equal(t, 500, normalizeUnifiedErrorAIAnalysisLimit(500))
 	require.Equal(t, 500, normalizeUnifiedErrorAIAnalysisLimit(501))
 }
+
+func TestGetAIAnalysisTaskAndReport(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	repo := &opsRepository{db: db}
+	start := time.Date(2026, 6, 8, 10, 0, 0, 0, time.UTC)
+	finishedAt := start.Add(2 * time.Minute)
+
+	mock.ExpectQuery(`(?s)SELECT id, source_type, source_id, trigger_type, trigger_user_id, time_start, time_end,.*FROM ops_ai_analysis_tasks\s+WHERE id = \$1`).
+		WithArgs(int64(77)).
+		WillReturnRows(taskRows().AddRow(int64(77), service.OpsAIAnalysisSourceUnifiedErrors, nil, service.OpsAIAnalysisTriggerManual, int64(7), start, start.Add(30*time.Minute), `{"platform":"openai"}`, service.OpsAIAnalysisStatusCompleted, 5, "responses", "gpt-5.5", "", start.Add(time.Minute), finishedAt, start, finishedAt))
+
+	task, err := repo.GetAIAnalysisTask(context.Background(), 77)
+	require.NoError(t, err)
+	require.Equal(t, int64(77), task.ID)
+	require.Equal(t, service.OpsAIAnalysisStatusCompleted, task.Status)
+
+	mock.ExpectQuery(`(?s)SELECT task_id, summary, COALESCE\(root_cause,''\), impact_scope::text, evidence::text,.*FROM ops_ai_analysis_reports\s+WHERE task_id = \$1`).
+		WithArgs(int64(77)).
+		WillReturnRows(sqlmock.NewRows([]string{"task_id", "summary", "root_cause", "impact_scope", "evidence", "suggested_actions", "error_breakdown", "confidence", "feedback_status", "feedback_note", "created_at", "updated_at"}).
+			AddRow(int64(77), "上游错误", "账号限流", `{"affected_users":2}`, `[{"text":"e1"}]`, `["切换账号"]`, `{"upstream":1}`, "high", "none", "", start, finishedAt))
+
+	report, err := repo.GetAIAnalysisReport(context.Background(), 77)
+	require.NoError(t, err)
+	require.Equal(t, int64(77), report.TaskID)
+	require.Equal(t, "上游错误", report.Summary)
+	require.Equal(t, "high", report.Confidence)
+	require.NotEmpty(t, report.ImpactScope)
+	require.NotEmpty(t, report.Evidence)
+	require.NoError(t, mock.ExpectationsWereMet())
+}

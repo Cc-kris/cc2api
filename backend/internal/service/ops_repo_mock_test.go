@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"time"
 )
 
@@ -14,6 +15,8 @@ type opsRepoMock struct {
 	CreateAIAnalysisTaskIfAllowedFn  func(ctx context.Context, input *OpsAIAnalysisTaskCreateInput, maxActive int) (*OpsAIAnalysisTask, OpsAIAnalysisTaskCreateResult, error)
 	ClaimNextAIAnalysisTaskFn        func(ctx context.Context) (*OpsAIAnalysisTask, error)
 	UpdateAIAnalysisTaskFn           func(ctx context.Context, taskID int64, update *OpsAIAnalysisTaskUpdate) (*OpsAIAnalysisTask, error)
+	GetAIAnalysisTaskFn              func(ctx context.Context, taskID int64) (*OpsAIAnalysisTask, error)
+	GetAIAnalysisReportFn            func(ctx context.Context, taskID int64) (*OpsAIAnalysisReport, error)
 	GetErrorLogByIDFn                func(ctx context.Context, id int64) (*OpsErrorLogDetail, error)
 	BatchInsertSystemLogsFn          func(ctx context.Context, inputs []*OpsInsertSystemLogInput) (int64, error)
 	ListSystemLogsFn                 func(ctx context.Context, filter *OpsSystemLogFilter) (*OpsSystemLogList, error)
@@ -85,6 +88,20 @@ func (m *opsRepoMock) UpdateAIAnalysisTask(ctx context.Context, taskID int64, up
 		return m.UpdateAIAnalysisTaskFn(ctx, taskID, update)
 	}
 	return &OpsAIAnalysisTask{ID: taskID, Status: update.Status, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+}
+
+func (m *opsRepoMock) GetAIAnalysisTask(ctx context.Context, taskID int64) (*OpsAIAnalysisTask, error) {
+	if m.GetAIAnalysisTaskFn != nil {
+		return m.GetAIAnalysisTaskFn(ctx, taskID)
+	}
+	return &OpsAIAnalysisTask{ID: taskID, Status: OpsAIAnalysisStatusPending, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+}
+
+func (m *opsRepoMock) GetAIAnalysisReport(ctx context.Context, taskID int64) (*OpsAIAnalysisReport, error) {
+	if m.GetAIAnalysisReportFn != nil {
+		return m.GetAIAnalysisReportFn(ctx, taskID)
+	}
+	return nil, sql.ErrNoRows
 }
 
 func (m *opsRepoMock) GetErrorLogByID(ctx context.Context, id int64) (*OpsErrorLogDetail, error) {

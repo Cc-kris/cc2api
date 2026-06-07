@@ -14,6 +14,8 @@ type OpsRepository interface {
 	CreateAIAnalysisTaskIfAllowed(ctx context.Context, input *OpsAIAnalysisTaskCreateInput, maxActive int) (*OpsAIAnalysisTask, OpsAIAnalysisTaskCreateResult, error)
 	ClaimNextAIAnalysisTask(ctx context.Context) (*OpsAIAnalysisTask, error)
 	UpdateAIAnalysisTask(ctx context.Context, taskID int64, update *OpsAIAnalysisTaskUpdate) (*OpsAIAnalysisTask, error)
+	GetAIAnalysisTask(ctx context.Context, taskID int64) (*OpsAIAnalysisTask, error)
+	GetAIAnalysisReport(ctx context.Context, taskID int64) (*OpsAIAnalysisReport, error)
 	GetErrorLogByID(ctx context.Context, id int64) (*OpsErrorLogDetail, error)
 	ListRequestDetails(ctx context.Context, filter *OpsRequestDetailFilter) ([]*OpsRequestDetail, int64, error)
 	BatchInsertSystemLogs(ctx context.Context, inputs []*OpsInsertSystemLogInput) (int64, error)

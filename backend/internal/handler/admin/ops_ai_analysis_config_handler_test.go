@@ -45,6 +45,7 @@ func newOpsAIAnalysisConfigRouter(handler *OpsHandler) *gin.Engine {
 	r.PUT("/ai-analysis/config", handler.UpdateAIAnalysisConfig)
 	r.POST("/ai-analysis/test", handler.TestAIAnalysisConnection)
 	r.POST("/ai-analysis/tasks", handler.CreateAIAnalysisTask)
+	r.GET("/ai-analysis/tasks/:id", handler.GetAIAnalysisTask)
 	return r
 }
 
@@ -223,5 +224,17 @@ func TestOpsAIAnalysisConfigHandler_CreateAIAnalysisTaskInvalidBody(t *testing.T
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("POST invalid status = %d, body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestOpsAIAnalysisConfigHandler_GetAIAnalysisTaskInvalidID(t *testing.T) {
+	h := newOpsAIAnalysisConfigHandler(newTestSettingRepo())
+	r := newOpsAIAnalysisConfigRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/ai-analysis/tasks/bad", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("GET invalid status = %d, body=%s", w.Code, w.Body.String())
 	}
 }

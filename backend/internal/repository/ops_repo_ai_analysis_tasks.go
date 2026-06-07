@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -226,4 +227,76 @@ func opsAINullInt(v *int) any {
 		return nil
 	}
 	return *v
+}
+
+func (r *opsRepository) GetAIAnalysisTask(ctx context.Context, taskID int64) (*service.OpsAIAnalysisTask, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("nil ops repository")
+	}
+	if taskID <= 0 {
+		return nil, errors.New("invalid AI analysis task id")
+	}
+	row := r.db.QueryRowContext(ctx, `
+SELECT id, source_type, source_id, trigger_type, trigger_user_id, time_start, time_end,
+       filters::text, status, sample_count, provider, model, COALESCE(error_message,''),
+       started_at, finished_at, created_at, updated_at
+FROM ops_ai_analysis_tasks
+WHERE id = $1`, taskID)
+	return scanOpsAIAnalysisTask(row)
+}
+
+func (r *opsRepository) GetAIAnalysisReport(ctx context.Context, taskID int64) (*service.OpsAIAnalysisReport, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("nil ops repository")
+	}
+	if taskID <= 0 {
+		return nil, errors.New("invalid AI analysis task id")
+	}
+	row := r.db.QueryRowContext(ctx, `
+SELECT task_id, summary, COALESCE(root_cause,''), impact_scope::text, evidence::text,
+       suggested_actions::text, error_breakdown::text, confidence, feedback_status,
+       COALESCE(feedback_note,''), created_at, updated_at
+FROM ops_ai_analysis_reports
+WHERE task_id = $1`, taskID)
+	return scanOpsAIAnalysisReport(row)
+}
+
+type opsAIAnalysisReportScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanOpsAIAnalysisReport(row opsAIAnalysisReportScanner) (*service.OpsAIAnalysisReport, error) {
+	var report service.OpsAIAnalysisReport
+	if err := row.Scan(
+		&report.TaskID,
+		&report.Summary,
+		&report.RootCause,
+		&report.ImpactScopeJSON,
+		&report.EvidenceJSON,
+		&report.ActionsJSON,
+		&report.BreakdownJSON,
+		&report.Confidence,
+		&report.FeedbackStatus,
+		&report.FeedbackNote,
+		&report.CreatedAt,
+		&report.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+	report.ImpactScope = decodeJSONValue(report.ImpactScopeJSON, map[string]any{})
+	report.Evidence = decodeJSONValue(report.EvidenceJSON, []any{})
+	report.SuggestedActions = decodeJSONValue(report.ActionsJSON, []any{})
+	report.ErrorBreakdown = decodeJSONValue(report.BreakdownJSON, map[string]any{})
+	return &report, nil
+}
+
+func decodeJSONValue(raw string, fallback any) any {
+	if raw == "" {
+		return fallback
+	}
+	var out any
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return fallback
+	}
+	return out
 }
