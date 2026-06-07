@@ -155,3 +155,28 @@ func TestMigration135AllowsGitHubAndGoogleAuthProviders(t *testing.T) {
 	require.Contains(t, sql, "'github'")
 	require.Contains(t, sql, "'google'")
 }
+
+func TestMigration143ExtendsOpsAlertRulesWithoutDroppingLegacyRows(t *testing.T) {
+	content, err := FS.ReadFile("143_ops_alert_rule_compound_conditions.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "ALTER TABLE ops_alert_rules")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS rule_version VARCHAR(16)")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS error_categories JSONB")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS min_final_failures INT")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS min_failure_rate DECIMAL(5,2)")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS min_sample_count INT")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS impact_scope JSONB")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS recovered_fluctuation_policy VARCHAR(32)")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS auto_ai_analysis BOOLEAN")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS notification_channels JSONB")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS silence_minutes INT")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS migration_state VARCHAR(32)")
+	require.Contains(t, sql, "WHERE rule_version IS NULL")
+	require.Contains(t, sql, "WHERE migration_state IS NULL")
+	require.Contains(t, sql, "SET DEFAULT 'v2'")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_alert_rules_trigger_level")
+	require.NotContains(t, sql, "DROP TABLE")
+	require.NotContains(t, sql, "TRUNCATE")
+}

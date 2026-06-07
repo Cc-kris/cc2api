@@ -239,7 +239,7 @@ describe('EditAccountModal', () => {
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.codex_image_generation_bridge).toBe(true)
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('codex_image_generation_bridge_enabled')
   })
-  it('saves upstream prepaid settings when pool mode is enabled', async () => {
+  it('saves upstream prepaid settings without deprecated upstream warning fields', async () => {
     const account = buildAccount()
     account.credentials = {
       ...account.credentials,
@@ -254,16 +254,16 @@ describe('EditAccountModal', () => {
 
     await wrapper.get('[data-testid="pool-mode-toggle"]').trigger('click')
     await wrapper.get('[data-testid="upstream-prepaid-amount"]').setValue('120')
-    await wrapper.get('[data-testid="upstream-warning-amount"]').setValue('30')
-    await wrapper.get('[data-testid="upstream-notify-enabled"]').setValue(true)
+    expect(wrapper.find('[data-testid="upstream-warning-amount"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="upstream-notify-enabled"]').exists()).toBe(false)
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     const payload = updateAccountMock.mock.calls[0]?.[1]
     expect(payload?.credentials?.pool_mode).toBe(true)
     expect(payload?.extra?.upstream_prepaid_amount).toBe(120)
-    expect(payload?.extra?.upstream_warning_amount).toBe(30)
-    expect(payload?.extra?.upstream_notify_enabled).toBe(true)
+    expect(payload?.extra).not.toHaveProperty('upstream_warning_amount')
+    expect(payload?.extra).not.toHaveProperty('upstream_notify_enabled')
   })
 
   it('fetches upstream models and saves identity model mappings', async () => {
