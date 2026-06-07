@@ -226,6 +226,8 @@ func registerDashboardRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	{
 		dashboard.GET("/snapshot-v2", h.Admin.Dashboard.GetSnapshotV2)
 		dashboard.GET("/stats", h.Admin.Dashboard.GetStats)
+		dashboard.GET("/revenue-overview", h.Admin.Dashboard.GetRevenueOverview)
+		dashboard.GET("/repurchase-distribution", h.Admin.Dashboard.GetRepurchaseDistribution)
 		dashboard.GET("/realtime", h.Admin.Dashboard.GetRealtimeMetrics)
 		dashboard.GET("/trend", h.Admin.Dashboard.GetUsageTrend)
 		dashboard.GET("/models", h.Admin.Dashboard.GetModelStats)

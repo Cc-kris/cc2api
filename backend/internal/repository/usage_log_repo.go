@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -1530,6 +1531,122 @@ func (r *usageLogRepository) GetDashboardStatsWithRange(ctx context.Context, sta
 	stats.Tpm = tpm
 
 	return stats, nil
+}
+
+func (r *usageLogRepository) GetDashboardRevenueOverview(ctx context.Context) (*service.DashboardRevenueOverview, error) {
+	const userTotalsQuery = `
+SELECT COUNT(*)::bigint AS non_admin_user_count,
+       COALESCE(SUM(GREATEST(balance, 0)), 0)::float8 AS unused_amount
+FROM users
+WHERE role <> $1`
+	const creditTotalsQuery = `
+SELECT COALESCE(SUM(rc.value), 0)::float8 AS total_credit_amount,
+       COUNT(DISTINCT rc.used_by)::bigint AS credited_user_count
+FROM redeem_codes rc
+JOIN users u ON u.id = rc.used_by
+WHERE u.role <> $1
+  AND rc.status = $2
+  AND rc.value > 0
+  AND rc.type IN ($3, $4)
+  AND rc.used_by IS NOT NULL`
+
+	var nonAdminUserCount int64
+	var unusedAmount float64
+	if err := scanSingleRow(ctx, r.sql, userTotalsQuery, []any{service.RoleAdmin}, &nonAdminUserCount, &unusedAmount); err != nil {
+		return nil, err
+	}
+
+	var totalCreditAmount float64
+	var creditedUserCount int64
+	if err := scanSingleRow(ctx, r.sql, creditTotalsQuery, []any{
+		service.RoleAdmin,
+		service.StatusUsed,
+		service.RedeemTypeBalance,
+		service.AdjustmentTypeAdminBalance,
+	}, &totalCreditAmount, &creditedUserCount); err != nil {
+		return nil, err
+	}
+
+	usedAmount := totalCreditAmount - unusedAmount
+	if usedAmount < 0 {
+		usedAmount = 0
+	}
+
+	return &service.DashboardRevenueOverview{
+		TotalCreditAmount: formatDashboardAmount(totalCreditAmount),
+		UsedAmount:        formatDashboardAmount(usedAmount),
+		UnusedAmount:      formatDashboardAmount(unusedAmount),
+		NonAdminUserCount: nonAdminUserCount,
+		CreditedUserCount: creditedUserCount,
+		IsEstimated:       true,
+		UpdatedAt:         time.Now().UTC().Format(time.RFC3339),
+	}, nil
+}
+
+func (r *usageLogRepository) GetDashboardRepurchaseDistribution(ctx context.Context) (*service.DashboardRepurchaseDistribution, error) {
+	const query = `
+WITH non_admin_users AS (
+    SELECT id
+    FROM users
+    WHERE role <> $1
+),
+credit_counts AS (
+    SELECT rc.used_by AS user_id, COUNT(*)::bigint AS credit_count
+    FROM redeem_codes rc
+    JOIN users u ON u.id = rc.used_by
+    WHERE u.role <> $1
+      AND rc.status = $2
+      AND rc.value > 0
+      AND rc.type IN ($3, $4)
+      AND rc.used_by IS NOT NULL
+    GROUP BY rc.used_by
+)
+SELECT COUNT(*)::bigint AS total_users,
+       COALESCE(SUM(CASE WHEN COALESCE(cc.credit_count, 0) = 0 THEN 1 ELSE 0 END), 0)::bigint AS zero_count,
+       COALESCE(SUM(CASE WHEN cc.credit_count = 1 THEN 1 ELSE 0 END), 0)::bigint AS one_count,
+       COALESCE(SUM(CASE WHEN cc.credit_count = 2 THEN 1 ELSE 0 END), 0)::bigint AS two_count,
+       COALESCE(SUM(CASE WHEN cc.credit_count = 3 THEN 1 ELSE 0 END), 0)::bigint AS three_count,
+       COALESCE(SUM(CASE WHEN cc.credit_count > 3 THEN 1 ELSE 0 END), 0)::bigint AS three_plus_count
+FROM non_admin_users u
+LEFT JOIN credit_counts cc ON cc.user_id = u.id`
+
+	var totalUsers, zeroCount, oneCount, twoCount, threeCount, threePlusCount int64
+	if err := scanSingleRow(ctx, r.sql, query, []any{
+		service.RoleAdmin,
+		service.StatusUsed,
+		service.RedeemTypeBalance,
+		service.AdjustmentTypeAdminBalance,
+	}, &totalUsers, &zeroCount, &oneCount, &twoCount, &threeCount, &threePlusCount); err != nil {
+		return nil, err
+	}
+
+	return &service.DashboardRepurchaseDistribution{
+		Buckets: []service.DashboardRepurchaseBucket{
+			dashboardRepurchaseBucket("zero", "零购", zeroCount, totalUsers),
+			dashboardRepurchaseBucket("one", "一购", oneCount, totalUsers),
+			dashboardRepurchaseBucket("two", "二购", twoCount, totalUsers),
+			dashboardRepurchaseBucket("three", "三购", threeCount, totalUsers),
+			dashboardRepurchaseBucket("three_plus", "三购以上", threePlusCount, totalUsers),
+		},
+		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+	}, nil
+}
+
+func formatDashboardAmount(v float64) string {
+	return fmt.Sprintf("%.2f", math.Round(v*100)/100)
+}
+
+func dashboardRepurchaseBucket(bucket, label string, userCount int64, totalUsers int64) service.DashboardRepurchaseBucket {
+	ratio := 0.0
+	if totalUsers > 0 {
+		ratio = math.Round((float64(userCount)/float64(totalUsers))*10000) / 100
+	}
+	return service.DashboardRepurchaseBucket{
+		Bucket:    bucket,
+		Label:     label,
+		UserCount: userCount,
+		Ratio:     ratio,
+	}
 }
 
 func (r *usageLogRepository) fillDashboardEntityStats(ctx context.Context, stats *DashboardStats, todayUTC, now time.Time) error {

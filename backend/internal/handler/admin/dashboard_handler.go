@@ -128,6 +128,28 @@ func (h *DashboardHandler) GetStats(c *gin.Context) {
 	})
 }
 
+// GetRevenueOverview handles getting revenue and credit overview metrics.
+// GET /api/v1/admin/dashboard/revenue-overview
+func (h *DashboardHandler) GetRevenueOverview(c *gin.Context) {
+	overview, err := h.dashboardService.GetRevenueOverview(c.Request.Context())
+	if err != nil {
+		response.Error(c, 500, "Failed to get revenue overview")
+		return
+	}
+	response.Success(c, overview)
+}
+
+// GetRepurchaseDistribution handles getting user repurchase distribution metrics.
+// GET /api/v1/admin/dashboard/repurchase-distribution
+func (h *DashboardHandler) GetRepurchaseDistribution(c *gin.Context) {
+	distribution, err := h.dashboardService.GetRepurchaseDistribution(c.Request.Context())
+	if err != nil {
+		response.Error(c, 500, "Failed to get repurchase distribution")
+		return
+	}
+	response.Success(c, distribution)
+}
+
 type DashboardAggregationBackfillRequest struct {
 	Start string `json:"start"`
 	End   string `json:"end"`

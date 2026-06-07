@@ -124,6 +124,14 @@ func (s *DashboardService) GetDashboardStats(ctx context.Context) (*usagestats.D
 	return stats, nil
 }
 
+func (s *DashboardService) GetRevenueOverview(ctx context.Context) (*DashboardRevenueOverview, error) {
+	return s.usageRepo.GetDashboardRevenueOverview(ctx)
+}
+
+func (s *DashboardService) GetRepurchaseDistribution(ctx context.Context) (*DashboardRepurchaseDistribution, error) {
+	return s.usageRepo.GetDashboardRepurchaseDistribution(ctx)
+}
+
 func (s *DashboardService) GetUsageTrendWithFilters(ctx context.Context, startTime, endTime time.Time, granularity string, userID, apiKeyID, accountID, groupID int64, model string, requestType *int16, stream *bool, billingType *int8) ([]usagestats.TrendDataPoint, error) {
 	trend, err := s.usageRepo.GetUsageTrendWithFilters(ctx, startTime, endTime, granularity, userID, apiKeyID, accountID, groupID, model, requestType, stream, billingType)
 	if err != nil {
