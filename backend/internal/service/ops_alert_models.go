@@ -91,5 +91,6 @@ type OpsAlertEventFilter struct {
 
 	// Dimensions filters (best-effort).
 	Platform string
+	Model    string
 	GroupID  *int64
 }

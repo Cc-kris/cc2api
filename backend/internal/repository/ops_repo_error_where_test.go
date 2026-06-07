@@ -94,3 +94,17 @@ func TestOpsErrorReasonCaseExprForUsesQualifiedColumns(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildOpsAlertEventsWhereIncludesModelDimension(t *testing.T) {
+	filter := &service.OpsAlertEventFilter{Platform: "openai", Model: "gpt-5.5"}
+	where, args := buildOpsAlertEventsWhere(filter)
+	if len(args) != 2 {
+		t.Fatalf("args len = %d, want 2", len(args))
+	}
+	if !strings.Contains(where, "(dimensions->>'platform') = $") {
+		t.Fatalf("where should include platform dimension: %s", where)
+	}
+	if !strings.Contains(where, "(dimensions->>'model') = $") {
+		t.Fatalf("where should include model dimension: %s", where)
+	}
+}

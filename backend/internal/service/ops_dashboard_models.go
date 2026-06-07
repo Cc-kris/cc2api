@@ -7,6 +7,7 @@ type OpsDashboardFilter struct {
 	EndTime   time.Time
 
 	Platform string
+	Model    string
 	GroupID  *int64
 
 	// QueryMode controls whether dashboard queries should use raw logs or pre-aggregated tables.

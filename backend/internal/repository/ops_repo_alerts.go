@@ -830,6 +830,10 @@ func buildOpsAlertEventsWhere(filter *service.OpsAlertEventFilter) (string, []an
 		args = append(args, platform)
 		clauses = append(clauses, "(dimensions->>'platform') = $"+itoa(len(args)))
 	}
+	if model := strings.TrimSpace(filter.Model); model != "" {
+		args = append(args, model)
+		clauses = append(clauses, "(dimensions->>'model') = $"+itoa(len(args)))
+	}
 	if filter.GroupID != nil && *filter.GroupID > 0 {
 		args = append(args, fmt.Sprintf("%d", *filter.GroupID))
 		clauses = append(clauses, "(dimensions->>'group_id') = $"+itoa(len(args)))

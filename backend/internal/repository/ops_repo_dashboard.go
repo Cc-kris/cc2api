@@ -1109,9 +1109,11 @@ func isQueryTimeoutErr(err error) bool {
 
 func buildUsageWhere(filter *service.OpsDashboardFilter, start, end time.Time, startIndex int) (join string, where string, args []any, nextIndex int) {
 	platform := ""
+	model := ""
 	groupID := (*int64)(nil)
 	if filter != nil {
 		platform = strings.TrimSpace(strings.ToLower(filter.Platform))
+		model = strings.TrimSpace(filter.Model)
 		groupID = filter.GroupID
 	}
 
@@ -1139,6 +1141,11 @@ func buildUsageWhere(filter *service.OpsDashboardFilter, start, end time.Time, s
 		clauses = append(clauses, fmt.Sprintf("COALESCE(NULLIF(g.platform,''), a.platform) = $%d", idx))
 		idx++
 	}
+	if model != "" {
+		args = append(args, model)
+		clauses = append(clauses, fmt.Sprintf("COALESCE(ul.model,'') = $%d", idx))
+		idx++
+	}
 
 	where = "WHERE " + strings.Join(clauses, " AND ")
 	return join, where, args, idx
@@ -1146,9 +1153,11 @@ func buildUsageWhere(filter *service.OpsDashboardFilter, start, end time.Time, s
 
 func buildErrorWhere(filter *service.OpsDashboardFilter, start, end time.Time, startIndex int) (where string, args []any, nextIndex int) {
 	platform := ""
+	model := ""
 	groupID := (*int64)(nil)
 	if filter != nil {
 		platform = strings.TrimSpace(strings.ToLower(filter.Platform))
+		model = strings.TrimSpace(filter.Model)
 		groupID = filter.GroupID
 	}
 
@@ -1173,6 +1182,11 @@ func buildErrorWhere(filter *service.OpsDashboardFilter, start, end time.Time, s
 	if platform != "" {
 		args = append(args, platform)
 		clauses = append(clauses, fmt.Sprintf("platform = $%d", idx))
+		idx++
+	}
+	if model != "" {
+		args = append(args, model)
+		clauses = append(clauses, fmt.Sprintf("COALESCE(model,'') = $%d", idx))
 		idx++
 	}
 

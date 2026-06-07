@@ -141,6 +141,9 @@ func registerOpsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		ops.GET("/account-availability", h.Admin.Ops.GetAccountAvailability)
 		ops.GET("/realtime-traffic", h.Admin.Ops.GetRealtimeTrafficSummary)
 
+		// Incident overview
+		ops.GET("/incidents/overview", h.Admin.Ops.GetIncidentOverview)
+
 		// Alerts (rules + events)
 		ops.GET("/alert-rules", h.Admin.Ops.ListAlertRules)
 		ops.POST("/alert-rules", h.Admin.Ops.CreateAlertRule)

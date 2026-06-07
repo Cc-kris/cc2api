@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"strings"
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -28,7 +29,13 @@ func (s *OpsService) GetDashboardOverview(ctx context.Context, filter *OpsDashbo
 	}
 
 	// Resolve query mode (requested via query param, or DB default).
-	filter.QueryMode = s.resolveOpsQueryMode(ctx, filter.QueryMode)
+	// Model-level drill-down is only available from raw request/error logs;
+	// pre-aggregated hourly/daily tables are not model-granular.
+	if strings.TrimSpace(filter.Model) != "" {
+		filter.QueryMode = OpsQueryModeRaw
+	} else {
+		filter.QueryMode = s.resolveOpsQueryMode(ctx, filter.QueryMode)
+	}
 
 	overview, err := s.opsRepo.GetDashboardOverview(ctx, filter)
 	if err != nil && shouldFallbackOpsPreagg(filter, err) {

@@ -11,6 +11,9 @@ type opsRepoMock struct {
 	BatchInsertErrorLogsFn        func(ctx context.Context, inputs []*OpsInsertErrorLogInput) (int64, error)
 	BatchInsertSystemLogsFn       func(ctx context.Context, inputs []*OpsInsertSystemLogInput) (int64, error)
 	ListSystemLogsFn              func(ctx context.Context, filter *OpsSystemLogFilter) (*OpsSystemLogList, error)
+	GetDashboardOverviewFn        func(ctx context.Context, filter *OpsDashboardFilter) (*OpsDashboardOverview, error)
+	GetIncidentImpactFn           func(ctx context.Context, filter *OpsDashboardFilter) (*OpsIncidentImpact, error)
+	ListAlertEventsFn             func(ctx context.Context, filter *OpsAlertEventFilter) ([]*OpsAlertEvent, error)
 	DeleteSystemLogsFn            func(ctx context.Context, filter *OpsSystemLogCleanupFilter) (int64, error)
 	InsertSystemLogCleanupAuditFn func(ctx context.Context, input *OpsSystemLogCleanupAudit) error
 }
@@ -82,7 +85,17 @@ func (m *opsRepoMock) GetRealtimeTrafficSummary(ctx context.Context, filter *Ops
 }
 
 func (m *opsRepoMock) GetDashboardOverview(ctx context.Context, filter *OpsDashboardFilter) (*OpsDashboardOverview, error) {
+	if m.GetDashboardOverviewFn != nil {
+		return m.GetDashboardOverviewFn(ctx, filter)
+	}
 	return &OpsDashboardOverview{}, nil
+}
+
+func (m *opsRepoMock) GetIncidentImpact(ctx context.Context, filter *OpsDashboardFilter) (*OpsIncidentImpact, error) {
+	if m.GetIncidentImpactFn != nil {
+		return m.GetIncidentImpactFn(ctx, filter)
+	}
+	return &OpsIncidentImpact{}, nil
 }
 
 func (m *opsRepoMock) GetThroughputTrend(ctx context.Context, filter *OpsDashboardFilter, bucketSeconds int) (*OpsThroughputTrendResponse, error) {
@@ -138,6 +151,9 @@ func (m *opsRepoMock) DeleteAlertRule(ctx context.Context, id int64) error {
 }
 
 func (m *opsRepoMock) ListAlertEvents(ctx context.Context, filter *OpsAlertEventFilter) ([]*OpsAlertEvent, error) {
+	if m.ListAlertEventsFn != nil {
+		return m.ListAlertEventsFn(ctx, filter)
+	}
 	return []*OpsAlertEvent{}, nil
 }
 
