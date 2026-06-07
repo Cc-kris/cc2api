@@ -488,3 +488,49 @@ func TestMigration149CreatesOpsSemanticCacheEntries(t *testing.T) {
 	require.NotContains(t, sql, "DELETE FROM ops_semantic_cache_entries")
 	require.NotContains(t, sql, "TRUNCATE")
 }
+
+func TestMigration150CreatesOpsSemanticCacheAudits(t *testing.T) {
+	content, err := FS.ReadFile("150_ops_semantic_cache_audits.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "CREATE TABLE IF NOT EXISTS ops_semantic_cache_audits")
+	for _, column := range []string{
+		"request_id VARCHAR(128) NOT NULL",
+		"semantic_entry_id BIGINT REFERENCES ops_semantic_cache_entries(id) ON DELETE SET NULL",
+		"occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()",
+		"platform VARCHAR(32) NOT NULL",
+		"model VARCHAR(128) NOT NULL",
+		"api_key_id BIGINT",
+		"similarity DECIMAL(8,6) NOT NULL DEFAULT 0",
+		"decision VARCHAR(32) NOT NULL",
+		"block_reason VARCHAR(128)",
+		"review_status VARCHAR(32) NOT NULL DEFAULT 'pending'",
+		"feedback_type VARCHAR(32) NOT NULL DEFAULT 'none'",
+		"feedback_note TEXT",
+		"operator_user_id BIGINT",
+		"auto_close_reason TEXT",
+		"source_summary TEXT",
+		"target_summary TEXT",
+	} {
+		require.Contains(t, sql, column)
+	}
+	require.Contains(t, sql, "CHECK (decision IN ('observe', 'hit', 'miss', 'blocked', 'rollback'))")
+	require.Contains(t, sql, "CHECK (review_status IN ('pending', 'reusable', 'not_reusable', 'disputed'))")
+	require.Contains(t, sql, "CHECK (feedback_type IN ('none', 'wrong_hit', 'complaint', 'manual_mark'))")
+	require.Contains(t, sql, "CHECK (similarity >= 0 AND similarity <= 1)")
+	require.Contains(t, sql, "api_key_id IS NULL OR api_key_id >= 0")
+	require.Contains(t, sql, "operator_user_id IS NULL OR operator_user_id >= 0")
+	require.Contains(t, sql, "length(trim(request_id)) > 0")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_semantic_cache_audits_occurred_at")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_semantic_cache_audits_entry")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_semantic_cache_audits_platform_model")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_semantic_cache_audits_api_key")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_semantic_cache_audits_decision_review")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_semantic_cache_audits_similarity")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_semantic_cache_audits_request_id")
+	require.NotContains(t, sql, "DROP TABLE")
+	require.NotContains(t, sql, "DROP COLUMN")
+	require.NotContains(t, sql, "DELETE FROM ops_semantic_cache_audits")
+	require.NotContains(t, sql, "TRUNCATE")
+}
