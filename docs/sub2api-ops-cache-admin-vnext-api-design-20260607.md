@@ -490,6 +490,8 @@ HTTP/1.1 202 Accepted
 
 并发控制：创建任务时在数据库事务内加锁，先检查同一筛选范围是否已有进行中任务，再检查队列上限，最后写入任务，避免重复提交和并发突破队列限制。
 
+Worker 状态流转：后台 Worker 以 `FOR UPDATE SKIP LOCKED` 原子领取最早 `pending` 任务并置为 `running`；执行成功后置为 `completed` 并写入 `sample_count`、`finished_at`；执行失败后置为 `failed` 并写入脱敏后的 `error_message`、`finished_at`。服务停止或上下文取消时保持 `running`，不误标失败。
+
 权限：平台所有者、管理员、运维角色可调用；其它后台角色返回 403。
 
 ### 6.5 获取 AI 分析任务和报告

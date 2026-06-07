@@ -114,3 +114,58 @@ func taskRows() *sqlmock.Rows {
 		"filters", "status", "sample_count", "provider", "model", "error_message", "started_at", "finished_at", "created_at", "updated_at",
 	})
 }
+
+func TestClaimNextAIAnalysisTask(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	repo := &opsRepository{db: db}
+	start := time.Date(2026, 6, 8, 10, 0, 0, 0, time.UTC)
+	createdAt := start.Add(time.Minute)
+	mock.ExpectQuery(`(?s)WITH picked AS \(.*FOR UPDATE SKIP LOCKED.*UPDATE ops_ai_analysis_tasks t.*status = 'running'.*RETURNING t\.id`).
+		WillReturnRows(taskRows().AddRow(int64(77), service.OpsAIAnalysisSourceUnifiedErrors, nil, service.OpsAIAnalysisTriggerManual, int64(7), start, start.Add(30*time.Minute), `{"platform":"openai"}`, service.OpsAIAnalysisStatusRunning, 0, "responses", "gpt-5.5", "", createdAt, nil, createdAt, createdAt))
+
+	got, err := repo.ClaimNextAIAnalysisTask(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Equal(t, int64(77), got.ID)
+	require.Equal(t, service.OpsAIAnalysisStatusRunning, got.Status)
+	require.NotNil(t, got.StartedAt)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestClaimNextAIAnalysisTaskNoRows(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	repo := &opsRepository{db: db}
+	mock.ExpectQuery(`(?s)WITH picked AS \(`).WillReturnError(sql.ErrNoRows)
+	got, err := repo.ClaimNextAIAnalysisTask(context.Background())
+	require.NoError(t, err)
+	require.Nil(t, got)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUpdateAIAnalysisTask(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	repo := &opsRepository{db: db}
+	start := time.Date(2026, 6, 8, 10, 0, 0, 0, time.UTC)
+	finishedAt := start.Add(2 * time.Minute)
+	sampleCount := 5
+	message := "done"
+	mock.ExpectQuery(`(?s)UPDATE ops_ai_analysis_tasks\s+SET status = \$2,.*finished_at = \$6.*WHERE id = \$1.*RETURNING id`).
+		WithArgs(int64(77), service.OpsAIAnalysisStatusCompleted, sampleCount, message, nil, finishedAt).
+		WillReturnRows(taskRows().AddRow(int64(77), service.OpsAIAnalysisSourceUnifiedErrors, nil, service.OpsAIAnalysisTriggerManual, int64(7), start, start.Add(30*time.Minute), `{"platform":"openai"}`, service.OpsAIAnalysisStatusCompleted, sampleCount, "responses", "gpt-5.5", message, start.Add(time.Minute), finishedAt, start, finishedAt))
+
+	got, err := repo.UpdateAIAnalysisTask(context.Background(), 77, &service.OpsAIAnalysisTaskUpdate{Status: service.OpsAIAnalysisStatusCompleted, SampleCount: &sampleCount, ErrorMessage: &message, FinishedAt: &finishedAt})
+	require.NoError(t, err)
+	require.Equal(t, service.OpsAIAnalysisStatusCompleted, got.Status)
+	require.Equal(t, sampleCount, got.SampleCount)
+	require.Equal(t, message, got.ErrorMessage)
+	require.NoError(t, mock.ExpectationsWereMet())
+}

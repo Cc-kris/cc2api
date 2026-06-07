@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -40,6 +41,14 @@ type OpsService struct {
 	systemLogSink             *OpsSystemLogSink
 	secretEncryptor           SecretEncryptor
 	aiAnalysisHTTPClient      *http.Client
+
+	aiWorkerStartOnce      sync.Once
+	aiWorkerStopOnce       sync.Once
+	aiWorkerRunning        int32
+	aiWorkerCtx            context.Context
+	aiWorkerCancel         context.CancelFunc
+	aiExecutorMu           sync.Mutex
+	aiAnalysisTaskExecutor OpsAIAnalysisTaskExecutor
 
 	// cleanupReloader 由 wire 在 OpsCleanupService 构造完成后通过 SetCleanupReloader 注入。
 	// 解耦避免 OpsService -> OpsCleanupService 的硬依赖（cleanup 也读 settings，会循环）。

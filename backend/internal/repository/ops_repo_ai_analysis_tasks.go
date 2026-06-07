@@ -161,3 +161,69 @@ func scanOpsAIAnalysisTask(row opsAIAnalysisTaskScanner) (*service.OpsAIAnalysis
 	}
 	return &task, nil
 }
+
+func (r *opsRepository) ClaimNextAIAnalysisTask(ctx context.Context) (*service.OpsAIAnalysisTask, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("nil ops repository")
+	}
+	row := r.db.QueryRowContext(ctx, `
+WITH picked AS (
+  SELECT id
+  FROM ops_ai_analysis_tasks
+  WHERE status = 'pending'
+  ORDER BY created_at ASC, id ASC
+  FOR UPDATE SKIP LOCKED
+  LIMIT 1
+)
+UPDATE ops_ai_analysis_tasks t
+SET status = 'running', started_at = COALESCE(t.started_at, NOW()), updated_at = NOW(), error_message = NULL
+FROM picked
+WHERE t.id = picked.id
+RETURNING t.id, t.source_type, t.source_id, t.trigger_type, t.trigger_user_id, t.time_start, t.time_end,
+          t.filters::text, t.status, t.sample_count, t.provider, t.model, COALESCE(t.error_message,''),
+          t.started_at, t.finished_at, t.created_at, t.updated_at`)
+	task, err := scanOpsAIAnalysisTask(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return task, nil
+}
+
+func (r *opsRepository) UpdateAIAnalysisTask(ctx context.Context, taskID int64, update *service.OpsAIAnalysisTaskUpdate) (*service.OpsAIAnalysisTask, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("nil ops repository")
+	}
+	if taskID <= 0 || update == nil {
+		return nil, errors.New("invalid AI analysis task update")
+	}
+	row := r.db.QueryRowContext(ctx, `
+UPDATE ops_ai_analysis_tasks
+SET status = $2,
+    sample_count = COALESCE($3, sample_count),
+    error_message = $4,
+    started_at = COALESCE($5, started_at),
+    finished_at = $6,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, source_type, source_id, trigger_type, trigger_user_id, time_start, time_end,
+          filters::text, status, sample_count, provider, model, COALESCE(error_message,''),
+          started_at, finished_at, created_at, updated_at`,
+		taskID,
+		update.Status,
+		opsAINullInt(update.SampleCount),
+		opsNullString(update.ErrorMessage),
+		opsNullTime(update.StartedAt),
+		opsNullTime(update.FinishedAt),
+	)
+	return scanOpsAIAnalysisTask(row)
+}
+
+func opsAINullInt(v *int) any {
+	if v == nil {
+		return nil
+	}
+	return *v
+}

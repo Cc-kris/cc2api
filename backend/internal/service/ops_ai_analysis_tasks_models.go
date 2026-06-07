@@ -74,3 +74,11 @@ type OpsAIAnalysisTaskCreateResponse struct {
 	MatchedErrorCount int    `json:"matched_error_count"`
 	Message           string `json:"message"`
 }
+
+type OpsAIAnalysisTaskUpdate struct {
+	Status       string
+	SampleCount  *int
+	ErrorMessage *string
+	StartedAt    *time.Time
+	FinishedAt   *time.Time
+}

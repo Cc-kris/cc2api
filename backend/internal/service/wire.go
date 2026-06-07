@@ -456,6 +456,7 @@ func ProvideOpsService(
 ) *OpsService {
 	svc := NewOpsService(opsRepo, settingRepo, cfg, accountRepo, userRepo, concurrencyService, gatewayService, openAIGatewayService, geminiCompatService, antigravityGatewayService, systemLogSink)
 	svc.SetSecretEncryptor(encryptor)
+	svc.StartAIAnalysisWorker()
 	return svc
 }
 

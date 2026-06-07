@@ -11,6 +11,8 @@ type opsRepoMock struct {
 	BatchInsertErrorLogsFn          func(ctx context.Context, inputs []*OpsInsertErrorLogInput) (int64, error)
 	ListUnifiedErrorsFn             func(ctx context.Context, filter *OpsUnifiedErrorListFilter) (*OpsUnifiedErrorList, error)
 	CreateAIAnalysisTaskIfAllowedFn func(ctx context.Context, input *OpsAIAnalysisTaskCreateInput, maxActive int) (*OpsAIAnalysisTask, OpsAIAnalysisTaskCreateResult, error)
+	ClaimNextAIAnalysisTaskFn       func(ctx context.Context) (*OpsAIAnalysisTask, error)
+	UpdateAIAnalysisTaskFn          func(ctx context.Context, taskID int64, update *OpsAIAnalysisTaskUpdate) (*OpsAIAnalysisTask, error)
 	GetErrorLogByIDFn               func(ctx context.Context, id int64) (*OpsErrorLogDetail, error)
 	BatchInsertSystemLogsFn         func(ctx context.Context, inputs []*OpsInsertSystemLogInput) (int64, error)
 	ListSystemLogsFn                func(ctx context.Context, filter *OpsSystemLogFilter) (*OpsSystemLogList, error)
@@ -61,6 +63,20 @@ func (m *opsRepoMock) CreateAIAnalysisTaskIfAllowed(ctx context.Context, input *
 		return m.CreateAIAnalysisTaskIfAllowedFn(ctx, input, maxActive)
 	}
 	return &OpsAIAnalysisTask{ID: 1, SourceType: input.SourceType, SourceID: input.SourceID, TriggerType: input.TriggerType, TriggerUserID: input.TriggerUserID, TimeStart: input.TimeStart, TimeEnd: input.TimeEnd, FiltersJSON: input.FiltersJSON, Status: input.Status, SampleCount: input.SampleCount, Provider: input.Provider, Model: input.Model, CreatedAt: time.Now(), UpdatedAt: time.Now()}, OpsAIAnalysisTaskCreateResultCreated, nil
+}
+
+func (m *opsRepoMock) ClaimNextAIAnalysisTask(ctx context.Context) (*OpsAIAnalysisTask, error) {
+	if m.ClaimNextAIAnalysisTaskFn != nil {
+		return m.ClaimNextAIAnalysisTaskFn(ctx)
+	}
+	return nil, nil
+}
+
+func (m *opsRepoMock) UpdateAIAnalysisTask(ctx context.Context, taskID int64, update *OpsAIAnalysisTaskUpdate) (*OpsAIAnalysisTask, error) {
+	if m.UpdateAIAnalysisTaskFn != nil {
+		return m.UpdateAIAnalysisTaskFn(ctx, taskID, update)
+	}
+	return &OpsAIAnalysisTask{ID: taskID, Status: update.Status, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
 }
 
 func (m *opsRepoMock) GetErrorLogByID(ctx context.Context, id int64) (*OpsErrorLogDetail, error) {
