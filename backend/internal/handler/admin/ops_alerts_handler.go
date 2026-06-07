@@ -865,7 +865,9 @@ func (h *OpsHandler) UpdateAlertEventStatus(c *gin.Context) {
 	}
 
 	var payload struct {
-		Status string `json:"status"`
+		Status           string `json:"status"`
+		Note             string `json:"note"`
+		ProcessingAction string `json:"processing_action"`
 	}
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		response.BadRequest(c, "Invalid request body")
@@ -876,17 +878,25 @@ func (h *OpsHandler) UpdateAlertEventStatus(c *gin.Context) {
 		response.BadRequest(c, "Invalid status")
 		return
 	}
-	if payload.Status != service.OpsAlertStatusResolved && payload.Status != service.OpsAlertStatusManualResolved {
+	status := service.NormalizeOpsAlertLifecycleStatusForAPI(payload.Status)
+	if !service.IsValidOpsAlertLifecycleStatusForAPI(status) {
 		response.BadRequest(c, "Invalid status")
 		return
 	}
 
 	var resolvedAt *time.Time
-	if payload.Status == service.OpsAlertStatusResolved || payload.Status == service.OpsAlertStatusManualResolved {
+	if status == service.OpsAlertStatusRecovered || status == service.OpsAlertStatusClosed {
 		now := time.Now().UTC()
 		resolvedAt = &now
 	}
-	if err := h.opsService.UpdateAlertEventStatus(c.Request.Context(), id, payload.Status, resolvedAt); err != nil {
+	operatorID := (*int64)(nil)
+	if subject, ok := middleware.GetAuthSubjectFromContext(c); ok {
+		uid := subject.UserID
+		operatorID = &uid
+	}
+	note := strings.TrimSpace(payload.Note)
+	processingAction := strings.TrimSpace(payload.ProcessingAction)
+	if err := h.opsService.UpdateAlertEventStatus(c.Request.Context(), id, status, note, processingAction, operatorID, resolvedAt); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}

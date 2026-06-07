@@ -50,7 +50,7 @@ type OpsRepository interface {
 	GetMergeableAlertEvent(ctx context.Context, eventKey string, since time.Time) (*OpsAlertEvent, error)
 	CreateAlertEvent(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error)
 	MergeAlertEvent(ctx context.Context, eventID int64, event *OpsAlertEvent) (*OpsAlertEvent, error)
-	UpdateAlertEventStatus(ctx context.Context, eventID int64, status string, resolvedAt *time.Time) error
+	UpdateAlertEventStatus(ctx context.Context, eventID int64, status string, note string, processingAction string, operatorID *int64, resolvedAt *time.Time) error
 	UpdateAlertEventEmailSent(ctx context.Context, eventID int64, emailSent bool) error
 
 	// Alert silences

@@ -491,7 +491,7 @@ func (s *OpsService) CreateAlertEvent(ctx context.Context, event *OpsAlertEvent)
 	return created, nil
 }
 
-func (s *OpsService) UpdateAlertEventStatus(ctx context.Context, eventID int64, status string, resolvedAt *time.Time) error {
+func (s *OpsService) UpdateAlertEventStatus(ctx context.Context, eventID int64, status string, note string, processingAction string, operatorID *int64, resolvedAt *time.Time) error {
 	if err := s.RequireMonitoringEnabled(ctx); err != nil {
 		return err
 	}
@@ -501,14 +501,47 @@ func (s *OpsService) UpdateAlertEventStatus(ctx context.Context, eventID int64, 
 	if eventID <= 0 {
 		return infraerrors.BadRequest("INVALID_EVENT_ID", "invalid event id")
 	}
-	status = strings.TrimSpace(status)
+	status = normalizeOpsAlertLifecycleStatus(status)
 	if status == "" {
 		return infraerrors.BadRequest("INVALID_STATUS", "invalid status")
 	}
-	if status != OpsAlertStatusResolved && status != OpsAlertStatusManualResolved {
+	if !isValidOpsAlertLifecycleStatus(status) {
 		return infraerrors.BadRequest("INVALID_STATUS", "invalid status")
 	}
-	return s.opsRepo.UpdateAlertEventStatus(ctx, eventID, status, resolvedAt)
+	return s.opsRepo.UpdateAlertEventStatus(ctx, eventID, status, strings.TrimSpace(note), strings.TrimSpace(processingAction), operatorID, resolvedAt)
+}
+
+func normalizeOpsAlertLifecycleStatus(status string) string {
+	switch strings.TrimSpace(status) {
+	case OpsAlertStatusResolved:
+		return OpsAlertStatusRecovered
+	case OpsAlertStatusManualResolved:
+		return OpsAlertStatusClosed
+	default:
+		return strings.TrimSpace(status)
+	}
+}
+
+func NormalizeOpsAlertLifecycleStatusForAPI(status string) string {
+	return normalizeOpsAlertLifecycleStatus(status)
+}
+
+func isValidOpsAlertLifecycleStatus(status string) bool {
+	switch strings.TrimSpace(status) {
+	case OpsAlertStatusFiring,
+		OpsAlertStatusAcknowledged,
+		OpsAlertStatusProcessing,
+		OpsAlertStatusRecovered,
+		OpsAlertStatusClosed,
+		OpsAlertStatusSilenced:
+		return true
+	default:
+		return false
+	}
+}
+
+func IsValidOpsAlertLifecycleStatusForAPI(status string) bool {
+	return isValidOpsAlertLifecycleStatus(status)
 }
 
 func (s *OpsService) UpdateAlertEventEmailSent(ctx context.Context, eventID int64, emailSent bool) error {

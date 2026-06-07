@@ -336,7 +336,7 @@ func (s *OpsAlertEvaluatorService) evaluateOnce(interval time.Duration) {
 		// Not breached: resolve active event if present.
 		if activeEvent != nil {
 			resolvedAt := now
-			if err := s.opsRepo.UpdateAlertEventStatus(ctx, activeEvent.ID, OpsAlertStatusResolved, &resolvedAt); err != nil {
+			if err := s.opsRepo.UpdateAlertEventStatus(ctx, activeEvent.ID, OpsAlertStatusRecovered, "", "", nil, &resolvedAt); err != nil {
 				logger.LegacyPrintf("service.ops_alert_evaluator", "[OpsAlertEvaluator] resolve event failed (event=%d): %v", activeEvent.ID, err)
 			} else {
 				eventsResolved++

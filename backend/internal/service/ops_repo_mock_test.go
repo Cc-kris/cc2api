@@ -22,6 +22,7 @@ type opsRepoMock struct {
 	GetMergeableAlertEventFn      func(ctx context.Context, eventKey string, since time.Time) (*OpsAlertEvent, error)
 	CreateAlertEventFn            func(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error)
 	MergeAlertEventFn             func(ctx context.Context, eventID int64, event *OpsAlertEvent) (*OpsAlertEvent, error)
+	UpdateAlertEventStatusFn      func(ctx context.Context, eventID int64, status string, note string, processingAction string, operatorID *int64, resolvedAt *time.Time) error
 	DeleteSystemLogsFn            func(ctx context.Context, filter *OpsSystemLogCleanupFilter) (int64, error)
 	InsertSystemLogCleanupAuditFn func(ctx context.Context, input *OpsSystemLogCleanupAudit) error
 }
@@ -215,7 +216,10 @@ func (m *opsRepoMock) MergeAlertEvent(ctx context.Context, eventID int64, event 
 	return event, nil
 }
 
-func (m *opsRepoMock) UpdateAlertEventStatus(ctx context.Context, eventID int64, status string, resolvedAt *time.Time) error {
+func (m *opsRepoMock) UpdateAlertEventStatus(ctx context.Context, eventID int64, status string, note string, processingAction string, operatorID *int64, resolvedAt *time.Time) error {
+	if m.UpdateAlertEventStatusFn != nil {
+		return m.UpdateAlertEventStatusFn(ctx, eventID, status, note, processingAction, operatorID, resolvedAt)
+	}
 	return nil
 }
 

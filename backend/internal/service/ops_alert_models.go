@@ -9,6 +9,11 @@ import "time"
 
 const (
 	OpsAlertStatusFiring         = "firing"
+	OpsAlertStatusAcknowledged   = "acknowledged"
+	OpsAlertStatusProcessing     = "processing"
+	OpsAlertStatusRecovered      = "recovered"
+	OpsAlertStatusClosed         = "closed"
+	OpsAlertStatusSilenced       = "silenced"
 	OpsAlertStatusResolved       = "resolved"
 	OpsAlertStatusManualResolved = "manual_resolved"
 )
@@ -75,8 +80,23 @@ type OpsAlertEvent struct {
 	TriggerSnapshot map[string]any `json:"trigger_snapshot,omitempty"`
 	ScoreSnapshot   map[string]any `json:"score_snapshot,omitempty"`
 
-	FiredAt    time.Time  `json:"fired_at"`
-	ResolvedAt *time.Time `json:"resolved_at,omitempty"`
+	FiredAt     time.Time  `json:"fired_at"`
+	ResolvedAt  *time.Time `json:"resolved_at,omitempty"`
+	RecoveredAt *time.Time `json:"recovered_at,omitempty"`
+
+	AcknowledgedAt   *time.Time `json:"acknowledged_at,omitempty"`
+	AcknowledgedBy   *int64     `json:"acknowledged_by,omitempty"`
+	AcknowledgedNote string     `json:"acknowledged_note,omitempty"`
+
+	ProcessingAt     *time.Time `json:"processing_at,omitempty"`
+	ProcessingBy     *int64     `json:"processing_by,omitempty"`
+	ProcessingNote   string     `json:"processing_note,omitempty"`
+	ProcessingAction string     `json:"processing_action,omitempty"`
+
+	ClosedAt     *time.Time `json:"closed_at,omitempty"`
+	ClosedBy     *int64     `json:"closed_by,omitempty"`
+	ClosedReason string     `json:"closed_reason,omitempty"`
+	AITaskID     *int64     `json:"ai_task_id,omitempty"`
 
 	EmailSent        bool       `json:"email_sent"`
 	CreatedAt        time.Time  `json:"created_at"`

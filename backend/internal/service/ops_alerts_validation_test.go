@@ -176,3 +176,60 @@ func TestBuildOpsAlertEventKeyUsesPRDDedupDimensions(t *testing.T) {
 
 	require.Equal(t, "upstream,rate_limit|error_rate|7|gpt-5.5|42|P1", got)
 }
+
+func TestOpsServiceUpdateAlertEventStatusSupportsLifecycleStatuses(t *testing.T) {
+	operatorID := int64(6)
+	resolvedAt := time.Date(2026, 6, 7, 10, 5, 0, 0, time.UTC)
+	tests := []struct {
+		name       string
+		input      string
+		want       string
+		resolvedAt *time.Time
+	}{
+		{name: "acknowledged", input: OpsAlertStatusAcknowledged, want: OpsAlertStatusAcknowledged},
+		{name: "processing", input: OpsAlertStatusProcessing, want: OpsAlertStatusProcessing},
+		{name: "recovered", input: OpsAlertStatusRecovered, want: OpsAlertStatusRecovered, resolvedAt: &resolvedAt},
+		{name: "closed", input: OpsAlertStatusClosed, want: OpsAlertStatusClosed, resolvedAt: &resolvedAt},
+		{name: "silenced", input: OpsAlertStatusSilenced, want: OpsAlertStatusSilenced},
+		{name: "legacy resolved", input: OpsAlertStatusResolved, want: OpsAlertStatusRecovered, resolvedAt: &resolvedAt},
+		{name: "legacy manual resolved", input: OpsAlertStatusManualResolved, want: OpsAlertStatusClosed, resolvedAt: &resolvedAt},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			var gotStatus string
+			var gotNote string
+			var gotProcessingAction string
+			var gotOperatorID *int64
+			repo := &opsRepoMock{
+				UpdateAlertEventStatusFn: func(ctx context.Context, eventID int64, status string, note string, processingAction string, operatorID *int64, resolvedAt *time.Time) error {
+					gotStatus = status
+					gotNote = note
+					gotProcessingAction = processingAction
+					gotOperatorID = operatorID
+					return nil
+				},
+			}
+			svc := NewOpsService(repo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+			err := svc.UpdateAlertEventStatus(context.Background(), 31, tt.input, "备注", "独立处理动作", &operatorID, tt.resolvedAt)
+
+			require.NoError(t, err)
+			require.Equal(t, tt.want, gotStatus)
+			require.Equal(t, "备注", gotNote)
+			require.Equal(t, "独立处理动作", gotProcessingAction)
+			require.NotNil(t, gotOperatorID)
+			require.Equal(t, operatorID, *gotOperatorID)
+		})
+	}
+}
+
+func TestOpsServiceUpdateAlertEventStatusRejectsInvalidLifecycleStatus(t *testing.T) {
+	repo := &opsRepoMock{}
+	svc := NewOpsService(repo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	err := svc.UpdateAlertEventStatus(context.Background(), 31, "invalid", "", "", nil, nil)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid status")
+}

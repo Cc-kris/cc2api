@@ -522,6 +522,18 @@ SELECT
   score_snapshot,
   fired_at,
   resolved_at,
+  recovered_at,
+  acknowledged_at,
+  acknowledged_by,
+  acknowledged_note,
+  processing_at,
+  processing_by,
+  processing_note,
+  processing_action,
+  closed_at,
+  closed_by,
+  closed_reason,
+  ai_task_id,
   email_sent,
   created_at
 FROM ops_alert_events
@@ -576,6 +588,18 @@ SELECT
   score_snapshot,
   fired_at,
   resolved_at,
+  recovered_at,
+  acknowledged_at,
+  acknowledged_by,
+  acknowledged_note,
+  processing_at,
+  processing_by,
+  processing_note,
+  processing_action,
+  closed_at,
+  closed_by,
+  closed_reason,
+  ai_task_id,
   email_sent,
   created_at
 FROM ops_alert_events
@@ -619,14 +643,27 @@ SELECT
   score_snapshot,
   fired_at,
   resolved_at,
+  recovered_at,
+  acknowledged_at,
+  acknowledged_by,
+  acknowledged_note,
+  processing_at,
+  processing_by,
+  processing_note,
+  processing_action,
+  closed_at,
+  closed_by,
+  closed_reason,
+  ai_task_id,
   email_sent,
   created_at
 FROM ops_alert_events
-WHERE rule_id = $1 AND status = $2
+WHERE rule_id = $1
+  AND COALESCE(lifecycle_status, status) IN ('firing', 'acknowledged', 'processing', 'silenced')
 ORDER BY fired_at DESC
 LIMIT 1`
 
-	row := r.db.QueryRowContext(ctx, q, ruleID, service.OpsAlertStatusFiring)
+	row := r.db.QueryRowContext(ctx, q, ruleID)
 	ev, err := scanOpsAlertEvent(row)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -664,6 +701,18 @@ SELECT
   score_snapshot,
   fired_at,
   resolved_at,
+  recovered_at,
+  acknowledged_at,
+  acknowledged_by,
+  acknowledged_note,
+  processing_at,
+  processing_by,
+  processing_note,
+  processing_action,
+  closed_at,
+  closed_by,
+  closed_reason,
+  ai_task_id,
   email_sent,
   created_at
 FROM ops_alert_events
@@ -713,6 +762,18 @@ SELECT
   score_snapshot,
   fired_at,
   resolved_at,
+  recovered_at,
+  acknowledged_at,
+  acknowledged_by,
+  acknowledged_note,
+  processing_at,
+  processing_by,
+  processing_note,
+  processing_action,
+  closed_at,
+  closed_by,
+  closed_reason,
+  ai_task_id,
   email_sent,
   created_at
 FROM ops_alert_events
@@ -805,6 +866,18 @@ RETURNING
   score_snapshot,
   fired_at,
   resolved_at,
+  recovered_at,
+  acknowledged_at,
+  acknowledged_by,
+  acknowledged_note,
+  processing_at,
+  processing_by,
+  processing_note,
+  processing_action,
+  closed_at,
+  closed_by,
+  closed_reason,
+  ai_task_id,
   email_sent,
   created_at`
 
@@ -884,6 +957,18 @@ RETURNING
   score_snapshot,
   fired_at,
   resolved_at,
+  recovered_at,
+  acknowledged_at,
+  acknowledged_by,
+  acknowledged_note,
+  processing_at,
+  processing_by,
+  processing_note,
+  processing_action,
+  closed_at,
+  closed_by,
+  closed_reason,
+  ai_task_id,
   email_sent,
   created_at`
 
@@ -906,7 +991,7 @@ RETURNING
 	return scanOpsAlertEvent(row)
 }
 
-func (r *opsRepository) UpdateAlertEventStatus(ctx context.Context, eventID int64, status string, resolvedAt *time.Time) error {
+func (r *opsRepository) UpdateAlertEventStatus(ctx context.Context, eventID int64, status string, note string, processingAction string, operatorID *int64, resolvedAt *time.Time) error {
 	if r == nil || r.db == nil {
 		return fmt.Errorf("nil ops repository")
 	}
@@ -920,17 +1005,22 @@ func (r *opsRepository) UpdateAlertEventStatus(ctx context.Context, eventID int6
 	q := `
 UPDATE ops_alert_events
 SET status = $2,
-    lifecycle_status = CASE
-        WHEN $2 = 'resolved' THEN 'recovered'
-        WHEN $2 = 'manual_resolved' THEN 'closed'
-        ELSE COALESCE(lifecycle_status, $2)
-    END,
-    recovered_at = CASE WHEN $2 = 'resolved' THEN $3 ELSE recovered_at END,
-    closed_at = CASE WHEN $2 = 'manual_resolved' THEN $3 ELSE closed_at END,
-    resolved_at = $3
+    lifecycle_status = $2,
+    acknowledged_at = CASE WHEN $2 = 'acknowledged' THEN COALESCE(acknowledged_at, NOW()) ELSE acknowledged_at END,
+    acknowledged_by = CASE WHEN $2 = 'acknowledged' THEN COALESCE($5, acknowledged_by) ELSE acknowledged_by END,
+    acknowledged_note = CASE WHEN $2 = 'acknowledged' THEN COALESCE($3, acknowledged_note) ELSE acknowledged_note END,
+    processing_at = CASE WHEN $2 = 'processing' THEN COALESCE(processing_at, NOW()) ELSE processing_at END,
+    processing_by = CASE WHEN $2 = 'processing' THEN COALESCE($5, processing_by) ELSE processing_by END,
+    processing_note = CASE WHEN $2 = 'processing' THEN COALESCE($3, processing_note) ELSE processing_note END,
+    processing_action = CASE WHEN $2 = 'processing' THEN COALESCE($4, processing_action) ELSE processing_action END,
+    recovered_at = CASE WHEN $2 = 'recovered' THEN COALESCE($6, NOW()) ELSE recovered_at END,
+    closed_at = CASE WHEN $2 = 'closed' THEN COALESCE($6, NOW()) ELSE closed_at END,
+    closed_by = CASE WHEN $2 = 'closed' THEN COALESCE($5, closed_by) ELSE closed_by END,
+    closed_reason = CASE WHEN $2 = 'closed' THEN COALESCE($3, closed_reason) ELSE closed_reason END,
+    resolved_at = CASE WHEN $2 IN ('recovered', 'closed') THEN COALESCE($6, NOW()) ELSE resolved_at END
 WHERE id = $1`
 
-	_, err := r.db.ExecContext(ctx, q, eventID, strings.TrimSpace(status), opsNullTime(resolvedAt))
+	_, err := r.db.ExecContext(ctx, q, eventID, strings.TrimSpace(status), opsNullString(note), opsNullString(processingAction), opsNullInt64(operatorID), opsNullTime(resolvedAt))
 	return err
 }
 
@@ -1117,6 +1207,18 @@ func scanOpsAlertEvent(row opsAlertEventRow) (*service.OpsAlertEvent, error) {
 	var triggerSnapshotRaw []byte
 	var scoreSnapshotRaw []byte
 	var resolvedAt sql.NullTime
+	var recoveredAt sql.NullTime
+	var acknowledgedAt sql.NullTime
+	var acknowledgedBy sql.NullInt64
+	var acknowledgedNote sql.NullString
+	var processingAt sql.NullTime
+	var processingBy sql.NullInt64
+	var processingNote sql.NullString
+	var processingAction sql.NullString
+	var closedAt sql.NullTime
+	var closedBy sql.NullInt64
+	var closedReason sql.NullString
+	var aiTaskID sql.NullInt64
 
 	if err := row.Scan(
 		&ev.ID,
@@ -1136,6 +1238,18 @@ func scanOpsAlertEvent(row opsAlertEventRow) (*service.OpsAlertEvent, error) {
 		&scoreSnapshotRaw,
 		&ev.FiredAt,
 		&resolvedAt,
+		&recoveredAt,
+		&acknowledgedAt,
+		&acknowledgedBy,
+		&acknowledgedNote,
+		&processingAt,
+		&processingBy,
+		&processingNote,
+		&processingAction,
+		&closedAt,
+		&closedBy,
+		&closedReason,
+		&aiTaskID,
 		&ev.EmailSent,
 		&ev.CreatedAt,
 	); err != nil {
@@ -1152,6 +1266,50 @@ func scanOpsAlertEvent(row opsAlertEventRow) (*service.OpsAlertEvent, error) {
 	if resolvedAt.Valid {
 		v := resolvedAt.Time
 		ev.ResolvedAt = &v
+	}
+	if recoveredAt.Valid {
+		v := recoveredAt.Time
+		ev.RecoveredAt = &v
+	}
+	if acknowledgedAt.Valid {
+		v := acknowledgedAt.Time
+		ev.AcknowledgedAt = &v
+	}
+	if acknowledgedBy.Valid {
+		v := acknowledgedBy.Int64
+		ev.AcknowledgedBy = &v
+	}
+	if acknowledgedNote.Valid {
+		ev.AcknowledgedNote = acknowledgedNote.String
+	}
+	if processingAt.Valid {
+		v := processingAt.Time
+		ev.ProcessingAt = &v
+	}
+	if processingBy.Valid {
+		v := processingBy.Int64
+		ev.ProcessingBy = &v
+	}
+	if processingNote.Valid {
+		ev.ProcessingNote = processingNote.String
+	}
+	if processingAction.Valid {
+		ev.ProcessingAction = processingAction.String
+	}
+	if closedAt.Valid {
+		v := closedAt.Time
+		ev.ClosedAt = &v
+	}
+	if closedBy.Valid {
+		v := closedBy.Int64
+		ev.ClosedBy = &v
+	}
+	if closedReason.Valid {
+		ev.ClosedReason = closedReason.String
+	}
+	if aiTaskID.Valid {
+		v := aiTaskID.Int64
+		ev.AITaskID = &v
 	}
 	if len(dimensionsRaw) > 0 && string(dimensionsRaw) != "null" {
 		var decoded map[string]any
@@ -1184,7 +1342,7 @@ func buildOpsAlertEventsWhere(filter *service.OpsAlertEventFilter) (string, []an
 
 	if status := strings.TrimSpace(filter.Status); status != "" {
 		args = append(args, status)
-		clauses = append(clauses, "status = $"+itoa(len(args)))
+		clauses = append(clauses, "COALESCE(lifecycle_status, status) = $"+itoa(len(args)))
 	}
 	if severity := strings.TrimSpace(filter.Severity); severity != "" {
 		args = append(args, severity)
