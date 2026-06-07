@@ -1,6 +1,7 @@
 package migrations
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -532,5 +533,50 @@ func TestMigration150CreatesOpsSemanticCacheAudits(t *testing.T) {
 	require.NotContains(t, sql, "DROP TABLE")
 	require.NotContains(t, sql, "DROP COLUMN")
 	require.NotContains(t, sql, "DELETE FROM ops_semantic_cache_audits")
+	require.NotContains(t, sql, "TRUNCATE")
+}
+
+func TestMigration151SeedsOpsV2DefaultAlertRules(t *testing.T) {
+	content, err := FS.ReadFile("151_seed_ops_v2_default_alert_rules.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	expectedKeys := []string{
+		"p0_service_unavailable",
+		"p0_final_failures_high",
+		"p0_final_failure_rate_high",
+		"p0_affected_users_concentrated",
+		"p0_affected_api_keys_concentrated",
+		"p0_model_wide_failure",
+		"p0_core_group_unavailable",
+		"p1_final_failures_medium",
+		"p1_final_failure_rate_medium",
+		"p1_upstream_account_concentrated",
+		"p1_model_permission_quota_concentrated",
+		"p1_single_user_severely_affected",
+		"p2_few_final_failures_observe",
+		"p2_recovered_upstream_fluctuation",
+		"p2_single_user_or_key_fluctuation",
+		"p2_slow_request_fluctuation",
+	}
+	jsonKeys := regexp.MustCompile(`"default_rule_key":"([^"]+)"`).FindAllStringSubmatch(sql, -1)
+	whereKeys := regexp.MustCompile(`filters->>'default_rule_key' = '([^']+)'`).FindAllStringSubmatch(sql, -1)
+	gotJSONKeys := make([]string, 0, len(jsonKeys))
+	gotWhereKeys := make([]string, 0, len(whereKeys))
+	for _, match := range jsonKeys {
+		gotJSONKeys = append(gotJSONKeys, match[1])
+	}
+	for _, match := range whereKeys {
+		gotWhereKeys = append(gotWhereKeys, match[1])
+	}
+	require.ElementsMatch(t, expectedKeys, gotJSONKeys)
+	require.ElementsMatch(t, expectedKeys, gotWhereKeys)
+	require.Equal(t, len(expectedKeys), strings.Count(sql, "INSERT INTO ops_alert_rules"))
+	require.Equal(t, len(expectedKeys), strings.Count(sql, "WHERE NOT EXISTS"))
+	require.Contains(t, sql, "rule_version")
+	require.Contains(t, sql, "'v2'")
+	require.Contains(t, sql, "'compound_rule'")
+	require.Contains(t, sql, "notification_channels")
+	require.NotContains(t, sql, "DELETE FROM ops_alert_rules")
 	require.NotContains(t, sql, "TRUNCATE")
 }
