@@ -317,49 +317,22 @@
                 }}
               </p>
             </div>
-            <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div>
-                <label class="input-label">{{ t('admin.accounts.upstreamPrepaidAmount') }}</label>
-                <div class="relative">
-                  <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">$</span>
-                  <input
-                    v-model.number="upstreamPrepaidAmount"
-                    type="number"
-                    min="0"
-                    step="0.000001"
-                    required
-                    class="input pl-7"
-                    data-testid="upstream-prepaid-amount"
-                  />
-                </div>
-                <p class="input-hint">{{ t('admin.accounts.upstreamPrepaidAmountHint') }}</p>
+            <div>
+              <label class="input-label">{{ t('admin.accounts.upstreamPrepaidAmount') }}</label>
+              <div class="relative">
+                <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">$</span>
+                <input
+                  v-model.number="upstreamPrepaidAmount"
+                  type="number"
+                  min="0"
+                  step="0.000001"
+                  required
+                  class="input pl-7"
+                  data-testid="upstream-prepaid-amount"
+                />
               </div>
-              <div>
-                <label class="input-label">{{ t('admin.accounts.upstreamWarningAmount') }}</label>
-                <div class="relative">
-                  <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">$</span>
-                  <input
-                    v-model.number="upstreamWarningAmount"
-                    type="number"
-                    min="0"
-                    step="0.000001"
-                    required
-                    class="input pl-7"
-                    data-testid="upstream-warning-amount"
-                  />
-                </div>
-                <p class="input-hint">{{ t('admin.accounts.upstreamWarningAmountHint') }}</p>
-              </div>
+              <p class="input-hint">{{ t('admin.accounts.upstreamPrepaidAmountHint') }}</p>
             </div>
-            <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
-              <input
-                v-model="upstreamNotifyEnabled"
-                type="checkbox"
-                class="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                data-testid="upstream-notify-enabled"
-              />
-              <span>{{ t('admin.accounts.upstreamNotifyEnabled') }}</span>
-            </label>
           </div>
         </div>
 
@@ -1062,49 +1035,22 @@
                 }}
               </p>
             </div>
-            <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div>
-                <label class="input-label">{{ t('admin.accounts.upstreamPrepaidAmount') }}</label>
-                <div class="relative">
-                  <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">$</span>
-                  <input
-                    v-model.number="upstreamPrepaidAmount"
-                    type="number"
-                    min="0"
-                    step="0.000001"
-                    required
-                    class="input pl-7"
-                    data-testid="upstream-prepaid-amount"
-                  />
-                </div>
-                <p class="input-hint">{{ t('admin.accounts.upstreamPrepaidAmountHint') }}</p>
+            <div>
+              <label class="input-label">{{ t('admin.accounts.upstreamPrepaidAmount') }}</label>
+              <div class="relative">
+                <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">$</span>
+                <input
+                  v-model.number="upstreamPrepaidAmount"
+                  type="number"
+                  min="0"
+                  step="0.000001"
+                  required
+                  class="input pl-7"
+                  data-testid="upstream-prepaid-amount"
+                />
               </div>
-              <div>
-                <label class="input-label">{{ t('admin.accounts.upstreamWarningAmount') }}</label>
-                <div class="relative">
-                  <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">$</span>
-                  <input
-                    v-model.number="upstreamWarningAmount"
-                    type="number"
-                    min="0"
-                    step="0.000001"
-                    required
-                    class="input pl-7"
-                    data-testid="upstream-warning-amount"
-                  />
-                </div>
-                <p class="input-hint">{{ t('admin.accounts.upstreamWarningAmountHint') }}</p>
-              </div>
+              <p class="input-hint">{{ t('admin.accounts.upstreamPrepaidAmountHint') }}</p>
             </div>
-            <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
-              <input
-                v-model="upstreamNotifyEnabled"
-                type="checkbox"
-                class="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                data-testid="upstream-notify-enabled"
-              />
-              <span>{{ t('admin.accounts.upstreamNotifyEnabled') }}</span>
-            </label>
           </div>
         </div>
       </div>
@@ -2464,8 +2410,6 @@ const MAX_POOL_MODE_RETRY_COUNT = 10
 const poolModeEnabled = ref(false)
 const poolModeRetryCount = ref(DEFAULT_POOL_MODE_RETRY_COUNT)
 const upstreamPrepaidAmount = ref<number | null>(null)
-const upstreamWarningAmount = ref<number | null>(null)
-const upstreamNotifyEnabled = ref(false)
 const customErrorCodesEnabled = ref(false)
 const selectedErrorCodes = ref<number[]>([])
 const customErrorCodeInput = ref<number | null>(null)
@@ -2766,46 +2710,28 @@ const toPositiveAmount = (value: unknown) => {
 
 const resetUpstreamPrepaidState = () => {
   upstreamPrepaidAmount.value = null
-  upstreamWarningAmount.value = null
-  upstreamNotifyEnabled.value = false
 }
 
 const loadUpstreamPrepaidState = (extra?: Record<string, unknown>) => {
   upstreamPrepaidAmount.value = toPositiveAmount(extra?.upstream_prepaid_amount)
-  upstreamWarningAmount.value = toPositiveAmount(extra?.upstream_warning_amount)
-  upstreamNotifyEnabled.value = extra?.upstream_notify_enabled === true
 }
 
 const applyUpstreamPrepaidToExtra = (extra: Record<string, unknown>) => {
+  delete extra.upstream_warning_amount
+  delete extra.upstream_notify_enabled
+
   if (!poolModeEnabled.value) {
     delete extra.upstream_prepaid_amount
-    delete extra.upstream_warning_amount
-    delete extra.upstream_notify_enabled
     return true
   }
 
   const prepaid = toPositiveAmount(upstreamPrepaidAmount.value)
-  const warning = toPositiveAmount(upstreamWarningAmount.value)
   if (prepaid == null) {
     appStore.showError(t('admin.accounts.upstreamPrepaidAmountRequired'))
     return false
   }
-  if (warning == null) {
-    appStore.showError(t('admin.accounts.upstreamWarningAmountRequired'))
-    return false
-  }
-  if (warning >= prepaid) {
-    appStore.showError(t('admin.accounts.upstreamWarningAmountMustBeLess'))
-    return false
-  }
 
   extra.upstream_prepaid_amount = prepaid
-  extra.upstream_warning_amount = warning
-  if (upstreamNotifyEnabled.value) {
-    extra.upstream_notify_enabled = true
-  } else {
-    delete extra.upstream_notify_enabled
-  }
   return true
 }
 
