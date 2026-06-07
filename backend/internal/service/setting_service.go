@@ -21,6 +21,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/imroc/req/v3"
+	"github.com/shirou/gopsutil/v4/mem"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -4774,6 +4775,203 @@ func DefaultCacheManagementConfig() CacheManagementConfig {
 			Value: cacheManagementBypassHeaderValue,
 		},
 	}
+}
+
+const SettingKeyAdvancedCacheConfig = "advanced_cache_config"
+
+const (
+	advancedCacheDefaultRedisCapacityMB        = 512
+	advancedCacheDefaultMemorySafeLimitMB      = 2048
+	advancedCacheDefaultCompressionThresholdKB = 64
+	advancedCacheDefaultEvictionPolicy         = "LRU"
+	advancedCacheDefaultHotWindow              = "1h"
+	advancedCacheDefaultHotThreshold           = 5
+)
+
+var advancedCacheMemorySafeLimitProbe = func(ctx context.Context) (int, error) {
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	default:
+	}
+	vm, err := mem.VirtualMemory()
+	if err != nil {
+		return 0, err
+	}
+	availableMB := int(vm.Available / 1024 / 1024)
+	if availableMB <= 0 {
+		return 0, nil
+	}
+	safeLimitMB := availableMB / 2
+	if safeLimitMB < advancedCacheDefaultMemorySafeLimitMB {
+		return advancedCacheDefaultMemorySafeLimitMB, nil
+	}
+	return safeLimitMB, nil
+}
+
+type AdvancedCacheGrayScope struct {
+	APIKeyIDs []int64  `json:"api_key_ids"`
+	GroupIDs  []int64  `json:"group_ids"`
+	Models    []string `json:"models"`
+}
+
+type AdvancedCacheConfig struct {
+	AdvancedCacheEnabled       bool                   `json:"advanced_cache_enabled"`
+	GrayScope                  AdvancedCacheGrayScope `json:"gray_scope"`
+	RedisCapacityMB            int                    `json:"redis_capacity_mb"`
+	MemorySafeLimitMB          int                    `json:"memory_safe_limit_mb,omitempty"`
+	CompressionEnabled         bool                   `json:"compression_enabled"`
+	CompressionThresholdKB     int                    `json:"compression_threshold_kb"`
+	EvictionPolicy             string                 `json:"eviction_policy"`
+	HotWindow                  string                 `json:"hot_window"`
+	HotThreshold               int                    `json:"hot_threshold"`
+	CostSavingEnabled          bool                   `json:"cost_saving_enabled"`
+	UpstreamPromptCacheEnabled bool                   `json:"upstream_prompt_cache_enabled"`
+}
+
+func DefaultAdvancedCacheConfig() AdvancedCacheConfig {
+	return AdvancedCacheConfig{
+		AdvancedCacheEnabled:       false,
+		GrayScope:                  AdvancedCacheGrayScope{APIKeyIDs: []int64{}, GroupIDs: []int64{}, Models: []string{}},
+		RedisCapacityMB:            advancedCacheDefaultRedisCapacityMB,
+		MemorySafeLimitMB:          advancedCacheDefaultMemorySafeLimitMB,
+		CompressionEnabled:         true,
+		CompressionThresholdKB:     advancedCacheDefaultCompressionThresholdKB,
+		EvictionPolicy:             advancedCacheDefaultEvictionPolicy,
+		HotWindow:                  advancedCacheDefaultHotWindow,
+		HotThreshold:               advancedCacheDefaultHotThreshold,
+		CostSavingEnabled:          true,
+		UpstreamPromptCacheEnabled: true,
+	}
+}
+
+func (s *SettingService) GetAdvancedCacheConfig(ctx context.Context) (AdvancedCacheConfig, error) {
+	cfg := DefaultAdvancedCacheConfig()
+	raw, err := s.settingRepo.GetValue(ctx, SettingKeyAdvancedCacheConfig)
+	if err != nil {
+		if errors.Is(err, ErrSettingNotFound) {
+			return s.normalizeAdvancedCacheConfigWithRuntime(ctx, cfg)
+		}
+		return cfg, err
+	}
+	if strings.TrimSpace(raw) == "" {
+		return s.normalizeAdvancedCacheConfigWithRuntime(ctx, cfg)
+	}
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		return cfg, fmt.Errorf("parse advanced cache config: %w", err)
+	}
+	cfg, err = s.normalizeAdvancedCacheConfigWithRuntime(ctx, cfg)
+	if err != nil {
+		return DefaultAdvancedCacheConfig(), err
+	}
+	if err := s.validateAdvancedCacheConfig(ctx, cfg); err != nil {
+		return DefaultAdvancedCacheConfig(), err
+	}
+	return cfg, nil
+}
+
+func (s *SettingService) UpdateAdvancedCacheConfig(ctx context.Context, cfg AdvancedCacheConfig) (AdvancedCacheConfig, error) {
+	cfg, err := s.normalizeAdvancedCacheConfigWithRuntime(ctx, cfg)
+	if err != nil {
+		return AdvancedCacheConfig{}, err
+	}
+	if err := s.validateAdvancedCacheConfig(ctx, cfg); err != nil {
+		return AdvancedCacheConfig{}, err
+	}
+	payload := cfg
+	payload.MemorySafeLimitMB = 0
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return AdvancedCacheConfig{}, err
+	}
+	if err := s.settingRepo.Set(ctx, SettingKeyAdvancedCacheConfig, string(encoded)); err != nil {
+		return AdvancedCacheConfig{}, err
+	}
+	return cfg, nil
+}
+
+func (s *SettingService) normalizeAdvancedCacheConfigWithRuntime(ctx context.Context, cfg AdvancedCacheConfig) (AdvancedCacheConfig, error) {
+	cfg.GrayScope.APIKeyIDs = normalizeAdvancedCacheIDList(cfg.GrayScope.APIKeyIDs)
+	cfg.GrayScope.GroupIDs = normalizeAdvancedCacheIDList(cfg.GrayScope.GroupIDs)
+	cfg.GrayScope.Models = normalizeCacheManagementModelList(cfg.GrayScope.Models)
+	cfg.EvictionPolicy = strings.TrimSpace(cfg.EvictionPolicy)
+	cfg.HotWindow = strings.TrimSpace(cfg.HotWindow)
+	cfg.MemorySafeLimitMB = s.deriveAdvancedCacheMemorySafeLimitMB(ctx)
+	return cfg, nil
+}
+
+func normalizeAdvancedCacheIDList(items []int64) []int64 {
+	out := make([]int64, 0, len(items))
+	seen := make(map[int64]struct{}, len(items))
+	for _, item := range items {
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		out = append(out, item)
+	}
+	return out
+}
+
+func (s *SettingService) deriveAdvancedCacheMemorySafeLimitMB(ctx context.Context) int {
+	limit, err := advancedCacheMemorySafeLimitProbe(ctx)
+	if err != nil || limit <= 0 {
+		return advancedCacheDefaultMemorySafeLimitMB
+	}
+	return max(advancedCacheDefaultMemorySafeLimitMB, limit)
+}
+
+func (s *SettingService) validateAdvancedCacheConfig(ctx context.Context, cfg AdvancedCacheConfig) error {
+	for _, id := range cfg.GrayScope.APIKeyIDs {
+		if id < 0 {
+			return infraerrors.BadRequest("ADVANCED_CACHE_CONFIG_INVALID", "gray_scope.api_key_ids must be non-negative")
+		}
+	}
+	for _, id := range cfg.GrayScope.GroupIDs {
+		if id < 0 {
+			return infraerrors.BadRequest("ADVANCED_CACHE_CONFIG_INVALID", "gray_scope.group_ids must be non-negative")
+		}
+	}
+	if cfg.RedisCapacityMB < 64 || cfg.RedisCapacityMB > cfg.MemorySafeLimitMB {
+		return infraerrors.BadRequest("ADVANCED_CACHE_CONFIG_INVALID", "redis_capacity_mb must be between 64 and memory_safe_limit_mb")
+	}
+	maxResponseKB, err := s.cacheManagementMaxResponseKB(ctx)
+	if err != nil {
+		return err
+	}
+	if cfg.CompressionThresholdKB < 1 || cfg.CompressionThresholdKB > maxResponseKB {
+		return infraerrors.BadRequest("ADVANCED_CACHE_CONFIG_INVALID", "compression_threshold_kb must be between 1 and max_response_bytes KB")
+	}
+	switch cfg.EvictionPolicy {
+	case "LRU", "LFU", "W-TinyLFU":
+	default:
+		return infraerrors.BadRequest("ADVANCED_CACHE_CONFIG_INVALID", "eviction_policy must be one of LRU, LFU, W-TinyLFU")
+	}
+	switch cfg.HotWindow {
+	case "15m", "1h", "6h", "24h":
+	default:
+		return infraerrors.BadRequest("ADVANCED_CACHE_CONFIG_INVALID", "hot_window must be one of 15m, 1h, 6h, 24h")
+	}
+	if cfg.HotThreshold < 1 {
+		return infraerrors.BadRequest("ADVANCED_CACHE_CONFIG_INVALID", "hot_threshold must be at least 1")
+	}
+	return nil
+}
+
+func (s *SettingService) cacheManagementMaxResponseKB(ctx context.Context) (int, error) {
+	cfg, err := s.GetCacheManagementConfig(ctx)
+	if err != nil {
+		return 0, err
+	}
+	maxResponseBytes := cfg.MaxResponseBytes
+	if maxResponseBytes <= 0 {
+		maxResponseBytes = DefaultCacheManagementConfig().MaxResponseBytes
+	}
+	maxResponseKB := maxResponseBytes / 1024
+	if maxResponseKB < 10*1024 {
+		maxResponseKB = 10 * 1024
+	}
+	return maxResponseKB, nil
 }
 
 func (s *SettingService) GetCacheManagementConfig(ctx context.Context) (CacheManagementConfig, error) {
