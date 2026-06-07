@@ -410,3 +410,36 @@ func TestMigration147CreatesOpsCacheMinuteStats(t *testing.T) {
 	require.NotContains(t, sql, "DELETE FROM ops_cache_minute_stats")
 	require.NotContains(t, sql, "TRUNCATE")
 }
+
+func TestMigration148CreatesOpsCacheClearAudits(t *testing.T) {
+	content, err := FS.ReadFile("148_ops_cache_clear_audits.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "CREATE TABLE IF NOT EXISTS ops_cache_clear_audits")
+	for _, column := range []string{
+		"operator_user_id BIGINT",
+		"clear_type VARCHAR(32) NOT NULL",
+		"scope JSONB NOT NULL DEFAULT '{}'::jsonb",
+		"matched_keys BIGINT NOT NULL DEFAULT 0",
+		"deleted_keys BIGINT NOT NULL DEFAULT 0",
+		"status VARCHAR(32) NOT NULL",
+		"error_message TEXT",
+		"created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()",
+	} {
+		require.Contains(t, sql, column)
+	}
+	require.Contains(t, sql, "CHECK (clear_type IN ('all', 'by_platform', 'by_model', 'by_group', 'by_api_key', 'by_time', 'expired'))")
+	require.Contains(t, sql, "CHECK (status IN ('success', 'failed', 'partial_success'))")
+	require.Contains(t, sql, "matched_keys >= 0")
+	require.Contains(t, sql, "deleted_keys >= 0")
+	require.Contains(t, sql, "deleted_keys <= matched_keys")
+	require.Contains(t, sql, "operator_user_id IS NULL OR operator_user_id >= 0")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_cache_clear_audits_created_at")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_cache_clear_audits_operator_created_at")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_cache_clear_audits_type_status_created_at")
+	require.NotContains(t, sql, "DROP TABLE")
+	require.NotContains(t, sql, "DROP COLUMN")
+	require.NotContains(t, sql, "DELETE FROM ops_cache_clear_audits")
+	require.NotContains(t, sql, "TRUNCATE")
+}
