@@ -1,9 +1,152 @@
 package service
 
 import (
+	"fmt"
 	"math"
 	"time"
 )
+
+const (
+	opsHealthSmallSampleMinScore = 70
+
+	OpsHealthReasonFinalFailures     = "final_failures"
+	OpsHealthReasonFailureRate       = "failure_rate"
+	OpsHealthReasonEffectiveRequests = "effective_requests"
+	OpsHealthReasonImpactScope       = "impact_scope"
+	OpsHealthReasonDependencyStatus  = "dependency_status"
+)
+
+type OpsHealthScoreResult struct {
+	Score   int
+	Reasons []*OpsHealthScoreReason
+}
+
+func buildOpsHealthScoreReasons(now time.Time, overview *OpsDashboardOverview) []*OpsHealthScoreReason {
+	if overview == nil {
+		return []*OpsHealthScoreReason{{Code: OpsHealthReasonDependencyStatus, Message: "overview data unavailable", Value: "unavailable"}}
+	}
+
+	finalFailures := finalFailureCount(overview)
+	effectiveRequests := effectiveRequestCount(overview)
+	failureRate := finalFailureRate(overview)
+	impactScope := impactScopeSummary(overview)
+	dependencyStatus := dependencyStatusSummary(now, overview)
+
+	return []*OpsHealthScoreReason{
+		{Code: OpsHealthReasonFinalFailures, Message: "final failures in window", Value: fmt.Sprintf("%d", finalFailures)},
+		{Code: OpsHealthReasonFailureRate, Message: "final failure rate", Value: fmt.Sprintf("%.2f%%", failureRate*100)},
+		{Code: OpsHealthReasonEffectiveRequests, Message: "effective requests in window", Value: fmt.Sprintf("%d", effectiveRequests)},
+		{Code: OpsHealthReasonImpactScope, Message: "impact scope", Value: impactScope},
+		{Code: OpsHealthReasonDependencyStatus, Message: "dependency status", Value: dependencyStatus},
+	}
+}
+
+func isSmallOneMinuteFailureWindow(overview *OpsDashboardOverview) bool {
+	if overview == nil {
+		return false
+	}
+	return isOneMinuteWindow(overview) && finalFailureCount(overview) <= 2
+}
+
+func isOneMinuteWindow(overview *OpsDashboardOverview) bool {
+	if overview == nil || overview.StartTime.IsZero() || overview.EndTime.IsZero() {
+		return false
+	}
+	d := overview.EndTime.Sub(overview.StartTime)
+	return d > 0 && d <= time.Minute
+}
+
+func finalFailureCount(overview *OpsDashboardOverview) int64 {
+	if overview == nil {
+		return 0
+	}
+	if overview.ErrorCountSLA > 0 {
+		return overview.ErrorCountSLA
+	}
+	return overview.ErrorCountTotal
+}
+
+func effectiveRequestCount(overview *OpsDashboardOverview) int64 {
+	if overview == nil {
+		return 0
+	}
+	if overview.RequestCountSLA > 0 {
+		return overview.RequestCountSLA
+	}
+	return overview.RequestCountTotal
+}
+
+func finalFailureRate(overview *OpsDashboardOverview) float64 {
+	requests := effectiveRequestCount(overview)
+	if requests <= 0 {
+		return 0
+	}
+	return clampFloat64(float64(finalFailureCount(overview))/float64(requests), 0, 1)
+}
+
+func impactScopeSummary(overview *OpsDashboardOverview) string {
+	if overview == nil {
+		return "none"
+	}
+	parts := make([]string, 0, 3)
+	if overview.PlatformErrorCount > 0 {
+		parts = append(parts, fmt.Sprintf("platform:%d", overview.PlatformErrorCount))
+	}
+	if overview.UpstreamErrorCount > 0 || overview.UpstreamLimitedCount > 0 {
+		parts = append(parts, fmt.Sprintf("upstream:%d", overview.UpstreamErrorCount+overview.UpstreamLimitedCount))
+	}
+	if overview.ClientErrorCount > 0 {
+		parts = append(parts, fmt.Sprintf("client:%d", overview.ClientErrorCount))
+	}
+	if len(parts) == 0 {
+		return "none"
+	}
+	return joinStrings(parts, ",")
+}
+
+func dependencyStatusSummary(now time.Time, overview *OpsDashboardOverview) string {
+	if overview == nil {
+		return "unavailable"
+	}
+	states := make([]string, 0, 3)
+	if overview.SystemMetrics != nil {
+		if overview.SystemMetrics.DBOK != nil && !*overview.SystemMetrics.DBOK {
+			states = append(states, "db:down")
+		}
+		if overview.SystemMetrics.RedisOK != nil && !*overview.SystemMetrics.RedisOK {
+			states = append(states, "redis:down")
+		}
+	}
+	failedJobs := 0
+	for _, hb := range overview.JobHeartbeats {
+		if hb == nil {
+			continue
+		}
+		if hb.LastErrorAt != nil && (hb.LastSuccessAt == nil || hb.LastErrorAt.After(*hb.LastSuccessAt)) {
+			failedJobs++
+		} else if hb.LastSuccessAt != nil && now.Sub(*hb.LastSuccessAt) > 15*time.Minute {
+			failedJobs++
+		}
+	}
+	if failedJobs > 0 {
+		states = append(states, fmt.Sprintf("jobs_failed:%d", failedJobs))
+	}
+	if len(states) == 0 {
+		return "healthy"
+	}
+	return joinStrings(states, ",")
+}
+
+func joinStrings(parts []string, sep string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	out := parts[0]
+	for _, part := range parts[1:] {
+		out += sep + part
+	}
+	return out
+}
 
 // computeDashboardHealthScore computes a 0-100 health score from the metrics returned by the dashboard overview.
 //
@@ -13,22 +156,39 @@ import (
 // - Avoids double-counting (e.g., DB failure affects both infra and business metrics)
 // - Conservative + stable: penalize clear degradations; avoid overreacting to missing/idle data.
 func computeDashboardHealthScore(now time.Time, overview *OpsDashboardOverview) int {
+	result := computeDashboardHealthScoreResult(now, overview)
+	return result.Score
+}
+
+func computeDashboardHealthScoreResult(now time.Time, overview *OpsDashboardOverview) *OpsHealthScoreResult {
 	if overview == nil {
-		return 0
+		return &OpsHealthScoreResult{
+			Score: 0,
+			Reasons: []*OpsHealthScoreReason{
+				{Code: OpsHealthReasonDependencyStatus, Message: "overview data unavailable", Value: "unavailable"},
+			},
+		}
 	}
+
+	reasons := buildOpsHealthScoreReasons(now, overview)
 
 	// Idle/no-data: avoid showing a "bad" score when there is no traffic.
 	// UI can still render a gray/idle state based on QPS + error rate.
 	if overview.RequestCountSLA <= 0 && overview.RequestCountTotal <= 0 && overview.ErrorCountTotal <= 0 {
-		return 100
+		return &OpsHealthScoreResult{Score: 100, Reasons: reasons}
 	}
 
 	businessHealth := computeBusinessHealth(overview)
 	infraHealth := computeInfraHealth(now, overview)
 
-	// Weighted combination: 70% business + 30% infrastructure
-	score := businessHealth*0.7 + infraHealth*0.3
-	return int(math.Round(clampFloat64(score, 0, 100)))
+	// Weighted combination: 70% business + 30% infrastructure. The score is auxiliary only;
+	// alert events and notifications must be driven by explicit alert/incident rules elsewhere.
+	score := int(math.Round(clampFloat64(businessHealth*0.7+infraHealth*0.3, 0, 100)))
+	if isSmallOneMinuteFailureWindow(overview) && score < opsHealthSmallSampleMinScore {
+		score = opsHealthSmallSampleMinScore
+	}
+
+	return &OpsHealthScoreResult{Score: score, Reasons: reasons}
 }
 
 // computeBusinessHealth calculates business health score (0-100)

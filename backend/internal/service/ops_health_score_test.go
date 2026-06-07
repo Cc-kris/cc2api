@@ -437,6 +437,127 @@ func TestComputeInfraHealth(t *testing.T) {
 	}
 }
 
+func TestComputeDashboardHealthScore_SmallOneMinuteFailureWindowFloor(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	overview := &OpsDashboardOverview{
+		StartTime:          now.Add(-time.Minute),
+		EndTime:            now,
+		RequestCountTotal:  2,
+		RequestCountSLA:    2,
+		ErrorCountTotal:    2,
+		ErrorCountSLA:      2,
+		ErrorRate:          1,
+		UpstreamErrorRate:  1,
+		TTFT:               OpsPercentiles{P99: intPtr(5_000)},
+		PlatformErrorCount: 2,
+		SystemMetrics: &OpsSystemMetricsSnapshot{
+			DBOK:               boolPtr(false),
+			RedisOK:            boolPtr(false),
+			CPUUsagePercent:    float64Ptr(99),
+			MemoryUsagePercent: float64Ptr(99),
+		},
+		JobHeartbeats: []*OpsJobHeartbeat{
+			{JobName: "stale-job", LastSuccessAt: timePtr(now.Add(-20 * time.Minute))},
+		},
+	}
+
+	result := computeDashboardHealthScoreResult(now, overview)
+	require.Equal(t, 70, result.Score)
+	requireHealthReasonCodes(t, result.Reasons,
+		OpsHealthReasonFinalFailures,
+		OpsHealthReasonFailureRate,
+		OpsHealthReasonEffectiveRequests,
+		OpsHealthReasonImpactScope,
+		OpsHealthReasonDependencyStatus,
+	)
+}
+
+func TestComputeDashboardHealthScore_NoSmallSampleFloorOutsideOneMinuteWindow(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	overview := &OpsDashboardOverview{
+		StartTime:         now.Add(-2 * time.Minute),
+		EndTime:           now,
+		RequestCountTotal: 2,
+		RequestCountSLA:   2,
+		ErrorCountTotal:   2,
+		ErrorCountSLA:     2,
+		ErrorRate:         1,
+		UpstreamErrorRate: 1,
+		TTFT:              OpsPercentiles{P99: intPtr(5_000)},
+		SystemMetrics: &OpsSystemMetricsSnapshot{
+			DBOK:               boolPtr(false),
+			RedisOK:            boolPtr(false),
+			CPUUsagePercent:    float64Ptr(99),
+			MemoryUsagePercent: float64Ptr(99),
+		},
+	}
+
+	result := computeDashboardHealthScoreResult(now, overview)
+	require.Less(t, result.Score, 70)
+}
+
+func TestBuildOpsHealthScoreReasons_CoversRequiredDisplayInputs(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	overview := &OpsDashboardOverview{
+		StartTime:            now.Add(-time.Minute),
+		EndTime:              now,
+		RequestCountTotal:    120,
+		RequestCountSLA:      100,
+		ErrorCountTotal:      8,
+		ErrorCountSLA:        5,
+		PlatformErrorCount:   2,
+		UpstreamErrorCount:   3,
+		UpstreamLimitedCount: 1,
+		ClientErrorCount:     4,
+		SystemMetrics: &OpsSystemMetricsSnapshot{
+			DBOK:    boolPtr(true),
+			RedisOK: boolPtr(false),
+		},
+		JobHeartbeats: []*OpsJobHeartbeat{
+			{JobName: "failed-job", LastErrorAt: timePtr(now.Add(-time.Minute))},
+		},
+	}
+
+	reasons := buildOpsHealthScoreReasons(now, overview)
+	require.Len(t, reasons, 5)
+	requireHealthReasonValue(t, reasons, OpsHealthReasonFinalFailures, "5")
+	requireHealthReasonValue(t, reasons, OpsHealthReasonFailureRate, "5.00%")
+	requireHealthReasonValue(t, reasons, OpsHealthReasonEffectiveRequests, "100")
+	requireHealthReasonValue(t, reasons, OpsHealthReasonImpactScope, "platform:2,upstream:4,client:4")
+	requireHealthReasonValue(t, reasons, OpsHealthReasonDependencyStatus, "redis:down,jobs_failed:1")
+}
+
+func requireHealthReasonCodes(t *testing.T, reasons []*OpsHealthScoreReason, codes ...string) {
+	t.Helper()
+	seen := make(map[string]bool, len(reasons))
+	for _, reason := range reasons {
+		if reason == nil {
+			continue
+		}
+		seen[reason.Code] = true
+	}
+	for _, code := range codes {
+		require.Truef(t, seen[code], "missing health score reason code %s", code)
+	}
+}
+
+func requireHealthReasonValue(t *testing.T, reasons []*OpsHealthScoreReason, code string, want string) {
+	t.Helper()
+	for _, reason := range reasons {
+		if reason != nil && reason.Code == code {
+			require.Equal(t, want, reason.Value)
+			return
+		}
+	}
+	require.Failf(t, "missing health score reason", "code=%s", code)
+}
+
 func timePtr(v time.Time) *time.Time { return &v }
 
 func stringPtr(v string) *string { return &v }

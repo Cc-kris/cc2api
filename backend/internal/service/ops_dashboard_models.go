@@ -29,15 +29,23 @@ type OpsPercentiles struct {
 	Max *int `json:"max_ms"`
 }
 
+type OpsHealthScoreReason struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Value   string `json:"value"`
+}
+
 type OpsDashboardOverview struct {
 	StartTime time.Time `json:"start_time"`
 	EndTime   time.Time `json:"end_time"`
 	Platform  string    `json:"platform"`
 	GroupID   *int64    `json:"group_id"`
 
-	// HealthScore is a backend-computed overall health score (0-100).
+	// HealthScore is a backend-computed auxiliary health risk score (0-100).
 	// It is derived from the monitored metrics in this overview, plus best-effort system metrics/job heartbeats.
 	HealthScore int `json:"health_score"`
+	// HealthScoreReasons explains the score inputs for dashboard display; it is not used to create alerts.
+	HealthScoreReasons []*OpsHealthScoreReason `json:"health_score_reasons"`
 
 	// Latest system-level snapshot (window=1m, global).
 	SystemMetrics *OpsSystemMetricsSnapshot `json:"system_metrics"`
