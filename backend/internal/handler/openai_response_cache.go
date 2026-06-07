@@ -82,7 +82,9 @@ func (w *localResponseCacheCaptureWriter) StatusCode() int {
 func (h *OpenAIGatewayHandler) prepareLocalResponseCache(c *gin.Context, apiKey *service.APIKey, endpoint, model string, body []byte) (service.LocalResponseCacheLookup, service.LocalResponseCacheConfig) {
 	cfg := h.gatewayService.LocalResponseCacheConfig(c.Request.Context())
 	explicitBypass := strings.EqualFold(strings.TrimSpace(c.GetHeader("X-Sub2API-Cache-Control")), "bypass")
-	lookup := service.BuildLocalResponseCacheLookup(cfg, apiKey.ID, apiKey.GroupID, endpoint, service.PlatformOpenAI, model, body, explicitBypass)
+	lookup := service.BuildLocalResponseCacheLookupWithOptions(cfg, apiKey.ID, apiKey.GroupID, endpoint, service.PlatformOpenAI, model, body, explicitBypass, service.LocalResponseCacheKeyOptions{
+		Headers: service.LocalResponseCacheKeyHeadersFromHTTP(c.Request.Header),
+	})
 	if lookup.Key == "" {
 		c.Header(service.LocalResponseCacheHeader, service.LocalResponseCacheHeaderBypass)
 		if cfg.Enabled {
@@ -97,6 +99,9 @@ func (h *OpenAIGatewayHandler) tryWriteLocalResponseCacheHit(c *gin.Context, loo
 		return false
 	}
 	entry, err := h.gatewayService.GetLocalResponseCache(c.Request.Context(), lookup.Key)
+	if errors.Is(err, redis.Nil) && strings.TrimSpace(lookup.LegacyKey) != "" {
+		entry, err = h.gatewayService.GetLocalResponseCache(c.Request.Context(), lookup.LegacyKey)
+	}
 	if err != nil {
 		if !errors.Is(err, redis.Nil) && reqLog != nil {
 			reqLog.Warn("local_response_cache.get_failed", zap.Error(err))

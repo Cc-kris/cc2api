@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,8 @@ const (
 	DefaultLocalResponseCacheMaxRequestBytes = 256 * 1024
 	DefaultLocalResponseCacheMaxBodyBytes    = 512 * 1024
 	DefaultLocalResponseCacheMaxTemperature  = 0.3
+	LocalResponseCacheRuleVersion            = "v2"
+	LocalResponseCacheLegacyRuleVersion      = "v1"
 
 	localResponseCacheStatsQueueSize     = 4096
 	localResponseCacheStatsFlushBatch    = 128
@@ -71,8 +74,13 @@ type LocalResponseCacheStats struct {
 }
 
 type LocalResponseCacheLookup struct {
-	Key    string
-	Reason string
+	Key       string
+	LegacyKey string
+	Reason    string
+}
+
+type LocalResponseCacheKeyOptions struct {
+	Headers map[string]string
 }
 
 func (s *OpenAIGatewayService) LocalResponseCacheConfig(ctx context.Context) LocalResponseCacheConfig {
@@ -179,6 +187,10 @@ func (s *OpenAIGatewayService) GetLocalResponseCacheStats(ctx context.Context) (
 }
 
 func BuildLocalResponseCacheLookup(cfg LocalResponseCacheConfig, apiKeyID int64, groupID *int64, endpoint, platform, model string, body []byte, explicitBypass bool) LocalResponseCacheLookup {
+	return BuildLocalResponseCacheLookupWithOptions(cfg, apiKeyID, groupID, endpoint, platform, model, body, explicitBypass, LocalResponseCacheKeyOptions{})
+}
+
+func BuildLocalResponseCacheLookupWithOptions(cfg LocalResponseCacheConfig, apiKeyID int64, groupID *int64, endpoint, platform, model string, body []byte, explicitBypass bool, opts LocalResponseCacheKeyOptions) LocalResponseCacheLookup {
 	if !cfg.Enabled {
 		return LocalResponseCacheLookup{Reason: "disabled"}
 	}
@@ -212,17 +224,80 @@ func BuildLocalResponseCacheLookup(cfg LocalResponseCacheConfig, apiKeyID int64,
 	if !ok {
 		return LocalResponseCacheLookup{Reason: "invalid_json"}
 	}
-	seed := strings.Join([]string{
-		"v1",
+	requestHash := buildLocalResponseCacheRequestHash(canonical, endpoint, platform, model, opts.Headers)
+	key := strings.Join([]string{
+		"cache",
+		LocalResponseCacheRuleVersion,
+		strings.TrimSpace(platform),
 		int64ToString(apiKeyID),
 		int64ToString(*groupID),
+		strings.TrimSpace(endpoint),
+		strings.TrimSpace(model),
+		requestHash,
+	}, ":")
+	return LocalResponseCacheLookup{
+		Key:       key,
+		LegacyKey: buildLegacyLocalResponseCacheKey(apiKeyID, *groupID, endpoint, platform, model, canonical),
+	}
+}
+
+func LocalResponseCacheKeyHeadersFromHTTP(header http.Header) map[string]string {
+	if len(header) == 0 {
+		return nil
+	}
+	out := map[string]string{}
+	for _, name := range []string{"Content-Type", "Accept", "OpenAI-Beta", "Anthropic-Version", "X-Goog-Api-Version"} {
+		value := strings.TrimSpace(header.Get(name))
+		if value != "" {
+			out[strings.ToLower(name)] = value
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func buildLocalResponseCacheRequestHash(canonical []byte, endpoint, platform, model string, headers map[string]string) string {
+	normalized := map[string]any{
+		"endpoint": strings.TrimSpace(endpoint),
+		"platform": strings.TrimSpace(platform),
+		"model":    strings.TrimSpace(model),
+		"body":     json.RawMessage(canonical),
+	}
+	if len(headers) > 0 {
+		clean := map[string]string{}
+		for k, v := range headers {
+			key := strings.ToLower(strings.TrimSpace(k))
+			value := strings.TrimSpace(v)
+			if key != "" && value != "" {
+				clean[key] = value
+			}
+		}
+		if len(clean) > 0 {
+			normalized["headers"] = clean
+		}
+	}
+	payload, err := json.Marshal(normalized)
+	if err != nil {
+		payload = canonical
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:])
+}
+
+func buildLegacyLocalResponseCacheKey(apiKeyID, groupID int64, endpoint, platform, model string, canonical []byte) string {
+	seed := strings.Join([]string{
+		LocalResponseCacheLegacyRuleVersion,
+		int64ToString(apiKeyID),
+		int64ToString(groupID),
 		strings.TrimSpace(endpoint),
 		strings.TrimSpace(platform),
 		strings.TrimSpace(model),
 		string(canonical),
 	}, "\x00")
 	sum := sha256.Sum256([]byte(seed))
-	return LocalResponseCacheLookup{Key: hex.EncodeToString(sum[:])}
+	return hex.EncodeToString(sum[:])
 }
 
 func canonicalJSON(body []byte) ([]byte, bool) {

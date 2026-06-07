@@ -167,6 +167,30 @@ func TestTryWriteLocalResponseCacheHit_ReplaysSSE(t *testing.T) {
 	store.requireStatEventually(t, "lookup_hit", 1)
 }
 
+func TestTryWriteLocalResponseCacheHit_FallsBackToLegacyKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &localResponseCacheTestStore{entries: map[string]*service.LocalResponseCacheEntry{
+		"legacy-key": {
+			StatusCode:  http.StatusOK,
+			ContentType: "application/json",
+			Body:        []byte(`{"id":"legacy"}`),
+			Headers:     map[string]string{"Content-Type": "application/json"},
+		},
+	}}
+	h := newLocalResponseCacheTestHandler(store)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+	ok := h.tryWriteLocalResponseCacheHit(c, service.LocalResponseCacheLookup{Key: "cache:v2:openai:10:1:/v1/responses:gpt-5.5:missing", LegacyKey: "legacy-key"}, nil)
+
+	require.True(t, ok)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "hit", recorder.Header().Get(service.LocalResponseCacheHeader))
+	require.Equal(t, `{"id":"legacy"}`, recorder.Body.String())
+	store.requireStatEventually(t, "lookup_hit", 1)
+}
+
 func TestPersistLocalResponseCache_RequiresCompleteSSE(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store := &localResponseCacheTestStore{}

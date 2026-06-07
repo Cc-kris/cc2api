@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -19,6 +20,45 @@ func TestBuildLocalResponseCacheLookup_GroupIsolation(t *testing.T) {
 	require.NotEmpty(t, a.Key)
 	require.NotEmpty(t, b.Key)
 	require.NotEqual(t, a.Key, b.Key)
+	require.True(t, strings.HasPrefix(a.Key, "cache:v2:openai:10:1:/v1/responses:gpt-5.5:"))
+	require.NotEmpty(t, a.LegacyKey)
+}
+
+func TestBuildLocalResponseCacheLookup_V2Isolation(t *testing.T) {
+	cfg := DefaultLocalResponseCacheConfig()
+	cfg.Enabled = true
+	groupID := int64(1)
+	body := []byte(`{"model":"gpt-5.5","input":"hello","temperature":0.1}`)
+
+	base := BuildLocalResponseCacheLookup(cfg, 10, &groupID, "/v1/responses", PlatformOpenAI, "gpt-5.5", body, false)
+	otherAPIKey := BuildLocalResponseCacheLookup(cfg, 11, &groupID, "/v1/responses", PlatformOpenAI, "gpt-5.5", body, false)
+	otherModel := BuildLocalResponseCacheLookup(cfg, 10, &groupID, "/v1/responses", PlatformOpenAI, "gpt-5.6", body, false)
+	otherPlatform := BuildLocalResponseCacheLookup(cfg, 10, &groupID, "/v1/responses", PlatformAnthropic, "gpt-5.5", body, false)
+
+	require.NotEmpty(t, base.Key)
+	require.NotEqual(t, base.Key, otherAPIKey.Key)
+	require.NotEqual(t, base.Key, otherModel.Key)
+	require.NotEqual(t, base.Key, otherPlatform.Key)
+	require.Contains(t, base.Key, ":10:1:/v1/responses:gpt-5.5:")
+}
+
+func TestBuildLocalResponseCacheLookup_HeaderAffectsV2RequestHash(t *testing.T) {
+	cfg := DefaultLocalResponseCacheConfig()
+	cfg.Enabled = true
+	groupID := int64(1)
+	body := []byte(`{"model":"gpt-5.5","input":"hello"}`)
+
+	jsonLookup := BuildLocalResponseCacheLookupWithOptions(cfg, 10, &groupID, "/v1/responses", PlatformOpenAI, "gpt-5.5", body, false, LocalResponseCacheKeyOptions{
+		Headers: map[string]string{"content-type": "application/json"},
+	})
+	sseLookup := BuildLocalResponseCacheLookupWithOptions(cfg, 10, &groupID, "/v1/responses", PlatformOpenAI, "gpt-5.5", body, false, LocalResponseCacheKeyOptions{
+		Headers: map[string]string{"content-type": "text/event-stream"},
+	})
+
+	require.NotEmpty(t, jsonLookup.Key)
+	require.NotEmpty(t, sseLookup.Key)
+	require.NotEqual(t, jsonLookup.Key, sseLookup.Key)
+	require.Equal(t, jsonLookup.LegacyKey, sseLookup.LegacyKey)
 }
 
 func TestBuildLocalResponseCacheLookup_CanonicalJSON(t *testing.T) {
