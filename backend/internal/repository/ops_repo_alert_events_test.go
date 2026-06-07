@@ -180,3 +180,52 @@ func TestOpsRepositoryUpdateAlertEventStatusKeepsProcessingNoteAndActionSeparate
 	require.NoError(t, err)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestOpsRepositoryGetCompoundAlertStatsAppliesCategoryAndDimensionAggregates(t *testing.T) {
+	db, mock := newSQLMock(t)
+	repo := &opsRepository{db: db}
+	start := time.Date(2026, 6, 7, 10, 0, 0, 0, time.UTC)
+	end := start.Add(time.Minute)
+	groupID := int64(7)
+
+	rows := sqlmock.NewRows([]string{
+		"final_failures",
+		"affected_users",
+		"affected_api_keys",
+		"affected_groups",
+		"affected_models",
+		"affected_upstream_accounts",
+		"max_failures_by_user",
+		"max_failures_by_api_key",
+		"max_failures_by_group",
+		"max_failures_by_model",
+		"max_failures_by_upstream_account",
+		"dominant_model",
+	}).AddRow(int64(5), int64(2), int64(3), int64(1), int64(1), int64(1), int64(4), int64(3), int64(5), int64(5), int64(5), "gpt-5.5")
+	mock.ExpectQuery(`(?s)WITH base AS .*ops_error_logs.*upstream_http.*provider.*upstream_status_code.*COUNT\(DISTINCT group_id\).*MAX\(c\).*GROUP BY group_id.*FROM base`).
+		WithArgs(start, end, groupID, "openai").
+		WillReturnRows(rows)
+
+	got, err := repo.GetCompoundAlertStats(context.Background(), &service.OpsCompoundAlertStatsFilter{
+		StartTime:       start,
+		EndTime:         end,
+		Platform:        "openai",
+		GroupID:         &groupID,
+		ErrorCategories: []string{"upstream"},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(5), got.FinalFailures)
+	require.Equal(t, int64(1), got.AffectedGroups)
+	require.Equal(t, int64(5), got.MaxFailuresByGroup)
+	require.Equal(t, int64(5), got.MaxFailuresByModel)
+	require.Equal(t, int64(5), got.MaxFailuresByUpstreamAccount)
+	require.Equal(t, "gpt-5.5", got.DominantModel)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestBuildCompoundAlertCategoryWhereReturnsEmptyForBroadCategorySet(t *testing.T) {
+	got := buildCompoundAlertCategoryWhere([]string{"client", "platform", "upstream", "account_pool", "rate_limit", "permission", "balance", "config", "slow_request", "unknown"})
+
+	require.Empty(t, got)
+}

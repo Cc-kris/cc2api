@@ -128,3 +128,182 @@ func TestOpsAlertEvaluatorMergesRepeatedEventKeyWithinSilenceWindow(t *testing.T
 	require.False(t, lookedUpSince.IsZero())
 	require.WithinDuration(t, time.Now().UTC().Add(-10*time.Minute), lookedUpSince, 5*time.Second)
 }
+
+func TestComputeCompoundRuleMetricUsesOneMinuteFinalFailuresAndImpact(t *testing.T) {
+	groupID := int64(7)
+	start := time.Date(2026, 6, 7, 10, 0, 0, 0, time.UTC)
+	end := start.Add(time.Minute)
+	rule := &OpsAlertRule{
+		MetricType:       "compound_rule",
+		MinFinalFailures: 5,
+		MinFailureRate:   20,
+		MinSampleCount:   20,
+		ImpactScope:      map[string]int{"affected_users": 2, "affected_api_keys": 2, "affected_models": 1, "affected_upstream_accounts": 1},
+	}
+
+	tests := []struct {
+		name     string
+		overview *OpsDashboardOverview
+		stats    *OpsCompoundAlertStats
+		want     float64
+	}{
+		{
+			name: "满足最终失败数、失败率、样本量和影响范围",
+			overview: &OpsDashboardOverview{
+				RequestCountSLA: 20,
+				ErrorCountSLA:   5,
+				ErrorRate:       0.25,
+			},
+			stats: &OpsCompoundAlertStats{
+				FinalFailures: 5, AffectedUsers: 2, AffectedAPIKeys: 2, AffectedModels: 1, AffectedUpstreamAccounts: 1,
+				MaxFailuresByUser: 3, MaxFailuresByAPIKey: 3, MaxFailuresByModel: 5, MaxFailuresByUpstreamAccount: 5,
+				DominantModel: "gpt-5.5",
+			},
+			want: 5,
+		},
+		{
+			name: "样本量不足不触发",
+			overview: &OpsDashboardOverview{
+				RequestCountSLA: 10,
+				ErrorCountSLA:   5,
+				ErrorRate:       0.5,
+			},
+			stats: &OpsCompoundAlertStats{
+				FinalFailures: 5, AffectedUsers: 2, AffectedAPIKeys: 2, AffectedModels: 1, AffectedUpstreamAccounts: 1,
+				MaxFailuresByUser: 3, MaxFailuresByAPIKey: 3, MaxFailuresByModel: 5, MaxFailuresByUpstreamAccount: 5,
+				DominantModel: "gpt-5.5",
+			},
+			want: 0,
+		},
+		{
+			name: "影响范围不足不触发",
+			overview: &OpsDashboardOverview{
+				RequestCountSLA: 20,
+				ErrorCountSLA:   5,
+				ErrorRate:       0.25,
+			},
+			stats: &OpsCompoundAlertStats{
+				FinalFailures: 5, AffectedUsers: 1, AffectedAPIKeys: 2, AffectedModels: 1, AffectedUpstreamAccounts: 1,
+				MaxFailuresByUser: 1, MaxFailuresByAPIKey: 3, MaxFailuresByModel: 5, MaxFailuresByUpstreamAccount: 5,
+				DominantModel: "gpt-5.5",
+			},
+			want: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &opsRepoMock{
+				GetCompoundAlertStatsFn: func(ctx context.Context, filter *OpsCompoundAlertStatsFilter) (*OpsCompoundAlertStats, error) {
+					require.True(t, filter.StartTime.Equal(start))
+					require.True(t, filter.EndTime.Equal(end))
+					require.Equal(t, "openai", filter.Platform)
+					require.NotNil(t, filter.GroupID)
+					require.Equal(t, groupID, *filter.GroupID)
+					return tt.stats, nil
+				},
+				GetDashboardOverviewFn: func(ctx context.Context, filter *OpsDashboardFilter) (*OpsDashboardOverview, error) {
+					require.Equal(t, "gpt-5.5", filter.Model)
+					return tt.overview, nil
+				},
+			}
+			svc := NewOpsAlertEvaluatorService(nil, repo, nil, nil, nil)
+
+			got, ok := svc.computeCompoundRuleMetric(context.Background(), rule, tt.overview, start, end, "openai", &groupID)
+
+			require.True(t, ok)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestComputeCompoundRuleMetricRejectsDistributedModelFailuresForSingleModelRule(t *testing.T) {
+	start := time.Date(2026, 6, 7, 10, 0, 0, 0, time.UTC)
+	end := start.Add(time.Minute)
+	rule := &OpsAlertRule{
+		MetricType:       "compound_rule",
+		MinFinalFailures: 10,
+		MinFailureRate:   20,
+		MinSampleCount:   50,
+		ImpactScope:      map[string]int{"affected_models": 1},
+	}
+	repo := &opsRepoMock{
+		GetCompoundAlertStatsFn: func(ctx context.Context, filter *OpsCompoundAlertStatsFilter) (*OpsCompoundAlertStats, error) {
+			return &OpsCompoundAlertStats{
+				FinalFailures:       10,
+				AffectedModels:      5,
+				MaxFailuresByModel:  2,
+				AffectedUsers:       5,
+				MaxFailuresByUser:   2,
+				AffectedAPIKeys:     5,
+				MaxFailuresByAPIKey: 2,
+			}, nil
+		},
+	}
+	svc := NewOpsAlertEvaluatorService(nil, repo, nil, nil, nil)
+
+	got, ok := svc.computeCompoundRuleMetric(context.Background(), rule, &OpsDashboardOverview{
+		RequestCountSLA: 50,
+		ErrorCountSLA:   10,
+		ErrorRate:       0.2,
+	}, start, end, "", nil)
+
+	require.True(t, ok)
+	require.Equal(t, float64(0), got)
+}
+
+func TestOpsAlertEvaluatorCreatesEventForCompoundRuleWithinOneMinuteWindow(t *testing.T) {
+	var created *OpsAlertEvent
+	repo := &opsRepoMock{
+		ListAlertRulesFn: func(ctx context.Context) ([]*OpsAlertRule, error) {
+			return []*OpsAlertRule{
+				{
+					ID:               20,
+					Name:             "P1 最终失败",
+					Enabled:          true,
+					RuleVersion:      "v2",
+					MigrationState:   "normal",
+					MetricType:       "compound_rule",
+					Operator:         ">=",
+					Threshold:        5,
+					WindowMinutes:    1,
+					MinFinalFailures: 5,
+					MinFailureRate:   20,
+					MinSampleCount:   20,
+					TriggerLevel:     "P1",
+					Severity:         "P1",
+					ErrorCategories:  []string{"upstream"},
+				},
+			}, nil
+		},
+		GetDashboardOverviewFn: func(ctx context.Context, filter *OpsDashboardFilter) (*OpsDashboardOverview, error) {
+			require.Equal(t, OpsQueryModeRaw, filter.QueryMode)
+			require.Equal(t, time.Minute, filter.EndTime.Sub(filter.StartTime))
+			return &OpsDashboardOverview{
+				RequestCountSLA: 20,
+				ErrorCountSLA:   5,
+				ErrorRate:       0.25,
+			}, nil
+		},
+		GetCompoundAlertStatsFn: func(ctx context.Context, filter *OpsCompoundAlertStatsFilter) (*OpsCompoundAlertStats, error) {
+			return &OpsCompoundAlertStats{FinalFailures: 5}, nil
+		},
+		CreateAlertEventFn: func(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error) {
+			created = event
+			event.ID = 200
+			return event, nil
+		},
+	}
+	svc := NewOpsAlertEvaluatorService(nil, repo, nil, nil, nil)
+
+	svc.evaluateOnce(time.Minute)
+
+	require.NotNil(t, created)
+	require.Equal(t, int64(20), created.RuleID)
+	require.Equal(t, "upstream|compound_rule|all|all|all|P1", created.EventKey)
+	require.Equal(t, float64(5), *created.MetricValue)
+	require.Equal(t, float64(5), *created.ThresholdValue)
+	require.Equal(t, "compound_rule", created.TriggerSnapshot["metric_type"])
+	require.Equal(t, float64(5), created.TriggerSnapshot["metric_value"])
+}

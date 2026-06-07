@@ -612,6 +612,8 @@ func (s *OpsAlertEvaluatorService) computeRuleMetric(
 	}
 
 	switch strings.TrimSpace(rule.MetricType) {
+	case "compound_rule":
+		return s.computeCompoundRuleMetric(ctx, rule, overview, start, end, platform, groupID)
 	case "success_rate":
 		if overview.RequestCountSLA <= 0 {
 			return 0, false
@@ -630,6 +632,132 @@ func (s *OpsAlertEvaluatorService) computeRuleMetric(
 	default:
 		return 0, false
 	}
+}
+
+func (s *OpsAlertEvaluatorService) computeCompoundRuleMetric(
+	ctx context.Context,
+	rule *OpsAlertRule,
+	overview *OpsDashboardOverview,
+	start time.Time,
+	end time.Time,
+	platform string,
+	groupID *int64,
+) (float64, bool) {
+	if rule == nil || overview == nil {
+		return 0, false
+	}
+	stats, err := s.opsRepo.GetCompoundAlertStats(ctx, &OpsCompoundAlertStatsFilter{
+		StartTime:       start,
+		EndTime:         end,
+		Platform:        platform,
+		GroupID:         groupID,
+		ErrorCategories: rule.ErrorCategories,
+	})
+	if err != nil {
+		return 0, false
+	}
+	if stats == nil {
+		return 0, false
+	}
+	finalFailures := stats.FinalFailures
+	if rule.MinSampleCount > 0 && overview.RequestCountSLA < int64(rule.MinSampleCount) {
+		return 0, true
+	}
+	if rule.MinFinalFailures > 0 && finalFailures < int64(rule.MinFinalFailures) {
+		return 0, true
+	}
+	if rule.MinFailureRate > 0 {
+		failureRate := s.compoundRuleFailureRate(ctx, rule, stats, overview, start, end, platform, groupID)
+		if failureRate < rule.MinFailureRate {
+			return 0, true
+		}
+	}
+	if !opsAlertImpactScopeSatisfied(rule, stats) {
+		return 0, true
+	}
+	return float64(finalFailures), true
+}
+
+func (s *OpsAlertEvaluatorService) compoundRuleFailureRate(
+	ctx context.Context,
+	rule *OpsAlertRule,
+	stats *OpsCompoundAlertStats,
+	overview *OpsDashboardOverview,
+	start time.Time,
+	end time.Time,
+	platform string,
+	groupID *int64,
+) float64 {
+	if rule != nil && stats != nil && rule.ImpactScope["affected_models"] == 1 && strings.TrimSpace(stats.DominantModel) != "" && s != nil && s.opsRepo != nil {
+		modelOverview, err := s.opsRepo.GetDashboardOverview(ctx, &OpsDashboardFilter{
+			StartTime: start,
+			EndTime:   end,
+			Platform:  platform,
+			Model:     strings.TrimSpace(stats.DominantModel),
+			GroupID:   groupID,
+			QueryMode: OpsQueryModeRaw,
+		})
+		if err == nil && modelOverview != nil && modelOverview.RequestCountSLA > 0 {
+			return modelOverview.ErrorRate * 100
+		}
+		return 0
+	}
+	if overview != nil && overview.RequestCountSLA > 0 {
+		return overview.ErrorRate * 100
+	}
+	return 0
+}
+
+func opsAlertImpactScopeSatisfied(rule *OpsAlertRule, stats *OpsCompoundAlertStats) bool {
+	if rule == nil || len(rule.ImpactScope) == 0 {
+		return true
+	}
+	if stats == nil {
+		return false
+	}
+	for key, minValue := range rule.ImpactScope {
+		if minValue <= 0 {
+			continue
+		}
+		var actualDistinct int64
+		var actualMax int64
+		switch strings.TrimSpace(key) {
+		case "affected_users":
+			actualDistinct = stats.AffectedUsers
+			actualMax = stats.MaxFailuresByUser
+		case "affected_api_keys":
+			actualDistinct = stats.AffectedAPIKeys
+			actualMax = stats.MaxFailuresByAPIKey
+		case "affected_groups":
+			actualDistinct = stats.AffectedGroups
+			actualMax = stats.MaxFailuresByGroup
+		case "affected_models":
+			actualDistinct = stats.AffectedModels
+			actualMax = stats.MaxFailuresByModel
+		case "affected_upstream_accounts", "affected_accounts":
+			actualDistinct = stats.AffectedUpstreamAccounts
+			actualMax = stats.MaxFailuresByUpstreamAccount
+		default:
+			return false
+		}
+		if int64(minValue) <= 1 {
+			minFailures := int64(rule.MinFinalFailures)
+			if minFailures <= 0 {
+				minFailures = int64(rule.Threshold)
+			}
+			if minFailures <= 0 {
+				minFailures = 1
+			}
+			if actualDistinct < 1 || actualMax < minFailures {
+				return false
+			}
+			continue
+		}
+		if actualDistinct < int64(minValue) {
+			return false
+		}
+	}
+	return true
 }
 
 func compareMetric(value float64, operator string, threshold float64) bool {

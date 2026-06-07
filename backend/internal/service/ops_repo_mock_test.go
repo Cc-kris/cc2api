@@ -20,6 +20,7 @@ type opsRepoMock struct {
 	GetActiveAlertEventFn         func(ctx context.Context, ruleID int64) (*OpsAlertEvent, error)
 	GetLatestAlertEventFn         func(ctx context.Context, ruleID int64) (*OpsAlertEvent, error)
 	GetMergeableAlertEventFn      func(ctx context.Context, eventKey string, since time.Time) (*OpsAlertEvent, error)
+	GetCompoundAlertStatsFn       func(ctx context.Context, filter *OpsCompoundAlertStatsFilter) (*OpsCompoundAlertStats, error)
 	CreateAlertEventFn            func(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error)
 	MergeAlertEventFn             func(ctx context.Context, eventID int64, event *OpsAlertEvent) (*OpsAlertEvent, error)
 	UpdateAlertEventStatusFn      func(ctx context.Context, eventID int64, status string, note string, processingAction string, operatorID *int64, resolvedAt *time.Time) error
@@ -198,6 +199,13 @@ func (m *opsRepoMock) GetMergeableAlertEvent(ctx context.Context, eventKey strin
 		return m.GetMergeableAlertEventFn(ctx, eventKey, since)
 	}
 	return nil, nil
+}
+
+func (m *opsRepoMock) GetCompoundAlertStats(ctx context.Context, filter *OpsCompoundAlertStatsFilter) (*OpsCompoundAlertStats, error) {
+	if m.GetCompoundAlertStatsFn != nil {
+		return m.GetCompoundAlertStatsFn(ctx, filter)
+	}
+	return &OpsCompoundAlertStats{}, nil
 }
 
 func (m *opsRepoMock) CreateAlertEvent(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error) {

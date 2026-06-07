@@ -48,6 +48,7 @@ type OpsRepository interface {
 	GetActiveAlertEvent(ctx context.Context, ruleID int64) (*OpsAlertEvent, error)
 	GetLatestAlertEvent(ctx context.Context, ruleID int64) (*OpsAlertEvent, error)
 	GetMergeableAlertEvent(ctx context.Context, eventKey string, since time.Time) (*OpsAlertEvent, error)
+	GetCompoundAlertStats(ctx context.Context, filter *OpsCompoundAlertStatsFilter) (*OpsCompoundAlertStats, error)
 	CreateAlertEvent(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error)
 	MergeAlertEvent(ctx context.Context, eventID int64, event *OpsAlertEvent) (*OpsAlertEvent, error)
 	UpdateAlertEventStatus(ctx context.Context, eventID int64, status string, note string, processingAction string, operatorID *int64, resolvedAt *time.Time) error

@@ -138,3 +138,29 @@ type OpsAlertEventFilter struct {
 	Model    string
 	GroupID  *int64
 }
+
+type OpsCompoundAlertStatsFilter struct {
+	StartTime       time.Time
+	EndTime         time.Time
+	Platform        string
+	GroupID         *int64
+	ErrorCategories []string
+}
+
+type OpsCompoundAlertStats struct {
+	FinalFailures int64
+
+	AffectedUsers            int64
+	AffectedAPIKeys          int64
+	AffectedGroups           int64
+	AffectedModels           int64
+	AffectedUpstreamAccounts int64
+
+	MaxFailuresByUser            int64
+	MaxFailuresByAPIKey          int64
+	MaxFailuresByGroup           int64
+	MaxFailuresByModel           int64
+	MaxFailuresByUpstreamAccount int64
+
+	DominantModel string
+}
