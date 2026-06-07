@@ -122,6 +122,15 @@ func (s *OpenAIGatewayService) LocalResponseCacheConfig(ctx context.Context) Loc
 	return cfg
 }
 
+func (s *GatewayService) LocalResponseCacheConfig(ctx context.Context) LocalResponseCacheConfig {
+	cfg := DefaultLocalResponseCacheConfig()
+	if s == nil || s.settingService == nil {
+		return cfg
+	}
+	cfg.Enabled = s.settingService.IsLocalResponseCacheEnabled(ctx)
+	return cfg
+}
+
 func (s *OpenAIGatewayService) GetLocalResponseCache(ctx context.Context, key string) (*LocalResponseCacheEntry, error) {
 	if s == nil || s.cache == nil {
 		return nil, nil
@@ -133,7 +142,29 @@ func (s *OpenAIGatewayService) GetLocalResponseCache(ctx context.Context, key st
 	return store.GetLocalResponse(ctx, key)
 }
 
+func (s *GatewayService) GetLocalResponseCache(ctx context.Context, key string) (*LocalResponseCacheEntry, error) {
+	if s == nil || s.cache == nil {
+		return nil, nil
+	}
+	store, ok := s.cache.(LocalResponseCacheStore)
+	if !ok {
+		return nil, nil
+	}
+	return store.GetLocalResponse(ctx, key)
+}
+
 func (s *OpenAIGatewayService) SetLocalResponseCache(ctx context.Context, key string, entry *LocalResponseCacheEntry, ttl time.Duration) error {
+	if s == nil || s.cache == nil || entry == nil {
+		return nil
+	}
+	store, ok := s.cache.(LocalResponseCacheStore)
+	if !ok {
+		return nil
+	}
+	return store.SetLocalResponse(ctx, key, entry, ttl)
+}
+
+func (s *GatewayService) SetLocalResponseCache(ctx context.Context, key string, entry *LocalResponseCacheEntry, ttl time.Duration) error {
 	if s == nil || s.cache == nil || entry == nil {
 		return nil
 	}
@@ -156,6 +187,25 @@ func (s *OpenAIGatewayService) RecordLocalResponseCacheStat(ctx context.Context,
 	s.localResponseCacheStatsOnce.Do(func() {
 		s.localResponseCacheStatsQueue = make(chan string, localResponseCacheStatsQueueSize)
 		go s.runLocalResponseCacheStatsWriter(store)
+	})
+	select {
+	case s.localResponseCacheStatsQueue <- field:
+	default:
+	}
+}
+
+func (s *GatewayService) RecordLocalResponseCacheStat(ctx context.Context, field string) {
+	field = strings.TrimSpace(field)
+	if s == nil || s.cache == nil || field == "" {
+		return
+	}
+	store, ok := s.cache.(LocalResponseCacheStatsStore)
+	if !ok {
+		return
+	}
+	s.localResponseCacheStatsOnce.Do(func() {
+		s.localResponseCacheStatsQueue = make(chan string, localResponseCacheStatsQueueSize)
+		go runLocalResponseCacheStatsWriter(store, s.localResponseCacheStatsQueue)
 	})
 	select {
 	case s.localResponseCacheStatsQueue <- field:
@@ -244,6 +294,10 @@ func normalizeLocalResponseCacheMinuteStatEvent(event *LocalResponseCacheMinuteS
 }
 
 func (s *OpenAIGatewayService) runLocalResponseCacheStatsWriter(store LocalResponseCacheStatsStore) {
+	runLocalResponseCacheStatsWriter(store, s.localResponseCacheStatsQueue)
+}
+
+func runLocalResponseCacheStatsWriter(store LocalResponseCacheStatsStore, queue <-chan string) {
 	ticker := time.NewTicker(localResponseCacheStatsFlushInterval)
 	defer ticker.Stop()
 	pending := map[string]int64{}
@@ -264,7 +318,7 @@ func (s *OpenAIGatewayService) runLocalResponseCacheStatsWriter(store LocalRespo
 	}
 	for {
 		select {
-		case field := <-s.localResponseCacheStatsQueue:
+		case field := <-queue:
 			if strings.TrimSpace(field) == "" {
 				continue
 			}
@@ -360,7 +414,7 @@ func LocalResponseCacheKeyHeadersFromHTTP(header http.Header) map[string]string 
 		return nil
 	}
 	out := map[string]string{}
-	for _, name := range []string{"Content-Type", "Accept", "OpenAI-Beta", "Anthropic-Version", "X-Goog-Api-Version"} {
+	for _, name := range []string{"Content-Type", "Accept", "OpenAI-Beta", "Anthropic-Version", "Anthropic-Beta", "X-Goog-Api-Version"} {
 		value := strings.TrimSpace(header.Get(name))
 		if value != "" {
 			out[strings.ToLower(name)] = value
@@ -427,9 +481,81 @@ func canonicalJSON(body []byte) ([]byte, bool) {
 }
 
 func hasLocalResponseCacheUnsafeFields(body []byte) bool {
-	for _, path := range []string{"tools", "tool_choice", "functions", "function_call", "parallel_tool_calls"} {
+	for _, path := range []string{"tools", "tool_choice", "functions", "function_call", "parallel_tool_calls", "thinking"} {
 		if gjson.GetBytes(body, path).Exists() {
 			return true
+		}
+	}
+	if containsLocalResponseCacheToolUse(body) {
+		return true
+	}
+	if containsLocalResponseCacheMultimodalContent(body) {
+		return true
+	}
+	return false
+}
+
+func containsLocalResponseCacheToolUse(body []byte) bool {
+	var value any
+	if err := json.Unmarshal(body, &value); err != nil {
+		return false
+	}
+	return containsLocalResponseCacheToolUseValue(value)
+}
+
+func containsLocalResponseCacheToolUseValue(value any) bool {
+	switch v := value.(type) {
+	case map[string]any:
+		if itemType, ok := v["type"].(string); ok && strings.EqualFold(strings.TrimSpace(itemType), "tool_use") {
+			return true
+		}
+		for _, child := range v {
+			if containsLocalResponseCacheToolUseValue(child) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range v {
+			if containsLocalResponseCacheToolUseValue(child) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func containsLocalResponseCacheMultimodalContent(body []byte) bool {
+	var value any
+	if err := json.Unmarshal(body, &value); err != nil {
+		return false
+	}
+	return containsLocalResponseCacheMultimodalValue(value)
+}
+
+func containsLocalResponseCacheMultimodalValue(value any) bool {
+	switch v := value.(type) {
+	case map[string]any:
+		if itemType, ok := v["type"].(string); ok {
+			switch strings.ToLower(strings.TrimSpace(itemType)) {
+			case "image", "document", "file", "audio", "video", "input_image", "input_file":
+				return true
+			}
+		}
+		if _, ok := v["source"]; ok {
+			if itemType, _ := v["type"].(string); itemType != "" && !strings.EqualFold(strings.TrimSpace(itemType), "text") {
+				return true
+			}
+		}
+		for _, child := range v {
+			if containsLocalResponseCacheMultimodalValue(child) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range v {
+			if containsLocalResponseCacheMultimodalValue(child) {
+				return true
+			}
 		}
 	}
 	return false

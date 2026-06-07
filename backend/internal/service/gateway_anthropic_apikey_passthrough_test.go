@@ -26,6 +26,7 @@ type anthropicHTTPUpstreamRecorder struct {
 	lastBody []byte
 	resp     *http.Response
 	err      error
+	calls    int
 }
 
 func newAnthropicAPIKeyAccountForTest() *Account {
@@ -48,6 +49,7 @@ func newAnthropicAPIKeyAccountForTest() *Account {
 }
 
 func (u *anthropicHTTPUpstreamRecorder) Do(req *http.Request, proxyURL string, accountID int64, accountConcurrency int) (*http.Response, error) {
+	u.calls++
 	u.lastReq = req
 	if req != nil && req.Body != nil {
 		b, _ := io.ReadAll(req.Body)
@@ -84,6 +86,58 @@ func (r *streamReadCloser) Read(p []byte) (int, error) {
 }
 
 func (r *streamReadCloser) Close() error { return nil }
+
+type localResponseCacheGatewayTestStore struct {
+	entries map[string]*LocalResponseCacheEntry
+	stats   map[string]int64
+}
+
+func (s *localResponseCacheGatewayTestStore) GetSessionAccountID(context.Context, int64, string) (int64, error) {
+	return 0, errors.New("not found")
+}
+
+func (s *localResponseCacheGatewayTestStore) SetSessionAccountID(context.Context, int64, string, int64, time.Duration) error {
+	return nil
+}
+
+func (s *localResponseCacheGatewayTestStore) RefreshSessionTTL(context.Context, int64, string, time.Duration) error {
+	return nil
+}
+
+func (s *localResponseCacheGatewayTestStore) DeleteSessionAccountID(context.Context, int64, string) error {
+	return nil
+}
+
+func (s *localResponseCacheGatewayTestStore) GetLocalResponse(_ context.Context, key string) (*LocalResponseCacheEntry, error) {
+	if s.entries == nil {
+		return nil, errors.New("not found")
+	}
+	entry, ok := s.entries[key]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	return entry, nil
+}
+
+func (s *localResponseCacheGatewayTestStore) SetLocalResponse(_ context.Context, key string, entry *LocalResponseCacheEntry, _ time.Duration) error {
+	if s.entries == nil {
+		s.entries = map[string]*LocalResponseCacheEntry{}
+	}
+	s.entries[key] = entry
+	return nil
+}
+
+func (s *localResponseCacheGatewayTestStore) IncrLocalResponseCacheStats(_ context.Context, field string, delta int64) error {
+	if s.stats == nil {
+		s.stats = map[string]int64{}
+	}
+	s.stats[field] += delta
+	return nil
+}
+
+func (s *localResponseCacheGatewayTestStore) GetLocalResponseCacheStats(context.Context) (*LocalResponseCacheStats, error) {
+	return &LocalResponseCacheStats{Counters: s.stats, Entries: int64(len(s.entries))}, nil
+}
 
 type failWriteResponseWriter struct {
 	gin.ResponseWriter
@@ -884,6 +938,76 @@ func TestGatewayService_AnthropicAPIKeyPassthrough_ForwardDirect_NonStreamingSuc
 	require.Equal(t, 5, result.Usage.CacheCreationInputTokens)
 	require.Equal(t, 4, result.Usage.CacheReadInputTokens)
 	require.Equal(t, upstreamJSON, rec.Body.String())
+}
+
+func TestGatewayService_AnthropicAPIKeyPassthrough_NonStreamingLocalResponseCacheHit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+		localResponseCache: true,
+		expiresAt:          time.Now().Add(time.Minute).UnixNano(),
+	})
+	defer gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
+
+	body := []byte(`{"model":"claude-3-5-sonnet-latest","messages":[{"role":"user","content":[{"type":"text","text":"hello"}]}],"stream":false}`)
+	upstreamJSON := `{"id":"msg_cache","type":"message","usage":{"input_tokens":12,"output_tokens":7},"content":[{"type":"text","text":"cached"}]}`
+	upstream := &anthropicHTTPUpstreamRecorder{
+		resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+				"x-request-id": []string{"rid-cache"},
+			},
+			Body: io.NopCloser(strings.NewReader(upstreamJSON)),
+		},
+	}
+	store := &localResponseCacheGatewayTestStore{}
+	settingRepo := newRuntimeSettingRepoStub()
+	settingRepo.values[SettingKeyLocalResponseCacheEnabled] = "true"
+	svc := &GatewayService{
+		cfg:                  &config.Config{},
+		httpUpstream:         upstream,
+		rateLimitService:     &RateLimitService{},
+		cache:                store,
+		settingService:       &SettingService{settingRepo: settingRepo},
+		responseHeaderFilter: compileResponseHeaderFilter(&config.Config{}),
+	}
+	groupID := int64(3)
+	parsed := &ParsedRequest{
+		Body:    body,
+		Model:   "claude-3-5-sonnet-latest",
+		Stream:  false,
+		GroupID: &groupID,
+		SessionContext: &SessionContext{
+			APIKeyID: 10,
+		},
+	}
+	account := newAnthropicAPIKeyAccountForTest()
+
+	rec1 := httptest.NewRecorder()
+	c1, _ := gin.CreateTestContext(rec1)
+	c1.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	result1, err := svc.Forward(context.Background(), c1, account, parsed)
+	require.NoError(t, err)
+	require.NotNil(t, result1)
+	require.Equal(t, 1, upstream.calls)
+	require.JSONEq(t, upstreamJSON, rec1.Body.String())
+
+	upstream.resp = &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"id":"msg_should_not_call"}`)),
+	}
+	rec2 := httptest.NewRecorder()
+	c2, _ := gin.CreateTestContext(rec2)
+	c2.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	result2, err := svc.Forward(context.Background(), c2, account, parsed)
+	require.NoError(t, err)
+	require.NotNil(t, result2)
+	require.Equal(t, 1, upstream.calls, "second identical non-streaming request must be served from local response cache")
+	require.Equal(t, LocalResponseCacheHeaderHit, rec2.Header().Get(LocalResponseCacheHeader))
+	require.JSONEq(t, upstreamJSON, rec2.Body.String())
+	require.Equal(t, 12, result2.Usage.InputTokens)
+	require.Equal(t, 7, result2.Usage.OutputTokens)
 }
 
 func TestGatewayService_AnthropicAPIKeyPassthrough_ForwardDirect_InvalidTokenType(t *testing.T) {

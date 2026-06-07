@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -595,6 +596,9 @@ type GatewayService struct {
 	tlsFPProfileService   *TLSFingerprintProfileService
 	balanceNotifyService  *BalanceNotifyService
 	userPlatformQuotaRepo UserPlatformQuotaRepository
+
+	localResponseCacheStatsOnce  sync.Once
+	localResponseCacheStatsQueue chan string
 }
 
 // NewGatewayService creates a new GatewayService
@@ -4390,6 +4394,13 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 			OriginalModel: parsed.Model,
 			RequestStream: parsed.Stream,
 			StartTime:     startTime,
+			GroupID:       parsed.GroupID,
+			APIKeyID: func() int64 {
+				if parsed.SessionContext != nil {
+					return parsed.SessionContext.APIKeyID
+				}
+				return 0
+			}(),
 		})
 	}
 
@@ -4988,6 +4999,8 @@ type anthropicPassthroughForwardInput struct {
 	OriginalModel string
 	RequestStream bool
 	StartTime     time.Time
+	GroupID       *int64
+	APIKeyID      int64
 }
 
 func (s *GatewayService) forwardAnthropicAPIKeyPassthrough(
@@ -5036,6 +5049,21 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 	}
 	// Pre-filter: strip empty text blocks (including nested in tool_result) to prevent upstream 400.
 	input.Body = StripEmptyTextBlocks(input.Body)
+
+	var localCacheLookup LocalResponseCacheLookup
+	var localCacheCfg LocalResponseCacheConfig
+	if !input.RequestStream {
+		localCacheLookup, localCacheCfg = s.prepareClaudeLocalResponseCache(ctx, c, input.Body, input.RequestModel, input.APIKeyID, input.GroupID)
+		if usage, ok := s.tryWriteClaudeLocalResponseCacheHit(ctx, c, localCacheLookup); ok {
+			return &ForwardResult{
+				Usage:         *usage,
+				Model:         input.OriginalModel,
+				UpstreamModel: input.RequestModel,
+				Stream:        false,
+				Duration:      time.Since(input.StartTime),
+			}, nil
+		}
+	}
 
 	var resp *http.Response
 	retryStart := time.Now()
@@ -5210,10 +5238,13 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 		firstTokenMs = streamResult.firstTokenMs
 		clientDisconnect = streamResult.clientDisconnect
 	} else {
-		usage, err = s.handleNonStreamingResponseAnthropicAPIKeyPassthrough(ctx, resp, c, account)
+		var responseBody []byte
+		var contentType string
+		usage, responseBody, contentType, err = s.handleNonStreamingResponseAnthropicAPIKeyPassthrough(ctx, resp, c, account)
 		if err != nil {
 			return nil, err
 		}
+		s.persistClaudeLocalResponseCache(ctx, c, localCacheLookup, localCacheCfg, resp.StatusCode, contentType, responseBody)
 	}
 	if usage == nil {
 		usage = &ClaudeUsage{}
@@ -5616,19 +5647,127 @@ func parseClaudeUsageFromResponseBody(body []byte) *ClaudeUsage {
 	return usage
 }
 
+func (s *GatewayService) prepareClaudeLocalResponseCache(ctx context.Context, c *gin.Context, body []byte, model string, apiKeyID int64, groupID *int64) (LocalResponseCacheLookup, LocalResponseCacheConfig) {
+	cfg := s.LocalResponseCacheConfig(ctx)
+	explicitBypass := false
+	headers := http.Header{}
+	if c != nil && c.Request != nil {
+		explicitBypass = strings.EqualFold(strings.TrimSpace(c.GetHeader("X-Sub2API-Cache-Control")), "bypass")
+		headers = c.Request.Header.Clone()
+	}
+	if strings.TrimSpace(headers.Get("Content-Type")) == "" {
+		headers.Set("Content-Type", "application/json")
+	}
+	if strings.TrimSpace(headers.Get("Anthropic-Version")) == "" {
+		headers.Set("Anthropic-Version", "2023-06-01")
+	}
+	lookup := BuildLocalResponseCacheLookupWithOptions(cfg, apiKeyID, groupID, "/v1/messages", PlatformAnthropic, model, body, explicitBypass, LocalResponseCacheKeyOptions{
+		Headers: LocalResponseCacheKeyHeadersFromHTTP(headers),
+	})
+	if lookup.Key == "" && cfg.Enabled && s != nil {
+		s.RecordLocalResponseCacheStat(ctx, "lookup_bypass:"+lookup.Reason)
+	}
+	return lookup, cfg
+}
+
+func (s *GatewayService) tryWriteClaudeLocalResponseCacheHit(ctx context.Context, c *gin.Context, lookup LocalResponseCacheLookup) (*ClaudeUsage, bool) {
+	if lookup.Key == "" {
+		return nil, false
+	}
+	entry, err := s.GetLocalResponseCache(ctx, lookup.Key)
+	if err != nil && strings.TrimSpace(lookup.LegacyKey) != "" {
+		entry, err = s.GetLocalResponseCache(ctx, lookup.LegacyKey)
+	}
+	if err != nil || entry == nil || len(entry.Body) == 0 {
+		if s != nil {
+			s.RecordLocalResponseCacheStat(ctx, "lookup_miss")
+		}
+		return nil, false
+	}
+	if c != nil {
+		for k, v := range entry.Headers {
+			if strings.TrimSpace(k) != "" && strings.TrimSpace(v) != "" {
+				c.Header(k, v)
+			}
+		}
+		contentType := entry.ContentType
+		if contentType == "" {
+			contentType = "application/json"
+		}
+		c.Header("Content-Type", contentType)
+		c.Header(LocalResponseCacheHeader, LocalResponseCacheHeaderHit)
+		status := entry.StatusCode
+		if status == 0 {
+			status = http.StatusOK
+		}
+		c.Data(status, contentType, entry.Body)
+	}
+	if s != nil {
+		s.RecordLocalResponseCacheStat(ctx, "lookup_hit")
+	}
+	return parseClaudeUsageFromResponseBody(entry.Body), true
+}
+
+func (s *GatewayService) persistClaudeLocalResponseCache(ctx context.Context, c *gin.Context, lookup LocalResponseCacheLookup, cfg LocalResponseCacheConfig, status int, contentType string, body []byte) {
+	if lookup.Key == "" {
+		return
+	}
+	if status != http.StatusOK || len(body) == 0 {
+		if s != nil {
+			if status != http.StatusOK {
+				s.RecordLocalResponseCacheStat(ctx, "store_skip:status_not_ok")
+			} else {
+				s.RecordLocalResponseCacheStat(ctx, "store_skip:empty_body")
+			}
+		}
+		return
+	}
+	if !isLocalResponseCacheableClaudeContentType(contentType) {
+		if s != nil {
+			s.RecordLocalResponseCacheStat(ctx, "store_skip:content_type")
+		}
+		return
+	}
+	entry := &LocalResponseCacheEntry{
+		StatusCode:  status,
+		ContentType: contentType,
+		Body:        append([]byte(nil), body...),
+		Headers: map[string]string{
+			"Content-Type": contentType,
+		},
+		CreatedAt: time.Now(),
+	}
+	if setErr := s.SetLocalResponseCache(ctx, lookup.Key, entry, cfg.TTL); setErr != nil {
+		if s != nil {
+			s.RecordLocalResponseCacheStat(ctx, "store_failed")
+		}
+		return
+	}
+	if c != nil {
+		c.Header(LocalResponseCacheHeader, LocalResponseCacheHeaderMiss)
+	}
+	if s != nil {
+		s.RecordLocalResponseCacheStat(ctx, "store_success")
+	}
+}
+
+func isLocalResponseCacheableClaudeContentType(contentType string) bool {
+	return strings.Contains(strings.ToLower(contentType), "application/json")
+}
+
 func (s *GatewayService) handleNonStreamingResponseAnthropicAPIKeyPassthrough(
 	ctx context.Context,
 	resp *http.Response,
 	c *gin.Context,
 	account *Account,
-) (*ClaudeUsage, error) {
+) (*ClaudeUsage, []byte, string, error) {
 	if s.rateLimitService != nil {
 		s.rateLimitService.UpdateSessionWindow(ctx, account, resp.Header)
 	}
 
 	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, anthropicTooLargeError)
 	if err != nil {
-		return nil, err
+		return nil, nil, "", err
 	}
 
 	usage := parseClaudeUsageFromResponseBody(body)
@@ -5640,7 +5779,7 @@ func (s *GatewayService) handleNonStreamingResponseAnthropicAPIKeyPassthrough(
 	}
 	body = reverseToolNamesIfPresent(c, body)
 	c.Data(resp.StatusCode, contentType, body)
-	return usage, nil
+	return usage, body, contentType, nil
 }
 
 func writeAnthropicPassthroughResponseHeaders(dst http.Header, src http.Header, filter *responseheaders.CompiledHeaderFilter) {

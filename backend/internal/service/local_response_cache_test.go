@@ -59,6 +59,16 @@ func TestBuildLocalResponseCacheLookup_HeaderAffectsV2RequestHash(t *testing.T) 
 	require.NotEmpty(t, sseLookup.Key)
 	require.NotEqual(t, jsonLookup.Key, sseLookup.Key)
 	require.Equal(t, jsonLookup.LegacyKey, sseLookup.LegacyKey)
+
+	claudeBetaLookup := BuildLocalResponseCacheLookupWithOptions(cfg, 10, &groupID, "/v1/messages", PlatformAnthropic, "claude-sonnet-4.6", body, false, LocalResponseCacheKeyOptions{
+		Headers: map[string]string{"anthropic-beta": "interleaved-thinking-2025-05-14"},
+	})
+	claudeNoBetaLookup := BuildLocalResponseCacheLookupWithOptions(cfg, 10, &groupID, "/v1/messages", PlatformAnthropic, "claude-sonnet-4.6", body, false, LocalResponseCacheKeyOptions{
+		Headers: map[string]string{"anthropic-version": "2023-06-01"},
+	})
+	require.NotEmpty(t, claudeBetaLookup.Key)
+	require.NotEmpty(t, claudeNoBetaLookup.Key)
+	require.NotEqual(t, claudeBetaLookup.Key, claudeNoBetaLookup.Key)
 }
 
 func TestBuildLocalResponseCacheLookup_CanonicalJSON(t *testing.T) {
@@ -84,6 +94,10 @@ func TestBuildLocalResponseCacheLookup_BypassRules(t *testing.T) {
 		want string
 	}{
 		{name: "tool", body: `{"model":"gpt-5.5","tools":[]}`, want: "tools_or_functions"},
+		{name: "claude tool_use", body: `{"model":"claude-sonnet-4.6","messages":[{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"read","input":{}}]}]}`, want: "tools_or_functions"},
+		{name: "claude thinking", body: `{"model":"claude-sonnet-4.6","thinking":{"type":"enabled"},"messages":[{"role":"user","content":"hi"}]}`, want: "tools_or_functions"},
+		{name: "claude image", body: `{"model":"claude-sonnet-4.6","messages":[{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"abc"}}]}]}`, want: "tools_or_functions"},
+		{name: "claude document", body: `{"model":"claude-sonnet-4.6","messages":[{"role":"user","content":[{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"abc"}}]}]}`, want: "tools_or_functions"},
 		{name: "temperature", body: `{"model":"gpt-5.5","temperature":0.9}`, want: "temperature_too_high"},
 		{name: "sensitive", body: `{"model":"gpt-5.5","input":"password=abc"}`, want: "sensitive_content"},
 	}
