@@ -190,6 +190,21 @@ func TestMigration143ExtendsOpsAlertRulesWithoutDroppingLegacyRows(t *testing.T)
 	require.NotContains(t, sql, "DROP COLUMN")
 	require.NotContains(t, sql, "DELETE FROM ops_alert_rules")
 	require.NotContains(t, sql, "TRUNCATE")
+	require.NotContains(t, sql, "DELETE FROM ops_alert_rules")
+}
+
+func TestMigration143BackfillsOnlyNullCompoundAlertRuleFields(t *testing.T) {
+	content, err := FS.ReadFile("143_ops_alert_rule_compound_conditions.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "UPDATE ops_alert_rules\nSET rule_version = 'v1'\nWHERE rule_version IS NULL")
+	require.Contains(t, sql, "UPDATE ops_alert_rules\nSET migration_state = 'readonly_legacy'\nWHERE migration_state IS NULL")
+	require.Contains(t, sql, "UPDATE ops_alert_rules\nSET notification_channels = CASE")
+	require.Contains(t, sql, "WHERE notification_channels IS NULL")
+	require.NotContains(t, sql, "UPDATE ops_alert_rules\nSET name")
+	require.NotContains(t, sql, "UPDATE ops_alert_rules\nSET metric_type")
+	require.NotContains(t, sql, "UPDATE ops_alert_rules\nSET threshold")
 }
 
 func TestMigration143UsesIdempotentColumnAdds(t *testing.T) {
