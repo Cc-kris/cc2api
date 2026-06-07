@@ -4418,101 +4418,6 @@
                 <Toggle v-model="form.backend_mode_enabled" />
               </div>
 
-              <div
-                class="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20"
-              >
-                <div class="flex items-center justify-between gap-4">
-                  <div>
-                    <h3 class="text-sm font-medium text-gray-900 dark:text-white">
-                      {{ t("admin.settings.site.localResponseCache") }}
-                    </h3>
-                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      {{ t("admin.settings.site.localResponseCacheDescription") }}
-                    </p>
-                  </div>
-                  <Toggle v-model="form.local_response_cache_enabled" />
-                </div>
-
-                <div class="mt-4 rounded-lg border border-blue-100 bg-white/70 p-4 dark:border-blue-900/60 dark:bg-dark-800/70">
-                  <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h4 class="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
-                        {{ localText("缓存使用情况", "Cache usage") }}
-                      </h4>
-                      <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        {{ localText("统计用于判断为什么当前请求没有命中缓存，不记录请求或响应正文。", "Stats explain cache hit or bypass reasons without recording request or response bodies.") }}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      class="btn btn-secondary btn-sm"
-                      :disabled="localResponseCacheStatsLoading"
-                      @click="loadLocalResponseCacheStats"
-                    >
-                      {{ localResponseCacheStatsLoading ? localText("刷新中", "Refreshing") : localText("刷新统计", "Refresh stats") }}
-                    </button>
-                  </div>
-
-                  <p
-                    v-if="localResponseCacheStatsError"
-                    class="mt-3 text-xs text-red-600 dark:text-red-400"
-                  >
-                    {{ localResponseCacheStatsError }}
-                  </p>
-
-                  <div class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-                    <div
-                      v-for="item in localResponseCacheOverview"
-                      :key="item.label"
-                      class="rounded-md border border-gray-100 bg-white p-3 dark:border-dark-700 dark:bg-dark-900"
-                    >
-                      <p class="text-xs text-gray-500 dark:text-gray-400">{{ item.label }}</p>
-                      <p class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">{{ item.value }}</p>
-                    </div>
-                  </div>
-
-                  <div class="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
-                    <div class="rounded-md border border-gray-100 bg-white p-3 dark:border-dark-700 dark:bg-dark-900">
-                      <p class="text-xs font-medium text-gray-700 dark:text-gray-300">
-                        {{ localText("绕过原因", "Bypass reasons") }}
-                      </p>
-                      <div v-if="localResponseCacheBypassReasonEntries.length" class="mt-2 space-y-1">
-                        <div
-                          v-for="[reason, count] in localResponseCacheBypassReasonEntries"
-                          :key="reason"
-                          class="flex items-center justify-between gap-3 text-xs"
-                        >
-                          <span class="font-mono text-gray-500 dark:text-gray-400">{{ reason }}</span>
-                          <span class="font-semibold text-gray-900 dark:text-white">{{ formatCacheNumber(count) }}</span>
-                        </div>
-                      </div>
-                      <p v-else class="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                        {{ localText("暂无绕过记录", "No bypass records") }}
-                      </p>
-                    </div>
-
-                    <div class="rounded-md border border-gray-100 bg-white p-3 dark:border-dark-700 dark:bg-dark-900">
-                      <p class="text-xs font-medium text-gray-700 dark:text-gray-300">
-                        {{ localText("写入跳过原因", "Store skip reasons") }}
-                      </p>
-                      <div v-if="localResponseCacheStoreSkipReasonEntries.length" class="mt-2 space-y-1">
-                        <div
-                          v-for="[reason, count] in localResponseCacheStoreSkipReasonEntries"
-                          :key="reason"
-                          class="flex items-center justify-between gap-3 text-xs"
-                        >
-                          <span class="font-mono text-gray-500 dark:text-gray-400">{{ reason }}</span>
-                          <span class="font-semibold text-gray-900 dark:text-white">{{ formatCacheNumber(count) }}</span>
-                        </div>
-                      </div>
-                      <p v-else class="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                        {{ localText("暂无写入跳过记录", "No store skip records") }}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div>
                   <label
@@ -6846,7 +6751,6 @@ import type {
   UpdateSettingsRequest,
   DefaultSubscriptionSetting,
   DefaultPlatformQuotasMap,
-  LocalResponseCacheStats,
   OpenAIFastPolicyRule,
   WeChatConnectMode,
   WebSearchEmulationConfig,
@@ -6994,10 +6898,6 @@ const registrationEmailSuffixWhitelistTags = ref<string[]>([]);
 const registrationEmailSuffixWhitelistDraft = ref("");
 const tablePageSizeOptionsInput = ref("10, 20, 50, 100");
 
-const localResponseCacheStatsLoading = ref(false);
-const localResponseCacheStatsError = ref("");
-const localResponseCacheStats = ref<LocalResponseCacheStats | null>(null);
-
 // Admin API Key 状态
 const adminApiKeyLoading = ref(true);
 const adminApiKeyExists = ref(false);
@@ -7094,72 +6994,6 @@ function defaultLoginAgreementDocuments(): LoginAgreementDocument[] {
       content_md: "",
     },
   ];
-}
-
-function formatCacheNumber(value: number | undefined | null): string {
-  return new Intl.NumberFormat(locale.value).format(Number(value) || 0);
-}
-
-function formatCacheBytes(value: number | undefined | null): string {
-  const bytes = Number(value) || 0;
-  if (bytes < 1024) {
-    return `${formatCacheNumber(bytes)} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  if (bytes < 1024 * 1024 * 1024) {
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  }
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
-}
-
-function formatCachePercent(value: number | undefined | null): string {
-  return `${((Number(value) || 0) * 100).toFixed(1)}%`;
-}
-
-function sortedCacheReasonEntries(reasons: Record<string, number> | undefined): Array<[string, number]> {
-  return Object.entries(reasons || {})
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, 8);
-}
-
-const localResponseCacheOverview = computed(() => {
-  const stats = localResponseCacheStats.value;
-  return [
-    { label: localText("当前条目", "Entries"), value: formatCacheNumber(stats?.entries) },
-    { label: localText("当前占用", "Memory"), value: formatCacheBytes(stats?.bytes) },
-    { label: localText("命中", "Hits"), value: formatCacheNumber(stats?.lookup_hit) },
-    { label: localText("未命中", "Misses"), value: formatCacheNumber(stats?.lookup_miss) },
-    { label: localText("命中率", "Hit rate"), value: formatCachePercent(stats?.hit_rate) },
-    { label: localText("绕过", "Bypass"), value: formatCacheNumber(stats?.bypass_total) },
-    { label: localText("写入成功", "Stored"), value: formatCacheNumber(stats?.store_success) },
-    { label: localText("写入跳过", "Store skipped"), value: formatCacheNumber(stats?.store_skip_total) },
-  ];
-});
-
-const localResponseCacheBypassReasonEntries = computed(() =>
-  sortedCacheReasonEntries(localResponseCacheStats.value?.bypass_reasons),
-);
-
-const localResponseCacheStoreSkipReasonEntries = computed(() =>
-  sortedCacheReasonEntries(localResponseCacheStats.value?.store_skip_reasons),
-);
-
-async function loadLocalResponseCacheStats() {
-  localResponseCacheStatsLoading.value = true;
-  localResponseCacheStatsError.value = "";
-  try {
-    localResponseCacheStats.value =
-      await adminAPI.settings.getLocalResponseCacheStats();
-  } catch (error: unknown) {
-    localResponseCacheStatsError.value = extractApiErrorMessage(
-      error,
-      localText("缓存统计加载失败", "Failed to load cache stats"),
-    );
-  } finally {
-    localResponseCacheStatsLoading.value = false;
-  }
 }
 
 function normalizeLoginAgreementDocumentId(raw: string): string {
@@ -8081,7 +7915,6 @@ async function loadSettings() {
   loadFailed.value = false;
   try {
     const settings = await adminAPI.settings.getSettings();
-    void loadLocalResponseCacheStats();
     settings.payment_load_balance_strategy =
       settings.payment_load_balance_strategy || "round-robin";
     // Only assign non-null values from backend (null means unconfigured, keep defaults)
@@ -8736,7 +8569,6 @@ async function saveSettings() {
     }
     // Save web search emulation config separately (errors handled internally)
     const wsOk = await saveWebSearchConfig();
-    void loadLocalResponseCacheStats();
     // Refresh cached settings so sidebar/header update immediately
     await appStore.fetchPublicSettings(true);
     await adminSettingsStore.fetch(true);

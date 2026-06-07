@@ -16,7 +16,6 @@ const {
   getStreamTimeoutSettings,
   getRectifierSettings,
   getBetaPolicySettings,
-  getLocalResponseCacheStats,
   getGroups,
   listProxies,
   getProviders,
@@ -41,7 +40,6 @@ const {
   getStreamTimeoutSettings: vi.fn(),
   getRectifierSettings: vi.fn(),
   getBetaPolicySettings: vi.fn(),
-  getLocalResponseCacheStats: vi.fn(),
   getGroups: vi.fn(),
   listProxies: vi.fn(),
   getProviders: vi.fn(),
@@ -72,7 +70,6 @@ vi.mock("@/api", () => ({
       getStreamTimeoutSettings,
       getRectifierSettings,
       getBetaPolicySettings,
-      getLocalResponseCacheStats,
     },
     groups: {
       getAll: getGroups,
@@ -513,7 +510,6 @@ describe("admin SettingsView payment visible method controls", () => {
     getStreamTimeoutSettings.mockReset();
     getRectifierSettings.mockReset();
     getBetaPolicySettings.mockReset();
-    getLocalResponseCacheStats.mockReset();
     getGroups.mockReset();
     listProxies.mockReset();
     getProviders.mockReset();
@@ -570,22 +566,6 @@ describe("admin SettingsView payment visible method controls", () => {
     });
     getBetaPolicySettings.mockResolvedValue({
       rules: [],
-    });
-    getLocalResponseCacheStats.mockResolvedValue({
-      enabled: true,
-      entries: 2,
-      bytes: 2048,
-      lookup_hit: 3,
-      lookup_miss: 5,
-      lookup_error: 0,
-      store_success: 2,
-      store_failed: 0,
-      bypass_total: 7,
-      store_skip_total: 4,
-      hit_rate: 0.375,
-      bypass_reasons: { tools_or_functions: 7 },
-      store_skip_reasons: { stream_incomplete: 4 },
-      counters: {},
     });
     getGroups.mockResolvedValue([]);
     listProxies.mockResolvedValue({
@@ -692,15 +672,14 @@ describe("admin SettingsView payment visible method controls", () => {
     );
   });
 
-  it("renders local response cache stats on general settings", async () => {
+  it("does not render cache management content inside general settings", async () => {
     const wrapper = mountView();
 
     await flushPromises();
 
-    expect(getLocalResponseCacheStats).toHaveBeenCalledTimes(1);
-    expect(wrapper.text()).toContain("缓存使用情况");
-    expect(wrapper.text()).toContain("tools_or_functions");
-    expect(wrapper.text()).toContain("stream_incomplete");
+    expect(wrapper.text()).not.toContain("缓存使用情况");
+    expect(wrapper.text()).not.toContain("tools_or_functions");
+    expect(wrapper.text()).not.toContain("stream_incomplete");
   });
 
   it("submits Antigravity user agent version gateway setting", async () => {
@@ -918,7 +897,6 @@ describe("admin SettingsView wechat connect controls", () => {
     getStreamTimeoutSettings.mockReset();
     getRectifierSettings.mockReset();
     getBetaPolicySettings.mockReset();
-    getLocalResponseCacheStats.mockReset();
     getGroups.mockReset();
     listProxies.mockReset();
     getProviders.mockReset();
@@ -978,22 +956,6 @@ describe("admin SettingsView wechat connect controls", () => {
     });
     getBetaPolicySettings.mockResolvedValue({
       rules: [],
-    });
-    getLocalResponseCacheStats.mockResolvedValue({
-      enabled: true,
-      entries: 2,
-      bytes: 2048,
-      lookup_hit: 3,
-      lookup_miss: 5,
-      lookup_error: 0,
-      store_success: 2,
-      store_failed: 0,
-      bypass_total: 7,
-      store_skip_total: 4,
-      hit_rate: 0.375,
-      bypass_reasons: { tools_or_functions: 7 },
-      store_skip_reasons: { stream_incomplete: 4 },
-      counters: {},
     });
     getGroups.mockResolvedValue([]);
     listProxies.mockResolvedValue({
@@ -1185,7 +1147,6 @@ describe("admin SettingsView platform quota matrix", () => {
     getStreamTimeoutSettings.mockReset();
     getRectifierSettings.mockReset();
     getBetaPolicySettings.mockReset();
-    getLocalResponseCacheStats.mockReset();
     getGroups.mockReset();
     listProxies.mockReset();
     getProviders.mockReset();
@@ -1212,22 +1173,6 @@ describe("admin SettingsView platform quota matrix", () => {
     getStreamTimeoutSettings.mockResolvedValue({});
     getRectifierSettings.mockResolvedValue({});
     getBetaPolicySettings.mockResolvedValue({});
-    getLocalResponseCacheStats.mockResolvedValue({
-      enabled: true,
-      entries: 2,
-      bytes: 2048,
-      lookup_hit: 3,
-      lookup_miss: 5,
-      lookup_error: 0,
-      store_success: 2,
-      store_failed: 0,
-      bypass_total: 7,
-      store_skip_total: 4,
-      hit_rate: 0.375,
-      bypass_reasons: { tools_or_functions: 7 },
-      store_skip_reasons: { stream_incomplete: 4 },
-      counters: {},
-    });
     getGroups.mockResolvedValue([]);
     listProxies.mockResolvedValue({ items: [] });
     getProviders.mockResolvedValue({ data: [] });
