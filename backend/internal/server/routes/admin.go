@@ -97,6 +97,17 @@ func RegisterAdminRoutes(
 
 		// 邀请返利（专属用户管理）
 		registerAffiliateRoutes(admin, h)
+
+		// 缓存管理
+		registerCacheManagementRoutes(admin, h)
+	}
+}
+
+func registerCacheManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	cache := admin.Group("/cache")
+	{
+		cache.GET("/config", h.Admin.CacheConfig.GetConfig)
+		cache.PUT("/config", h.Admin.CacheConfig.UpdateConfig)
 	}
 }
 

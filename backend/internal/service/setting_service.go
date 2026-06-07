@@ -4720,3 +4720,148 @@ func (s *SettingService) IsLocalResponseCacheEnabled(ctx context.Context) bool {
 	}
 	return s.getGatewayForwardingSettingsCached(ctx).localResponseCache
 }
+
+const SettingKeyCacheManagementConfig = "cache_management_config"
+
+const (
+	cacheManagementBypassHeaderName  = "X-Sub2API-Cache-Control"
+	cacheManagementBypassHeaderValue = "bypass"
+)
+
+type CacheManagementPlatformConfig struct {
+	Enabled bool `json:"enabled"`
+}
+
+type CacheManagementPlatformsConfig struct {
+	OpenAI CacheManagementPlatformConfig `json:"openai"`
+	Claude CacheManagementPlatformConfig `json:"claude"`
+	Gemini CacheManagementPlatformConfig `json:"gemini"`
+}
+
+type CacheManagementBypassHeader struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type CacheManagementConfig struct {
+	GlobalEnabled    bool                           `json:"global_enabled"`
+	Platforms        CacheManagementPlatformsConfig `json:"platforms"`
+	TTLSeconds       int                            `json:"ttl_seconds"`
+	MaxRequestBytes  int                            `json:"max_request_bytes"`
+	MaxResponseBytes int                            `json:"max_response_bytes"`
+	MaxTemperature   float64                        `json:"max_temperature"`
+	ModelAllowlist   []string                       `json:"model_allowlist"`
+	ModelBlocklist   []string                       `json:"model_blocklist"`
+	BypassHeader     CacheManagementBypassHeader    `json:"bypass_header"`
+}
+
+func DefaultCacheManagementConfig() CacheManagementConfig {
+	return CacheManagementConfig{
+		GlobalEnabled: false,
+		Platforms: CacheManagementPlatformsConfig{
+			OpenAI: CacheManagementPlatformConfig{Enabled: false},
+			Claude: CacheManagementPlatformConfig{Enabled: false},
+			Gemini: CacheManagementPlatformConfig{Enabled: false},
+		},
+		TTLSeconds:       600,
+		MaxRequestBytes:  256 * 1024,
+		MaxResponseBytes: 512 * 1024,
+		MaxTemperature:   0.3,
+		ModelAllowlist:   []string{},
+		ModelBlocklist:   []string{},
+		BypassHeader: CacheManagementBypassHeader{
+			Name:  cacheManagementBypassHeaderName,
+			Value: cacheManagementBypassHeaderValue,
+		},
+	}
+}
+
+func (s *SettingService) GetCacheManagementConfig(ctx context.Context) (CacheManagementConfig, error) {
+	cfg := DefaultCacheManagementConfig()
+	raw, err := s.settingRepo.GetValue(ctx, SettingKeyCacheManagementConfig)
+	if err != nil {
+		if errors.Is(err, ErrSettingNotFound) {
+			return cfg, nil
+		}
+		return cfg, err
+	}
+	if strings.TrimSpace(raw) == "" {
+		return cfg, nil
+	}
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		return cfg, fmt.Errorf("parse cache management config: %w", err)
+	}
+	cfg = normalizeCacheManagementConfig(cfg)
+	if err := validateCacheManagementConfig(cfg); err != nil {
+		return DefaultCacheManagementConfig(), err
+	}
+	return cfg, nil
+}
+
+func (s *SettingService) UpdateCacheManagementConfig(ctx context.Context, cfg CacheManagementConfig) (CacheManagementConfig, error) {
+	cfg = normalizeCacheManagementConfig(cfg)
+	if err := validateCacheManagementConfig(cfg); err != nil {
+		return CacheManagementConfig{}, err
+	}
+	payload, err := json.Marshal(cfg)
+	if err != nil {
+		return CacheManagementConfig{}, err
+	}
+	if err := s.settingRepo.Set(ctx, SettingKeyCacheManagementConfig, string(payload)); err != nil {
+		return CacheManagementConfig{}, err
+	}
+	return cfg, nil
+}
+
+func normalizeCacheManagementConfig(cfg CacheManagementConfig) CacheManagementConfig {
+	cfg.ModelAllowlist = normalizeCacheManagementModelList(cfg.ModelAllowlist)
+	cfg.ModelBlocklist = normalizeCacheManagementModelList(cfg.ModelBlocklist)
+	cfg.BypassHeader = CacheManagementBypassHeader{
+		Name:  cacheManagementBypassHeaderName,
+		Value: cacheManagementBypassHeaderValue,
+	}
+	return cfg
+}
+
+func normalizeCacheManagementModelList(items []string) []string {
+	out := make([]string, 0, len(items))
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		model := strings.TrimSpace(item)
+		if model == "" {
+			continue
+		}
+		key := strings.ToLower(model)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, model)
+	}
+	return out
+}
+
+func validateCacheManagementConfig(cfg CacheManagementConfig) error {
+	if cfg.TTLSeconds < 60 || cfg.TTLSeconds > 86400 {
+		return infraerrors.BadRequest("CACHE_CONFIG_INVALID", "ttl_seconds must be between 60 and 86400")
+	}
+	if cfg.MaxRequestBytes < 1024 || cfg.MaxRequestBytes > 5*1024*1024 {
+		return infraerrors.BadRequest("CACHE_CONFIG_INVALID", "max_request_bytes must be between 1024 and 5242880")
+	}
+	if cfg.MaxResponseBytes < 1024 || cfg.MaxResponseBytes > 10*1024*1024 {
+		return infraerrors.BadRequest("CACHE_CONFIG_INVALID", "max_response_bytes must be between 1024 and 10485760")
+	}
+	if math.IsNaN(cfg.MaxTemperature) || math.IsInf(cfg.MaxTemperature, 0) || cfg.MaxTemperature < 0 || cfg.MaxTemperature > 2 {
+		return infraerrors.BadRequest("CACHE_CONFIG_INVALID", "max_temperature must be between 0 and 2")
+	}
+	allow := make(map[string]struct{}, len(cfg.ModelAllowlist))
+	for _, model := range cfg.ModelAllowlist {
+		allow[strings.ToLower(model)] = struct{}{}
+	}
+	for _, model := range cfg.ModelBlocklist {
+		if _, ok := allow[strings.ToLower(model)]; ok {
+			return infraerrors.BadRequest("CACHE_CONFIG_INVALID", "model_allowlist and model_blocklist cannot overlap")
+		}
+	}
+	return nil
+}
