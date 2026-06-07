@@ -333,3 +333,33 @@ func TestMigration145CreatesOpsAIAnalysisTasks(t *testing.T) {
 	require.NotContains(t, sql, "DELETE FROM ops_ai_analysis_tasks")
 	require.NotContains(t, sql, "TRUNCATE")
 }
+
+func TestMigration146CreatesOpsAIAnalysisReports(t *testing.T) {
+	content, err := FS.ReadFile("146_ops_ai_analysis_reports.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "CREATE TABLE IF NOT EXISTS ops_ai_analysis_reports")
+	for _, column := range []string{
+		"task_id BIGINT PRIMARY KEY",
+		"summary TEXT NOT NULL DEFAULT ''",
+		"root_cause TEXT",
+		"impact_scope JSONB NOT NULL DEFAULT '{}'::jsonb",
+		"evidence JSONB NOT NULL DEFAULT '[]'::jsonb",
+		"suggested_actions JSONB NOT NULL DEFAULT '[]'::jsonb",
+		"error_breakdown JSONB NOT NULL DEFAULT '{}'::jsonb",
+		"confidence VARCHAR(16) NOT NULL DEFAULT 'medium'",
+		"feedback_status VARCHAR(32) NOT NULL DEFAULT 'none'",
+		"feedback_note TEXT",
+	} {
+		require.Contains(t, sql, column)
+	}
+	require.Contains(t, sql, "CHECK (confidence IN ('high', 'medium', 'low'))")
+	require.Contains(t, sql, "CHECK (feedback_status IN ('none', 'useful', 'not_useful', 'wrong_category'))")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_ai_analysis_reports_confidence")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_ai_analysis_reports_feedback_status")
+	require.NotContains(t, sql, "DROP TABLE")
+	require.NotContains(t, sql, "DROP COLUMN")
+	require.NotContains(t, sql, "DELETE FROM ops_ai_analysis_reports")
+	require.NotContains(t, sql, "TRUNCATE")
+}
