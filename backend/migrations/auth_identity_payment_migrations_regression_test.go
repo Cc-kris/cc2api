@@ -231,3 +231,52 @@ func TestMigration143UsesIdempotentColumnAdds(t *testing.T) {
 		require.NotContains(t, sql, "ADD COLUMN "+column, "column %s must not be added non-idempotently", column)
 	}
 }
+
+func TestMigration144ExtendsOpsAlertEventsLifecycleFields(t *testing.T) {
+	content, err := FS.ReadFile("144_ops_alert_event_lifecycle_fields.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "ALTER TABLE ops_alert_events")
+	for _, column := range []string{
+		"event_key",
+		"lifecycle_status",
+		"merged_count",
+		"last_seen_at",
+		"recovered_at",
+		"acknowledged_at",
+		"acknowledged_by",
+		"acknowledged_note",
+		"processing_at",
+		"processing_by",
+		"processing_note",
+		"processing_action",
+		"closed_at",
+		"closed_by",
+		"closed_reason",
+		"trigger_snapshot",
+		"score_snapshot",
+		"ai_task_id",
+	} {
+		require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS "+column, "column %s must be added idempotently", column)
+		require.NotContains(t, sql, "ADD COLUMN "+column, "column %s must not be added non-idempotently", column)
+	}
+	require.Contains(t, sql, "SET lifecycle_status = CASE")
+	require.Contains(t, sql, "WHEN status = 'resolved' THEN 'recovered'")
+	require.Contains(t, sql, "WHEN status = 'manual_resolved' THEN 'closed'")
+	require.Contains(t, sql, "WHERE lifecycle_status IS NULL")
+	require.Contains(t, sql, "SET merged_count = 0")
+	require.Contains(t, sql, "WHERE merged_count IS NULL")
+	require.Contains(t, sql, "SET last_seen_at = fired_at")
+	require.Contains(t, sql, "WHERE last_seen_at IS NULL")
+	require.Contains(t, sql, "ALTER COLUMN lifecycle_status SET NOT NULL")
+	require.Contains(t, sql, "ALTER COLUMN merged_count SET NOT NULL")
+	require.Contains(t, sql, "ALTER COLUMN last_seen_at SET NOT NULL")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_alert_events_event_key_status")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_alert_events_lifecycle_last_seen")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_alert_events_ai_task_id")
+	require.NotContains(t, sql, "DROP TABLE")
+	require.NotContains(t, sql, "DROP COLUMN")
+	require.NotContains(t, sql, "DELETE FROM ops_alert_events")
+	require.NotContains(t, sql, "TRUNCATE")
+}
