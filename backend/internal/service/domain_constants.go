@@ -341,6 +341,9 @@ const (
 	// SettingKeyOpsAdvancedSettings stores JSON config for ops advanced settings (data retention, aggregation).
 	SettingKeyOpsAdvancedSettings = "ops_advanced_settings"
 
+	// SettingKeyOpsAIAnalysisConfig stores JSON config for ops AI analysis provider settings.
+	SettingKeyOpsAIAnalysisConfig = "ops_ai_analysis_config"
+
 	// SettingKeyOpsRuntimeLogConfig stores JSON config for runtime log settings.
 	SettingKeyOpsRuntimeLogConfig = "ops_runtime_log_config"
 

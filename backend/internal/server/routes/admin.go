@@ -144,6 +144,10 @@ func registerOpsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		ops.GET("/email-notification/config", h.Admin.Ops.GetEmailNotificationConfig)
 		ops.PUT("/email-notification/config", h.Admin.Ops.UpdateEmailNotificationConfig)
 
+		// AI analysis config (DB-backed)
+		ops.GET("/ai-analysis/config", h.Admin.Ops.GetAIAnalysisConfig)
+		ops.PUT("/ai-analysis/config", h.Admin.Ops.UpdateAIAnalysisConfig)
+
 		// Runtime settings (DB-backed)
 		runtime := ops.Group("/runtime")
 		{

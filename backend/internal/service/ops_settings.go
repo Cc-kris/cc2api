@@ -4,15 +4,31 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"net/url"
 	"strings"
 	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 )
 
 const (
 	opsAlertEvaluatorLeaderLockKeyDefault = "ops:alert:evaluator:leader"
 	opsAlertEvaluatorLeaderLockTTLDefault = 30 * time.Second
 )
+
+type opsAIAnalysisConfigStored struct {
+	Enabled                  bool     `json:"enabled"`
+	BaseURL                  string   `json:"base_url"`
+	APIKeyEncrypted          string   `json:"api_key_encrypted,omitempty"`
+	Model                    string   `json:"model"`
+	InterfaceType            string   `json:"interface_type"`
+	TimeoutSeconds           int      `json:"timeout_seconds"`
+	MaxSamples               int      `json:"max_samples"`
+	AutoDedupMinutes         int      `json:"auto_dedup_minutes"`
+	GlobalRateLimitPerMinute int      `json:"global_rate_limit_per_minute"`
+	AutoLevels               []string `json:"auto_levels"`
+	ManualEnabled            bool     `json:"manual_enabled"`
+}
 
 // =========================
 // Email notification config
@@ -351,6 +367,311 @@ func (s *OpsService) UpdateOpsAlertRuntimeSettings(ctx context.Context, cfg *Ops
 	updated := &OpsAlertRuntimeSettings{}
 	_ = json.Unmarshal(raw, updated)
 	return updated, nil
+}
+
+func defaultOpsAIAnalysisConfig() *OpsAIAnalysisConfig {
+	return &OpsAIAnalysisConfig{
+		Enabled:                  false,
+		BaseURL:                  "",
+		Model:                    "",
+		InterfaceType:            "responses",
+		TimeoutSeconds:           60,
+		MaxSamples:               50,
+		AutoDedupMinutes:         10,
+		GlobalRateLimitPerMinute: 10,
+		AutoLevels:               []string{"P0", "P1"},
+		ManualEnabled:            true,
+	}
+}
+
+func normalizeOpsAIAnalysisConfig(cfg *OpsAIAnalysisConfig) {
+	if cfg == nil {
+		return
+	}
+	cfg.BaseURL = strings.TrimSpace(cfg.BaseURL)
+	cfg.APIKeyEncrypted = strings.TrimSpace(cfg.APIKeyEncrypted)
+	cfg.Model = strings.TrimSpace(cfg.Model)
+	cfg.InterfaceType = strings.TrimSpace(cfg.InterfaceType)
+	if cfg.InterfaceType == "" {
+		cfg.InterfaceType = "responses"
+	}
+	if cfg.TimeoutSeconds <= 0 {
+		cfg.TimeoutSeconds = 60
+	}
+	if cfg.MaxSamples <= 0 {
+		cfg.MaxSamples = 50
+	}
+	if cfg.AutoDedupMinutes < 0 {
+		cfg.AutoDedupMinutes = 10
+	}
+	if cfg.GlobalRateLimitPerMinute <= 0 {
+		cfg.GlobalRateLimitPerMinute = 10
+	}
+	normalizedLevels := make([]string, 0, len(cfg.AutoLevels))
+	seen := map[string]struct{}{}
+	for _, level := range cfg.AutoLevels {
+		level = strings.TrimSpace(level)
+		if level == "" {
+			continue
+		}
+		if _, ok := seen[level]; ok {
+			continue
+		}
+		seen[level] = struct{}{}
+		normalizedLevels = append(normalizedLevels, level)
+	}
+	if len(normalizedLevels) == 0 {
+		normalizedLevels = []string{"P0", "P1"}
+	}
+	cfg.AutoLevels = normalizedLevels
+}
+
+func normalizeOpsAIAnalysisConfigRequest(cfg *OpsAIAnalysisConfig) {
+	if cfg == nil {
+		return
+	}
+	cfg.BaseURL = strings.TrimSpace(cfg.BaseURL)
+	cfg.APIKeyEncrypted = strings.TrimSpace(cfg.APIKeyEncrypted)
+	cfg.Model = strings.TrimSpace(cfg.Model)
+	cfg.InterfaceType = strings.TrimSpace(cfg.InterfaceType)
+	normalizedLevels := make([]string, 0, len(cfg.AutoLevels))
+	seen := map[string]struct{}{}
+	for _, level := range cfg.AutoLevels {
+		level = strings.TrimSpace(level)
+		if level == "" {
+			continue
+		}
+		if _, ok := seen[level]; ok {
+			continue
+		}
+		seen[level] = struct{}{}
+		normalizedLevels = append(normalizedLevels, level)
+	}
+	cfg.AutoLevels = normalizedLevels
+}
+
+func validateOpsAIAnalysisConfig(cfg *OpsAIAnalysisConfig) error {
+	if cfg == nil {
+		return errors.New("invalid config")
+	}
+	validInterfaceTypes := map[string]struct{}{
+		"openai_compatible":    {},
+		"responses":            {},
+		"anthropic_compatible": {},
+		"gemini_compatible":    {},
+	}
+	if _, ok := validInterfaceTypes[cfg.InterfaceType]; !ok {
+		return errors.New("interface_type must be one of openai_compatible, responses, anthropic_compatible or gemini_compatible")
+	}
+	if cfg.TimeoutSeconds < 5 || cfg.TimeoutSeconds > 300 {
+		return errors.New("timeout_seconds must be between 5 and 300")
+	}
+	if cfg.MaxSamples < 1 || cfg.MaxSamples > 500 {
+		return errors.New("max_samples must be between 1 and 500")
+	}
+	if cfg.AutoDedupMinutes < 1 || cfg.AutoDedupMinutes > 1440 {
+		return errors.New("auto_dedup_minutes must be between 1 and 1440")
+	}
+	if cfg.GlobalRateLimitPerMinute < 1 || cfg.GlobalRateLimitPerMinute > 1000 {
+		return errors.New("global_rate_limit_per_minute must be between 1 and 1000")
+	}
+	if len(cfg.BaseURL) > 500 {
+		return errors.New("base_url must not exceed 500 characters")
+	}
+	if len(cfg.Model) > 100 {
+		return errors.New("model must not exceed 100 characters")
+	}
+	validLevels := map[string]struct{}{"P0": {}, "P1": {}, "P2": {}}
+	for _, level := range cfg.AutoLevels {
+		if _, ok := validLevels[level]; !ok {
+			return errors.New("auto_levels contains invalid level")
+		}
+	}
+	if cfg.BaseURL != "" {
+		u, err := url.Parse(cfg.BaseURL)
+		if err != nil || u.Scheme == "" || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+			return errors.New("base_url must be a valid http(s) URL")
+		}
+	}
+	if cfg.Enabled {
+		if cfg.BaseURL == "" {
+			return errors.New("base_url is required when enabled")
+		}
+		if cfg.Model == "" {
+			return errors.New("model is required when enabled")
+		}
+		if cfg.APIKeyEncrypted == "" {
+			return errors.New("api_key is required when enabled")
+		}
+	}
+	return nil
+}
+
+func opsAIConfigToStored(cfg *OpsAIAnalysisConfig) *opsAIAnalysisConfigStored {
+	if cfg == nil {
+		cfg = defaultOpsAIAnalysisConfig()
+	}
+	return &opsAIAnalysisConfigStored{
+		Enabled:                  cfg.Enabled,
+		BaseURL:                  cfg.BaseURL,
+		APIKeyEncrypted:          cfg.APIKeyEncrypted,
+		Model:                    cfg.Model,
+		InterfaceType:            cfg.InterfaceType,
+		TimeoutSeconds:           cfg.TimeoutSeconds,
+		MaxSamples:               cfg.MaxSamples,
+		AutoDedupMinutes:         cfg.AutoDedupMinutes,
+		GlobalRateLimitPerMinute: cfg.GlobalRateLimitPerMinute,
+		AutoLevels:               append([]string(nil), cfg.AutoLevels...),
+		ManualEnabled:            cfg.ManualEnabled,
+	}
+}
+
+func opsAIConfigFromStored(stored *opsAIAnalysisConfigStored) *OpsAIAnalysisConfig {
+	cfg := defaultOpsAIAnalysisConfig()
+	if stored == nil {
+		return cfg
+	}
+	cfg.Enabled = stored.Enabled
+	cfg.BaseURL = stored.BaseURL
+	cfg.APIKeyEncrypted = stored.APIKeyEncrypted
+	cfg.Model = stored.Model
+	cfg.InterfaceType = stored.InterfaceType
+	cfg.TimeoutSeconds = stored.TimeoutSeconds
+	cfg.MaxSamples = stored.MaxSamples
+	cfg.AutoDedupMinutes = stored.AutoDedupMinutes
+	cfg.GlobalRateLimitPerMinute = stored.GlobalRateLimitPerMinute
+	cfg.AutoLevels = append([]string(nil), stored.AutoLevels...)
+	cfg.ManualEnabled = stored.ManualEnabled
+	normalizeOpsAIAnalysisConfig(cfg)
+	return cfg
+}
+
+func (s *OpsService) maskOpsAIAPIKey(encrypted string) string {
+	encrypted = strings.TrimSpace(encrypted)
+	if encrypted == "" {
+		return ""
+	}
+	if s == nil || s.secretEncryptor == nil {
+		return "****"
+	}
+	plain, err := s.secretEncryptor.Decrypt(encrypted)
+	if err != nil {
+		return "****"
+	}
+	plain = strings.TrimSpace(plain)
+	if len(plain) <= 4 {
+		return "****"
+	}
+	return "****" + plain[len(plain)-4:]
+}
+
+func (s *OpsService) GetOpsAIAnalysisConfig(ctx context.Context) (*OpsAIAnalysisConfig, error) {
+	defaultCfg := defaultOpsAIAnalysisConfig()
+	if s == nil || s.settingRepo == nil {
+		return defaultCfg, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	raw, err := s.settingRepo.GetValue(ctx, SettingKeyOpsAIAnalysisConfig)
+	if err != nil {
+		if errors.Is(err, ErrSettingNotFound) {
+			if b, mErr := json.Marshal(opsAIConfigToStored(defaultCfg)); mErr == nil {
+				_ = s.settingRepo.Set(ctx, SettingKeyOpsAIAnalysisConfig, string(b))
+			}
+			return defaultCfg, nil
+		}
+		return nil, err
+	}
+
+	stored := &opsAIAnalysisConfigStored{}
+	if err := json.Unmarshal([]byte(raw), stored); err != nil {
+		return defaultCfg, nil
+	}
+
+	cfg := opsAIConfigFromStored(stored)
+	cfg.APIKeyMasked = s.maskOpsAIAPIKey(cfg.APIKeyEncrypted)
+	cfg.APIKeyEncrypted = ""
+	return cfg, nil
+}
+
+func (s *OpsService) UpdateOpsAIAnalysisConfig(ctx context.Context, req *OpsAIAnalysisConfigUpdateRequest) (*OpsAIAnalysisConfig, error) {
+	if s == nil || s.settingRepo == nil {
+		return nil, errors.New("setting repository not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if req == nil {
+		return nil, errors.New("invalid config")
+	}
+
+	existing, err := s.loadOpsAIAnalysisConfigForUpdate(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := &OpsAIAnalysisConfig{
+		Enabled:                  req.Enabled,
+		BaseURL:                  req.BaseURL,
+		APIKeyEncrypted:          existing.APIKeyEncrypted,
+		Model:                    req.Model,
+		InterfaceType:            req.InterfaceType,
+		TimeoutSeconds:           req.TimeoutSeconds,
+		MaxSamples:               req.MaxSamples,
+		AutoDedupMinutes:         req.AutoDedupMinutes,
+		GlobalRateLimitPerMinute: req.GlobalRateLimitPerMinute,
+		AutoLevels:               append([]string(nil), req.AutoLevels...),
+		ManualEnabled:            req.ManualEnabled,
+	}
+	normalizeOpsAIAnalysisConfigRequest(cfg)
+
+	if plainKey := strings.TrimSpace(req.APIKey); plainKey != "" {
+		if s.secretEncryptor == nil {
+			return nil, errors.New("secret encryptor not initialized")
+		}
+		encrypted, err := s.secretEncryptor.Encrypt(plainKey)
+		if err != nil {
+			return nil, err
+		}
+		cfg.APIKeyEncrypted = encrypted
+	}
+
+	if err := validateOpsAIAnalysisConfig(cfg); err != nil {
+		return nil, err
+	}
+
+	raw, err := json.Marshal(opsAIConfigToStored(cfg))
+	if err != nil {
+		return nil, err
+	}
+	if err := s.settingRepo.Set(ctx, SettingKeyOpsAIAnalysisConfig, string(raw)); err != nil {
+		return nil, err
+	}
+
+	cfg.APIKeyMasked = s.maskOpsAIAPIKey(cfg.APIKeyEncrypted)
+	cfg.APIKeyEncrypted = ""
+	return cfg, nil
+}
+
+func (s *OpsService) loadOpsAIAnalysisConfigForUpdate(ctx context.Context) (*OpsAIAnalysisConfig, error) {
+	defaultCfg := defaultOpsAIAnalysisConfig()
+	if s == nil || s.settingRepo == nil {
+		return defaultCfg, nil
+	}
+	raw, err := s.settingRepo.GetValue(ctx, SettingKeyOpsAIAnalysisConfig)
+	if err != nil {
+		if errors.Is(err, ErrSettingNotFound) {
+			return defaultCfg, nil
+		}
+		return nil, err
+	}
+	stored := &opsAIAnalysisConfigStored{}
+	if err := json.Unmarshal([]byte(raw), stored); err != nil {
+		return defaultCfg, nil
+	}
+	return opsAIConfigFromStored(stored), nil
 }
 
 // =========================

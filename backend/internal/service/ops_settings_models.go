@@ -90,6 +90,35 @@ type OpsAlertRuntimeSettings struct {
 	Thresholds      OpsMetricThresholds        `json:"thresholds"` // 指标阈值配置
 }
 
+type OpsAIAnalysisConfig struct {
+	Enabled                  bool     `json:"enabled"`
+	BaseURL                  string   `json:"base_url"`
+	APIKeyMasked             string   `json:"api_key_masked,omitempty"`
+	APIKeyEncrypted          string   `json:"-"`
+	Model                    string   `json:"model"`
+	InterfaceType            string   `json:"interface_type"`
+	TimeoutSeconds           int      `json:"timeout_seconds"`
+	MaxSamples               int      `json:"max_samples"`
+	AutoDedupMinutes         int      `json:"auto_dedup_minutes"`
+	GlobalRateLimitPerMinute int      `json:"global_rate_limit_per_minute"`
+	AutoLevels               []string `json:"auto_levels"`
+	ManualEnabled            bool     `json:"manual_enabled"`
+}
+
+type OpsAIAnalysisConfigUpdateRequest struct {
+	Enabled                  bool     `json:"enabled"`
+	BaseURL                  string   `json:"base_url"`
+	APIKey                   string   `json:"api_key"`
+	Model                    string   `json:"model"`
+	InterfaceType            string   `json:"interface_type"`
+	TimeoutSeconds           int      `json:"timeout_seconds"`
+	MaxSamples               int      `json:"max_samples"`
+	AutoDedupMinutes         int      `json:"auto_dedup_minutes"`
+	GlobalRateLimitPerMinute int      `json:"global_rate_limit_per_minute"`
+	AutoLevels               []string `json:"auto_levels"`
+	ManualEnabled            bool     `json:"manual_enabled"`
+}
+
 // OpsAdvancedSettings stores advanced ops configuration (data retention, aggregation).
 type OpsAdvancedSettings struct {
 	DataRetention                   OpsDataRetentionSettings `json:"data_retention"`

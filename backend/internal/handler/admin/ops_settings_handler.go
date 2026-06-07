@@ -102,6 +102,52 @@ func (h *OpsHandler) UpdateAlertRuntimeSettings(c *gin.Context) {
 	response.Success(c, updated)
 }
 
+// GetAIAnalysisConfig returns Ops AI analysis config (DB-backed).
+// GET /api/v1/admin/ops/ai-analysis/config
+func (h *OpsHandler) GetAIAnalysisConfig(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	cfg, err := h.opsService.GetOpsAIAnalysisConfig(c.Request.Context())
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, "Failed to get AI analysis config")
+		return
+	}
+	response.Success(c, cfg)
+}
+
+// UpdateAIAnalysisConfig updates Ops AI analysis config (DB-backed).
+// PUT /api/v1/admin/ops/ai-analysis/config
+func (h *OpsHandler) UpdateAIAnalysisConfig(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	var req service.OpsAIAnalysisConfigUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request body")
+		return
+	}
+
+	updated, err := h.opsService.UpdateOpsAIAnalysisConfig(c.Request.Context(), &req)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.Success(c, updated)
+}
+
 // GetRuntimeLogConfig returns runtime log config (DB-backed).
 // GET /api/v1/admin/ops/runtime/logging
 func (h *OpsHandler) GetRuntimeLogConfig(c *gin.Context) {

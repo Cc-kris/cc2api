@@ -438,6 +438,26 @@ func ProvideAPIKeyService(
 	return svc
 }
 
+// ProvideOpsService creates OpsService and injects optional secret encryption dependencies.
+func ProvideOpsService(
+	opsRepo OpsRepository,
+	settingRepo SettingRepository,
+	cfg *config.Config,
+	accountRepo AccountRepository,
+	userRepo UserRepository,
+	concurrencyService *ConcurrencyService,
+	gatewayService *GatewayService,
+	openAIGatewayService *OpenAIGatewayService,
+	geminiCompatService *GeminiMessagesCompatService,
+	antigravityGatewayService *AntigravityGatewayService,
+	systemLogSink *OpsSystemLogSink,
+	encryptor SecretEncryptor,
+) *OpsService {
+	svc := NewOpsService(opsRepo, settingRepo, cfg, accountRepo, userRepo, concurrencyService, gatewayService, openAIGatewayService, geminiCompatService, antigravityGatewayService, systemLogSink)
+	svc.SetSecretEncryptor(encryptor)
+	return svc
+}
+
 // ProviderSet is the Wire provider set for all services
 var ProviderSet = wire.NewSet(
 	// Core services
@@ -481,7 +501,7 @@ var ProviderSet = wire.NewSet(
 	NewDataManagementService,
 	ProvideBackupService,
 	ProvideOpsSystemLogSink,
-	NewOpsService,
+	ProvideOpsService,
 	ProvideOpsMetricsCollector,
 	ProvideOpsAggregationService,
 	ProvideOpsAlertEvaluatorService,
