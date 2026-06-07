@@ -1443,7 +1443,25 @@ export default {
       configureAiAccounts: '配置 AI 平台账号',
       systemSettings: '系统设置',
       configureSystem: '配置系统设置',
-      failedToLoad: '加载仪表盘数据失败'
+      failedToLoad: '加载仪表盘数据失败',
+      revenueOverviewTitle: '充值与入账概览',
+      revenueOverviewDescription: '非超管用户累计入账、消耗与复购分布',
+      updatedAt: '更新时间',
+      revenueMetricsUnavailable: '充值与复购统计暂时不可用。',
+      totalCreditAmount: '累计入账金额',
+      usedAmount: '已使用金额',
+      unusedAmount: '未使用金额',
+      nonAdminUserCount: '非超管用户数',
+      creditedUserCount: '有入账用户数',
+      creditedUsers: '有入账用户',
+      repurchaseUsers: '复购用户',
+      repurchaseDistributionTitle: '复购分布',
+      repurchaseDistributionDescription: '按有效入账次数统计用户分布',
+      estimatedData: '历史数据估算',
+      includesManualCredits: '包含人工加款与赠送余额',
+      excludesAdmins: '已排除超管账号',
+      userCount: '人数',
+      repurchaseTooltipNote: '有效入账包含自助支付、后台代充、人工加款和赠送余额'
     },
 
     backup: {

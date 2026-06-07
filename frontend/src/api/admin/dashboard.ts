@@ -148,6 +148,30 @@ export interface DashboardSnapshotV2Response {
   users_trend?: UserUsageTrendPoint[]
 }
 
+export interface DashboardRevenueOverview {
+  total_credit_amount: string
+  used_amount: string
+  unused_amount: string
+  non_admin_user_count: number
+  credited_user_count: number
+  is_estimated: boolean
+  updated_at: string
+}
+
+export type DashboardRepurchaseBucketKey = 'zero' | 'one' | 'two' | 'three' | 'three_plus'
+
+export interface DashboardRepurchaseBucket {
+  bucket: DashboardRepurchaseBucketKey
+  label: string
+  user_count: number
+  ratio: number
+}
+
+export interface DashboardRepurchaseDistribution {
+  buckets: DashboardRepurchaseBucket[]
+  updated_at: string
+}
+
 /**
  * Get group usage statistics
  * @param params - Query parameters for filtering
@@ -196,6 +220,18 @@ export async function getSnapshotV2(params?: DashboardSnapshotV2Params): Promise
   const { data } = await apiClient.get<DashboardSnapshotV2Response>('/admin/dashboard/snapshot-v2', {
     params
   })
+  return data
+}
+
+export async function getRevenueOverview(): Promise<DashboardRevenueOverview> {
+  const { data } = await apiClient.get<DashboardRevenueOverview>('/admin/dashboard/revenue-overview')
+  return data
+}
+
+export async function getRepurchaseDistribution(): Promise<DashboardRepurchaseDistribution> {
+  const { data } = await apiClient.get<DashboardRepurchaseDistribution>(
+    '/admin/dashboard/repurchase-distribution'
+  )
   return data
 }
 
@@ -329,6 +365,8 @@ export const dashboardAPI = {
   getModelStats,
   getGroupStats,
   getSnapshotV2,
+  getRevenueOverview,
+  getRepurchaseDistribution,
   getApiKeyUsageTrend,
   getUserUsageTrend,
   getUserSpendingRanking,

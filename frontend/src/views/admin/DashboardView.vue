@@ -216,6 +216,68 @@
           </div>
         </div>
 
+        <!-- Revenue and Repurchase Section -->
+        <div class="space-y-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ t('admin.dashboard.revenueOverviewTitle') }}
+              </h2>
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                {{ t('admin.dashboard.revenueOverviewDescription') }}
+              </p>
+            </div>
+            <div v-if="revenueOverview?.updated_at || repurchaseDistribution?.updated_at" class="text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.dashboard.updatedAt') }}:
+              {{ formatDateTime(revenueOverview?.updated_at || repurchaseDistribution?.updated_at || '') }}
+            </div>
+          </div>
+
+          <div v-if="businessMetricsError" class="card border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+            {{ t('admin.dashboard.revenueMetricsUnavailable') }}
+          </div>
+
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <div v-for="metric in revenueCards" :key="metric.key" class="card p-4">
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
+                {{ metric.label }}
+              </p>
+              <p class="mt-2 text-xl font-bold text-gray-900 dark:text-white">
+                {{ metric.value }}
+              </p>
+              <p v-if="metric.note" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {{ metric.note }}
+              </p>
+            </div>
+          </div>
+
+          <div class="card p-4">
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                  {{ t('admin.dashboard.repurchaseDistributionTitle') }}
+                </h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.dashboard.repurchaseDistributionDescription') }}
+                </p>
+              </div>
+              <div class="flex gap-4 text-xs text-gray-500 dark:text-gray-400">
+                <span>{{ t('admin.dashboard.creditedUsers') }}: {{ formatNumber(creditedUserCount) }}</span>
+                <span>{{ t('admin.dashboard.repurchaseUsers') }}: {{ formatNumber(repurchaseUserCount) }}</span>
+              </div>
+            </div>
+            <div class="h-72">
+              <div v-if="businessMetricsLoading" class="flex h-full items-center justify-center">
+                <LoadingSpinner size="md" />
+              </div>
+              <Bar v-else-if="repurchaseChartData" :data="repurchaseChartData" :options="repurchaseChartOptions" />
+              <div v-else class="flex h-full items-center justify-center text-sm text-gray-500 dark:text-gray-400">
+                {{ t('admin.dashboard.noDataAvailable') }}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Charts Section -->
         <div class="space-y-6">
           <!-- Date Range Filter -->
@@ -307,6 +369,7 @@ import type {
   UserUsageTrendPoint,
   UserSpendingRankingItem
 } from '@/types'
+import type { DashboardRevenueOverview, DashboardRepurchaseDistribution } from '@/api/admin/dashboard'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -321,11 +384,12 @@ import {
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
   Tooltip,
   Legend,
   Filler
 } from 'chart.js'
-import { Line } from 'vue-chartjs'
+import { Line, Bar } from 'vue-chartjs'
 
 // Register Chart.js components
 ChartJS.register(
@@ -333,6 +397,7 @@ ChartJS.register(
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
   Tooltip,
   Legend,
   Filler
@@ -346,6 +411,8 @@ const chartsLoading = ref(false)
 const userTrendLoading = ref(false)
 const rankingLoading = ref(false)
 const rankingError = ref(false)
+const businessMetricsLoading = ref(false)
+const businessMetricsError = ref(false)
 
 // Chart data
 const trendData = ref<TrendDataPoint[]>([])
@@ -355,9 +422,12 @@ const rankingItems = ref<UserSpendingRankingItem[]>([])
 const rankingTotalActualCost = ref(0)
 const rankingTotalRequests = ref(0)
 const rankingTotalTokens = ref(0)
+const revenueOverview = ref<DashboardRevenueOverview | null>(null)
+const repurchaseDistribution = ref<DashboardRepurchaseDistribution | null>(null)
 let chartLoadSeq = 0
 let usersTrendLoadSeq = 0
 let rankingLoadSeq = 0
+let businessMetricsLoadSeq = 0
 const rankingLimit = 12
 
 // Helper function to format date in local timezone
@@ -459,6 +529,118 @@ const lineOptions = computed(() => ({
 }))
 
 // User trend chart data
+const emptyRevenueOverview = computed<DashboardRevenueOverview>(() => revenueOverview.value || {
+  total_credit_amount: '0.00',
+  used_amount: '0.00',
+  unused_amount: '0.00',
+  non_admin_user_count: 0,
+  credited_user_count: 0,
+  is_estimated: false,
+  updated_at: ''
+})
+
+const revenueCards = computed(() => {
+  const overview = emptyRevenueOverview.value
+  const estimatedNote = overview.is_estimated ? t('admin.dashboard.estimatedData') : ''
+  return [
+    {
+      key: 'total_credit_amount',
+      label: t('admin.dashboard.totalCreditAmount'),
+      value: formatMoney(overview.total_credit_amount),
+      note: t('admin.dashboard.includesManualCredits')
+    },
+    {
+      key: 'used_amount',
+      label: t('admin.dashboard.usedAmount'),
+      value: formatMoney(overview.used_amount),
+      note: estimatedNote
+    },
+    {
+      key: 'unused_amount',
+      label: t('admin.dashboard.unusedAmount'),
+      value: formatMoney(overview.unused_amount),
+      note: ''
+    },
+    {
+      key: 'non_admin_user_count',
+      label: t('admin.dashboard.nonAdminUserCount'),
+      value: formatNumber(overview.non_admin_user_count),
+      note: t('admin.dashboard.excludesAdmins')
+    },
+    {
+      key: 'credited_user_count',
+      label: t('admin.dashboard.creditedUserCount'),
+      value: formatNumber(overview.credited_user_count),
+      note: ''
+    }
+  ]
+})
+
+const repurchaseBuckets = computed(() => repurchaseDistribution.value?.buckets || [])
+const creditedUserCount = computed(() => repurchaseBuckets.value.reduce((sum, bucket) => (
+  bucket.bucket === 'zero' ? sum : sum + bucket.user_count
+), 0))
+const repurchaseUserCount = computed(() => repurchaseBuckets.value.reduce((sum, bucket) => (
+  bucket.bucket === 'two' || bucket.bucket === 'three' || bucket.bucket === 'three_plus'
+    ? sum + bucket.user_count
+    : sum
+), 0))
+
+const repurchaseChartData = computed(() => {
+  if (!repurchaseBuckets.value.length) return null
+  return {
+    labels: repurchaseBuckets.value.map((bucket) => bucket.label),
+    datasets: [
+      {
+        label: t('admin.dashboard.userCount'),
+        data: repurchaseBuckets.value.map((bucket) => bucket.user_count),
+        backgroundColor: ['#94a3b8', '#60a5fa', '#34d399', '#f59e0b', '#f97316'],
+        borderRadius: 8,
+        ratioData: repurchaseBuckets.value.map((bucket) => bucket.ratio)
+      }
+    ]
+  }
+})
+
+const repurchaseChartOptions = computed(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      display: false
+    },
+    tooltip: {
+      callbacks: {
+        label: (context: any) => {
+          const ratio = context.dataset.ratioData?.[context.dataIndex] ?? 0
+          return `${t('admin.dashboard.userCount')}: ${formatNumber(context.raw)} (${ratio.toFixed(1)}%)`
+        },
+        afterLabel: () => t('admin.dashboard.repurchaseTooltipNote')
+      }
+    }
+  },
+  scales: {
+    x: {
+      grid: {
+        display: false
+      },
+      ticks: {
+        color: chartColors.value.text
+      }
+    },
+    y: {
+      beginAtZero: true,
+      grid: {
+        color: chartColors.value.grid
+      },
+      ticks: {
+        color: chartColors.value.text,
+        precision: 0
+      }
+    }
+  }
+}))
+
 const userTrendChartData = computed(() => {
   if (!userTrend.value?.length) return null
 
@@ -535,6 +717,22 @@ const formatTokens = (value: number | undefined): string => {
 
 const formatNumber = (value: number): string => {
   return value.toLocaleString()
+}
+
+const formatMoney = (value?: string | number | null): string => {
+  const numericValue = typeof value === 'number' ? value : Number(value ?? 0)
+  if (!Number.isFinite(numericValue)) return '¥0.00'
+  return `¥${numericValue.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })}`
+}
+
+const formatDateTime = (value: string): string => {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString()
 }
 
 const formatCost = (value?: number | null): string => {
@@ -647,6 +845,31 @@ const loadUsersTrend = async () => {
   }
 }
 
+const loadBusinessMetrics = async () => {
+  const currentSeq = ++businessMetricsLoadSeq
+  businessMetricsLoading.value = true
+  businessMetricsError.value = false
+  try {
+    const [overview, distribution] = await Promise.all([
+      adminAPI.dashboard.getRevenueOverview(),
+      adminAPI.dashboard.getRepurchaseDistribution()
+    ])
+    if (currentSeq !== businessMetricsLoadSeq) return
+    revenueOverview.value = overview
+    repurchaseDistribution.value = distribution
+  } catch (error) {
+    if (currentSeq !== businessMetricsLoadSeq) return
+    console.error('Error loading dashboard revenue metrics:', error)
+    revenueOverview.value = null
+    repurchaseDistribution.value = null
+    businessMetricsError.value = true
+  } finally {
+    if (currentSeq === businessMetricsLoadSeq) {
+      businessMetricsLoading.value = false
+    }
+  }
+}
+
 const loadUserSpendingRanking = async () => {
   const currentSeq = ++rankingLoadSeq
   rankingLoading.value = true
@@ -681,7 +904,8 @@ const loadDashboardStats = async () => {
   await Promise.all([
     loadDashboardSnapshot(true),
     loadUsersTrend(),
-    loadUserSpendingRanking()
+    loadUserSpendingRanking(),
+    loadBusinessMetrics()
   ])
 }
 

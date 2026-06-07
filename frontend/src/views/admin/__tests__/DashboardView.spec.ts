@@ -4,10 +4,18 @@ import { flushPromises, mount } from '@vue/test-utils'
 import type { DashboardStats } from '@/types'
 import DashboardView from '../DashboardView.vue'
 
-const { getSnapshotV2, getUserUsageTrend, getUserSpendingRanking } = vi.hoisted(() => ({
+const {
+  getSnapshotV2,
+  getUserUsageTrend,
+  getUserSpendingRanking,
+  getRevenueOverview,
+  getRepurchaseDistribution
+} = vi.hoisted(() => ({
   getSnapshotV2: vi.fn(),
   getUserUsageTrend: vi.fn(),
-  getUserSpendingRanking: vi.fn()
+  getUserSpendingRanking: vi.fn(),
+  getRevenueOverview: vi.fn(),
+  getRepurchaseDistribution: vi.fn()
 }))
 
 vi.mock('@/api/admin', () => ({
@@ -15,7 +23,9 @@ vi.mock('@/api/admin', () => ({
     dashboard: {
       getSnapshotV2,
       getUserUsageTrend,
-      getUserSpendingRanking
+      getUserSpendingRanking,
+      getRevenueOverview,
+      getRepurchaseDistribution
     }
   }
 }))
@@ -30,6 +40,12 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({
     push: vi.fn()
   })
+}))
+
+
+vi.mock('vue-chartjs', () => ({
+  Line: { name: 'Line', template: '<div data-testid="line-chart" />' },
+  Bar: { name: 'Bar', template: '<div data-testid="bar-chart" />' }
 }))
 
 vi.mock('vue-i18n', async () => {
@@ -71,6 +87,7 @@ const createDashboardStats = (): DashboardStats => ({
   total_tokens: 0,
   total_cost: 0,
   total_actual_cost: 0,
+  total_account_cost: 0,
   today_requests: 0,
   today_input_tokens: 0,
   today_output_tokens: 0,
@@ -79,6 +96,7 @@ const createDashboardStats = (): DashboardStats => ({
   today_tokens: 0,
   today_cost: 0,
   today_actual_cost: 0,
+  today_account_cost: 0,
   average_duration_ms: 0,
   uptime: 0,
   rpm: 0,
@@ -90,6 +108,8 @@ describe('admin DashboardView', () => {
     getSnapshotV2.mockReset()
     getUserUsageTrend.mockReset()
     getUserSpendingRanking.mockReset()
+    getRevenueOverview.mockReset()
+    getRepurchaseDistribution.mockReset()
 
     getSnapshotV2.mockResolvedValue({
       stats: createDashboardStats(),
@@ -110,6 +130,25 @@ describe('admin DashboardView', () => {
       start_date: '',
       end_date: ''
     })
+    getRevenueOverview.mockResolvedValue({
+      total_credit_amount: '10000.00',
+      used_amount: '3200.00',
+      unused_amount: '6800.00',
+      non_admin_user_count: 200,
+      credited_user_count: 120,
+      is_estimated: false,
+      updated_at: '2026-06-07T12:00:00+08:00'
+    })
+    getRepurchaseDistribution.mockResolvedValue({
+      buckets: [
+        { bucket: 'zero', label: '零购', user_count: 100, ratio: 50 },
+        { bucket: 'one', label: '一购', user_count: 60, ratio: 30 },
+        { bucket: 'two', label: '二购', user_count: 20, ratio: 10 },
+        { bucket: 'three', label: '三购', user_count: 10, ratio: 5 },
+        { bucket: 'three_plus', label: '三购以上', user_count: 10, ratio: 5 }
+      ],
+      updated_at: '2026-06-07T12:00:00+08:00'
+    })
   })
 
   it('uses last 24 hours as default dashboard range', async () => {
@@ -123,7 +162,8 @@ describe('admin DashboardView', () => {
           Select: true,
           ModelDistributionChart: true,
           TokenUsageTrend: true,
-          Line: true
+          Line: true,
+          Bar: true
         }
       }
     })
@@ -140,4 +180,33 @@ describe('admin DashboardView', () => {
       granularity: 'hour'
     }))
   })
+
+  it('loads and renders revenue and repurchase metrics', async () => {
+    const wrapper = mount(DashboardView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          LoadingSpinner: true,
+          Icon: true,
+          DateRangePicker: true,
+          Select: true,
+          ModelDistributionChart: true,
+          TokenUsageTrend: true,
+          Line: true,
+          Bar: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(getRevenueOverview).toHaveBeenCalledTimes(1)
+    expect(getRepurchaseDistribution).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('admin.dashboard.revenueOverviewTitle')
+    expect(wrapper.text()).toContain('¥10,000.00')
+    expect(wrapper.text()).toContain('admin.dashboard.repurchaseDistributionTitle')
+    expect(wrapper.text()).toContain('120')
+    expect(wrapper.text()).toContain('40')
+  })
+
 })

@@ -1422,7 +1422,25 @@ export default {
       spendShort: 'Spend',
       requestsShort: 'Req',
       tokensShort: 'Tok',
-      failedToLoad: 'Failed to load dashboard statistics'
+      failedToLoad: 'Failed to load dashboard statistics',
+      revenueOverviewTitle: 'Revenue & Credits Overview',
+      revenueOverviewDescription: 'Non-admin user credit intake, usage, and repurchase distribution',
+      updatedAt: 'Updated at',
+      revenueMetricsUnavailable: 'Revenue and repurchase metrics are temporarily unavailable.',
+      totalCreditAmount: 'Total credited amount',
+      usedAmount: 'Used amount',
+      unusedAmount: 'Unused amount',
+      nonAdminUserCount: 'Non-admin users',
+      creditedUserCount: 'Credited users',
+      creditedUsers: 'Credited users',
+      repurchaseUsers: 'Repurchase users',
+      repurchaseDistributionTitle: 'Repurchase Distribution',
+      repurchaseDistributionDescription: 'Users grouped by effective credit count',
+      estimatedData: 'Estimated from historical data',
+      includesManualCredits: 'Includes manual credits and gifts',
+      excludesAdmins: 'Excludes admin accounts',
+      userCount: 'Users',
+      repurchaseTooltipNote: 'Effective credits include self-service payment, manual top-up, and gifts'
     },
 
     backup: {
