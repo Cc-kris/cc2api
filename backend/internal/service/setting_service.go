@@ -158,6 +158,7 @@ type SettingService struct {
 	defaultSubGroupReader     DefaultSubscriptionGroupReader
 	proxyRepo                 ProxyRepository // for resolving websearch provider proxy URLs
 	cfg                       *config.Config
+	secretEncryptor           SecretEncryptor
 	onUpdate                  func() // Callback when settings are updated (for cache invalidation)
 	version                   string // Application version
 	webSearchManagerBuilder   WebSearchManagerBuilder
@@ -623,6 +624,12 @@ func (s *SettingService) SetDefaultSubscriptionGroupReader(reader DefaultSubscri
 // SetProxyRepository injects a proxy repo for resolving websearch provider proxy URLs.
 func (s *SettingService) SetProxyRepository(repo ProxyRepository) {
 	s.proxyRepo = repo
+}
+func (s *SettingService) SetSecretEncryptor(encryptor SecretEncryptor) {
+	if s == nil {
+		return
+	}
+	s.secretEncryptor = encryptor
 }
 
 func (s *SettingService) LoadAPIKeyACLTrustForwardedIPSetting(ctx context.Context) error {
@@ -4972,6 +4979,366 @@ func (s *SettingService) cacheManagementMaxResponseKB(ctx context.Context) (int,
 		maxResponseKB = 10 * 1024
 	}
 	return maxResponseKB, nil
+}
+
+const SettingKeySemanticCacheConfig = "semantic_cache_config"
+
+const (
+	semanticCacheDefaultStage                           = "observe"
+	semanticCacheDefaultNamespace                       = "default"
+	semanticCacheDefaultRuleVersion                     = "v1"
+	semanticCacheDefaultSimilarityThreshold             = 0.98
+	semanticCacheDefaultMaxReuseMinutes                 = 10
+	semanticCacheDefaultMaxCandidates                   = 20
+	semanticCacheDefaultReviewMode                      = true
+	semanticCacheDefaultQualityRollbackThresholdPercent = 1.0
+)
+
+type SemanticCacheConfig struct {
+	Enabled                         bool     `json:"enabled"`
+	Stage                           string   `json:"stage"`
+	Platforms                       []string `json:"platforms"`
+	ModelAllowlist                  []string `json:"model_allowlist"`
+	SemanticModelBaseURL            string   `json:"semantic_model_base_url"`
+	SemanticAPIKey                  string   `json:"-"`
+	SemanticAPIKeyMasked            string   `json:"semantic_api_key_masked"`
+	SemanticAPIKeyEncrypted         string   `json:"-"`
+	SemanticModelName               string   `json:"semantic_model_name"`
+	Namespace                       string   `json:"namespace"`
+	EmbeddingDimension              *int     `json:"embedding_dimension"`
+	RuleVersion                     string   `json:"rule_version"`
+	SimilarityThreshold             float64  `json:"similarity_threshold"`
+	MaxReuseMinutes                 int      `json:"max_reuse_minutes"`
+	MaxCandidates                   int      `json:"max_candidates"`
+	GrayAPIKeyIDs                   []int64  `json:"gray_api_key_ids"`
+	ReviewMode                      bool     `json:"review_mode"`
+	QualityRollbackThresholdPercent float64  `json:"quality_rollback_threshold_percent"`
+	AutoClosed                      bool     `json:"auto_closed"`
+	AutoCloseReason                 *string  `json:"auto_close_reason"`
+	AutoClosedAt                    *string  `json:"auto_closed_at"`
+}
+
+type semanticCacheConfigStored struct {
+	Enabled                         bool     `json:"enabled"`
+	Stage                           string   `json:"stage"`
+	Platforms                       []string `json:"platforms"`
+	ModelAllowlist                  []string `json:"model_allowlist"`
+	SemanticModelBaseURL            string   `json:"semantic_model_base_url"`
+	SemanticAPIKeyEncrypted         string   `json:"semantic_api_key_encrypted,omitempty"`
+	SemanticModelName               string   `json:"semantic_model_name"`
+	Namespace                       string   `json:"namespace"`
+	EmbeddingDimension              *int     `json:"embedding_dimension"`
+	RuleVersion                     string   `json:"rule_version"`
+	SimilarityThreshold             float64  `json:"similarity_threshold"`
+	MaxReuseMinutes                 int      `json:"max_reuse_minutes"`
+	MaxCandidates                   int      `json:"max_candidates"`
+	GrayAPIKeyIDs                   []int64  `json:"gray_api_key_ids"`
+	ReviewMode                      bool     `json:"review_mode"`
+	QualityRollbackThresholdPercent float64  `json:"quality_rollback_threshold_percent"`
+	AutoClosed                      bool     `json:"auto_closed"`
+	AutoCloseReason                 *string  `json:"auto_close_reason"`
+	AutoClosedAt                    *string  `json:"auto_closed_at"`
+}
+
+func DefaultSemanticCacheConfig() SemanticCacheConfig {
+	return SemanticCacheConfig{
+		Enabled:                         false,
+		Stage:                           semanticCacheDefaultStage,
+		Platforms:                       []string{},
+		ModelAllowlist:                  []string{},
+		SemanticModelBaseURL:            "",
+		SemanticAPIKeyMasked:            "",
+		SemanticModelName:               "",
+		Namespace:                       semanticCacheDefaultNamespace,
+		EmbeddingDimension:              nil,
+		RuleVersion:                     semanticCacheDefaultRuleVersion,
+		SimilarityThreshold:             semanticCacheDefaultSimilarityThreshold,
+		MaxReuseMinutes:                 semanticCacheDefaultMaxReuseMinutes,
+		MaxCandidates:                   semanticCacheDefaultMaxCandidates,
+		GrayAPIKeyIDs:                   []int64{},
+		ReviewMode:                      semanticCacheDefaultReviewMode,
+		QualityRollbackThresholdPercent: semanticCacheDefaultQualityRollbackThresholdPercent,
+		AutoClosed:                      false,
+		AutoCloseReason:                 nil,
+		AutoClosedAt:                    nil,
+	}
+}
+
+func (s *SettingService) GetSemanticCacheConfig(ctx context.Context) (SemanticCacheConfig, error) {
+	cfg := DefaultSemanticCacheConfig()
+	raw, err := s.settingRepo.GetValue(ctx, SettingKeySemanticCacheConfig)
+	if err != nil {
+		if errors.Is(err, ErrSettingNotFound) {
+			return cfg, nil
+		}
+		return cfg, err
+	}
+	if strings.TrimSpace(raw) == "" {
+		return cfg, nil
+	}
+	var stored semanticCacheConfigStored
+	if err := json.Unmarshal([]byte(raw), &stored); err != nil {
+		return cfg, fmt.Errorf("parse semantic cache config: %w", err)
+	}
+	cfg = semanticCacheConfigFromStored(stored)
+	cfg.SemanticAPIKeyMasked = s.maskSemanticCacheAPIKey(cfg.SemanticAPIKeyEncrypted)
+	cfg.SemanticAPIKeyEncrypted = ""
+	return cfg, nil
+}
+
+func (s *SettingService) UpdateSemanticCacheConfig(ctx context.Context, req SemanticCacheConfig) (SemanticCacheConfig, error) {
+	existing, err := s.loadSemanticCacheConfigForUpdate(ctx)
+	if err != nil {
+		return SemanticCacheConfig{}, err
+	}
+	req.SemanticAPIKeyEncrypted = existing.SemanticAPIKeyEncrypted
+	if plainKey := strings.TrimSpace(req.SemanticAPIKey); plainKey != "" {
+		if s == nil || s.secretEncryptor == nil {
+			return SemanticCacheConfig{}, errors.New("secret encryptor not initialized")
+		}
+		encrypted, err := s.secretEncryptor.Encrypt(plainKey)
+		if err != nil {
+			return SemanticCacheConfig{}, err
+		}
+		req.SemanticAPIKeyEncrypted = encrypted
+	}
+	req = normalizeSemanticCacheConfig(req)
+	if err := validateSemanticCacheConfig(req); err != nil {
+		return SemanticCacheConfig{}, err
+	}
+	payload, err := json.Marshal(semanticCacheConfigToStored(req))
+	if err != nil {
+		return SemanticCacheConfig{}, err
+	}
+	if err := s.settingRepo.Set(ctx, SettingKeySemanticCacheConfig, string(payload)); err != nil {
+		return SemanticCacheConfig{}, err
+	}
+	req.SemanticAPIKeyMasked = s.maskSemanticCacheAPIKey(req.SemanticAPIKeyEncrypted)
+	req.SemanticAPIKeyEncrypted = ""
+	req.SemanticAPIKey = ""
+	return req, nil
+}
+
+func (s *SettingService) loadSemanticCacheConfigForUpdate(ctx context.Context) (SemanticCacheConfig, error) {
+	cfg := DefaultSemanticCacheConfig()
+	raw, err := s.settingRepo.GetValue(ctx, SettingKeySemanticCacheConfig)
+	if err != nil {
+		if errors.Is(err, ErrSettingNotFound) {
+			return cfg, nil
+		}
+		return cfg, err
+	}
+	if strings.TrimSpace(raw) == "" {
+		return cfg, nil
+	}
+	var stored semanticCacheConfigStored
+	if err := json.Unmarshal([]byte(raw), &stored); err != nil {
+		return cfg, fmt.Errorf("parse semantic cache config: %w", err)
+	}
+	return semanticCacheConfigFromStored(stored), nil
+}
+
+func normalizeSemanticCacheConfig(cfg SemanticCacheConfig) SemanticCacheConfig {
+	cfg.Stage = strings.TrimSpace(cfg.Stage)
+	if cfg.Stage == "" {
+		cfg.Stage = semanticCacheDefaultStage
+	}
+	cfg.Platforms = normalizeSemanticCachePlatforms(cfg.Platforms)
+	cfg.ModelAllowlist = normalizeCacheManagementModelList(cfg.ModelAllowlist)
+	cfg.SemanticModelBaseURL = strings.TrimSpace(cfg.SemanticModelBaseURL)
+	cfg.SemanticAPIKey = strings.TrimSpace(cfg.SemanticAPIKey)
+	cfg.SemanticAPIKeyEncrypted = strings.TrimSpace(cfg.SemanticAPIKeyEncrypted)
+	cfg.SemanticModelName = strings.TrimSpace(cfg.SemanticModelName)
+	cfg.Namespace = strings.TrimSpace(cfg.Namespace)
+	if cfg.Namespace == "" {
+		cfg.Namespace = semanticCacheDefaultNamespace
+	}
+	cfg.RuleVersion = strings.TrimSpace(cfg.RuleVersion)
+	if cfg.RuleVersion == "" {
+		cfg.RuleVersion = semanticCacheDefaultRuleVersion
+	}
+	if cfg.SimilarityThreshold == 0 {
+		cfg.SimilarityThreshold = semanticCacheDefaultSimilarityThreshold
+	}
+	if cfg.MaxReuseMinutes == 0 {
+		cfg.MaxReuseMinutes = semanticCacheDefaultMaxReuseMinutes
+	}
+	if cfg.MaxCandidates == 0 {
+		cfg.MaxCandidates = semanticCacheDefaultMaxCandidates
+	}
+	cfg.GrayAPIKeyIDs = normalizeAdvancedCacheIDList(cfg.GrayAPIKeyIDs)
+	return cfg
+}
+
+func normalizeSemanticCachePlatforms(items []string) []string {
+	allowed := map[string]string{"openai": "openai", "claude": "claude", "gemini": "gemini"}
+	out := make([]string, 0, len(items))
+	seen := map[string]struct{}{}
+	for _, item := range items {
+		platform := strings.ToLower(strings.TrimSpace(item))
+		canonical, ok := allowed[platform]
+		if !ok {
+			if platform != "" {
+				out = append(out, platform)
+			}
+			continue
+		}
+		if _, ok := seen[canonical]; ok {
+			continue
+		}
+		seen[canonical] = struct{}{}
+		out = append(out, canonical)
+	}
+	return out
+}
+
+func validateSemanticCacheConfig(cfg SemanticCacheConfig) error {
+	switch cfg.Stage {
+	case "observe", "review", "gray", "active", "rollback":
+	default:
+		return infraerrors.BadRequest("SEMANTIC_CACHE_CONFIG_INVALID", "stage must be one of observe, review, gray, active, rollback")
+	}
+	validPlatforms := map[string]struct{}{"openai": {}, "claude": {}, "gemini": {}}
+	for _, platform := range cfg.Platforms {
+		if _, ok := validPlatforms[platform]; !ok {
+			return infraerrors.BadRequest("SEMANTIC_CACHE_CONFIG_INVALID", "platforms contains invalid platform")
+		}
+	}
+	if cfg.SemanticModelBaseURL != "" {
+		if len(cfg.SemanticModelBaseURL) > 500 {
+			return infraerrors.BadRequest("SEMANTIC_CACHE_CONFIG_INVALID", "semantic_model_base_url must not exceed 500 characters")
+		}
+		u, err := url.Parse(cfg.SemanticModelBaseURL)
+		if err != nil || u.Scheme == "" || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+			return infraerrors.BadRequest("SEMANTIC_CACHE_CONFIG_INVALID", "semantic_model_base_url must be a valid http(s) URL")
+		}
+	}
+	if len(cfg.SemanticModelName) > 100 {
+		return infraerrors.BadRequest("SEMANTIC_CACHE_CONFIG_INVALID", "semantic_model_name must not exceed 100 characters")
+	}
+	if len(cfg.Namespace) > 100 {
+		return infraerrors.BadRequest("SEMANTIC_CACHE_CONFIG_INVALID", "namespace must not exceed 100 characters")
+	}
+	if cfg.EmbeddingDimension != nil && *cfg.EmbeddingDimension <= 0 {
+		return infraerrors.BadRequest("SEMANTIC_CACHE_CONFIG_INVALID", "embedding_dimension must be positive")
+	}
+	if cfg.SimilarityThreshold < 0.90 || cfg.SimilarityThreshold > 1.0 || !semanticCacheMaxDecimals(cfg.SimilarityThreshold, 4) {
+		return infraerrors.BadRequest("SEMANTIC_CACHE_CONFIG_INVALID", "similarity_threshold must be between 0.90 and 1.00 with at most 4 decimals")
+	}
+	if cfg.MaxReuseMinutes < 1 || cfg.MaxReuseMinutes > 1440 {
+		return infraerrors.BadRequest("SEMANTIC_CACHE_CONFIG_INVALID", "max_reuse_minutes must be between 1 and 1440")
+	}
+	if cfg.MaxCandidates < 1 || cfg.MaxCandidates > 200 {
+		return infraerrors.BadRequest("SEMANTIC_CACHE_CONFIG_INVALID", "max_candidates must be between 1 and 200")
+	}
+	if cfg.QualityRollbackThresholdPercent < 0 || cfg.QualityRollbackThresholdPercent > 100 || !semanticCacheMaxDecimals(cfg.QualityRollbackThresholdPercent, 2) {
+		return infraerrors.BadRequest("SEMANTIC_CACHE_CONFIG_INVALID", "quality_rollback_threshold_percent must be between 0 and 100 with at most 2 decimals")
+	}
+	for _, id := range cfg.GrayAPIKeyIDs {
+		if id < 0 {
+			return infraerrors.BadRequest("SEMANTIC_CACHE_CONFIG_INVALID", "gray_api_key_ids must be non-negative")
+		}
+	}
+	if cfg.Enabled {
+		if cfg.SemanticModelBaseURL == "" {
+			return infraerrors.BadRequest("SEMANTIC_CACHE_CONFIG_INVALID", "semantic_model_base_url is required when enabled")
+		}
+		if cfg.SemanticAPIKeyEncrypted == "" {
+			return infraerrors.BadRequest("SEMANTIC_CACHE_CONFIG_INVALID", "semantic_api_key is required when enabled")
+		}
+		if cfg.SemanticModelName == "" {
+			return infraerrors.BadRequest("SEMANTIC_CACHE_CONFIG_INVALID", "semantic_model_name is required when enabled")
+		}
+	}
+	return nil
+}
+
+func semanticCacheMaxDecimals(v float64, decimals int) bool {
+	factor := math.Pow10(decimals)
+	return math.Abs(v*factor-math.Round(v*factor)) < 1e-9
+}
+
+func semanticCacheConfigToStored(cfg SemanticCacheConfig) semanticCacheConfigStored {
+	return semanticCacheConfigStored{
+		Enabled:                         cfg.Enabled,
+		Stage:                           cfg.Stage,
+		Platforms:                       append([]string(nil), cfg.Platforms...),
+		ModelAllowlist:                  append([]string(nil), cfg.ModelAllowlist...),
+		SemanticModelBaseURL:            cfg.SemanticModelBaseURL,
+		SemanticAPIKeyEncrypted:         cfg.SemanticAPIKeyEncrypted,
+		SemanticModelName:               cfg.SemanticModelName,
+		Namespace:                       cfg.Namespace,
+		EmbeddingDimension:              cloneIntPtr(cfg.EmbeddingDimension),
+		RuleVersion:                     cfg.RuleVersion,
+		SimilarityThreshold:             cfg.SimilarityThreshold,
+		MaxReuseMinutes:                 cfg.MaxReuseMinutes,
+		MaxCandidates:                   cfg.MaxCandidates,
+		GrayAPIKeyIDs:                   append([]int64(nil), cfg.GrayAPIKeyIDs...),
+		ReviewMode:                      cfg.ReviewMode,
+		QualityRollbackThresholdPercent: cfg.QualityRollbackThresholdPercent,
+		AutoClosed:                      cfg.AutoClosed,
+		AutoCloseReason:                 cloneStringPtr(cfg.AutoCloseReason),
+		AutoClosedAt:                    cloneStringPtr(cfg.AutoClosedAt),
+	}
+}
+
+func semanticCacheConfigFromStored(stored semanticCacheConfigStored) SemanticCacheConfig {
+	cfg := DefaultSemanticCacheConfig()
+	cfg.Enabled = stored.Enabled
+	cfg.Stage = stored.Stage
+	cfg.Platforms = append([]string(nil), stored.Platforms...)
+	cfg.ModelAllowlist = append([]string(nil), stored.ModelAllowlist...)
+	cfg.SemanticModelBaseURL = stored.SemanticModelBaseURL
+	cfg.SemanticAPIKeyEncrypted = stored.SemanticAPIKeyEncrypted
+	cfg.SemanticModelName = stored.SemanticModelName
+	cfg.Namespace = stored.Namespace
+	cfg.EmbeddingDimension = cloneIntPtr(stored.EmbeddingDimension)
+	cfg.RuleVersion = stored.RuleVersion
+	cfg.SimilarityThreshold = stored.SimilarityThreshold
+	cfg.MaxReuseMinutes = stored.MaxReuseMinutes
+	cfg.MaxCandidates = stored.MaxCandidates
+	cfg.GrayAPIKeyIDs = append([]int64(nil), stored.GrayAPIKeyIDs...)
+	cfg.ReviewMode = stored.ReviewMode
+	cfg.QualityRollbackThresholdPercent = stored.QualityRollbackThresholdPercent
+	cfg.AutoClosed = stored.AutoClosed
+	cfg.AutoCloseReason = cloneStringPtr(stored.AutoCloseReason)
+	cfg.AutoClosedAt = cloneStringPtr(stored.AutoClosedAt)
+	return normalizeSemanticCacheConfig(cfg)
+}
+
+func cloneIntPtr(v *int) *int {
+	if v == nil {
+		return nil
+	}
+	out := *v
+	return &out
+}
+
+func cloneStringPtr(v *string) *string {
+	if v == nil {
+		return nil
+	}
+	out := *v
+	return &out
+}
+
+func (s *SettingService) maskSemanticCacheAPIKey(encrypted string) string {
+	encrypted = strings.TrimSpace(encrypted)
+	if encrypted == "" {
+		return ""
+	}
+	if s == nil || s.secretEncryptor == nil {
+		return "****"
+	}
+	plain, err := s.secretEncryptor.Decrypt(encrypted)
+	if err != nil {
+		return "****"
+	}
+	plain = strings.TrimSpace(plain)
+	if len(plain) <= 4 {
+		return "****"
+	}
+	return "****" + plain[len(plain)-4:]
 }
 
 func (s *SettingService) GetCacheManagementConfig(ctx context.Context) (CacheManagementConfig, error) {

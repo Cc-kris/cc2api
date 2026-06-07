@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -259,4 +260,183 @@ func TestSettingServiceAdvancedCacheCompressionThresholdUsesCacheConfigMaxRespon
 	_, err = svc.UpdateAdvancedCacheConfig(context.Background(), advancedCfg)
 	require.Error(t, err)
 	require.Equal(t, "ADVANCED_CACHE_CONFIG_INVALID", infraerrors.Reason(err))
+}
+
+type semanticCacheEncryptorStub struct{}
+
+func (semanticCacheEncryptorStub) Encrypt(plaintext string) (string, error) {
+	runes := []rune(plaintext)
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+	return "enc:" + string(runes), nil
+}
+
+func (semanticCacheEncryptorStub) Decrypt(ciphertext string) (string, error) {
+	plain := []rune(strings.TrimPrefix(ciphertext, "enc:"))
+	for i, j := 0, len(plain)-1; i < j; i, j = i+1, j-1 {
+		plain[i], plain[j] = plain[j], plain[i]
+	}
+	return string(plain), nil
+}
+
+func TestSettingServiceSemanticCacheConfigDefaults(t *testing.T) {
+	svc := NewSettingService(&cacheManagementSettingRepoStub{}, &config.Config{})
+
+	cfg, err := svc.GetSemanticCacheConfig(context.Background())
+
+	require.NoError(t, err)
+	require.False(t, cfg.Enabled)
+	require.Equal(t, "observe", cfg.Stage)
+	require.Empty(t, cfg.Platforms)
+	require.Empty(t, cfg.ModelAllowlist)
+	require.Empty(t, cfg.SemanticModelBaseURL)
+	require.Empty(t, cfg.SemanticAPIKeyMasked)
+	require.Empty(t, cfg.SemanticAPIKeyEncrypted)
+	require.Empty(t, cfg.SemanticModelName)
+	require.Equal(t, "default", cfg.Namespace)
+	require.Nil(t, cfg.EmbeddingDimension)
+	require.Equal(t, "v1", cfg.RuleVersion)
+	require.Equal(t, 0.98, cfg.SimilarityThreshold)
+	require.Equal(t, 10, cfg.MaxReuseMinutes)
+	require.Equal(t, 20, cfg.MaxCandidates)
+	require.Empty(t, cfg.GrayAPIKeyIDs)
+	require.True(t, cfg.ReviewMode)
+	require.Equal(t, 1.0, cfg.QualityRollbackThresholdPercent)
+	require.False(t, cfg.AutoClosed)
+}
+
+func TestSettingServiceUpdateSemanticCacheConfigEncryptsMasksNormalizesAndPersists(t *testing.T) {
+	repo := &cacheManagementSettingRepoStub{}
+	svc := NewSettingService(repo, &config.Config{})
+	svc.SetSecretEncryptor(semanticCacheEncryptorStub{})
+	dimension := 3072
+
+	cfg, err := svc.UpdateSemanticCacheConfig(context.Background(), SemanticCacheConfig{
+		Enabled:                         true,
+		Stage:                           " gray ",
+		Platforms:                       []string{" OpenAI ", "openai", "claude"},
+		ModelAllowlist:                  []string{" gpt-5.5 ", "", "GPT-5.5", "claude-3"},
+		SemanticModelBaseURL:            " https://semantic.example.com/v1 ",
+		SemanticAPIKey:                  "sk-semantic-secret",
+		SemanticModelName:               " text-embedding-3-large ",
+		Namespace:                       " tenant-a ",
+		EmbeddingDimension:              &dimension,
+		RuleVersion:                     " v2 ",
+		SimilarityThreshold:             0.9755,
+		MaxReuseMinutes:                 30,
+		MaxCandidates:                   50,
+		GrayAPIKeyIDs:                   []int64{9, 3, 9},
+		ReviewMode:                      true,
+		QualityRollbackThresholdPercent: 2.25,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, "gray", cfg.Stage)
+	require.Equal(t, []string{"openai", "claude"}, cfg.Platforms)
+	require.Equal(t, []string{"gpt-5.5", "claude-3"}, cfg.ModelAllowlist)
+	require.Equal(t, "https://semantic.example.com/v1", cfg.SemanticModelBaseURL)
+	require.Equal(t, "****cret", cfg.SemanticAPIKeyMasked)
+	require.Empty(t, cfg.SemanticAPIKeyEncrypted)
+	require.Empty(t, cfg.SemanticAPIKey)
+	require.Equal(t, "text-embedding-3-large", cfg.SemanticModelName)
+	require.Equal(t, "tenant-a", cfg.Namespace)
+	require.Equal(t, []int64{9, 3}, cfg.GrayAPIKeyIDs)
+	require.Contains(t, repo.sets, SettingKeySemanticCacheConfig)
+
+	raw := repo.sets[SettingKeySemanticCacheConfig]
+	require.NotContains(t, raw, "sk-semantic-secret")
+	require.NotContains(t, raw, "semantic_api_key_masked")
+	require.Contains(t, raw, "enc:terces-citnames-ks")
+
+	got, err := svc.GetSemanticCacheConfig(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, "****cret", got.SemanticAPIKeyMasked)
+	require.Empty(t, got.SemanticAPIKeyEncrypted)
+	require.Empty(t, got.SemanticAPIKey)
+}
+
+func TestSettingServiceUpdateSemanticCacheConfigPreservesAPIKey(t *testing.T) {
+	repo := &cacheManagementSettingRepoStub{}
+	svc := NewSettingService(repo, &config.Config{})
+	svc.SetSecretEncryptor(semanticCacheEncryptorStub{})
+	seed := validSemanticCacheConfig("sk-old-secret")
+	_, err := svc.UpdateSemanticCacheConfig(context.Background(), seed)
+	require.NoError(t, err)
+
+	update := validSemanticCacheConfig("")
+	update.SemanticModelName = "text-embedding-3-small"
+	cfg, err := svc.UpdateSemanticCacheConfig(context.Background(), update)
+
+	require.NoError(t, err)
+	require.Equal(t, "****cret", cfg.SemanticAPIKeyMasked)
+	require.Contains(t, repo.values[SettingKeySemanticCacheConfig], "enc:terces-dlo-ks")
+	require.NotContains(t, repo.values[SettingKeySemanticCacheConfig], "sk-old-secret")
+}
+
+func TestSettingServiceUpdateSemanticCacheConfigValidation(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*SemanticCacheConfig)
+	}{
+		{name: "invalid stage", mutate: func(c *SemanticCacheConfig) { c.Stage = "draft" }},
+		{name: "invalid platform", mutate: func(c *SemanticCacheConfig) { c.Platforms = []string{"openai", "bedrock"} }},
+		{name: "invalid url", mutate: func(c *SemanticCacheConfig) { c.SemanticModelBaseURL = "ftp://semantic.example.com" }},
+		{name: "base url too long", mutate: func(c *SemanticCacheConfig) { c.SemanticModelBaseURL = "https://" + strings.Repeat("a", 489) + ".com" }},
+		{name: "model too long", mutate: func(c *SemanticCacheConfig) { c.SemanticModelName = strings.Repeat("m", 101) }},
+		{name: "namespace too long", mutate: func(c *SemanticCacheConfig) { c.Namespace = strings.Repeat("n", 101) }},
+		{name: "dimension invalid", mutate: func(c *SemanticCacheConfig) { d := 0; c.EmbeddingDimension = &d }},
+		{name: "similarity too low", mutate: func(c *SemanticCacheConfig) { c.SimilarityThreshold = 0.8999 }},
+		{name: "similarity too many decimals", mutate: func(c *SemanticCacheConfig) { c.SimilarityThreshold = 0.98765 }},
+		{name: "reuse too high", mutate: func(c *SemanticCacheConfig) { c.MaxReuseMinutes = 1441 }},
+		{name: "candidates too low", mutate: func(c *SemanticCacheConfig) { c.MaxCandidates = -1 }},
+		{name: "quality rollback invalid", mutate: func(c *SemanticCacheConfig) { c.QualityRollbackThresholdPercent = 100.001 }},
+		{name: "negative gray id", mutate: func(c *SemanticCacheConfig) { c.GrayAPIKeyIDs = []int64{1, -1} }},
+		{name: "enabled missing url", mutate: func(c *SemanticCacheConfig) { c.SemanticModelBaseURL = "" }},
+		{name: "enabled missing model", mutate: func(c *SemanticCacheConfig) { c.SemanticModelName = "" }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &cacheManagementSettingRepoStub{}
+			svc := NewSettingService(repo, &config.Config{})
+			svc.SetSecretEncryptor(semanticCacheEncryptorStub{})
+			cfg := validSemanticCacheConfig("sk-semantic-secret")
+			tt.mutate(&cfg)
+
+			_, err := svc.UpdateSemanticCacheConfig(context.Background(), cfg)
+
+			require.Error(t, err)
+			require.Equal(t, "SEMANTIC_CACHE_CONFIG_INVALID", infraerrors.Reason(err))
+		})
+	}
+}
+
+func TestSettingServiceUpdateSemanticCacheConfigRequiresEncryptorWhenKeyProvided(t *testing.T) {
+	svc := NewSettingService(&cacheManagementSettingRepoStub{}, &config.Config{})
+
+	_, err := svc.UpdateSemanticCacheConfig(context.Background(), validSemanticCacheConfig("sk-semantic-secret"))
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "secret encryptor not initialized")
+}
+
+func validSemanticCacheConfig(apiKey string) SemanticCacheConfig {
+	return SemanticCacheConfig{
+		Enabled:                         true,
+		Stage:                           "observe",
+		Platforms:                       []string{"openai"},
+		ModelAllowlist:                  []string{"gpt-5.5"},
+		SemanticModelBaseURL:            "https://semantic.example.com/v1",
+		SemanticAPIKey:                  apiKey,
+		SemanticModelName:               "text-embedding-3-large",
+		Namespace:                       "default",
+		RuleVersion:                     "v1",
+		SimilarityThreshold:             0.98,
+		MaxReuseMinutes:                 10,
+		MaxCandidates:                   20,
+		GrayAPIKeyIDs:                   []int64{12},
+		ReviewMode:                      true,
+		QualityRollbackThresholdPercent: 1.0,
+	}
 }
