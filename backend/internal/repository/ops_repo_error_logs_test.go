@@ -231,3 +231,153 @@ func TestListAndDetailErrorClassificationUseSameEvidence(t *testing.T) {
 	require.Equal(t, list.Errors[0].ErrorSubcategory, detail.ErrorSubcategory)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestListUnifiedErrorsFiltersSortsAndCountsSameKind(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	repo := &opsRepository{db: db}
+	start := time.Date(2026, 6, 8, 8, 0, 0, 0, time.UTC)
+	end := start.Add(30 * time.Minute)
+	userID := int64(6)
+
+	rows := sqlmock.NewRows([]string{
+		"id", "created_at", "error_phase", "error_type", "error_owner", "error_source", "severity", "client_status_code", "status_code", "platform", "model",
+		"client_request_id", "request_id", "error_message", "error_body", "upstream_status_code", "upstream_error_message", "upstream_error_detail", "upstream_errors", "is_business_limited",
+		"user_id", "user_email", "api_key_id", "api_key_name", "account_id", "account_name", "group_id", "group_name",
+		"request_path", "inbound_endpoint", "upstream_endpoint", "requested_model", "upstream_model",
+		"auth_latency_ms", "routing_latency_ms", "upstream_latency_ms", "response_latency_ms", "time_to_first_token_ms", "ai_analysis_status", "same_kind_count", "total_count",
+	}).AddRow(
+		int64(1), start.Add(2*time.Minute), "upstream", "api_error", "provider", "upstream_http", "P1", 500, 500, "openai", "gpt-5.5",
+		"client-1", "req-1", "upstream failed", "", 500, "insufficient balance", "", "", false,
+		userID, "user@example.com", int64(12), "prod-key", int64(88), "Op01", int64(3), "VIP",
+		"/v1/responses", "/v1/responses", "/v1/responses", "gpt-5.5", "gpt-5.5",
+		nil, nil, nil, nil, nil, "completed", 2, 2,
+	).AddRow(
+		int64(2), start.Add(time.Minute), "upstream", "api_error", "provider", "upstream_http", "P1", 500, 500, "openai", "gpt-5.5",
+		"client-2", "req-2", "upstream failed again", "", 500, "insufficient balance", "", "", false,
+		userID, "user@example.com", int64(12), "prod-key", int64(88), "Op01", int64(3), "VIP",
+		"/v1/responses", "/v1/responses", "/v1/responses", "gpt-5.5", "gpt-5.5",
+		nil, nil, nil, nil, nil, "completed", 2, 2,
+	)
+
+	mock.ExpectQuery(`(?s)WITH base AS .*ops_ai_analysis_tasks.*FROM ops_error_logs e.*COALESCE\(e\.user_id, ak\.user_id\) = \$3.*COALESCE\(e\.upstream_status_code, e\.status_code, 0\) = ANY\(\$5\).*error_category = ANY\(\$6\).*ORDER BY same_kind_count DESC.*LIMIT \$7 OFFSET \$8`).
+		WithArgs(start, end, userID, "openai", sqlmock.AnyArg(), sqlmock.AnyArg(), 20, 0).
+		WillReturnRows(rows)
+
+	got, err := repo.ListUnifiedErrors(context.Background(), &service.OpsUnifiedErrorListFilter{
+		StartTime:       &start,
+		EndTime:         &end,
+		UserID:          &userID,
+		Platform:        "openai",
+		StatusCodes:     []int{400, 500},
+		ErrorCategories: []string{service.OpsErrorCategoryBalance},
+		AIAnalysis:      service.OpsUnifiedAIAnalysisAnalyzed,
+		SortBy:          "same_kind_count",
+		SortOrder:       "desc",
+		Page:            1,
+		PageSize:        20,
+	})
+
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+	require.Equal(t, 2, got.Total)
+	require.Len(t, got.Items, 2)
+	for _, item := range got.Items {
+		require.Equal(t, service.OpsErrorCategoryBalance, item.ErrorCategory)
+		require.Equal(t, "upstream_balance_error", item.ErrorSubcategory)
+		require.Nil(t, item.ClientErrorSubcategory)
+		require.Equal(t, service.OpsUnifiedErrorResultFinalFailed, item.ErrorResult)
+		require.Equal(t, 2, item.SameKindCount)
+		require.Equal(t, "completed", item.AIAnalysisStatus)
+		require.NotNil(t, item.User)
+		require.NotNil(t, item.APIKey)
+		require.NotNil(t, item.UpstreamAccount)
+	}
+}
+
+func TestListUnifiedErrorsClassifiesRecoveredByClientFinalStatus(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	repo := &opsRepository{db: db}
+	start := time.Date(2026, 6, 8, 9, 0, 0, 0, time.UTC)
+	end := start.Add(30 * time.Minute)
+	rows := sqlmock.NewRows([]string{
+		"id", "created_at", "error_phase", "error_type", "error_owner", "error_source", "severity", "client_status_code", "status_code", "platform", "model",
+		"client_request_id", "request_id", "error_message", "error_body", "upstream_status_code", "upstream_error_message", "upstream_error_detail", "upstream_errors", "is_business_limited",
+		"user_id", "user_email", "api_key_id", "api_key_name", "account_id", "account_name", "group_id", "group_name",
+		"request_path", "inbound_endpoint", "upstream_endpoint", "requested_model", "upstream_model",
+		"auth_latency_ms", "routing_latency_ms", "upstream_latency_ms", "response_latency_ms", "time_to_first_token_ms", "ai_analysis_status", "same_kind_count", "total_count",
+	}).AddRow(
+		int64(11), start.Add(time.Minute), "upstream", "rate_limit_error", "provider", "upstream_http", "P1", 200, 429, "openai", "gpt-5.5",
+		"client-11", "req-11", "upstream recovered after retry", "", 429, "rate limit", "", "", false,
+		nil, "", nil, "", int64(88), "Op01", nil, "",
+		"/v1/responses", "/v1/responses", "/v1/responses", "gpt-5.5", "gpt-5.5",
+		nil, nil, nil, nil, nil, "not_analyzed", 1, 1,
+	)
+	mock.ExpectQuery(`(?s)WITH base AS .*COALESCE\(e\.status_code, 0\) AS client_status_code.*COALESCE\(e\.upstream_status_code, e\.status_code, 0\) AS effective_status_code.*FROM ops_error_logs e.*error_result = ANY\(\$3\).*LIMIT \$4 OFFSET \$5`).
+		WithArgs(start, end, sqlmock.AnyArg(), 20, 0).
+		WillReturnRows(rows)
+
+	got, err := repo.ListUnifiedErrors(context.Background(), &service.OpsUnifiedErrorListFilter{
+		StartTime:    &start,
+		EndTime:      &end,
+		ErrorResults: []string{service.OpsUnifiedErrorResultRecovered},
+		Page:         1,
+		PageSize:     20,
+	})
+
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+	require.Equal(t, 1, got.Total)
+	require.Len(t, got.Items, 1)
+	require.Equal(t, 429, got.Items[0].StatusCode)
+	require.Equal(t, service.OpsUnifiedErrorResultRecovered, got.Items[0].ErrorResult)
+}
+
+func TestListUnifiedErrorsOutOfRangePageKeepsTotal(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	repo := &opsRepository{db: db}
+	start := time.Date(2026, 6, 8, 10, 0, 0, 0, time.UTC)
+	end := start.Add(30 * time.Minute)
+	cols := []string{
+		"id", "created_at", "error_phase", "error_type", "error_owner", "error_source", "severity", "client_status_code", "status_code", "platform", "model",
+		"client_request_id", "request_id", "error_message", "error_body", "upstream_status_code", "upstream_error_message", "upstream_error_detail", "upstream_errors", "is_business_limited",
+		"user_id", "user_email", "api_key_id", "api_key_name", "account_id", "account_name", "group_id", "group_name",
+		"request_path", "inbound_endpoint", "upstream_endpoint", "requested_model", "upstream_model",
+		"auth_latency_ms", "routing_latency_ms", "upstream_latency_ms", "response_latency_ms", "time_to_first_token_ms", "ai_analysis_status", "same_kind_count", "total_count",
+	}
+	mock.ExpectQuery(`(?s)WITH base AS .*LIMIT \$3 OFFSET \$4`).
+		WithArgs(start, end, 20, 19960).
+		WillReturnRows(sqlmock.NewRows(cols))
+
+	firstPageRows := sqlmock.NewRows(cols).AddRow(
+		int64(21), start.Add(time.Minute), "upstream", "api_error", "provider", "upstream_http", "P1", 500, 500, "openai", "gpt-5.5",
+		"client-21", "req-21", "upstream failed", "", 500, "service unavailable", "", "", false,
+		nil, "", nil, "", int64(88), "Op01", nil, "",
+		"/v1/responses", "/v1/responses", "/v1/responses", "gpt-5.5", "gpt-5.5",
+		nil, nil, nil, nil, nil, "not_analyzed", 1, 3,
+	)
+	mock.ExpectQuery(`(?s)WITH base AS .*LIMIT \$3 OFFSET \$4`).
+		WithArgs(start, end, 20, 0).
+		WillReturnRows(firstPageRows)
+
+	got, err := repo.ListUnifiedErrors(context.Background(), &service.OpsUnifiedErrorListFilter{
+		StartTime: &start,
+		EndTime:   &end,
+		Page:      999,
+		PageSize:  20,
+	})
+
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+	require.Empty(t, got.Items)
+	require.Equal(t, 3, got.Total)
+	require.Equal(t, 999, got.Page)
+}

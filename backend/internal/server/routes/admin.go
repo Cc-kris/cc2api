@@ -189,6 +189,9 @@ func registerOpsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 			ws.GET("/qps", h.Admin.Ops.QPSWSHandler)
 		}
 
+		// Unified errors
+		ops.GET("/unified-errors", h.Admin.Ops.GetUnifiedErrors)
+
 		// Error logs (legacy)
 		ops.GET("/errors", h.Admin.Ops.GetErrorLogs)
 		ops.GET("/errors/:id", h.Admin.Ops.GetErrorLogByID)

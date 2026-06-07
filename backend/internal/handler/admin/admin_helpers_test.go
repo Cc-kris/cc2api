@@ -374,3 +374,74 @@ func TestOpsAlertRuleValidationV2RejectsInvalidRules(t *testing.T) {
 		})
 	}
 }
+
+func TestParseOpsUnifiedErrorListFilter(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	start := "2026-06-08T08:00:00Z"
+	end := "2026-06-08T08:30:00Z"
+	c.Request = httptest.NewRequest(http.MethodGet, "/?page=2&page_size=50&start_time="+start+"&end_time="+end+"&error_categories=client,balance&client_error_subcategories=client_parameter_error&error_results=final_failed&severity=P1,observe&status_code=400,500-502&user_id=6&api_key_id=12&group_id=3&platform=openai&model=gpt-5.5&upstream_account_id=88&request_id=req-1&keyword=rate&ai_analysis=not_analyzed&sort_by=status_code&sort_order=asc", nil)
+
+	filter, err := parseOpsUnifiedErrorListFilter(c)
+	require.NoError(t, err)
+	require.Equal(t, 2, filter.Page)
+	require.Equal(t, 50, filter.PageSize)
+	require.Equal(t, []string{"client", "balance"}, filter.ErrorCategories)
+	require.Equal(t, []string{"client_parameter_error"}, filter.ClientErrorSubcategories)
+	require.Equal(t, []string{"final_failed"}, filter.ErrorResults)
+	require.Equal(t, []string{"P1", "observe"}, filter.Severities)
+	require.Equal(t, []int{400, 500, 501, 502}, filter.StatusCodes)
+	require.NotNil(t, filter.UserID)
+	require.Equal(t, int64(6), *filter.UserID)
+	require.Equal(t, "openai", filter.Platform)
+	require.Equal(t, "gpt-5.5", filter.Model)
+	require.Equal(t, "req-1", filter.RequestID)
+	require.Equal(t, "rate", filter.Keyword)
+	require.Equal(t, service.OpsUnifiedAIAnalysisNotAnalyzed, filter.AIAnalysis)
+	require.Equal(t, "status_code", filter.SortBy)
+	require.Equal(t, "asc", filter.SortOrder)
+}
+
+func TestParseOpsUnifiedErrorListFilterRejectsInvalidInput(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []string{
+		"/?page_size=10",
+		"/?time_range=30d",
+		"/?error_categories=legacy_error",
+		"/?client_error_subcategories=client_unknown",
+		"/?status_code=99",
+		"/?status_code=600",
+		"/?status_code=500-1200",
+		"/?keyword=x",
+		"/?ai_analysis=maybe",
+		"/?sort_by=model",
+		"/?sort_order=random",
+	}
+	for _, target := range tests {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, target, nil)
+		_, err := parseOpsUnifiedErrorListFilter(c)
+		require.Error(t, err, target)
+	}
+}
+
+func TestParseOpsStatusCodeFilterBounds(t *testing.T) {
+	codes, err := parseOpsStatusCodeFilter("100,599")
+	require.NoError(t, err)
+	require.Equal(t, []int{100, 599}, codes)
+
+	codes, err = parseOpsStatusCodeFilter("200-202")
+	require.NoError(t, err)
+	require.Equal(t, []int{200, 201, 202}, codes)
+
+	_, err = parseOpsStatusCodeFilter("99")
+	require.Error(t, err)
+	_, err = parseOpsStatusCodeFilter("600")
+	require.Error(t, err)
+	_, err = parseOpsStatusCodeFilter("99-100")
+	require.Error(t, err)
+	_, err = parseOpsStatusCodeFilter("599-600")
+	require.Error(t, err)
+}

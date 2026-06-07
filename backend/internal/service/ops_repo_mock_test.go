@@ -46,6 +46,10 @@ func (m *opsRepoMock) ListErrorLogs(ctx context.Context, filter *OpsErrorLogFilt
 	return &OpsErrorLogList{Errors: []*OpsErrorLog{}, Page: 1, PageSize: 20}, nil
 }
 
+func (m *opsRepoMock) ListUnifiedErrors(ctx context.Context, filter *OpsUnifiedErrorListFilter) (*OpsUnifiedErrorList, error) {
+	return &OpsUnifiedErrorList{Items: []*OpsUnifiedErrorItem{}, Page: 1, PageSize: 20}, nil
+}
+
 func (m *opsRepoMock) GetErrorLogByID(ctx context.Context, id int64) (*OpsErrorLogDetail, error) {
 	return &OpsErrorLogDetail{}, nil
 }

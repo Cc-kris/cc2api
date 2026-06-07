@@ -106,6 +106,31 @@ func NewOpsHandler(opsService *service.OpsService) *OpsHandler {
 	return &OpsHandler{opsService: opsService}
 }
 
+// GetUnifiedErrors lists unified ops errors.
+// GET /api/v1/admin/ops/unified-errors
+func (h *OpsHandler) GetUnifiedErrors(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	filter, err := parseOpsUnifiedErrorListFilter(c)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	result, err := h.opsService.GetUnifiedErrors(c.Request.Context(), filter)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
 // GetErrorLogs lists ops error logs.
 // GET /api/v1/admin/ops/errors
 func (h *OpsHandler) GetErrorLogs(c *gin.Context) {
@@ -766,4 +791,167 @@ func parseOpsDuration(v string) (time.Duration, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func parseOpsUnifiedErrorListFilter(c *gin.Context) (*service.OpsUnifiedErrorListFilter, error) {
+	page, pageSize := response.ParsePagination(c)
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize == 0 {
+		pageSize = 20
+	}
+	if pageSize != 20 && pageSize != 50 && pageSize != 100 {
+		return nil, fmt.Errorf("page_size must be one of 20, 50, 100")
+	}
+	start, end, err := parseOpsTimeRange(c, "30m")
+	if err != nil {
+		return nil, err
+	}
+	if end.Sub(start) > 7*24*time.Hour {
+		return nil, fmt.Errorf("invalid time range: max window is 7 days")
+	}
+
+	filter := &service.OpsUnifiedErrorListFilter{StartTime: &start, EndTime: &end, Page: page, PageSize: pageSize}
+	if filter.ErrorCategories, err = parseOpsCSVParam(c, "error_categories", service.IsValidOpsErrorCategory, "invalid error_categories"); err != nil {
+		return nil, err
+	}
+	if filter.ErrorSubcategories, err = parseOpsCSVParam(c, "error_subcategories", nil, "invalid error_subcategories"); err != nil {
+		return nil, err
+	}
+	if filter.ClientErrorSubcategories, err = parseOpsCSVParam(c, "client_error_subcategories", service.IsValidOpsClientErrorSubcategory, "invalid client_error_subcategories"); err != nil {
+		return nil, err
+	}
+	if filter.ErrorResults, err = parseOpsCSVParam(c, "error_results", service.IsValidOpsUnifiedErrorResult, "invalid error_results"); err != nil {
+		return nil, err
+	}
+	if filter.Severities, err = parseOpsCSVParam(c, "severity", service.IsValidOpsUnifiedSeverity, "invalid severity"); err != nil {
+		return nil, err
+	}
+	if filter.StatusCodes, err = parseOpsStatusCodeFilter(c.Query("status_code")); err != nil {
+		return nil, err
+	}
+	if filter.UserID, err = parsePositiveInt64Ptr(c.Query("user_id"), "user_id"); err != nil {
+		return nil, err
+	}
+	if filter.APIKeyID, err = parsePositiveInt64Ptr(c.Query("api_key_id"), "api_key_id"); err != nil {
+		return nil, err
+	}
+	if filter.GroupID, err = parsePositiveInt64Ptr(c.Query("group_id"), "group_id"); err != nil {
+		return nil, err
+	}
+	if filter.UpstreamAccountID, err = parsePositiveInt64Ptr(c.Query("upstream_account_id"), "upstream_account_id"); err != nil {
+		return nil, err
+	}
+	filter.Platform = strings.TrimSpace(c.Query("platform"))
+	filter.Model = strings.TrimSpace(c.Query("model"))
+	filter.RequestID = strings.TrimSpace(c.Query("request_id"))
+	if len(filter.RequestID) > 128 {
+		return nil, fmt.Errorf("request_id must be at most 128 characters")
+	}
+	filter.Keyword = strings.TrimSpace(c.Query("keyword"))
+	if filter.Keyword != "" && (len([]rune(filter.Keyword)) < 2 || len([]rune(filter.Keyword)) > 100) {
+		return nil, fmt.Errorf("keyword must be 2-100 characters")
+	}
+	filter.AIAnalysis = strings.TrimSpace(c.Query("ai_analysis"))
+	if filter.AIAnalysis == "" {
+		filter.AIAnalysis = service.OpsUnifiedAIAnalysisAll
+	}
+	if !service.IsValidOpsUnifiedAIAnalysis(filter.AIAnalysis) {
+		return nil, fmt.Errorf("ai_analysis must be all/analyzed/not_analyzed")
+	}
+	filter.SortBy = strings.TrimSpace(c.Query("sort_by"))
+	if filter.SortBy == "" {
+		filter.SortBy = "occurred_at"
+	}
+	switch filter.SortBy {
+	case "occurred_at", "status_code", "severity", "same_kind_count":
+	default:
+		return nil, fmt.Errorf("invalid sort_by")
+	}
+	filter.SortOrder = strings.ToLower(strings.TrimSpace(c.Query("sort_order")))
+	if filter.SortOrder == "" {
+		filter.SortOrder = "desc"
+	}
+	if filter.SortOrder != "asc" && filter.SortOrder != "desc" {
+		return nil, fmt.Errorf("sort_order must be asc or desc")
+	}
+	return filter, nil
+}
+
+func parseOpsCSVParam(c *gin.Context, key string, validate func(string) bool, invalidMessage string) ([]string, error) {
+	raw := strings.TrimSpace(c.Query(key))
+	if raw == "" {
+		return nil, nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	seen := map[string]struct{}{}
+	for _, part := range parts {
+		value := strings.TrimSpace(part)
+		if value == "" {
+			continue
+		}
+		if validate != nil && !validate(value) {
+			return nil, fmt.Errorf("%s", invalidMessage)
+		}
+		lower := strings.ToLower(value)
+		if _, ok := seen[lower]; ok {
+			continue
+		}
+		seen[lower] = struct{}{}
+		out = append(out, value)
+	}
+	return out, nil
+}
+
+func parsePositiveInt64Ptr(raw string, field string) (*int64, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id <= 0 {
+		return nil, fmt.Errorf("invalid %s", field)
+	}
+	return &id, nil
+}
+
+func parseOpsStatusCodeFilter(raw string) ([]int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	seen := map[int]struct{}{}
+	out := []int{}
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if strings.Contains(part, "-") {
+			bounds := strings.SplitN(part, "-", 2)
+			start, err1 := strconv.Atoi(strings.TrimSpace(bounds[0]))
+			end, err2 := strconv.Atoi(strings.TrimSpace(bounds[1]))
+			if err1 != nil || err2 != nil || start < 100 || end > 599 || end < start {
+				return nil, fmt.Errorf("invalid status_code")
+			}
+			for code := start; code <= end; code++ {
+				if _, ok := seen[code]; !ok {
+					seen[code] = struct{}{}
+					out = append(out, code)
+				}
+			}
+			continue
+		}
+		code, err := strconv.Atoi(part)
+		if err != nil || code < 100 || code > 599 {
+			return nil, fmt.Errorf("invalid status_code")
+		}
+		if _, ok := seen[code]; !ok {
+			seen[code] = struct{}{}
+			out = append(out, code)
+		}
+	}
+	return out, nil
 }

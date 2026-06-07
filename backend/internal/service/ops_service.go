@@ -331,6 +331,21 @@ func (s *OpsService) GetErrorLogs(ctx context.Context, filter *OpsErrorLogFilter
 	return result, nil
 }
 
+func (s *OpsService) GetUnifiedErrors(ctx context.Context, filter *OpsUnifiedErrorListFilter) (*OpsUnifiedErrorList, error) {
+	if err := s.RequireMonitoringEnabled(ctx); err != nil {
+		return nil, err
+	}
+	if s.opsRepo == nil {
+		return &OpsUnifiedErrorList{Items: []*OpsUnifiedErrorItem{}, Total: 0, Page: 1, PageSize: 20}, nil
+	}
+	result, err := s.opsRepo.ListUnifiedErrors(ctx, filter)
+	if err != nil {
+		log.Printf("[Ops] GetUnifiedErrors failed: %v", err)
+		return nil, err
+	}
+	return result, nil
+}
+
 func (s *OpsService) GetErrorLogByID(ctx context.Context, id int64) (*OpsErrorLogDetail, error) {
 	if err := s.RequireMonitoringEnabled(ctx); err != nil {
 		return nil, err
