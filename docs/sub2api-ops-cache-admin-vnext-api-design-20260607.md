@@ -434,6 +434,64 @@ POST /api/v1/admin/ops/ai-analysis/tasks
 }
 ```
 
+字段规则：
+
+| 字段 | 必填 | 规则 |
+|---|---|---|
+| source_type | 否 | `unified_errors` 或 `manual_filter`，为空按 `manual_filter` 处理 |
+| source_id | 否 | 来源对象 ID；手动筛选任务可为空 |
+| time_start | 是 | RFC3339 时间 |
+| time_end | 是 | RFC3339 时间，必须晚于 `time_start` |
+| filters | 否 | 当前统一错误列表筛选快照；未传按空筛选处理 |
+
+`time_end - time_start` 最大 24 小时。`filters` 支持当前统一错误列表的错误分类、错误子类、客户端错误子类、处理结果、严重级别、状态码、用户、API Key、分组、上游账号、平台、模型、请求 ID、关键词等筛选字段。服务端会将筛选条件规范化后保存为任务快照，不保存 API 秘钥等敏感信息。
+
+成功响应：
+
+```http
+HTTP/1.1 202 Accepted
+```
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "task_id": 123,
+    "status": "pending",
+    "sample_count": 0,
+    "matched_error_count": 18,
+    "message": "AI 分析任务已提交"
+  }
+}
+```
+
+说明：
+
+| 字段 | 说明 |
+|---|---|
+| task_id | 创建成功的 AI 分析任务 ID |
+| status | 初始固定为 `pending` |
+| sample_count | Worker 实际采样后更新；创建时为 0 |
+| matched_error_count | 当前筛选条件命中的错误总数，用于页面提交反馈 |
+| message | 前端成功提示文案 |
+
+错误响应：
+
+| HTTP 状态 | code | 场景 | 前端提示 |
+|---|---|---|---|
+| 400 | OPS_AI_ANALYSIS_NOT_CONFIGURED | AI 未启用、手动分析未启用、地址/模型/API Key 缺失 | 请先配置 AI 分析服务 |
+| 400 | OPS_AI_ANALYSIS_INVALID_TIME / OPS_AI_ANALYSIS_INVALID_TIME_RANGE | 时间缺失、格式错误或结束时间不晚于开始时间 | 请选择有效时间范围 |
+| 400 | OPS_AI_ANALYSIS_TIME_RANGE_TOO_LARGE | 时间范围超过 24 小时 | 手动分析时间范围最长 24 小时 |
+| 400 | OPS_AI_ANALYSIS_INVALID_FILTER | 筛选字段类型或枚举非法 | 筛选条件不合法 |
+| 400 | OPS_AI_ANALYSIS_NO_ERRORS | 当前筛选条件没有错误 | 当前范围暂无可分析错误 |
+| 409 | OPS_AI_ANALYSIS_TASK_DUPLICATE | 同一筛选范围已有 pending/running 任务 | 分析任务处理中，请稍后查看 |
+| 429 | OPS_AI_ANALYSIS_QUEUE_BUSY | pending/running 任务达到并发上限 3 个 | AI 分析队列繁忙，请稍后重试 |
+
+并发控制：创建任务时在数据库事务内加锁，先检查同一筛选范围是否已有进行中任务，再检查队列上限，最后写入任务，避免重复提交和并发突破队列限制。
+
+权限：平台所有者、管理员、运维角色可调用；其它后台角色返回 403。
+
 ### 6.5 获取 AI 分析任务和报告
 
 ```http

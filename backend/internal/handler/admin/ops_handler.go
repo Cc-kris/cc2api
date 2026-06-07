@@ -1055,6 +1055,10 @@ func canExportOpsUnifiedErrors(c *gin.Context) bool {
 	return role == service.RoleAdmin || strings.EqualFold(role, "ops") || strings.EqualFold(role, "operation") || strings.EqualFold(role, "operator")
 }
 
+func canOperateOpsAIAnalysis(c *gin.Context) bool {
+	return canExportOpsUnifiedErrors(c)
+}
+
 func opsJoinInts(values []int) string {
 	if len(values) == 0 {
 		return ""

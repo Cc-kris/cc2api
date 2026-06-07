@@ -168,6 +168,39 @@ func (h *OpsHandler) TestAIAnalysisConnection(c *gin.Context) {
 	response.Success(c, result)
 }
 
+// CreateAIAnalysisTask creates a manual Ops AI analysis task from current filters.
+// POST /api/v1/admin/ops/ai-analysis/tasks
+func (h *OpsHandler) CreateAIAnalysisTask(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if !canOperateOpsAIAnalysis(c) {
+		response.Forbidden(c, "无权限创建 AI 分析任务")
+		return
+	}
+	var req service.OpsAIAnalysisTaskCreateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request body")
+		return
+	}
+	subject, ok := middleware.GetAuthSubjectFromContext(c)
+	if !ok || subject.UserID <= 0 {
+		response.Forbidden(c, "无权限创建 AI 分析任务")
+		return
+	}
+	result, err := h.opsService.CreateManualAIAnalysisTask(c.Request.Context(), &req, subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Accepted(c, result)
+}
+
 // GetRuntimeLogConfig returns runtime log config (DB-backed).
 // GET /api/v1/admin/ops/runtime/logging
 func (h *OpsHandler) GetRuntimeLogConfig(c *gin.Context) {

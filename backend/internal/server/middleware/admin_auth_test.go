@@ -123,7 +123,7 @@ func TestAdminAuthJWTValidatesTokenVersion(t *testing.T) {
 	})
 }
 
-func TestAdminAuthAllowsOpsRoleOnlyForUnifiedErrorExport(t *testing.T) {
+func TestAdminAuthAllowsOpsRoleOnlyForAllowedOpsEndpoints(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	cfg := &config.Config{JWT: config.JWTConfig{Secret: "test-secret", ExpireHour: 1}}
@@ -154,6 +154,13 @@ func TestAdminAuthAllowsOpsRoleOnlyForUnifiedErrorExport(t *testing.T) {
 		role, _ := GetUserRoleFromContext(c)
 		c.JSON(http.StatusOK, gin.H{"role": role})
 	})
+	router.POST("/api/v1/admin/ops/ai-analysis/tasks", func(c *gin.Context) {
+		role, _ := GetUserRoleFromContext(c)
+		c.JSON(http.StatusAccepted, gin.H{"role": role})
+	})
+	router.GET("/api/v1/admin/ops/ai-analysis/tasks", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
 	router.GET("/api/v1/admin/users", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
@@ -169,6 +176,26 @@ func TestAdminAuthAllowsOpsRoleOnlyForUnifiedErrorExport(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Contains(t, w.Body.String(), `"role":"ops"`)
+	})
+
+	t.Run("ops_role_can_enter_manual_ai_task_create_path", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/ops/ai-analysis/tasks", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusAccepted, w.Code)
+		require.Contains(t, w.Body.String(), `"role":"ops"`)
+	})
+
+	t.Run("ops_role_cannot_enter_manual_ai_task_read_with_wrong_method", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/ops/ai-analysis/tasks", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Contains(t, w.Body.String(), "FORBIDDEN")
 	})
 
 	t.Run("ops_role_cannot_enter_other_admin_path", func(t *testing.T) {

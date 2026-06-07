@@ -4,6 +4,7 @@ package middleware
 import (
 	"crypto/subtle"
 	"errors"
+	"net/http"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -151,7 +152,7 @@ func validateAdminAPIKey(
 }
 
 // validateJWTForAdmin 验证 JWT 并检查管理员权限。
-// 精确放行统一错误导出接口的运维角色，其它后台接口仍只允许管理员。
+// 精确放行部分运维接口的运维角色，其它后台接口仍只允许管理员。
 func validateJWTForAdmin(
 	c *gin.Context,
 	token string,
@@ -188,8 +189,8 @@ func validateJWTForAdmin(
 		return false
 	}
 
-	// 检查后台访问权限。除统一错误导出接口外，其它后台接口仍只允许管理员。
-	if !user.IsAdmin() && !allowOpsRoleForAdminPath(user.Role, c.Request.URL.Path) {
+	// 检查后台访问权限。除明确放行的运维接口外，其它后台接口仍只允许管理员。
+	if !user.IsAdmin() && !allowOpsRoleForAdminPath(user.Role, c.Request.Method, c.Request.URL.Path) {
 		AbortWithError(c, 403, "FORBIDDEN", "Admin access required")
 		return false
 	}
@@ -204,10 +205,14 @@ func validateJWTForAdmin(
 	return true
 }
 
-func allowOpsRoleForAdminPath(role, path string) bool {
+func allowOpsRoleForAdminPath(role, method, path string) bool {
 	role = strings.TrimSpace(role)
 	if role != "ops" && !strings.EqualFold(role, "operation") && !strings.EqualFold(role, "operator") {
 		return false
 	}
-	return strings.HasSuffix(strings.TrimSpace(path), "/admin/ops/unified-errors/export")
+	method = strings.ToUpper(strings.TrimSpace(method))
+	path = strings.TrimSpace(path)
+	path = strings.TrimRight(path, "/")
+	return (method == http.MethodGet && path == "/api/v1/admin/ops/unified-errors/export") ||
+		(method == http.MethodPost && path == "/api/v1/admin/ops/ai-analysis/tasks")
 }

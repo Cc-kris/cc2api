@@ -38,11 +38,13 @@ func newOpsAIAnalysisConfigRouter(handler *OpsHandler) *gin.Engine {
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 7})
+		c.Set(string(middleware.ContextKeyUserRole), service.RoleAdmin)
 		c.Next()
 	})
 	r.GET("/ai-analysis/config", handler.GetAIAnalysisConfig)
 	r.PUT("/ai-analysis/config", handler.UpdateAIAnalysisConfig)
 	r.POST("/ai-analysis/test", handler.TestAIAnalysisConnection)
+	r.POST("/ai-analysis/tasks", handler.CreateAIAnalysisTask)
 	return r
 }
 
@@ -209,4 +211,17 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
 	return f(r)
+}
+
+func TestOpsAIAnalysisConfigHandler_CreateAIAnalysisTaskInvalidBody(t *testing.T) {
+	h := newOpsAIAnalysisConfigHandler(newTestSettingRepo())
+	r := newOpsAIAnalysisConfigRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/ai-analysis/tasks", bytes.NewBufferString(`{`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("POST invalid status = %d, body=%s", w.Code, w.Body.String())
+	}
 }

@@ -162,6 +162,7 @@ func registerOpsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		ops.GET("/ai-analysis/config", h.Admin.Ops.GetAIAnalysisConfig)
 		ops.PUT("/ai-analysis/config", h.Admin.Ops.UpdateAIAnalysisConfig)
 		ops.POST("/ai-analysis/test", h.Admin.Ops.TestAIAnalysisConnection)
+		ops.POST("/ai-analysis/tasks", h.Admin.Ops.CreateAIAnalysisTask)
 
 		// Runtime settings (DB-backed)
 		runtime := ops.Group("/runtime")
