@@ -30,6 +30,10 @@ const (
 	localResponseCacheStatsFlushBatch    = 128
 	localResponseCacheStatsFlushInterval = time.Second
 	localResponseCacheStatsFlushTimeout  = 500 * time.Millisecond
+
+	localResponseCacheMinuteStatsQueueSize    = 4096
+	localResponseCacheMinuteStatsFlushBatch   = 128
+	localResponseCacheMinuteStatsFlushTimeout = 500 * time.Millisecond
 )
 
 type LocalResponseCacheConfig struct {
@@ -67,6 +71,10 @@ type LocalResponseCacheStatsStore interface {
 	GetLocalResponseCacheStats(ctx context.Context) (*LocalResponseCacheStats, error)
 }
 
+type LocalResponseCacheMinuteStatsStore interface {
+	RecordLocalResponseCacheMinuteStats(ctx context.Context, entries []*LocalResponseCacheMinuteStatEvent) error
+}
+
 type LocalResponseCacheStats struct {
 	Entries  int64            `json:"entries"`
 	Bytes    int64            `json:"bytes"`
@@ -77,6 +85,28 @@ type LocalResponseCacheLookup struct {
 	Key       string
 	LegacyKey string
 	Reason    string
+	Platform  string
+	Model     string
+	GroupID   *int64
+	APIKeyID  *int64
+}
+
+type LocalResponseCacheMinuteStatEvent struct {
+	At              time.Time
+	Platform        string
+	Model           string
+	GroupID         *int64
+	APIKeyID        *int64
+	CacheType       string
+	TotalRequests   int64
+	Candidate       bool
+	Hit             bool
+	BypassReason    string
+	StoreSuccess    bool
+	StoreSkipReason string
+	InputTokens     int64
+	OutputTokens    int64
+	HitTokens       int64
 }
 
 type LocalResponseCacheKeyOptions struct {
@@ -130,6 +160,86 @@ func (s *OpenAIGatewayService) RecordLocalResponseCacheStat(ctx context.Context,
 	select {
 	case s.localResponseCacheStatsQueue <- field:
 	default:
+	}
+}
+
+func (s *OpenAIGatewayService) RecordLocalResponseCacheMinuteStat(ctx context.Context, event LocalResponseCacheMinuteStatEvent) {
+	if s == nil || s.cache == nil {
+		return
+	}
+	store, ok := s.cache.(LocalResponseCacheMinuteStatsStore)
+	if !ok {
+		return
+	}
+	normalizeLocalResponseCacheMinuteStatEvent(&event)
+	if event.Platform == "" || event.Model == "" || event.CacheType == "" {
+		return
+	}
+	s.localResponseCacheMinuteStatsOnce.Do(func() {
+		s.localResponseCacheMinuteStatsQueue = make(chan LocalResponseCacheMinuteStatEvent, localResponseCacheMinuteStatsQueueSize)
+		go s.runLocalResponseCacheMinuteStatsWriter(store)
+	})
+	select {
+	case s.localResponseCacheMinuteStatsQueue <- event:
+	default:
+	}
+}
+
+func (s *OpenAIGatewayService) runLocalResponseCacheMinuteStatsWriter(store LocalResponseCacheMinuteStatsStore) {
+	ticker := time.NewTicker(localResponseCacheStatsFlushInterval)
+	defer ticker.Stop()
+	pending := make([]*LocalResponseCacheMinuteStatEvent, 0, localResponseCacheMinuteStatsFlushBatch)
+	flush := func() {
+		if len(pending) == 0 {
+			return
+		}
+		batch := pending
+		pending = make([]*LocalResponseCacheMinuteStatEvent, 0, localResponseCacheMinuteStatsFlushBatch)
+		ctx, cancel := context.WithTimeout(context.Background(), localResponseCacheMinuteStatsFlushTimeout)
+		defer cancel()
+		_ = store.RecordLocalResponseCacheMinuteStats(ctx, batch)
+	}
+	for {
+		select {
+		case event := <-s.localResponseCacheMinuteStatsQueue:
+			normalizeLocalResponseCacheMinuteStatEvent(&event)
+			pending = append(pending, &event)
+			if len(pending) >= localResponseCacheMinuteStatsFlushBatch {
+				flush()
+			}
+		case <-ticker.C:
+			flush()
+		}
+	}
+}
+
+func normalizeLocalResponseCacheMinuteStatEvent(event *LocalResponseCacheMinuteStatEvent) {
+	if event == nil {
+		return
+	}
+	if event.At.IsZero() {
+		event.At = time.Now().UTC()
+	}
+	event.At = event.At.UTC().Truncate(time.Minute)
+	event.Platform = strings.TrimSpace(strings.ToLower(event.Platform))
+	event.Model = strings.TrimSpace(event.Model)
+	if event.CacheType == "" {
+		event.CacheType = "exact"
+	}
+	event.CacheType = strings.TrimSpace(strings.ToLower(event.CacheType))
+	event.BypassReason = strings.TrimSpace(event.BypassReason)
+	event.StoreSkipReason = strings.TrimSpace(event.StoreSkipReason)
+	if event.TotalRequests <= 0 {
+		event.TotalRequests = 1
+	}
+	if event.InputTokens < 0 {
+		event.InputTokens = 0
+	}
+	if event.OutputTokens < 0 {
+		event.OutputTokens = 0
+	}
+	if event.HitTokens < 0 {
+		event.HitTokens = 0
 	}
 }
 
@@ -238,6 +348,10 @@ func BuildLocalResponseCacheLookupWithOptions(cfg LocalResponseCacheConfig, apiK
 	return LocalResponseCacheLookup{
 		Key:       key,
 		LegacyKey: buildLegacyLocalResponseCacheKey(apiKeyID, *groupID, endpoint, platform, model, canonical),
+		Platform:  strings.TrimSpace(platform),
+		Model:     strings.TrimSpace(model),
+		GroupID:   groupID,
+		APIKeyID:  &apiKeyID,
 	}
 }
 

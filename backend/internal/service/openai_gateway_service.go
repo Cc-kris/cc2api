@@ -367,6 +367,8 @@ type OpenAIGatewayService struct {
 	openaiCompatAnthropicDigestSessions sync.Map
 	localResponseCacheStatsOnce         sync.Once
 	localResponseCacheStatsQueue        chan string
+	localResponseCacheMinuteStatsOnce   sync.Once
+	localResponseCacheMinuteStatsQueue  chan LocalResponseCacheMinuteStatEvent
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService
@@ -4906,6 +4908,10 @@ func extractOpenAIUsageFromJSONBytes(body []byte) (OpenAIUsage, bool) {
 		return usage, true
 	}
 	return openAIUsageFromGJSON(gjson.GetBytes(body, "response.usage"))
+}
+
+func ExtractOpenAIUsageFromJSONBytes(body []byte) (OpenAIUsage, bool) {
+	return extractOpenAIUsageFromJSONBytes(body)
 }
 
 func openAIUsageFromGJSON(value gjson.Result) (OpenAIUsage, bool) {

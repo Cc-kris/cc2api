@@ -89,6 +89,9 @@ func (h *OpenAIGatewayHandler) prepareLocalResponseCache(c *gin.Context, apiKey 
 		c.Header(service.LocalResponseCacheHeader, service.LocalResponseCacheHeaderBypass)
 		if cfg.Enabled {
 			h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "lookup_bypass:"+lookup.Reason)
+			h.recordLocalResponseCacheMinuteStat(c, lookup, service.LocalResponseCacheMinuteStatEvent{
+				BypassReason: lookup.Reason,
+			})
 		}
 	}
 	return lookup, cfg
@@ -132,6 +135,14 @@ func (h *OpenAIGatewayHandler) tryWriteLocalResponseCacheHit(c *gin.Context, loo
 		flusher.Flush()
 	}
 	h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "lookup_hit")
+	usage, _ := service.ExtractOpenAIUsageFromJSONBytes(entry.Body)
+	h.recordLocalResponseCacheMinuteStat(c, lookup, service.LocalResponseCacheMinuteStatEvent{
+		Candidate:    true,
+		Hit:          true,
+		InputTokens:  int64(usage.InputTokens),
+		OutputTokens: int64(usage.OutputTokens),
+		HitTokens:    int64(usage.InputTokens + usage.OutputTokens),
+	})
 	return true
 }
 
@@ -151,22 +162,27 @@ func (h *OpenAIGatewayHandler) persistLocalResponseCache(c *gin.Context, lookup 
 	}
 	if err != nil {
 		h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_skip:forward_error")
+		h.recordLocalResponseCacheStoreSkipMinuteStat(c, lookup, capture, "forward_error")
 		return
 	}
 	if capture.overLimit {
 		h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_skip:body_too_large")
+		h.recordLocalResponseCacheStoreSkipMinuteStat(c, lookup, capture, "body_too_large")
 		return
 	}
 	if capture.writeErr != nil {
 		h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_skip:write_error")
+		h.recordLocalResponseCacheStoreSkipMinuteStat(c, lookup, capture, "write_error")
 		return
 	}
 	status := capture.StatusCode()
 	if status != http.StatusOK || capture.body.Len() == 0 {
 		if status != http.StatusOK {
 			h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_skip:status_not_ok")
+			h.recordLocalResponseCacheStoreSkipMinuteStat(c, lookup, capture, "status_not_ok")
 		} else {
 			h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_skip:empty_body")
+			h.recordLocalResponseCacheStoreSkipMinuteStat(c, lookup, capture, "empty_body")
 		}
 		return
 	}
@@ -176,10 +192,12 @@ func (h *OpenAIGatewayHandler) persistLocalResponseCache(c *gin.Context, lookup 
 	}
 	if !isLocalResponseCacheableContentType(contentType) {
 		h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_skip:content_type")
+		h.recordLocalResponseCacheStoreSkipMinuteStat(c, lookup, capture, "content_type")
 		return
 	}
 	if isLocalResponseCacheStreamingContentType(contentType) && !isLocalResponseCacheCompleteSSE(capture.body.Bytes()) {
 		h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_skip:stream_incomplete")
+		h.recordLocalResponseCacheStoreSkipMinuteStat(c, lookup, capture, "stream_incomplete")
 		return
 	}
 	entry := &service.LocalResponseCacheEntry{
@@ -196,9 +214,42 @@ func (h *OpenAIGatewayHandler) persistLocalResponseCache(c *gin.Context, lookup 
 			reqLog.Warn("local_response_cache.set_failed", zap.Error(setErr))
 		}
 		h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_failed")
+		h.recordLocalResponseCacheStoreSkipMinuteStat(c, lookup, capture, "store_failed")
 		return
 	}
 	h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_success")
+	usage, _ := service.ExtractOpenAIUsageFromJSONBytes(capture.body.Bytes())
+	h.recordLocalResponseCacheMinuteStat(c, lookup, service.LocalResponseCacheMinuteStatEvent{
+		Candidate:    true,
+		StoreSuccess: true,
+		InputTokens:  int64(usage.InputTokens),
+		OutputTokens: int64(usage.OutputTokens),
+	})
+}
+
+func (h *OpenAIGatewayHandler) recordLocalResponseCacheStoreSkipMinuteStat(c *gin.Context, lookup service.LocalResponseCacheLookup, capture *localResponseCacheCaptureWriter, reason string) {
+	var usage service.OpenAIUsage
+	if capture != nil {
+		usage, _ = service.ExtractOpenAIUsageFromJSONBytes(capture.body.Bytes())
+	}
+	h.recordLocalResponseCacheMinuteStat(c, lookup, service.LocalResponseCacheMinuteStatEvent{
+		Candidate:       true,
+		StoreSkipReason: reason,
+		InputTokens:     int64(usage.InputTokens),
+		OutputTokens:    int64(usage.OutputTokens),
+	})
+}
+
+func (h *OpenAIGatewayHandler) recordLocalResponseCacheMinuteStat(c *gin.Context, lookup service.LocalResponseCacheLookup, event service.LocalResponseCacheMinuteStatEvent) {
+	if h == nil || h.gatewayService == nil || c == nil {
+		return
+	}
+	event.Platform = lookup.Platform
+	event.Model = lookup.Model
+	event.GroupID = lookup.GroupID
+	event.APIKeyID = lookup.APIKeyID
+	event.CacheType = "exact"
+	h.gatewayService.RecordLocalResponseCacheMinuteStat(c.Request.Context(), event)
 }
 
 func isLocalResponseCacheableContentType(contentType string) bool {

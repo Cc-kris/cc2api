@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -14,10 +15,11 @@ const stickySessionPrefix = "sticky_session:"
 
 type gatewayCache struct {
 	rdb *redis.Client
+	db  *sql.DB
 }
 
-func NewGatewayCache(rdb *redis.Client) service.GatewayCache {
-	return &gatewayCache{rdb: rdb}
+func NewGatewayCache(rdb *redis.Client, db *sql.DB) service.GatewayCache {
+	return &gatewayCache{rdb: rdb, db: db}
 }
 
 // buildSessionKey 构建 session key，包含 groupID 实现分组隔离

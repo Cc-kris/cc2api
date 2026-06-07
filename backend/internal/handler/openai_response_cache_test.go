@@ -59,9 +59,10 @@ func TestIsLocalResponseCacheableContentType(t *testing.T) {
 }
 
 type localResponseCacheTestStore struct {
-	entries map[string]*service.LocalResponseCacheEntry
-	mu      sync.Mutex
-	stats   map[string]int64
+	entries     map[string]*service.LocalResponseCacheEntry
+	mu          sync.Mutex
+	stats       map[string]int64
+	minuteStats []*service.LocalResponseCacheMinuteStatEvent
 }
 
 func (s *localResponseCacheTestStore) GetSessionAccountID(context.Context, int64, string) (int64, error) {
@@ -122,6 +123,19 @@ func (s *localResponseCacheTestStore) GetLocalResponseCacheStats(context.Context
 	}, nil
 }
 
+func (s *localResponseCacheTestStore) RecordLocalResponseCacheMinuteStats(_ context.Context, entries []*service.LocalResponseCacheMinuteStatEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, entry := range entries {
+		if entry == nil {
+			continue
+		}
+		cp := *entry
+		s.minuteStats = append(s.minuteStats, &cp)
+	}
+	return nil
+}
+
 func (s *localResponseCacheTestStore) requireStatEventually(t *testing.T, field string, want int64) {
 	t.Helper()
 	require.Eventually(t, func() bool {
@@ -129,6 +143,23 @@ func (s *localResponseCacheTestStore) requireStatEventually(t *testing.T, field 
 		defer s.mu.Unlock()
 		return s.stats[field] == want
 	}, 2*time.Second, 20*time.Millisecond)
+}
+
+func (s *localResponseCacheTestStore) requireMinuteStatEventually(t *testing.T, match func(*service.LocalResponseCacheMinuteStatEvent) bool) *service.LocalResponseCacheMinuteStatEvent {
+	t.Helper()
+	var got *service.LocalResponseCacheMinuteStatEvent
+	require.Eventually(t, func() bool {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for _, item := range s.minuteStats {
+			if match(item) {
+				got = item
+				return true
+			}
+		}
+		return false
+	}, 2*time.Second, 20*time.Millisecond)
+	return got
 }
 
 func newLocalResponseCacheTestHandler(store *localResponseCacheTestStore) *OpenAIGatewayHandler {
@@ -191,6 +222,39 @@ func TestTryWriteLocalResponseCacheHit_FallsBackToLegacyKey(t *testing.T) {
 	store.requireStatEventually(t, "lookup_hit", 1)
 }
 
+func TestTryWriteLocalResponseCacheHit_RecordsMinuteStatsWithTokens(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	groupID := int64(3)
+	apiKeyID := int64(10)
+	store := &localResponseCacheTestStore{entries: map[string]*service.LocalResponseCacheEntry{
+		"hit-key": {
+			StatusCode:  http.StatusOK,
+			ContentType: "application/json",
+			Body:        []byte(`{"usage":{"input_tokens":11,"output_tokens":7}}`),
+			Headers:     map[string]string{"Content-Type": "application/json"},
+		},
+	}}
+	h := newLocalResponseCacheTestHandler(store)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+	ok := h.tryWriteLocalResponseCacheHit(c, service.LocalResponseCacheLookup{Key: "hit-key", Platform: service.PlatformOpenAI, Model: "gpt-5.5", GroupID: &groupID, APIKeyID: &apiKeyID}, nil)
+
+	require.True(t, ok)
+	got := store.requireMinuteStatEventually(t, func(item *service.LocalResponseCacheMinuteStatEvent) bool {
+		return item.Hit && item.Candidate && item.Model == "gpt-5.5"
+	})
+	require.Equal(t, service.PlatformOpenAI, got.Platform)
+	require.NotNil(t, got.GroupID)
+	require.Equal(t, groupID, *got.GroupID)
+	require.NotNil(t, got.APIKeyID)
+	require.Equal(t, apiKeyID, *got.APIKeyID)
+	require.Equal(t, int64(11), got.InputTokens)
+	require.Equal(t, int64(7), got.OutputTokens)
+	require.Equal(t, int64(18), got.HitTokens)
+}
+
 func TestPersistLocalResponseCache_RequiresCompleteSSE(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store := &localResponseCacheTestStore{}
@@ -248,4 +312,33 @@ func TestPersistLocalResponseCache_SkipsWriteError(t *testing.T) {
 
 	require.Empty(t, store.entries)
 	store.requireStatEventually(t, "store_skip:write_error", 1)
+}
+
+func TestPersistLocalResponseCache_RecordsStoreSuccessMinuteStats(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	groupID := int64(3)
+	apiKeyID := int64(10)
+	store := &localResponseCacheTestStore{}
+	h := newLocalResponseCacheTestHandler(store)
+	cfg := service.DefaultLocalResponseCacheConfig()
+	lookup := service.LocalResponseCacheLookup{Key: "store-key", Platform: service.PlatformOpenAI, Model: "gpt-5.5", GroupID: &groupID, APIKeyID: &apiKeyID}
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Header("Content-Type", "application/json")
+	capture := newLocalResponseCacheCaptureWriter(c.Writer, cfg.MaxBodySize)
+	c.Writer = capture
+	c.Status(http.StatusOK)
+	_, err := c.Writer.Write([]byte(`{"usage":{"input_tokens":5,"output_tokens":4}}`))
+	require.NoError(t, err)
+
+	h.persistLocalResponseCache(c, lookup, cfg, capture, nil, nil)
+
+	got := store.requireMinuteStatEventually(t, func(item *service.LocalResponseCacheMinuteStatEvent) bool {
+		return item.StoreSuccess && item.Candidate && item.Model == "gpt-5.5"
+	})
+	require.Equal(t, int64(5), got.InputTokens)
+	require.Equal(t, int64(4), got.OutputTokens)
+	require.Equal(t, int64(0), got.HitTokens)
 }
