@@ -191,6 +191,7 @@ func registerOpsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 
 		// Unified errors
 		ops.GET("/unified-errors", h.Admin.Ops.GetUnifiedErrors)
+		ops.GET("/unified-errors/export", h.Admin.Ops.ExportUnifiedErrors)
 		ops.GET("/unified-errors/:id", h.Admin.Ops.GetUnifiedErrorByID)
 
 		// Error logs (legacy)

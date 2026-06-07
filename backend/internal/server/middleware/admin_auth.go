@@ -150,7 +150,8 @@ func validateAdminAPIKey(
 	return true
 }
 
-// validateJWTForAdmin 验证 JWT 并检查管理员权限
+// validateJWTForAdmin 验证 JWT 并检查管理员权限。
+// 精确放行统一错误导出接口的运维角色，其它后台接口仍只允许管理员。
 func validateJWTForAdmin(
 	c *gin.Context,
 	token string,
@@ -187,8 +188,8 @@ func validateJWTForAdmin(
 		return false
 	}
 
-	// 检查管理员权限
-	if !user.IsAdmin() {
+	// 检查后台访问权限。除统一错误导出接口外，其它后台接口仍只允许管理员。
+	if !user.IsAdmin() && !allowOpsRoleForAdminPath(user.Role, c.Request.URL.Path) {
 		AbortWithError(c, 403, "FORBIDDEN", "Admin access required")
 		return false
 	}
@@ -201,4 +202,12 @@ func validateJWTForAdmin(
 	c.Set("auth_method", "jwt")
 
 	return true
+}
+
+func allowOpsRoleForAdminPath(role, path string) bool {
+	role = strings.TrimSpace(role)
+	if role != "ops" && !strings.EqualFold(role, "operation") && !strings.EqualFold(role, "operator") {
+		return false
+	}
+	return strings.HasSuffix(strings.TrimSpace(path), "/admin/ops/unified-errors/export")
 }

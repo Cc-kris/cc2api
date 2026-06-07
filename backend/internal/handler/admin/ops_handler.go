@@ -1,7 +1,10 @@
 package admin
 
 import (
+	"bytes"
+	"encoding/csv"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -129,6 +132,69 @@ func (h *OpsHandler) GetUnifiedErrors(c *gin.Context) {
 		return
 	}
 	response.Success(c, result)
+}
+
+// ExportUnifiedErrors exports unified ops errors as CSV.
+// GET /api/v1/admin/ops/unified-errors/export
+func (h *OpsHandler) ExportUnifiedErrors(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if !canExportOpsUnifiedErrors(c) {
+		response.Forbidden(c, "无权限导出错误列表")
+		return
+	}
+
+	filter, err := parseOpsUnifiedErrorListFilter(c)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	filter.Page = 1
+	filter.PageSize = 100
+	if filter.StartTime == nil || filter.EndTime == nil || filter.EndTime.Sub(*filter.StartTime) > 7*24*time.Hour {
+		response.BadRequest(c, "时间范围超出允许范围")
+		return
+	}
+	result, err := h.opsService.ExportUnifiedErrors(c.Request.Context(), filter, 100000)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if result.Total == 0 || len(result.Rows) == 0 {
+		response.BadRequest(c, "当前筛选条件下暂无可导出数据")
+		return
+	}
+	if result.Truncated {
+		logOpsUnifiedErrorExportAudit(c, filter, result.Total, false, "row_limit_exceeded")
+		response.BadRequest(c, "导出行数超过 100000，请缩小范围")
+		return
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString("\xEF\xBB\xBF")
+	writer := csv.NewWriter(&buf)
+	for _, row := range result.Rows {
+		if err := writer.Write(row); err != nil {
+			response.InternalError(c, "导出失败")
+			return
+		}
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		response.InternalError(c, "导出失败")
+		return
+	}
+	filename := "ops_unified_errors_" + time.Now().Format("20060102150405") + ".csv"
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", "attachment; filename="+filename)
+	logOpsUnifiedErrorExportAudit(c, filter, result.Total, true, "")
+	c.Data(http.StatusOK, "text/csv; charset=utf-8", buf.Bytes())
 }
 
 // GetUnifiedErrorByID returns unified ops error detail.
@@ -978,4 +1044,62 @@ func parseOpsStatusCodeFilter(raw string) ([]int, error) {
 		}
 	}
 	return out, nil
+}
+
+func canExportOpsUnifiedErrors(c *gin.Context) bool {
+	role, ok := middleware.GetUserRoleFromContext(c)
+	if !ok {
+		return false
+	}
+	role = strings.TrimSpace(role)
+	return role == service.RoleAdmin || strings.EqualFold(role, "ops") || strings.EqualFold(role, "operation") || strings.EqualFold(role, "operator")
+}
+
+func opsJoinInts(values []int) string {
+	if len(values) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(values))
+	for _, value := range values {
+		parts = append(parts, strconv.Itoa(value))
+	}
+	return strings.Join(parts, ",")
+}
+
+func logOpsUnifiedErrorExportAudit(c *gin.Context, filter *service.OpsUnifiedErrorListFilter, total int, success bool, reason string) {
+	if c == nil || filter == nil {
+		return
+	}
+	subject, _ := middleware.GetAuthSubjectFromContext(c)
+	role, _ := middleware.GetUserRoleFromContext(c)
+	startAt, endAt := "", ""
+	if filter.StartTime != nil {
+		startAt = filter.StartTime.Format(time.RFC3339)
+	}
+	if filter.EndTime != nil {
+		endAt = filter.EndTime.Format(time.RFC3339)
+	}
+	slog.Info("ops unified errors exported",
+		"audit", true,
+		"operation", "ops_unified_errors_export",
+		"user_id", subject.UserID,
+		"role", role,
+		"success", success,
+		"reason", reason,
+		"export_rows", total,
+		"start_time", startAt,
+		"end_time", endAt,
+		"error_categories", strings.Join(filter.ErrorCategories, ","),
+		"error_subcategories", strings.Join(filter.ErrorSubcategories, ","),
+		"client_error_subcategories", strings.Join(filter.ClientErrorSubcategories, ","),
+		"error_results", strings.Join(filter.ErrorResults, ","),
+		"severities", strings.Join(filter.Severities, ","),
+		"platform", filter.Platform,
+		"model", filter.Model,
+		"status_codes", opsJoinInts(filter.StatusCodes),
+		"group_id", filter.GroupID,
+		"user_id_filter", filter.UserID,
+		"api_key_id", filter.APIKeyID,
+		"upstream_account_id", filter.UpstreamAccountID,
+	)
 }

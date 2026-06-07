@@ -40,6 +40,12 @@ type OpsUnifiedErrorListFilter struct {
 	PageSize  int
 }
 
+type OpsUnifiedErrorExportResult struct {
+	Rows      [][]string
+	Total     int
+	Truncated bool
+}
+
 type OpsUnifiedErrorList struct {
 	Items    []*OpsUnifiedErrorItem `json:"items"`
 	Total    int                    `json:"total"`

@@ -363,6 +363,66 @@ func (s *OpsService) GetErrorLogByID(ctx context.Context, id int64) (*OpsErrorLo
 	return detail, nil
 }
 
+func (s *OpsService) ExportUnifiedErrors(ctx context.Context, filter *OpsUnifiedErrorListFilter, maxRows int) (*OpsUnifiedErrorExportResult, error) {
+	if err := s.RequireMonitoringEnabled(ctx); err != nil {
+		return nil, err
+	}
+	if maxRows <= 0 || maxRows > 100000 {
+		maxRows = 100000
+	}
+	if filter == nil {
+		filter = &OpsUnifiedErrorListFilter{}
+	}
+	exportFilter := *filter
+	exportFilter.Page = 1
+	exportFilter.PageSize = 100
+	exportFilter.SortBy = strings.TrimSpace(exportFilter.SortBy)
+	if exportFilter.SortBy == "" {
+		exportFilter.SortBy = "occurred_at"
+	}
+	exportFilter.SortOrder = strings.TrimSpace(exportFilter.SortOrder)
+	if exportFilter.SortOrder == "" {
+		exportFilter.SortOrder = "desc"
+	}
+
+	rows := [][]string{opsUnifiedErrorCSVHeader()}
+	exported := 0
+	total := 0
+	for {
+		page, err := s.GetUnifiedErrors(ctx, &exportFilter)
+		if err != nil {
+			return nil, err
+		}
+		if page == nil {
+			break
+		}
+		if page.Total > total {
+			total = page.Total
+		}
+		if page.Total > maxRows {
+			return &OpsUnifiedErrorExportResult{Rows: rows, Total: page.Total, Truncated: true}, nil
+		}
+		if len(page.Items) == 0 {
+			break
+		}
+		for _, item := range page.Items {
+			if item == nil {
+				continue
+			}
+			if exported >= maxRows {
+				return &OpsUnifiedErrorExportResult{Rows: rows, Total: total, Truncated: true}, nil
+			}
+			rows = append(rows, opsUnifiedErrorCSVRow(item))
+			exported++
+		}
+		if exported >= page.Total || len(page.Items) < exportFilter.PageSize {
+			break
+		}
+		exportFilter.Page++
+	}
+	return &OpsUnifiedErrorExportResult{Rows: rows, Total: total, Truncated: total > maxRows}, nil
+}
+
 func (s *OpsService) GetUnifiedErrorDetail(ctx context.Context, id int64) (*OpsUnifiedErrorDetail, error) {
 	detail, err := s.GetErrorLogByID(ctx, id)
 	if err != nil {
@@ -998,4 +1058,114 @@ func truncateRunes(s string, max int) string {
 		return s
 	}
 	return string(runes[:max])
+}
+
+func opsUnifiedErrorCSVHeader() []string {
+	return []string{
+		"id", "occurred_at", "error_category", "error_subcategory", "client_error_subcategory", "error_result", "severity", "status_code",
+		"user_id", "user_email", "api_key", "group_id", "group_name", "platform", "model", "upstream_account_id", "upstream_account_name",
+		"summary", "same_kind_count", "ai_analysis_status",
+	}
+}
+
+func opsUnifiedErrorCSVRow(item *OpsUnifiedErrorItem) []string {
+	clientSubcategory := ""
+	if item.ClientErrorSubcategory != nil {
+		clientSubcategory = *item.ClientErrorSubcategory
+	}
+	userID, userEmail := "", ""
+	if item.User != nil {
+		userID = opsStrconvFormatInt(item.User.ID)
+		userEmail = maskEmailForExport(item.User.Email)
+	}
+	apiKey := ""
+	if item.APIKey != nil {
+		apiKey = item.APIKey.Display
+		if apiKey == "" {
+			apiKey = item.APIKey.Name
+		}
+		if apiKey == "" && item.APIKey.ID > 0 {
+			apiKey = "API Key #" + opsStrconvFormatInt(item.APIKey.ID)
+		}
+	}
+	groupID, groupName := "", ""
+	if item.Group != nil {
+		groupID = opsStrconvFormatInt(item.Group.ID)
+		groupName = item.Group.Name
+	}
+	accountID, accountName := "", ""
+	if item.UpstreamAccount != nil {
+		accountID = opsStrconvFormatInt(item.UpstreamAccount.ID)
+		accountName = maskUpstreamAccountNameForExport(item.UpstreamAccount.Name)
+	}
+	return opsCSVSafeRow([]string{
+		opsStrconvFormatInt(item.ID),
+		item.OccurredAt.Format("2006-01-02 15:04:05"),
+		item.ErrorCategory,
+		item.ErrorSubcategory,
+		clientSubcategory,
+		item.ErrorResult,
+		item.Severity,
+		opsStrconvFormatInt(int64(item.StatusCode)),
+		userID,
+		userEmail,
+		apiKey,
+		groupID,
+		groupName,
+		item.Platform,
+		item.Model,
+		accountID,
+		accountName,
+		truncateRunes(item.Summary, 500),
+		opsStrconvFormatInt(int64(item.SameKindCount)),
+		item.AIAnalysisStatus,
+	})
+}
+
+func opsCSVSafeRow(row []string) []string {
+	out := make([]string, len(row))
+	for i, value := range row {
+		out[i] = opsCSVSafeCell(value)
+	}
+	return out
+}
+
+func opsCSVSafeCell(value string) string {
+	if value == "" {
+		return ""
+	}
+	trimmedLeft := strings.TrimLeft(value, " \r\n")
+	if trimmedLeft == "" {
+		return value
+	}
+	switch trimmedLeft[0] {
+	case '=', '+', '-', '@', '\t':
+		return "'" + value
+	}
+	return value
+}
+
+func maskEmailForExport(email string) string {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return ""
+	}
+	parts := strings.SplitN(email, "@", 2)
+	if len(parts) != 2 || parts[0] == "" {
+		return "***"
+	}
+	local := []rune(parts[0])
+	return string(local[0]) + "***@" + parts[1]
+}
+
+func maskUpstreamAccountNameForExport(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	runes := []rune(name)
+	if len(runes) <= 4 {
+		return string(runes[:1]) + "***"
+	}
+	return string(runes[:2]) + "***" + string(runes[len(runes)-2:])
 }

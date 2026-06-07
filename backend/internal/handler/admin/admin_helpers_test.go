@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -444,4 +445,22 @@ func TestParseOpsStatusCodeFilterBounds(t *testing.T) {
 	require.Error(t, err)
 	_, err = parseOpsStatusCodeFilter("599-600")
 	require.Error(t, err)
+}
+
+func TestCanExportOpsUnifiedErrors(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, role := range []string{service.RoleAdmin, "ops", "operation", "operator"} {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Set(string(middleware.ContextKeyUserRole), role)
+		require.True(t, canExportOpsUnifiedErrors(c), role)
+	}
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Set(string(middleware.ContextKeyUserRole), service.RoleUser)
+	require.False(t, canExportOpsUnifiedErrors(c))
+
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	require.False(t, canExportOpsUnifiedErrors(c))
 }
