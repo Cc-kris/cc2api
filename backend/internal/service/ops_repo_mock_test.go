@@ -34,6 +34,7 @@ type opsRepoMock struct {
 	CreateAlertEventFn               func(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error)
 	MergeAlertEventFn                func(ctx context.Context, eventID int64, event *OpsAlertEvent) (*OpsAlertEvent, error)
 	UpdateAlertEventStatusFn         func(ctx context.Context, eventID int64, status string, note string, processingAction string, operatorID *int64, resolvedAt *time.Time) error
+	UpdateAlertEventAITaskIDFn       func(ctx context.Context, eventID int64, taskID int64) error
 	DeleteSystemLogsFn               func(ctx context.Context, filter *OpsSystemLogCleanupFilter) (int64, error)
 	InsertSystemLogCleanupAuditFn    func(ctx context.Context, input *OpsSystemLogCleanupAudit) error
 }
@@ -302,6 +303,13 @@ func (m *opsRepoMock) UpdateAlertEventStatus(ctx context.Context, eventID int64,
 }
 
 func (m *opsRepoMock) UpdateAlertEventEmailSent(ctx context.Context, eventID int64, emailSent bool) error {
+	return nil
+}
+
+func (m *opsRepoMock) UpdateAlertEventAITaskID(ctx context.Context, eventID int64, taskID int64) error {
+	if m.UpdateAlertEventAITaskIDFn != nil {
+		return m.UpdateAlertEventAITaskIDFn(ctx, eventID, taskID)
+	}
 	return nil
 }
 

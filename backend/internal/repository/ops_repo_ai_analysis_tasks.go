@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
@@ -33,7 +34,15 @@ func (r *opsRepository) CreateAIAnalysisTaskIfAllowed(ctx context.Context, input
 		return nil, "", err
 	}
 
-	existing, err := findActiveAIAnalysisTaskTx(ctx, tx, input)
+	existing, err := findRecentAutoAIAnalysisTaskByAlertKeyTx(ctx, tx, input)
+	if err != nil {
+		return nil, "", err
+	}
+	if existing != nil {
+		return existing, service.OpsAIAnalysisTaskCreateResultDuplicate, nil
+	}
+
+	existing, err = findActiveAIAnalysisTaskTx(ctx, tx, input)
 	if err != nil {
 		return nil, "", err
 	}
@@ -81,6 +90,52 @@ RETURNING id, source_type, source_id, trigger_type, trigger_user_id, time_start,
 		input.Model,
 	)
 	return scanOpsAIAnalysisTask(row)
+}
+
+func findRecentAutoAIAnalysisTaskByAlertKeyTx(ctx context.Context, tx *sql.Tx, input *service.OpsAIAnalysisTaskCreateInput) (*service.OpsAIAnalysisTask, error) {
+	if input == nil || input.SourceType != service.OpsAIAnalysisSourceAlertEvent || input.TriggerType != service.OpsAIAnalysisTriggerAuto {
+		return nil, nil
+	}
+	alertKey := alertEventKeyFromAIAnalysisFilters(input.FiltersJSON)
+	if alertKey == "" {
+		return nil, nil
+	}
+	dedupSince := input.TimeStart
+	if input.DedupSince != nil && !input.DedupSince.IsZero() {
+		dedupSince = *input.DedupSince
+	}
+	row := tx.QueryRowContext(ctx, `
+SELECT id, source_type, source_id, trigger_type, trigger_user_id, time_start, time_end,
+       filters::text, status, sample_count, provider, model, COALESCE(error_message,''),
+       started_at, finished_at, created_at, updated_at
+FROM ops_ai_analysis_tasks
+WHERE source_type = $1
+  AND trigger_type = $2
+  AND filters->>'alert_event_key' = $3
+  AND created_at >= $4
+  AND status IN ('pending','running','completed')
+ORDER BY created_at DESC
+LIMIT 1`, input.SourceType, input.TriggerType, alertKey, dedupSince)
+	task, err := scanOpsAIAnalysisTask(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return task, nil
+}
+
+func alertEventKeyFromAIAnalysisFilters(filtersJSON string) string {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(filtersJSON), &raw); err != nil {
+		return ""
+	}
+	value, ok := raw["alert_event_key"].(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(value)
 }
 
 func findActiveAIAnalysisTaskTx(ctx context.Context, tx *sql.Tx, input *service.OpsAIAnalysisTaskCreateInput) (*service.OpsAIAnalysisTask, error) {

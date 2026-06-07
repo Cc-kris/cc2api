@@ -229,3 +229,17 @@ func TestBuildCompoundAlertCategoryWhereReturnsEmptyForBroadCategorySet(t *testi
 
 	require.Empty(t, got)
 }
+
+func TestOpsRepositoryUpdateAlertEventAITaskID(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	repo := &opsRepository{db: db}
+	mock.ExpectExec(`UPDATE ops_alert_events SET ai_task_id = \$2 WHERE id = \$1`).
+		WithArgs(int64(77), int64(501)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	require.NoError(t, repo.UpdateAlertEventAITaskID(context.Background(), 77, 501))
+	require.NoError(t, mock.ExpectationsWereMet())
+}

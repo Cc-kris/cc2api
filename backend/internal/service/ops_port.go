@@ -61,6 +61,7 @@ type OpsRepository interface {
 	MergeAlertEvent(ctx context.Context, eventID int64, event *OpsAlertEvent) (*OpsAlertEvent, error)
 	UpdateAlertEventStatus(ctx context.Context, eventID int64, status string, note string, processingAction string, operatorID *int64, resolvedAt *time.Time) error
 	UpdateAlertEventEmailSent(ctx context.Context, eventID int64, emailSent bool) error
+	UpdateAlertEventAITaskID(ctx context.Context, eventID int64, taskID int64) error
 
 	// Alert silences
 	CreateAlertSilence(ctx context.Context, input *OpsAlertSilence) (*OpsAlertSilence, error)

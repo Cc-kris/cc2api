@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -306,4 +307,73 @@ func TestOpsAlertEvaluatorCreatesEventForCompoundRuleWithinOneMinuteWindow(t *te
 	require.Equal(t, float64(5), *created.ThresholdValue)
 	require.Equal(t, "compound_rule", created.TriggerSnapshot["metric_type"])
 	require.Equal(t, float64(5), created.TriggerSnapshot["metric_value"])
+}
+
+func TestOpsAlertEvaluatorCreatesAutoAIAnalysisForNewP1Event(t *testing.T) {
+	var createdEvent *OpsAlertEvent
+	var createdTask *OpsAIAnalysisTaskCreateInput
+	var linkedEventID int64
+	var linkedTaskID int64
+	repo := &opsRepoMock{
+		ListAlertRulesFn: func(ctx context.Context) ([]*OpsAlertRule, error) {
+			return []*OpsAlertRule{
+				{
+					ID:              31,
+					Name:            "P1 上游错误",
+					Enabled:         true,
+					RuleVersion:     "v2",
+					MigrationState:  "normal",
+					MetricType:      "error_rate",
+					Operator:        ">=",
+					Threshold:       1,
+					WindowMinutes:   1,
+					TriggerLevel:    "P1",
+					Severity:        "P1",
+					ErrorCategories: []string{"upstream"},
+					AutoAIAnalysis:  true,
+				},
+			}, nil
+		},
+		GetDashboardOverviewFn: func(ctx context.Context, filter *OpsDashboardFilter) (*OpsDashboardOverview, error) {
+			require.Equal(t, OpsQueryModeRaw, filter.QueryMode)
+			require.Equal(t, time.Minute, filter.EndTime.Sub(filter.StartTime))
+			return &OpsDashboardOverview{RequestCountSLA: 100, ErrorCountSLA: 5, ErrorRate: 0.05}, nil
+		},
+		CreateAlertEventFn: func(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error) {
+			createdEvent = event
+			event.ID = 903
+			return event, nil
+		},
+		CreateAIAnalysisTaskIfAllowedFn: func(ctx context.Context, input *OpsAIAnalysisTaskCreateInput, maxActive int) (*OpsAIAnalysisTask, OpsAIAnalysisTaskCreateResult, error) {
+			createdTask = input
+			require.Equal(t, opsAIAutoMaxActiveTasks, maxActive)
+			return &OpsAIAnalysisTask{ID: 904, Status: OpsAIAnalysisStatusPending}, OpsAIAnalysisTaskCreateResultCreated, nil
+		},
+		UpdateAlertEventAITaskIDFn: func(ctx context.Context, eventID int64, taskID int64) error {
+			linkedEventID = eventID
+			linkedTaskID = taskID
+			return nil
+		},
+	}
+	opsService := NewOpsService(repo, newRuntimeSettingRepoStub(), &config.Config{Ops: config.OpsConfig{Enabled: true}}, nil, nil, nil, nil, nil, nil, nil, nil)
+	seedManualAIConfig(t, opsService)
+	svc := NewOpsAlertEvaluatorService(opsService, repo, nil, nil, nil)
+
+	svc.evaluateOnce(time.Minute)
+
+	require.NotNil(t, createdEvent)
+	require.Equal(t, int64(31), createdEvent.RuleID)
+	require.Equal(t, "upstream|error_rate|all|all|all|P1", createdEvent.EventKey)
+	require.NotNil(t, createdTask)
+	require.Equal(t, OpsAIAnalysisSourceAlertEvent, createdTask.SourceType)
+	require.NotNil(t, createdTask.SourceID)
+	require.Equal(t, int64(903), *createdTask.SourceID)
+	require.Equal(t, OpsAIAnalysisTriggerAuto, createdTask.TriggerType)
+	require.Nil(t, createdTask.TriggerUserID)
+	require.Contains(t, createdTask.FiltersJSON, `"alert_event_key":"upstream|error_rate|all|all|all|P1"`)
+	require.Contains(t, createdTask.FiltersJSON, `"error_categories":["upstream"]`)
+	require.Equal(t, int64(903), linkedEventID)
+	require.Equal(t, int64(904), linkedTaskID)
+	require.NotNil(t, createdEvent.AITaskID)
+	require.Equal(t, int64(904), *createdEvent.AITaskID)
 }

@@ -54,6 +54,7 @@ type OpsAIAnalysisTaskCreateInput struct {
 	SampleCount   int
 	Provider      string
 	Model         string
+	DedupSince    *time.Time
 }
 
 type OpsAIAnalysisTaskCreateRequest struct {

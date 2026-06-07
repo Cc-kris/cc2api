@@ -241,3 +241,42 @@ func TestUpdateAIAnalysisReportFeedback(t *testing.T) {
 	require.True(t, report.FeedbackAt.Equal(feedbackAt))
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestCreateAIAnalysisTaskIfAllowedAutoDedupsByAlertEventKey(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	repo := &opsRepository{db: db}
+	start := time.Date(2026, 6, 8, 10, 0, 0, 0, time.UTC)
+	end := start.Add(time.Minute)
+	dedupSince := end.Add(-10 * time.Minute)
+	sourceID := int64(77)
+	input := &service.OpsAIAnalysisTaskCreateInput{
+		SourceType:  service.OpsAIAnalysisSourceAlertEvent,
+		SourceID:    &sourceID,
+		TriggerType: service.OpsAIAnalysisTriggerAuto,
+		TimeStart:   start,
+		TimeEnd:     end,
+		FiltersJSON: `{"alert_event_key":"upstream|final_failed|group-3|P1","error_results":["final_failed"]}`,
+		Status:      service.OpsAIAnalysisStatusPending,
+		Provider:    "responses",
+		Model:       "gpt-5.5",
+		DedupSince:  &dedupSince,
+	}
+
+	createdAt := start.Add(-2 * time.Minute)
+	mock.ExpectBegin()
+	mock.ExpectExec(`SELECT pg_advisory_xact_lock`).WithArgs(opsAIAnalysisTaskCreateAdvisoryLockID).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(`(?s)FROM ops_ai_analysis_tasks.*filters->>'alert_event_key' = \$3.*created_at >= \$4.*LIMIT 1`).
+		WithArgs(input.SourceType, input.TriggerType, "upstream|final_failed|group-3|P1", dedupSince).
+		WillReturnRows(taskRows().AddRow(int64(501), input.SourceType, sourceID, input.TriggerType, nil, start, end, input.FiltersJSON, service.OpsAIAnalysisStatusCompleted, 3, input.Provider, input.Model, "", start, end, createdAt, end))
+	mock.ExpectRollback()
+
+	got, result, err := repo.CreateAIAnalysisTaskIfAllowed(context.Background(), input, 3)
+	require.NoError(t, err)
+	require.Equal(t, service.OpsAIAnalysisTaskCreateResultDuplicate, result)
+	require.NotNil(t, got)
+	require.Equal(t, int64(501), got.ID)
+	require.NoError(t, mock.ExpectationsWereMet())
+}

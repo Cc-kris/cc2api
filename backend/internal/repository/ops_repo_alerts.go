@@ -1399,3 +1399,17 @@ func opsNullJSONMap(v map[string]any) (any, error) {
 	}
 	return sql.NullString{String: string(b), Valid: true}, nil
 }
+
+func (r *opsRepository) UpdateAlertEventAITaskID(ctx context.Context, eventID int64, taskID int64) error {
+	if r == nil || r.db == nil {
+		return fmt.Errorf("nil ops repository")
+	}
+	if eventID <= 0 {
+		return fmt.Errorf("invalid event id")
+	}
+	if taskID <= 0 {
+		return fmt.Errorf("invalid AI analysis task id")
+	}
+	_, err := r.db.ExecContext(ctx, "UPDATE ops_alert_events SET ai_task_id = $2 WHERE id = $1", eventID, taskID)
+	return err
+}

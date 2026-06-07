@@ -326,6 +326,9 @@ func (s *OpsAlertEvaluatorService) evaluateOnce(interval time.Duration) {
 				eventsCreated++
 			}
 			if created != nil && created.ID > 0 {
+				if !merged && s.opsService != nil {
+					s.opsService.MaybeCreateAutoAIAnalysisTaskForAlert(ctx, rule, created)
+				}
 				if !merged && s.maybeSendAlertEmail(ctx, runtimeCfg, rule, created) {
 					emailsSent++
 				}
