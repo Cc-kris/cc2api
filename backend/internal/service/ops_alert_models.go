@@ -60,19 +60,27 @@ type OpsAlertEvent struct {
 	Severity string `json:"severity"`
 	Status   string `json:"status"`
 
+	EventKey        string    `json:"event_key,omitempty"`
+	LifecycleStatus string    `json:"lifecycle_status"`
+	MergedCount     int       `json:"merged_count"`
+	LastSeenAt      time.Time `json:"last_seen_at"`
+
 	Title       string `json:"title"`
 	Description string `json:"description"`
 
 	MetricValue    *float64 `json:"metric_value,omitempty"`
 	ThresholdValue *float64 `json:"threshold_value,omitempty"`
 
-	Dimensions map[string]any `json:"dimensions,omitempty"`
+	Dimensions      map[string]any `json:"dimensions,omitempty"`
+	TriggerSnapshot map[string]any `json:"trigger_snapshot,omitempty"`
+	ScoreSnapshot   map[string]any `json:"score_snapshot,omitempty"`
 
 	FiredAt    time.Time  `json:"fired_at"`
 	ResolvedAt *time.Time `json:"resolved_at,omitempty"`
 
-	EmailSent bool      `json:"email_sent"`
-	CreatedAt time.Time `json:"created_at"`
+	EmailSent        bool       `json:"email_sent"`
+	CreatedAt        time.Time  `json:"created_at"`
+	MergeWindowStart *time.Time `json:"-"`
 }
 
 type OpsAlertSilence struct {

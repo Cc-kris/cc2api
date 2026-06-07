@@ -463,6 +463,26 @@ func (s *OpsService) CreateAlertEvent(ctx context.Context, event *OpsAlertEvent)
 	if event == nil {
 		return nil, infraerrors.BadRequest("INVALID_EVENT", "invalid event")
 	}
+	event.EventKey = strings.TrimSpace(event.EventKey)
+	if event.LifecycleStatus == "" {
+		event.LifecycleStatus = OpsAlertStatusFiring
+	}
+	if event.LastSeenAt.IsZero() {
+		if !event.FiredAt.IsZero() {
+			event.LastSeenAt = event.FiredAt
+		} else {
+			event.LastSeenAt = time.Now().UTC()
+		}
+	}
+	if event.EventKey != "" && event.MergeWindowStart != nil && !event.MergeWindowStart.IsZero() {
+		existing, err := s.opsRepo.GetMergeableAlertEvent(ctx, event.EventKey, *event.MergeWindowStart)
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil && existing.ID > 0 {
+			return s.opsRepo.MergeAlertEvent(ctx, existing.ID, event)
+		}
+	}
 
 	created, err := s.opsRepo.CreateAlertEvent(ctx, event)
 	if err != nil {

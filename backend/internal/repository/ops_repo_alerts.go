@@ -509,11 +509,17 @@ SELECT
   COALESCE(rule_id, 0),
   COALESCE(severity, ''),
   COALESCE(status, ''),
+  COALESCE(event_key, ''),
+  COALESCE(lifecycle_status, status, ''),
+  COALESCE(merged_count, 0),
+  COALESCE(last_seen_at, fired_at),
   COALESCE(title, ''),
   COALESCE(description, ''),
   metric_value,
   threshold_value,
   dimensions,
+  trigger_snapshot,
+  score_snapshot,
   fired_at,
   resolved_at,
   email_sent,
@@ -531,47 +537,11 @@ LIMIT ` + limitArg
 
 	out := []*service.OpsAlertEvent{}
 	for rows.Next() {
-		var ev service.OpsAlertEvent
-		var metricValue sql.NullFloat64
-		var thresholdValue sql.NullFloat64
-		var dimensionsRaw []byte
-		var resolvedAt sql.NullTime
-		if err := rows.Scan(
-			&ev.ID,
-			&ev.RuleID,
-			&ev.Severity,
-			&ev.Status,
-			&ev.Title,
-			&ev.Description,
-			&metricValue,
-			&thresholdValue,
-			&dimensionsRaw,
-			&ev.FiredAt,
-			&resolvedAt,
-			&ev.EmailSent,
-			&ev.CreatedAt,
-		); err != nil {
+		ev, err := scanOpsAlertEvent(rows)
+		if err != nil {
 			return nil, err
 		}
-		if metricValue.Valid {
-			v := metricValue.Float64
-			ev.MetricValue = &v
-		}
-		if thresholdValue.Valid {
-			v := thresholdValue.Float64
-			ev.ThresholdValue = &v
-		}
-		if resolvedAt.Valid {
-			v := resolvedAt.Time
-			ev.ResolvedAt = &v
-		}
-		if len(dimensionsRaw) > 0 && string(dimensionsRaw) != "null" {
-			var decoded map[string]any
-			if err := json.Unmarshal(dimensionsRaw, &decoded); err == nil {
-				ev.Dimensions = decoded
-			}
-		}
-		out = append(out, &ev)
+		out = append(out, ev)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -593,11 +563,17 @@ SELECT
   COALESCE(rule_id, 0),
   COALESCE(severity, ''),
   COALESCE(status, ''),
+  COALESCE(event_key, ''),
+  COALESCE(lifecycle_status, status, ''),
+  COALESCE(merged_count, 0),
+  COALESCE(last_seen_at, fired_at),
   COALESCE(title, ''),
   COALESCE(description, ''),
   metric_value,
   threshold_value,
   dimensions,
+  trigger_snapshot,
+  score_snapshot,
   fired_at,
   resolved_at,
   email_sent,
@@ -630,11 +606,17 @@ SELECT
   COALESCE(rule_id, 0),
   COALESCE(severity, ''),
   COALESCE(status, ''),
+  COALESCE(event_key, ''),
+  COALESCE(lifecycle_status, status, ''),
+  COALESCE(merged_count, 0),
+  COALESCE(last_seen_at, fired_at),
   COALESCE(title, ''),
   COALESCE(description, ''),
   metric_value,
   threshold_value,
   dimensions,
+  trigger_snapshot,
+  score_snapshot,
   fired_at,
   resolved_at,
   email_sent,
@@ -669,11 +651,17 @@ SELECT
   COALESCE(rule_id, 0),
   COALESCE(severity, ''),
   COALESCE(status, ''),
+  COALESCE(event_key, ''),
+  COALESCE(lifecycle_status, status, ''),
+  COALESCE(merged_count, 0),
+  COALESCE(last_seen_at, fired_at),
   COALESCE(title, ''),
   COALESCE(description, ''),
   metric_value,
   threshold_value,
   dimensions,
+  trigger_snapshot,
+  score_snapshot,
   fired_at,
   resolved_at,
   email_sent,
@@ -694,6 +682,57 @@ LIMIT 1`
 	return ev, nil
 }
 
+func (r *opsRepository) GetMergeableAlertEvent(ctx context.Context, eventKey string, since time.Time) (*service.OpsAlertEvent, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("nil ops repository")
+	}
+	eventKey = strings.TrimSpace(eventKey)
+	if eventKey == "" {
+		return nil, fmt.Errorf("invalid event key")
+	}
+	if since.IsZero() {
+		return nil, fmt.Errorf("invalid merge window")
+	}
+
+	q := `
+SELECT
+  id,
+  COALESCE(rule_id, 0),
+  COALESCE(severity, ''),
+  COALESCE(status, ''),
+  COALESCE(event_key, ''),
+  COALESCE(lifecycle_status, status, ''),
+  COALESCE(merged_count, 0),
+  COALESCE(last_seen_at, fired_at),
+  COALESCE(title, ''),
+  COALESCE(description, ''),
+  metric_value,
+  threshold_value,
+  dimensions,
+  trigger_snapshot,
+  score_snapshot,
+  fired_at,
+  resolved_at,
+  email_sent,
+  created_at
+FROM ops_alert_events
+WHERE event_key = $1
+  AND COALESCE(lifecycle_status, status) IN ('firing', 'acknowledged', 'processing', 'silenced')
+  AND COALESCE(last_seen_at, fired_at) >= $2
+ORDER BY COALESCE(last_seen_at, fired_at) DESC, id DESC
+LIMIT 1`
+
+	row := r.db.QueryRowContext(ctx, q, eventKey, since)
+	ev, err := scanOpsAlertEvent(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return ev, nil
+}
+
 func (r *opsRepository) CreateAlertEvent(ctx context.Context, event *service.OpsAlertEvent) (*service.OpsAlertEvent, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil ops repository")
@@ -701,8 +740,26 @@ func (r *opsRepository) CreateAlertEvent(ctx context.Context, event *service.Ops
 	if event == nil {
 		return nil, fmt.Errorf("nil event")
 	}
+	if strings.TrimSpace(event.LifecycleStatus) == "" {
+		event.LifecycleStatus = service.OpsAlertStatusFiring
+	}
+	if event.LastSeenAt.IsZero() {
+		if !event.FiredAt.IsZero() {
+			event.LastSeenAt = event.FiredAt
+		} else {
+			event.LastSeenAt = time.Now().UTC()
+		}
+	}
 
 	dimensionsArg, err := opsNullJSONMap(event.Dimensions)
+	if err != nil {
+		return nil, err
+	}
+	triggerSnapshotArg, err := opsNullJSONMap(event.TriggerSnapshot)
+	if err != nil {
+		return nil, err
+	}
+	scoreSnapshotArg, err := opsNullJSONMap(event.ScoreSnapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -712,28 +769,40 @@ INSERT INTO ops_alert_events (
   rule_id,
   severity,
   status,
+  event_key,
+  lifecycle_status,
+  merged_count,
+  last_seen_at,
   title,
   description,
   metric_value,
   threshold_value,
   dimensions,
+  trigger_snapshot,
+  score_snapshot,
   fired_at,
   resolved_at,
   email_sent,
   created_at
 ) VALUES (
-  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW()
+  $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW()
 )
 RETURNING
   id,
   COALESCE(rule_id, 0),
   COALESCE(severity, ''),
   COALESCE(status, ''),
+  COALESCE(event_key, ''),
+  COALESCE(lifecycle_status, status, ''),
+  COALESCE(merged_count, 0),
+  COALESCE(last_seen_at, fired_at),
   COALESCE(title, ''),
   COALESCE(description, ''),
   metric_value,
   threshold_value,
   dimensions,
+  trigger_snapshot,
+  score_snapshot,
   fired_at,
   resolved_at,
   email_sent,
@@ -745,14 +814,94 @@ RETURNING
 		opsNullInt64(&event.RuleID),
 		opsNullString(event.Severity),
 		opsNullString(event.Status),
+		opsNullString(event.EventKey),
+		opsNullString(event.LifecycleStatus),
+		event.MergedCount,
+		event.LastSeenAt,
 		opsNullString(event.Title),
 		opsNullString(event.Description),
 		opsNullFloat64(event.MetricValue),
 		opsNullFloat64(event.ThresholdValue),
 		dimensionsArg,
+		triggerSnapshotArg,
+		scoreSnapshotArg,
 		event.FiredAt,
 		opsNullTime(event.ResolvedAt),
 		event.EmailSent,
+	)
+	return scanOpsAlertEvent(row)
+}
+
+func (r *opsRepository) MergeAlertEvent(ctx context.Context, eventID int64, event *service.OpsAlertEvent) (*service.OpsAlertEvent, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("nil ops repository")
+	}
+	if eventID <= 0 {
+		return nil, fmt.Errorf("invalid event id")
+	}
+	if event == nil {
+		return nil, fmt.Errorf("nil event")
+	}
+	dimensionsArg, err := opsNullJSONMap(event.Dimensions)
+	if err != nil {
+		return nil, err
+	}
+	triggerSnapshotArg, err := opsNullJSONMap(event.TriggerSnapshot)
+	if err != nil {
+		return nil, err
+	}
+	scoreSnapshotArg, err := opsNullJSONMap(event.ScoreSnapshot)
+	if err != nil {
+		return nil, err
+	}
+
+	q := `
+UPDATE ops_alert_events
+SET last_seen_at = GREATEST(COALESCE(last_seen_at, fired_at), $2),
+    merged_count = COALESCE(merged_count, 0) + 1,
+    metric_value = $3,
+    threshold_value = $4,
+    dimensions = $5,
+    trigger_snapshot = COALESCE($6::jsonb, trigger_snapshot),
+    score_snapshot = COALESCE($7::jsonb, score_snapshot),
+    description = COALESCE($8, description)
+WHERE id = $1
+RETURNING
+  id,
+  COALESCE(rule_id, 0),
+  COALESCE(severity, ''),
+  COALESCE(status, ''),
+  COALESCE(event_key, ''),
+  COALESCE(lifecycle_status, status, ''),
+  COALESCE(merged_count, 0),
+  COALESCE(last_seen_at, fired_at),
+  COALESCE(title, ''),
+  COALESCE(description, ''),
+  metric_value,
+  threshold_value,
+  dimensions,
+  trigger_snapshot,
+  score_snapshot,
+  fired_at,
+  resolved_at,
+  email_sent,
+  created_at`
+
+	lastSeenAt := event.LastSeenAt
+	if lastSeenAt.IsZero() {
+		lastSeenAt = time.Now().UTC()
+	}
+	row := r.db.QueryRowContext(
+		ctx,
+		q,
+		eventID,
+		lastSeenAt,
+		opsNullFloat64(event.MetricValue),
+		opsNullFloat64(event.ThresholdValue),
+		dimensionsArg,
+		triggerSnapshotArg,
+		scoreSnapshotArg,
+		opsNullString(event.Description),
 	)
 	return scanOpsAlertEvent(row)
 }
@@ -771,6 +920,13 @@ func (r *opsRepository) UpdateAlertEventStatus(ctx context.Context, eventID int6
 	q := `
 UPDATE ops_alert_events
 SET status = $2,
+    lifecycle_status = CASE
+        WHEN $2 = 'resolved' THEN 'recovered'
+        WHEN $2 = 'manual_resolved' THEN 'closed'
+        ELSE COALESCE(lifecycle_status, $2)
+    END,
+    recovered_at = CASE WHEN $2 = 'resolved' THEN $3 ELSE recovered_at END,
+    closed_at = CASE WHEN $2 = 'manual_resolved' THEN $3 ELSE closed_at END,
     resolved_at = $3
 WHERE id = $1`
 
@@ -958,6 +1114,8 @@ func scanOpsAlertEvent(row opsAlertEventRow) (*service.OpsAlertEvent, error) {
 	var metricValue sql.NullFloat64
 	var thresholdValue sql.NullFloat64
 	var dimensionsRaw []byte
+	var triggerSnapshotRaw []byte
+	var scoreSnapshotRaw []byte
 	var resolvedAt sql.NullTime
 
 	if err := row.Scan(
@@ -965,11 +1123,17 @@ func scanOpsAlertEvent(row opsAlertEventRow) (*service.OpsAlertEvent, error) {
 		&ev.RuleID,
 		&ev.Severity,
 		&ev.Status,
+		&ev.EventKey,
+		&ev.LifecycleStatus,
+		&ev.MergedCount,
+		&ev.LastSeenAt,
 		&ev.Title,
 		&ev.Description,
 		&metricValue,
 		&thresholdValue,
 		&dimensionsRaw,
+		&triggerSnapshotRaw,
+		&scoreSnapshotRaw,
 		&ev.FiredAt,
 		&resolvedAt,
 		&ev.EmailSent,
@@ -993,6 +1157,18 @@ func scanOpsAlertEvent(row opsAlertEventRow) (*service.OpsAlertEvent, error) {
 		var decoded map[string]any
 		if err := json.Unmarshal(dimensionsRaw, &decoded); err == nil {
 			ev.Dimensions = decoded
+		}
+	}
+	if len(triggerSnapshotRaw) > 0 && string(triggerSnapshotRaw) != "null" {
+		var decoded map[string]any
+		if err := json.Unmarshal(triggerSnapshotRaw, &decoded); err == nil {
+			ev.TriggerSnapshot = decoded
+		}
+	}
+	if len(scoreSnapshotRaw) > 0 && string(scoreSnapshotRaw) != "null" {
+		var decoded map[string]any
+		if err := json.Unmarshal(scoreSnapshotRaw, &decoded); err == nil {
+			ev.ScoreSnapshot = decoded
 		}
 	}
 	return &ev, nil

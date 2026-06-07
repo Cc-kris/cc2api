@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -115,4 +116,63 @@ func TestOpsServiceUpdateAlertRuleFailsClosedWhenExistingRuleCannotBeLoaded(t *t
 	_, err := svc.UpdateAlertRule(context.Background(), rule)
 
 	require.ErrorIs(t, err, repoErr)
+}
+
+func TestOpsServiceCreateAlertEventMergesByEventKeyWithinSilenceWindow(t *testing.T) {
+	now := time.Date(2026, 6, 7, 10, 0, 0, 0, time.UTC)
+	mergeStart := now.Add(-10 * time.Minute)
+	var lookedUpKey string
+	var lookedUpSince time.Time
+	var created bool
+	var mergedID int64
+	repo := &opsRepoMock{
+		GetMergeableAlertEventFn: func(ctx context.Context, eventKey string, since time.Time) (*OpsAlertEvent, error) {
+			lookedUpKey = eventKey
+			lookedUpSince = since
+			return &OpsAlertEvent{ID: 99, EventKey: eventKey, MergedCount: 2}, nil
+		},
+		CreateAlertEventFn: func(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error) {
+			created = true
+			return event, nil
+		},
+		MergeAlertEventFn: func(ctx context.Context, eventID int64, event *OpsAlertEvent) (*OpsAlertEvent, error) {
+			mergedID = eventID
+			return &OpsAlertEvent{ID: eventID, EventKey: event.EventKey, MergedCount: 3, LastSeenAt: event.LastSeenAt}, nil
+		},
+	}
+	svc := NewOpsService(repo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	got, err := svc.CreateAlertEvent(context.Background(), &OpsAlertEvent{
+		EventKey:         "upstream|rate_limit|1|gpt-5.5|acct-1|P1",
+		Status:           OpsAlertStatusFiring,
+		LifecycleStatus:  OpsAlertStatusFiring,
+		FiredAt:          now,
+		LastSeenAt:       now,
+		MergeWindowStart: &mergeStart,
+	})
+
+	require.NoError(t, err)
+	require.False(t, created)
+	require.Equal(t, int64(99), mergedID)
+	require.Equal(t, int64(99), got.ID)
+	require.Equal(t, 3, got.MergedCount)
+	require.Equal(t, "upstream|rate_limit|1|gpt-5.5|acct-1|P1", lookedUpKey)
+	require.True(t, lookedUpSince.Equal(mergeStart))
+}
+
+func TestBuildOpsAlertEventKeyUsesPRDDedupDimensions(t *testing.T) {
+	rule := &OpsAlertRule{
+		MetricType:      "error_rate",
+		Severity:        "P1",
+		ErrorCategories: []string{"upstream", "rate_limit"},
+		TriggerLevel:    "P1",
+	}
+
+	got := buildOpsAlertEventKey(rule, map[string]any{
+		"group_id":            int64(7),
+		"model":               "gpt-5.5",
+		"upstream_account_id": int64(42),
+	})
+
+	require.Equal(t, "upstream,rate_limit|error_rate|7|gpt-5.5|42|P1", got)
 }

@@ -194,6 +194,7 @@ func (s *OpsAlertEvaluatorService) evaluateOnce(interval time.Duration) {
 	rulesEnabled := 0
 	rulesEvaluated := 0
 	eventsCreated := 0
+	eventsMerged := 0
 	eventsResolved := 0
 	emailsSent := 0
 
@@ -248,7 +249,7 @@ func (s *OpsAlertEvaluatorService) evaluateOnce(interval time.Duration) {
 		}
 
 		if breachedNow && consecutive >= required {
-			if activeEvent != nil {
+			if activeEvent != nil && rule.SilenceMinutes <= 0 {
 				continue
 			}
 
@@ -260,6 +261,43 @@ func (s *OpsAlertEvaluatorService) evaluateOnce(interval time.Duration) {
 					if ok, err := s.opsService.IsAlertSilenced(ctx, rule.ID, platform, scopeGroupID, region, now); err == nil && ok {
 						continue
 					}
+				}
+			}
+
+			firedEvent := &OpsAlertEvent{
+				RuleID:          rule.ID,
+				Severity:        strings.TrimSpace(rule.Severity),
+				Status:          OpsAlertStatusFiring,
+				LifecycleStatus: OpsAlertStatusFiring,
+				Title:           fmt.Sprintf("%s: %s", strings.TrimSpace(rule.Severity), strings.TrimSpace(rule.Name)),
+				Description:     buildOpsAlertDescription(rule, metricValue, windowMinutes, scopePlatform, scopeGroupID),
+				MetricValue:     float64Ptr(metricValue),
+				ThresholdValue:  float64Ptr(rule.Threshold),
+				Dimensions:      buildOpsAlertDimensions(scopePlatform, scopeGroupID),
+				TriggerSnapshot: buildOpsAlertTriggerSnapshot(rule, metricValue, windowMinutes, scopePlatform, scopeGroupID),
+				FiredAt:         now,
+				LastSeenAt:      now,
+				CreatedAt:       now,
+			}
+			firedEvent.EventKey = buildOpsAlertEventKey(rule, firedEvent.Dimensions)
+			if rule.SilenceMinutes > 0 {
+				mergeStart := now.Add(-time.Duration(rule.SilenceMinutes) * time.Minute)
+				firedEvent.MergeWindowStart = &mergeStart
+			}
+
+			if firedEvent.EventKey != "" && firedEvent.MergeWindowStart != nil {
+				existing, err := s.opsRepo.GetMergeableAlertEvent(ctx, firedEvent.EventKey, *firedEvent.MergeWindowStart)
+				if err != nil {
+					logger.LegacyPrintf("service.ops_alert_evaluator", "[OpsAlertEvaluator] get mergeable event failed (rule=%d): %v", rule.ID, err)
+					continue
+				}
+				if existing != nil && existing.ID > 0 {
+					if _, err := s.opsRepo.MergeAlertEvent(ctx, existing.ID, firedEvent); err != nil {
+						logger.LegacyPrintf("service.ops_alert_evaluator", "[OpsAlertEvaluator] merge event failed (rule=%d event=%d): %v", rule.ID, existing.ID, err)
+						continue
+					}
+					eventsMerged++
+					continue
 				}
 			}
 
@@ -275,28 +313,20 @@ func (s *OpsAlertEvaluatorService) evaluateOnce(interval time.Duration) {
 				}
 			}
 
-			firedEvent := &OpsAlertEvent{
-				RuleID:         rule.ID,
-				Severity:       strings.TrimSpace(rule.Severity),
-				Status:         OpsAlertStatusFiring,
-				Title:          fmt.Sprintf("%s: %s", strings.TrimSpace(rule.Severity), strings.TrimSpace(rule.Name)),
-				Description:    buildOpsAlertDescription(rule, metricValue, windowMinutes, scopePlatform, scopeGroupID),
-				MetricValue:    float64Ptr(metricValue),
-				ThresholdValue: float64Ptr(rule.Threshold),
-				Dimensions:     buildOpsAlertDimensions(scopePlatform, scopeGroupID),
-				FiredAt:        now,
-				CreatedAt:      now,
-			}
-
-			created, err := s.opsRepo.CreateAlertEvent(ctx, firedEvent)
+			created, err := s.createAlertEvent(ctx, firedEvent)
 			if err != nil {
 				logger.LegacyPrintf("service.ops_alert_evaluator", "[OpsAlertEvaluator] create event failed (rule=%d): %v", rule.ID, err)
 				continue
 			}
 
-			eventsCreated++
+			merged := created != nil && created.MergedCount > 0
+			if merged {
+				eventsMerged++
+			} else {
+				eventsCreated++
+			}
 			if created != nil && created.ID > 0 {
-				if s.maybeSendAlertEmail(ctx, runtimeCfg, rule, created) {
+				if !merged && s.maybeSendAlertEmail(ctx, runtimeCfg, rule, created) {
 					emailsSent++
 				}
 			}
@@ -314,8 +344,18 @@ func (s *OpsAlertEvaluatorService) evaluateOnce(interval time.Duration) {
 		}
 	}
 
-	result := truncateString(fmt.Sprintf("rules=%d enabled=%d evaluated=%d created=%d resolved=%d emails_sent=%d", rulesTotal, rulesEnabled, rulesEvaluated, eventsCreated, eventsResolved, emailsSent), 2048)
+	result := truncateString(fmt.Sprintf("rules=%d enabled=%d evaluated=%d created=%d merged=%d resolved=%d emails_sent=%d", rulesTotal, rulesEnabled, rulesEvaluated, eventsCreated, eventsMerged, eventsResolved, emailsSent), 2048)
 	s.recordHeartbeatSuccess(runAt, time.Since(startedAt), result)
+}
+
+func (s *OpsAlertEvaluatorService) createAlertEvent(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error) {
+	if s != nil && s.opsService != nil {
+		return s.opsService.CreateAlertEvent(ctx, event)
+	}
+	if s == nil || s.opsRepo == nil {
+		return nil, fmt.Errorf("nil ops repository")
+	}
+	return s.opsRepo.CreateAlertEvent(ctx, event)
 }
 
 func (s *OpsAlertEvaluatorService) pruneRuleStates(rules []*OpsAlertRule) {
@@ -623,6 +663,99 @@ func buildOpsAlertDimensions(platform string, groupID *int64) map[string]any {
 		return nil
 	}
 	return dims
+}
+
+func buildOpsAlertEventKey(rule *OpsAlertRule, dimensions map[string]any) string {
+	if rule == nil {
+		return ""
+	}
+	category := "metric"
+	if len(rule.ErrorCategories) > 0 {
+		cleaned := make([]string, 0, len(rule.ErrorCategories))
+		for _, categoryItem := range rule.ErrorCategories {
+			if item := strings.TrimSpace(categoryItem); item != "" {
+				cleaned = append(cleaned, item)
+			}
+		}
+		if len(cleaned) > 0 {
+			category = strings.Join(cleaned, ",")
+		}
+	}
+	subCategory := strings.TrimSpace(rule.MetricType)
+	if subCategory == "" {
+		subCategory = "unknown"
+	}
+	triggerLevel := strings.TrimSpace(rule.TriggerLevel)
+	if triggerLevel == "" {
+		triggerLevel = strings.TrimSpace(rule.Severity)
+	}
+	if triggerLevel == "" {
+		triggerLevel = "unknown"
+	}
+	return strings.Join([]string{
+		opsAlertEventKeyPart(category),
+		opsAlertEventKeyPart(subCategory),
+		opsAlertEventKeyPart(opsAlertDimensionString(dimensions, "group_id")),
+		opsAlertEventKeyPart(opsAlertDimensionString(dimensions, "model")),
+		opsAlertEventKeyPart(firstNonEmptyOpsAlertDimensionString(dimensions, "upstream_account_id", "upstream_account", "account_id")),
+		opsAlertEventKeyPart(triggerLevel),
+	}, "|")
+}
+
+func buildOpsAlertTriggerSnapshot(rule *OpsAlertRule, value float64, windowMinutes int, platform string, groupID *int64) map[string]any {
+	if rule == nil {
+		return nil
+	}
+	snapshot := map[string]any{
+		"rule_id":        rule.ID,
+		"rule_name":      strings.TrimSpace(rule.Name),
+		"metric_type":    strings.TrimSpace(rule.MetricType),
+		"operator":       strings.TrimSpace(rule.Operator),
+		"threshold":      rule.Threshold,
+		"metric_value":   value,
+		"window_minutes": windowMinutes,
+	}
+	if strings.TrimSpace(rule.TriggerLevel) != "" {
+		snapshot["trigger_level"] = strings.TrimSpace(rule.TriggerLevel)
+	} else if strings.TrimSpace(rule.Severity) != "" {
+		snapshot["trigger_level"] = strings.TrimSpace(rule.Severity)
+	}
+	if strings.TrimSpace(platform) != "" {
+		snapshot["platform"] = strings.TrimSpace(platform)
+	}
+	if groupID != nil && *groupID > 0 {
+		snapshot["group_id"] = *groupID
+	}
+	return snapshot
+}
+
+func opsAlertDimensionString(dimensions map[string]any, key string) string {
+	if len(dimensions) == 0 || strings.TrimSpace(key) == "" {
+		return ""
+	}
+	value, ok := dimensions[key]
+	if !ok || value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
+}
+
+func firstNonEmptyOpsAlertDimensionString(dimensions map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value := opsAlertDimensionString(dimensions, key); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func opsAlertEventKeyPart(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		value = "all"
+	}
+	value = strings.ReplaceAll(value, "|", "_")
+	return value
 }
 
 func buildOpsAlertDescription(rule *OpsAlertRule, value float64, windowMinutes int, platform string, groupID *int64) string {

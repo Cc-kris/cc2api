@@ -19,7 +19,9 @@ type opsRepoMock struct {
 	UpdateAlertRuleFn             func(ctx context.Context, input *OpsAlertRule) (*OpsAlertRule, error)
 	GetActiveAlertEventFn         func(ctx context.Context, ruleID int64) (*OpsAlertEvent, error)
 	GetLatestAlertEventFn         func(ctx context.Context, ruleID int64) (*OpsAlertEvent, error)
+	GetMergeableAlertEventFn      func(ctx context.Context, eventKey string, since time.Time) (*OpsAlertEvent, error)
 	CreateAlertEventFn            func(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error)
+	MergeAlertEventFn             func(ctx context.Context, eventID int64, event *OpsAlertEvent) (*OpsAlertEvent, error)
 	DeleteSystemLogsFn            func(ctx context.Context, filter *OpsSystemLogCleanupFilter) (int64, error)
 	InsertSystemLogCleanupAuditFn func(ctx context.Context, input *OpsSystemLogCleanupAudit) error
 }
@@ -190,10 +192,26 @@ func (m *opsRepoMock) GetLatestAlertEvent(ctx context.Context, ruleID int64) (*O
 	return nil, nil
 }
 
+func (m *opsRepoMock) GetMergeableAlertEvent(ctx context.Context, eventKey string, since time.Time) (*OpsAlertEvent, error) {
+	if m.GetMergeableAlertEventFn != nil {
+		return m.GetMergeableAlertEventFn(ctx, eventKey, since)
+	}
+	return nil, nil
+}
+
 func (m *opsRepoMock) CreateAlertEvent(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error) {
 	if m.CreateAlertEventFn != nil {
 		return m.CreateAlertEventFn(ctx, event)
 	}
+	return event, nil
+}
+
+func (m *opsRepoMock) MergeAlertEvent(ctx context.Context, eventID int64, event *OpsAlertEvent) (*OpsAlertEvent, error) {
+	if m.MergeAlertEventFn != nil {
+		return m.MergeAlertEventFn(ctx, eventID, event)
+	}
+	event.ID = eventID
+	event.MergedCount++
 	return event, nil
 }
 
