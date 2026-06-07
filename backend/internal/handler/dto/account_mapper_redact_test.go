@@ -65,3 +65,27 @@ func TestAccountFromServiceShallow_NilCredentialsOmitsStatus(t *testing.T) {
 	require.Nil(t, got.Credentials)
 	require.Nil(t, got.CredentialsStatus)
 }
+
+func TestAccountFromServiceShallow_DropsDeprecatedUpstreamWarningExtra(t *testing.T) {
+	src := &service.Account{
+		ID:       43,
+		Name:     "legacy-extra",
+		Platform: "anthropic",
+		Type:     "api_key",
+		Extra: map[string]any{
+			"upstream_prepaid_amount": 25.5,
+			"upstream_warning_amount": 5.0,
+			"upstream_notify_enabled": true,
+		},
+	}
+
+	got := AccountFromServiceShallow(src)
+	require.NotNil(t, got)
+	require.Equal(t, 25.5, got.Extra["upstream_prepaid_amount"])
+	require.NotContains(t, got.Extra, "upstream_warning_amount")
+	require.NotContains(t, got.Extra, "upstream_notify_enabled")
+
+	// 原始 service.Account 不应被响应层清理逻辑改动。
+	require.Contains(t, src.Extra, "upstream_warning_amount")
+	require.Contains(t, src.Extra, "upstream_notify_enabled")
+}

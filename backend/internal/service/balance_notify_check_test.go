@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -77,6 +78,18 @@ func TestCheckBalanceAfterDeduction_NoCrossingNotFired(t *testing.T) {
 	s.CheckBalanceAfterDeduction(context.Background(), u, 5, 2)
 }
 
+func TestBalanceNotifyService_DoesNotContainUpstreamWarningEmailPath(t *testing.T) {
+	content, err := os.ReadFile("balance_notify_service.go")
+	require.NoError(t, err)
+
+	source := string(content)
+	require.NotContains(t, source, "checkUpstreamPrepaidCrossing")
+	require.NotContains(t, source, "asyncSendUpstreamPrepaidAlert")
+	require.NotContains(t, source, "sendUpstreamPrepaidAlertEmails")
+	require.NotContains(t, source, "upstreamPrepaidAlertEmailTemplate")
+	require.NotContains(t, source, "Upstream Prepaid Alert")
+}
+
 // ---------- nil-service guards on CheckAccountQuotaAfterIncrement ----------
 
 func TestCheckAccountQuotaAfterIncrement_NilAccount(t *testing.T) {
@@ -95,6 +108,30 @@ func TestCheckAccountQuotaAfterIncrement_NegativeCost(t *testing.T) {
 	s, _ := newBalanceNotifyServiceForTest()
 	a := &Account{ID: 1, Platform: PlatformAnthropic, Type: AccountTypeAPIKey}
 	s.CheckAccountQuotaAfterIncrement(context.Background(), a, -5, nil)
+}
+
+func TestCheckAccountQuotaAfterIncrement_IgnoresDeprecatedUpstreamWarningFields(t *testing.T) {
+	s, repo := newBalanceNotifyServiceForTest()
+	repo.data[SettingKeyAccountQuotaNotifyEnabled] = "true"
+	account := &Account{
+		ID:       1,
+		Name:     "legacy-upstream-warning",
+		Platform: PlatformAnthropic,
+		Type:     AccountTypeAPIKey,
+		Extra: map[string]any{
+			"upstream_prepaid_amount": 4.0,
+			"upstream_warning_amount": 5.0,
+			"upstream_notify_enabled": true,
+		},
+	}
+
+	// Before BE-056 this historical shape crossed the old upstream warning threshold
+	// and could send an upstream prepaid alert. The warning feature is removed, so
+	// this call must not panic or attempt any upstream warning path even when the
+	// legacy fields are still present in stored extra JSON.
+	s.CheckAccountQuotaAfterIncrement(context.Background(), account, 2, &AccountQuotaState{
+		UpstreamPrepaidAmount: 4.0,
+	})
 }
 
 func TestCheckAccountQuotaAfterIncrement_GlobalDisabled(t *testing.T) {

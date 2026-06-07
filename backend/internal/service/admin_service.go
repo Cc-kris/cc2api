@@ -318,6 +318,14 @@ type BulkUpdateAccountsInput struct {
 	SkipMixedChannelCheck bool
 }
 
+func dropDeprecatedUpstreamWarningExtra(extra map[string]any) {
+	if extra == nil {
+		return
+	}
+	delete(extra, "upstream_warning_amount")
+	delete(extra, "upstream_notify_enabled")
+}
+
 type BulkUpdateAccountFilters struct {
 	Platform    string
 	Type        string
@@ -2392,6 +2400,7 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 		Status:      StatusActive,
 		Schedulable: true,
 	}
+	dropDeprecatedUpstreamWarningExtra(account.Extra)
 	// 预计算固定时间重置的下次重置时间
 	if account.Extra != nil {
 		if err := ValidateQuotaResetConfig(account.Extra); err != nil {
@@ -2483,6 +2492,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	// Extra 使用 map：需要区分“未提供(nil)”与“显式清空({})”。
 	// 关闭配额限制时前端会删除 quota_* 键并提交 extra:{}，此时也必须落库。
 	if input.Extra != nil {
+		dropDeprecatedUpstreamWarningExtra(input.Extra)
 		// 保留配额用量字段，防止编辑账号时意外重置
 		for _, key := range []string{"quota_used", "quota_daily_used", "quota_daily_start", "quota_weekly_used", "quota_weekly_start"} {
 			if v, ok := account.Extra[key]; ok {
@@ -2649,6 +2659,7 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	}
 
 	// Prepare bulk updates for columns and JSONB fields.
+	dropDeprecatedUpstreamWarningExtra(input.Extra)
 	repoUpdates := AccountBulkUpdate{
 		Credentials: input.Credentials,
 		Extra:       input.Extra,

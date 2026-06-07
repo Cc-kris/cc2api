@@ -32,6 +32,7 @@ type accountRepoStubForBulkUpdate struct {
 	listErr          error
 	listCalled       bool
 	lastListParams   pagination.PaginationParams
+	lastBulkUpdate   AccountBulkUpdate
 	lastListFilters  struct {
 		platform    string
 		accountType string
@@ -42,8 +43,9 @@ type accountRepoStubForBulkUpdate struct {
 	}
 }
 
-func (s *accountRepoStubForBulkUpdate) BulkUpdate(_ context.Context, ids []int64, _ AccountBulkUpdate) (int64, error) {
+func (s *accountRepoStubForBulkUpdate) BulkUpdate(_ context.Context, ids []int64, update AccountBulkUpdate) (int64, error) {
 	s.bulkUpdateIDs = append([]int64{}, ids...)
+	s.lastBulkUpdate = update
 	if s.bulkUpdateErr != nil {
 		return 0, s.bulkUpdateErr
 	}
@@ -124,6 +126,26 @@ func TestAdminService_BulkUpdateAccounts_AllSuccessIDs(t *testing.T) {
 	require.ElementsMatch(t, []int64{1, 2, 3}, result.SuccessIDs)
 	require.Empty(t, result.FailedIDs)
 	require.Len(t, result.Results, 3)
+}
+
+func TestAdminService_BulkUpdateAccounts_DropsDeprecatedUpstreamWarningExtra(t *testing.T) {
+	repo := &accountRepoStubForBulkUpdate{}
+	svc := &adminServiceImpl{accountRepo: repo}
+
+	result, err := svc.BulkUpdateAccounts(context.Background(), &BulkUpdateAccountsInput{
+		AccountIDs: []int64{1, 2},
+		Extra: map[string]any{
+			"upstream_prepaid_amount": 25.5,
+			"upstream_warning_amount": 5.0,
+			"upstream_notify_enabled": true,
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Success)
+	require.Equal(t, 25.5, repo.lastBulkUpdate.Extra["upstream_prepaid_amount"])
+	require.NotContains(t, repo.lastBulkUpdate.Extra, "upstream_warning_amount")
+	require.NotContains(t, repo.lastBulkUpdate.Extra, "upstream_notify_enabled")
 }
 
 // TestAdminService_BulkUpdateAccounts_PartialFailureIDs 验证部分失败时 success_ids/failed_ids 正确。

@@ -169,14 +169,50 @@ func TestMigration143ExtendsOpsAlertRulesWithoutDroppingLegacyRows(t *testing.T)
 	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS min_sample_count INT")
 	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS impact_scope JSONB")
 	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS recovered_fluctuation_policy VARCHAR(32)")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS min_recovered_fluctuations INT")
 	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS auto_ai_analysis BOOLEAN")
 	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS notification_channels JSONB")
 	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS silence_minutes INT")
 	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS migration_state VARCHAR(32)")
 	require.Contains(t, sql, "WHERE rule_version IS NULL")
 	require.Contains(t, sql, "WHERE migration_state IS NULL")
+	require.Contains(t, sql, "SET migration_state = 'readonly_legacy'")
+	require.Contains(t, sql, "SET min_recovered_fluctuations = 0")
 	require.Contains(t, sql, "SET DEFAULT 'v2'")
+	require.Contains(t, sql, "ALTER COLUMN rule_version SET NOT NULL")
+	require.Contains(t, sql, "ALTER COLUMN min_recovered_fluctuations SET DEFAULT 0")
+	require.Contains(t, sql, "ALTER COLUMN min_recovered_fluctuations SET NOT NULL")
+	require.Contains(t, sql, "ALTER COLUMN notification_channels SET DEFAULT")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_alert_rules_rule_version")
 	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_alert_rules_trigger_level")
+	require.NotContains(t, sql, "ADD COLUMN rule_version")
 	require.NotContains(t, sql, "DROP TABLE")
+	require.NotContains(t, sql, "DROP COLUMN")
+	require.NotContains(t, sql, "DELETE FROM ops_alert_rules")
 	require.NotContains(t, sql, "TRUNCATE")
+}
+
+func TestMigration143UsesIdempotentColumnAdds(t *testing.T) {
+	content, err := FS.ReadFile("143_ops_alert_rule_compound_conditions.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	for _, column := range []string{
+		"rule_version",
+		"error_categories",
+		"trigger_level",
+		"min_final_failures",
+		"min_failure_rate",
+		"min_sample_count",
+		"impact_scope",
+		"recovered_fluctuation_policy",
+		"min_recovered_fluctuations",
+		"auto_ai_analysis",
+		"notification_channels",
+		"silence_minutes",
+		"migration_state",
+	} {
+		require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS "+column, "column %s must be added idempotently", column)
+		require.NotContains(t, sql, "ADD COLUMN "+column, "column %s must not be added non-idempotently", column)
+	}
 }

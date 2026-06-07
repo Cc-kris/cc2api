@@ -13,6 +13,7 @@ import (
 type updateAccountOveragesRepoStub struct {
 	mockAccountRepoForGemini
 	account     *Account
+	created     *Account
 	updateCalls int
 }
 
@@ -23,6 +24,11 @@ func (r *updateAccountOveragesRepoStub) GetByID(ctx context.Context, id int64) (
 func (r *updateAccountOveragesRepoStub) Update(ctx context.Context, account *Account) error {
 	r.updateCalls++
 	r.account = account
+	return nil
+}
+
+func (r *updateAccountOveragesRepoStub) Create(ctx context.Context, account *Account) error {
+	r.created = account
 	return nil
 }
 
@@ -152,4 +158,62 @@ func TestUpdateAccount_EmptyExtraPayloadCanClearQuotaLimits(t *testing.T) {
 	require.NotContains(t, repo.account.Extra, "quota_daily_limit")
 	require.NotContains(t, repo.account.Extra, "quota_weekly_limit")
 	require.Len(t, repo.account.Extra, 0)
+}
+
+func TestUpdateAccount_DropsDeprecatedUpstreamWarningExtra(t *testing.T) {
+	accountID := int64(104)
+	repo := &updateAccountOveragesRepoStub{
+		account: &Account{
+			ID:       accountID,
+			Platform: PlatformAnthropic,
+			Type:     AccountTypeAPIKey,
+			Status:   StatusActive,
+			Extra: map[string]any{
+				"quota_used": 3.0,
+			},
+		},
+	}
+
+	svc := &adminServiceImpl{accountRepo: repo}
+	updated, err := svc.UpdateAccount(context.Background(), accountID, &UpdateAccountInput{
+		Extra: map[string]any{
+			"upstream_prepaid_amount": 25.5,
+			"upstream_warning_amount": 5.0,
+			"upstream_notify_enabled": true,
+			"quota_daily_limit":       20.0,
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	require.Equal(t, 1, repo.updateCalls)
+	require.Equal(t, 25.5, repo.account.Extra["upstream_prepaid_amount"])
+	require.Equal(t, 3.0, repo.account.Extra["quota_used"])
+	require.NotContains(t, repo.account.Extra, "upstream_warning_amount")
+	require.NotContains(t, repo.account.Extra, "upstream_notify_enabled")
+}
+
+func TestCreateAccount_DropsDeprecatedUpstreamWarningExtra(t *testing.T) {
+	repo := &updateAccountOveragesRepoStub{}
+	svc := &adminServiceImpl{accountRepo: repo}
+
+	created, err := svc.CreateAccount(context.Background(), &CreateAccountInput{
+		Name:                 "legacy-client-account",
+		Platform:             PlatformAnthropic,
+		Type:                 AccountTypeAPIKey,
+		Credentials:          map[string]any{"api_key": "test-key"},
+		SkipDefaultGroupBind: true,
+		Extra: map[string]any{
+			"upstream_prepaid_amount": 25.5,
+			"upstream_warning_amount": 5.0,
+			"upstream_notify_enabled": true,
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, created)
+	require.NotNil(t, repo.created)
+	require.Equal(t, 25.5, repo.created.Extra["upstream_prepaid_amount"])
+	require.NotContains(t, repo.created.Extra, "upstream_warning_amount")
+	require.NotContains(t, repo.created.Extra, "upstream_notify_enabled")
 }

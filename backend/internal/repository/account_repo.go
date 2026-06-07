@@ -1999,20 +1999,16 @@ func (r *accountRepository) IncrementQuotaUsed(ctx context.Context, id int64, am
 		WHERE id = $2 AND deleted_at IS NULL
 		RETURNING
 			COALESCE((extra->>'quota_used')::numeric, 0),
-			COALESCE((extra->>'quota_limit')::numeric, 0),
-			COALESCE((extra->>'upstream_prepaid_amount')::numeric, 0),
-			COALESCE((extra->>'upstream_warning_amount')::numeric, 0),
-			COALESCE((extra->>'upstream_notify_enabled')::boolean, false)`,
+			COALESCE((extra->>'quota_limit')::numeric, 0)`,
 		amount, id)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = rows.Close() }()
 
-	var newUsed, limit, upstreamPrepaid, upstreamWarning float64
-	var upstreamNotifyEnabled bool
+	var newUsed, limit float64
 	if rows.Next() {
-		if err := rows.Scan(&newUsed, &limit, &upstreamPrepaid, &upstreamWarning, &upstreamNotifyEnabled); err != nil {
+		if err := rows.Scan(&newUsed, &limit); err != nil {
 			return err
 		}
 	}
@@ -2021,8 +2017,7 @@ func (r *accountRepository) IncrementQuotaUsed(ctx context.Context, id int64, am
 	}
 
 	// 任一维度配额刚超限时触发调度快照刷新
-	prepaidCrossed := upstreamNotifyEnabled && upstreamWarning > 0 && upstreamPrepaid < upstreamWarning && (upstreamPrepaid+amount) >= upstreamWarning
-	if (limit > 0 && newUsed >= limit && (newUsed-amount) < limit) || prepaidCrossed {
+	if limit > 0 && newUsed >= limit && (newUsed-amount) < limit {
 		if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &id, nil, nil); err != nil {
 			logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue quota exceeded failed: account=%d err=%v", id, err)
 		}

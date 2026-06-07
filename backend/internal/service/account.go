@@ -1898,14 +1898,14 @@ func (a *Account) GetUpstreamPrepaidAmount() float64 {
 	return a.getExtraFloat64("upstream_prepaid_amount")
 }
 
-// GetUpstreamWarningAmount 获取池模式上游预存余额预警金额（美元）。
+// GetUpstreamWarningAmount 已废弃：上游预警金额功能已移除，旧数据不再生效。
 func (a *Account) GetUpstreamWarningAmount() float64 {
-	return a.getExtraFloat64("upstream_warning_amount")
+	return 0
 }
 
-// IsUpstreamPrepaidNotifyEnabled 返回池模式上游预存余额邮件通知开关。
+// IsUpstreamPrepaidNotifyEnabled 已废弃：上游预警邮件通知已移除，旧数据不再生效。
 func (a *Account) IsUpstreamPrepaidNotifyEnabled() bool {
-	return a.getExtraBool("upstream_notify_enabled")
+	return false
 }
 
 // HasUpstreamPrepaidBalance 检查账号是否启用池模式上游预存余额扣减。

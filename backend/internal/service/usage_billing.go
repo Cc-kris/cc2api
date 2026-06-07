@@ -113,8 +113,6 @@ type AccountQuotaState struct {
 	// Pool-mode upstream prepaid balance. UpstreamPrepaidAmount is the post-deduction
 	// remaining amount in USD.
 	UpstreamPrepaidAmount float64
-	UpstreamWarningAmount float64
-	UpstreamNotifyEnabled bool
 }
 
 type UsageBillingApplyResult struct {

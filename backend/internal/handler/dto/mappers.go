@@ -194,6 +194,19 @@ func groupFromServiceBase(g *service.Group) Group {
 	}
 }
 
+func accountExtraForResponse(extra map[string]any) map[string]any {
+	if extra == nil {
+		return nil
+	}
+	out := make(map[string]any, len(extra))
+	for k, v := range extra {
+		out[k] = v
+	}
+	delete(out, "upstream_warning_amount")
+	delete(out, "upstream_notify_enabled")
+	return out
+}
+
 func AccountFromServiceShallow(a *service.Account) *Account {
 	if a == nil {
 		return nil
@@ -207,7 +220,7 @@ func AccountFromServiceShallow(a *service.Account) *Account {
 		Type:                    a.Type,
 		Credentials:             redactedCreds,
 		CredentialsStatus:       credsStatus,
-		Extra:                   a.Extra,
+		Extra:                   accountExtraForResponse(a.Extra),
 		ProxyID:                 a.ProxyID,
 		Concurrency:             a.Concurrency,
 		LoadFactor:              a.LoadFactor,
@@ -358,12 +371,6 @@ func AccountFromServiceShallow(a *service.Account) *Account {
 		}
 		if amount := a.GetUpstreamPrepaidAmount(); amount > 0 {
 			out.UpstreamPrepaidAmount = &amount
-		}
-		if threshold := a.GetUpstreamWarningAmount(); threshold > 0 {
-			out.UpstreamWarningAmount = &threshold
-		}
-		if enabled := a.IsUpstreamPrepaidNotifyEnabled(); enabled {
-			out.UpstreamNotifyEnabled = &enabled
 		}
 	}
 

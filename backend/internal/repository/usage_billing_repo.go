@@ -292,9 +292,7 @@ func incrementUsageBillingAccountQuota(ctx context.Context, tx *sql.Tx, accountI
 			COALESCE((extra->>'quota_daily_limit')::numeric, 0),
 			COALESCE((extra->>'quota_weekly_used')::numeric, 0),
 			COALESCE((extra->>'quota_weekly_limit')::numeric, 0),
-			COALESCE((extra->>'upstream_prepaid_amount')::numeric, 0),
-			COALESCE((extra->>'upstream_warning_amount')::numeric, 0),
-			COALESCE((extra->>'upstream_notify_enabled')::boolean, false)`,
+			COALESCE((extra->>'upstream_prepaid_amount')::numeric, 0)`,
 		amount, accountID)
 	if err != nil {
 		return nil, err
@@ -306,7 +304,7 @@ func incrementUsageBillingAccountQuota(ctx context.Context, tx *sql.Tx, accountI
 			&state.TotalUsed, &state.TotalLimit,
 			&state.DailyUsed, &state.DailyLimit,
 			&state.WeeklyUsed, &state.WeeklyLimit,
-			&state.UpstreamPrepaidAmount, &state.UpstreamWarningAmount, &state.UpstreamNotifyEnabled,
+			&state.UpstreamPrepaidAmount,
 		); err != nil {
 			_ = rows.Close()
 			return nil, err
@@ -337,8 +335,7 @@ func incrementUsageBillingAccountQuota(ctx context.Context, tx *sql.Tx, accountI
 	crossedTotal := state.TotalLimit > 0 && state.TotalUsed >= state.TotalLimit && (state.TotalUsed-amount) < state.TotalLimit
 	crossedDaily := state.DailyLimit > 0 && state.DailyUsed >= state.DailyLimit && (state.DailyUsed-amount) < state.DailyLimit
 	crossedWeekly := state.WeeklyLimit > 0 && state.WeeklyUsed >= state.WeeklyLimit && (state.WeeklyUsed-amount) < state.WeeklyLimit
-	crossedUpstreamPrepaid := state.UpstreamNotifyEnabled && state.UpstreamWarningAmount > 0 && state.UpstreamPrepaidAmount < state.UpstreamWarningAmount && (state.UpstreamPrepaidAmount+amount) >= state.UpstreamWarningAmount
-	if crossedTotal || crossedDaily || crossedWeekly || crossedUpstreamPrepaid {
+	if crossedTotal || crossedDaily || crossedWeekly {
 		if err := enqueueSchedulerOutbox(ctx, tx, service.SchedulerOutboxEventAccountChanged, &accountID, nil, nil); err != nil {
 			logger.LegacyPrintf("repository.usage_billing", "[SchedulerOutbox] enqueue quota exceeded failed: account=%d err=%v", accountID, err)
 			return nil, err

@@ -54,6 +54,10 @@ SET recovered_fluctuation_policy = 'record_only'
 WHERE recovered_fluctuation_policy IS NULL;
 
 UPDATE ops_alert_rules
+SET min_recovered_fluctuations = 0
+WHERE min_recovered_fluctuations IS NULL;
+
+UPDATE ops_alert_rules
 SET auto_ai_analysis = false
 WHERE auto_ai_analysis IS NULL;
 
@@ -89,6 +93,8 @@ ALTER TABLE ops_alert_rules
     ALTER COLUMN impact_scope SET NOT NULL,
     ALTER COLUMN recovered_fluctuation_policy SET DEFAULT 'record_only',
     ALTER COLUMN recovered_fluctuation_policy SET NOT NULL,
+    ALTER COLUMN min_recovered_fluctuations SET DEFAULT 0,
+    ALTER COLUMN min_recovered_fluctuations SET NOT NULL,
     ALTER COLUMN auto_ai_analysis SET DEFAULT false,
     ALTER COLUMN auto_ai_analysis SET NOT NULL,
     ALTER COLUMN notification_channels SET DEFAULT '["in_app"]'::jsonb,

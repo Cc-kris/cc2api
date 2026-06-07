@@ -125,6 +125,7 @@ func TestHasUpstreamPrepaidBalanceRequiresPoolModeAndAmount(t *testing.T) {
 		},
 		Extra: map[string]any{
 			"upstream_prepaid_amount": 25.5,
+			// Deprecated legacy fields must not re-enable upstream warning emails.
 			"upstream_warning_amount": 5.0,
 			"upstream_notify_enabled": true,
 		},
@@ -132,8 +133,8 @@ func TestHasUpstreamPrepaidBalanceRequiresPoolModeAndAmount(t *testing.T) {
 
 	require.True(t, account.HasUpstreamPrepaidBalance())
 	require.Equal(t, 25.5, account.GetUpstreamPrepaidAmount())
-	require.Equal(t, 5.0, account.GetUpstreamWarningAmount())
-	require.True(t, account.IsUpstreamPrepaidNotifyEnabled())
+	require.Zero(t, account.GetUpstreamWarningAmount())
+	require.False(t, account.IsUpstreamPrepaidNotifyEnabled())
 
 	account.Credentials["pool_mode"] = false
 	require.False(t, account.HasUpstreamPrepaidBalance())
