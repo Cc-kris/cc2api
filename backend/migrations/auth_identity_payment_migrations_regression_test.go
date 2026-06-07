@@ -443,3 +443,48 @@ func TestMigration148CreatesOpsCacheClearAudits(t *testing.T) {
 	require.NotContains(t, sql, "DELETE FROM ops_cache_clear_audits")
 	require.NotContains(t, sql, "TRUNCATE")
 }
+
+func TestMigration149CreatesOpsSemanticCacheEntries(t *testing.T) {
+	content, err := FS.ReadFile("149_ops_semantic_cache_entries.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "CREATE TABLE IF NOT EXISTS ops_semantic_cache_entries")
+	for _, column := range []string{
+		"namespace VARCHAR(512) NOT NULL",
+		"platform VARCHAR(32) NOT NULL",
+		"model VARCHAR(128) NOT NULL",
+		"api_key_id BIGINT",
+		"user_id BIGINT",
+		"group_id BIGINT",
+		"system_fingerprint VARCHAR(128) NOT NULL",
+		"rule_version VARCHAR(64) NOT NULL",
+		"embedding_model VARCHAR(128) NOT NULL",
+		"embedding_dimension INTEGER NOT NULL",
+		"embedding_ref JSONB NOT NULL DEFAULT '{}'::jsonb",
+		"normalized_prompt_hash VARCHAR(128) NOT NULL",
+		"response_cache_key VARCHAR(512) NOT NULL",
+		"status VARCHAR(32) NOT NULL DEFAULT 'active'",
+		"expires_at TIMESTAMPTZ NOT NULL",
+	} {
+		require.Contains(t, sql, column)
+	}
+	require.Contains(t, sql, "CHECK (status IN ('active', 'expired', 'deleted', 'invalidated'))")
+	require.Contains(t, sql, "CHECK (embedding_dimension > 0)")
+	require.Contains(t, sql, "api_key_id IS NULL OR api_key_id >= 0")
+	require.Contains(t, sql, "user_id IS NULL OR user_id >= 0")
+	require.Contains(t, sql, "group_id IS NULL OR group_id >= 0")
+	require.Contains(t, sql, "length(trim(namespace)) > 0")
+	require.Contains(t, sql, "CREATE UNIQUE INDEX IF NOT EXISTS idx_ops_semantic_cache_entries_active_unique")
+	require.Contains(t, sql, "WHERE status = 'active'")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_semantic_cache_entries_lookup")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_semantic_cache_entries_platform_model")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_semantic_cache_entries_api_key")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_semantic_cache_entries_user")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_semantic_cache_entries_group")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_semantic_cache_entries_cleanup")
+	require.NotContains(t, sql, "DROP TABLE")
+	require.NotContains(t, sql, "DROP COLUMN")
+	require.NotContains(t, sql, "DELETE FROM ops_semantic_cache_entries")
+	require.NotContains(t, sql, "TRUNCATE")
+}
