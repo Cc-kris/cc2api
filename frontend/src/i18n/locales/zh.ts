@@ -368,6 +368,8 @@ export default {
     ops: '运维监控',
     promoCodes: '优惠码',
     settings: '系统设置',
+    generalSettings: '通用设置',
+    cacheManagement: '缓存管理',
     myAccount: '我的账户',
     lightMode: '浅色模式',
     darkMode: '深色模式',
@@ -5468,6 +5470,12 @@ export default {
     },
 
     // Settings
+    cacheManagement: {
+      title: '缓存管理',
+      description: '集中管理响应缓存配置、统计、清理和审计。',
+      shellTitle: '缓存管理入口已创建',
+      shellDescription: '当前版本先提供菜单和路由壳，后续任务会继续接入缓存配置、统计、清理与审计页面。',
+    },
     settings: {
       title: '系统设置',
       description: '管理注册、邮箱验证、默认值和 SMTP 设置',

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import router from '@/router'
 import { resolveDocumentTitle } from '@/router/title'
 
 describe('resolveDocumentTitle', () => {
@@ -21,5 +22,16 @@ describe('resolveDocumentTitle', () => {
 
     expect(before).toBe('Admin Dashboard - Alpha')
     expect(after).toBe('Admin Dashboard - Beta')
+  })
+})
+
+
+describe('admin cache management route', () => {
+  it('registers the cache management shell under system settings', () => {
+    const route = router.resolve('/admin/settings/cache')
+
+    expect(route.name).toBe('AdminCacheManagement')
+    expect(route.meta.requiresAdmin).toBe(true)
+    expect(route.meta.titleKey).toBe('admin.cacheManagement.title')
   })
 })

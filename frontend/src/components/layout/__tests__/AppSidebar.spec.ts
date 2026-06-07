@@ -30,3 +30,13 @@ describe('AppSidebar header styles', () => {
     expect(sidebarBrandBlockMatch?.[0]).not.toContain('overflow: hidden;')
   })
 })
+
+
+describe('AppSidebar cache management navigation', () => {
+  it('keeps system settings as a group with general settings and cache management children', () => {
+    expect(componentSource).toContain("path: '/admin/settings'")
+    expect(componentSource).toContain("label: t('nav.generalSettings')")
+    expect(componentSource).toContain("path: '/admin/settings/cache'")
+    expect(componentSource).toContain("label: t('nav.cacheManagement')")
+  })
+})

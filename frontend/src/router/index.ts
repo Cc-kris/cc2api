@@ -549,6 +549,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/settings/cache',
+    name: 'AdminCacheManagement',
+    component: () => import('@/views/admin/CacheManagementView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Cache Management',
+      titleKey: 'admin.cacheManagement.title',
+      descriptionKey: 'admin.cacheManagement.description'
+    }
+  },
+  {
     path: '/admin/risk-control',
     name: 'AdminRiskControl',
     component: () => import('@/views/admin/RiskControlView.vue'),

@@ -321,6 +321,8 @@ export default {
     },
     view: 'View',
     settings: 'Settings',
+    generalSettings: 'General Settings',
+    cacheManagement: 'Cache Management',
     chooseFile: 'Choose File',
     copy: 'Copy',
     notAvailable: 'N/A',
@@ -5305,6 +5307,12 @@ export default {
     },
 
     // Settings
+    cacheManagement: {
+      title: 'Cache Management',
+      description: 'Manage response cache configuration, statistics, cleanup, and audit in one place.',
+      shellTitle: 'Cache management entry is ready',
+      shellDescription: 'This version adds the menu and route shell first. Follow-up tasks will connect cache configuration, statistics, cleanup, and audit pages.',
+    },
     settings: {
       title: 'System Settings',
       description: 'Manage registration, email verification, default values, and SMTP settings',
