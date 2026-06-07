@@ -293,3 +293,43 @@ func TestMigration144ExtendsOpsAlertEventsLifecycleFields(t *testing.T) {
 	require.NotContains(t, sql, "DELETE FROM ops_alert_events")
 	require.NotContains(t, sql, "TRUNCATE")
 }
+
+func TestMigration145CreatesOpsAIAnalysisTasks(t *testing.T) {
+	content, err := FS.ReadFile("145_ops_ai_analysis_tasks.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "CREATE TABLE IF NOT EXISTS ops_ai_analysis_tasks")
+	for _, column := range []string{
+		"id BIGSERIAL PRIMARY KEY",
+		"source_type VARCHAR(32) NOT NULL",
+		"source_id BIGINT",
+		"trigger_type VARCHAR(16) NOT NULL",
+		"trigger_user_id BIGINT",
+		"time_start TIMESTAMPTZ NOT NULL",
+		"time_end TIMESTAMPTZ NOT NULL",
+		"filters JSONB NOT NULL DEFAULT '{}'::jsonb",
+		"status VARCHAR(16) NOT NULL DEFAULT 'pending'",
+		"sample_count INT NOT NULL DEFAULT 0",
+		"provider VARCHAR(32)",
+		"model VARCHAR(100)",
+		"error_message TEXT",
+		"started_at TIMESTAMPTZ",
+		"finished_at TIMESTAMPTZ",
+	} {
+		require.Contains(t, sql, column)
+	}
+	require.Contains(t, sql, "CHECK (source_type IN ('alert_event', 'unified_errors', 'manual_filter'))")
+	require.Contains(t, sql, "CHECK (trigger_type IN ('auto', 'manual'))")
+	require.Contains(t, sql, "CHECK (status IN ('pending', 'running', 'completed', 'failed', 'expired'))")
+	require.Contains(t, sql, "CHECK (sample_count >= 0)")
+	require.Contains(t, sql, "CHECK (time_end >= time_start)")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_ai_analysis_tasks_status_created_at")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_ai_analysis_tasks_source")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_ai_analysis_tasks_time_range")
+	require.Contains(t, sql, "CREATE INDEX IF NOT EXISTS idx_ops_ai_analysis_tasks_trigger_user_id")
+	require.NotContains(t, sql, "DROP TABLE")
+	require.NotContains(t, sql, "DROP COLUMN")
+	require.NotContains(t, sql, "DELETE FROM ops_ai_analysis_tasks")
+	require.NotContains(t, sql, "TRUNCATE")
+}
