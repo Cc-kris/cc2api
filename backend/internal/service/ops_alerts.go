@@ -53,6 +53,9 @@ func (s *OpsService) UpdateAlertRule(ctx context.Context, rule *OpsAlertRule) (*
 	if rule == nil || rule.ID <= 0 {
 		return nil, infraerrors.BadRequest("INVALID_RULE", "invalid rule")
 	}
+	if err := s.ensureAlertRuleEditable(ctx, rule.ID); err != nil {
+		return nil, err
+	}
 	if err := s.validateAlertRuleForSave(ctx, rule, rule.ID); err != nil {
 		return nil, err
 	}
@@ -65,6 +68,35 @@ func (s *OpsService) UpdateAlertRule(ctx context.Context, rule *OpsAlertRule) (*
 		return nil, err
 	}
 	return updated, nil
+}
+
+func (s *OpsService) ensureAlertRuleEditable(ctx context.Context, ruleID int64) error {
+	if s == nil || s.opsRepo == nil || ruleID <= 0 {
+		return nil
+	}
+	rules, err := s.opsRepo.ListAlertRules(ctx)
+	if err != nil {
+		return err
+	}
+	for _, existing := range rules {
+		if existing == nil || existing.ID != ruleID {
+			continue
+		}
+		if isReadOnlyLegacyAlertRule(existing) {
+			return infraerrors.BadRequest("OPS_ALERT_RULE_READONLY_LEGACY", "该规则已按新告警模型迁移")
+		}
+		return nil
+	}
+	return nil
+}
+
+func isReadOnlyLegacyAlertRule(rule *OpsAlertRule) bool {
+	if rule == nil {
+		return false
+	}
+	version := strings.ToLower(strings.TrimSpace(rule.RuleVersion))
+	state := strings.ToLower(strings.TrimSpace(rule.MigrationState))
+	return version == "v1" && (state == "migrated" || state == "readonly_legacy")
 }
 
 func (s *OpsService) validateAlertRuleForSave(ctx context.Context, rule *OpsAlertRule, currentID int64) error {

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -72,4 +73,46 @@ func TestOpsServiceCreateAlertRuleNormalizesCompoundRule(t *testing.T) {
 	require.Equal(t, "P1", saved.Severity)
 	require.True(t, saved.NotifyEmail)
 	require.Equal(t, "compound_rule", saved.MetricType)
+}
+
+func TestOpsServiceUpdateAlertRuleRejectsMigratedLegacyRule(t *testing.T) {
+	tests := []struct {
+		name           string
+		migrationState string
+	}{
+		{name: "migrated", migrationState: "migrated"},
+		{name: "readonly_legacy", migrationState: "readonly_legacy"},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &opsRepoMock{
+				ListAlertRulesFn: func(ctx context.Context) ([]*OpsAlertRule, error) {
+					return []*OpsAlertRule{{ID: 9, Name: "旧错误率规则", RuleVersion: "v1", MigrationState: tt.migrationState}}, nil
+				},
+			}
+			svc := NewOpsService(repo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			rule := validCompoundAlertRuleForTest()
+			rule.ID = 9
+			_, err := svc.UpdateAlertRule(context.Background(), rule)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "该规则已按新告警模型迁移")
+		})
+	}
+}
+
+func TestOpsServiceUpdateAlertRuleFailsClosedWhenExistingRuleCannotBeLoaded(t *testing.T) {
+	repoErr := errors.New("list alert rules failed")
+	repo := &opsRepoMock{
+		ListAlertRulesFn: func(ctx context.Context) ([]*OpsAlertRule, error) {
+			return nil, repoErr
+		},
+	}
+	svc := NewOpsService(repo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	rule := validCompoundAlertRuleForTest()
+	rule.ID = 9
+
+	_, err := svc.UpdateAlertRule(context.Background(), rule)
+
+	require.ErrorIs(t, err, repoErr)
 }

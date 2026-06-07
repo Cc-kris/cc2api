@@ -17,6 +17,9 @@ type opsRepoMock struct {
 	ListAlertRulesFn              func(ctx context.Context) ([]*OpsAlertRule, error)
 	CreateAlertRuleFn             func(ctx context.Context, input *OpsAlertRule) (*OpsAlertRule, error)
 	UpdateAlertRuleFn             func(ctx context.Context, input *OpsAlertRule) (*OpsAlertRule, error)
+	GetActiveAlertEventFn         func(ctx context.Context, ruleID int64) (*OpsAlertEvent, error)
+	GetLatestAlertEventFn         func(ctx context.Context, ruleID int64) (*OpsAlertEvent, error)
+	CreateAlertEventFn            func(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error)
 	DeleteSystemLogsFn            func(ctx context.Context, filter *OpsSystemLogCleanupFilter) (int64, error)
 	InsertSystemLogCleanupAuditFn func(ctx context.Context, input *OpsSystemLogCleanupAudit) error
 }
@@ -174,14 +177,23 @@ func (m *opsRepoMock) GetAlertEventByID(ctx context.Context, eventID int64) (*Op
 }
 
 func (m *opsRepoMock) GetActiveAlertEvent(ctx context.Context, ruleID int64) (*OpsAlertEvent, error) {
+	if m.GetActiveAlertEventFn != nil {
+		return m.GetActiveAlertEventFn(ctx, ruleID)
+	}
 	return nil, nil
 }
 
 func (m *opsRepoMock) GetLatestAlertEvent(ctx context.Context, ruleID int64) (*OpsAlertEvent, error) {
+	if m.GetLatestAlertEventFn != nil {
+		return m.GetLatestAlertEventFn(ctx, ruleID)
+	}
 	return nil, nil
 }
 
 func (m *opsRepoMock) CreateAlertEvent(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error) {
+	if m.CreateAlertEventFn != nil {
+		return m.CreateAlertEventFn(ctx, event)
+	}
 	return event, nil
 }
 

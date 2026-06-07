@@ -580,3 +580,22 @@ func TestMigration151SeedsOpsV2DefaultAlertRules(t *testing.T) {
 	require.NotContains(t, sql, "DELETE FROM ops_alert_rules")
 	require.NotContains(t, sql, "TRUNCATE")
 }
+
+func TestMigration152MigratesLegacyPercentAlertRulesIdempotently(t *testing.T) {
+	content, err := FS.ReadFile("152_migrate_legacy_ops_percent_alert_rules.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "CONCAT('迁移-', legacy.id, '-', LEFT(legacy.name, 100))")
+	require.Contains(t, sql, "migrated_legacy_percent_rule_")
+	require.Contains(t, sql, "legacy.metric_type IN ('success_rate', 'error_rate', 'upstream_error_rate')")
+	require.Contains(t, sql, "'compound_rule'")
+	require.Contains(t, sql, "min_final_failures")
+	require.Contains(t, sql, "min_failure_rate")
+	require.Contains(t, sql, "min_sample_count")
+	require.Contains(t, sql, "UPDATE ops_alert_rules legacy")
+	require.Contains(t, sql, "SET migration_state = 'migrated'")
+	require.Contains(t, sql, "NOT EXISTS")
+	require.NotContains(t, sql, "DELETE FROM ops_alert_rules")
+	require.NotContains(t, sql, "TRUNCATE")
+}

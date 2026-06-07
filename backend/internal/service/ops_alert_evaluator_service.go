@@ -209,7 +209,14 @@ func (s *OpsAlertEvaluatorService) evaluateOnce(interval time.Duration) {
 	s.pruneRuleStates(rules)
 
 	for _, rule := range rules {
-		if rule == nil || !rule.Enabled || rule.ID <= 0 {
+		if rule == nil || rule.ID <= 0 {
+			continue
+		}
+		if isReadOnlyLegacyAlertRule(rule) {
+			s.resetRuleState(rule.ID, now)
+			continue
+		}
+		if !rule.Enabled {
 			continue
 		}
 		rulesEnabled++
