@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"strconv"
@@ -123,6 +124,10 @@ func (h *UserHandler) List(c *gin.Context) {
 		GroupName:  strings.TrimSpace(c.Query("group_name")),
 		Attributes: parseAttributeFilters(c),
 	}
+	if err := applyUserBalanceFilters(c, &filters); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
 	sortBy := c.DefaultQuery("sort_by", "created_at")
 	sortOrder := c.DefaultQuery("sort_order", "desc")
 	if raw, ok := c.GetQuery("include_subscriptions"); ok {
@@ -165,6 +170,87 @@ func (h *UserHandler) List(c *gin.Context) {
 
 // parseAttributeFilters extracts attribute filters from query params
 // Format: attr[{attributeID}]=value, e.g. attr[1]=company&attr[2]=developer
+func applyUserBalanceFilters(c *gin.Context, filters *service.UserListFilters) error {
+	filterType := strings.TrimSpace(c.Query("balance_filter_type"))
+	if filterType == "" || filterType == "none" {
+		return nil
+	}
+
+	switch filterType {
+	case "eq", "gt", "gte":
+		min, err := parseUserBalanceQuery(c.Query("balance_min"), "balance_min")
+		if err != nil {
+			return err
+		}
+		filters.BalanceFilterType = filterType
+		filters.BalanceMin = &min
+	case "lt", "lte":
+		max, err := parseUserBalanceQuery(c.Query("balance_max"), "balance_max")
+		if err != nil {
+			return err
+		}
+		filters.BalanceFilterType = filterType
+		filters.BalanceMax = &max
+	case "between":
+		min, err := parseUserBalanceQuery(c.Query("balance_min"), "balance_min")
+		if err != nil {
+			return err
+		}
+		max, err := parseUserBalanceQuery(c.Query("balance_max"), "balance_max")
+		if err != nil {
+			return err
+		}
+		if max < min {
+			return fmt.Errorf("balance_max must be greater than or equal to balance_min")
+		}
+		filters.BalanceFilterType = filterType
+		filters.BalanceMin = &min
+		filters.BalanceMax = &max
+	default:
+		return fmt.Errorf("invalid balance_filter_type")
+	}
+
+	return nil
+}
+
+func parseUserBalanceQuery(raw string, field string) (float64, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return 0, fmt.Errorf("%s is required", field)
+	}
+	if !hasAtMostFourDecimalPlaces(value) {
+		return 0, fmt.Errorf("%s must have at most 4 decimal places", field)
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil || math.IsNaN(parsed) || math.IsInf(parsed, 0) {
+		return 0, fmt.Errorf("%s must be a valid number", field)
+	}
+	return parsed, nil
+}
+
+func hasAtMostFourDecimalPlaces(value string) bool {
+	if value == "" {
+		return false
+	}
+	if strings.ContainsAny(value, "eE") {
+		return false
+	}
+	if strings.HasPrefix(value, "+") || strings.HasPrefix(value, "-") {
+		value = value[1:]
+	}
+	parts := strings.Split(value, ".")
+	if len(parts) > 2 {
+		return false
+	}
+	if parts[0] == "" && (len(parts) == 1 || parts[1] == "") {
+		return false
+	}
+	if len(parts) == 2 {
+		return len(parts[1]) <= 4
+	}
+	return true
+}
+
 func parseAttributeFilters(c *gin.Context) map[int64]string {
 	result := make(map[int64]string)
 

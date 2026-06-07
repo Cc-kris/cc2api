@@ -65,11 +65,14 @@ var (
 
 // UserListFilters contains all filter options for listing users
 type UserListFilters struct {
-	Status     string           // User status filter
-	Role       string           // User role filter
-	Search     string           // Search in email, username
-	GroupName  string           // Filter by allowed group name (fuzzy match)
-	Attributes map[int64]string // Custom attribute filters: attributeID -> value
+	Status            string           // User status filter
+	Role              string           // User role filter
+	Search            string           // Search in email, username
+	GroupName         string           // Filter by allowed group name (fuzzy match)
+	Attributes        map[int64]string // Custom attribute filters: attributeID -> value
+	BalanceFilterType string           // none/eq/gt/gte/lt/lte/between
+	BalanceMin        *float64         // lower or exact balance bound
+	BalanceMax        *float64         // upper balance bound for between
 	// IncludeSubscriptions controls whether ListWithFilters should load active subscriptions.
 	// For large datasets this can be expensive; admin list pages should enable it on demand.
 	// nil means not specified (default: load subscriptions for backward compatibility).

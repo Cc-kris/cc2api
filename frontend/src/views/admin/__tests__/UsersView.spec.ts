@@ -161,4 +161,194 @@ describe('admin UsersView', () => {
       expect.any(Object)
     )
   })
+
+  it('passes balance between filters to the users API', async () => {
+    localStorage.setItem('user-visible-filters', JSON.stringify(['balance']))
+    localStorage.setItem('user-filter-values', JSON.stringify({
+      balanceType: 'between',
+      balanceMin: '10',
+      balanceMax: '100'
+    }))
+
+    mount(UsersView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          TablePageLayout: {
+            template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
+          },
+          DataTable: DataTableStub,
+          Pagination: true,
+          ConfirmDialog: true,
+          EmptyState: true,
+          GroupBadge: true,
+          Select: true,
+          UserAttributesConfigModal: true,
+          UserConcurrencyCell: true,
+          UserCreateModal: true,
+          UserEditModal: true,
+          UserApiKeysModal: true,
+          UserAllowedGroupsModal: true,
+          UserBalanceModal: true,
+          UserBalanceHistoryModal: true,
+          GroupReplaceModal: true,
+          Icon: true,
+          Teleport: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(listUsers).toHaveBeenCalledWith(
+      1,
+      20,
+      expect.objectContaining({
+        balance_filter_type: 'between',
+        balance_min: '10',
+        balance_max: '100'
+      }),
+      expect.any(Object)
+    )
+  })
+
+  it('passes negative less-than balance filters to the users API', async () => {
+    localStorage.setItem('user-visible-filters', JSON.stringify(['balance']))
+    localStorage.setItem('user-filter-values', JSON.stringify({
+      balanceType: 'lt',
+      balanceMax: '-0.01'
+    }))
+
+    mount(UsersView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          TablePageLayout: {
+            template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
+          },
+          DataTable: DataTableStub,
+          Pagination: true,
+          ConfirmDialog: true,
+          EmptyState: true,
+          GroupBadge: true,
+          Select: true,
+          UserAttributesConfigModal: true,
+          UserConcurrencyCell: true,
+          UserCreateModal: true,
+          UserEditModal: true,
+          UserApiKeysModal: true,
+          UserAllowedGroupsModal: true,
+          UserBalanceModal: true,
+          UserBalanceHistoryModal: true,
+          GroupReplaceModal: true,
+          Icon: true,
+          Teleport: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(listUsers).toHaveBeenCalledWith(
+      1,
+      20,
+      expect.objectContaining({
+        balance_filter_type: 'lt',
+        balance_max: '-0.01'
+      }),
+      expect.any(Object)
+    )
+  })
+
+  it('does not send stale balance bounds when the balance filter is hidden', async () => {
+    localStorage.setItem('user-visible-filters', JSON.stringify([]))
+    localStorage.setItem('user-filter-values', JSON.stringify({
+      balanceType: 'between',
+      balanceMin: '10',
+      balanceMax: '100'
+    }))
+
+    mount(UsersView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          TablePageLayout: {
+            template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
+          },
+          DataTable: DataTableStub,
+          Pagination: true,
+          ConfirmDialog: true,
+          EmptyState: true,
+          GroupBadge: true,
+          Select: true,
+          UserAttributesConfigModal: true,
+          UserConcurrencyCell: true,
+          UserCreateModal: true,
+          UserEditModal: true,
+          UserApiKeysModal: true,
+          UserAllowedGroupsModal: true,
+          UserBalanceModal: true,
+          UserBalanceHistoryModal: true,
+          GroupReplaceModal: true,
+          Icon: true,
+          Teleport: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(listUsers).toHaveBeenCalledWith(
+      1,
+      20,
+      expect.objectContaining({
+        balance_filter_type: 'none',
+        balance_min: undefined,
+        balance_max: undefined
+      }),
+      expect.any(Object)
+    )
+  })
+
+  it('blocks invalid balance between filters before querying users', async () => {
+    localStorage.setItem('user-visible-filters', JSON.stringify(['balance']))
+    localStorage.setItem('user-filter-values', JSON.stringify({
+      balanceType: 'between',
+      balanceMin: '100',
+      balanceMax: '10'
+    }))
+
+    mount(UsersView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          TablePageLayout: {
+            template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
+          },
+          DataTable: DataTableStub,
+          Pagination: true,
+          ConfirmDialog: true,
+          EmptyState: true,
+          GroupBadge: true,
+          Select: true,
+          UserAttributesConfigModal: true,
+          UserConcurrencyCell: true,
+          UserCreateModal: true,
+          UserEditModal: true,
+          UserApiKeysModal: true,
+          UserAllowedGroupsModal: true,
+          UserBalanceModal: true,
+          UserBalanceHistoryModal: true,
+          GroupReplaceModal: true,
+          Icon: true,
+          Teleport: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(listUsers).not.toHaveBeenCalled()
+  })
+
 })

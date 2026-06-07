@@ -61,6 +61,40 @@
               />
             </div>
 
+            <!-- Balance Filter (visible when enabled) -->
+            <div
+              v-if="visibleFilters.has('balance')"
+              class="flex w-full flex-wrap items-start gap-2 sm:w-auto"
+            >
+              <Select
+                v-model="filters.balanceType"
+                class="w-full sm:w-36"
+                :options="balanceFilterOptions"
+                @change="handleBalanceFilterTypeChange"
+              />
+              <input
+                v-if="showBalanceMinInput"
+                v-model="filters.balanceMin"
+                type="number"
+                step="0.0001"
+                :placeholder="balanceMinPlaceholder"
+                class="input w-full sm:w-32"
+                @keyup.enter="applyFilter"
+              />
+              <input
+                v-if="showBalanceMaxInput"
+                v-model="filters.balanceMax"
+                type="number"
+                step="0.0001"
+                :placeholder="balanceMaxPlaceholder"
+                class="input w-full sm:w-32"
+                @keyup.enter="applyFilter"
+              />
+              <p v-if="balanceFilterError" class="w-full text-xs text-red-600 dark:text-red-400">
+                {{ balanceFilterError }}
+              </p>
+            </div>
+
             <!-- Dynamic Attribute Filters -->
             <template v-for="(value, attrId) in activeAttributeFilters" :key="attrId">
               <div
@@ -773,6 +807,8 @@ import UserBalanceModal from '@/components/admin/user/UserBalanceModal.vue'
 import UserBalanceHistoryModal from '@/components/admin/user/UserBalanceHistoryModal.vue'
 import GroupReplaceModal from '@/components/admin/user/GroupReplaceModal.vue'
 
+type BalanceFilterType = 'none' | 'gt' | 'gte' | 'lt' | 'lte' | 'between' | 'eq'
+
 const appStore = useAppStore()
 
 // Generate dynamic attribute columns from enabled definitions
@@ -1047,7 +1083,10 @@ const groupFilterOptions = computed(() => {
 const filters = reactive({
   role: '',
   status: '',
-  group: ''  // group name for fuzzy match, '' = all
+  group: '',  // group name for fuzzy match, '' = all
+  balanceType: 'none' as BalanceFilterType,
+  balanceMin: '',
+  balanceMax: ''
 })
 const activeAttributeFilters = reactive<Record<number, string>>({})
 
@@ -1076,8 +1115,79 @@ const filterableAttributes = computed(() =>
 const builtInFilters = computed(() => [
   { key: 'role', name: t('admin.users.columns.role'), type: 'select' as const },
   { key: 'status', name: t('admin.users.columns.status'), type: 'select' as const },
-  { key: 'group', name: t('admin.users.columns.groups'), type: 'select' as const }
+  { key: 'group', name: t('admin.users.columns.groups'), type: 'select' as const },
+  { key: 'balance', name: t('admin.users.balanceFilter.label'), type: 'select' as const }
 ])
+
+const balanceFilterOptions = computed(() => [
+  { value: 'none', label: t('admin.users.balanceFilter.none') },
+  { value: 'eq', label: t('admin.users.balanceFilter.eq') },
+  { value: 'gt', label: t('admin.users.balanceFilter.gt') },
+  { value: 'gte', label: t('admin.users.balanceFilter.gte') },
+  { value: 'lt', label: t('admin.users.balanceFilter.lt') },
+  { value: 'lte', label: t('admin.users.balanceFilter.lte') },
+  { value: 'between', label: t('admin.users.balanceFilter.between') }
+])
+
+const showBalanceMinInput = computed(() => ['eq', 'gt', 'gte', 'between'].includes(filters.balanceType))
+const showBalanceMaxInput = computed(() => ['lt', 'lte', 'between'].includes(filters.balanceType))
+const balanceMinPlaceholder = computed(() => (
+  filters.balanceType === 'between'
+    ? t('admin.users.balanceFilter.minPlaceholder')
+    : t('admin.users.balanceFilter.amountPlaceholder')
+))
+const balanceMaxPlaceholder = computed(() => (
+  filters.balanceType === 'between'
+    ? t('admin.users.balanceFilter.maxPlaceholder')
+    : t('admin.users.balanceFilter.amountPlaceholder')
+))
+const balanceFilterError = ref('')
+
+const parseBalanceInput = (value: string): number | null => {
+  const trimmed = value.trim()
+  if (trimmed === '') return null
+  if (!/^-?\d+(?:\.\d{1,4})?$/.test(trimmed)) return Number.NaN
+  return Number(trimmed)
+}
+
+const validateBalanceFilter = (): boolean => {
+  balanceFilterError.value = ''
+  if (!visibleFilters.has('balance') || filters.balanceType === 'none') return true
+
+  const minValue = parseBalanceInput(filters.balanceMin)
+  const maxValue = parseBalanceInput(filters.balanceMax)
+
+  if (showBalanceMinInput.value && minValue === null) {
+    balanceFilterError.value = t('admin.users.balanceFilter.minRequired')
+    return false
+  }
+  if (showBalanceMaxInput.value && maxValue === null) {
+    balanceFilterError.value = t('admin.users.balanceFilter.maxRequired')
+    return false
+  }
+  if ((minValue !== null && Number.isNaN(minValue)) || (maxValue !== null && Number.isNaN(maxValue))) {
+    balanceFilterError.value = t('admin.users.balanceFilter.invalidAmount')
+    return false
+  }
+  if (filters.balanceType === 'between' && minValue !== null && maxValue !== null && maxValue < minValue) {
+    balanceFilterError.value = t('admin.users.balanceFilter.maxMustBeGteMin')
+    return false
+  }
+  return true
+}
+
+const handleBalanceFilterTypeChange = () => {
+  balanceFilterError.value = ''
+  if (filters.balanceType === 'none') {
+    filters.balanceMin = ''
+    filters.balanceMax = ''
+  } else if (!showBalanceMinInput.value) {
+    filters.balanceMin = ''
+  } else if (!showBalanceMaxInput.value) {
+    filters.balanceMax = ''
+  }
+  applyFilter()
+}
 
 // Load saved filters from localStorage
 const loadSavedFilters = () => {
@@ -1095,6 +1205,9 @@ const loadSavedFilters = () => {
       if (parsed.role) filters.role = parsed.role
       if (parsed.status) filters.status = parsed.status
       if (parsed.group) filters.group = parsed.group
+      if (parsed.balanceType) filters.balanceType = parsed.balanceType
+      if (parsed.balanceMin) filters.balanceMin = parsed.balanceMin
+      if (parsed.balanceMax) filters.balanceMax = parsed.balanceMax
       if (parsed.attributes) {
         Object.assign(activeAttributeFilters, parsed.attributes)
       }
@@ -1114,6 +1227,9 @@ const saveFiltersToStorage = () => {
       role: filters.role,
       status: filters.status,
       group: filters.group,
+      balanceType: filters.balanceType,
+      balanceMin: filters.balanceMin,
+      balanceMax: filters.balanceMax,
       attributes: activeAttributeFilters
     }
     localStorage.setItem(FILTER_VALUES_KEY, JSON.stringify(values))
@@ -1484,6 +1600,13 @@ const loadUsers = async () => {
       }
     }
 
+    if (!validateBalanceFilter()) {
+      return
+    }
+
+    const isBalanceFilterVisible = visibleFilters.has('balance')
+    const balanceFilterType = isBalanceFilterVisible ? filters.balanceType : 'none'
+
     const response = await adminAPI.users.list(
       pagination.page,
       pagination.page_size,
@@ -1492,6 +1615,9 @@ const loadUsers = async () => {
         status: filters.status as any,
         search: searchQuery.value || undefined,
         group_name: filters.group || undefined,
+        balance_filter_type: balanceFilterType,
+        balance_min: isBalanceFilterVisible && showBalanceMinInput.value ? filters.balanceMin.trim() || undefined : undefined,
+        balance_max: isBalanceFilterVisible && showBalanceMaxInput.value ? filters.balanceMax.trim() || undefined : undefined,
         attributes: Object.keys(attrFilters).length > 0 ? attrFilters : undefined,
         // 始终请求 subscriptions：列隐藏时仍需用于 UserPlatformQuotaModal 的 active-subscription 警示 banner
         include_subscriptions: true,
@@ -1576,6 +1702,12 @@ const toggleBuiltInFilter = (key: string) => {
     if (key === 'role') filters.role = ''
     if (key === 'status') filters.status = ''
     if (key === 'group') filters.group = ''
+    if (key === 'balance') {
+      filters.balanceType = 'none'
+      filters.balanceMin = ''
+      filters.balanceMax = ''
+      balanceFilterError.value = ''
+    }
   } else {
     visibleFilters.add(key)
     if (key === 'group') loadAllGroups()
@@ -1606,7 +1738,9 @@ const updateAttributeFilter = (attrId: number, value: string) => {
 
 // Apply filter and save to localStorage
 const applyFilter = () => {
+  if (!validateBalanceFilter()) return
   saveFiltersToStorage()
+  pagination.page = 1
   loadUsers()
 }
 

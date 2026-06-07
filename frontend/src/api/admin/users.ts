@@ -62,6 +62,9 @@ export async function list(
     group_name?: string         // fuzzy filter by allowed group name
     attributes?: Record<number, string>  // attributeId -> value
     include_subscriptions?: boolean
+    balance_filter_type?: 'none' | 'gt' | 'gte' | 'lt' | 'lte' | 'between' | 'eq'
+    balance_min?: string
+    balance_max?: string
     sort_by?: string
     sort_order?: 'asc' | 'desc'
   },
@@ -78,6 +81,9 @@ export async function list(
     search: filters?.search,
     group_name: filters?.group_name,
     include_subscriptions: filters?.include_subscriptions,
+    balance_filter_type: filters?.balance_filter_type && filters.balance_filter_type !== 'none' ? filters.balance_filter_type : undefined,
+    balance_min: filters?.balance_min,
+    balance_max: filters?.balance_max,
     sort_by: filters?.sort_by,
     sort_order: filters?.sort_order
   }

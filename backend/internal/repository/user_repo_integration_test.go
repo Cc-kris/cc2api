@@ -62,6 +62,10 @@ func (s *UserRepoSuite) mustCreateUser(u *service.User) *service.User {
 	return u
 }
 
+func float64Ptr(v float64) *float64 {
+	return &v
+}
+
 func (s *UserRepoSuite) mustCreateGroup(name string) *service.Group {
 	s.T().Helper()
 
@@ -330,6 +334,82 @@ func (s *UserRepoSuite) TestListWithFilters_CombinedFilters() {
 }
 
 // --- Balance operations ---
+
+func (s *UserRepoSuite) TestListWithFilters_BalanceFilters() {
+	negative := s.mustCreateUser(&service.User{Email: "balance-negative@test.com", Balance: -1})
+	zero := s.mustCreateUser(&service.User{Email: "balance-zero@test.com", Balance: 0})
+	low := s.mustCreateUser(&service.User{Email: "balance-low@test.com", Balance: 10})
+	high := s.mustCreateUser(&service.User{Email: "balance-high@test.com", Balance: 100})
+
+	tests := []struct {
+		name    string
+		filters service.UserListFilters
+		wantIDs []int64
+	}{
+		{
+			name:    "gt",
+			filters: service.UserListFilters{BalanceFilterType: "gt", BalanceMin: float64Ptr(10)},
+			wantIDs: []int64{high.ID},
+		},
+		{
+			name:    "gte",
+			filters: service.UserListFilters{BalanceFilterType: "gte", BalanceMin: float64Ptr(10)},
+			wantIDs: []int64{low.ID, high.ID},
+		},
+		{
+			name:    "lt supports negative balances",
+			filters: service.UserListFilters{BalanceFilterType: "lt", BalanceMax: float64Ptr(0)},
+			wantIDs: []int64{negative.ID},
+		},
+		{
+			name:    "lte",
+			filters: service.UserListFilters{BalanceFilterType: "lte", BalanceMax: float64Ptr(0)},
+			wantIDs: []int64{negative.ID, zero.ID},
+		},
+		{
+			name:    "eq zero",
+			filters: service.UserListFilters{BalanceFilterType: "eq", BalanceMin: float64Ptr(0)},
+			wantIDs: []int64{zero.ID},
+		},
+		{
+			name:    "between inclusive",
+			filters: service.UserListFilters{BalanceFilterType: "between", BalanceMin: float64Ptr(0), BalanceMax: float64Ptr(10)},
+			wantIDs: []int64{zero.ID, low.ID},
+		},
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			users, page, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10, SortBy: "id", SortOrder: "asc"}, tt.filters)
+			s.Require().NoError(err)
+			s.Require().Equal(int64(len(tt.wantIDs)), page.Total)
+			gotIDs := make([]int64, 0, len(users))
+			for _, user := range users {
+				gotIDs = append(gotIDs, user.ID)
+			}
+			s.Require().Equal(tt.wantIDs, gotIDs)
+		})
+	}
+}
+
+func (s *UserRepoSuite) TestListWithFilters_BalanceCombinesWithExistingFilters() {
+	s.mustCreateUser(&service.User{Email: "balance-combo-user@test.com", Role: service.RoleUser, Status: service.StatusActive, Balance: 50})
+	target := s.mustCreateUser(&service.User{Email: "balance-combo-admin@test.com", Role: service.RoleAdmin, Status: service.StatusActive, Balance: 75})
+	s.mustCreateUser(&service.User{Email: "balance-combo-disabled@test.com", Role: service.RoleAdmin, Status: service.StatusDisabled, Balance: 75})
+
+	users, page, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, service.UserListFilters{
+		Status:            service.StatusActive,
+		Role:              service.RoleAdmin,
+		Search:            "combo-admin",
+		BalanceFilterType: "between",
+		BalanceMin:        float64Ptr(50),
+		BalanceMax:        float64Ptr(80),
+	})
+	s.Require().NoError(err)
+	s.Require().Equal(int64(1), page.Total)
+	s.Require().Len(users, 1)
+	s.Require().Equal(target.ID, users[0].ID)
+}
 
 func (s *UserRepoSuite) TestUpdateBalance() {
 	user := s.mustCreateUser(&service.User{Email: "bal@test.com", Balance: 10})

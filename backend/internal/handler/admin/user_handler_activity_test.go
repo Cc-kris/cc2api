@@ -68,6 +68,81 @@ func TestUserHandlerListIncludesActivityFieldsAndSortParams(t *testing.T) {
 	require.WithinDuration(t, lastUsedAt, *resp.Data.Items[0].LastUsedAt, time.Second)
 }
 
+func TestUserHandlerListPassesBalanceFilterParams(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	adminSvc := newStubAdminService()
+	handler := NewUserHandler(adminSvc, nil, nil, nil)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(
+		http.MethodGet,
+		"/api/v1/admin/users?status=active&balance_filter_type=between&balance_min=-1.25&balance_max=100.0001",
+		nil,
+	)
+
+	handler.List(c)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, service.StatusActive, adminSvc.lastListUsers.filters.Status)
+	require.Equal(t, "between", adminSvc.lastListUsers.filters.BalanceFilterType)
+	require.NotNil(t, adminSvc.lastListUsers.filters.BalanceMin)
+	require.NotNil(t, adminSvc.lastListUsers.filters.BalanceMax)
+	require.Equal(t, -1.25, *adminSvc.lastListUsers.filters.BalanceMin)
+	require.Equal(t, 100.0001, *adminSvc.lastListUsers.filters.BalanceMax)
+}
+
+func TestUserHandlerListRejectsInvalidBalanceFilters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name string
+		url  string
+	}{
+		{
+			name: "unknown filter type",
+			url:  "/api/v1/admin/users?balance_filter_type=ne&balance_min=1",
+		},
+		{
+			name: "missing minimum",
+			url:  "/api/v1/admin/users?balance_filter_type=gte",
+		},
+		{
+			name: "missing maximum",
+			url:  "/api/v1/admin/users?balance_filter_type=lte",
+		},
+		{
+			name: "between max below min",
+			url:  "/api/v1/admin/users?balance_filter_type=between&balance_min=100&balance_max=10",
+		},
+		{
+			name: "too many decimals",
+			url:  "/api/v1/admin/users?balance_filter_type=eq&balance_min=1.12345",
+		},
+		{
+			name: "non numeric",
+			url:  "/api/v1/admin/users?balance_filter_type=gt&balance_min=abc",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adminSvc := newStubAdminService()
+			handler := NewUserHandler(adminSvc, nil, nil, nil)
+
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodGet, tt.url, nil)
+
+			handler.List(c)
+
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+			require.Zero(t, adminSvc.lastListUsers.calls)
+		})
+	}
+}
+
 func TestUserHandlerGetByIDIncludesActivityFields(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

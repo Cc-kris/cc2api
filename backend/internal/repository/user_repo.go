@@ -429,6 +429,9 @@ func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.
 			dbgroup.NameContainsFold(filters.GroupName),
 		))
 	}
+	if balancePredicate := userBalanceFilterPredicate(filters); balancePredicate != nil {
+		q = q.Where(balancePredicate)
+	}
 
 	// If attribute filters are specified, we need to filter by user IDs first
 	var allowedUserIDs []int64
@@ -508,6 +511,46 @@ func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.
 	}
 
 	return outUsers, paginationResultFromTotal(int64(total), params), nil
+}
+
+func userBalanceFilterPredicate(filters service.UserListFilters) predicate.User {
+	switch filters.BalanceFilterType {
+	case "eq":
+		if filters.BalanceMin == nil {
+			return nil
+		}
+		return dbuser.BalanceEQ(*filters.BalanceMin)
+	case "gt":
+		if filters.BalanceMin == nil {
+			return nil
+		}
+		return dbuser.BalanceGT(*filters.BalanceMin)
+	case "gte":
+		if filters.BalanceMin == nil {
+			return nil
+		}
+		return dbuser.BalanceGTE(*filters.BalanceMin)
+	case "lt":
+		if filters.BalanceMax == nil {
+			return nil
+		}
+		return dbuser.BalanceLT(*filters.BalanceMax)
+	case "lte":
+		if filters.BalanceMax == nil {
+			return nil
+		}
+		return dbuser.BalanceLTE(*filters.BalanceMax)
+	case "between":
+		if filters.BalanceMin == nil || filters.BalanceMax == nil {
+			return nil
+		}
+		return dbuser.And(
+			dbuser.BalanceGTE(*filters.BalanceMin),
+			dbuser.BalanceLTE(*filters.BalanceMax),
+		)
+	default:
+		return nil
+	}
 }
 
 func userListOrder(params pagination.PaginationParams) []func(*entsql.Selector) {
