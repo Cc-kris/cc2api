@@ -148,6 +148,26 @@ func (h *OpsHandler) UpdateAIAnalysisConfig(c *gin.Context) {
 	response.Success(c, updated)
 }
 
+// TestAIAnalysisConnection validates the configured Ops AI analysis provider without creating reports.
+// POST /api/v1/admin/ops/ai-analysis/test
+func (h *OpsHandler) TestAIAnalysisConnection(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	result, err := h.opsService.TestOpsAIAnalysisConnection(c.Request.Context())
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, "Failed to test AI analysis connection")
+		return
+	}
+	response.Success(c, result)
+}
+
 // GetRuntimeLogConfig returns runtime log config (DB-backed).
 // GET /api/v1/admin/ops/runtime/logging
 func (h *OpsHandler) GetRuntimeLogConfig(c *gin.Context) {

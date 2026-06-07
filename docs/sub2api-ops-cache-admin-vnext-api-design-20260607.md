@@ -379,6 +379,38 @@ PUT /api/v1/admin/ops/ai-analysis/config
 POST /api/v1/admin/ops/ai-analysis/test
 ```
 
+规则：读取已保存的 AI 分析配置，验证服务地址、API Key 和模型是否可用；不创建 AI 分析任务，不写入 AI 分析报告。
+
+响应：
+
+```json
+{
+  "data": {
+    "success": true,
+    "status": "success",
+    "message": "AI 分析服务连接成功",
+    "interface_type": "responses",
+    "base_url": "https://example.com/v1",
+    "model": "gpt-5.5",
+    "duration_ms": 320,
+    "http_status": 200
+  }
+}
+```
+
+`status` 枚举：
+
+| status | 说明 |
+|---|---|
+| success | 连接成功，服务地址、秘钥、模型可用 |
+| config_error | 配置缺失、秘钥不可用或接口类型错误 |
+| auth_failed | 上游返回 401/403，表示认证失败 |
+| network_failed | 域名、端口、TLS 或网络连接失败 |
+| timeout | 测试连接超时 |
+| failed | 上游返回非 2xx 且非 401/403 的异常状态 |
+
+失败时 HTTP 状态仍返回 200，页面根据 `success=false`、`status` 和 `message` 展示失败原因。运维监控未启用时按通用错误返回。
+
 ### 6.4 创建 AI 分析任务
 
 ```http

@@ -3,6 +3,7 @@ package admin
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -41,6 +42,7 @@ func newOpsAIAnalysisConfigRouter(handler *OpsHandler) *gin.Engine {
 	})
 	r.GET("/ai-analysis/config", handler.GetAIAnalysisConfig)
 	r.PUT("/ai-analysis/config", handler.UpdateAIAnalysisConfig)
+	r.POST("/ai-analysis/test", handler.TestAIAnalysisConnection)
 	return r
 }
 
@@ -141,4 +143,70 @@ func TestOpsAIAnalysisConfigHandler_MonitoringDisabled(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("GET disabled status = %d, body=%s", w.Code, w.Body.String())
 	}
+}
+
+func TestOpsAIAnalysisConfigHandler_TestConnection(t *testing.T) {
+	var gotAuth string
+
+	repo := newTestSettingRepo()
+	h := newOpsAIAnalysisConfigHandler(repo)
+	h.opsService.SetAIAnalysisHTTPClient(&http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		gotAuth = r.Header.Get("Authorization")
+		if r.URL.Path != "/v1/responses" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBufferString(`{"id":"resp_1"}`)), Header: http.Header{}}, nil
+	})})
+	r := newOpsAIAnalysisConfigRouter(h)
+
+	body := `{"enabled":true,"base_url":"https://93.184.216.34/v1","api_key":"sk-handler-secret","model":"gpt-5.5","interface_type":"responses","timeout_seconds":60,"max_samples":50,"auto_dedup_minutes":10,"global_rate_limit_per_minute":10,"auto_levels":["P0","P1"],"manual_enabled":true}`
+	req := httptest.NewRequest(http.MethodPut, "/ai-analysis/config", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d, body=%s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/ai-analysis/test", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST test status = %d, body=%s", w.Code, w.Body.String())
+	}
+	data := decodeOpsAIResponse(t, w)
+	if data["status"] != service.OpsAIAnalysisConnectionStatusSuccess || data["success"] != true {
+		t.Fatalf("unexpected data: %+v", data)
+	}
+	if gotAuth != "Bearer sk-handler-secret" {
+		t.Fatalf("auth header = %q", gotAuth)
+	}
+	if strings.Contains(w.Body.String(), "sk-handler-secret") {
+		t.Fatalf("test response leaked plaintext API key: %s", w.Body.String())
+	}
+}
+
+func TestOpsAIAnalysisConfigHandler_TestConnectionConfigMissing(t *testing.T) {
+	h := newOpsAIAnalysisConfigHandler(newTestSettingRepo())
+	r := newOpsAIAnalysisConfigRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/ai-analysis/test", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST test status = %d, body=%s", w.Code, w.Body.String())
+	}
+	data := decodeOpsAIResponse(t, w)
+	if data["status"] != service.OpsAIAnalysisConnectionStatusConfigError || data["success"] != false {
+		t.Fatalf("unexpected data: %+v", data)
+	}
+	if !strings.Contains(w.Body.String(), "请先配置 AI 分析服务") {
+		t.Fatalf("missing clear config message: %s", w.Body.String())
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"net/http"
 	"strings"
 	"time"
 
@@ -38,6 +39,7 @@ type OpsService struct {
 	antigravityGatewayService *AntigravityGatewayService
 	systemLogSink             *OpsSystemLogSink
 	secretEncryptor           SecretEncryptor
+	aiAnalysisHTTPClient      *http.Client
 
 	// cleanupReloader 由 wire 在 OpsCleanupService 构造完成后通过 SetCleanupReloader 注入。
 	// 解耦避免 OpsService -> OpsCleanupService 的硬依赖（cleanup 也读 settings，会循环）。
@@ -56,6 +58,13 @@ func (s *OpsService) SetCleanupReloader(r CleanupReloader) {
 		return
 	}
 	s.cleanupReloader = r
+}
+
+func (s *OpsService) SetAIAnalysisHTTPClient(client *http.Client) {
+	if s == nil {
+		return
+	}
+	s.aiAnalysisHTTPClient = client
 }
 
 func (s *OpsService) SetSecretEncryptor(encryptor SecretEncryptor) {
