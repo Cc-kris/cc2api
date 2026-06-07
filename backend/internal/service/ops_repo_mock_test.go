@@ -9,6 +9,8 @@ import (
 type opsRepoMock struct {
 	InsertErrorLogFn              func(ctx context.Context, input *OpsInsertErrorLogInput) (int64, error)
 	BatchInsertErrorLogsFn        func(ctx context.Context, inputs []*OpsInsertErrorLogInput) (int64, error)
+	ListUnifiedErrorsFn           func(ctx context.Context, filter *OpsUnifiedErrorListFilter) (*OpsUnifiedErrorList, error)
+	GetErrorLogByIDFn             func(ctx context.Context, id int64) (*OpsErrorLogDetail, error)
 	BatchInsertSystemLogsFn       func(ctx context.Context, inputs []*OpsInsertSystemLogInput) (int64, error)
 	ListSystemLogsFn              func(ctx context.Context, filter *OpsSystemLogFilter) (*OpsSystemLogList, error)
 	GetDashboardOverviewFn        func(ctx context.Context, filter *OpsDashboardFilter) (*OpsDashboardOverview, error)
@@ -47,10 +49,16 @@ func (m *opsRepoMock) ListErrorLogs(ctx context.Context, filter *OpsErrorLogFilt
 }
 
 func (m *opsRepoMock) ListUnifiedErrors(ctx context.Context, filter *OpsUnifiedErrorListFilter) (*OpsUnifiedErrorList, error) {
+	if m.ListUnifiedErrorsFn != nil {
+		return m.ListUnifiedErrorsFn(ctx, filter)
+	}
 	return &OpsUnifiedErrorList{Items: []*OpsUnifiedErrorItem{}, Page: 1, PageSize: 20}, nil
 }
 
 func (m *opsRepoMock) GetErrorLogByID(ctx context.Context, id int64) (*OpsErrorLogDetail, error) {
+	if m.GetErrorLogByIDFn != nil {
+		return m.GetErrorLogByIDFn(ctx, id)
+	}
 	return &OpsErrorLogDetail{}, nil
 }
 

@@ -40,9 +40,10 @@ type OpsErrorLog struct {
 
 	Severity string `json:"severity"`
 
-	StatusCode int    `json:"status_code"`
-	Platform   string `json:"platform"`
-	Model      string `json:"model"`
+	StatusCode       int    `json:"status_code"`
+	ClientStatusCode int    `json:"client_status_code,omitempty"`
+	Platform         string `json:"platform"`
+	Model            string `json:"model"`
 
 	Resolved           bool       `json:"resolved"`
 	ResolvedAt         *time.Time `json:"resolved_at"`

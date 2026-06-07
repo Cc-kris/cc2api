@@ -102,3 +102,82 @@ func IsValidOpsUnifiedAIAnalysis(v string) bool {
 		return false
 	}
 }
+
+type OpsUnifiedErrorDetail struct {
+	Conclusion     OpsUnifiedErrorConclusion     `json:"conclusion"`
+	RequestChain   OpsUnifiedErrorRequestChain   `json:"request_chain"`
+	Classification OpsUnifiedErrorClassification `json:"classification"`
+	ImpactScope    OpsUnifiedErrorImpactScope    `json:"impact_scope"`
+	Recovery       OpsUnifiedErrorRecovery       `json:"recovery"`
+	AIAnalysis     OpsUnifiedErrorAIAnalysis     `json:"ai_analysis"`
+	RawRecord      OpsUnifiedErrorRawRecord      `json:"raw_record"`
+	SameKindErrors []*OpsUnifiedErrorItem        `json:"same_kind_errors"`
+}
+
+type OpsUnifiedErrorConclusion struct {
+	Title              string   `json:"title"`
+	Summary            string   `json:"summary"`
+	ErrorResult        string   `json:"error_result"`
+	FinalFailed        bool     `json:"final_failed"`
+	Recovered          bool     `json:"recovered"`
+	AffectsUser        bool     `json:"affects_user"`
+	RecommendedActions []string `json:"recommended_actions"`
+}
+
+type OpsUnifiedErrorRequestChain struct {
+	User             *OpsUnifiedEntityRef `json:"user,omitempty"`
+	APIKey           *OpsUnifiedEntityRef `json:"api_key,omitempty"`
+	Group            *OpsUnifiedEntityRef `json:"group,omitempty"`
+	Platform         string               `json:"platform"`
+	Model            string               `json:"model"`
+	RequestedModel   string               `json:"requested_model"`
+	UpstreamModel    string               `json:"upstream_model"`
+	RequestPath      string               `json:"request_path"`
+	InboundEndpoint  string               `json:"inbound_endpoint"`
+	UpstreamEndpoint string               `json:"upstream_endpoint"`
+	UpstreamAccount  *OpsUnifiedEntityRef `json:"upstream_account,omitempty"`
+	RequestID        string               `json:"request_id"`
+	ClientRequestID  string               `json:"client_request_id"`
+}
+
+type OpsUnifiedErrorClassification struct {
+	ErrorCategory            string   `json:"error_category"`
+	ErrorSubcategory         string   `json:"error_subcategory"`
+	ClientErrorSubcategory   *string  `json:"client_error_subcategory"`
+	ClassificationConfidence string   `json:"classification_confidence"`
+	ClassificationReason     string   `json:"classification_reason"`
+	MissingEvidence          []string `json:"missing_evidence,omitempty"`
+	StatusCode               int      `json:"status_code"`
+	ClientStatusCode         int      `json:"client_status_code"`
+	ErrorSource              string   `json:"error_source"`
+	ErrorOwner               string   `json:"error_owner"`
+}
+
+type OpsUnifiedErrorImpactScope struct {
+	SameKindCount            int `json:"same_kind_count"`
+	AffectedUsers            int `json:"affected_users"`
+	AffectedAPIKeys          int `json:"affected_api_keys"`
+	AffectedGroups           int `json:"affected_groups"`
+	AffectedModels           int `json:"affected_models"`
+	AffectedUpstreamAccounts int `json:"affected_upstream_accounts"`
+}
+
+type OpsUnifiedErrorRecovery struct {
+	FinalFailed    bool       `json:"final_failed"`
+	Recovered      bool       `json:"recovered"`
+	RecoveryMethod string     `json:"recovery_method"`
+	Resolved       bool       `json:"resolved"`
+	ResolvedAt     *time.Time `json:"resolved_at,omitempty"`
+}
+
+type OpsUnifiedErrorAIAnalysis struct {
+	Status  string `json:"status"`
+	TaskID  *int64 `json:"task_id,omitempty"`
+	Summary string `json:"summary,omitempty"`
+}
+
+type OpsUnifiedErrorRawRecord struct {
+	ErrorLog         *OpsErrorLogDetail `json:"error_log"`
+	ErrorBodyPreview string             `json:"error_body_preview"`
+	UpstreamErrors   string             `json:"upstream_errors,omitempty"`
+}

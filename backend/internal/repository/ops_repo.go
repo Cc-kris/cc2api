@@ -208,6 +208,7 @@ SELECT
   COALESCE(e.error_source, ''),
   e.severity,
   COALESCE(e.upstream_status_code, e.status_code, 0),
+  COALESCE(e.status_code, 0),
   COALESCE(e.platform, ''),
   COALESCE(e.model, ''),
   COALESCE(e.resolved, false),
@@ -264,6 +265,7 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 		var item service.OpsErrorLog
 		var statusCode sql.NullInt64
 		var clientIP sql.NullString
+		var clientStatusCode sql.NullInt64
 		var userID sql.NullInt64
 		var apiKeyID sql.NullInt64
 		var accountID sql.NullInt64
@@ -295,6 +297,7 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 			&item.Source,
 			&item.Severity,
 			&statusCode,
+			&clientStatusCode,
 			&item.Platform,
 			&item.Model,
 			&item.Resolved,
@@ -343,6 +346,9 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 		}
 		item.ResolvedByUserName = resolvedByName
 		item.StatusCode = int(statusCode.Int64)
+		if clientStatusCode.Valid {
+			item.ClientStatusCode = int(clientStatusCode.Int64)
+		}
 		if clientIP.Valid {
 			s := clientIP.String
 			item.ClientIP = &s
@@ -434,6 +440,7 @@ SELECT
   COALESCE(e.error_source, ''),
   e.severity,
   COALESCE(e.upstream_status_code, e.status_code, 0),
+  COALESCE(e.status_code, 0),
   COALESCE(e.platform, ''),
   COALESCE(e.model, ''),
   COALESCE(e.resolved, false),
@@ -479,6 +486,7 @@ LIMIT 1`
 
 	var out service.OpsErrorLogDetail
 	var statusCode sql.NullInt64
+	var clientStatusCode sql.NullInt64
 	var upstreamStatusCode sql.NullInt64
 	var resolvedAt sql.NullTime
 	var resolvedBy sql.NullInt64
@@ -503,6 +511,7 @@ LIMIT 1`
 		&out.Source,
 		&out.Severity,
 		&statusCode,
+		&clientStatusCode,
 		&out.Platform,
 		&out.Model,
 		&out.Resolved,
@@ -544,6 +553,9 @@ LIMIT 1`
 	}
 
 	out.StatusCode = int(statusCode.Int64)
+	if clientStatusCode.Valid {
+		out.ClientStatusCode = int(clientStatusCode.Int64)
+	}
 	if resolvedAt.Valid {
 		t := resolvedAt.Time
 		out.ResolvedAt = &t

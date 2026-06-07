@@ -363,6 +363,129 @@ func (s *OpsService) GetErrorLogByID(ctx context.Context, id int64) (*OpsErrorLo
 	return detail, nil
 }
 
+func (s *OpsService) GetUnifiedErrorDetail(ctx context.Context, id int64) (*OpsUnifiedErrorDetail, error) {
+	detail, err := s.GetErrorLogByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if detail.ClientStatusCode == 0 {
+		detail.ClientStatusCode = detail.StatusCode
+	}
+	rawDetail := *detail
+	rawDetail.ErrorBody = truncateRunes(detail.ErrorBody, 500)
+	rawDetail.UpstreamErrorDetail = truncateRunes(detail.UpstreamErrorDetail, 500)
+	rawDetail.UpstreamErrors = truncateRunes(detail.UpstreamErrors, 500)
+
+	result := opsUnifiedErrorResultFromDetail(detail)
+	classification := OpsUnifiedErrorClassification{
+		ErrorCategory:            detail.ErrorCategory,
+		ErrorSubcategory:         detail.ErrorSubcategory,
+		ClientErrorSubcategory:   detail.ClientErrorSubcategory,
+		ClassificationConfidence: detail.ClassificationConfidence,
+		ClassificationReason:     detail.ClassificationReason,
+		MissingEvidence:          detail.ClassificationMissingEvidence,
+		StatusCode:               detail.StatusCode,
+		ClientStatusCode:         detail.ClientStatusCode,
+		ErrorSource:              detail.Source,
+		ErrorOwner:               detail.Owner,
+	}
+
+	start := detail.CreatedAt.Add(-30 * time.Minute)
+	end := detail.CreatedAt.Add(30 * time.Minute)
+	sameKindFilter := &OpsUnifiedErrorListFilter{
+		StartTime:          &start,
+		EndTime:            &end,
+		ErrorCategories:    []string{detail.ErrorCategory},
+		ErrorSubcategories: []string{detail.ErrorSubcategory},
+		StatusCodes:        []int{detail.StatusCode},
+		ErrorResults:       []string{result},
+		Platform:           detail.Platform,
+		Model:              detail.Model,
+		SortBy:             "occurred_at",
+		SortOrder:          "desc",
+		Page:               1,
+		PageSize:           20,
+	}
+	if detail.ClientErrorSubcategory != nil && *detail.ClientErrorSubcategory != "" {
+		sameKindFilter.ClientErrorSubcategories = []string{*detail.ClientErrorSubcategory}
+	}
+	sameKind, _ := s.GetUnifiedErrors(ctx, sameKindFilter)
+	var sameKindItems []*OpsUnifiedErrorItem
+	impact := OpsUnifiedErrorImpactScope{SameKindCount: 1}
+	aiStatus := OpsUnifiedAIAnalysisNotAnalyzed
+	if sameKind != nil {
+		sameKindItems = sameKind.Items
+		if sameKind.Total > 0 {
+			impact.SameKindCount = sameKind.Total
+		}
+		impact.AffectedUsers, impact.AffectedAPIKeys, impact.AffectedGroups, impact.AffectedModels, impact.AffectedUpstreamAccounts = opsUnifiedImpactCounts(sameKind.Items)
+		for _, item := range sameKind.Items {
+			if item != nil && item.ID == detail.ID && strings.TrimSpace(item.AIAnalysisStatus) != "" {
+				aiStatus = item.AIAnalysisStatus
+				break
+			}
+		}
+	}
+	if detail.UserID != nil && impact.AffectedUsers == 0 {
+		impact.AffectedUsers = 1
+	}
+	if detail.APIKeyID != nil && impact.AffectedAPIKeys == 0 {
+		impact.AffectedAPIKeys = 1
+	}
+	if detail.GroupID != nil && impact.AffectedGroups == 0 {
+		impact.AffectedGroups = 1
+	}
+	if detail.Model != "" && impact.AffectedModels == 0 {
+		impact.AffectedModels = 1
+	}
+	if detail.AccountID != nil && impact.AffectedUpstreamAccounts == 0 {
+		impact.AffectedUpstreamAccounts = 1
+	}
+
+	return &OpsUnifiedErrorDetail{
+		Conclusion: OpsUnifiedErrorConclusion{
+			Title:              opsUnifiedDetailTitle(classification, result),
+			Summary:            opsUnifiedDetailSummary(classification, detail),
+			ErrorResult:        result,
+			FinalFailed:        result == OpsUnifiedErrorResultFinalFailed,
+			Recovered:          result == OpsUnifiedErrorResultRecovered,
+			AffectsUser:        detail.UserID != nil || detail.APIKeyID != nil,
+			RecommendedActions: opsUnifiedRecommendedActions(classification.ErrorCategory, classification.ErrorSubcategory),
+		},
+		RequestChain: OpsUnifiedErrorRequestChain{
+			User:             opsUnifiedUserRef(detail.UserID, detail.UserEmail),
+			APIKey:           opsUnifiedNameRef(detail.APIKeyID, "", opsUnifiedAPIKeyDisplayFromPtr(detail.APIKeyID)),
+			Group:            opsUnifiedNameRef(detail.GroupID, detail.GroupName, ""),
+			Platform:         detail.Platform,
+			Model:            detail.Model,
+			RequestedModel:   detail.RequestedModel,
+			UpstreamModel:    detail.UpstreamModel,
+			RequestPath:      detail.RequestPath,
+			InboundEndpoint:  detail.InboundEndpoint,
+			UpstreamEndpoint: detail.UpstreamEndpoint,
+			UpstreamAccount:  opsUnifiedNameRef(detail.AccountID, detail.AccountName, ""),
+			RequestID:        detail.RequestID,
+			ClientRequestID:  detail.ClientRequestID,
+		},
+		Classification: classification,
+		ImpactScope:    impact,
+		Recovery: OpsUnifiedErrorRecovery{
+			FinalFailed:    result == OpsUnifiedErrorResultFinalFailed,
+			Recovered:      result == OpsUnifiedErrorResultRecovered,
+			RecoveryMethod: opsUnifiedRecoveryMethod(detail, result),
+			Resolved:       detail.Resolved,
+			ResolvedAt:     detail.ResolvedAt,
+		},
+		AIAnalysis: OpsUnifiedErrorAIAnalysis{Status: aiStatus},
+		RawRecord: OpsUnifiedErrorRawRecord{
+			ErrorLog:         &rawDetail,
+			ErrorBodyPreview: rawDetail.ErrorBody,
+			UpstreamErrors:   rawDetail.UpstreamErrors,
+		},
+		SameKindErrors: sameKindItems,
+	}, nil
+}
+
 func (s *OpsService) UpdateErrorResolution(ctx context.Context, errorID int64, resolved bool, resolvedByUserID *int64) error {
 	if err := s.RequireMonitoringEnabled(ctx); err != nil {
 		return err
@@ -703,4 +826,176 @@ func sanitizeErrorBodyForStorage(raw string, maxBytes int) (sanitized string, tr
 		return truncateString(raw, maxBytes), true
 	}
 	return raw, false
+}
+
+func opsUnifiedErrorResultFromDetail(detail *OpsErrorLogDetail) string {
+	if detail == nil {
+		return OpsUnifiedErrorResultUnknown
+	}
+	clientStatus := detail.ClientStatusCode
+	if clientStatus == 0 {
+		clientStatus = detail.StatusCode
+	}
+	if detail.ClientErrorSubcategory != nil && *detail.ClientErrorSubcategory == OpsClientErrorSubcategoryDisconnect {
+		return OpsUnifiedErrorResultClientAborted
+	}
+	if clientStatus >= 400 {
+		return OpsUnifiedErrorResultFinalFailed
+	}
+	if clientStatus > 0 && clientStatus < 400 {
+		return OpsUnifiedErrorResultRecovered
+	}
+	return OpsUnifiedErrorResultUnknown
+}
+
+func opsUnifiedImpactCounts(items []*OpsUnifiedErrorItem) (users int, apiKeys int, groups int, models int, upstreamAccounts int) {
+	userSet := map[int64]struct{}{}
+	apiKeySet := map[int64]struct{}{}
+	groupSet := map[int64]struct{}{}
+	modelSet := map[string]struct{}{}
+	accountSet := map[int64]struct{}{}
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		if item.User != nil && item.User.ID > 0 {
+			userSet[item.User.ID] = struct{}{}
+		}
+		if item.APIKey != nil && item.APIKey.ID > 0 {
+			apiKeySet[item.APIKey.ID] = struct{}{}
+		}
+		if item.Group != nil && item.Group.ID > 0 {
+			groupSet[item.Group.ID] = struct{}{}
+		}
+		if strings.TrimSpace(item.Model) != "" {
+			modelSet[item.Model] = struct{}{}
+		}
+		if item.UpstreamAccount != nil && item.UpstreamAccount.ID > 0 {
+			accountSet[item.UpstreamAccount.ID] = struct{}{}
+		}
+	}
+	return len(userSet), len(apiKeySet), len(groupSet), len(modelSet), len(accountSet)
+}
+
+func opsUnifiedUserRef(id *int64, email string) *OpsUnifiedEntityRef {
+	if id == nil || *id <= 0 {
+		return nil
+	}
+	return &OpsUnifiedEntityRef{ID: *id, Email: email}
+}
+
+func opsUnifiedNameRef(id *int64, name string, display string) *OpsUnifiedEntityRef {
+	if id == nil || *id <= 0 {
+		return nil
+	}
+	return &OpsUnifiedEntityRef{ID: *id, Name: name, Display: display}
+}
+
+func opsUnifiedAPIKeyDisplayFromPtr(id *int64) string {
+	if id == nil || *id <= 0 {
+		return ""
+	}
+	return "API Key #" + opsStrconvFormatInt(*id)
+}
+
+func opsStrconvFormatInt(v int64) string {
+	// Keep service layer free of fmt formatting for hot-path detail assembly.
+	if v == 0 {
+		return "0"
+	}
+	negative := v < 0
+	if negative {
+		v = -v
+	}
+	buf := [20]byte{}
+	i := len(buf)
+	for v > 0 {
+		i--
+		buf[i] = byte('0' + v%10)
+		v /= 10
+	}
+	if negative {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
+}
+
+func opsUnifiedDetailTitle(classification OpsUnifiedErrorClassification, result string) string {
+	prefix := "错误"
+	switch result {
+	case OpsUnifiedErrorResultRecovered:
+		prefix = "已恢复波动"
+	case OpsUnifiedErrorResultFinalFailed:
+		prefix = "最终失败"
+	case OpsUnifiedErrorResultClientAborted:
+		prefix = "客户端中断"
+	}
+	if classification.ErrorSubcategory != "" {
+		return prefix + "：" + classification.ErrorSubcategory
+	}
+	return prefix
+}
+
+func opsUnifiedDetailSummary(classification OpsUnifiedErrorClassification, detail *OpsErrorLogDetail) string {
+	for _, candidate := range []string{classification.ClassificationReason, detail.Message, detail.UpstreamErrorMessage} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate != "" {
+			return truncateRunes(candidate, 160)
+		}
+	}
+	return "暂无摘要"
+}
+
+func opsUnifiedRecoveryMethod(detail *OpsErrorLogDetail, result string) string {
+	if result != OpsUnifiedErrorResultRecovered {
+		return "none"
+	}
+	if detail != nil && detail.AccountID != nil && strings.TrimSpace(detail.UpstreamErrors) != "" {
+		return "account_switch"
+	}
+	if detail != nil && strings.Contains(strings.ToLower(detail.UpstreamErrors), "retry") {
+		return "retry"
+	}
+	return "recovered"
+}
+
+func opsUnifiedRecommendedActions(category string, subcategory string) []string {
+	switch category {
+	case OpsErrorCategoryAccountPool:
+		return []string{"检查上游账号可用性", "补充可用账号或调整分组路由"}
+	case OpsErrorCategoryPermission:
+		return []string{"检查 API Key、上游账号和模型权限", "确认订阅或模型访问范围"}
+	case OpsErrorCategoryBalance:
+		return []string{"检查用户余额、Key 配额和上游额度", "补充余额或切换可用上游账号"}
+	case OpsErrorCategoryRateLimit:
+		return []string{"检查 RPM/TPM/并发限制", "降低请求速率或扩容上游账号"}
+	case OpsErrorCategoryClient:
+		return []string{"检查客户端请求参数、路径、模型和鉴权配置"}
+	case OpsErrorCategoryConfig:
+		return []string{"检查模型映射、渠道配置、分组配置和缓存配置"}
+	case OpsErrorCategoryUpstream:
+		return []string{"检查上游服务状态和账号健康", "必要时临时切换上游账号"}
+	case OpsErrorCategoryPlatform:
+		return []string{"检查 Sub2API 服务日志和依赖服务状态"}
+	case OpsErrorCategorySlowRequest:
+		return []string{"检查 TTFT、总耗时和上游响应延迟"}
+	default:
+		if strings.TrimSpace(subcategory) != "" {
+			return []string{"根据错误子类继续排查：" + subcategory}
+		}
+		return []string{"补充日志证据后继续排查"}
+	}
+}
+
+func truncateRunes(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if max <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max])
 }

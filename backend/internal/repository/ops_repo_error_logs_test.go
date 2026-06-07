@@ -26,14 +26,14 @@ func TestListErrorLogs_PlatformSLADetailsScansRows(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 	rows := sqlmock.NewRows([]string{
-		"id", "created_at", "error_phase", "error_type", "error_owner", "error_source", "severity", "status_code", "platform", "model",
+		"id", "created_at", "error_phase", "error_type", "error_owner", "error_source", "severity", "status_code", "client_status_code", "platform", "model",
 		"resolved", "resolved_at", "resolved_by_user_id", "resolved_by_user_email", "client_request_id", "request_id", "error_message",
 		"user_id", "user_email", "api_key_id", "account_id", "account_name", "group_id", "group_name", "client_ip", "request_path", "stream",
 		"inbound_endpoint", "upstream_endpoint", "requested_model", "upstream_model", "request_type",
 		"upstream_status_code", "error_body", "upstream_error_message", "upstream_error_detail", "upstream_errors", "is_business_limited",
 		"auth_latency_ms", "routing_latency_ms", "upstream_latency_ms", "response_latency_ms", "time_to_first_token_ms",
 	}).AddRow(
-		int64(7), createdAt, "upstream", "upstream_http_error", "provider", "upstream_http", "error", 500, "openai", "gpt-5.4-upstream",
+		int64(7), createdAt, "upstream", "upstream_http_error", "provider", "upstream_http", "error", 500, 500, "openai", "gpt-5.4-upstream",
 		false, nil, nil, "", "client-req-1", "req-1", "provider failed",
 		int64(11), "user@example.com", int64(22), int64(42), "上游账号A", int64(33), "默认分组", "127.0.0.1", "/v1/chat/completions", true,
 		"/v1/chat/completions", "/v1/responses", "gpt-5.4", "gpt-5.4-upstream", int64(2),
@@ -88,14 +88,14 @@ func TestListErrorLogs_BackfillsRequesterFromAPIKey(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 	rows := sqlmock.NewRows([]string{
-		"id", "created_at", "error_phase", "error_type", "error_owner", "error_source", "severity", "status_code", "platform", "model",
+		"id", "created_at", "error_phase", "error_type", "error_owner", "error_source", "severity", "status_code", "client_status_code", "platform", "model",
 		"resolved", "resolved_at", "resolved_by_user_id", "resolved_by_user_email", "client_request_id", "request_id", "error_message",
 		"user_id", "user_email", "api_key_id", "account_id", "account_name", "group_id", "group_name", "client_ip", "request_path", "stream",
 		"inbound_endpoint", "upstream_endpoint", "requested_model", "upstream_model", "request_type",
 		"upstream_status_code", "error_body", "upstream_error_message", "upstream_error_detail", "upstream_errors", "is_business_limited",
 		"auth_latency_ms", "routing_latency_ms", "upstream_latency_ms", "response_latency_ms", "time_to_first_token_ms",
 	}).AddRow(
-		int64(8), createdAt, "routing", "forbidden_error", "platform", "gateway", "error", 403, "openai", "",
+		int64(8), createdAt, "routing", "forbidden_error", "platform", "gateway", "error", 403, 403, "openai", "",
 		false, nil, nil, "", "client-req-2", "req-2", "API Key 所属分组已删除",
 		int64(11), "3238607507@qq.com", int64(95), nil, "", nil, "", "127.0.0.1", "/v1/responses", false,
 		"/v1/responses", "", "", "", nil,
@@ -128,14 +128,14 @@ func TestGetErrorLogByID_BackfillsRequesterFromAPIKey(t *testing.T) {
 	createdAt := time.Date(2026, 6, 2, 6, 45, 0, 0, time.UTC)
 
 	rows := sqlmock.NewRows([]string{
-		"id", "created_at", "error_phase", "error_type", "error_owner", "error_source", "severity", "status_code", "platform", "model",
+		"id", "created_at", "error_phase", "error_type", "error_owner", "error_source", "severity", "status_code", "client_status_code", "platform", "model",
 		"resolved", "resolved_at", "resolved_by_user_id", "client_request_id", "request_id", "error_message", "error_body",
 		"upstream_status_code", "upstream_error_message", "upstream_error_detail", "upstream_errors", "is_business_limited",
 		"user_id", "user_email", "api_key_id", "account_id", "account_name", "group_id", "group_name", "client_ip",
 		"request_path", "stream", "inbound_endpoint", "upstream_endpoint", "requested_model", "upstream_model", "request_type", "user_agent",
 		"auth_latency_ms", "routing_latency_ms", "upstream_latency_ms", "response_latency_ms", "time_to_first_token_ms",
 	}).AddRow(
-		int64(8), createdAt, "routing", "forbidden_error", "platform", "gateway", "error", 403, "openai", "",
+		int64(8), createdAt, "routing", "forbidden_error", "platform", "gateway", "error", 403, 403, "openai", "",
 		false, nil, nil, "client-req-2", "req-2", "API Key 所属分组已删除", "{}",
 		nil, "", "", "", false,
 		int64(11), "3238607507@qq.com", int64(95), nil, "", nil, "", "127.0.0.1",
@@ -183,14 +183,14 @@ func TestListAndDetailErrorClassificationUseSameEvidence(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 	listRows := sqlmock.NewRows([]string{
-		"id", "created_at", "error_phase", "error_type", "error_owner", "error_source", "severity", "status_code", "platform", "model",
+		"id", "created_at", "error_phase", "error_type", "error_owner", "error_source", "severity", "status_code", "client_status_code", "platform", "model",
 		"resolved", "resolved_at", "resolved_by_user_id", "resolved_by_user_email", "client_request_id", "request_id", "error_message",
 		"user_id", "user_email", "api_key_id", "account_id", "account_name", "group_id", "group_name", "client_ip", "request_path", "stream",
 		"inbound_endpoint", "upstream_endpoint", "requested_model", "upstream_model", "request_type",
 		"upstream_status_code", "error_body", "upstream_error_message", "upstream_error_detail", "upstream_errors", "is_business_limited",
 		"auth_latency_ms", "routing_latency_ms", "upstream_latency_ms", "response_latency_ms", "time_to_first_token_ms",
 	}).AddRow(
-		int64(9), createdAt, "upstream", "api_error", "provider", "upstream_http", "error", 500, "openai", "gpt-5.5",
+		int64(9), createdAt, "upstream", "api_error", "provider", "upstream_http", "error", 500, 500, "openai", "gpt-5.5",
 		false, nil, nil, "", "client-req-9", "req-9", "upstream failed",
 		int64(6), "user@example.com", int64(10), int64(88), "上游账号A", int64(3), "VIP", "127.0.0.1", "/v1/responses", false,
 		"/v1/responses", "/v1/responses", "gpt-5.5", "gpt-5.5", nil,
@@ -207,14 +207,14 @@ func TestListAndDetailErrorClassificationUseSameEvidence(t *testing.T) {
 	require.Equal(t, "upstream_balance_error", list.Errors[0].ErrorSubcategory)
 
 	detailRows := sqlmock.NewRows([]string{
-		"id", "created_at", "error_phase", "error_type", "error_owner", "error_source", "severity", "status_code", "platform", "model",
+		"id", "created_at", "error_phase", "error_type", "error_owner", "error_source", "severity", "status_code", "client_status_code", "platform", "model",
 		"resolved", "resolved_at", "resolved_by_user_id", "client_request_id", "request_id", "error_message", "error_body",
 		"upstream_status_code", "upstream_error_message", "upstream_error_detail", "upstream_errors", "is_business_limited",
 		"user_id", "user_email", "api_key_id", "account_id", "account_name", "group_id", "group_name", "client_ip",
 		"request_path", "stream", "inbound_endpoint", "upstream_endpoint", "requested_model", "upstream_model", "request_type", "user_agent",
 		"auth_latency_ms", "routing_latency_ms", "upstream_latency_ms", "response_latency_ms", "time_to_first_token_ms",
 	}).AddRow(
-		int64(9), createdAt, "upstream", "api_error", "provider", "upstream_http", "error", 500, "openai", "gpt-5.5",
+		int64(9), createdAt, "upstream", "api_error", "provider", "upstream_http", "error", 500, 500, "openai", "gpt-5.5",
 		false, nil, nil, "client-req-9", "req-9", "upstream failed", "",
 		500, "insufficient balance", "", "", false,
 		int64(6), "user@example.com", int64(10), int64(88), "上游账号A", int64(3), "VIP", "127.0.0.1",

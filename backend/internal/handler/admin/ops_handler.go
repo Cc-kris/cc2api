@@ -131,6 +131,30 @@ func (h *OpsHandler) GetUnifiedErrors(c *gin.Context) {
 	response.Success(c, result)
 }
 
+// GetUnifiedErrorByID returns unified ops error detail.
+// GET /api/v1/admin/ops/unified-errors/:id
+func (h *OpsHandler) GetUnifiedErrorByID(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	id, err := strconv.ParseInt(strings.TrimSpace(c.Param("id")), 10, 64)
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "Invalid error id")
+		return
+	}
+	detail, err := h.opsService.GetUnifiedErrorDetail(c.Request.Context(), id)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, detail)
+}
+
 // GetErrorLogs lists ops error logs.
 // GET /api/v1/admin/ops/errors
 func (h *OpsHandler) GetErrorLogs(c *gin.Context) {
