@@ -233,7 +233,9 @@ func (c *gatewayCache) localResponseCacheKeyMatchesClearScope(ctx context.Contex
 
 	meta, ok := parseLocalResponseCacheKeyMeta(redisKey)
 	if !ok {
-		return false, nil
+		// Legacy v1 keys do not carry platform/model/group/api-key metadata.
+		// Delete them on scoped clears so fallback lookup cannot keep serving stale responses.
+		return true, nil
 	}
 	scope := req.Scope
 	switch req.ClearType {

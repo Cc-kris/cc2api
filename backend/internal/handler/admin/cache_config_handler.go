@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -10,12 +11,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type CacheConfigHandler struct {
-	settingService       *service.SettingService
-	openAIGatewayService *service.OpenAIGatewayService
+type localResponseCacheClearService interface {
+	ClearLocalResponseCache(ctx context.Context, req service.LocalResponseCacheClearRequest) (*service.LocalResponseCacheClearResult, error)
 }
 
-func NewCacheConfigHandler(settingService *service.SettingService, openAIGatewayService *service.OpenAIGatewayService) *CacheConfigHandler {
+type CacheConfigHandler struct {
+	settingService       *service.SettingService
+	openAIGatewayService localResponseCacheClearService
+}
+
+func NewCacheConfigHandler(settingService *service.SettingService, openAIGatewayService localResponseCacheClearService) *CacheConfigHandler {
 	return &CacheConfigHandler{settingService: settingService, openAIGatewayService: openAIGatewayService}
 }
 

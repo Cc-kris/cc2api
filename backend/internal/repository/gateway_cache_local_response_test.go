@@ -130,3 +130,65 @@ func TestGatewayCacheRecordLocalResponseCacheMinuteStats(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestGatewayCacheClearLocalResponseCacheByModelDeletesMatchingAndLegacyOnly(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	cache := &gatewayCache{rdb: rdb}
+	ctx := context.Background()
+	entry := &service.LocalResponseCacheEntry{StatusCode: http.StatusOK, ContentType: "application/json", Body: []byte(`{"ok":true}`), CreatedAt: time.Now().UTC()}
+
+	matchingKey := "cache:" + service.LocalResponseCacheRuleVersion + ":openai:12:3:/v1/responses:gpt-5.5:hash-a"
+	otherKey := "cache:" + service.LocalResponseCacheRuleVersion + ":openai:12:3:/v1/responses:gpt-4.1:hash-b"
+	require.NoError(t, cache.SetLocalResponse(ctx, matchingKey, entry, time.Minute))
+	require.NoError(t, cache.SetLocalResponse(ctx, otherKey, entry, time.Minute))
+	require.NoError(t, cache.SetLocalResponse(ctx, "legacy-hash", entry, time.Minute))
+	require.NoError(t, cache.IncrLocalResponseCacheStats(ctx, "lookup_hit", 1))
+
+	res, err := cache.ClearLocalResponseCache(ctx, service.LocalResponseCacheClearRequest{ClearType: service.LocalResponseCacheClearTypeByModel, Scope: service.LocalResponseCacheClearScope{Models: []string{"gpt-5.5"}}})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(2), res.MatchedKeys)
+	require.Equal(t, int64(2), res.DeletedKeys)
+	require.False(t, mr.Exists(buildLocalResponseCacheKey(matchingKey)))
+	require.False(t, mr.Exists(buildLocalResponseCacheKey("legacy-hash")))
+	require.True(t, mr.Exists(buildLocalResponseCacheKey(otherKey)))
+	require.True(t, mr.Exists(localResponseCacheStatsKey))
+}
+
+func TestGatewayCacheClearLocalResponseCacheByTimeUsesEntryCreatedAt(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	cache := &gatewayCache{rdb: rdb}
+	ctx := context.Background()
+	start := time.Date(2026, 6, 8, 10, 0, 0, 0, time.UTC)
+	end := start.Add(time.Hour)
+	insideKey := "cache:" + service.LocalResponseCacheRuleVersion + ":openai:12:3:/v1/responses:gpt-5.5:hash-in"
+	outsideKey := "cache:" + service.LocalResponseCacheRuleVersion + ":openai:12:3:/v1/responses:gpt-5.5:hash-out"
+
+	require.NoError(t, cache.SetLocalResponse(ctx, insideKey, &service.LocalResponseCacheEntry{StatusCode: http.StatusOK, ContentType: "application/json", Body: []byte(`{}`), CreatedAt: start.Add(10 * time.Minute)}, time.Minute))
+	require.NoError(t, cache.SetLocalResponse(ctx, outsideKey, &service.LocalResponseCacheEntry{StatusCode: http.StatusOK, ContentType: "application/json", Body: []byte(`{}`), CreatedAt: start.Add(-time.Minute)}, time.Minute))
+
+	res, err := cache.ClearLocalResponseCache(ctx, service.LocalResponseCacheClearRequest{ClearType: service.LocalResponseCacheClearTypeByTime, Scope: service.LocalResponseCacheClearScope{StartTime: &start, EndTime: &end}})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(1), res.DeletedKeys)
+	require.False(t, mr.Exists(buildLocalResponseCacheKey(insideKey)))
+	require.True(t, mr.Exists(buildLocalResponseCacheKey(outsideKey)))
+}
+
+func TestGatewayCacheRecordLocalResponseCacheClearAudit(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+	cache := &gatewayCache{db: db}
+	operatorID := int64(9)
+
+	mock.ExpectExec(`(?s)INSERT INTO ops_cache_clear_audits`).
+		WithArgs(&operatorID, service.LocalResponseCacheClearTypeByGroup, `{"group_ids":[3]}`, int64(4), int64(4), service.LocalResponseCacheClearStatusSuccess, "").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err = cache.RecordLocalResponseCacheClearAudit(context.Background(), service.LocalResponseCacheClearAudit{OperatorUserID: &operatorID, ClearType: service.LocalResponseCacheClearTypeByGroup, Scope: service.LocalResponseCacheClearScope{GroupIDs: []int64{3}}, MatchedKeys: 4, DeletedKeys: 4, Status: service.LocalResponseCacheClearStatusSuccess})
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+}

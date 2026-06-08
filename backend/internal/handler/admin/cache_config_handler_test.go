@@ -10,6 +10,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -18,7 +19,7 @@ import (
 func newCacheConfigHandlerForTest(values map[string]string) (*CacheConfigHandler, *cacheManagementHandlerRepoStub) {
 	repo := &cacheManagementHandlerRepoStub{values: values}
 	svc := service.NewSettingService(repo, &config.Config{})
-	return NewCacheConfigHandler(svc), repo
+	return NewCacheConfigHandler(svc, nil), repo
 }
 
 type cacheManagementHandlerRepoStub struct {
@@ -139,4 +140,48 @@ func TestCacheConfigHandlerUpdateConfigRejectsInvalidPayload(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Empty(t, repo.sets)
+}
+
+type cacheClearHandlerServiceStub struct {
+	got service.LocalResponseCacheClearRequest
+	res *service.LocalResponseCacheClearResult
+	err error
+}
+
+func (s *cacheClearHandlerServiceStub) ClearLocalResponseCache(_ context.Context, req service.LocalResponseCacheClearRequest) (*service.LocalResponseCacheClearResult, error) {
+	s.got = req
+	return s.res, s.err
+}
+
+func TestCacheConfigHandlerClearPassesOperatorAndScope(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	stub := &cacheClearHandlerServiceStub{res: &service.LocalResponseCacheClearResult{ClearType: service.LocalResponseCacheClearTypeByModel, MatchedKeys: 2, DeletedKeys: 2, Status: service.LocalResponseCacheClearStatusSuccess}}
+	handler := NewCacheConfigHandler(nil, stub)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Set("user", middleware.AuthSubject{UserID: 9})
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/cache/clear", bytes.NewReader([]byte(`{"clear_type":"by_model","scope":{"models":["gpt-5.5"]}}`)))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	handler.Clear(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, service.LocalResponseCacheClearTypeByModel, stub.got.ClearType)
+	require.Equal(t, []string{"gpt-5.5"}, stub.got.Scope.Models)
+	require.NotNil(t, stub.got.OperatorUserID)
+	require.Equal(t, int64(9), *stub.got.OperatorUserID)
+}
+
+func TestCacheConfigHandlerClearRejectsInvalidPayload(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	stub := &cacheClearHandlerServiceStub{err: service.ErrInvalidLocalResponseCacheClear}
+	handler := NewCacheConfigHandler(nil, stub)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/cache/clear", bytes.NewReader([]byte(`{"clear_type":"all"}`)))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	handler.Clear(c)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
