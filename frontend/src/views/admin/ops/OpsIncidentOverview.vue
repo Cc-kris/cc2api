@@ -552,8 +552,8 @@ const errorDetailsType = ref<'request' | 'upstream'>('request')
 const errorDetailsPreset = ref<OpsErrorDetailsPreset | null>(null)
 
 const autoRefreshCountdown = ref(30)
-let autoRefreshTimer: ReturnType<typeof window.setInterval> | null = null
-let aiReportPollTimer: ReturnType<typeof window.setTimeout> | null = null
+let autoRefreshTimer: ReturnType<typeof setInterval> | null = null
+let aiReportPollTimer: ReturnType<typeof setTimeout> | null = null
 let fetchController: AbortController | null = null
 
 const timeRangeOptions = computed(() => [
@@ -845,7 +845,7 @@ async function loadGroups() {
 function startAutoRefresh() {
   stopAutoRefresh()
   autoRefreshCountdown.value = 30
-  autoRefreshTimer = window.setInterval(() => {
+  autoRefreshTimer = setInterval(() => {
     if (loading.value) return
     if (autoRefreshCountdown.value <= 1) {
       autoRefreshCountdown.value = 30
@@ -885,7 +885,7 @@ async function fetchAIAnalysisTaskDetail(taskId: number, poll = false) {
     const status = String(detail.task.status || '').trim().toLowerCase()
     if (poll && (status === 'pending' || status === 'running')) {
       stopAIReportPolling()
-      aiReportPollTimer = window.setTimeout(() => {
+      aiReportPollTimer = setTimeout(() => {
         void fetchAIAnalysisTaskDetail(taskId, true)
       }, 5000)
     } else {
