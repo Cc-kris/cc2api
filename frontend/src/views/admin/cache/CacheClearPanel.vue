@@ -604,7 +604,7 @@ function buildPayload(): CacheClearRequest {
   return {
     clear_type: form.clearType,
     scope: {
-      platforms: form.clearType === 'by_platform' ? [...form.platforms] : undefined,
+      platforms: form.clearType === 'by_platform' || form.clearType === 'by_model' ? [...form.platforms] : undefined,
       models: form.clearType === 'by_model' ? [...form.models] : undefined,
       group_ids: form.clearType === 'by_group' ? [...form.groupIds] : undefined,
       api_key_ids: form.clearType === 'by_api_key' ? form.apiKeys.map((item) => item.id) : undefined,
