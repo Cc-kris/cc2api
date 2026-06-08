@@ -622,18 +622,6 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/admin/settings/cache/semantic',
-    name: 'AdminSemanticCache',
-    component: () => import('@/views/admin/cache/SemanticCachePanel.vue'),
-    meta: {
-      requiresAuth: true,
-      requiresAdmin: true,
-      title: 'Semantic Cache',
-      titleKey: 'admin.cacheManagement.nav.semantic',
-      descriptionKey: 'admin.cacheManagement.nav.semantic'
-    }
-  },
-  {
     path: '/admin/risk-control',
     name: 'AdminRiskControl',
     component: () => import('@/views/admin/RiskControlView.vue'),
