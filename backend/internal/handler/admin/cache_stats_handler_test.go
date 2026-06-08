@@ -2,9 +2,11 @@ package admin
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -69,4 +71,52 @@ func TestCacheStatsHandlerRejectsInvalidRange(t *testing.T) {
 	handler.GetStats(c)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestCacheStatsHandlerExportRejectsInvalidRange(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := NewCacheStatsHandler(service.NewCacheStatsService(&cacheStatsHandlerRepoStub{}))
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/stats/export?time_range=32d", nil)
+
+	handler.Export(c)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestCacheStatsHandlerExportReturnsCSV(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &cacheStatsHandlerRepoStub{rows: []*service.CacheStatsRawRow{{
+		Platform: "openai", Model: "gpt-5.5", TotalRequests: 2, CandidateRequests: 2, HitRequests: 1,
+		InputTokens: 100, OutputTokens: 10, HitTokens: 50, CandidateTokens: 100,
+	}}}
+	handler := NewCacheStatsHandler(service.NewCacheStatsService(repo))
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/stats/export?time_range=1d&platform=openai", nil)
+
+	handler.Export(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Header().Get("Content-Type"), "text/csv")
+	require.Contains(t, rec.Header().Get("Content-Disposition"), "cache-stats.csv")
+	require.Equal(t, "openai", repo.filter.Platform)
+	records, err := csv.NewReader(strings.NewReader(rec.Body.String())).ReadAll()
+	require.NoError(t, err)
+	require.Equal(t, "平台", records[0][0])
+	require.Equal(t, []string{"openai", "gpt-5.5", "2", "2", "1", "1", "0", "100", "10", "50", "50.00%", "50.00%", ""}, records[1])
+}
+
+func TestCacheStatsHandlerExportRejectsEmptyRows(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := NewCacheStatsHandler(service.NewCacheStatsService(&cacheStatsHandlerRepoStub{}))
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/stats/export?time_range=1d", nil)
+
+	handler.Export(c)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Empty(t, rec.Header().Get("Content-Disposition"))
 }

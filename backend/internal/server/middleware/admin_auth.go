@@ -213,6 +213,18 @@ func allowOpsRoleForAdminPath(role, method, path string) bool {
 	if method == http.MethodPost && isOpsAIAnalysisTaskFeedbackPath(path) {
 		return isOpsAIAnalysisFeedbackRole(role)
 	}
+	if method == http.MethodGet && path == "/api/v1/admin/cache/stats/export" {
+		return isCacheStatsExportRole(role)
+	}
+	if method == http.MethodGet && path == "/api/v1/admin/cache/stats" {
+		return isCacheStatsReadRole(role)
+	}
+	if method == http.MethodGet && path == "/api/v1/admin/cache/clear-audits" {
+		return isOpsAIAnalysisOperatorRole(role)
+	}
+	if method == http.MethodGet && path == "/api/v1/admin/cache/advanced-config" {
+		return isCacheStatsReadRole(role)
+	}
 	if !isOpsAIAnalysisOperatorRole(role) {
 		return false
 	}
@@ -235,6 +247,23 @@ func isOpsAIAnalysisFeedbackRole(role string) bool {
 		strings.EqualFold(role, "support") ||
 		strings.EqualFold(role, "service") ||
 		strings.EqualFold(role, "cs")
+}
+
+func isCacheStatsReadRole(role string) bool {
+	return isOpsAIAnalysisOperatorRole(role) || isBusinessOperationRole(role)
+}
+
+func isCacheStatsExportRole(role string) bool {
+	return isBusinessOperationRole(role)
+}
+
+func isBusinessOperationRole(role string) bool {
+	role = strings.TrimSpace(role)
+	return strings.EqualFold(role, "business") ||
+		strings.EqualFold(role, "business_operator") ||
+		strings.EqualFold(role, "business-operator") ||
+		strings.EqualFold(role, "运营") ||
+		strings.EqualFold(role, "yunying")
 }
 
 func isOpsAIAnalysisTaskFeedbackPath(path string) bool {

@@ -165,6 +165,30 @@ func TestAdminAuthAllowsOpsRoleOnlyForAllowedOpsEndpoints(t *testing.T) {
 		role, _ := GetUserRoleFromContext(c)
 		c.JSON(http.StatusOK, gin.H{"role": role})
 	})
+	router.GET("/api/v1/admin/cache/stats", func(c *gin.Context) {
+		role, _ := GetUserRoleFromContext(c)
+		c.JSON(http.StatusOK, gin.H{"role": role})
+	})
+	router.GET("/api/v1/admin/cache/stats/export", func(c *gin.Context) {
+		role, _ := GetUserRoleFromContext(c)
+		c.JSON(http.StatusOK, gin.H{"role": role})
+	})
+	router.GET("/api/v1/admin/cache/clear-audits", func(c *gin.Context) {
+		role, _ := GetUserRoleFromContext(c)
+		c.JSON(http.StatusOK, gin.H{"role": role})
+	})
+	router.GET("/api/v1/admin/cache/advanced-config", func(c *gin.Context) {
+		role, _ := GetUserRoleFromContext(c)
+		c.JSON(http.StatusOK, gin.H{"role": role})
+	})
+	router.PUT("/api/v1/admin/cache/advanced-config", func(c *gin.Context) {
+		role, _ := GetUserRoleFromContext(c)
+		c.JSON(http.StatusOK, gin.H{"role": role})
+	})
+	router.POST("/api/v1/admin/cache/clear", func(c *gin.Context) {
+		role, _ := GetUserRoleFromContext(c)
+		c.JSON(http.StatusOK, gin.H{"role": role})
+	})
 	router.POST("/api/v1/admin/ops/ai-analysis/tasks/77/feedback", func(c *gin.Context) {
 		role, _ := GetUserRoleFromContext(c)
 		c.JSON(http.StatusOK, gin.H{"role": role})
@@ -263,6 +287,93 @@ func TestAdminAuthAllowsOpsRoleOnlyForAllowedOpsEndpoints(t *testing.T) {
 
 		require.Equal(t, http.StatusForbidden, w.Code)
 		require.Contains(t, w.Body.String(), "FORBIDDEN")
+		opsUser.Role = "ops"
+	})
+
+	t.Run("ops_role_can_read_cache_stats_and_clear_audits_but_cannot_export", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/stats", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/clear-audits", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/advanced-config", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodPut, "/api/v1/admin/cache/advanced-config", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusForbidden, w.Code)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/stats/export", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("business_role_can_read_and_export_cache_stats", func(t *testing.T) {
+		opsUser.Role = "business"
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/stats", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/stats/export", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/advanced-config", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodPut, "/api/v1/admin/cache/advanced-config", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusForbidden, w.Code)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/clear-audits", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusForbidden, w.Code)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/cache/clear", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusForbidden, w.Code)
+		opsUser.Role = "ops"
+	})
+
+	t.Run("support_role_cannot_read_cache_stats", func(t *testing.T) {
+		opsUser.Role = "customer_service"
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/stats", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusForbidden, w.Code)
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/advanced-config", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusForbidden, w.Code)
 		opsUser.Role = "ops"
 	})
 

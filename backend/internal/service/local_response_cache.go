@@ -1,10 +1,14 @@
 package service
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -54,11 +58,20 @@ func DefaultLocalResponseCacheConfig() LocalResponseCacheConfig {
 }
 
 type LocalResponseCacheEntry struct {
-	StatusCode  int               `json:"status_code"`
-	ContentType string            `json:"content_type"`
-	Body        []byte            `json:"body"`
-	Headers     map[string]string `json:"headers,omitempty"`
-	CreatedAt   time.Time         `json:"created_at"`
+	StatusCode      int               `json:"status_code"`
+	ContentType     string            `json:"content_type"`
+	Body            []byte            `json:"body"`
+	Headers         map[string]string `json:"headers,omitempty"`
+	CreatedAt       time.Time         `json:"created_at"`
+	Encoding        string            `json:"encoding,omitempty"`
+	RawBodyBytes    int64             `json:"raw_body_bytes,omitempty"`
+	StoredBodyBytes int64             `json:"stored_body_bytes,omitempty"`
+	LastAccessedAt  time.Time         `json:"last_accessed_at,omitempty"`
+	HitCount        int64             `json:"hit_count,omitempty"`
+	Platform        string            `json:"platform,omitempty"`
+	Model           string            `json:"model,omitempty"`
+	GroupID         *int64            `json:"group_id,omitempty"`
+	APIKeyID        *int64            `json:"api_key_id,omitempty"`
 }
 
 type LocalResponseCacheStore interface {
@@ -69,6 +82,60 @@ type LocalResponseCacheStore interface {
 type LocalResponseCacheStatsStore interface {
 	IncrLocalResponseCacheStats(ctx context.Context, field string, delta int64) error
 	GetLocalResponseCacheStats(ctx context.Context) (*LocalResponseCacheStats, error)
+}
+
+type LocalResponseCacheEvictionStore interface {
+	EvictLocalResponseCache(ctx context.Context, req LocalResponseCacheEvictionRequest) (*LocalResponseCacheEvictionResult, error)
+}
+
+type LocalResponseCacheHotspotStore interface {
+	RecordLocalResponseCacheHotspot(ctx context.Context, event LocalResponseCacheHotspotEvent) error
+	ListLocalResponseCacheHotspots(ctx context.Context, filter LocalResponseCacheHotspotFilter) ([]LocalResponseCacheHotspot, error)
+}
+
+type LocalResponseCacheEvictionRequest struct {
+	CapacityBytes int64
+	Policy        string
+}
+
+type LocalResponseCacheEvictionResult struct {
+	BytesBefore  int64
+	BytesAfter   int64
+	ScannedKeys  int64
+	DeletedKeys  int64
+	DeletedBytes int64
+}
+
+type LocalResponseCacheHotspotEvent struct {
+	CacheKey  string
+	Platform  string
+	Model     string
+	GroupID   *int64
+	APIKeyID  *int64
+	HitTokens int64
+	HitAt     time.Time
+	Window    time.Duration
+}
+
+type LocalResponseCacheHotspotFilter struct {
+	Window   time.Duration
+	Limit    int
+	Platform string
+	Model    string
+	GroupID  *int64
+	APIKeyID *int64
+}
+
+type LocalResponseCacheHotspot struct {
+	Rank      int       `json:"rank"`
+	CacheKey  string    `json:"cache_key"`
+	Platform  string    `json:"platform"`
+	Model     string    `json:"model"`
+	GroupID   *int64    `json:"group_id,omitempty"`
+	APIKeyID  *int64    `json:"api_key_id,omitempty"`
+	HitCount  int64     `json:"hit_count"`
+	HitTokens int64     `json:"hit_tokens"`
+	LastHitAt time.Time `json:"last_hit_at"`
 }
 
 type LocalResponseCacheMinuteStatsStore interface {
@@ -139,7 +206,16 @@ func (s *OpenAIGatewayService) GetLocalResponseCache(ctx context.Context, key st
 	if !ok {
 		return nil, nil
 	}
-	return store.GetLocalResponse(ctx, key)
+	entry, err := store.GetLocalResponse(ctx, key)
+	if err != nil || entry == nil {
+		return entry, err
+	}
+	restored, err := restoreLocalResponseCacheEntryForRead(entry)
+	if err != nil {
+		s.RecordLocalResponseCacheStat(ctx, "decompression_failed")
+		return nil, err
+	}
+	return restored, nil
 }
 
 func (s *GatewayService) GetLocalResponseCache(ctx context.Context, key string) (*LocalResponseCacheEntry, error) {
@@ -150,7 +226,16 @@ func (s *GatewayService) GetLocalResponseCache(ctx context.Context, key string) 
 	if !ok {
 		return nil, nil
 	}
-	return store.GetLocalResponse(ctx, key)
+	entry, err := store.GetLocalResponse(ctx, key)
+	if err != nil || entry == nil {
+		return entry, err
+	}
+	restored, err := restoreLocalResponseCacheEntryForRead(entry)
+	if err != nil {
+		s.RecordLocalResponseCacheStat(ctx, "decompression_failed")
+		return nil, err
+	}
+	return restored, nil
 }
 
 func (s *OpenAIGatewayService) SetLocalResponseCache(ctx context.Context, key string, entry *LocalResponseCacheEntry, ttl time.Duration) error {
@@ -161,7 +246,19 @@ func (s *OpenAIGatewayService) SetLocalResponseCache(ctx context.Context, key st
 	if !ok {
 		return nil
 	}
-	return store.SetLocalResponse(ctx, key, entry, ttl)
+	prepared, compressed, err := prepareLocalResponseCacheEntryForStore(ctx, s.settingService, entry)
+	if err != nil {
+		s.RecordLocalResponseCacheStat(ctx, "compression_failed")
+		return err
+	}
+	if compressed {
+		s.RecordLocalResponseCacheStat(ctx, "compression_success")
+	}
+	if err := store.SetLocalResponse(ctx, key, prepared, ttl); err != nil {
+		return err
+	}
+	s.scheduleLocalResponseCacheEviction(ctx, prepared)
+	return nil
 }
 
 func (s *GatewayService) SetLocalResponseCache(ctx context.Context, key string, entry *LocalResponseCacheEntry, ttl time.Duration) error {
@@ -172,7 +269,292 @@ func (s *GatewayService) SetLocalResponseCache(ctx context.Context, key string, 
 	if !ok {
 		return nil
 	}
-	return store.SetLocalResponse(ctx, key, entry, ttl)
+	prepared, compressed, err := prepareLocalResponseCacheEntryForStore(ctx, s.settingService, entry)
+	if err != nil {
+		s.RecordLocalResponseCacheStat(ctx, "compression_failed")
+		return err
+	}
+	if compressed {
+		s.RecordLocalResponseCacheStat(ctx, "compression_success")
+	}
+	if err := store.SetLocalResponse(ctx, key, prepared, ttl); err != nil {
+		return err
+	}
+	s.scheduleLocalResponseCacheEviction(ctx, prepared)
+	return nil
+}
+
+func (s *OpenAIGatewayService) scheduleLocalResponseCacheEviction(ctx context.Context, entry *LocalResponseCacheEntry) {
+	if s == nil {
+		return
+	}
+	scheduleLocalResponseCacheEviction(ctx, s.settingService, entry, s.cache, s.RecordLocalResponseCacheStat)
+}
+
+func (s *GatewayService) scheduleLocalResponseCacheEviction(ctx context.Context, entry *LocalResponseCacheEntry) {
+	if s == nil {
+		return
+	}
+	scheduleLocalResponseCacheEviction(ctx, s.settingService, entry, s.cache, s.RecordLocalResponseCacheStat)
+}
+
+func (s *OpenAIGatewayService) RecordLocalResponseCacheHotspot(ctx context.Context, lookup LocalResponseCacheLookup, hitTokens int64) {
+	if s == nil {
+		return
+	}
+	recordLocalResponseCacheHotspot(ctx, s.settingService, s.cache, lookup, hitTokens)
+}
+
+func (s *GatewayService) RecordLocalResponseCacheHotspot(ctx context.Context, lookup LocalResponseCacheLookup, hitTokens int64) {
+	if s == nil {
+		return
+	}
+	recordLocalResponseCacheHotspot(ctx, s.settingService, s.cache, lookup, hitTokens)
+}
+
+func (s *GeminiMessagesCompatService) RecordLocalResponseCacheHotspot(ctx context.Context, lookup LocalResponseCacheLookup, hitTokens int64) {
+	if s == nil {
+		return
+	}
+	recordLocalResponseCacheHotspot(ctx, s.settingService, s.cache, lookup, hitTokens)
+}
+
+func recordLocalResponseCacheHotspot(ctx context.Context, settingService *SettingService, cache GatewayCache, lookup LocalResponseCacheLookup, hitTokens int64) {
+	if cache == nil || strings.TrimSpace(lookup.Key) == "" {
+		return
+	}
+	store, ok := cache.(LocalResponseCacheHotspotStore)
+	if !ok {
+		return
+	}
+	entry := &LocalResponseCacheEntry{Platform: lookup.Platform, Model: lookup.Model, GroupID: lookup.GroupID, APIKeyID: lookup.APIKeyID}
+	cfg, ok := advancedLocalResponseCacheConfigForEntry(ctx, settingService, entry)
+	if !ok {
+		return
+	}
+	event := LocalResponseCacheHotspotEvent{
+		CacheKey:  lookup.Key,
+		Platform:  lookup.Platform,
+		Model:     lookup.Model,
+		GroupID:   lookup.GroupID,
+		APIKeyID:  lookup.APIKeyID,
+		HitTokens: hitTokens,
+		HitAt:     time.Now(),
+		Window:    advancedCacheHotWindowDuration(cfg.HotWindow),
+	}
+	go func() {
+		hotspotCtx, cancel := context.WithTimeout(context.Background(), localResponseCacheHotspotTimeout)
+		defer cancel()
+		_ = store.RecordLocalResponseCacheHotspot(hotspotCtx, event)
+	}()
+}
+
+func advancedCacheHotWindowDuration(raw string) time.Duration {
+	switch strings.TrimSpace(raw) {
+	case "15m":
+		return 15 * time.Minute
+	case "6h":
+		return 6 * time.Hour
+	case "24h":
+		return 24 * time.Hour
+	default:
+		return time.Hour
+	}
+}
+
+func scheduleLocalResponseCacheEviction(ctx context.Context, settingService *SettingService, entry *LocalResponseCacheEntry, cache GatewayCache, recordStat func(context.Context, string)) {
+	if cache == nil || entry == nil {
+		return
+	}
+	store, ok := cache.(LocalResponseCacheEvictionStore)
+	if !ok {
+		return
+	}
+	cfg, ok := advancedLocalResponseCacheConfigForEntry(ctx, settingService, entry)
+	if !ok || cfg.RedisCapacityMB <= 0 {
+		return
+	}
+	req := LocalResponseCacheEvictionRequest{
+		CapacityBytes: int64(cfg.RedisCapacityMB) * 1024 * 1024,
+		Policy:        cfg.EvictionPolicy,
+	}
+	go func() {
+		evictCtx, cancel := context.WithTimeout(context.Background(), localResponseCacheEvictionTimeout)
+		defer cancel()
+		result, err := store.EvictLocalResponseCache(evictCtx, req)
+		if err != nil {
+			if recordStat != nil {
+				recordStat(context.Background(), "eviction_failed")
+			}
+			return
+		}
+		if result != nil && result.DeletedKeys > 0 && recordStat != nil {
+			recordStat(context.Background(), "eviction_success")
+		}
+	}()
+}
+
+const localResponseCacheEncodingGzip = "gzip"
+
+const localResponseCacheEvictionTimeout = 2 * time.Second
+const localResponseCacheHotspotTimeout = 500 * time.Millisecond
+
+func prepareLocalResponseCacheEntryForStore(ctx context.Context, settingService *SettingService, entry *LocalResponseCacheEntry) (*LocalResponseCacheEntry, bool, error) {
+	prepared := cloneLocalResponseCacheEntry(entry)
+	if prepared == nil || len(prepared.Body) == 0 || strings.TrimSpace(prepared.Encoding) != "" {
+		return prepared, false, nil
+	}
+	cfg, ok := advancedLocalResponseCacheConfigForEntry(ctx, settingService, prepared)
+	if !ok || !cfg.CompressionEnabled {
+		return prepared, false, nil
+	}
+	thresholdBytes := cfg.CompressionThresholdKB * 1024
+	if thresholdBytes <= 0 || len(prepared.Body) <= thresholdBytes {
+		return prepared, false, nil
+	}
+	compressedBody, err := compressLocalResponseCacheBody(prepared.Body)
+	if err != nil {
+		return nil, false, err
+	}
+	prepared.RawBodyBytes = int64(len(prepared.Body))
+	prepared.StoredBodyBytes = int64(len(compressedBody))
+	prepared.Encoding = localResponseCacheEncodingGzip
+	prepared.Body = compressedBody
+	return prepared, true, nil
+}
+
+func restoreLocalResponseCacheEntryForRead(entry *LocalResponseCacheEntry) (*LocalResponseCacheEntry, error) {
+	if entry == nil {
+		return nil, nil
+	}
+	encoding := strings.TrimSpace(strings.ToLower(entry.Encoding))
+	if encoding == "" {
+		return entry, nil
+	}
+	if encoding != localResponseCacheEncodingGzip {
+		return nil, fmt.Errorf("unsupported local response cache encoding: %s", entry.Encoding)
+	}
+	restored := cloneLocalResponseCacheEntry(entry)
+	body, err := decompressLocalResponseCacheBody(restored.Body)
+	if err != nil {
+		return nil, err
+	}
+	restored.Body = body
+	restored.Encoding = ""
+	if restored.RawBodyBytes == 0 {
+		restored.RawBodyBytes = int64(len(body))
+	}
+	if restored.StoredBodyBytes == 0 {
+		restored.StoredBodyBytes = int64(len(entry.Body))
+	}
+	return restored, nil
+}
+
+func advancedLocalResponseCacheConfigForEntry(ctx context.Context, settingService *SettingService, entry *LocalResponseCacheEntry) (AdvancedCacheConfig, bool) {
+	if settingService == nil || entry == nil {
+		return AdvancedCacheConfig{}, false
+	}
+	cfg, err := settingService.GetAdvancedCacheConfig(ctx)
+	if err != nil || !cfg.AdvancedCacheEnabled {
+		return cfg, false
+	}
+	if !localResponseCacheGrayScopeMatchesEntry(cfg.GrayScope, entry) {
+		return cfg, false
+	}
+	return cfg, true
+}
+
+func localResponseCacheGrayScopeMatchesEntry(scope AdvancedCacheGrayScope, entry *LocalResponseCacheEntry) bool {
+	if entry == nil {
+		return false
+	}
+	if len(scope.APIKeyIDs) > 0 {
+		if entry.APIKeyID != nil && int64InServiceList(*entry.APIKeyID, scope.APIKeyIDs) {
+			return true
+		}
+	}
+	if len(scope.GroupIDs) > 0 {
+		if entry.GroupID != nil && int64InServiceList(*entry.GroupID, scope.GroupIDs) {
+			return true
+		}
+	}
+	if len(scope.Models) > 0 {
+		if stringInServiceList(entry.Model, scope.Models) {
+			return true
+		}
+	}
+	return false
+}
+
+func compressLocalResponseCacheBody(body []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	writer := gzip.NewWriter(&buf)
+	if _, err := writer.Write(body); err != nil {
+		_ = writer.Close()
+		return nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func decompressLocalResponseCacheBody(body []byte) ([]byte, error) {
+	reader, err := gzip.NewReader(bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	return io.ReadAll(reader)
+}
+
+func cloneLocalResponseCacheEntry(entry *LocalResponseCacheEntry) *LocalResponseCacheEntry {
+	if entry == nil {
+		return nil
+	}
+	cloned := *entry
+	if entry.Body != nil {
+		cloned.Body = append([]byte(nil), entry.Body...)
+	}
+	if entry.Headers != nil {
+		cloned.Headers = make(map[string]string, len(entry.Headers))
+		for k, v := range entry.Headers {
+			cloned.Headers[k] = v
+		}
+	}
+	cloned.GroupID = cloneLocalResponseCacheInt64Ptr(entry.GroupID)
+	cloned.APIKeyID = cloneLocalResponseCacheInt64Ptr(entry.APIKeyID)
+	return &cloned
+}
+
+func cloneLocalResponseCacheInt64Ptr(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func stringInServiceList(value string, values []string) bool {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" {
+		return false
+	}
+	for _, item := range values {
+		if strings.TrimSpace(strings.ToLower(item)) == value {
+			return true
+		}
+	}
+	return false
+}
+
+func int64InServiceList(value int64, values []int64) bool {
+	for _, item := range values {
+		if item == value {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *OpenAIGatewayService) RecordLocalResponseCacheStat(ctx context.Context, field string) {

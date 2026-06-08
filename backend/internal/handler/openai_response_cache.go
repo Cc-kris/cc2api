@@ -136,6 +136,7 @@ func (h *OpenAIGatewayHandler) tryWriteLocalResponseCacheHit(c *gin.Context, loo
 	}
 	h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "lookup_hit")
 	usage, _ := service.ExtractOpenAIUsageFromJSONBytes(entry.Body)
+	h.gatewayService.RecordLocalResponseCacheHotspot(c.Request.Context(), lookup, int64(usage.InputTokens+usage.OutputTokens))
 	h.recordLocalResponseCacheMinuteStat(c, lookup, service.LocalResponseCacheMinuteStatEvent{
 		Candidate:    true,
 		Hit:          true,
@@ -208,6 +209,10 @@ func (h *OpenAIGatewayHandler) persistLocalResponseCache(c *gin.Context, lookup 
 			"Content-Type": contentType,
 		},
 		CreatedAt: time.Now(),
+		Platform:  lookup.Platform,
+		Model:     lookup.Model,
+		GroupID:   lookup.GroupID,
+		APIKeyID:  lookup.APIKeyID,
 	}
 	if setErr := h.gatewayService.SetLocalResponseCache(c.Request.Context(), lookup.Key, entry, cfg.TTL); setErr != nil {
 		if reqLog != nil {

@@ -27,6 +27,7 @@ const (
 var (
 	ErrLocalResponseCacheClearUnavailable = errors.New("local response cache clear store unavailable")
 	ErrInvalidLocalResponseCacheClear     = errors.New("invalid local response cache clear request")
+	ErrInvalidLocalResponseCacheAuditList = errors.New("invalid local response cache clear audit list request")
 )
 
 type LocalResponseCacheClearScope struct {
@@ -64,9 +65,42 @@ type LocalResponseCacheClearAudit struct {
 	ErrorMessage   string
 }
 
+type LocalResponseCacheClearAuditRecord struct {
+	ID             int64                        `json:"id"`
+	OperatorUserID *int64                       `json:"operator_user_id,omitempty"`
+	ClearType      string                       `json:"clear_type"`
+	Scope          LocalResponseCacheClearScope `json:"scope"`
+	MatchedKeys    int64                        `json:"matched_keys"`
+	DeletedKeys    int64                        `json:"deleted_keys"`
+	Status         string                       `json:"status"`
+	ErrorMessage   string                       `json:"error_message,omitempty"`
+	CreatedAt      time.Time                    `json:"created_at"`
+}
+
+type LocalResponseCacheClearAuditFilter struct {
+	Page           int
+	PageSize       int
+	StartTime      *time.Time
+	EndTime        *time.Time
+	OperatorUserID *int64
+	ClearType      string
+	Status         string
+}
+
+type LocalResponseCacheClearAuditPage struct {
+	Items    []LocalResponseCacheClearAuditRecord `json:"items"`
+	Total    int64                                `json:"total"`
+	Page     int                                  `json:"page"`
+	PageSize int                                  `json:"page_size"`
+}
+
 type LocalResponseCacheClearStore interface {
 	ClearLocalResponseCache(ctx context.Context, req LocalResponseCacheClearRequest) (*LocalResponseCacheClearResult, error)
 	RecordLocalResponseCacheClearAudit(ctx context.Context, audit LocalResponseCacheClearAudit) error
+}
+
+type LocalResponseCacheClearAuditStore interface {
+	ListLocalResponseCacheClearAudits(ctx context.Context, filter LocalResponseCacheClearAuditFilter) (*LocalResponseCacheClearAuditPage, error)
 }
 
 func (s *OpenAIGatewayService) ClearLocalResponseCache(ctx context.Context, req LocalResponseCacheClearRequest) (*LocalResponseCacheClearResult, error) {
@@ -111,6 +145,23 @@ func (s *OpenAIGatewayService) ClearLocalResponseCache(ctx context.Context, req 
 	return result, nil
 }
 
+func (s *OpenAIGatewayService) ListLocalResponseCacheClearAudits(ctx context.Context, filter LocalResponseCacheClearAuditFilter) (*LocalResponseCacheClearAuditPage, error) {
+	filter.ClearType = strings.TrimSpace(filter.ClearType)
+	filter.Status = strings.TrimSpace(filter.Status)
+	normalized, err := normalizeLocalResponseCacheClearAuditFilter(filter)
+	if err != nil {
+		return nil, err
+	}
+	if s == nil || s.cache == nil {
+		return nil, ErrLocalResponseCacheClearUnavailable
+	}
+	store, ok := s.cache.(LocalResponseCacheClearAuditStore)
+	if !ok {
+		return nil, ErrLocalResponseCacheClearUnavailable
+	}
+	return store.ListLocalResponseCacheClearAudits(ctx, normalized)
+}
+
 func validateLocalResponseCacheClearRequest(req LocalResponseCacheClearRequest) error {
 	scope := req.Scope
 	switch req.ClearType {
@@ -150,6 +201,62 @@ func validateLocalResponseCacheClearRequest(req LocalResponseCacheClearRequest) 
 		return fmt.Errorf("%w: clear_type is required", ErrInvalidLocalResponseCacheClear)
 	}
 	return nil
+}
+
+func normalizeLocalResponseCacheClearAuditFilter(filter LocalResponseCacheClearAuditFilter) (LocalResponseCacheClearAuditFilter, error) {
+	if filter.Page <= 0 {
+		filter.Page = 1
+	}
+	if filter.PageSize <= 0 {
+		filter.PageSize = 20
+	}
+	if filter.PageSize > 100 {
+		filter.PageSize = 100
+	}
+	if filter.StartTime != nil && filter.EndTime != nil {
+		if filter.StartTime.After(*filter.EndTime) {
+			return filter, fmt.Errorf("%w: start_time must be before end_time", ErrInvalidLocalResponseCacheAuditList)
+		}
+		if filter.EndTime.Sub(*filter.StartTime) > 31*24*time.Hour {
+			return filter, fmt.Errorf("%w: time range cannot exceed 31 days", ErrInvalidLocalResponseCacheAuditList)
+		}
+	}
+	if filter.OperatorUserID != nil && *filter.OperatorUserID <= 0 {
+		return filter, fmt.Errorf("%w: invalid operator_user_id", ErrInvalidLocalResponseCacheAuditList)
+	}
+	if filter.ClearType != "" && !isValidLocalResponseCacheClearType(filter.ClearType) {
+		return filter, fmt.Errorf("%w: invalid clear_type", ErrInvalidLocalResponseCacheAuditList)
+	}
+	if filter.Status != "" && !isValidLocalResponseCacheClearStatus(filter.Status) {
+		return filter, fmt.Errorf("%w: invalid status", ErrInvalidLocalResponseCacheAuditList)
+	}
+	return filter, nil
+}
+
+func isValidLocalResponseCacheClearType(clearType string) bool {
+	switch clearType {
+	case LocalResponseCacheClearTypeAll,
+		LocalResponseCacheClearTypeByPlatform,
+		LocalResponseCacheClearTypeByModel,
+		LocalResponseCacheClearTypeByGroup,
+		LocalResponseCacheClearTypeByAPIKey,
+		LocalResponseCacheClearTypeByTime,
+		LocalResponseCacheClearTypeExpired:
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidLocalResponseCacheClearStatus(status string) bool {
+	switch status {
+	case LocalResponseCacheClearStatusSuccess,
+		LocalResponseCacheClearStatusFailed,
+		LocalResponseCacheClearStatusPartialSuccess:
+		return true
+	default:
+		return false
+	}
 }
 
 func cleanStringList(values []string) []string {

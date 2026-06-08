@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/csv"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,4 +67,40 @@ func TestCacheStatsServiceZeroDenominators(t *testing.T) {
 	require.NotNil(t, got.ModelRows)
 	require.NotNil(t, got.BypassReasons)
 	require.NotNil(t, got.StoreSkipReasons)
+}
+
+func TestCacheStatsServiceExportCSVUsesCurrentModelRows(t *testing.T) {
+	svc := NewCacheStatsService(&cacheStatsRepoStub{rows: []*CacheStatsRawRow{{
+		Platform: "openai", Model: "gpt-5.5", TotalRequests: 4, CandidateRequests: 3, HitRequests: 2, BypassRequests: 1,
+		InputTokens: 100, OutputTokens: 20, HitTokens: 60, CandidateTokens: 120,
+		BypassReasonsJSON: `{"temperature_too_high":1}`,
+	}}})
+
+	data, err := svc.ExportCSV(context.Background(), &CacheStatsFilter{})
+
+	require.NoError(t, err)
+	records, err := csv.NewReader(strings.NewReader(string(data))).ReadAll()
+	require.NoError(t, err)
+	require.Equal(t, []string{"平台", "模型", "请求次数", "候选请求数", "命中次数", "未命中次数", "绕过次数", "输入 tokens", "输出 tokens", "命中 tokens", "请求命中率", "tokens 命中率", "主要绕过原因"}, records[0])
+	require.Equal(t, []string{"openai", "gpt-5.5", "4", "3", "2", "1", "1", "100", "20", "60", "66.67%", "50.00%", "temperature_too_high"}, records[1])
+}
+
+func TestCacheStatsServiceExportCSVRejectsEmptyRows(t *testing.T) {
+	svc := NewCacheStatsService(&cacheStatsRepoStub{})
+
+	_, err := svc.ExportCSV(context.Background(), &CacheStatsFilter{})
+
+	require.ErrorIs(t, err, ErrCacheStatsExportEmpty)
+}
+
+func TestCacheStatsServiceExportCSVRejectsTooManyRows(t *testing.T) {
+	rows := make([]*CacheStatsRawRow, cacheStatsExportMaxRows+1)
+	for i := range rows {
+		rows[i] = &CacheStatsRawRow{Platform: "openai", Model: "gpt-" + strconv.Itoa(i)}
+	}
+	svc := NewCacheStatsService(&cacheStatsRepoStub{rows: rows})
+
+	_, err := svc.ExportCSV(context.Background(), &CacheStatsFilter{})
+
+	require.ErrorIs(t, err, ErrCacheStatsExportTooLarge)
 }

@@ -1,13 +1,22 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"math"
 	"sort"
 	"strconv"
 	"strings"
 )
+
+const cacheStatsExportMaxRows = 100000
+
+var ErrCacheStatsExportTooLarge = errors.New("cache stats export row count exceeds limit")
+var ErrCacheStatsExportEmpty = errors.New("cache stats export has no rows")
 
 type CacheStatsService struct {
 	repo CacheStatsRepository
@@ -70,6 +79,63 @@ func (s *CacheStatsService) GetStats(ctx context.Context, filter *CacheStatsFilt
 	resp.BypassReasons = cacheStatsReasonRows(bypassReasons)
 	resp.StoreSkipReasons = cacheStatsReasonRows(storeSkipReasons)
 	return resp, nil
+}
+
+func (s *CacheStatsService) ExportCSV(ctx context.Context, filter *CacheStatsFilter) ([]byte, error) {
+	stats, err := s.GetStats(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	if len(stats.ModelRows) > cacheStatsExportMaxRows {
+		return nil, ErrCacheStatsExportTooLarge
+	}
+	if len(stats.ModelRows) == 0 {
+		return nil, ErrCacheStatsExportEmpty
+	}
+
+	var buf bytes.Buffer
+	writer := csv.NewWriter(&buf)
+	if err := writer.Write([]string{
+		"平台",
+		"模型",
+		"请求次数",
+		"候选请求数",
+		"命中次数",
+		"未命中次数",
+		"绕过次数",
+		"输入 tokens",
+		"输出 tokens",
+		"命中 tokens",
+		"请求命中率",
+		"tokens 命中率",
+		"主要绕过原因",
+	}); err != nil {
+		return nil, err
+	}
+	for _, row := range stats.ModelRows {
+		if err := writer.Write([]string{
+			row.Platform,
+			row.Model,
+			strconv.FormatInt(row.TotalRequests, 10),
+			strconv.FormatInt(row.CandidateRequests, 10),
+			strconv.FormatInt(row.HitRequests, 10),
+			strconv.FormatInt(row.MissRequests, 10),
+			strconv.FormatInt(row.BypassRequests, 10),
+			strconv.FormatInt(row.InputTokens, 10),
+			strconv.FormatInt(row.OutputTokens, 10),
+			strconv.FormatInt(row.HitTokens, 10),
+			formatCacheStatsPercent(row.RequestHitRate),
+			formatCacheStatsPercent(row.TokensHitRate),
+			row.TopBypassReason,
+		}); err != nil {
+			return nil, err
+		}
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return nil, fmt.Errorf("write cache stats export csv: %w", err)
+	}
+	return buf.Bytes(), nil
 }
 
 type cacheStatsAccumulator struct {
@@ -297,4 +363,8 @@ func displayCacheStatsPlatform(platform string) string {
 	default:
 		return strings.ToLower(strings.TrimSpace(platform))
 	}
+}
+
+func formatCacheStatsPercent(value float64) string {
+	return strconv.FormatFloat(value, 'f', 2, 64) + "%"
 }

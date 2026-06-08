@@ -12,6 +12,8 @@ type localResponseCacheClearStoreStub struct {
 	result *LocalResponseCacheClearResult
 	err    error
 	audit  LocalResponseCacheClearAudit
+	page   *LocalResponseCacheClearAuditPage
+	filter LocalResponseCacheClearAuditFilter
 }
 
 func (s *localResponseCacheClearStoreStub) GetSessionAccountID(context.Context, int64, string) (int64, error) {
@@ -32,6 +34,10 @@ func (s *localResponseCacheClearStoreStub) ClearLocalResponseCache(context.Conte
 func (s *localResponseCacheClearStoreStub) RecordLocalResponseCacheClearAudit(_ context.Context, audit LocalResponseCacheClearAudit) error {
 	s.audit = audit
 	return nil
+}
+func (s *localResponseCacheClearStoreStub) ListLocalResponseCacheClearAudits(_ context.Context, filter LocalResponseCacheClearAuditFilter) (*LocalResponseCacheClearAuditPage, error) {
+	s.filter = filter
+	return s.page, nil
 }
 
 func TestOpenAIGatewayServiceClearLocalResponseCacheValidatesAllConfirmText(t *testing.T) {
@@ -67,4 +73,26 @@ func TestOpenAIGatewayServiceClearLocalResponseCacheWritesAudit(t *testing.T) {
 	require.Equal(t, operatorID, *store.audit.OperatorUserID)
 	require.Equal(t, LocalResponseCacheClearTypeByAPIKey, store.audit.ClearType)
 	require.Equal(t, LocalResponseCacheClearStatusPartialSuccess, store.audit.Status)
+}
+
+func TestOpenAIGatewayServiceListLocalResponseCacheClearAuditsNormalizesFilter(t *testing.T) {
+	store := &localResponseCacheClearStoreStub{page: &LocalResponseCacheClearAuditPage{}}
+	svc := &OpenAIGatewayService{cache: store}
+
+	got, err := svc.ListLocalResponseCacheClearAudits(context.Background(), LocalResponseCacheClearAuditFilter{PageSize: 200, ClearType: LocalResponseCacheClearTypeByModel, Status: LocalResponseCacheClearStatusSuccess})
+
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Equal(t, 1, store.filter.Page)
+	require.Equal(t, 100, store.filter.PageSize)
+	require.Equal(t, LocalResponseCacheClearTypeByModel, store.filter.ClearType)
+	require.Equal(t, LocalResponseCacheClearStatusSuccess, store.filter.Status)
+}
+
+func TestOpenAIGatewayServiceListLocalResponseCacheClearAuditsRejectsInvalidStatus(t *testing.T) {
+	svc := &OpenAIGatewayService{cache: &localResponseCacheClearStoreStub{}}
+
+	_, err := svc.ListLocalResponseCacheClearAudits(context.Background(), LocalResponseCacheClearAuditFilter{Status: "done"})
+
+	require.ErrorIs(t, err, ErrInvalidLocalResponseCacheAuditList)
 }

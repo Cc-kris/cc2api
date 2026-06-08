@@ -107,7 +107,16 @@ func (s *GeminiMessagesCompatService) GetLocalResponseCache(ctx context.Context,
 	if !ok {
 		return nil, nil
 	}
-	return store.GetLocalResponse(ctx, key)
+	entry, err := store.GetLocalResponse(ctx, key)
+	if err != nil || entry == nil {
+		return entry, err
+	}
+	restored, err := restoreLocalResponseCacheEntryForRead(entry)
+	if err != nil {
+		s.RecordLocalResponseCacheStat(ctx, "decompression_failed")
+		return nil, err
+	}
+	return restored, nil
 }
 
 func (s *GeminiMessagesCompatService) SetLocalResponseCache(ctx context.Context, key string, entry *LocalResponseCacheEntry, ttl time.Duration) error {
@@ -118,7 +127,19 @@ func (s *GeminiMessagesCompatService) SetLocalResponseCache(ctx context.Context,
 	if !ok {
 		return nil
 	}
-	return store.SetLocalResponse(ctx, key, entry, ttl)
+	prepared, compressed, err := prepareLocalResponseCacheEntryForStore(ctx, s.settingService, entry)
+	if err != nil {
+		s.RecordLocalResponseCacheStat(ctx, "compression_failed")
+		return err
+	}
+	if compressed {
+		s.RecordLocalResponseCacheStat(ctx, "compression_success")
+	}
+	if err := store.SetLocalResponse(ctx, key, prepared, ttl); err != nil {
+		return err
+	}
+	scheduleLocalResponseCacheEviction(ctx, s.settingService, prepared, s.cache, s.RecordLocalResponseCacheStat)
+	return nil
 }
 
 func (s *GeminiMessagesCompatService) RecordLocalResponseCacheStat(ctx context.Context, field string) {
@@ -230,10 +251,16 @@ func (s *GeminiMessagesCompatService) tryWriteGeminiLocalResponseCacheHit(ctx co
 		}
 		c.Data(status, contentType, entry.Body)
 	}
+	usage := parseGeminiUsageFromCachedLocalResponse(entry.ContentType, entry.Body)
 	if s != nil {
 		s.RecordLocalResponseCacheStat(ctx, "lookup_hit")
+		hitTokens := int64(0)
+		if usage != nil {
+			hitTokens = int64(usage.InputTokens + usage.OutputTokens)
+		}
+		s.RecordLocalResponseCacheHotspot(ctx, lookup, hitTokens)
 	}
-	return parseGeminiUsageFromCachedLocalResponse(entry.ContentType, entry.Body), true
+	return usage, true
 }
 
 func (s *GeminiMessagesCompatService) persistGeminiLocalResponseCache(ctx context.Context, c *gin.Context, lookup LocalResponseCacheLookup, cfg LocalResponseCacheConfig, status int, contentType string, body []byte, requestStream bool) {
@@ -270,6 +297,10 @@ func (s *GeminiMessagesCompatService) persistGeminiLocalResponseCache(ctx contex
 			"Content-Type": contentType,
 		},
 		CreatedAt: time.Now(),
+		Platform:  lookup.Platform,
+		Model:     lookup.Model,
+		GroupID:   lookup.GroupID,
+		APIKeyID:  lookup.APIKeyID,
 	}
 	if setErr := s.SetLocalResponseCache(ctx, lookup.Key, entry, cfg.TTL); setErr != nil {
 		if s != nil {

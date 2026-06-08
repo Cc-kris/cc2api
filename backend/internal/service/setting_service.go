@@ -4975,8 +4975,8 @@ func (s *SettingService) cacheManagementMaxResponseKB(ctx context.Context) (int,
 		maxResponseBytes = DefaultCacheManagementConfig().MaxResponseBytes
 	}
 	maxResponseKB := maxResponseBytes / 1024
-	if maxResponseKB < 10*1024 {
-		maxResponseKB = 10 * 1024
+	if maxResponseKB < 1 {
+		maxResponseKB = 1
 	}
 	return maxResponseKB, nil
 }

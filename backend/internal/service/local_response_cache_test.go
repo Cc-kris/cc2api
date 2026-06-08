@@ -1,8 +1,10 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -116,4 +118,278 @@ func TestBuildLocalResponseCacheLookup_Disabled(t *testing.T) {
 	lookup := BuildLocalResponseCacheLookup(cfg, 10, &groupID, "/v1/responses", PlatformOpenAI, "gpt-5.5", []byte(`{"model":"gpt-5.5"}`), false)
 	require.Empty(t, lookup.Key)
 	require.Equal(t, "disabled", lookup.Reason)
+}
+
+func TestLocalResponseCacheAdvancedCompressionRoundTrip(t *testing.T) {
+	withAdvancedCacheMemorySafeLimitProbe(t, 2048, nil)
+	ctx := context.Background()
+	settings := NewSettingService(&cacheManagementSettingRepoStub{}, nil)
+	cfg := DefaultAdvancedCacheConfig()
+	cfg.AdvancedCacheEnabled = true
+	cfg.GrayScope.Models = []string{"gpt-5.5"}
+	cfg.CompressionEnabled = true
+	cfg.CompressionThresholdKB = 1
+	_, err := settings.UpdateAdvancedCacheConfig(ctx, cfg)
+	require.NoError(t, err)
+
+	store := newLocalResponseCacheMemoryStore()
+	svc := &OpenAIGatewayService{cache: store, settingService: settings}
+	body := []byte(strings.Repeat("advanced-cache-compression", 120))
+	groupID := int64(10)
+	apiKeyID := int64(20)
+	entry := &LocalResponseCacheEntry{
+		StatusCode:  200,
+		ContentType: "application/json",
+		Body:        body,
+		Headers:     map[string]string{"Content-Type": "application/json"},
+		CreatedAt:   time.Now(),
+		Platform:    PlatformOpenAI,
+		Model:       "gpt-5.5",
+		GroupID:     &groupID,
+		APIKeyID:    &apiKeyID,
+	}
+
+	require.NoError(t, svc.SetLocalResponseCache(ctx, "key", entry, time.Minute))
+	stored := store.entries["key"]
+	require.NotNil(t, stored)
+	require.Equal(t, localResponseCacheEncodingGzip, stored.Encoding)
+	require.Equal(t, int64(len(body)), stored.RawBodyBytes)
+	require.Equal(t, int64(len(stored.Body)), stored.StoredBodyBytes)
+	require.Less(t, len(stored.Body), len(body))
+	require.Equal(t, body, entry.Body, "caller entry must not be mutated")
+
+	got, err := svc.GetLocalResponseCache(ctx, "key")
+	require.NoError(t, err)
+	require.Equal(t, body, got.Body)
+	require.Empty(t, got.Encoding)
+	require.Equal(t, int64(len(body)), got.RawBodyBytes)
+	require.Equal(t, int64(len(stored.Body)), got.StoredBodyBytes)
+}
+
+func TestLocalResponseCacheAdvancedCompressionRequiresGrayScopeMatch(t *testing.T) {
+	withAdvancedCacheMemorySafeLimitProbe(t, 2048, nil)
+	ctx := context.Background()
+	settings := NewSettingService(&cacheManagementSettingRepoStub{}, nil)
+	cfg := DefaultAdvancedCacheConfig()
+	cfg.AdvancedCacheEnabled = true
+	cfg.GrayScope.Models = []string{"gpt-5.5"}
+	cfg.CompressionEnabled = true
+	cfg.CompressionThresholdKB = 1
+	_, err := settings.UpdateAdvancedCacheConfig(ctx, cfg)
+	require.NoError(t, err)
+
+	store := newLocalResponseCacheMemoryStore()
+	svc := &OpenAIGatewayService{cache: store, settingService: settings}
+	body := []byte(strings.Repeat("advanced-cache-compression", 120))
+	entry := &LocalResponseCacheEntry{StatusCode: 200, ContentType: "application/json", Body: body, Model: "gpt-4o"}
+
+	require.NoError(t, svc.SetLocalResponseCache(ctx, "key", entry, time.Minute))
+	stored := store.entries["key"]
+	require.NotNil(t, stored)
+	require.Empty(t, stored.Encoding)
+	require.Equal(t, body, stored.Body)
+}
+
+func TestLocalResponseCacheAdvancedCompressionEmptyGrayScopeDoesNotAffectTraffic(t *testing.T) {
+	withAdvancedCacheMemorySafeLimitProbe(t, 2048, nil)
+	ctx := context.Background()
+	settings := NewSettingService(&cacheManagementSettingRepoStub{}, nil)
+	cfg := DefaultAdvancedCacheConfig()
+	cfg.AdvancedCacheEnabled = true
+	cfg.CompressionEnabled = true
+	cfg.CompressionThresholdKB = 1
+	_, err := settings.UpdateAdvancedCacheConfig(ctx, cfg)
+	require.NoError(t, err)
+
+	store := newLocalResponseCacheMemoryStore()
+	svc := &OpenAIGatewayService{cache: store, settingService: settings}
+	body := []byte(strings.Repeat("advanced-cache-compression", 120))
+	entry := &LocalResponseCacheEntry{StatusCode: 200, ContentType: "application/json", Body: body, Model: "gpt-5.5"}
+
+	require.NoError(t, svc.SetLocalResponseCache(ctx, "key", entry, time.Minute))
+	stored := store.entries["key"]
+	require.NotNil(t, stored)
+	require.Empty(t, stored.Encoding)
+	require.Equal(t, body, stored.Body)
+}
+
+func TestLocalResponseCacheAdvancedCompressionReadFailureReturnsError(t *testing.T) {
+	_, err := restoreLocalResponseCacheEntryForRead(&LocalResponseCacheEntry{
+		StatusCode:  200,
+		ContentType: "application/json",
+		Body:        []byte("not-gzip"),
+		Encoding:    localResponseCacheEncodingGzip,
+	})
+	require.Error(t, err)
+}
+
+type localResponseCacheMemoryStore struct {
+	entries       map[string]*LocalResponseCacheEntry
+	evictionCalls chan LocalResponseCacheEvictionRequest
+	hotspotCalls  chan LocalResponseCacheHotspotEvent
+}
+
+func newLocalResponseCacheMemoryStore() *localResponseCacheMemoryStore {
+	return &localResponseCacheMemoryStore{entries: map[string]*LocalResponseCacheEntry{}}
+}
+
+func (s *localResponseCacheMemoryStore) GetSessionAccountID(context.Context, int64, string) (int64, error) {
+	return 0, nil
+}
+
+func (s *localResponseCacheMemoryStore) SetSessionAccountID(context.Context, int64, string, int64, time.Duration) error {
+	return nil
+}
+
+func (s *localResponseCacheMemoryStore) RefreshSessionTTL(context.Context, int64, string, time.Duration) error {
+	return nil
+}
+
+func (s *localResponseCacheMemoryStore) DeleteSessionAccountID(context.Context, int64, string) error {
+	return nil
+}
+
+func (s *localResponseCacheMemoryStore) GetLocalResponse(ctx context.Context, key string) (*LocalResponseCacheEntry, error) {
+	return s.entries[key], nil
+}
+
+func (s *localResponseCacheMemoryStore) SetLocalResponse(ctx context.Context, key string, entry *LocalResponseCacheEntry, ttl time.Duration) error {
+	s.entries[key] = cloneLocalResponseCacheEntry(entry)
+	return nil
+}
+
+func (s *localResponseCacheMemoryStore) IncrLocalResponseCacheStats(ctx context.Context, field string, delta int64) error {
+	return nil
+}
+
+func (s *localResponseCacheMemoryStore) GetLocalResponseCacheStats(context.Context) (*LocalResponseCacheStats, error) {
+	return &LocalResponseCacheStats{}, nil
+}
+
+func TestLocalResponseCacheEvictionSchedulesOnlyForAdvancedGrayScopeMatch(t *testing.T) {
+	withAdvancedCacheMemorySafeLimitProbe(t, 2048, nil)
+	ctx := context.Background()
+	settings := NewSettingService(&cacheManagementSettingRepoStub{}, nil)
+	cfg := DefaultAdvancedCacheConfig()
+	cfg.AdvancedCacheEnabled = true
+	cfg.GrayScope.Models = []string{"gpt-5.5"}
+	cfg.RedisCapacityMB = 128
+	_, err := settings.UpdateAdvancedCacheConfig(ctx, cfg)
+	require.NoError(t, err)
+
+	store := newLocalResponseCacheMemoryStore()
+	store.evictionCalls = make(chan LocalResponseCacheEvictionRequest, 1)
+	svc := &OpenAIGatewayService{cache: store, settingService: settings}
+	entry := &LocalResponseCacheEntry{StatusCode: 200, ContentType: "application/json", Body: []byte(`{"ok":true}`), Model: "gpt-5.5"}
+
+	require.NoError(t, svc.SetLocalResponseCache(ctx, "key", entry, time.Minute))
+
+	select {
+	case req := <-store.evictionCalls:
+		require.Equal(t, int64(128*1024*1024), req.CapacityBytes)
+		require.Equal(t, "LRU", req.Policy)
+	case <-time.After(time.Second):
+		t.Fatal("expected eviction to be scheduled for gray-scope matched advanced cache entry")
+	}
+}
+
+func TestLocalResponseCacheEvictionNotScheduledWhenGrayScopeEmpty(t *testing.T) {
+	withAdvancedCacheMemorySafeLimitProbe(t, 2048, nil)
+	ctx := context.Background()
+	settings := NewSettingService(&cacheManagementSettingRepoStub{}, nil)
+	cfg := DefaultAdvancedCacheConfig()
+	cfg.AdvancedCacheEnabled = true
+	cfg.RedisCapacityMB = 128
+	_, err := settings.UpdateAdvancedCacheConfig(ctx, cfg)
+	require.NoError(t, err)
+
+	store := newLocalResponseCacheMemoryStore()
+	store.evictionCalls = make(chan LocalResponseCacheEvictionRequest, 1)
+	svc := &OpenAIGatewayService{cache: store, settingService: settings}
+	entry := &LocalResponseCacheEntry{StatusCode: 200, ContentType: "application/json", Body: []byte(`{"ok":true}`), Model: "gpt-5.5"}
+
+	require.NoError(t, svc.SetLocalResponseCache(ctx, "key", entry, time.Minute))
+
+	select {
+	case <-store.evictionCalls:
+		t.Fatal("eviction must not be scheduled when gray scope is empty")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func (s *localResponseCacheMemoryStore) EvictLocalResponseCache(ctx context.Context, req LocalResponseCacheEvictionRequest) (*LocalResponseCacheEvictionResult, error) {
+	if s.evictionCalls != nil {
+		select {
+		case s.evictionCalls <- req:
+		default:
+		}
+	}
+	return &LocalResponseCacheEvictionResult{}, nil
+}
+
+func TestLocalResponseCacheHotspotRecordsOnlyForAdvancedGrayScopeMatch(t *testing.T) {
+	withAdvancedCacheMemorySafeLimitProbe(t, 2048, nil)
+	ctx := context.Background()
+	settings := NewSettingService(&cacheManagementSettingRepoStub{}, nil)
+	cfg := DefaultAdvancedCacheConfig()
+	cfg.AdvancedCacheEnabled = true
+	cfg.GrayScope.Models = []string{"gpt-5.5"}
+	cfg.HotWindow = "6h"
+	_, err := settings.UpdateAdvancedCacheConfig(ctx, cfg)
+	require.NoError(t, err)
+
+	store := newLocalResponseCacheMemoryStore()
+	store.hotspotCalls = make(chan LocalResponseCacheHotspotEvent, 1)
+	svc := &OpenAIGatewayService{cache: store, settingService: settings}
+	lookup := LocalResponseCacheLookup{Key: "cache-key", Platform: PlatformOpenAI, Model: "gpt-5.5"}
+
+	svc.RecordLocalResponseCacheHotspot(ctx, lookup, 88)
+
+	select {
+	case event := <-store.hotspotCalls:
+		require.Equal(t, "cache-key", event.CacheKey)
+		require.Equal(t, PlatformOpenAI, event.Platform)
+		require.Equal(t, "gpt-5.5", event.Model)
+		require.Equal(t, int64(88), event.HitTokens)
+		require.Equal(t, 6*time.Hour, event.Window)
+	case <-time.After(time.Second):
+		t.Fatal("expected hotspot event for gray-scope matched advanced cache hit")
+	}
+}
+
+func TestLocalResponseCacheHotspotNotRecordedWhenGrayScopeEmpty(t *testing.T) {
+	withAdvancedCacheMemorySafeLimitProbe(t, 2048, nil)
+	ctx := context.Background()
+	settings := NewSettingService(&cacheManagementSettingRepoStub{}, nil)
+	cfg := DefaultAdvancedCacheConfig()
+	cfg.AdvancedCacheEnabled = true
+	_, err := settings.UpdateAdvancedCacheConfig(ctx, cfg)
+	require.NoError(t, err)
+
+	store := newLocalResponseCacheMemoryStore()
+	store.hotspotCalls = make(chan LocalResponseCacheHotspotEvent, 1)
+	svc := &OpenAIGatewayService{cache: store, settingService: settings}
+	lookup := LocalResponseCacheLookup{Key: "cache-key", Platform: PlatformOpenAI, Model: "gpt-5.5"}
+
+	svc.RecordLocalResponseCacheHotspot(ctx, lookup, 88)
+
+	select {
+	case <-store.hotspotCalls:
+		t.Fatal("hotspot must not be recorded when gray scope is empty")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func (s *localResponseCacheMemoryStore) RecordLocalResponseCacheHotspot(ctx context.Context, event LocalResponseCacheHotspotEvent) error {
+	if s.hotspotCalls != nil {
+		select {
+		case s.hotspotCalls <- event:
+		default:
+		}
+	}
+	return nil
+}
+
+func (s *localResponseCacheMemoryStore) ListLocalResponseCacheHotspots(ctx context.Context, filter LocalResponseCacheHotspotFilter) ([]LocalResponseCacheHotspot, error) {
+	return []LocalResponseCacheHotspot{}, nil
 }

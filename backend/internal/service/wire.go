@@ -35,6 +35,10 @@ func ProvideUpdateService(cache UpdateCache, githubClient GitHubReleaseClient, b
 	return NewUpdateService(cache, githubClient, buildInfo.Version, buildInfo.BuildType)
 }
 
+func ProvideCacheStatsService(repo OpsRepository) *CacheStatsService {
+	return NewCacheStatsService(repo)
+}
+
 // ProvideEmailQueueService creates EmailQueueService with default worker count
 func ProvideEmailQueueService(emailService *EmailService) *EmailQueueService {
 	return NewEmailQueueService(emailService, 3)
@@ -526,6 +530,7 @@ var ProviderSet = wire.NewSet(
 	ProvideOpsAlertEvaluatorService,
 	ProvideOpsCleanupService,
 	ProvideOpsScheduledReportService,
+	ProvideCacheStatsService,
 	NewEmailService,
 	NewNotificationEmailService,
 	ProvideEmailQueueService,

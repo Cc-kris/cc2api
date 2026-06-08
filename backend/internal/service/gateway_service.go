@@ -5739,10 +5739,16 @@ func (s *GatewayService) tryWriteClaudeLocalResponseCacheHit(ctx context.Context
 		}
 		c.Data(status, contentType, entry.Body)
 	}
+	usage := s.parseClaudeUsageFromCachedLocalResponse(entry.ContentType, entry.Body)
 	if s != nil {
 		s.RecordLocalResponseCacheStat(ctx, "lookup_hit")
+		hitTokens := int64(0)
+		if usage != nil {
+			hitTokens = int64(usage.InputTokens + usage.OutputTokens)
+		}
+		s.RecordLocalResponseCacheHotspot(ctx, lookup, hitTokens)
 	}
-	return s.parseClaudeUsageFromCachedLocalResponse(entry.ContentType, entry.Body), true
+	return usage, true
 }
 
 func (s *GatewayService) persistClaudeLocalResponseCache(ctx context.Context, c *gin.Context, lookup LocalResponseCacheLookup, cfg LocalResponseCacheConfig, status int, contentType string, body []byte) {
@@ -5773,6 +5779,10 @@ func (s *GatewayService) persistClaudeLocalResponseCache(ctx context.Context, c 
 			"Content-Type": contentType,
 		},
 		CreatedAt: time.Now(),
+		Platform:  lookup.Platform,
+		Model:     lookup.Model,
+		GroupID:   lookup.GroupID,
+		APIKeyID:  lookup.APIKeyID,
 	}
 	if setErr := s.SetLocalResponseCache(ctx, lookup.Key, entry, cfg.TTL); setErr != nil {
 		if s != nil {

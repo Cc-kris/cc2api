@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -38,6 +39,33 @@ func (h *CacheStatsHandler) GetStats(c *gin.Context) {
 		return
 	}
 	response.Success(c, stats)
+}
+
+func (h *CacheStatsHandler) Export(c *gin.Context) {
+	if h == nil || h.cacheStatsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Cache stats service is unavailable")
+		return
+	}
+	filter, err := parseCacheStatsFilter(c)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	data, err := h.cacheStatsService.ExportCSV(c.Request.Context(), filter)
+	if err != nil {
+		if errors.Is(err, service.ErrCacheStatsExportTooLarge) {
+			response.BadRequest(c, "cache stats export row count exceeds limit")
+			return
+		}
+		if errors.Is(err, service.ErrCacheStatsExportEmpty) {
+			response.BadRequest(c, "current filter has no cache stats to export")
+			return
+		}
+		response.Error(c, http.StatusInternalServerError, "Failed to export cache stats")
+		return
+	}
+	c.Header("Content-Disposition", `attachment; filename="cache-stats.csv"`)
+	c.Data(http.StatusOK, "text/csv; charset=utf-8", data)
 }
 
 func parseCacheStatsFilter(c *gin.Context) (*service.CacheStatsFilter, error) {

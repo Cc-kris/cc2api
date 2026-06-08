@@ -252,11 +252,22 @@ func TestSettingServiceAdvancedCacheCompressionThresholdUsesCacheConfigMaxRespon
 	require.NoError(t, err)
 
 	advancedCfg := DefaultAdvancedCacheConfig()
-	advancedCfg.CompressionThresholdKB = 10 * 1024
+	advancedCfg.CompressionThresholdKB = 1
 	_, err = svc.UpdateAdvancedCacheConfig(context.Background(), advancedCfg)
 	require.NoError(t, err)
 
-	advancedCfg.CompressionThresholdKB = 10*1024 + 1
+	advancedCfg.CompressionThresholdKB = 2
+	_, err = svc.UpdateAdvancedCacheConfig(context.Background(), advancedCfg)
+	require.Error(t, err)
+	require.Equal(t, "ADVANCED_CACHE_CONFIG_INVALID", infraerrors.Reason(err))
+
+	cacheCfg = DefaultCacheManagementConfig()
+	cacheCfg.MaxResponseBytes = 512 * 1024
+	_, err = svc.UpdateCacheManagementConfig(context.Background(), cacheCfg)
+	require.NoError(t, err)
+
+	advancedCfg = DefaultAdvancedCacheConfig()
+	advancedCfg.CompressionThresholdKB = 513
 	_, err = svc.UpdateAdvancedCacheConfig(context.Background(), advancedCfg)
 	require.Error(t, err)
 	require.Equal(t, "ADVANCED_CACHE_CONFIG_INVALID", infraerrors.Reason(err))
