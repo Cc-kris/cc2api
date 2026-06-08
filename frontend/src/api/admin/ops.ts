@@ -1324,6 +1324,76 @@ export async function getIncidentOverview(
   return data
 }
 
+export interface OpsUnifiedEntityRef {
+  id: number
+  name?: string
+  email?: string
+  display?: string
+}
+
+export interface OpsUnifiedErrorItem {
+  id: number
+  occurred_at: string
+  error_category: string
+  error_subcategory: string
+  client_error_subcategory?: string | null
+  error_result: string
+  severity: string
+  status_code: number
+  user?: OpsUnifiedEntityRef | null
+  api_key?: OpsUnifiedEntityRef | null
+  group?: OpsUnifiedEntityRef | null
+  platform: string
+  model: string
+  upstream_account?: OpsUnifiedEntityRef | null
+  summary: string
+  same_kind_count: number
+  ai_analysis_status: string
+}
+
+export interface OpsUnifiedErrorListResponse {
+  items: OpsUnifiedErrorItem[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export type OpsUnifiedErrorListQueryParams = {
+  page?: number
+  page_size?: number
+  time_range?: string
+  start_time?: string
+  end_time?: string
+  error_categories?: string
+  error_subcategories?: string
+  client_error_subcategories?: string
+  error_results?: string
+  severity?: string
+  status_code?: string
+  user_id?: number | null
+  api_key_id?: number | null
+  group_id?: number | null
+  platform?: string
+  model?: string
+  upstream_account_id?: number | null
+  request_id?: string
+  keyword?: string
+  ai_analysis?: 'all' | 'analyzed' | 'not_analyzed'
+  sort_by?: 'occurred_at' | 'status_code' | 'severity' | 'same_kind_count'
+  sort_order?: 'asc' | 'desc'
+}
+
+export async function listUnifiedErrors(
+  params: OpsUnifiedErrorListQueryParams,
+  options: OpsRequestOptions = {}
+): Promise<OpsUnifiedErrorListResponse> {
+  const { data } = await apiClient.get<OpsUnifiedErrorListResponse>('/admin/ops/unified-errors', {
+    params,
+    signal: options.signal
+  })
+  return data
+}
+
 export type OpsErrorListView = 'errors' | 'excluded' | 'all'
 
 export type OpsErrorListQueryParams = {
