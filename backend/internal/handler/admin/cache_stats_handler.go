@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -82,13 +83,19 @@ func parseCacheStatsFilter(c *gin.Context) (*service.CacheStatsFilter, error) {
 		return nil, err
 	}
 	return &service.CacheStatsFilter{
-		StartTime: start,
-		EndTime:   end,
-		Platform:  strings.TrimSpace(c.Query("platform")),
-		Model:     strings.TrimSpace(c.Query("model")),
-		APIKeyID:  apiKeyID,
-		GroupID:   groupID,
+		StartTime:  start,
+		EndTime:    end,
+		Platform:   strings.TrimSpace(c.Query("platform")),
+		Model:      strings.TrimSpace(c.Query("model")),
+		APIKeyID:   apiKeyID,
+		GroupID:    groupID,
+		ViewerRole: cacheStatsViewerRole(c),
 	}, nil
+}
+
+func cacheStatsViewerRole(c *gin.Context) string {
+	role, _ := middleware.GetUserRoleFromContext(c)
+	return role
 }
 
 func parseCacheStatsTimeRange(c *gin.Context) (time.Time, time.Time, error) {

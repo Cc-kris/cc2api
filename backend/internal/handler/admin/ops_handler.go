@@ -126,6 +126,8 @@ func (h *OpsHandler) GetUnifiedErrors(c *gin.Context) {
 		response.BadRequest(c, err.Error())
 		return
 	}
+	role, _ := middleware.GetUserRoleFromContext(c)
+	filter.ViewerRole = role
 	result, err := h.opsService.GetUnifiedErrors(c.Request.Context(), filter)
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -157,6 +159,8 @@ func (h *OpsHandler) ExportUnifiedErrors(c *gin.Context) {
 	}
 	filter.Page = 1
 	filter.PageSize = 100
+	role, _ := middleware.GetUserRoleFromContext(c)
+	filter.ViewerRole = role
 	if filter.StartTime == nil || filter.EndTime == nil || filter.EndTime.Sub(*filter.StartTime) > 7*24*time.Hour {
 		response.BadRequest(c, "时间范围超出允许范围")
 		return
@@ -213,7 +217,8 @@ func (h *OpsHandler) GetUnifiedErrorByID(c *gin.Context) {
 		response.BadRequest(c, "Invalid error id")
 		return
 	}
-	detail, err := h.opsService.GetUnifiedErrorDetail(c.Request.Context(), id)
+	role, _ := middleware.GetUserRoleFromContext(c)
+	detail, err := h.opsService.GetUnifiedErrorDetailForRole(c.Request.Context(), id, role)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

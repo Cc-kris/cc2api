@@ -10,6 +10,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -131,7 +132,8 @@ func (h *DashboardHandler) GetStats(c *gin.Context) {
 // GetRevenueOverview handles getting revenue and credit overview metrics.
 // GET /api/v1/admin/dashboard/revenue-overview
 func (h *DashboardHandler) GetRevenueOverview(c *gin.Context) {
-	overview, err := h.dashboardService.GetRevenueOverview(c.Request.Context())
+	role, _ := middleware.GetUserRoleFromContext(c)
+	overview, err := h.dashboardService.GetRevenueOverviewForRole(c.Request.Context(), role)
 	if err != nil {
 		response.Error(c, 500, "Failed to get revenue overview")
 		return
@@ -142,7 +144,8 @@ func (h *DashboardHandler) GetRevenueOverview(c *gin.Context) {
 // GetRepurchaseDistribution handles getting user repurchase distribution metrics.
 // GET /api/v1/admin/dashboard/repurchase-distribution
 func (h *DashboardHandler) GetRepurchaseDistribution(c *gin.Context) {
-	distribution, err := h.dashboardService.GetRepurchaseDistribution(c.Request.Context())
+	role, _ := middleware.GetUserRoleFromContext(c)
+	distribution, err := h.dashboardService.GetRepurchaseDistributionForRole(c.Request.Context(), role)
 	if err != nil {
 		response.Error(c, 500, "Failed to get repurchase distribution")
 		return

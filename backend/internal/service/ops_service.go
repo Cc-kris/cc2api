@@ -362,7 +362,7 @@ func (s *OpsService) GetUnifiedErrors(ctx context.Context, filter *OpsUnifiedErr
 		log.Printf("[Ops] GetUnifiedErrors failed: %v", err)
 		return nil, err
 	}
-	return result, nil
+	return applyOpsUnifiedErrorListFieldPolicy(result, viewerRoleFromOpsUnifiedErrorFilter(filter)), nil
 }
 
 func (s *OpsService) GetErrorLogByID(ctx context.Context, id int64) (*OpsErrorLogDetail, error) {
@@ -521,7 +521,7 @@ func (s *OpsService) GetUnifiedErrorDetail(ctx context.Context, id int64) (*OpsU
 		impact.AffectedUpstreamAccounts = 1
 	}
 
-	return &OpsUnifiedErrorDetail{
+	resultDetail := &OpsUnifiedErrorDetail{
 		Conclusion: OpsUnifiedErrorConclusion{
 			Title:              opsUnifiedDetailTitle(classification, result),
 			Summary:            opsUnifiedDetailSummary(classification, detail),
@@ -562,7 +562,16 @@ func (s *OpsService) GetUnifiedErrorDetail(ctx context.Context, id int64) (*OpsU
 			UpstreamErrors:   rawDetail.UpstreamErrors,
 		},
 		SameKindErrors: sameKindItems,
-	}, nil
+	}
+	return resultDetail, nil
+}
+
+func (s *OpsService) GetUnifiedErrorDetailForRole(ctx context.Context, id int64, viewerRole string) (*OpsUnifiedErrorDetail, error) {
+	detail, err := s.GetUnifiedErrorDetail(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return applyOpsUnifiedErrorDetailFieldPolicy(detail, viewerRole), nil
 }
 
 func (s *OpsService) UpdateErrorResolution(ctx context.Context, errorID int64, resolved bool, resolvedByUserID *int64) error {

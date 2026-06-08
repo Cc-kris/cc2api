@@ -34,10 +34,10 @@ type OpsUnifiedErrorListFilter struct {
 	Keyword           string
 	AIAnalysis        string
 
-	SortBy    string
-	SortOrder string
-	Page      int
-	PageSize  int
+	SortBy     string
+	SortOrder  string
+	Page       int
+	PageSize   int
 	ViewerRole string
 }
 
