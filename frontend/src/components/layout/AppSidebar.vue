@@ -838,8 +838,14 @@ function handleMenuItemClick(itemPath: string) {
   }
 }
 
+function normalizeNavPath(path: string): string {
+  return path === '/admin/ops' ? '/admin/ops/overview' : path
+}
+
 function isActive(path: string): boolean {
-  return route.path === path || route.path.startsWith(path + '/')
+  const currentPath = normalizeNavPath(route.path)
+  const targetPath = normalizeNavPath(path)
+  return currentPath === targetPath || currentPath.startsWith(targetPath + '/')
 }
 
 function isGroupActive(item: NavItem): boolean {
