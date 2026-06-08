@@ -347,13 +347,15 @@ import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import { adminAPI } from '@/api/admin'
 import type { SimpleApiKey } from '@/api/admin/usage'
 import type { AdminGroup } from '@/types'
-import type { CacheClearRequest, CacheClearResult, CacheClearType } from '@/api/admin/cache'
+import type { CacheClearAuditFilter, CacheClearAuditRecord, CacheClearRequest, CacheClearResult, CacheClearType } from '@/api/admin/cache'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { extractApiErrorMessage } from '@/utils/apiError'
+import { formatDateTime as formatDateTimeValue } from '@/utils/format'
 
 type ClearTypeForm = {
   clearType: CacheClearType
@@ -378,6 +380,9 @@ const apiKeyKeyword = ref('')
 const apiKeyResults = ref<SimpleApiKey[]>([])
 const apiKeySearchTried = ref(false)
 const lastResult = ref<CacheClearResult | null>(null)
+const auditLoading = ref(false)
+const auditError = ref('')
+const auditRows = ref<CacheClearAuditRecord[]>([])
 let apiKeySearchTimeout: ReturnType<typeof setTimeout> | null = null
 
 const form = reactive<ClearTypeForm>({
@@ -394,6 +399,19 @@ const viewerRole = computed(() => String((authStore.user as { role?: string } | 
 const canManage = computed(() => viewerRole.value === '' || viewerRole.value === 'admin')
 const requiresPlatforms = computed(() => form.clearType === 'by_platform' || form.clearType === 'by_model')
 const requiresConfirmText = computed(() => form.clearType === 'all')
+const auditPagination = reactive({
+  page: 1,
+  page_size: 20,
+  total: 0,
+  pages: 0
+})
+const auditFilters = reactive({
+  operatorUserId: '',
+  clearType: '',
+  status: '',
+  startTime: '',
+  endTime: ''
+})
 
 const navItems = computed(() => [
   { key: 'home', to: '/admin/settings/cache', label: t('admin.cacheManagement.nav.home'), active: false },
@@ -412,6 +430,11 @@ const clearTypeOptions = computed(() => [
   { value: 'by_api_key', label: t('admin.cacheManagement.clearPage.types.byApiKey'), hint: t('admin.cacheManagement.clearPage.typeHints.byApiKey') },
   { value: 'by_time', label: t('admin.cacheManagement.clearPage.types.byTime'), hint: t('admin.cacheManagement.clearPage.typeHints.byTime') },
   { value: 'all', label: t('admin.cacheManagement.clearPage.types.all'), hint: t('admin.cacheManagement.clearPage.typeHints.all') }
+])
+const auditStatusOptions = computed(() => [
+  { value: 'success', label: t('admin.cacheManagement.clearPage.auditStatuses.success') },
+  { value: 'partial_success', label: t('admin.cacheManagement.clearPage.auditStatuses.partialSuccess') },
+  { value: 'failed', label: t('admin.cacheManagement.clearPage.auditStatuses.failed') }
 ])
 
 const platformOptions = computed(() => [
@@ -521,6 +544,34 @@ const validationErrors = computed(() => {
 
 const canSubmit = computed(() => canManage.value && validationErrors.value.length === 0)
 const confirmReady = computed(() => !requiresConfirmText.value || confirmText.value === '确认清理')
+const auditColumns = computed(() => [
+  { key: 'id', label: t('admin.cacheManagement.clearPage.auditColumns.id') },
+  { key: 'operator', label: t('admin.cacheManagement.clearPage.auditColumns.operator') },
+  { key: 'createdAt', label: t('admin.cacheManagement.clearPage.auditColumns.createdAt') },
+  { key: 'clearType', label: t('admin.cacheManagement.clearPage.auditColumns.clearType') },
+  { key: 'scope', label: t('admin.cacheManagement.clearPage.auditColumns.scope') },
+  { key: 'result', label: t('admin.cacheManagement.clearPage.auditColumns.result') },
+  { key: 'status', label: t('admin.cacheManagement.clearPage.auditColumns.status') },
+  { key: 'error', label: t('admin.cacheManagement.clearPage.auditColumns.error') }
+])
+const auditValidationError = computed(() => {
+  if (!auditFilters.startTime && !auditFilters.endTime) return ''
+  if (!auditFilters.startTime || !auditFilters.endTime) {
+    return t('admin.cacheManagement.clearPage.auditValidation.timeRequired')
+  }
+  const start = new Date(auditFilters.startTime)
+  const end = new Date(auditFilters.endTime)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return t('admin.cacheManagement.clearPage.auditValidation.timeInvalid')
+  }
+  if (start.getTime() > end.getTime()) {
+    return t('admin.cacheManagement.clearPage.auditValidation.timeOrder')
+  }
+  if (end.getTime() - start.getTime() > 31 * 24 * 60 * 60 * 1000) {
+    return t('admin.cacheManagement.clearPage.auditValidation.timeRange')
+  }
+  return ''
+})
 
 function resetForm(): void {
   form.clearType = 'expired'
