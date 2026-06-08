@@ -35,8 +35,8 @@ func ProvideUpdateService(cache UpdateCache, githubClient GitHubReleaseClient, b
 	return NewUpdateService(cache, githubClient, buildInfo.Version, buildInfo.BuildType)
 }
 
-func ProvideCacheStatsService(repo OpsRepository) *CacheStatsService {
-	return NewCacheStatsService(repo)
+func ProvideCacheStatsService(repo OpsRepository, cache GatewayCache, settingService *SettingService) *CacheStatsService {
+	return NewCacheStatsService(repo).SetAdvancedDependencies(repo, cache, settingService)
 }
 
 // ProvideEmailQueueService creates EmailQueueService with default worker count

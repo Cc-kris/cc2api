@@ -42,6 +42,25 @@ func (h *CacheStatsHandler) GetStats(c *gin.Context) {
 	response.Success(c, stats)
 }
 
+func (h *CacheStatsHandler) GetAdvancedStats(c *gin.Context) {
+	if h == nil || h.cacheStatsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Advanced cache stats service is unavailable")
+		return
+	}
+	filter, err := parseCacheStatsFilter(c)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	filter.HotspotLimit = parseCacheStatsHotspotLimit(c.Query("hotspot_limit"))
+	stats, err := h.cacheStatsService.GetAdvancedStats(c.Request.Context(), filter)
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, "Failed to get advanced cache stats")
+		return
+	}
+	response.Success(c, stats)
+}
+
 func (h *CacheStatsHandler) Export(c *gin.Context) {
 	if h == nil || h.cacheStatsService == nil {
 		response.Error(c, http.StatusServiceUnavailable, "Cache stats service is unavailable")
@@ -165,6 +184,21 @@ func cacheStatsDuration(raw string) time.Duration {
 	default:
 		return 0
 	}
+}
+
+func parseCacheStatsHotspotLimit(raw string) int {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 20
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return 20
+	}
+	if value > 100 {
+		return 100
+	}
+	return value
 }
 
 func parseOptionalPositiveInt64(raw, field string) (*int64, error) {

@@ -219,6 +219,9 @@ func allowOpsRoleForAdminPath(role, method, path string) bool {
 	if method == http.MethodGet && path == "/api/v1/admin/cache/stats" {
 		return isCacheStatsReadRole(role)
 	}
+	if method == http.MethodGet && path == "/api/v1/admin/cache/advanced-stats" {
+		return isCacheStatsReadRole(role)
+	}
 	if method == http.MethodGet && path == "/api/v1/admin/cache/clear-audits" {
 		return isOpsAIAnalysisOperatorRole(role)
 	}
