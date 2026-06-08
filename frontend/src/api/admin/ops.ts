@@ -1394,6 +1394,14 @@ export async function listUnifiedErrors(
   return data
 }
 
+export async function exportUnifiedErrors(params: OpsUnifiedErrorListQueryParams): Promise<Blob> {
+  const response = await apiClient.get('/admin/ops/unified-errors/export', {
+    params,
+    responseType: 'blob'
+  })
+  return response.data
+}
+
 export type OpsErrorListView = 'errors' | 'excluded' | 'all'
 
 export type OpsErrorListQueryParams = {
@@ -1658,6 +1666,7 @@ export const opsAPI = {
   updateErrorResolved,
 
   // New split endpoints
+  exportUnifiedErrors,
   listRequestErrors,
   getUnifiedErrorDetail,
   listUpstreamErrors,
