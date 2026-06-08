@@ -110,6 +110,10 @@ type SemanticCacheLookupResult struct {
 	CandidateCount    int
 	HighestSimilarity float64
 	Match             *SemanticCacheLookupMatch
+	Reusable          bool
+	Decision          string
+	BlockReason       string
+	ReviewStatus      string
 	SkipReason        string
 }
 
@@ -330,7 +334,7 @@ func (w *SemanticCacheAsyncWriter) Probe(ctx context.Context, req SemanticCacheL
 	}
 	var cfg SemanticCacheConfig
 	var prepared *semanticCachePreparedLookup
-	defer w.recordObserveAudit(ctx, cfg, req, prepared, result)
+	defer w.recordSemanticAudit(ctx, cfg, req, prepared, result)
 	if w == nil || w.settingService == nil || w.embeddingClient == nil || w.candidateStore == nil {
 		result.SkipReason = SemanticEmbeddingSkipConfigIncomplete
 		return result
@@ -396,18 +400,38 @@ func (w *SemanticCacheAsyncWriter) Probe(ctx context.Context, req SemanticCacheL
 			}
 		}
 	}
+	w.applySemanticLookupDecision(cfg, result)
 	return result
 }
 
-func (w *SemanticCacheAsyncWriter) recordObserveAudit(ctx context.Context, cfg SemanticCacheConfig, req SemanticCacheLookupRequest, prepared *semanticCachePreparedLookup, result *SemanticCacheLookupResult) {
+func (w *SemanticCacheAsyncWriter) applySemanticLookupDecision(cfg SemanticCacheConfig, result *SemanticCacheLookupResult) {
+	if result == nil || result.Match == nil {
+		return
+	}
+	result.Reusable = true
+	result.Decision = "hit"
+	result.ReviewStatus = "reusable"
+	switch {
+	case strings.TrimSpace(cfg.Stage) == "observe":
+		result.Reusable = false
+		result.Decision = "observe"
+		result.ReviewStatus = "pending"
+	case strings.TrimSpace(cfg.Stage) == "review" || cfg.ReviewMode:
+		result.Reusable = false
+		result.Decision = "blocked"
+		result.BlockReason = "review_pending"
+		result.ReviewStatus = "pending"
+	}
+}
+
+func (w *SemanticCacheAsyncWriter) recordSemanticAudit(ctx context.Context, cfg SemanticCacheConfig, req SemanticCacheLookupRequest, prepared *semanticCachePreparedLookup, result *SemanticCacheLookupResult) {
 	if w == nil || w.auditStore == nil || prepared == nil || result == nil {
 		return
 	}
-	if strings.TrimSpace(cfg.Stage) != "observe" {
+	if strings.TrimSpace(result.SkipReason) != "" || result.Match == nil {
 		return
 	}
-
-	if strings.TrimSpace(result.SkipReason) != "" || result.Match == nil {
+	if strings.TrimSpace(result.Decision) == "" {
 		return
 	}
 	similarity := result.Match.Similarity
@@ -439,9 +463,9 @@ func (w *SemanticCacheAsyncWriter) recordObserveAudit(ctx context.Context, cfg S
 		Model:           strings.TrimSpace(req.Model),
 		APIKeyID:        req.APIKeyID,
 		Similarity:      similarity,
-		Decision:        "observe",
-		BlockReason:     "",
-		ReviewStatus:    "pending",
+		Decision:        strings.TrimSpace(result.Decision),
+		BlockReason:     strings.TrimSpace(result.BlockReason),
+		ReviewStatus:    strings.TrimSpace(result.ReviewStatus),
 		SourceSummary:   sourceSummary,
 		TargetSummary:   targetSummary,
 	})
