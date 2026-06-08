@@ -851,7 +851,16 @@ export interface AlertEvent {
   id: number
   rule_id: number
   severity: OpsSeverity | string
-  status: 'firing' | 'resolved' | 'manual_resolved' | string
+  status:
+    | 'firing'
+    | 'acknowledged'
+    | 'processing'
+    | 'recovered'
+    | 'closed'
+    | 'silenced'
+    | 'resolved'
+    | 'manual_resolved'
+    | string
   title?: string
   description?: string
   metric_value?: number
@@ -1351,8 +1360,15 @@ export async function getAlertEvent(id: number): Promise<AlertEvent> {
   return data
 }
 
-export async function updateAlertEventStatus(id: number, status: 'resolved' | 'manual_resolved'): Promise<void> {
-  await apiClient.put(`/admin/ops/alert-events/${id}/status`, { status })
+export async function updateAlertEventStatus(
+  id: number,
+  payload: {
+    status: 'acknowledged' | 'processing' | 'closed' | 'silenced' | 'recovered' | 'resolved' | 'manual_resolved'
+    note?: string
+    processing_action?: string
+  }
+): Promise<void> {
+  await apiClient.put(`/admin/ops/alert-events/${id}/status`, payload)
 }
 
 export async function createAlertSilence(payload: {
