@@ -1,4 +1,5 @@
 import { apiClient } from '../client'
+import type { PaginatedResponse } from '@/types'
 
 export interface CacheManagementPlatformConfig {
   enabled: boolean
@@ -27,67 +28,53 @@ export interface CacheManagementConfig {
   bypass_header: CacheManagementBypassHeader
 }
 
-export interface CacheStatsParams {
-  time_range?: string
+export type CacheClearType =
+  | 'all'
+  | 'by_platform'
+  | 'by_model'
+  | 'by_group'
+  | 'by_api_key'
+  | 'by_time'
+  | 'expired'
+
+export interface CacheClearScope {
+  platforms?: string[]
+  models?: string[]
+  group_ids?: number[]
+  api_key_ids?: number[]
   start_time?: string
   end_time?: string
-  platform?: string
-  model?: string
-  api_key_id?: number
-  group_id?: number
 }
 
-export interface CacheStatsSummary {
-  total_requests: number
-  candidate_requests: number
-  hit_requests: number
-  miss_requests: number
-  bypass_requests: number
-  store_success: number
-  store_skip: number
-  request_hit_rate: number
-  input_tokens: number
-  output_tokens: number
-  hit_tokens: number
-  candidate_tokens: number
-  tokens_hit_rate: number
-  overall_tokens_coverage: number
-  estimated_saved_amount: string
+export interface CacheClearRequest {
+  clear_type: CacheClearType
+  scope: CacheClearScope
+  confirm_text?: string
 }
 
-export interface CacheStatsModelRow {
-  platform: string
-  model: string
-  total_requests: number
-  candidate_requests: number
-  hit_requests: number
-  miss_requests: number
-  bypass_requests: number
-  store_success: number
-  store_skip: number
-  input_tokens: number
-  output_tokens: number
-  hit_tokens: number
-  candidate_tokens: number
-  all_request_tokens: number
-  request_hit_rate: number
-  tokens_hit_rate: number
-  top_bypass_reason?: string
-  top_store_skip_reason?: string
-  estimated_saved_amount: string
+export interface CacheClearResult {
+  clear_type: CacheClearType
+  scope: CacheClearScope
+  matched_keys: number
+  deleted_keys: number
+  status: 'success' | 'failed' | 'partial_success'
+  error_message?: string
 }
 
-export interface CacheStatsReasonRow {
-  reason: string
-  count: number
-  percent: number
+export interface CacheClearAuditRecord extends CacheClearResult {
+  id: number
+  operator_user_id?: number | null
+  created_at: string
 }
 
-export interface CacheStatsResponse {
-  summary: CacheStatsSummary
-  model_rows: CacheStatsModelRow[]
-  bypass_reasons: CacheStatsReasonRow[]
-  store_skip_reasons: CacheStatsReasonRow[]
+export interface CacheClearAuditFilter {
+  page?: number
+  page_size?: number
+  start_time?: string
+  end_time?: string
+  operator_user_id?: number
+  clear_type?: CacheClearType
+  status?: CacheClearResult['status']
 }
 
 export const defaultCacheManagementConfig = (): CacheManagementConfig => ({
@@ -146,10 +133,15 @@ export const cacheAPI = {
     return apiClient.put<CacheManagementConfig>('/admin/cache/config', data)
   },
 
-  getStats(params?: CacheStatsParams) {
-    return apiClient.get<CacheStatsResponse>('/admin/cache/stats', {
-      params: sanitizeCacheStatsParams(params)
-    })
+  clearLocalResponseCache(data: CacheClearRequest) {
+    return apiClient.post<CacheClearResult>('/admin/cache/clear', data)
+  },
+
+  listClearAudits(params?: CacheClearAuditFilter) {
+    return apiClient.get<PaginatedResponse<CacheClearAuditRecord> | { items: CacheClearAuditRecord[]; total: number; page: number; page_size: number }>(
+      '/admin/cache/clear-audits',
+      { params }
+    )
   }
 }
 
