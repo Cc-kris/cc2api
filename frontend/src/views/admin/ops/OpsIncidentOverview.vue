@@ -574,11 +574,7 @@
             <div v-if="canSubmitAIReportFeedback" class="mt-4 space-y-4">
               <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <button
-                  v-for="option in [
-                    { value: 'useful', label: '有用' },
-                    { value: 'not_useful', label: '无用' },
-                    { value: 'wrong_category', label: '错误归因' }
-                  ]"
+                  v-for="option in feedbackOptions"
                   :key="option.value"
                   type="button"
                   :class="[
@@ -688,6 +684,24 @@ type OpsErrorDetailsPreset = {
 const { t } = useI18n()
 const appStore = useAppStore()
 const authStore = useAuthStore()
+const aiFeedbackAllowedRoles = new Set([
+  'admin',
+  'ops',
+  'operation',
+  'operator',
+  'operations',
+  'customer_service',
+  'customer-service',
+  'customerservice',
+  'support',
+  'service',
+  'cs'
+])
+const feedbackOptions: Array<{ value: Exclude<OpsAIAnalysisFeedbackStatus, 'none'>, label: string }> = [
+  { value: 'useful', label: '有用' },
+  { value: 'not_useful', label: '无用' },
+  { value: 'wrong_category', label: '错误归因' }
+]
 
 const timeRange = ref<OpsIncidentOverviewTimeRange>('1m')
 const platform = ref('')
@@ -842,10 +856,7 @@ const latestAnalysisStatusLabel = computed(() => {
 const latestAnalysisStatusClass = computed(() => analysisTaskStatusClass(displayOverview.value?.latest_ai_analysis?.status || 'completed'))
 const currentViewerRole = computed(() => String((authStore.user as { role?: string } | null)?.role || '').trim().toLowerCase())
 const canRunManualAIAnalysis = computed(() => canManageManualAIAnalysis(currentViewerRole.value))
-const canSubmitAIReportFeedback = computed(() => {
-  return new Set(['admin', 'ops', 'operation', 'operator', 'operations', 'customer_service', 'customer-service', 'customerservice', 'support', 'service', 'cs'])
-    .has(currentViewerRole.value)
-})
+const canSubmitAIReportFeedback = computed(() => aiFeedbackAllowedRoles.has(currentViewerRole.value))
 
 const canOpenSummaryDetails = computed(() => {
   return Boolean(displayOverview.value?.quick_filters?.length)
