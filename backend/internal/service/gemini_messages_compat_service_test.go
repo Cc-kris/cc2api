@@ -431,6 +431,116 @@ func TestGeminiForwardNative_GenerateContentLocalResponseCacheHit(t *testing.T) 
 	require.Equal(t, 2, result2.Usage.CacheReadInputTokens)
 }
 
+func TestGeminiForwardNative_StreamGenerateContentLocalResponseCacheHit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+		localResponseCache: true,
+		expiresAt:          time.Now().Add(time.Minute).UnixNano(),
+	})
+	defer gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
+
+	upstreamSSE := `data: {"candidates":[{"content":{"parts":[{"text":"cached gemini stream"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":11,"candidatesTokenCount":5,"cachedContentTokenCount":3}}` + "\n\n" +
+		"data: [DONE]\n\n"
+	httpStub := &geminiCompatHTTPUpstreamStub{
+		response: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream; charset=utf-8"}, "x-request-id": []string{"gemini-stream-cache-1"}},
+			Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
+		},
+	}
+	store := &localResponseCacheGatewayTestStore{}
+	repo := newRuntimeSettingRepoStub()
+	repo.values[SettingKeyLocalResponseCacheEnabled] = "true"
+	svc := &GeminiMessagesCompatService{
+		httpUpstream:         httpStub,
+		cfg:                  &config.Config{},
+		cache:                store,
+		settingService:       &SettingService{settingRepo: repo},
+		responseHeaderFilter: compileResponseHeaderFilter(&config.Config{}),
+	}
+	groupID := int64(3)
+	account := &Account{ID: 204, Platform: PlatformGemini, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "gemini-api-key"}, Concurrency: 1}
+	body := []byte(`{"contents":[{"role":"user","parts":[{"text":"hello stream"}]}],"generationConfig":{"temperature":0.1}}`)
+
+	rec1 := httptest.NewRecorder()
+	c1, _ := gin.CreateTestContext(rec1)
+	c1.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse", bytes.NewReader(body))
+	c1.Set("api_key", &APIKey{ID: 10, GroupID: &groupID})
+	result1, err := svc.ForwardNative(context.Background(), c1, account, "gemini-2.5-flash", "streamGenerateContent", true, body)
+	require.NoError(t, err)
+	require.NotNil(t, result1)
+	require.True(t, result1.Stream)
+	require.Equal(t, 1, httpStub.calls)
+	require.Equal(t, upstreamSSE, rec1.Body.String())
+	require.Len(t, store.entries, 1)
+	require.Equal(t, 11, result1.Usage.InputTokens)
+	require.Equal(t, 5, result1.Usage.OutputTokens)
+	require.Equal(t, 3, result1.Usage.CacheReadInputTokens)
+
+	httpStub.response = &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream; charset=utf-8"}},
+		Body:       io.NopCloser(strings.NewReader(`data: {"candidates":[{"content":{"parts":[{"text":"should not call"}]}}]}` + "\n\n")),
+	}
+	rec2 := httptest.NewRecorder()
+	c2, _ := gin.CreateTestContext(rec2)
+	c2.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse", bytes.NewReader(body))
+	c2.Set("api_key", &APIKey{ID: 10, GroupID: &groupID})
+	result2, err := svc.ForwardNative(context.Background(), c2, account, "gemini-2.5-flash", "streamGenerateContent", true, body)
+	require.NoError(t, err)
+	require.NotNil(t, result2)
+	require.Equal(t, 1, httpStub.calls, "second identical streamGenerateContent request must be served from local response cache")
+	require.Equal(t, LocalResponseCacheHeaderHit, rec2.Header().Get(LocalResponseCacheHeader))
+	require.Contains(t, rec2.Header().Get("Content-Type"), "text/event-stream")
+	require.Equal(t, upstreamSSE, rec2.Body.String())
+	require.Equal(t, 11, result2.Usage.InputTokens)
+	require.Equal(t, 5, result2.Usage.OutputTokens)
+	require.Equal(t, 3, result2.Usage.CacheReadInputTokens)
+}
+
+func TestGeminiForwardNative_StreamGenerateContentLocalResponseCacheSkipsIncompleteStream(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+		localResponseCache: true,
+		expiresAt:          time.Now().Add(time.Minute).UnixNano(),
+	})
+	defer gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
+
+	incompleteSSE := `data: {"candidates":[{"content":{"parts":[{"text":"partial gemini stream"}]}}],"usageMetadata":{"promptTokenCount":4,"candidatesTokenCount":2}}` + "\n\n"
+	httpStub := &geminiCompatHTTPUpstreamStub{
+		response: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream; charset=utf-8"}},
+			Body:       io.NopCloser(strings.NewReader(incompleteSSE)),
+		},
+	}
+	store := &localResponseCacheGatewayTestStore{}
+	repo := newRuntimeSettingRepoStub()
+	repo.values[SettingKeyLocalResponseCacheEnabled] = "true"
+	svc := &GeminiMessagesCompatService{
+		httpUpstream:         httpStub,
+		cfg:                  &config.Config{},
+		cache:                store,
+		settingService:       &SettingService{settingRepo: repo},
+		responseHeaderFilter: compileResponseHeaderFilter(&config.Config{}),
+	}
+	groupID := int64(3)
+	account := &Account{ID: 205, Platform: PlatformGemini, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "gemini-api-key"}, Concurrency: 1}
+	body := []byte(`{"contents":[{"role":"user","parts":[{"text":"hello incomplete stream"}]}],"generationConfig":{"temperature":0.1}}`)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse", bytes.NewReader(body))
+	c.Set("api_key", &APIKey{ID: 10, GroupID: &groupID})
+	result, err := svc.ForwardNative(context.Background(), c, account, "gemini-2.5-flash", "streamGenerateContent", true, body)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, incompleteSSE, rec.Body.String())
+	require.Empty(t, store.entries, "Gemini streams without a supported completion marker must not be cached")
+	require.Equal(t, 4, result.Usage.InputTokens)
+	require.Equal(t, 2, result.Usage.OutputTokens)
+}
+
 func TestGeminiForwardNative_GenerateContentLocalResponseCacheBypassesTools(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
