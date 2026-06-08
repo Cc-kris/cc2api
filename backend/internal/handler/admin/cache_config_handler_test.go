@@ -243,6 +243,17 @@ type cacheClearHandlerServiceStub struct {
 
 	filter service.LocalResponseCacheClearAuditFilter
 	page   *service.LocalResponseCacheClearAuditPage
+
+	semanticFilter service.SemanticCacheAuditListFilter
+	semanticPage   *service.SemanticCacheAuditListPage
+	semanticRecord *service.SemanticCacheAuditListRecord
+	reviewReq      service.SemanticCacheAuditReviewRequest
+	feedbackReq    service.SemanticCacheAuditFeedbackRequest
+	reviewAuditID  int64
+	feedbackAuditID int64
+	reviewOperator int64
+	feedbackOperator int64
+	viewerRole     string
 }
 
 func (s *cacheClearHandlerServiceStub) ClearLocalResponseCache(_ context.Context, req service.LocalResponseCacheClearRequest) (*service.LocalResponseCacheClearResult, error) {
@@ -252,6 +263,24 @@ func (s *cacheClearHandlerServiceStub) ClearLocalResponseCache(_ context.Context
 func (s *cacheClearHandlerServiceStub) ListLocalResponseCacheClearAudits(_ context.Context, filter service.LocalResponseCacheClearAuditFilter) (*service.LocalResponseCacheClearAuditPage, error) {
 	s.filter = filter
 	return s.page, s.err
+}
+func (s *cacheClearHandlerServiceStub) ListSemanticCacheAudits(_ context.Context, filter service.SemanticCacheAuditListFilter) (*service.SemanticCacheAuditListPage, error) {
+	s.semanticFilter = filter
+	return s.semanticPage, s.err
+}
+func (s *cacheClearHandlerServiceStub) ReviewSemanticCacheAudit(_ context.Context, auditID int64, req service.SemanticCacheAuditReviewRequest, operatorUserID int64, viewerRole string) (*service.SemanticCacheAuditListRecord, error) {
+	s.reviewAuditID = auditID
+	s.reviewReq = req
+	s.reviewOperator = operatorUserID
+	s.viewerRole = viewerRole
+	return s.semanticRecord, s.err
+}
+func (s *cacheClearHandlerServiceStub) FeedbackSemanticCacheAudit(_ context.Context, auditID int64, req service.SemanticCacheAuditFeedbackRequest, operatorUserID int64, viewerRole string) (*service.SemanticCacheAuditListRecord, error) {
+	s.feedbackAuditID = auditID
+	s.feedbackReq = req
+	s.feedbackOperator = operatorUserID
+	s.viewerRole = viewerRole
+	return s.semanticRecord, s.err
 }
 
 func TestCacheConfigHandlerClearPassesOperatorAndScope(t *testing.T) {
@@ -359,4 +388,111 @@ func TestCacheConfigHandlerListClearAuditsRejectsInvalidServiceFilter(t *testing
 
 		require.Equal(t, http.StatusBadRequest, rec.Code, url)
 	}
+}
+
+func TestCacheConfigHandlerListSemanticAuditsParsesFilters(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	occurredAt := time.Date(2026, 6, 8, 1, 0, 0, 0, time.UTC)
+	apiKeyID := int64(12)
+	entryID := int64(99)
+	stub := &cacheClearHandlerServiceStub{semanticPage: &service.SemanticCacheAuditListPage{Items: []service.SemanticCacheAuditListRecord{{
+		ID:              1,
+		RequestID:       "req-1",
+		SemanticEntryID: &entryID,
+		OccurredAt:      occurredAt,
+		Platform:        "openai",
+		Model:           "gpt-5.5",
+		APIKeyID:        &apiKeyID,
+		APIKey:          "sk-****",
+		Similarity:      0.9876,
+		Decision:        service.SemanticCacheDecisionHit,
+		ReviewStatus:    service.SemanticCacheReviewPending,
+		FeedbackType:    service.SemanticCacheFeedbackNone,
+		UpdatedAt:       occurredAt,
+	}}, Total: 1, Page: 2, PageSize: 10}}
+	handler := NewCacheConfigHandler(nil, stub)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	start := occurredAt.Add(-time.Hour).Format(time.RFC3339)
+	end := occurredAt.Format(time.RFC3339)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/semantic-audits?page=2&page_size=10&start_time="+start+"&end_time="+end+"&platform=openai&model=gpt-5.5&api_key_id=12&review_status=pending&decision=hit&min_similarity=0.98&max_similarity=0.99", nil)
+
+	handler.ListSemanticAudits(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, 2, stub.semanticFilter.Page)
+	require.Equal(t, 10, stub.semanticFilter.PageSize)
+	require.Equal(t, "openai", stub.semanticFilter.Platform)
+	require.Equal(t, "gpt-5.5", stub.semanticFilter.Model)
+	require.Equal(t, int64(12), *stub.semanticFilter.APIKeyID)
+	require.Equal(t, service.SemanticCacheReviewPending, stub.semanticFilter.ReviewStatus)
+	require.Equal(t, service.SemanticCacheDecisionHit, stub.semanticFilter.Decision)
+	require.NotNil(t, stub.semanticFilter.MinSimilarity)
+	require.NotNil(t, stub.semanticFilter.MaxSimilarity)
+	var body response.Response
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	data := body.Data.(map[string]any)
+	require.Equal(t, float64(1), data["total"])
+}
+
+func TestCacheConfigHandlerListSemanticAuditsRejectsInvalidQuery(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := NewCacheConfigHandler(nil, &cacheClearHandlerServiceStub{semanticPage: &service.SemanticCacheAuditListPage{}})
+	cases := []string{
+		"/api/v1/admin/cache/semantic-audits?page=0",
+		"/api/v1/admin/cache/semantic-audits?api_key_id=0",
+		"/api/v1/admin/cache/semantic-audits?min_similarity=1.1",
+		"/api/v1/admin/cache/semantic-audits?start_time=nope",
+	}
+	for _, url := range cases {
+		rec := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rec)
+		c.Request = httptest.NewRequest(http.MethodGet, url, nil)
+
+		handler.ListSemanticAudits(c)
+
+		require.Equal(t, http.StatusBadRequest, rec.Code, url)
+	}
+}
+
+func TestCacheConfigHandlerReviewSemanticAuditPassesOperator(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	stub := &cacheClearHandlerServiceStub{semanticRecord: &service.SemanticCacheAuditListRecord{ID: 7, ReviewStatus: service.SemanticCacheReviewReusable}}
+	handler := NewCacheConfigHandler(nil, stub)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Set("user", middleware.AuthSubject{UserID: 9})
+	c.Set(string(middleware.ContextKeyUserRole), "ops")
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/cache/semantic-audits/7/review", bytes.NewReader([]byte(`{"review_status":"reusable","note":"可复用"}`)))
+	c.Params = gin.Params{{Key: "id", Value: "7"}}
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	handler.ReviewSemanticAudit(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, int64(7), stub.reviewAuditID)
+	require.Equal(t, service.SemanticCacheReviewReusable, stub.reviewReq.ReviewStatus)
+	require.Equal(t, int64(9), stub.reviewOperator)
+	require.Equal(t, "ops", stub.viewerRole)
+}
+
+func TestCacheConfigHandlerFeedbackSemanticAuditPassesOperator(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	stub := &cacheClearHandlerServiceStub{semanticRecord: &service.SemanticCacheAuditListRecord{ID: 8, FeedbackType: service.SemanticCacheFeedbackWrongHit}}
+	handler := NewCacheConfigHandler(nil, stub)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Set("user", middleware.AuthSubject{UserID: 11})
+	c.Set(string(middleware.ContextKeyUserRole), "ops")
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/cache/semantic-audits/8/feedback", bytes.NewReader([]byte(`{"feedback_type":"wrong_hit","note":"语义不同"}`)))
+	c.Params = gin.Params{{Key: "id", Value: "8"}}
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	handler.FeedbackSemanticAudit(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, int64(8), stub.feedbackAuditID)
+	require.Equal(t, service.SemanticCacheFeedbackWrongHit, stub.feedbackReq.FeedbackType)
+	require.Equal(t, int64(11), stub.feedbackOperator)
+	require.Equal(t, "ops", stub.viewerRole)
 }

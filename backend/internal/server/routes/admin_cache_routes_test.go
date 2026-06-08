@@ -50,6 +50,34 @@ func TestRegisterCacheManagementRoutesIncludesStatsExportAndClearAudits(t *testi
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/clear-audits", nil)
 	router.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/semantic-audits", nil)
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestRegisterCacheManagementRoutesIncludesSemanticAuditActions(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	handlers := &handler.Handlers{Admin: &handler.AdminHandlers{
+		CacheConfig: adminhandler.NewCacheConfigHandler(nil, nil),
+		CacheStats:  adminhandler.NewCacheStatsHandler(nil),
+	}}
+	v1 := router.Group("/api/v1/admin")
+	registerCacheManagementRoutes(v1, handlers)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/cache/semantic-audits/7/review", strings.NewReader(`{`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/cache/semantic-audits/7/feedback", strings.NewReader(`{`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 
 func TestRegisterCacheManagementRoutesIncludesAdvancedConfig(t *testing.T) {
