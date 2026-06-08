@@ -5008,6 +5008,7 @@ export default {
         filterApplied: '{field} filter applied: {value}',
         modelPlaceholder: 'Enter a model name',
         accountDetailsTitle: 'Upstream Account: {name}',
+        invalidCustomRange: 'Please choose a valid custom time range.',
         analysisDisabled: {
           loading: 'AI analysis becomes available after the incident data finishes loading.',
           noErrors: 'There are no errors to analyze for the current filters.',

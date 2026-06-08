@@ -5170,6 +5170,7 @@ export default {
         filterApplied: '已应用 {field} 筛选：{value}',
         modelPlaceholder: '输入模型名称',
         accountDetailsTitle: '上游账号：{name}',
+        invalidCustomRange: '请选择合法的自定义时间范围。',
         analysisDisabled: {
           loading: '事故数据加载完成后可发起 AI 分析。',
           noErrors: '当前筛选条件下暂无可分析的错误。',

@@ -110,6 +110,30 @@
                 </select>
               </div>
             </div>
+
+            <div v-if="timeRange === 'custom'" class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+              <div>
+                <label class="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  {{ t('admin.ops.customTimeRange.startTime') }}
+                </label>
+                <input v-model="customTimeStartInput" type="datetime-local" class="input">
+              </div>
+              <div>
+                <label class="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  {{ t('admin.ops.customTimeRange.endTime') }}
+                </label>
+                <input v-model="customTimeEndInput" type="datetime-local" class="input">
+              </div>
+              <div class="flex items-end">
+                <button
+                  type="button"
+                  class="inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                  @click="applyCustomTimeRange"
+                >
+                  {{ t('common.confirm') }}
+                </button>
+              </div>
+            </div>
           </div>
 
           <div class="grid grid-cols-2 gap-3">
@@ -945,20 +969,26 @@ function handleTimeRangeChange(nextValue: OpsIncidentOverviewTimeRange) {
     const now = Math.floor(Date.now() / 1000)
     customTimeStartInput.value = formatDateTimeLocalInput(now - 60)
     customTimeEndInput.value = formatDateTimeLocalInput(now)
-    const start = parseDateTimeLocalInput(customTimeStartInput.value)
-    const end = parseDateTimeLocalInput(customTimeEndInput.value)
-    if (start && end) {
-      customTimeStartISO.value = new Date(start * 1000).toISOString()
-      customTimeEndISO.value = new Date(end * 1000).toISOString()
-      timeRange.value = 'custom'
-      void fetchOverview()
-    }
+    timeRange.value = 'custom'
+    applyCustomTimeRange()
     return
   }
 
   timeRange.value = nextValue
   customTimeStartISO.value = null
   customTimeEndISO.value = null
+  void fetchOverview()
+}
+
+function applyCustomTimeRange() {
+  const start = parseDateTimeLocalInput(customTimeStartInput.value)
+  const end = parseDateTimeLocalInput(customTimeEndInput.value)
+  if (!start || !end || end <= start) {
+    appStore.showWarning(t('admin.ops.incidentOverview.invalidCustomRange'))
+    return
+  }
+  customTimeStartISO.value = new Date(start * 1000).toISOString()
+  customTimeEndISO.value = new Date(end * 1000).toISOString()
   void fetchOverview()
 }
 
