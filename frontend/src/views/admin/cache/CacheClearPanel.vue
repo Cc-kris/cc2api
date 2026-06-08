@@ -429,7 +429,7 @@ const scopeSummary = computed(() => {
     { label: t('admin.cacheManagement.clearPage.previewType'), value: currentTypeLabel.value }
   ]
 
-  if (form.clearType === 'by_platform') {
+  if (requiresPlatforms.value) {
     summary.push({
       label: t('admin.cacheManagement.clearPage.fields.platforms'),
       value: form.platforms.length > 0 ? form.platforms.join(', ') : t('common.notConfigured')
