@@ -185,6 +185,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } from '@/stores'
 import VersionBadge from '@/components/common/VersionBadge.vue'
+import { canAccessAdminPath, canAccessCacheManagement, canAccessCacheStats, hasScopedAdminAccess, isPlatformOwnerRole, normalizeAdminViewerRole } from '@/utils/adminAccess'
 import { sanitizeSvg } from '@/utils/sanitize'
 import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
 
@@ -235,7 +236,8 @@ const adminSettingsStore = useAdminSettingsStore()
 
 const sidebarCollapsed = computed(() => appStore.sidebarCollapsed)
 const mobileOpen = computed(() => appStore.mobileOpen)
-const isAdmin = computed(() => authStore.isAdmin)
+const viewerRole = computed(() => normalizeAdminViewerRole(authStore.user?.role))
+const isAdmin = computed(() => hasScopedAdminAccess(viewerRole.value))
 const isDark = ref(document.documentElement.classList.contains('dark'))
 
 // Track which parent nav groups are expanded
@@ -768,38 +770,47 @@ const adminNavItems = computed((): NavItem[] => {
     { path: '/admin/usage', label: t('nav.usage'), icon: ChartIcon }
   ]
 
-  const visible = applyFeatureFlags(baseItems)
+  const visible = applyFeatureFlags(baseItems).filter((item) => canAccessAdminPath(item.path, viewerRole.value))
+
+  const cacheNavTarget = canAccessCacheManagement(viewerRole.value) ? '/admin/settings/cache' : '/admin/settings/cache/stats'
+  const cacheNavLabel = canAccessCacheManagement(viewerRole.value) ? t('nav.cacheManagement') : t('admin.cacheStats.title')
+
+  const settingsItem: NavItem | null = isPlatformOwnerRole(viewerRole.value)
+    ? {
+        path: '/admin/settings',
+        label: t('nav.settings'),
+        icon: CogIcon,
+        children: [
+          { path: '/admin/settings', label: t('nav.generalSettings'), icon: CogIcon },
+          { path: '/admin/settings/cache', label: t('nav.cacheManagement'), icon: ChartIcon },
+        ],
+      }
+    : (canAccessCacheManagement(viewerRole.value) || canAccessCacheStats(viewerRole.value))
+      ? { path: cacheNavTarget, label: cacheNavLabel, icon: CogIcon }
+      : null
 
   // 简单模式下，在系统设置前插入 API密钥
   if (authStore.isSimpleMode) {
     const filtered = visible.filter(item => !item.hideInSimpleMode)
     filtered.push({ path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon })
-    filtered.push({
-      path: '/admin/settings',
-      label: t('nav.settings'),
-      icon: CogIcon,
-      children: [
-        { path: '/admin/settings', label: t('nav.generalSettings'), icon: CogIcon },
-        { path: '/admin/settings/cache', label: t('nav.cacheManagement'), icon: ChartIcon },
-      ],
-    })
-    for (const cm of customMenuItemsForAdmin.value) {
-      filtered.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
+    if (settingsItem) {
+      filtered.push(settingsItem)
+    }
+    if (isPlatformOwnerRole(viewerRole.value)) {
+      for (const cm of customMenuItemsForAdmin.value) {
+        filtered.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
+      }
     }
     return filtered
   }
 
-  visible.push({
-    path: '/admin/settings',
-    label: t('nav.settings'),
-    icon: CogIcon,
-    children: [
-      { path: '/admin/settings', label: t('nav.generalSettings'), icon: CogIcon },
-      { path: '/admin/settings/cache', label: t('nav.cacheManagement'), icon: ChartIcon },
-    ],
-  })
-  for (const cm of customMenuItemsForAdmin.value) {
-    visible.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
+  if (settingsItem) {
+    visible.push(settingsItem)
+  }
+  if (isPlatformOwnerRole(viewerRole.value)) {
+    for (const cm of customMenuItemsForAdmin.value) {
+      visible.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
+    }
   }
   return visible
 })
