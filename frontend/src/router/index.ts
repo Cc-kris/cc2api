@@ -427,6 +427,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/ops/ai-analysis',
+    name: 'AdminOpsAIAnalysis',
+    component: () => import('@/views/admin/ops/OpsAIAnalysisView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'AI Analysis',
+      titleKey: 'admin.ops.aiAnalysis.title',
+      descriptionKey: 'admin.ops.aiAnalysis.description'
+    }
+  },
+  {
     path: '/admin/users',
     name: 'AdminUsers',
     component: () => import('@/views/admin/UsersView.vue'),

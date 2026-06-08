@@ -336,6 +336,59 @@ export interface OpsAIAnalysisTaskDetailResponse {
   report?: OpsAIAnalysisReport | null
 }
 
+export type OpsAIAnalysisInterfaceType =
+  | 'openai_compatible'
+  | 'responses'
+  | 'anthropic_compatible'
+  | 'gemini_compatible'
+
+export interface OpsAIAnalysisConfig {
+  enabled: boolean
+  base_url: string
+  api_key_masked: string
+  model: string
+  interface_type: OpsAIAnalysisInterfaceType
+  timeout_seconds: number
+  max_samples: number
+  auto_dedup_minutes: number
+  global_rate_limit_per_minute: number
+  auto_levels: string[]
+  manual_enabled: boolean
+}
+
+export interface UpdateOpsAIAnalysisConfigRequest {
+  enabled: boolean
+  base_url: string
+  api_key?: string
+  model: string
+  interface_type: OpsAIAnalysisInterfaceType
+  timeout_seconds: number
+  max_samples: number
+  auto_dedup_minutes: number
+  global_rate_limit_per_minute: number
+  auto_levels: string[]
+  manual_enabled: boolean
+}
+
+export type OpsAIAnalysisConnectionStatus =
+  | 'success'
+  | 'config_error'
+  | 'auth_failed'
+  | 'network_failed'
+  | 'timeout'
+  | 'failed'
+
+export interface OpsAIAnalysisTestResponse {
+  success: boolean
+  status: OpsAIAnalysisConnectionStatus
+  message: string
+  interface_type: OpsAIAnalysisInterfaceType
+  base_url: string
+  model: string
+  duration_ms?: number
+  http_status?: number
+}
+
 export type OpsOpenAITokenStatsTimeRange = '30m' | '1h' | '1d' | '15d' | '30d'
 
 export interface OpsOpenAITokenStatsItem {
@@ -1525,6 +1578,23 @@ export async function getAIAnalysisTaskDetail(id: number): Promise<OpsAIAnalysis
   return data
 }
 
+export async function getAIAnalysisConfig(): Promise<OpsAIAnalysisConfig> {
+  const { data } = await apiClient.get<OpsAIAnalysisConfig>('/admin/ops/ai-analysis/config')
+  return data
+}
+
+export async function updateAIAnalysisConfig(
+  payload: UpdateOpsAIAnalysisConfigRequest
+): Promise<OpsAIAnalysisConfig> {
+  const { data } = await apiClient.put<OpsAIAnalysisConfig>('/admin/ops/ai-analysis/config', payload)
+  return data
+}
+
+export async function testAIAnalysisConnection(): Promise<OpsAIAnalysisTestResponse> {
+  const { data } = await apiClient.post<OpsAIAnalysisTestResponse>('/admin/ops/ai-analysis/test')
+  return data
+}
+
 export interface AlertEventsQuery {
   limit?: number
   status?: string
@@ -1683,6 +1753,9 @@ export const opsAPI = {
   deleteAlertRule,
   createAIAnalysisTask,
   getAIAnalysisTaskDetail,
+  getAIAnalysisConfig,
+  updateAIAnalysisConfig,
+  testAIAnalysisConnection,
   listAlertEvents,
   getAlertEvent,
   updateAlertEventStatus,
