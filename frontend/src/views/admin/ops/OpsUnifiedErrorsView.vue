@@ -280,7 +280,7 @@
             v-if="total > 0"
             :total="total"
             :page="page"
-            :page-size="numericPageSize"
+            :page-size="numericPageSize()"
             @update:page="handlePageChange"
             @update:pageSize="handlePageSizeUpdate"
           />
@@ -444,6 +444,7 @@ function buildQueryObject(): Record<string, string> {
     const endIso = parseDateTimeLocalInput(customEndInput.value)
     if (startIso) query.start_time = startIso
     if (endIso) query.end_time = endIso
+    if (!startIso || !endIso) query.time_range = '30m'
   } else {
     query.time_range = timeRange.value
   }
