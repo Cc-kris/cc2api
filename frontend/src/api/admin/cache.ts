@@ -161,6 +161,102 @@ export interface AdvancedCacheStatsResponse {
   updated_at: string
 }
 
+
+export interface AdvancedCacheGrayScope {
+  api_key_ids: number[]
+  group_ids: number[]
+  models: string[]
+}
+
+export interface AdvancedCacheConfig {
+  advanced_cache_enabled: boolean
+  gray_scope: AdvancedCacheGrayScope
+  redis_capacity_mb: number
+  memory_safe_limit_mb: number
+  compression_enabled: boolean
+  compression_threshold_kb: number
+  eviction_policy: 'LRU' | 'LFU' | 'W-TinyLFU' | string
+  hot_window: '15m' | '1h' | '6h' | '24h' | string
+  hot_threshold: number
+  cost_saving_enabled: boolean
+  upstream_prompt_cache_enabled: boolean
+}
+
+export interface AdvancedCacheStatsParams extends CacheStatsParams {
+  hotspot_limit?: number
+}
+
+export interface AdvancedCacheNameRef {
+  id: number
+  name?: string
+  display?: string
+}
+
+export interface AdvancedCacheCapacityStats {
+  current_used_bytes: number
+  capacity_limit_bytes: number
+  capacity_usage_rate: number
+  memory_safe_limit_bytes: number
+  eviction_policy: string
+  recent_eviction_count: number
+  last_evicted_at?: string | null
+}
+
+export interface AdvancedCacheCompressionStats {
+  enabled: boolean
+  raw_response_bytes: number
+  stored_response_bytes: number
+  compression_saved_bytes: number
+  compression_saved_rate: number
+  compressed_entry_count: number
+  compression_failed_count: number
+  decompression_failed_count: number
+}
+
+export interface AdvancedCacheHotspot {
+  rank: number
+  platform: string
+  model: string
+  group: AdvancedCacheNameRef
+  api_key: AdvancedCacheNameRef
+  hit_count: number
+  hit_tokens: number
+  last_hit_at?: string | null
+}
+
+export interface AdvancedCacheSavings {
+  local_response_cache_saved_tokens: number
+  local_response_cache_saved_amount?: string | null
+  upstream_prompt_cache_read_tokens: number
+  upstream_prompt_cache_write_tokens: number
+  upstream_prompt_cache_saved_amount?: string | null
+  total_estimated_saved_amount?: string | null
+  price_missing: boolean
+  price_missing_models: string[]
+}
+
+export interface AdvancedCacheEmptyStates {
+  hotspots: boolean
+  prompt_cache: boolean
+  price: boolean
+}
+
+export interface AdvancedCacheFallback {
+  advanced_cache_fallback_active: boolean
+  fallback_reason?: string | null
+  last_fallback_at?: string | null
+}
+
+export interface AdvancedCacheStatsResponse {
+  capacity: AdvancedCacheCapacityStats
+  compression: AdvancedCacheCompressionStats
+  hotspots: AdvancedCacheHotspot[]
+  savings: AdvancedCacheSavings
+  empty_states: AdvancedCacheEmptyStates
+  fallback: AdvancedCacheFallback
+  updated_at: string
+}
+
 export interface CacheStatsParams {
   time_range?: string
   start_time?: string
