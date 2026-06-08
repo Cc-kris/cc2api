@@ -2,10 +2,13 @@ package logredact
 
 import (
 	"encoding/json"
+	"net"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 // maxRedactDepth 限制递归深度以防止栈溢出
@@ -42,6 +45,8 @@ type textRedactPatterns struct {
 var (
 	reGOCSPX = regexp.MustCompile(`GOCSPX-[0-9A-Za-z_-]{24,}`)
 	reAIza   = regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`)
+	reEmail  = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
+	reToken  = regexp.MustCompile(`(?i)\b(?:sk|ak|pk|rk|ya29|ghp|gho|ghu|ghs|github_pat)[-_A-Za-z0-9]{8,}\b`)
 
 	defaultTextRedactPatterns = compileTextRedactPatterns(nil)
 	extraTextPatternCache     sync.Map // map[string]*textRedactPatterns
@@ -99,10 +104,87 @@ func RedactText(input string, extraKeys ...string) string {
 	out := input
 	out = reGOCSPX.ReplaceAllString(out, "GOCSPX-***")
 	out = reAIza.ReplaceAllString(out, "AIza***")
+	out = reEmail.ReplaceAllStringFunc(out, RedactEmail)
+	out = reToken.ReplaceAllString(out, "******")
 	out = patterns.reJSONLike.ReplaceAllString(out, `$1***$3`)
 	out = patterns.reQueryLike.ReplaceAllString(out, `$1=***`)
 	out = patterns.rePlain.ReplaceAllString(out, `$1$2***`)
 	return out
+}
+
+func RedactEmail(email string) string {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return ""
+	}
+	parts := strings.SplitN(email, "@", 2)
+	if len(parts) != 2 || parts[0] == "" {
+		return "***"
+	}
+	local := []rune(parts[0])
+	return string(local[0]) + "***@" + parts[1]
+}
+
+func RedactAPIKey(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	runes := []rune(value)
+	if len(runes) <= 4 {
+		return "****"
+	}
+	return "****" + string(runes[len(runes)-4:])
+}
+
+func RedactToken(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return ""
+	}
+	return "******"
+}
+
+func RedactProxyURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Host == "" {
+		return RedactText(value)
+	}
+	host := parsed.Hostname()
+	port := parsed.Port()
+	if host == "" {
+		return RedactText(value)
+	}
+	parsed.User = nil
+	parsed.Host = maskedHost(host, port)
+	return parsed.String()
+}
+
+func RedactRequestBody(value string, maxRunes int) string {
+	return redactBody(value, maxRunes)
+}
+
+func RedactResponseBody(value string, maxRunes int) string {
+	return redactBody(value, maxRunes)
+}
+
+func RedactAIContext(value string, maxRunes int) string {
+	return redactBody(value, maxRunes)
+}
+
+func RedactUpstreamAccountName(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	runes := []rune(name)
+	if len(runes) <= 4 {
+		return string(runes[:1]) + "***"
+	}
+	return string(runes[:2]) + "***" + string(runes[len(runes)-2:])
 }
 
 func compileTextRedactPatterns(extraKeys []string) *textRedactPatterns {
@@ -229,4 +311,108 @@ func isSensitiveKey(key string, keys map[string]struct{}) bool {
 
 func normalizeKey(key string) string {
 	return strings.ToLower(strings.TrimSpace(key))
+}
+
+func redactBody(value string, maxRunes int) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	value = RedactText(value,
+		"authorization",
+		"x-api-key",
+		"api_key",
+		"apikey",
+		"token",
+		"secret",
+		"cookie",
+		"proxy",
+		"proxy_url",
+		"proxyurl",
+	)
+	value = redactProxyURLCandidates(value)
+	if maxRunes > 0 {
+		value = truncateRunes(value, maxRunes)
+	}
+	return value
+}
+
+func redactProxyURLCandidates(value string) string {
+	fields := strings.Fields(value)
+	if len(fields) == 0 {
+		return value
+	}
+	replaced := false
+	for i, field := range fields {
+		trimmed := strings.Trim(field, `"'(),[]{}<>`)
+		if trimmed == "" || !strings.Contains(trimmed, "://") {
+			continue
+		}
+		masked := RedactProxyURL(trimmed)
+		if masked == trimmed {
+			continue
+		}
+		fields[i] = strings.Replace(field, trimmed, masked, 1)
+		replaced = true
+	}
+	if !replaced {
+		return value
+	}
+	return strings.Join(fields, " ")
+}
+
+func maskedHost(host, port string) string {
+	if ip := net.ParseIP(host); ip != nil {
+		masked := maskIPAddress(host)
+		if port != "" {
+			return net.JoinHostPort(masked, port)
+		}
+		return masked
+	}
+	parts := strings.Split(host, ".")
+	if len(parts) >= 2 {
+		for i := 0; i < len(parts)-2; i++ {
+			if parts[i] != "" {
+				parts[i] = "*"
+			}
+		}
+		if len(parts)-2 >= 0 && parts[len(parts)-2] != "" {
+			runes := []rune(parts[len(parts)-2])
+			parts[len(parts)-2] = string(runes[:1]) + "***"
+		}
+		masked := strings.Join(parts, ".")
+		if port != "" {
+			return net.JoinHostPort(masked, port)
+		}
+		return masked
+	}
+	runes := []rune(host)
+	if len(runes) > 1 {
+		host = string(runes[:1]) + "***"
+	} else {
+		host = "***"
+	}
+	if port != "" {
+		return net.JoinHostPort(host, port)
+	}
+	return host
+}
+
+func maskIPAddress(host string) string {
+	if strings.Contains(host, ":") {
+		return "***"
+	}
+	parts := strings.Split(host, ".")
+	if len(parts) != 4 {
+		return "***"
+	}
+	return parts[0] + "." + parts[1] + ".*.*"
+}
+
+func truncateRunes(value string, maxRunes int) string {
+	if maxRunes <= 0 || utf8.RuneCountInString(value) <= maxRunes {
+		return value
+	}
+	runes := []rune(value)
+	return string(runes[:maxRunes])
 }

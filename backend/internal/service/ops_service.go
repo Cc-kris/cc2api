@@ -13,6 +13,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
 )
 
 var ErrOpsDisabled = infraerrors.NotFound("OPS_DISABLED", "Ops monitoring is disabled")
@@ -451,9 +452,11 @@ func (s *OpsService) GetUnifiedErrorDetail(ctx context.Context, id int64) (*OpsU
 		detail.ClientStatusCode = detail.StatusCode
 	}
 	rawDetail := *detail
-	rawDetail.ErrorBody = truncateRunes(detail.ErrorBody, 500)
-	rawDetail.UpstreamErrorDetail = truncateRunes(detail.UpstreamErrorDetail, 500)
-	rawDetail.UpstreamErrors = truncateRunes(detail.UpstreamErrors, 500)
+	rawDetail.ErrorBody = logredact.RedactRequestBody(detail.ErrorBody, 500)
+	rawDetail.UpstreamErrorMessage = logredact.RedactResponseBody(detail.UpstreamErrorMessage, 500)
+	rawDetail.UpstreamErrorDetail = logredact.RedactResponseBody(detail.UpstreamErrorDetail, 500)
+	rawDetail.UpstreamErrors = logredact.RedactResponseBody(detail.UpstreamErrors, 500)
+	rawDetail.Message = logredact.RedactResponseBody(detail.Message, 500)
 
 	result := opsUnifiedErrorResultFromDetail(detail)
 	classification := OpsUnifiedErrorClassification{
@@ -1144,7 +1147,7 @@ func opsUnifiedErrorCSVRow(item *OpsUnifiedErrorItem) []string {
 		item.Model,
 		accountID,
 		accountName,
-		truncateRunes(item.Summary, 500),
+		logredact.RedactResponseBody(item.Summary, 500),
 		opsStrconvFormatInt(int64(item.SameKindCount)),
 		item.AIAnalysisStatus,
 	})
@@ -1174,26 +1177,9 @@ func opsCSVSafeCell(value string) string {
 }
 
 func maskEmailForExport(email string) string {
-	email = strings.TrimSpace(email)
-	if email == "" {
-		return ""
-	}
-	parts := strings.SplitN(email, "@", 2)
-	if len(parts) != 2 || parts[0] == "" {
-		return "***"
-	}
-	local := []rune(parts[0])
-	return string(local[0]) + "***@" + parts[1]
+	return logredact.RedactEmail(email)
 }
 
 func maskUpstreamAccountNameForExport(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return ""
-	}
-	runes := []rune(name)
-	if len(runes) <= 4 {
-		return string(runes[:1]) + "***"
-	}
-	return string(runes[:2]) + "***" + string(runes[len(runes)-2:])
+	return logredact.RedactUpstreamAccountName(name)
 }

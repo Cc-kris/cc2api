@@ -170,7 +170,9 @@ func applyOpsUnifiedErrorItemFieldPolicy(item *OpsUnifiedErrorItem, role fieldPe
 	out.Group = cloneOpsEntityRef(item.Group)
 	out.UpstreamAccount = applyOpsEntityFieldPolicy(item.UpstreamAccount, role, opsEntityUpstreamAccount)
 	if role == fieldPermissionSupport {
-		out.Summary = logredact.RedactText(out.Summary)
+		out.Summary = logredact.RedactResponseBody(out.Summary, 500)
+	} else {
+		out.Summary = logredact.RedactResponseBody(out.Summary, 500)
 	}
 	return &out
 }
@@ -191,17 +193,19 @@ func applyOpsUnifiedErrorDetailFieldPolicy(detail *OpsUnifiedErrorDetail, viewer
 	}
 	if role == fieldPermissionSupport {
 		out.RequestChain.InboundEndpoint = ""
-		out.RawRecord = OpsUnifiedErrorRawRecord{ErrorBodyPreview: logredact.RedactText(detail.RawRecord.ErrorBodyPreview)}
+		out.RawRecord = OpsUnifiedErrorRawRecord{ErrorBodyPreview: logredact.RedactRequestBody(detail.RawRecord.ErrorBodyPreview, 500)}
 	} else if role == fieldPermissionBusiness {
+		out.RawRecord = sanitizeOpsRawRecord(detail.RawRecord)
+	} else {
 		out.RawRecord = sanitizeOpsRawRecord(detail.RawRecord)
 	}
 	out.SameKindErrors = make([]*OpsUnifiedErrorItem, 0, len(detail.SameKindErrors))
 	for _, item := range detail.SameKindErrors {
 		out.SameKindErrors = append(out.SameKindErrors, applyOpsUnifiedErrorItemFieldPolicy(item, role))
 	}
-	if role == fieldPermissionSupport {
-		out.AIAnalysis.Summary = logredact.RedactText(out.AIAnalysis.Summary)
-	}
+	out.Conclusion.Summary = logredact.RedactResponseBody(out.Conclusion.Summary, 500)
+	out.Classification.ClassificationReason = logredact.RedactResponseBody(out.Classification.ClassificationReason, 500)
+	out.AIAnalysis.Summary = logredact.RedactAIContext(out.AIAnalysis.Summary, 500)
 	return &out
 }
 
@@ -272,12 +276,14 @@ func sanitizeOpsRawRecord(raw OpsUnifiedErrorRawRecord) OpsUnifiedErrorRawRecord
 	out := raw
 	if out.ErrorLog != nil {
 		log := *out.ErrorLog
-		log.ErrorBody = logredact.RedactText(log.ErrorBody)
-		log.UpstreamErrorDetail = ""
-		log.UpstreamErrors = ""
+		log.ErrorBody = logredact.RedactRequestBody(log.ErrorBody, 500)
+		log.UpstreamErrorMessage = logredact.RedactResponseBody(log.UpstreamErrorMessage, 500)
+		log.UpstreamErrorDetail = logredact.RedactResponseBody(log.UpstreamErrorDetail, 500)
+		log.UpstreamErrors = logredact.RedactResponseBody(log.UpstreamErrors, 500)
+		log.Message = logredact.RedactResponseBody(log.Message, 500)
 		out.ErrorLog = &log
 	}
-	out.ErrorBodyPreview = logredact.RedactText(out.ErrorBodyPreview)
-	out.UpstreamErrors = ""
+	out.ErrorBodyPreview = logredact.RedactRequestBody(out.ErrorBodyPreview, 500)
+	out.UpstreamErrors = logredact.RedactResponseBody(out.UpstreamErrors, 500)
 	return out
 }
