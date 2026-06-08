@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { opsAPI, type OpsAccountAvailabilityStatsResponse, type OpsConcurrencyStatsResponse, type OpsUserConcurrencyStatsResponse } from '@/api/admin/ops'
+import { useAuthStore } from '@/stores/auth'
+import { formatUpstreamAccountForRole, formatUserEmailForRole, normalizeAdminRole } from '@/utils/adminSensitiveDisplay'
 
 interface Props {
   platformFilter?: string
@@ -15,6 +17,8 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const { t } = useI18n()
+const authStore = useAuthStore()
+const viewerRole = computed(() => normalizeAdminRole((authStore.user as { role?: string } | null)?.role))
 
 const loading = ref(false)
 const errorMessage = ref('')
@@ -196,7 +200,7 @@ const accountRows = computed((): AccountRow[] => {
 
       return {
         key: aid,
-        name: String(conc.account_name || avail.account_name || `Account ${aid}`),
+        name: formatUpstreamAccountForRole(String(conc.account_name || avail.account_name || `Account ${aid}`), viewerRole.value),
         platform: String(conc.platform || avail.platform || ''),
         group_name: String(conc.group_name || avail.group_name || ''),
         current_in_use: safeNumber(conc.current_in_use),
@@ -233,7 +237,7 @@ const userRows = computed((): UserRow[] => {
       return {
         key: uid,
         user_id: safeNumber(u.user_id),
-        user_email: u.user_email || `User ${uid}`,
+        user_email: formatUserEmailForRole(u.user_email || `User ${uid}`, viewerRole.value),
         username: u.username || '',
         current_in_use: safeNumber(u.current_in_use),
         max_capacity: safeNumber(u.max_capacity),

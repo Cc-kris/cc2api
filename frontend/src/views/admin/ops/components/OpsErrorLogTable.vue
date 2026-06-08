@@ -144,7 +144,7 @@
               <td class="px-4 py-2">
                 <el-tooltip v-if="log.account_id" :content="t('admin.ops.errorLog.accountId') + ' ' + log.account_id" placement="top" :show-after="500">
                   <span class="max-w-[120px] truncate text-xs font-medium text-gray-900 dark:text-gray-200">
-                    {{ log.account_name || log.account_id }}
+                    {{ formatUpstreamAccount(log) || log.account_id }}
                   </span>
                 </el-tooltip>
                 <span v-else class="text-xs text-gray-400">-</span>
@@ -215,12 +215,17 @@ ${log.message || ''}`">
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Pagination from '@/components/common/Pagination.vue'
 import type { OpsErrorLog } from '@/api/admin/ops'
+import { useAuthStore } from '@/stores/auth'
+import { formatUpstreamAccountForRole, formatUserEmailForRole, normalizeAdminRole } from '@/utils/adminSensitiveDisplay'
 import { getSeverityClass, formatDateTime } from '../utils/opsFormatters'
 
 const { t } = useI18n()
+const authStore = useAuthStore()
+const viewerRole = computed(() => normalizeAdminRole((authStore.user as { role?: string } | null)?.role))
 
 function isUpstreamRow(log: OpsErrorLog): boolean {
   const phase = String(log.phase || '').toLowerCase()
@@ -315,7 +320,7 @@ function getStatusClass(code: number): string {
 }
 
 function formatRequestAccount(log: OpsErrorLog): string {
-  if (log.user_email) return log.user_email
+  if (log.user_email) return formatUserEmailForRole(log.user_email, viewerRole.value)
   if (log.user_id != null) return `${t('admin.ops.errorLog.userId')} ${log.user_id}`
   if (log.api_key_id != null) return `${t('admin.ops.errorLog.apiKeyId')} ${log.api_key_id}`
   return ''
@@ -323,9 +328,16 @@ function formatRequestAccount(log: OpsErrorLog): string {
 
 function formatRequestAccountTooltip(log: OpsErrorLog): string {
   const parts: string[] = []
+  if (log.user_email) parts.push(formatUserEmailForRole(log.user_email, viewerRole.value))
   if (log.user_id != null) parts.push(`${t('admin.ops.errorLog.userId')} ${log.user_id}`)
   if (log.api_key_id != null) parts.push(`${t('admin.ops.errorLog.apiKeyId')} ${log.api_key_id}`)
   return parts.join('\n')
+}
+
+function formatUpstreamAccount(log: OpsErrorLog): string {
+  if (log.account_name) return formatUpstreamAccountForRole(log.account_name, viewerRole.value)
+  if (log.account_id != null) return String(log.account_id)
+  return ''
 }
 
 function formatSpecificReason(log: OpsErrorLog): string {

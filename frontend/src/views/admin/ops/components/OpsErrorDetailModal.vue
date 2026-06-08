@@ -52,7 +52,7 @@
         <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
           <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.upstreamAccount') }}</div>
           <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
-            {{ detail.account_name || (detail.account_id != null ? String(detail.account_id) : '—') }}
+            {{ formatUpstreamAccount(detail) || '—' }}
           </div>
         </div>
 
@@ -116,8 +116,8 @@
 
         <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
           <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.message') }}</div>
-          <div class="mt-1 truncate text-sm font-medium text-gray-900 dark:text-white" :title="detail.message">
-            {{ detail.message || '—' }}
+          <div class="mt-1 truncate text-sm font-medium text-gray-900 dark:text-white" :title="redactSensitivePreview(detail.message, 500)">
+            {{ redactSensitivePreview(detail.message, 500) || '—' }}
           </div>
         </div>
       </div>
@@ -188,7 +188,7 @@
               </div>
             </div>
 
-            <div v-if="ev.message" class="mt-3 break-words text-sm font-medium text-gray-900 dark:text-white">{{ ev.message }}</div>
+            <div v-if="ev.message" class="mt-3 break-words text-sm font-medium text-gray-900 dark:text-white">{{ redactSensitivePreview(ev.message, 500) }}</div>
 
             <pre
               v-if="expandedUpstreamDetailIds.has(ev.id)"
@@ -207,8 +207,10 @@ import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores'
+import { useAuthStore } from '@/stores/auth'
 import { opsAPI, type OpsErrorDetail } from '@/api/admin/ops'
 import { formatDateTime } from '@/utils/format'
+import { formatUpstreamAccountForRole, formatUserEmailForRole, normalizeAdminRole, redactSensitivePreview } from '@/utils/adminSensitiveDisplay'
 import { resolvePrimaryResponseBody, resolveUpstreamPayload } from '../utils/errorDetailResponse'
 
 interface Props {
@@ -226,6 +228,8 @@ const emit = defineEmits<Emits>()
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const authStore = useAuthStore()
+const viewerRole = computed(() => normalizeAdminRole((authStore.user as { role?: string } | null)?.role))
 
 const loading = ref(false)
 const detail = ref<OpsErrorDetail | null>(null)
@@ -235,7 +239,7 @@ const showUpstreamList = computed(() => props.errorType === 'request')
 const requestId = computed(() => detail.value?.request_id || detail.value?.client_request_id || '')
 
 const primaryResponseBody = computed(() => {
-  return resolvePrimaryResponseBody(detail.value, props.errorType)
+  return redactSensitivePreview(resolvePrimaryResponseBody(detail.value, props.errorType), 500)
 })
 
 
@@ -251,9 +255,16 @@ const emptyText = computed(() => t('admin.ops.errorDetail.noErrorSelected'))
 
 function formatRequestAccount(d: OpsErrorDetail | null): string {
   if (!d) return ''
-  if (d.user_email) return d.user_email
+  if (d.user_email) return formatUserEmailForRole(d.user_email, viewerRole.value)
   if (d.user_id != null) return `user:${d.user_id}`
   if (d.api_key_id != null) return `key:${d.api_key_id}`
+  return ''
+}
+
+function formatUpstreamAccount(d: OpsErrorDetail | null): string {
+  if (!d) return ''
+  if (d.account_name) return formatUpstreamAccountForRole(d.account_name, viewerRole.value)
+  if (d.account_id != null) return String(d.account_id)
   return ''
 }
 
@@ -323,8 +334,8 @@ const expandedUpstreamDetailIds = ref(new Set<number>())
 
 function getUpstreamResponsePreview(ev: OpsErrorDetail): string {
   const upstreamPayload = resolveUpstreamPayload(ev)
-  if (upstreamPayload) return upstreamPayload
-  return String(ev.error_body || '').trim()
+  if (upstreamPayload) return redactSensitivePreview(upstreamPayload, 500)
+  return redactSensitivePreview(String(ev.error_body || '').trim(), 500)
 }
 
 function toggleUpstreamDetail(id: number) {

@@ -5,8 +5,10 @@ import BaseDialog from '@/components/common/BaseDialog.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import { useClipboard } from '@/composables/useClipboard'
 import { useAppStore } from '@/stores'
+import { useAuthStore } from '@/stores/auth'
 import { opsAPI, type OpsRequestDetailsParams, type OpsRequestDetail } from '@/api/admin/ops'
 import { parseTimeRangeMinutes, formatDateTime } from '../utils/opsFormatters'
+import { formatUpstreamAccountForRole, formatUserEmailForRole, normalizeAdminRole } from '@/utils/adminSensitiveDisplay'
 
 export interface OpsRequestDetailsPreset {
   title: string
@@ -34,6 +36,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const authStore = useAuthStore()
 const { copyToClipboard } = useClipboard()
 
 const loading = ref(false)
@@ -41,6 +44,7 @@ const items = ref<OpsRequestDetail[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(10)
+const viewerRole = computed(() => normalizeAdminRole((authStore.user as { role?: string } | null)?.role))
 
 const close = () => emit('update:modelValue', false)
 
@@ -159,14 +163,14 @@ function openRowErrorDetail(row: OpsRequestDetail) {
 }
 
 function requestAccountLabel(row: OpsRequestDetail): string {
-  if (row.user_email) return row.user_email
+  if (row.user_email) return formatUserEmailForRole(row.user_email, viewerRole.value)
   if (row.user_id != null) return t('admin.ops.requestDetails.accountUser', { id: row.user_id })
   if (row.api_key_id != null) return t('admin.ops.requestDetails.accountApiKey', { id: row.api_key_id })
   return '-'
 }
 
 function upstreamAccountLabel(row: OpsRequestDetail): string {
-  if (row.account_name) return row.account_name
+  if (row.account_name) return formatUpstreamAccountForRole(row.account_name, viewerRole.value)
   if (row.account_id != null) return t('admin.ops.requestDetails.upstreamAccountId', { id: row.account_id })
   return '-'
 }
