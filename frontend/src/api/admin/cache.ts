@@ -441,6 +441,21 @@ export const cacheAPI = {
     return apiClient.post<SemanticCacheConnectionTestResult>('/admin/cache/semantic-config/test', data)
   },
 
+  listSemanticAudits(params?: SemanticCacheAuditFilter) {
+    return apiClient.get<PaginatedResponse<SemanticCacheAuditRecord> | { items: SemanticCacheAuditRecord[]; total: number; page: number; page_size: number }>(
+      '/admin/cache/semantic-audits',
+      { params }
+    )
+  },
+
+  reviewSemanticAudit(id: number, data: SemanticCacheAuditReviewRequest) {
+    return apiClient.post<SemanticCacheAuditRecord>(`/admin/cache/semantic-audits/${id}/review`, data)
+  },
+
+  feedbackSemanticAudit(id: number, data: SemanticCacheAuditFeedbackRequest) {
+    return apiClient.post<SemanticCacheAuditRecord>(`/admin/cache/semantic-audits/${id}/feedback`, data)
+  },
+
   getStats(params?: CacheStatsParams) {
     return apiClient.get<CacheStatsResponse>('/admin/cache/stats', { params: sanitizeCacheStatsParams(params) })
   },
