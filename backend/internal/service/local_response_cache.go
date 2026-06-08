@@ -379,10 +379,8 @@ func BuildLocalResponseCacheLookupWithOptions(cfg LocalResponseCacheConfig, apiK
 	if hasLocalResponseCacheSensitiveContent(body) {
 		return LocalResponseCacheLookup{Reason: "sensitive_content"}
 	}
-	if cfg.MaxTemperature >= 0 {
-		if t := gjson.GetBytes(body, "temperature"); t.Exists() && t.Num > cfg.MaxTemperature {
-			return LocalResponseCacheLookup{Reason: "temperature_too_high"}
-		}
+	if cfg.MaxTemperature >= 0 && localResponseCacheTemperatureTooHigh(body, cfg.MaxTemperature) {
+		return LocalResponseCacheLookup{Reason: "temperature_too_high"}
 	}
 	canonical, ok := canonicalJSON(body)
 	if !ok {
@@ -480,8 +478,17 @@ func canonicalJSON(body []byte) ([]byte, bool) {
 	return out, true
 }
 
+func localResponseCacheTemperatureTooHigh(body []byte, maxTemperature float64) bool {
+	for _, path := range []string{"temperature", "generationConfig.temperature", "generation_config.temperature"} {
+		if t := gjson.GetBytes(body, path); t.Exists() && t.Num > maxTemperature {
+			return true
+		}
+	}
+	return false
+}
+
 func hasLocalResponseCacheUnsafeFields(body []byte) bool {
-	for _, path := range []string{"tools", "tool_choice", "functions", "function_call", "parallel_tool_calls", "thinking"} {
+	for _, path := range []string{"tools", "tool_choice", "functions", "function_call", "functionCall", "function_response", "functionResponse", "parallel_tool_calls", "thinking"} {
 		if gjson.GetBytes(body, path).Exists() {
 			return true
 		}
@@ -506,6 +513,12 @@ func containsLocalResponseCacheToolUse(body []byte) bool {
 func containsLocalResponseCacheToolUseValue(value any) bool {
 	switch v := value.(type) {
 	case map[string]any:
+		if _, ok := v["functionCall"]; ok {
+			return true
+		}
+		if _, ok := v["functionResponse"]; ok {
+			return true
+		}
 		if itemType, ok := v["type"].(string); ok && strings.EqualFold(strings.TrimSpace(itemType), "tool_use") {
 			return true
 		}
@@ -535,6 +548,18 @@ func containsLocalResponseCacheMultimodalContent(body []byte) bool {
 func containsLocalResponseCacheMultimodalValue(value any) bool {
 	switch v := value.(type) {
 	case map[string]any:
+		if _, ok := v["inlineData"]; ok {
+			return true
+		}
+		if _, ok := v["fileData"]; ok {
+			return true
+		}
+		if _, ok := v["inline_data"]; ok {
+			return true
+		}
+		if _, ok := v["file_data"]; ok {
+			return true
+		}
 		if itemType, ok := v["type"].(string); ok {
 			switch strings.ToLower(strings.TrimSpace(itemType)) {
 			case "image", "document", "file", "audio", "video", "input_image", "input_file":

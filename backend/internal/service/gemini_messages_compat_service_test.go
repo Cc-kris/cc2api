@@ -19,22 +19,35 @@ import (
 )
 
 type geminiCompatHTTPUpstreamStub struct {
-	response *http.Response
-	err      error
-	calls    int
-	lastReq  *http.Request
+	response  *http.Response
+	responses []*http.Response
+	err       error
+	calls     int
+	lastReq   *http.Request
+	lastBody  []byte
 }
 
 func (s *geminiCompatHTTPUpstreamStub) Do(req *http.Request, proxyURL string, accountID int64, accountConcurrency int) (*http.Response, error) {
 	s.calls++
 	s.lastReq = req
+	if req != nil && req.Body != nil {
+		s.lastBody, _ = io.ReadAll(req.Body)
+		req.Body = io.NopCloser(bytes.NewReader(s.lastBody))
+	}
 	if s.err != nil {
 		return nil, s.err
 	}
-	if s.response == nil {
+	var base *http.Response
+	if len(s.responses) > 0 {
+		base = s.responses[0]
+		s.responses = s.responses[1:]
+	} else {
+		base = s.response
+	}
+	if base == nil {
 		return nil, fmt.Errorf("missing stub response")
 	}
-	resp := *s.response
+	resp := *base
 	return &resp, nil
 }
 
@@ -352,6 +365,180 @@ func TestGeminiHandleNativeNonStreamingResponse_DebugDisabledDoesNotEmitHeaderLo
 	require.NoError(t, err)
 	require.NotNil(t, usage)
 	require.False(t, logSink.ContainsMessage("[GeminiAPI]"), "debug 关闭时不应输出 Gemini 响应头日志")
+}
+
+func TestGeminiForwardNative_GenerateContentLocalResponseCacheHit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+		localResponseCache: true,
+		expiresAt:          time.Now().Add(time.Minute).UnixNano(),
+	})
+	defer gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
+
+	upstreamJSON := `{"candidates":[{"content":{"parts":[{"text":"cached gemini"}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":12,"candidatesTokenCount":7,"cachedContentTokenCount":2}}`
+	httpStub := &geminiCompatHTTPUpstreamStub{
+		response: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}, "x-request-id": []string{"gemini-cache-1"}},
+			Body:       io.NopCloser(strings.NewReader(upstreamJSON)),
+		},
+	}
+	store := &localResponseCacheGatewayTestStore{}
+	repo := newRuntimeSettingRepoStub()
+	repo.values[SettingKeyLocalResponseCacheEnabled] = "true"
+	svc := &GeminiMessagesCompatService{
+		httpUpstream:         httpStub,
+		cfg:                  &config.Config{},
+		cache:                store,
+		settingService:       &SettingService{settingRepo: repo},
+		responseHeaderFilter: compileResponseHeaderFilter(&config.Config{}),
+	}
+	groupID := int64(3)
+	account := &Account{ID: 201, Platform: PlatformGemini, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "gemini-api-key"}, Concurrency: 1}
+	body := []byte(`{"contents":[{"role":"user","parts":[{"text":"hello"}]}],"generationConfig":{"temperature":0.1}}`)
+
+	rec1 := httptest.NewRecorder()
+	c1, _ := gin.CreateTestContext(rec1)
+	c1.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-flash:generateContent", bytes.NewReader(body))
+	c1.Set("api_key", &APIKey{ID: 10, GroupID: &groupID})
+	result1, err := svc.ForwardNative(context.Background(), c1, account, "gemini-2.5-flash", "generateContent", false, body)
+	require.NoError(t, err)
+	require.NotNil(t, result1)
+	require.Equal(t, 1, httpStub.calls)
+	require.JSONEq(t, upstreamJSON, rec1.Body.String())
+	require.NotEmpty(t, store.entries)
+	require.Equal(t, 10, result1.Usage.InputTokens)
+	require.Equal(t, 7, result1.Usage.OutputTokens)
+	require.Equal(t, 2, result1.Usage.CacheReadInputTokens)
+
+	httpStub.response = &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"candidates":[{"content":{"parts":[{"text":"should not call"}]}}]}`)),
+	}
+	rec2 := httptest.NewRecorder()
+	c2, _ := gin.CreateTestContext(rec2)
+	c2.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-flash:generateContent", bytes.NewReader(body))
+	c2.Set("api_key", &APIKey{ID: 10, GroupID: &groupID})
+	result2, err := svc.ForwardNative(context.Background(), c2, account, "gemini-2.5-flash", "generateContent", false, body)
+	require.NoError(t, err)
+	require.NotNil(t, result2)
+	require.Equal(t, 1, httpStub.calls, "second identical generateContent request must be served from local response cache")
+	require.Equal(t, LocalResponseCacheHeaderHit, rec2.Header().Get(LocalResponseCacheHeader))
+	require.JSONEq(t, upstreamJSON, rec2.Body.String())
+	require.Equal(t, 10, result2.Usage.InputTokens)
+	require.Equal(t, 7, result2.Usage.OutputTokens)
+	require.Equal(t, 2, result2.Usage.CacheReadInputTokens)
+}
+
+func TestGeminiForwardNative_GenerateContentLocalResponseCacheBypassesTools(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+		localResponseCache: true,
+		expiresAt:          time.Now().Add(time.Minute).UnixNano(),
+	})
+	defer gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
+
+	httpStub := &geminiCompatHTTPUpstreamStub{
+		response: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"candidates":[{"content":{"parts":[{"text":"tool response"}]}}],"usageMetadata":{"promptTokenCount":2,"candidatesTokenCount":1}}`)),
+		},
+	}
+	store := &localResponseCacheGatewayTestStore{}
+	repo := newRuntimeSettingRepoStub()
+	repo.values[SettingKeyLocalResponseCacheEnabled] = "true"
+	svc := &GeminiMessagesCompatService{
+		httpUpstream:         httpStub,
+		cfg:                  &config.Config{},
+		cache:                store,
+		settingService:       &SettingService{settingRepo: repo},
+		responseHeaderFilter: compileResponseHeaderFilter(&config.Config{}),
+	}
+	groupID := int64(3)
+	account := &Account{ID: 202, Platform: PlatformGemini, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "gemini-api-key"}, Concurrency: 1}
+	body := []byte(`{"contents":[{"role":"user","parts":[{"text":"hello"}]}],"tools":[{"functionDeclarations":[{"name":"get_weather"}]}]}`)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-flash:generateContent", bytes.NewReader(body))
+	c.Set("api_key", &APIKey{ID: 10, GroupID: &groupID})
+	result, err := svc.ForwardNative(context.Background(), c, account, "gemini-2.5-flash", "generateContent", false, body)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, httpStub.calls)
+	require.Empty(t, store.entries, "Gemini tool requests must bypass local response cache")
+}
+
+func TestGeminiForwardNative_GenerateContentLocalResponseCacheBypassesGeminiUnsafeFields(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+		localResponseCache: true,
+		expiresAt:          time.Now().Add(time.Minute).UnixNano(),
+	})
+	defer gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "generationConfig high temperature",
+			body: `{"contents":[{"role":"user","parts":[{"text":"hello"}]}],"generationConfig":{"temperature":0.9}}`,
+		},
+		{
+			name: "inlineData image",
+			body: `{"contents":[{"role":"user","parts":[{"inlineData":{"mimeType":"image/png","data":"AAAA"}}]}],"generationConfig":{"temperature":0.1}}`,
+		},
+		{
+			name: "fileData image",
+			body: `{"contents":[{"role":"user","parts":[{"fileData":{"mimeType":"image/png","fileUri":"gs://bucket/a.png"}}]}],"generationConfig":{"temperature":0.1}}`,
+		},
+		{
+			name: "functionCall part",
+			body: `{"contents":[{"role":"model","parts":[{"functionCall":{"name":"get_weather","args":{"city":"SZ"}}}]}],"generationConfig":{"temperature":0.1}}`,
+		},
+		{
+			name: "functionResponse part",
+			body: `{"contents":[{"role":"user","parts":[{"functionResponse":{"name":"get_weather","response":{"temp":30}}}]}],"generationConfig":{"temperature":0.1}}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			httpStub := &geminiCompatHTTPUpstreamStub{
+				response: &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"candidates":[{"content":{"parts":[{"text":"unsafe response"}]}}],"usageMetadata":{"promptTokenCount":2,"candidatesTokenCount":1}}`)),
+				},
+			}
+			store := &localResponseCacheGatewayTestStore{}
+			repo := newRuntimeSettingRepoStub()
+			repo.values[SettingKeyLocalResponseCacheEnabled] = "true"
+			svc := &GeminiMessagesCompatService{
+				httpUpstream:         httpStub,
+				cfg:                  &config.Config{},
+				cache:                store,
+				settingService:       &SettingService{settingRepo: repo},
+				responseHeaderFilter: compileResponseHeaderFilter(&config.Config{}),
+			}
+			groupID := int64(3)
+			account := &Account{ID: 203, Platform: PlatformGemini, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "gemini-api-key"}, Concurrency: 1}
+			body := []byte(tt.body)
+
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-flash:generateContent", bytes.NewReader(body))
+			c.Set("api_key", &APIKey{ID: 10, GroupID: &groupID})
+			result, err := svc.ForwardNative(context.Background(), c, account, "gemini-2.5-flash", "generateContent", false, body)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Equal(t, 1, httpStub.calls)
+			require.Empty(t, store.entries, "unsafe Gemini request must bypass local response cache")
+		})
+	}
 }
 
 func TestGeminiMessagesCompatServiceForward_PreservesRequestedModelAndMappedUpstreamModel(t *testing.T) {

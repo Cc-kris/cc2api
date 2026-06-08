@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -53,7 +54,11 @@ type GeminiMessagesCompatService struct {
 	httpUpstream              HTTPUpstream
 	antigravityGatewayService *AntigravityGatewayService
 	cfg                       *config.Config
+	settingService            *SettingService
 	responseHeaderFilter      *responseheaders.CompiledHeaderFilter
+
+	localResponseCacheStatsOnce  sync.Once
+	localResponseCacheStatsQueue chan string
 }
 
 func NewGeminiMessagesCompatService(
@@ -79,6 +84,207 @@ func NewGeminiMessagesCompatService(
 		cfg:                       cfg,
 		responseHeaderFilter:      compileResponseHeaderFilter(cfg),
 	}
+}
+
+func (s *GeminiMessagesCompatService) SetSettingService(settingService *SettingService) {
+	s.settingService = settingService
+}
+
+func (s *GeminiMessagesCompatService) LocalResponseCacheConfig(ctx context.Context) LocalResponseCacheConfig {
+	cfg := DefaultLocalResponseCacheConfig()
+	if s == nil || s.settingService == nil {
+		return cfg
+	}
+	cfg.Enabled = s.settingService.IsLocalResponseCacheEnabled(ctx)
+	return cfg
+}
+
+func (s *GeminiMessagesCompatService) GetLocalResponseCache(ctx context.Context, key string) (*LocalResponseCacheEntry, error) {
+	if s == nil || s.cache == nil {
+		return nil, nil
+	}
+	store, ok := s.cache.(LocalResponseCacheStore)
+	if !ok {
+		return nil, nil
+	}
+	return store.GetLocalResponse(ctx, key)
+}
+
+func (s *GeminiMessagesCompatService) SetLocalResponseCache(ctx context.Context, key string, entry *LocalResponseCacheEntry, ttl time.Duration) error {
+	if s == nil || s.cache == nil || entry == nil {
+		return nil
+	}
+	store, ok := s.cache.(LocalResponseCacheStore)
+	if !ok {
+		return nil
+	}
+	return store.SetLocalResponse(ctx, key, entry, ttl)
+}
+
+func (s *GeminiMessagesCompatService) RecordLocalResponseCacheStat(ctx context.Context, field string) {
+	field = strings.TrimSpace(field)
+	if s == nil || s.cache == nil || field == "" {
+		return
+	}
+	store, ok := s.cache.(LocalResponseCacheStatsStore)
+	if !ok {
+		return
+	}
+	s.localResponseCacheStatsOnce.Do(func() {
+		s.localResponseCacheStatsQueue = make(chan string, localResponseCacheStatsQueueSize)
+		go runLocalResponseCacheStatsWriter(store, s.localResponseCacheStatsQueue)
+	})
+	select {
+	case s.localResponseCacheStatsQueue <- field:
+	default:
+	}
+}
+
+func getAPIKeyGroupIDFromContext(c *gin.Context) *int64 {
+	if c == nil {
+		return nil
+	}
+	v, exists := c.Get("api_key")
+	if !exists {
+		return nil
+	}
+	apiKey, ok := v.(*APIKey)
+	if !ok || apiKey == nil || apiKey.GroupID == nil || *apiKey.GroupID <= 0 {
+		return nil
+	}
+	groupID := *apiKey.GroupID
+	return &groupID
+}
+
+func (s *GeminiMessagesCompatService) prepareGeminiLocalResponseCache(ctx context.Context, c *gin.Context, body []byte, model string, apiKeyID int64, groupID *int64, action string, stream bool, useUpstreamStream bool) (LocalResponseCacheLookup, LocalResponseCacheConfig) {
+	cfg := s.LocalResponseCacheConfig(ctx)
+	if action != "generateContent" || stream || useUpstreamStream {
+		reason := "unsupported_action"
+		if stream || useUpstreamStream {
+			reason = "stream"
+		}
+		if cfg.Enabled && s != nil {
+			s.RecordLocalResponseCacheStat(ctx, "lookup_bypass:"+reason)
+		}
+		return LocalResponseCacheLookup{Reason: reason}, cfg
+	}
+	explicitBypass := false
+	headers := http.Header{}
+	if c != nil && c.Request != nil {
+		explicitBypass = strings.EqualFold(strings.TrimSpace(c.GetHeader("X-Sub2API-Cache-Control")), "bypass")
+		headers = c.Request.Header.Clone()
+	}
+	if strings.TrimSpace(headers.Get("Content-Type")) == "" {
+		headers.Set("Content-Type", "application/json")
+	}
+	lookup := BuildLocalResponseCacheLookupWithOptions(cfg, apiKeyID, groupID, "/v1beta/models/:model:generateContent", PlatformGemini, model, body, explicitBypass, LocalResponseCacheKeyOptions{
+		Headers: LocalResponseCacheKeyHeadersFromHTTP(headers),
+	})
+	if lookup.Key == "" && cfg.Enabled && s != nil {
+		s.RecordLocalResponseCacheStat(ctx, "lookup_bypass:"+lookup.Reason)
+	}
+	return lookup, cfg
+}
+
+func (s *GeminiMessagesCompatService) tryWriteGeminiLocalResponseCacheHit(ctx context.Context, c *gin.Context, lookup LocalResponseCacheLookup, requestStream bool) (*ClaudeUsage, bool) {
+	if lookup.Key == "" || requestStream {
+		return nil, false
+	}
+	entry, err := s.GetLocalResponseCache(ctx, lookup.Key)
+	if err != nil && strings.TrimSpace(lookup.LegacyKey) != "" {
+		entry, err = s.GetLocalResponseCache(ctx, lookup.LegacyKey)
+	}
+	if err != nil || entry == nil || len(entry.Body) == 0 {
+		if s != nil {
+			s.RecordLocalResponseCacheStat(ctx, "lookup_miss")
+		}
+		return nil, false
+	}
+	if !isGeminiLocalResponseCacheEntryCompatible(entry.ContentType) {
+		if s != nil {
+			s.RecordLocalResponseCacheStat(ctx, "lookup_miss:content_type_mismatch")
+		}
+		return nil, false
+	}
+	if c != nil {
+		for k, v := range entry.Headers {
+			if strings.TrimSpace(k) != "" && strings.TrimSpace(v) != "" {
+				c.Header(k, v)
+			}
+		}
+		contentType := entry.ContentType
+		if contentType == "" {
+			contentType = "application/json"
+		}
+		c.Header("Content-Type", contentType)
+		c.Header(LocalResponseCacheHeader, LocalResponseCacheHeaderHit)
+		status := entry.StatusCode
+		if status == 0 {
+			status = http.StatusOK
+		}
+		c.Data(status, contentType, entry.Body)
+	}
+	if s != nil {
+		s.RecordLocalResponseCacheStat(ctx, "lookup_hit")
+	}
+	return extractGeminiUsage(entry.Body), true
+}
+
+func (s *GeminiMessagesCompatService) persistGeminiLocalResponseCache(ctx context.Context, c *gin.Context, lookup LocalResponseCacheLookup, cfg LocalResponseCacheConfig, status int, contentType string, body []byte) {
+	if lookup.Key == "" {
+		return
+	}
+	if status != http.StatusOK || len(body) == 0 {
+		if s != nil {
+			if status != http.StatusOK {
+				s.RecordLocalResponseCacheStat(ctx, "store_skip:status_not_ok")
+			} else {
+				s.RecordLocalResponseCacheStat(ctx, "store_skip:empty_body")
+			}
+		}
+		return
+	}
+	if cfg.MaxBodySize > 0 && len(body) > cfg.MaxBodySize {
+		if s != nil {
+			s.RecordLocalResponseCacheStat(ctx, "store_skip:body_too_large")
+		}
+		return
+	}
+	if !isGeminiLocalResponseCacheEntryCompatible(contentType) {
+		if s != nil {
+			s.RecordLocalResponseCacheStat(ctx, "store_skip:content_type")
+		}
+		return
+	}
+	entry := &LocalResponseCacheEntry{
+		StatusCode:  status,
+		ContentType: contentType,
+		Body:        append([]byte(nil), body...),
+		Headers: map[string]string{
+			"Content-Type": contentType,
+		},
+		CreatedAt: time.Now(),
+	}
+	if setErr := s.SetLocalResponseCache(ctx, lookup.Key, entry, cfg.TTL); setErr != nil {
+		if s != nil {
+			s.RecordLocalResponseCacheStat(ctx, "store_failed")
+		}
+		return
+	}
+	if c != nil {
+		c.Header(LocalResponseCacheHeader, LocalResponseCacheHeaderMiss)
+	}
+	if s != nil {
+		s.RecordLocalResponseCacheStat(ctx, "store_success")
+	}
+}
+
+func isGeminiLocalResponseCacheEntryCompatible(contentType string) bool {
+	ct := strings.ToLower(strings.TrimSpace(contentType))
+	if ct == "" {
+		ct = "application/json"
+	}
+	return strings.Contains(ct, "application/json")
 }
 
 // GetTokenProvider returns the token provider for OAuth accounts
@@ -1142,6 +1348,18 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	}
 	forceAIStudio := action == "countTokens"
 
+	localCacheLookup, localCacheCfg := s.prepareGeminiLocalResponseCache(ctx, c, body, mappedModel, getAPIKeyIDFromContext(c), getAPIKeyGroupIDFromContext(c), action, stream, useUpstreamStream)
+	if usage, ok := s.tryWriteGeminiLocalResponseCacheHit(ctx, c, localCacheLookup, stream); ok {
+		return &ForwardResult{
+			RequestID:     "",
+			Usage:         *usage,
+			Model:         originalModel,
+			UpstreamModel: mappedModel,
+			Stream:        stream,
+			Duration:      time.Since(startTime),
+		}, nil
+	}
+
 	var requestIDHeader string
 	var buildReq func(ctx context.Context) (*http.Request, string, error)
 
@@ -1576,11 +1794,12 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 			c.Data(http.StatusOK, "application/json", b)
 			usage = usageObj
 		} else {
-			usageResp, err := s.handleNativeNonStreamingResponse(c, resp, isOAuth)
+			usageResp, responseBody, contentType, err := s.handleNativeNonStreamingResponseWithBody(c, resp, isOAuth)
 			if err != nil {
 				return nil, err
 			}
 			usage = usageResp
+			s.persistGeminiLocalResponseCache(ctx, c, localCacheLookup, localCacheCfg, resp.StatusCode, contentType, responseBody)
 		}
 	}
 
@@ -2465,6 +2684,11 @@ type UpstreamHTTPResult struct {
 }
 
 func (s *GeminiMessagesCompatService) handleNativeNonStreamingResponse(c *gin.Context, resp *http.Response, isOAuth bool) (*ClaudeUsage, error) {
+	usage, _, _, err := s.handleNativeNonStreamingResponseWithBody(c, resp, isOAuth)
+	return usage, err
+}
+
+func (s *GeminiMessagesCompatService) handleNativeNonStreamingResponseWithBody(c *gin.Context, resp *http.Response, isOAuth bool) (*ClaudeUsage, []byte, string, error) {
 	if s.cfg != nil && s.cfg.Gateway.GeminiDebugResponseHeaders {
 		logger.LegacyPrintf("service.gemini_messages_compat", "[GeminiAPI] ========== Response Headers ==========")
 		for key, values := range resp.Header {
@@ -2477,7 +2701,7 @@ func (s *GeminiMessagesCompatService) handleNativeNonStreamingResponse(c *gin.Co
 
 	respBody, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
-		return nil, err
+		return nil, nil, "", err
 	}
 
 	if isOAuth {
@@ -2496,9 +2720,9 @@ func (s *GeminiMessagesCompatService) handleNativeNonStreamingResponse(c *gin.Co
 	c.Data(resp.StatusCode, contentType, respBody)
 
 	if u := extractGeminiUsage(respBody); u != nil {
-		return u, nil
+		return u, respBody, contentType, nil
 	}
-	return &ClaudeUsage{}, nil
+	return &ClaudeUsage{}, respBody, contentType, nil
 }
 
 func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Context, resp *http.Response, startTime time.Time, isOAuth bool) (*geminiNativeStreamResult, error) {
