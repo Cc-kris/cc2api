@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"regexp"
-	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
 )
 
 const (
@@ -335,30 +334,7 @@ func (s *OpsService) aiAnalysisMaxSamples() int {
 }
 
 func redactAIContextText(value string, maxRunes int) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-	value = redactSensitiveText(value)
-	return truncateRunes(value, maxRunes)
-}
-
-var (
-	opsAIEmailRedactRe = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
-	opsAIKeyRedactRe   = regexp.MustCompile(`(?i)\b(?:sk|ak|pk|rk|ya29|ghp|gho|ghu|ghs|github_pat)[-_A-Za-z0-9]{8,}\b`)
-)
-
-func redactSensitiveText(value string) string {
-	value = opsAIEmailRedactRe.ReplaceAllString(value, "[REDACTED_EMAIL]")
-	value = opsAIKeyRedactRe.ReplaceAllString(value, "[REDACTED_TOKEN]")
-	patterns := []string{"authorization", "bearer", "api_key", "apikey", "x-api-key", "cookie", "token", "secret", "password", "proxy"}
-	lower := strings.ToLower(value)
-	for _, pattern := range patterns {
-		if strings.Contains(lower, pattern) {
-			return "[REDACTED]"
-		}
-	}
-	return value
+	return logredact.RedactAIContext(value, maxRunes)
 }
 
 func truncateOpsAIAnalysisError(s string, max int) string {
