@@ -231,6 +231,111 @@ export interface OpsDashboardSnapshotV2Response {
   error_trend: OpsErrorTrendResponse
 }
 
+export type OpsIncidentOverviewTimeRange = '1m' | '5m' | '30m' | '1h' | '6h' | '24h' | 'custom'
+
+export interface OpsIncidentAffectedAccount {
+  id: number
+  name: string
+}
+
+export interface OpsIncidentQuickFilter {
+  label: string
+  params: Record<string, string>
+}
+
+export interface OpsIncidentLatestAIAnalysis {
+  id: number
+  status: string
+  summary: string
+  created_at: string
+}
+
+export interface OpsIncidentOverview {
+  status: string
+  health_risk_score: number
+  score_level: string
+  score_reasons: string[]
+  summary: string
+  final_failures: number
+  final_failure_rate: number
+  recovered_fluctuations: number
+  total_requests: number
+  affected_users: number
+  affected_api_keys: number
+  affected_models: string[]
+  affected_accounts: OpsIncidentAffectedAccount[]
+  latest_ai_analysis: OpsIncidentLatestAIAnalysis | null
+  quick_filters: OpsIncidentQuickFilter[]
+  recommended_actions: string[]
+  updated_at: string
+}
+
+export interface OpsIncidentOverviewParams {
+  time_range?: OpsIncidentOverviewTimeRange
+  start_time?: string
+  end_time?: string
+  platform?: string
+  model?: string
+  group_id?: number | null
+}
+
+export interface OpsAIAnalysisTaskCreateRequest {
+  source_type: 'unified_errors' | 'manual_filter'
+  source_id?: number | null
+  time_start: string
+  time_end: string
+  filters?: Record<string, any>
+}
+
+export interface OpsAIAnalysisTaskCreateResponse {
+  task_id: number
+  status: string
+  sample_count: number
+  matched_error_count: number
+  message: string
+}
+
+export interface OpsAIAnalysisTask {
+  id: number
+  source_type: string
+  source_id?: number | null
+  trigger_type: string
+  trigger_user_id?: number | null
+  time_start: string
+  time_end: string
+  filters_json?: string
+  status: string
+  provider?: string
+  model?: string
+  sample_count: number
+  matched_error_count: number
+  error_message?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface OpsAIAnalysisReport {
+  task_id: number
+  summary: string
+  root_cause?: string
+  impact_scope?: any
+  evidence?: any
+  suggested_actions?: any
+  error_breakdown?: any
+  confidence?: string
+  feedback_status?: string
+  feedback_note?: string
+  feedback_user_id?: number
+  feedback_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface OpsAIAnalysisTaskDetailResponse {
+  task: OpsAIAnalysisTask
+  report?: OpsAIAnalysisReport | null
+}
+
 export type OpsOpenAITokenStatsTimeRange = '30m' | '1h' | '1d' | '15d' | '30d'
 
 export interface OpsOpenAITokenStatsItem {
@@ -1079,6 +1184,17 @@ export async function getOpenAITokenStats(
   return data
 }
 
+export async function getIncidentOverview(
+  params: OpsIncidentOverviewParams,
+  options: OpsRequestOptions = {}
+): Promise<OpsIncidentOverview> {
+  const { data } = await apiClient.get<OpsIncidentOverview>('/admin/ops/incidents/overview', {
+    params,
+    signal: options.signal
+  })
+  return data
+}
+
 export type OpsErrorListView = 'errors' | 'excluded' | 'all'
 
 export type OpsErrorListQueryParams = {
@@ -1183,6 +1299,18 @@ export async function updateAlertRule(id: number, rule: Partial<AlertRule>): Pro
 
 export async function deleteAlertRule(id: number): Promise<void> {
   await apiClient.delete(`/admin/ops/alert-rules/${id}`)
+}
+
+export async function createAIAnalysisTask(
+  payload: OpsAIAnalysisTaskCreateRequest
+): Promise<OpsAIAnalysisTaskCreateResponse> {
+  const { data } = await apiClient.post<OpsAIAnalysisTaskCreateResponse>('/admin/ops/ai-analysis/tasks', payload)
+  return data
+}
+
+export async function getAIAnalysisTaskDetail(id: number): Promise<OpsAIAnalysisTaskDetailResponse> {
+  const { data } = await apiClient.get<OpsAIAnalysisTaskDetailResponse>(`/admin/ops/ai-analysis/tasks/${id}`)
+  return data
 }
 
 export interface AlertEventsQuery {
@@ -1306,6 +1434,7 @@ export const opsAPI = {
   getErrorTrend,
   getErrorDistribution,
   getOpenAITokenStats,
+  getIncidentOverview,
   getConcurrencyStats,
   getUserConcurrencyStats,
   getAccountAvailabilityStats,
@@ -1331,6 +1460,8 @@ export const opsAPI = {
   createAlertRule,
   updateAlertRule,
   deleteAlertRule,
+  createAIAnalysisTask,
+  getAIAnalysisTaskDetail,
   listAlertEvents,
   getAlertEvent,
   updateAlertEventStatus,
