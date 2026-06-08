@@ -5042,6 +5042,83 @@ export default {
           expired: 'Expired'
         }
       },
+      aiAnalysis: {
+        title: 'AI Analysis Configuration',
+        description: 'Maintain the AI analysis service settings and run a saved-configuration connection test.',
+        loadFailed: 'Failed to load AI configuration',
+        saveSuccess: 'AI configuration saved',
+        saveFailed: 'Failed to save AI configuration',
+        testFailed: 'Connection test failed',
+        testSuccess: 'Connection successful',
+        testAction: 'Test Connection',
+        testActionRetry: 'Retest',
+        refresh: 'Refresh Config',
+        save: 'Save Config',
+        saving: 'Saving...',
+        testing: 'Testing...',
+        noChanges: 'There are no unsaved changes.',
+        dirtyHint: 'Current changes will be saved before the connection test runs.',
+        readOnly: 'This account can only view the masked configuration and cannot edit or test the connection.',
+        cards: {
+          basic: 'Basic Configuration',
+          behavior: 'Analysis Behavior',
+          testResult: 'Test Result'
+        },
+        fields: {
+          enabled: 'Enable AI analysis',
+          enabledHint: 'When disabled, the configuration is preserved but neither auto nor manual AI analysis will run.',
+          baseUrl: 'AI service URL',
+          apiKey: 'AI API key',
+          apiKeyPlaceholder: 'Leave empty to keep the currently saved key',
+          apiKeyHint: 'Saved key: {masked}',
+          model: 'AI model name',
+          interfaceType: 'Interface type',
+          timeoutSeconds: 'Single analysis timeout (seconds)',
+          maxSamples: 'Max samples',
+          autoDedupMinutes: 'Auto-analysis same-kind dedup window (minutes)',
+          globalRateLimitPerMinute: 'Global AI call rate limit (per minute)',
+          autoLevels: 'Auto-analysis levels',
+          manualEnabled: 'Allow manual analysis',
+          manualEnabledHint: 'When disabled, only automatic analysis remains available.'
+        },
+        interfaceTypes: {
+          openai_compatible: 'OpenAI Compatible',
+          responses: 'Responses',
+          anthropic_compatible: 'Anthropic Compatible',
+          gemini_compatible: 'Gemini Compatible'
+        },
+        autoLevels: {
+          P0: 'P0',
+          P1: 'P1',
+          P2: 'P2',
+          observe: 'Observe'
+        },
+        validation: {
+          title: 'Please fix the following issues',
+          baseUrl: 'Please enter a valid AI service URL',
+          apiKey: 'Please enter an AI API key',
+          model: 'Please enter an AI model name',
+          interfaceType: 'Please select an interface type',
+          timeoutSeconds: 'Please enter an integer number of seconds between 5 and 300',
+          maxSamples: 'Please enter an integer between 1 and 500',
+          autoDedupMinutes: 'Please enter an integer number of minutes between 1 and 1440',
+          globalRateLimitPerMinute: 'Please enter an integer between 1 and 1000'
+        },
+        connectionStatus: {
+          success: 'Connection successful',
+          config_error: 'Please configure the AI analysis service first',
+          auth_failed: 'Authentication failed',
+          network_failed: 'Connection failed',
+          timeout: 'Connection timed out',
+          failed: 'Connection failed'
+        },
+        resultMeta: {
+          httpStatus: 'HTTP status: {status}',
+          duration: 'Duration: {duration} ms',
+          model: 'Model: {model}',
+          endpoint: 'Endpoint: {baseUrl}'
+        }
+      },
       unifiedErrorDetail: {
         title: 'Unified Error Detail',
         description: 'Aggregated request chain, classification, impact scope, recovery state, AI analysis, raw record, and same-kind issues.',
