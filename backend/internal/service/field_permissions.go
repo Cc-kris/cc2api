@@ -133,6 +133,20 @@ func (s *SettingService) UpdateAdvancedCacheConfigForRole(ctx context.Context, c
 	return s.UpdateAdvancedCacheConfig(ctx, cfg)
 }
 
+func (s *SettingService) GetSemanticCacheConfigForRole(ctx context.Context, viewerRole string) (SemanticCacheConfig, error) {
+	if !canViewCacheConfig(viewerRole) {
+		return SemanticCacheConfig{}, nil
+	}
+	return s.GetSemanticCacheConfig(ctx)
+}
+
+func (s *SettingService) UpdateSemanticCacheConfigForRole(ctx context.Context, cfg SemanticCacheConfig, viewerRole string) (SemanticCacheConfig, error) {
+	if !canManageCacheConfig(viewerRole) {
+		return SemanticCacheConfig{}, ErrInsufficientPerms
+	}
+	return s.UpdateSemanticCacheConfig(ctx, cfg)
+}
+
 func viewerRoleFromCacheStatsFilter(filter *CacheStatsFilter) string {
 	if filter == nil {
 		return ""
