@@ -74,6 +74,9 @@ func (c *gatewayCache) GetLocalResponse(ctx context.Context, key string) (*servi
 	}
 	redisKey := buildLocalResponseCacheKey(key)
 	payload, err := c.rdb.Get(ctx, redisKey).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return nil, service.ErrLocalResponseCacheMiss
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +175,7 @@ LIMIT $2`
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	candidates := make([]service.SemanticCacheStoredCandidate, 0, limit)
 	for rows.Next() {

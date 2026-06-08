@@ -676,6 +676,7 @@ func TestAPIContracts(t *testing.T) {
 					"promo_code_enabled": true,
 					"password_reset_enabled": false,
 						"frontend_url": "",
+						"local_response_cache_enabled": false,
 						"totp_enabled": false,
 						"totp_encryption_key_configured": false,
 						"login_agreement_enabled": false,
@@ -948,6 +949,7 @@ func TestAPIContracts(t *testing.T) {
 					"promo_code_enabled": true,
 					"password_reset_enabled": false,
 					"frontend_url": "",
+						"local_response_cache_enabled": false,
 						"invitation_code_enabled": false,
 						"totp_enabled": false,
 						"totp_encryption_key_configured": false,
@@ -2305,6 +2307,14 @@ func (r *stubUsageLogRepo) GetAccountTodayStats(ctx context.Context, accountID i
 }
 
 func (r *stubUsageLogRepo) GetDashboardStats(ctx context.Context) (*usagestats.DashboardStats, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) GetDashboardRevenueOverview(ctx context.Context) (*service.DashboardRevenueOverview, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) GetDashboardRepurchaseDistribution(ctx context.Context) (*service.DashboardRepurchaseDistribution, error) {
 	return nil, errors.New("not implemented")
 }
 

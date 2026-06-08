@@ -181,7 +181,7 @@ func (h *OpsHandler) ExportUnifiedErrors(c *gin.Context) {
 	}
 
 	var buf bytes.Buffer
-	buf.WriteString("\xEF\xBB\xBF")
+	_, _ = buf.WriteString("\xEF\xBB\xBF")
 	writer := csv.NewWriter(&buf)
 	for _, row := range result.Rows {
 		if err := writer.Write(row); err != nil {

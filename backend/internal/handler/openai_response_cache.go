@@ -3,7 +3,7 @@ package handler
 import (
 	"bufio"
 	"bytes"
-	"errors"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -11,7 +11,6 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -40,7 +39,7 @@ func (w *localResponseCacheCaptureWriter) Write(data []byte) (int, error) {
 		return n, err
 	}
 	if n < len(data) {
-		w.writeErr = http.ErrShortBody
+		w.writeErr = io.ErrShortWrite
 		return n, nil
 	}
 	if w.maxBodySize <= 0 || w.body.Len()+len(data) <= w.maxBodySize {
@@ -73,8 +72,8 @@ func (w *localResponseCacheCaptureWriter) StatusCode() int {
 	if w.status != 0 {
 		return w.status
 	}
-	if w.ResponseWriter.Status() != 0 {
-		return w.ResponseWriter.Status()
+	if w.Status() != 0 {
+		return w.Status()
 	}
 	return http.StatusOK
 }
@@ -102,14 +101,14 @@ func (h *OpenAIGatewayHandler) tryWriteLocalResponseCacheHit(c *gin.Context, loo
 		return false
 	}
 	entry, err := h.gatewayService.GetLocalResponseCache(c.Request.Context(), lookup.Key)
-	if errors.Is(err, redis.Nil) && strings.TrimSpace(lookup.LegacyKey) != "" {
+	if service.IsLocalResponseCacheMiss(err) && strings.TrimSpace(lookup.LegacyKey) != "" {
 		entry, err = h.gatewayService.GetLocalResponseCache(c.Request.Context(), lookup.LegacyKey)
 	}
 	if err != nil {
-		if !errors.Is(err, redis.Nil) && reqLog != nil {
+		if !service.IsLocalResponseCacheMiss(err) && reqLog != nil {
 			reqLog.Warn("local_response_cache.get_failed", zap.Error(err))
 		}
-		if errors.Is(err, redis.Nil) {
+		if service.IsLocalResponseCacheMiss(err) {
 			h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "lookup_miss")
 		} else {
 			h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "lookup_error")

@@ -5392,8 +5392,8 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 			cacheBodyTooLarge = true
 			return
 		}
-		cacheBody.WriteString(line)
-		cacheBody.WriteByte('\n')
+		_, _ = cacheBody.WriteString(line)
+		_ = cacheBody.WriteByte('\n')
 	}
 
 	scanner := bufio.NewScanner(resp.Body)

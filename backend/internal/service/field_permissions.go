@@ -223,12 +223,13 @@ func applyOpsUnifiedErrorDetailFieldPolicy(detail *OpsUnifiedErrorDetail, viewer
 	if role == fieldPermissionBusiness || role == fieldPermissionSupport {
 		out.RequestChain.UpstreamEndpoint = ""
 	}
-	if role == fieldPermissionSupport {
+	switch role {
+	case fieldPermissionSupport:
 		out.RequestChain.InboundEndpoint = ""
 		out.RawRecord = OpsUnifiedErrorRawRecord{ErrorBodyPreview: logredact.RedactRequestBody(detail.RawRecord.ErrorBodyPreview, 500)}
-	} else if role == fieldPermissionBusiness {
+	case fieldPermissionBusiness:
 		out.RawRecord = sanitizeOpsRawRecord(detail.RawRecord)
-	} else {
+	default:
 		out.RawRecord = sanitizeOpsRawRecord(detail.RawRecord)
 	}
 	out.SameKindErrors = make([]*OpsUnifiedErrorItem, 0, len(detail.SameKindErrors))

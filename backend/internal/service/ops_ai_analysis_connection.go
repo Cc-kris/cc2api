@@ -106,7 +106,7 @@ func (s *OpsService) TestOpsAIAnalysisConnection(ctx context.Context) (*OpsAIAna
 		result.Message = "无法连接 AI 分析服务"
 		return result, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	result.HTTPStatus = resp.StatusCode
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 
@@ -208,7 +208,11 @@ func validateOpsAIAnalysisOutboundURL(ctx context.Context, u *url.URL) error {
 }
 
 func newOpsAIAnalysisHTTPClient(timeout time.Duration) *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	baseTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return &http.Client{Timeout: timeout}
+	}
+	transport := baseTransport.Clone()
 	transport.DialContext = safeDialContext
 	return &http.Client{Timeout: timeout, Transport: transport}
 }

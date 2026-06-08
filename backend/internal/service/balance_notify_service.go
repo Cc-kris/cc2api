@@ -93,11 +93,6 @@ func (s *BalanceNotifyService) CheckBalanceAfterDeduction(ctx context.Context, u
 	_ = cost
 }
 
-// crossedDownward returns true when oldV was at-or-above threshold but newV dropped below it.
-func crossedDownward(oldV, newV, threshold float64) bool {
-	return oldV >= threshold && newV < threshold
-}
-
 // ScanBalanceLowUsers scans active users and sends one low-balance email per low-balance episode.
 func (s *BalanceNotifyService) ScanBalanceLowUsers(ctx context.Context) (BalanceLowScanStats, error) {
 	var stats BalanceLowScanStats

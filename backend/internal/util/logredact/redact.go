@@ -47,9 +47,9 @@ var (
 	reAIza                         = regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`)
 	reEmail                        = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
 	reToken                        = regexp.MustCompile(`(?i)\b(?:sk|ak|pk|rk|ya29|ghp|gho|ghu|ghs|github_pat)[-_A-Za-z0-9]{8,}\b`)
-	reAuthorizationBearer          = regexp.MustCompile("(?i)\\bauthorization\\s*[:=]?\\s*bearer\\s+[^\\s,\"'`]+")
-	reBearerToken                  = regexp.MustCompile("(?i)\\bbearer\\s+[^\\s,\"'`]+")
-	reAuthorizationRedactedResidue = regexp.MustCompile("(?i)\\bauthorization\\s*[:=]\\s*(?:bearer\\s*)?\\*{3,}(?:\\s+\\*{3,})?")
+	reAuthorizationBearer          = regexp.MustCompile(`(?i)\bauthorization\s*[:=]?\s*bearer\s+[^\s,"'\x60]+`)
+	reBearerToken                  = regexp.MustCompile(`(?i)\bbearer\s+[^\s,"'\x60]+`)
+	reAuthorizationRedactedResidue = regexp.MustCompile(`(?i)\bauthorization\s*[:=]\s*(?:bearer\s*)?\*{3,}(?:\s+\*{3,})?`)
 
 	defaultTextRedactPatterns = compileTextRedactPatterns(nil)
 	extraTextPatternCache     sync.Map // map[string]*textRedactPatterns

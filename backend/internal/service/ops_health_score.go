@@ -155,11 +155,6 @@ func joinStrings(parts []string, sep string) string {
 // - Layered scoring: Business Health (70%) + Infrastructure Health (30%)
 // - Avoids double-counting (e.g., DB failure affects both infra and business metrics)
 // - Conservative + stable: penalize clear degradations; avoid overreacting to missing/idle data.
-func computeDashboardHealthScore(now time.Time, overview *OpsDashboardOverview) int {
-	result := computeDashboardHealthScoreResult(now, overview)
-	return result.Score
-}
-
 func computeDashboardHealthScoreResult(now time.Time, overview *OpsDashboardOverview) *OpsHealthScoreResult {
 	if overview == nil {
 		return &OpsHealthScoreResult{

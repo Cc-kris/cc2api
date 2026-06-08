@@ -213,6 +213,10 @@ func TestGetSiteName_Configured(t *testing.T) {
 
 // ---------- crossedDownward ----------
 
+func crossedDownward(oldV, newV, threshold float64) bool {
+	return oldV >= threshold && newV < threshold
+}
+
 func TestCrossedDownward_CrossesBelow(t *testing.T) {
 	// oldBalance > threshold, newBalance < threshold → true
 	require.True(t, crossedDownward(100, 5, 10))

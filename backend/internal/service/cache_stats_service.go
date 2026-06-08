@@ -172,9 +172,9 @@ func (s *CacheStatsService) GetAdvancedStats(ctx context.Context, filter *CacheS
 	priceMissing := len(priceMissingModels) > 0
 	var localAmountPtr, promptAmountPtr, totalAmountPtr *string
 	if !priceMissing {
-		localAmountPtr = stringPtr(localAmount)
-		promptAmountPtr = stringPtr(promptAmount)
-		totalAmountPtr = stringPtr(addDecimalStrings(localAmount, promptAmount))
+		localAmountPtr = cacheStatsStringPtr(localAmount)
+		promptAmountPtr = cacheStatsStringPtr(promptAmount)
+		totalAmountPtr = cacheStatsStringPtr(addDecimalStrings(localAmount, promptAmount))
 	}
 	fallback := AdvancedCacheFallback{}
 	if !cfg.AdvancedCacheEnabled {
@@ -545,7 +545,7 @@ func mergeUniqueStrings(groups ...[]string) []string {
 	return out
 }
 
-func stringPtr(v string) *string {
+func cacheStatsStringPtr(v string) *string {
 	return &v
 }
 

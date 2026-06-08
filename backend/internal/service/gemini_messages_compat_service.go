@@ -2883,7 +2883,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 				cacheBody.Reset()
 				cacheBodyTooLarge = true
 			} else {
-				cacheBody.WriteString(data)
+				_, _ = cacheBody.WriteString(data)
 			}
 		}
 		return nil

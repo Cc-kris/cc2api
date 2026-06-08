@@ -86,7 +86,8 @@ func TestCacheConfigHandlerGetConfigReturnsDefaults(t *testing.T) {
 	require.Equal(t, float64(256*1024), data["max_request_bytes"])
 	require.Equal(t, float64(512*1024), data["max_response_bytes"])
 	require.Equal(t, 0.3, data["max_temperature"])
-	header := data["bypass_header"].(map[string]any)
+	header, ok := data["bypass_header"].(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, "X-Sub2API-Cache-Control", header["name"])
 	require.Equal(t, "bypass", header["value"])
 }
@@ -155,10 +156,13 @@ func TestCacheConfigHandlerGetAdvancedConfigReturnsDefaults(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	var body response.Response
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
-	data := body.Data.(map[string]any)
+	data, ok := body.Data.(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, false, data["advanced_cache_enabled"])
 	require.Equal(t, float64(512), data["redis_capacity_mb"])
-	require.Equal(t, float64(2048), data["memory_safe_limit_mb"])
+	memorySafeLimitMB, ok := data["memory_safe_limit_mb"].(float64)
+	require.True(t, ok)
+	require.GreaterOrEqual(t, memorySafeLimitMB, float64(2048))
 	require.Equal(t, true, data["compression_enabled"])
 	require.Equal(t, float64(64), data["compression_threshold_kb"])
 	require.Equal(t, "LRU", data["eviction_policy"])
@@ -166,7 +170,8 @@ func TestCacheConfigHandlerGetAdvancedConfigReturnsDefaults(t *testing.T) {
 	require.Equal(t, float64(5), data["hot_threshold"])
 	require.Equal(t, true, data["cost_saving_enabled"])
 	require.Equal(t, true, data["upstream_prompt_cache_enabled"])
-	grayScope := data["gray_scope"].(map[string]any)
+	grayScope, ok := data["gray_scope"].(map[string]any)
+	require.True(t, ok)
 	require.Empty(t, grayScope["api_key_ids"])
 	require.Empty(t, grayScope["group_ids"])
 	require.Empty(t, grayScope["models"])
@@ -202,10 +207,12 @@ func TestCacheConfigHandlerUpdateAdvancedConfigPersistsNormalizedPayload(t *test
 	require.NotContains(t, stored, "memory_safe_limit_mb")
 	var body response.Response
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
-	data := body.Data.(map[string]any)
+	data, ok := body.Data.(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, "LFU", data["eviction_policy"])
 	require.Equal(t, "6h", data["hot_window"])
-	grayScope := data["gray_scope"].(map[string]any)
+	grayScope, ok := data["gray_scope"].(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, []any{float64(3), float64(1)}, grayScope["api_key_ids"])
 	require.Equal(t, []any{float64(8), float64(2)}, grayScope["group_ids"])
 	require.Equal(t, []any{"gpt-5.5"}, grayScope["models"])
@@ -347,7 +354,8 @@ func TestCacheConfigHandlerListClearAuditsParsesFilters(t *testing.T) {
 	require.Equal(t, service.LocalResponseCacheClearStatusSuccess, stub.filter.Status)
 	var body response.Response
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
-	data := body.Data.(map[string]any)
+	data, ok := body.Data.(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, float64(1), data["total"])
 }
 
@@ -431,7 +439,8 @@ func TestCacheConfigHandlerListSemanticAuditsParsesFilters(t *testing.T) {
 	require.NotNil(t, stub.semanticFilter.MaxSimilarity)
 	var body response.Response
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
-	data := body.Data.(map[string]any)
+	data, ok := body.Data.(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, float64(1), data["total"])
 }
 

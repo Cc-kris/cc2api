@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,12 @@ import (
 
 	"github.com/tidwall/gjson"
 )
+
+var ErrLocalResponseCacheMiss = errors.New("local response cache miss")
+
+func IsLocalResponseCacheMiss(err error) bool {
+	return errors.Is(err, ErrLocalResponseCacheMiss)
+}
 
 const (
 	LocalResponseCacheHeader       = "X-Sub2API-Cache"
@@ -507,7 +514,7 @@ func decompressLocalResponseCacheBody(body []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 	return io.ReadAll(reader)
 }
 

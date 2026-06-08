@@ -12,8 +12,8 @@ import (
 func TestComputeDashboardHealthScore_IdleReturns100(t *testing.T) {
 	t.Parallel()
 
-	score := computeDashboardHealthScore(time.Now().UTC(), &OpsDashboardOverview{})
-	require.Equal(t, 100, score)
+	result := computeDashboardHealthScoreResult(time.Now().UTC(), &OpsDashboardOverview{})
+	require.Equal(t, 100, result.Score)
 }
 
 func TestComputeDashboardHealthScore_DegradesOnBadSignals(t *testing.T) {
@@ -50,9 +50,9 @@ func TestComputeDashboardHealthScore_DegradesOnBadSignals(t *testing.T) {
 		},
 	}
 
-	score := computeDashboardHealthScore(time.Now().UTC(), ov)
-	require.Less(t, score, 80)
-	require.GreaterOrEqual(t, score, 0)
+	result := computeDashboardHealthScoreResult(time.Now().UTC(), ov)
+	require.Less(t, result.Score, 80)
+	require.GreaterOrEqual(t, result.Score, 0)
 }
 
 func TestComputeDashboardHealthScore_Comprehensive(t *testing.T) {
@@ -229,11 +229,11 @@ func TestComputeDashboardHealthScore_Comprehensive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			score := computeDashboardHealthScore(time.Now().UTC(), tt.overview)
-			require.GreaterOrEqual(t, score, tt.wantMin, "score should be >= %d", tt.wantMin)
-			require.LessOrEqual(t, score, tt.wantMax, "score should be <= %d", tt.wantMax)
-			require.GreaterOrEqual(t, score, 0, "score must be >= 0")
-			require.LessOrEqual(t, score, 100, "score must be <= 100")
+			result := computeDashboardHealthScoreResult(time.Now().UTC(), tt.overview)
+			require.GreaterOrEqual(t, result.Score, tt.wantMin, "score should be >= %d", tt.wantMin)
+			require.LessOrEqual(t, result.Score, tt.wantMax, "score should be <= %d", tt.wantMax)
+			require.GreaterOrEqual(t, result.Score, 0, "score must be >= 0")
+			require.LessOrEqual(t, result.Score, 100, "score must be <= 100")
 		})
 	}
 }

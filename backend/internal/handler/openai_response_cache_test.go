@@ -10,7 +10,6 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
-	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 )
 
@@ -66,7 +65,7 @@ type localResponseCacheTestStore struct {
 }
 
 func (s *localResponseCacheTestStore) GetSessionAccountID(context.Context, int64, string) (int64, error) {
-	return 0, redis.Nil
+	return 0, service.ErrLocalResponseCacheMiss
 }
 
 func (s *localResponseCacheTestStore) SetSessionAccountID(context.Context, int64, string, int64, time.Duration) error {
@@ -83,11 +82,11 @@ func (s *localResponseCacheTestStore) DeleteSessionAccountID(context.Context, in
 
 func (s *localResponseCacheTestStore) GetLocalResponse(_ context.Context, key string) (*service.LocalResponseCacheEntry, error) {
 	if s == nil || s.entries == nil {
-		return nil, redis.Nil
+		return nil, service.ErrLocalResponseCacheMiss
 	}
 	entry, ok := s.entries[key]
 	if !ok {
-		return nil, redis.Nil
+		return nil, service.ErrLocalResponseCacheMiss
 	}
 	return entry, nil
 }

@@ -120,7 +120,6 @@ func buildIncidentImpactWhere(filter *service.OpsDashboardFilter, start, end tim
 		if model := strings.TrimSpace(filter.Model); model != "" {
 			args = append(args, model)
 			clauses = append(clauses, fmt.Sprintf("COALESCE(e.model,'') = $%d", idx))
-			idx++
 		}
 	}
 

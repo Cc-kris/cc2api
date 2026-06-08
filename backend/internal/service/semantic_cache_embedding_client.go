@@ -166,7 +166,7 @@ func (c *semanticEmbeddingClient) GenerateEmbedding(ctx context.Context, input s
 		}
 		return result, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	result.HTTPStatus = resp.StatusCode
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
@@ -272,7 +272,7 @@ func (s *SettingService) TestSemanticCacheConnection(ctx context.Context, req Se
 		result.Message = "无法连接语义模型服务"
 		return result, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	result.HTTPStatus = resp.StatusCode
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
@@ -348,7 +348,11 @@ func validateSemanticEmbeddingOutboundURL(ctx context.Context, u *url.URL) error
 }
 
 func newSemanticEmbeddingHTTPClient(timeout time.Duration) *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	baseTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return &http.Client{Timeout: timeout}
+	}
+	transport := baseTransport.Clone()
 	transport.DialContext = safeDialContext
 	return &http.Client{Timeout: timeout, Transport: transport}
 }

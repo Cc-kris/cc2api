@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"strings"
 
@@ -103,7 +102,7 @@ ORDER BY m.hit_tokens DESC, m.platform ASC, m.model ASC`, strings.Join(where, " 
 	if err != nil {
 		return nil, fmt.Errorf("list cache stats rows: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	out := []*service.CacheStatsRawRow{}
 	for rows.Next() {
@@ -169,7 +168,7 @@ ORDER BY model ASC`
 	if err != nil {
 		return nil, fmt.Errorf("list prompt cache price missing models: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var model string
 		if err := rows.Scan(&model); err != nil {
@@ -207,13 +206,6 @@ func buildPromptCacheStatsWhere(filter *service.CacheStatsFilter) (string, []str
 		where = append(where, fmt.Sprintf("ul.group_id = $%d", len(args)))
 	}
 	return join, where, args
-}
-
-func scanNullDecimalText(value sql.NullString) string {
-	if !value.Valid {
-		return "0"
-	}
-	return value.String
 }
 
 func normalizeCacheStatsPlatform(platform string) string {
