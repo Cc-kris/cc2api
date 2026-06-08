@@ -25,7 +25,20 @@
             >
               重置筛选
             </button>
+            <button
+              type="button"
+              class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:disabled:bg-blue-800/60"
+              :disabled="exportButtonDisabled"
+              :title="exportButtonTitle || undefined"
+              @click="exportErrors"
+            >
+              {{ exporting ? '导出中...' : '导出 CSV' }}
+            </button>
           </div>
+        </div>
+
+        <div class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+          {{ exportHint }}
         </div>
 
         <div v-if="errorMessage" class="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
@@ -292,13 +305,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import { adminAPI } from '@/api'
-import { listUnifiedErrors, type OpsUnifiedEntityRef, type OpsUnifiedErrorItem, type OpsUnifiedErrorListQueryParams } from '@/api/admin/ops'
-import { useAppStore } from '@/stores'
+import { exportUnifiedErrors, listUnifiedErrors, type OpsUnifiedEntityRef, type OpsUnifiedErrorItem, type OpsUnifiedErrorListQueryParams } from '@/api/admin/ops'
+import { useAppStore, useAuthStore } from '@/stores'
 import { formatDateTime } from '@/utils/format'
 
 type GroupOption = {
@@ -309,6 +322,7 @@ type GroupOption = {
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
+const authStore = useAuthStore()
 
 const timeRangeOptions = [
   { value: '30m', label: '最近 30 分钟' },
@@ -360,6 +374,7 @@ const clientErrorSubcategoryOptions = [
 ]
 
 const loading = ref(false)
+const exporting = ref(false)
 const hasLoadedOnce = ref(false)
 const errorMessage = ref('')
 const items = ref<OpsUnifiedErrorItem[]>([])
@@ -390,6 +405,21 @@ const page = ref(1)
 const pageSize = ref('20')
 
 const numericPageSize = () => Number.parseInt(pageSize.value, 10) || 20
+
+const exportAllowedRoles = new Set(['admin', 'ops', 'operation', 'operator'])
+
+const currentViewerRole = computed(() => String((authStore.user as { role?: string } | null)?.role || '').trim().toLowerCase())
+const canExport = computed(() => exportAllowedRoles.has(currentViewerRole.value))
+const exportButtonDisabled = computed(() => exporting.value || !canExport.value)
+const exportButtonTitle = computed(() => {
+  if (exporting.value) return '正在导出错误列表'
+  if (!canExport.value) return '当前账号无权限执行此操作'
+  return '导出当前筛选条件下的错误列表 CSV'
+})
+const exportHint = computed(() => {
+  if (!canExport.value) return '当前账号无权限导出错误列表。'
+  return '仅平台所有者、运维可导出；导出范围最长 7 天，最多 100000 行。'
+})
 
 function splitCSV(value: string): string[] {
   return value.split(',').map((item) => item.trim()).filter(Boolean)
@@ -515,6 +545,35 @@ function buildApiParams(): OpsUnifiedErrorListQueryParams {
   }
 }
 
+function buildExportFilename(): string {
+  const now = new Date()
+  const pad2 = (value: number) => String(value).padStart(2, '0')
+  return `ops-unified-errors-${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}.csv`
+}
+
+async function extractExportErrorMessage(err: any): Promise<string> {
+  const blob = err?.response?.data
+  if (blob instanceof Blob) {
+    try {
+      const text = await blob.text()
+      if (text) {
+        try {
+          const parsed = JSON.parse(text)
+          if (typeof parsed?.message === 'string' && parsed.message.trim()) return parsed.message.trim()
+          if (typeof parsed?.detail === 'string' && parsed.detail.trim()) return parsed.detail.trim()
+          if (typeof parsed?.error === 'string' && parsed.error.trim()) return parsed.error.trim()
+        } catch {
+          if (text.trim()) return text.trim()
+        }
+      }
+    } catch {
+      // ignore blob parsing failure and fall back below
+    }
+  }
+
+  return err?.message || err?.response?.data?.detail || '错误列表导出失败，请稍后重试'
+}
+
 async function syncRouteQuery() {
   const nextQuery = buildQueryObject()
   if (JSON.stringify(route.query) === JSON.stringify(nextQuery)) return
@@ -538,6 +597,32 @@ async function fetchErrors() {
     appStore.showError(errorMessage.value)
   } finally {
     loading.value = false
+  }
+}
+
+async function exportErrors() {
+  if (exporting.value) return
+  if (!canExport.value) {
+    appStore.showError('当前账号无权限执行此操作')
+    return
+  }
+
+  exporting.value = true
+  try {
+    await syncRouteQuery()
+    const blob = await exportUnifiedErrors(buildApiParams())
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = buildExportFilename()
+    link.click()
+    URL.revokeObjectURL(url)
+    appStore.showSuccess('错误列表导出成功')
+  } catch (err: any) {
+    const message = await extractExportErrorMessage(err)
+    appStore.showError(message)
+  } finally {
+    exporting.value = false
   }
 }
 
