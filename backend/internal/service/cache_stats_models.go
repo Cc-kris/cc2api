@@ -149,6 +149,13 @@ type AdvancedCacheSavings struct {
 	PriceMissingModels             []string `json:"price_missing_models"`
 }
 
+type PromptCacheStatsRaw struct {
+	ReadTokens           int64
+	WriteTokens          int64
+	EstimatedSavedAmount string
+	PriceMissingModels   []string
+}
+
 type AdvancedCacheEmptyStates struct {
 	Hotspots    bool `json:"hotspots"`
 	PromptCache bool `json:"prompt_cache"`
