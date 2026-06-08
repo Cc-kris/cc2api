@@ -5052,17 +5052,15 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 
 	var localCacheLookup LocalResponseCacheLookup
 	var localCacheCfg LocalResponseCacheConfig
-	if !input.RequestStream {
-		localCacheLookup, localCacheCfg = s.prepareClaudeLocalResponseCache(ctx, c, input.Body, input.RequestModel, input.APIKeyID, input.GroupID)
-		if usage, ok := s.tryWriteClaudeLocalResponseCacheHit(ctx, c, localCacheLookup); ok {
-			return &ForwardResult{
-				Usage:         *usage,
-				Model:         input.OriginalModel,
-				UpstreamModel: input.RequestModel,
-				Stream:        false,
-				Duration:      time.Since(input.StartTime),
-			}, nil
-		}
+	localCacheLookup, localCacheCfg = s.prepareClaudeLocalResponseCache(ctx, c, input.Body, input.RequestModel, input.APIKeyID, input.GroupID)
+	if usage, ok := s.tryWriteClaudeLocalResponseCacheHit(ctx, c, localCacheLookup, input.RequestStream); ok {
+		return &ForwardResult{
+			Usage:         *usage,
+			Model:         input.OriginalModel,
+			UpstreamModel: input.RequestModel,
+			Stream:        input.RequestStream,
+			Duration:      time.Since(input.StartTime),
+		}, nil
 	}
 
 	var resp *http.Response
@@ -5230,13 +5228,18 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 	var firstTokenMs *int
 	var clientDisconnect bool
 	if input.RequestStream {
-		streamResult, err := s.handleStreamingResponseAnthropicAPIKeyPassthrough(ctx, resp, c, account, input.StartTime, input.RequestModel)
+		streamResult, err := s.handleStreamingResponseAnthropicAPIKeyPassthrough(ctx, resp, c, account, input.StartTime, input.RequestModel, localCacheCfg.MaxBodySize)
 		if err != nil {
 			return nil, err
 		}
 		usage = streamResult.usage
 		firstTokenMs = streamResult.firstTokenMs
 		clientDisconnect = streamResult.clientDisconnect
+		if !clientDisconnect && streamResult.cacheBodyTooLarge {
+			s.RecordLocalResponseCacheStat(ctx, "store_skip:body_too_large")
+		} else if !clientDisconnect && len(streamResult.cacheBody) > 0 {
+			s.persistClaudeLocalResponseCache(ctx, c, localCacheLookup, localCacheCfg, resp.StatusCode, streamResult.cacheContentType, streamResult.cacheBody)
+		}
 	} else {
 		var responseBody []byte
 		var contentType string
@@ -5321,6 +5324,7 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 	account *Account,
 	startTime time.Time,
 	model string,
+	cacheMaxBodySize int,
 ) (*streamingResult, error) {
 	if s.rateLimitService != nil {
 		s.rateLimitService.UpdateSessionWindow(ctx, account, resp.Header)
@@ -5354,6 +5358,21 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 	var firstTokenMs *int
 	clientDisconnected := false
 	sawTerminalEvent := false
+	var cacheBody bytes.Buffer
+	cacheBodyTooLarge := false
+	appendCacheLine := func(line string) {
+		if cacheBodyTooLarge {
+			return
+		}
+		lineLen := len(line) + 1
+		if cacheMaxBodySize > 0 && cacheBody.Len()+lineLen > cacheMaxBodySize {
+			cacheBody.Reset()
+			cacheBodyTooLarge = true
+			return
+		}
+		cacheBody.WriteString(line)
+		cacheBody.WriteByte('\n')
+	}
 
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
@@ -5441,11 +5460,21 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 					}
 					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: clientDisconnected}, fmt.Errorf("stream usage incomplete: missing terminal event")
 				}
-				return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: clientDisconnected}, nil
+				result := &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: clientDisconnected, cacheBodyTooLarge: cacheBodyTooLarge}
+				if !clientDisconnected && !cacheBodyTooLarge && cacheBody.Len() > 0 {
+					result.cacheBody = append([]byte(nil), cacheBody.Bytes()...)
+					result.cacheContentType = contentType
+				}
+				return result, nil
 			}
 			if ev.err != nil {
 				if sawTerminalEvent {
-					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: clientDisconnected}, nil
+					result := &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: clientDisconnected, cacheBodyTooLarge: cacheBodyTooLarge}
+					if !clientDisconnected && !cacheBodyTooLarge && cacheBody.Len() > 0 {
+						result.cacheBody = append([]byte(nil), cacheBody.Bytes()...)
+						result.cacheContentType = contentType
+					}
+					return result, nil
 				}
 				if clientDisconnected {
 					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: true}, fmt.Errorf("stream usage incomplete after disconnect: %w", ev.err)
@@ -5487,11 +5516,13 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 					clientDisconnected = true
 					logger.LegacyPrintf("service.gateway", "[Anthropic passthrough] Client disconnected during streaming, continue draining upstream for usage: account=%d", account.ID)
 				} else if line == "" {
+					appendCacheLine(restored)
 					// 按 SSE 事件边界刷出，减少每行 flush 带来的 syscall 开销。
 					flusher.Flush()
 					lastDataAt = time.Now()
 					inPartialEvent = false
 				} else {
+					appendCacheLine(restored)
 					inPartialEvent = true
 				}
 			}
@@ -5670,7 +5701,7 @@ func (s *GatewayService) prepareClaudeLocalResponseCache(ctx context.Context, c 
 	return lookup, cfg
 }
 
-func (s *GatewayService) tryWriteClaudeLocalResponseCacheHit(ctx context.Context, c *gin.Context, lookup LocalResponseCacheLookup) (*ClaudeUsage, bool) {
+func (s *GatewayService) tryWriteClaudeLocalResponseCacheHit(ctx context.Context, c *gin.Context, lookup LocalResponseCacheLookup, requestStream bool) (*ClaudeUsage, bool) {
 	if lookup.Key == "" {
 		return nil, false
 	}
@@ -5681,6 +5712,12 @@ func (s *GatewayService) tryWriteClaudeLocalResponseCacheHit(ctx context.Context
 	if err != nil || entry == nil || len(entry.Body) == 0 {
 		if s != nil {
 			s.RecordLocalResponseCacheStat(ctx, "lookup_miss")
+		}
+		return nil, false
+	}
+	if !isClaudeLocalResponseCacheEntryCompatible(requestStream, entry.ContentType) {
+		if s != nil {
+			s.RecordLocalResponseCacheStat(ctx, "lookup_miss:content_type_mismatch")
 		}
 		return nil, false
 	}
@@ -5705,7 +5742,7 @@ func (s *GatewayService) tryWriteClaudeLocalResponseCacheHit(ctx context.Context
 	if s != nil {
 		s.RecordLocalResponseCacheStat(ctx, "lookup_hit")
 	}
-	return parseClaudeUsageFromResponseBody(entry.Body), true
+	return s.parseClaudeUsageFromCachedLocalResponse(entry.ContentType, entry.Body), true
 }
 
 func (s *GatewayService) persistClaudeLocalResponseCache(ctx context.Context, c *gin.Context, lookup LocalResponseCacheLookup, cfg LocalResponseCacheConfig, status int, contentType string, body []byte) {
@@ -5752,7 +5789,32 @@ func (s *GatewayService) persistClaudeLocalResponseCache(ctx context.Context, c 
 }
 
 func isLocalResponseCacheableClaudeContentType(contentType string) bool {
-	return strings.Contains(strings.ToLower(contentType), "application/json")
+	ct := strings.ToLower(contentType)
+	return strings.Contains(ct, "application/json") || strings.Contains(ct, "text/event-stream")
+}
+
+func isClaudeLocalResponseCacheEntryCompatible(requestStream bool, contentType string) bool {
+	ct := strings.ToLower(strings.TrimSpace(contentType))
+	if ct == "" {
+		ct = "application/json"
+	}
+	if requestStream {
+		return strings.Contains(ct, "text/event-stream")
+	}
+	return strings.Contains(ct, "application/json")
+}
+
+func (s *GatewayService) parseClaudeUsageFromCachedLocalResponse(contentType string, body []byte) *ClaudeUsage {
+	if strings.Contains(strings.ToLower(contentType), "text/event-stream") {
+		usage := &ClaudeUsage{}
+		for _, line := range strings.Split(string(body), "\n") {
+			if data, ok := extractAnthropicSSEDataLine(line); ok {
+				s.parseSSEUsagePassthrough(data, usage)
+			}
+		}
+		return usage
+	}
+	return parseClaudeUsageFromResponseBody(body)
 }
 
 func (s *GatewayService) handleNonStreamingResponseAnthropicAPIKeyPassthrough(
@@ -7366,9 +7428,12 @@ func (s *GatewayService) handleRetryExhaustedError(ctx context.Context, resp *ht
 
 // streamingResult 流式响应结果
 type streamingResult struct {
-	usage            *ClaudeUsage
-	firstTokenMs     *int
-	clientDisconnect bool // 客户端是否在流式传输过程中断开
+	usage             *ClaudeUsage
+	firstTokenMs      *int
+	clientDisconnect  bool // 客户端是否在流式传输过程中断开
+	cacheBody         []byte
+	cacheContentType  string
+	cacheBodyTooLarge bool
 }
 
 func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, startTime time.Time, originalModel, mappedModel string, mimicClaudeCode bool) (*streamingResult, error) {

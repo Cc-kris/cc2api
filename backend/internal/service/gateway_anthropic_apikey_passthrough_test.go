@@ -865,7 +865,7 @@ func TestGatewayService_AnthropicAPIKeyPassthrough_StreamingStillCollectsUsageAf
 		}, "\n"))),
 	}
 
-	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 1}, time.Now(), "claude-3-7-sonnet-20250219")
+	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 1}, time.Now(), "claude-3-7-sonnet-20250219", DefaultLocalResponseCacheMaxBodyBytes)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, result.usage)
@@ -900,7 +900,7 @@ func TestGatewayService_AnthropicAPIKeyPassthrough_MissingTerminalEventReturnsEr
 		}, "\n"))),
 	}
 
-	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 1}, time.Now(), "claude-3-7-sonnet-20250219")
+	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 1}, time.Now(), "claude-3-7-sonnet-20250219", DefaultLocalResponseCacheMaxBodyBytes)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "missing terminal event")
 	require.NotNil(t, result)
@@ -1010,6 +1010,258 @@ func TestGatewayService_AnthropicAPIKeyPassthrough_NonStreamingLocalResponseCach
 	require.Equal(t, 7, result2.Usage.OutputTokens)
 }
 
+func TestGatewayService_AnthropicAPIKeyPassthrough_StreamingLocalResponseCacheWritesOnlyCompleteStream(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+		localResponseCache: true,
+		expiresAt:          time.Now().Add(time.Minute).UnixNano(),
+	})
+	defer gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
+
+	body := []byte(`{"model":"claude-3-5-sonnet-latest","messages":[{"role":"user","content":[{"type":"text","text":"hello"}]}],"stream":true}`)
+	upstreamSSE := strings.Join([]string{
+		`data: {"type":"message_start","message":{"usage":{"input_tokens":12}}}`,
+		"",
+		`data: {"type":"message_delta","usage":{"output_tokens":7}}`,
+		"",
+		`data: {"type":"message_stop"}`,
+		"",
+	}, "\n")
+	upstream := &anthropicHTTPUpstreamRecorder{
+		resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
+		},
+	}
+	store := &localResponseCacheGatewayTestStore{}
+	svc := &GatewayService{
+		cfg:              &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}},
+		httpUpstream:     upstream,
+		rateLimitService: &RateLimitService{},
+		cache:            store,
+		settingService: &SettingService{settingRepo: func() *runtimeSettingRepoStub {
+			repo := newRuntimeSettingRepoStub()
+			repo.values[SettingKeyLocalResponseCacheEnabled] = "true"
+			return repo
+		}()},
+		responseHeaderFilter: compileResponseHeaderFilter(&config.Config{}),
+	}
+	groupID := int64(3)
+	parsed := &ParsedRequest{
+		Body:           body,
+		Model:          "claude-3-5-sonnet-latest",
+		Stream:         true,
+		GroupID:        &groupID,
+		SessionContext: &SessionContext{APIKeyID: 10},
+	}
+	account := newAnthropicAPIKeyAccountForTest()
+
+	rec1 := httptest.NewRecorder()
+	c1, _ := gin.CreateTestContext(rec1)
+	c1.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	result1, err := svc.Forward(context.Background(), c1, account, parsed)
+	require.NoError(t, err)
+	require.NotNil(t, result1)
+	require.Equal(t, 1, upstream.calls)
+	require.Contains(t, rec1.Body.String(), `"type":"message_stop"`)
+	require.NotEmpty(t, store.entries)
+
+	upstream.resp = &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:       io.NopCloser(strings.NewReader(`data: {"type":"message_stop"}`)),
+	}
+	rec2 := httptest.NewRecorder()
+	c2, _ := gin.CreateTestContext(rec2)
+	c2.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	result2, err := svc.Forward(context.Background(), c2, account, parsed)
+	require.NoError(t, err)
+	require.NotNil(t, result2)
+	require.True(t, result2.Stream)
+	require.Equal(t, 1, upstream.calls, "second identical streaming request must be served from local response cache")
+	require.Equal(t, LocalResponseCacheHeaderHit, rec2.Header().Get(LocalResponseCacheHeader))
+	require.Equal(t, rec1.Body.String(), rec2.Body.String())
+	require.Equal(t, 12, result2.Usage.InputTokens)
+	require.Equal(t, 7, result2.Usage.OutputTokens)
+}
+
+func TestGatewayService_AnthropicAPIKeyPassthrough_StreamingLocalResponseCacheSkipsIncompleteStream(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+		localResponseCache: true,
+		expiresAt:          time.Now().Add(time.Minute).UnixNano(),
+	})
+	defer gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
+
+	body := []byte(`{"model":"claude-3-5-sonnet-latest","messages":[{"role":"user","content":[{"type":"text","text":"hello"}]}],"stream":true}`)
+	upstreamSSE := strings.Join([]string{
+		`data: {"type":"message_start","message":{"usage":{"input_tokens":12}}}`,
+		"",
+		`data: {"type":"message_delta","usage":{"output_tokens":7}}`,
+		"",
+	}, "\n")
+	upstream := &anthropicHTTPUpstreamRecorder{
+		resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
+		},
+	}
+	store := &localResponseCacheGatewayTestStore{}
+	repo := newRuntimeSettingRepoStub()
+	repo.values[SettingKeyLocalResponseCacheEnabled] = "true"
+	svc := &GatewayService{
+		cfg:              &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}},
+		httpUpstream:     upstream,
+		rateLimitService: &RateLimitService{},
+		cache:            store,
+		settingService:   &SettingService{settingRepo: repo},
+	}
+	groupID := int64(3)
+	parsed := &ParsedRequest{
+		Body:           body,
+		Model:          "claude-3-5-sonnet-latest",
+		Stream:         true,
+		GroupID:        &groupID,
+		SessionContext: &SessionContext{APIKeyID: 10},
+	}
+
+	result, err := svc.Forward(context.Background(), func() *gin.Context {
+		rec := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rec)
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+		return c
+	}(), newAnthropicAPIKeyAccountForTest(), parsed)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing terminal event")
+	require.Nil(t, result)
+	require.Empty(t, store.entries, "incomplete stream must not be cached")
+}
+
+func TestGatewayService_AnthropicAPIKeyPassthrough_StreamingLocalResponseCacheSkipsBodyTooLarge(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+		localResponseCache: true,
+		expiresAt:          time.Now().Add(time.Minute).UnixNano(),
+	})
+	defer gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
+
+	body := []byte(`{"model":"claude-3-5-sonnet-latest","messages":[{"role":"user","content":[{"type":"text","text":"hello large"}]}],"stream":true}`)
+	hugeText := strings.Repeat("x", DefaultLocalResponseCacheMaxBodyBytes)
+	upstreamSSE := strings.Join([]string{
+		`data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"` + hugeText + `"}}`,
+		"",
+		`data: {"type":"message_stop"}`,
+		"",
+	}, "\n")
+	upstream := &anthropicHTTPUpstreamRecorder{
+		resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
+		},
+	}
+	store := &localResponseCacheGatewayTestStore{}
+	repo := newRuntimeSettingRepoStub()
+	repo.values[SettingKeyLocalResponseCacheEnabled] = "true"
+	svc := &GatewayService{
+		cfg:                  &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}},
+		httpUpstream:         upstream,
+		rateLimitService:     &RateLimitService{},
+		cache:                store,
+		settingService:       &SettingService{settingRepo: repo},
+		responseHeaderFilter: compileResponseHeaderFilter(&config.Config{}),
+	}
+	groupID := int64(3)
+	parsed := &ParsedRequest{
+		Body:           body,
+		Model:          "claude-3-5-sonnet-latest",
+		Stream:         true,
+		GroupID:        &groupID,
+		SessionContext: &SessionContext{APIKeyID: 10},
+	}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	result, err := svc.Forward(context.Background(), c, newAnthropicAPIKeyAccountForTest(), parsed)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, upstream.calls)
+	require.Contains(t, rec.Body.String(), hugeText)
+	require.Empty(t, store.entries, "stream responses larger than MaxBodySize must not be cached")
+}
+
+func TestGatewayService_AnthropicAPIKeyPassthrough_StreamingLocalResponseCacheIgnoresLegacyJSONEntry(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{
+		localResponseCache: true,
+		expiresAt:          time.Now().Add(time.Minute).UnixNano(),
+	})
+	defer gatewayForwardingCache.Store(&cachedGatewayForwardingSettings{})
+
+	body := []byte(`{"model":"claude-3-5-sonnet-latest","messages":[{"role":"user","content":[{"type":"text","text":"hello legacy"}]}],"stream":true}`)
+	upstreamSSE := strings.Join([]string{
+		`data: {"type":"message_start","message":{"usage":{"input_tokens":3}}}`,
+		"",
+		`data: {"type":"message_delta","usage":{"output_tokens":4}}`,
+		"",
+		`data: {"type":"message_stop"}`,
+		"",
+	}, "\n")
+	upstream := &anthropicHTTPUpstreamRecorder{
+		resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
+		},
+	}
+	store := &localResponseCacheGatewayTestStore{entries: map[string]*LocalResponseCacheEntry{}}
+	repo := newRuntimeSettingRepoStub()
+	repo.values[SettingKeyLocalResponseCacheEnabled] = "true"
+	svc := &GatewayService{
+		cfg:                  &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}},
+		httpUpstream:         upstream,
+		rateLimitService:     &RateLimitService{},
+		cache:                store,
+		settingService:       &SettingService{settingRepo: repo},
+		responseHeaderFilter: compileResponseHeaderFilter(&config.Config{}),
+	}
+	groupID := int64(3)
+	parsed := &ParsedRequest{
+		Body:           body,
+		Model:          "claude-3-5-sonnet-latest",
+		Stream:         true,
+		GroupID:        &groupID,
+		SessionContext: &SessionContext{APIKeyID: 10},
+	}
+	lookup, _ := svc.prepareClaudeLocalResponseCache(context.Background(), nil, body, parsed.Model, parsed.SessionContext.APIKeyID, parsed.GroupID)
+	require.NotEmpty(t, lookup.LegacyKey)
+	store.entries[lookup.LegacyKey] = &LocalResponseCacheEntry{
+		StatusCode:  http.StatusOK,
+		ContentType: "application/json",
+		Body:        []byte(`{"id":"legacy_json_should_not_be_replayed","usage":{"input_tokens":99,"output_tokens":99}}`),
+		CreatedAt:   time.Now(),
+	}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	result, err := svc.Forward(context.Background(), c, newAnthropicAPIKeyAccountForTest(), parsed)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, upstream.calls, "stream request must ignore legacy JSON cache entry and call upstream")
+	require.NotEqual(t, LocalResponseCacheHeaderHit, rec.Header().Get(LocalResponseCacheHeader))
+	require.Contains(t, rec.Body.String(), `"type":"message_stop"`)
+	require.NotContains(t, rec.Body.String(), "legacy_json_should_not_be_replayed")
+	require.Equal(t, 3, result.Usage.InputTokens)
+	require.Equal(t, 4, result.Usage.OutputTokens)
+}
+
 func TestGatewayService_AnthropicAPIKeyPassthrough_ForwardDirect_InvalidTokenType(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()
@@ -1089,7 +1341,7 @@ func TestGatewayService_AnthropicAPIKeyPassthrough_ForwardDirect_EmptyResponseBo
 
 func TestExtractAnthropicSSEDataLine(t *testing.T) {
 	t.Run("valid data line with spaces", func(t *testing.T) {
-		data, ok := extractAnthropicSSEDataLine("data:   {\"type\":\"message_start\"}")
+		data, ok := extractAnthropicSSEDataLine(`data:   {"type":"message_start"}`)
 		require.True(t, ok)
 		require.Equal(t, `{"type":"message_start"}`, data)
 	})
@@ -1214,7 +1466,7 @@ func TestGatewayService_AnthropicAPIKeyPassthrough_StreamingErrTooLong(t *testin
 		Body:       io.NopCloser(strings.NewReader(longLine)),
 	}
 
-	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 2}, time.Now(), "claude-3-7-sonnet-20250219")
+	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 2}, time.Now(), "claude-3-7-sonnet-20250219", DefaultLocalResponseCacheMaxBodyBytes)
 	require.Error(t, err)
 	require.ErrorIs(t, err, bufio.ErrTooLong)
 	require.NotNil(t, result)
@@ -1243,7 +1495,7 @@ func TestGatewayService_AnthropicAPIKeyPassthrough_StreamingDataIntervalTimeout(
 		Body:       pr,
 	}
 
-	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 5}, time.Now(), "claude-3-7-sonnet-20250219")
+	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 5}, time.Now(), "claude-3-7-sonnet-20250219", DefaultLocalResponseCacheMaxBodyBytes)
 	_ = pw.Close()
 	_ = pr.Close()
 
@@ -1291,13 +1543,16 @@ func TestGatewayService_AnthropicAPIKeyPassthrough_StreamingSendsKeepaliveDuring
 		_ = pw.Close()
 	}()
 
-	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 8}, time.Now(), "claude-3-7-sonnet-20250219")
+	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 8}, time.Now(), "claude-3-7-sonnet-20250219", DefaultLocalResponseCacheMaxBodyBytes)
 	_ = pr.Close()
 	<-done
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Contains(t, rec.Body.String(), "event: ping\ndata: {\"type\": \"ping\"}\n\n")
+	require.Contains(t, rec.Body.String(), `event: ping
+data: {"type": "ping"}
+
+`)
 	require.Contains(t, rec.Body.String(), "data: [DONE]")
 }
 
@@ -1334,7 +1589,7 @@ func TestGatewayService_AnthropicAPIKeyPassthrough_StreamingKeepaliveDoesNotInte
 		_ = pw.Close()
 	}()
 
-	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 9}, time.Now(), "claude-3-7-sonnet-20250219")
+	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 9}, time.Now(), "claude-3-7-sonnet-20250219", DefaultLocalResponseCacheMaxBodyBytes)
 	_ = pr.Close()
 	<-done
 
@@ -1368,7 +1623,7 @@ func TestGatewayService_AnthropicAPIKeyPassthrough_StreamingReadError(t *testing
 		},
 	}
 
-	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 6}, time.Now(), "claude-3-7-sonnet-20250219")
+	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 6}, time.Now(), "claude-3-7-sonnet-20250219", DefaultLocalResponseCacheMaxBodyBytes)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "stream read error")
 	require.NotNil(t, result)
@@ -1408,7 +1663,7 @@ func TestGatewayService_AnthropicAPIKeyPassthrough_StreamingTimeoutAfterClientDi
 		_ = pw.Close()
 	}()
 
-	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 7}, time.Now(), "claude-3-7-sonnet-20250219")
+	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 7}, time.Now(), "claude-3-7-sonnet-20250219", DefaultLocalResponseCacheMaxBodyBytes)
 	_ = pr.Close()
 	<-done
 
@@ -1441,7 +1696,7 @@ func TestGatewayService_AnthropicAPIKeyPassthrough_StreamingContextCanceled(t *t
 		},
 	}
 
-	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 3}, time.Now(), "claude-3-7-sonnet-20250219")
+	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 3}, time.Now(), "claude-3-7-sonnet-20250219", DefaultLocalResponseCacheMaxBodyBytes)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "stream usage incomplete")
 	require.NotNil(t, result)
@@ -1472,7 +1727,7 @@ func TestGatewayService_AnthropicAPIKeyPassthrough_StreamingUpstreamReadErrorAft
 		},
 	}
 
-	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 4}, time.Now(), "claude-3-7-sonnet-20250219")
+	result, err := svc.handleStreamingResponseAnthropicAPIKeyPassthrough(context.Background(), resp, c, &Account{ID: 4}, time.Now(), "claude-3-7-sonnet-20250219", DefaultLocalResponseCacheMaxBodyBytes)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "stream usage incomplete after disconnect")
 	require.NotNil(t, result)
