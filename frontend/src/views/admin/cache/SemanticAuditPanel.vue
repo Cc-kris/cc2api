@@ -493,7 +493,7 @@ function normalizeRole(role: string): string {
 function parseOptionalNumber(value: string): number | undefined {
   if (!value.trim()) return undefined
   const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : Number.NaN
+  return Number.isFinite(parsed) ? parsed : undefined
 }
 
 function toISOString(value: string): string | undefined {
@@ -514,8 +514,8 @@ function buildParams() {
     api_key_id: filters.apiKeyId ? Number(filters.apiKeyId) : undefined,
     review_status: filters.reviewStatus || undefined,
     decision: filters.decision || undefined,
-    min_similarity: filters.minSimilarity ? Number(filters.minSimilarity) : undefined,
-    max_similarity: filters.maxSimilarity ? Number(filters.maxSimilarity) : undefined
+    min_similarity: parseOptionalNumber(filters.minSimilarity),
+    max_similarity: parseOptionalNumber(filters.maxSimilarity)
   }
 }
 
@@ -537,7 +537,7 @@ function reviewLabel(value: SemanticCacheAuditReviewStatus): string {
 }
 
 function feedbackLabel(value?: SemanticCacheAuditFeedbackType): string {
-  return feedbackOptions.find((item) => item.value === value)?.label ?? value || '--'
+  return feedbackOptions.find((item) => item.value === value)?.label ?? value ?? '--'
 }
 
 function decisionClass(value: SemanticCacheAuditDecision): string {
