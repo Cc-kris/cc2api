@@ -1100,10 +1100,6 @@ function openErrorDetailsFromPreset(preset: OpsErrorDetailsPreset, type: 'reques
   })
 }
 
-function openUnifiedErrorDetail(errorId: number) {
-  if (!errorId) return
-  router.push({ name: 'AdminOpsUnifiedErrorDetail', params: { id: String(errorId) } })
-}
 
 onMounted(async () => {
   await loadGroups()

@@ -238,7 +238,8 @@
               <tr
                 v-for="item in items"
                 :key="item.id"
-                class="transition hover:bg-gray-50 dark:hover:bg-dark-800/50"
+                class="cursor-pointer transition hover:bg-gray-50 dark:hover:bg-dark-800/50"
+                @click="openDetail(item.id)"
               >
                 <td class="table-td whitespace-nowrap font-mono text-xs">{{ formatDateTime(item.occurred_at) }}</td>
                 <td class="table-td">
@@ -631,6 +632,11 @@ function formatAIStatus(value: string): string {
     default:
       return '未分析'
   }
+}
+
+function openDetail(id: number) {
+  if (!id) return
+  void router.push({ name: 'AdminOpsUnifiedErrorDetail', params: { id: String(id) } })
 }
 
 function severityBadgeClass(value: string): string {
