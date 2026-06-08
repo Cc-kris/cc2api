@@ -6,12 +6,13 @@ import (
 )
 
 type CacheStatsFilter struct {
-	StartTime time.Time
-	EndTime   time.Time
-	Platform  string
-	Model     string
-	APIKeyID  *int64
-	GroupID   *int64
+	StartTime    time.Time
+	EndTime      time.Time
+	Platform     string
+	Model        string
+	APIKeyID     *int64
+	GroupID      *int64
+	HotspotLimit int
 	// ViewerRole is the current admin-side viewer role. It keeps field-level
 	// filtering in the service layer instead of relying only on route guards.
 	ViewerRole string

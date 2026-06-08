@@ -108,6 +108,9 @@ func (s *CacheStatsService) GetAdvancedStats(ctx context.Context, filter *CacheS
 	if filter == nil {
 		filter = &CacheStatsFilter{}
 	}
+	if !canViewCacheStats(viewerRoleFromCacheStatsFilter(filter)) {
+		return &AdvancedCacheStatsResponse{Hotspots: []AdvancedCacheHotspot{}, UpdatedAt: time.Now()}, nil
+	}
 	baseStats, err := s.GetStats(ctx, filter)
 	if err != nil {
 		return nil, err
