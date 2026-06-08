@@ -93,7 +93,7 @@ type cacheStatsAccumulator struct {
 
 func cacheStatsAccumulatorFromRow(row *CacheStatsRawRow) *cacheStatsAccumulator {
 	return &cacheStatsAccumulator{
-		platform:             strings.TrimSpace(row.Platform),
+		platform:             displayCacheStatsPlatform(row.Platform),
 		model:                strings.TrimSpace(row.Model),
 		totalRequests:        nonNegativeInt64(row.TotalRequests),
 		candidateRequests:    nonNegativeInt64(row.CandidateRequests),
@@ -142,10 +142,18 @@ func (a *cacheStatsAccumulator) summary() CacheStatsSummary {
 	if a == nil {
 		return CacheStatsSummary{EstimatedSavedAmount: "0.00000000"}
 	}
+	miss := a.candidateRequests - a.hitRequests
+	if miss < 0 {
+		miss = 0
+	}
 	return CacheStatsSummary{
 		TotalRequests:         a.totalRequests,
 		CandidateRequests:     a.candidateRequests,
 		HitRequests:           a.hitRequests,
+		MissRequests:          miss,
+		BypassRequests:        a.bypassRequests,
+		StoreSuccess:          a.storeSuccess,
+		StoreSkip:             a.storeSkip,
 		RequestHitRate:        percent(a.hitRequests, a.candidateRequests),
 		InputTokens:           a.inputTokens,
 		OutputTokens:          a.outputTokens,
@@ -278,4 +286,15 @@ func normalizeDecimalString(v string) string {
 		return "0.00000000"
 	}
 	return strconv.FormatFloat(f, 'f', 8, 64)
+}
+
+func displayCacheStatsPlatform(platform string) string {
+	switch strings.ToLower(strings.TrimSpace(platform)) {
+	case "anthropic", "claude":
+		return "claude"
+	case "openai", "gemini":
+		return strings.ToLower(strings.TrimSpace(platform))
+	default:
+		return strings.ToLower(strings.TrimSpace(platform))
+	}
 }

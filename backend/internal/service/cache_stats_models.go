@@ -34,14 +34,18 @@ type CacheStatsRawRow struct {
 }
 
 type CacheStatsSummary struct {
-	TotalRequests         int64  `json:"total_requests"`
-	CandidateRequests     int64  `json:"candidate_requests"`
-	HitRequests           int64  `json:"hit_requests"`
+	TotalRequests         int64   `json:"total_requests"`
+	CandidateRequests     int64   `json:"candidate_requests"`
+	HitRequests           int64   `json:"hit_requests"`
+	MissRequests          int64   `json:"miss_requests"`
+	BypassRequests        int64   `json:"bypass_requests"`
+	StoreSuccess          int64   `json:"store_success"`
+	StoreSkip             int64   `json:"store_skip"`
 	RequestHitRate        float64 `json:"request_hit_rate"`
-	InputTokens           int64  `json:"input_tokens"`
-	OutputTokens          int64  `json:"output_tokens"`
-	HitTokens             int64  `json:"hit_tokens"`
-	CandidateTokens       int64  `json:"candidate_tokens"`
+	InputTokens           int64   `json:"input_tokens"`
+	OutputTokens          int64   `json:"output_tokens"`
+	HitTokens             int64   `json:"hit_tokens"`
+	CandidateTokens       int64   `json:"candidate_tokens"`
 	TokensHitRate         float64 `json:"tokens_hit_rate"`
 	OverallTokensCoverage float64 `json:"overall_tokens_coverage"`
 	EstimatedSavedAmount  string  `json:"estimated_saved_amount"`
@@ -77,9 +81,9 @@ type CacheStatsReasonRow struct {
 
 type CacheStatsResponse struct {
 	Summary          CacheStatsSummary     `json:"summary"`
-	ModelRows        []CacheStatsModelRow   `json:"model_rows"`
-	BypassReasons    []CacheStatsReasonRow  `json:"bypass_reasons"`
-	StoreSkipReasons []CacheStatsReasonRow  `json:"store_skip_reasons"`
+	ModelRows        []CacheStatsModelRow  `json:"model_rows"`
+	BypassReasons    []CacheStatsReasonRow `json:"bypass_reasons"`
+	StoreSkipReasons []CacheStatsReasonRow `json:"store_skip_reasons"`
 }
 
 type CacheStatsRepository interface {

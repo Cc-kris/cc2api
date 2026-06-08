@@ -60,7 +60,7 @@ WITH filtered AS (
 ), bypass_agg AS (
   SELECT platform, model, COALESCE(jsonb_object_agg(reason, total), '{}'::jsonb)::text AS bypass_reasons
   FROM (
-    SELECT f.platform, f.model, reason.key AS reason, SUM((reason.value)::bigint) AS total
+    SELECT f.platform, f.model, reason.key AS reason, SUM(CASE WHEN reason.value ~ '^[0-9]+$' THEN (reason.value)::bigint ELSE 0 END) AS total
     FROM filtered f
     JOIN LATERAL jsonb_each_text(f.bypass_reasons) reason ON TRUE
     GROUP BY f.platform, f.model, reason.key
@@ -69,7 +69,7 @@ WITH filtered AS (
 ), store_skip_agg AS (
   SELECT platform, model, COALESCE(jsonb_object_agg(reason, total), '{}'::jsonb)::text AS store_skip_reasons
   FROM (
-    SELECT f.platform, f.model, reason.key AS reason, SUM((reason.value)::bigint) AS total
+    SELECT f.platform, f.model, reason.key AS reason, SUM(CASE WHEN reason.value ~ '^[0-9]+$' THEN (reason.value)::bigint ELSE 0 END) AS total
     FROM filtered f
     JOIN LATERAL jsonb_each_text(f.store_skip_reasons) reason ON TRUE
     GROUP BY f.platform, f.model, reason.key
