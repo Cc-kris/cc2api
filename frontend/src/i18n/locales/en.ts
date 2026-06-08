@@ -5544,7 +5544,89 @@ export default {
           accountHealthThresholdRange: 'Account health threshold must be between 0 and 100'
         }
       },
-      settings: {
+      cacheStats: {
+      title: 'Cache Stats',
+      description: 'Inspect cache hit value, reason breakdowns, and model-level summaries by time range and scope.',
+      loadFailed: 'Failed to load cache stats',
+      hiddenAmount: 'No access',
+      priceMissing: 'Price missing',
+      emptyBypassReasons: 'No bypass data',
+      emptyStoreSkipReasons: 'No store-skip data',
+      emptyModelRows: 'No model stats',
+      timeRanges: {
+        '1h': 'Last 1 hour',
+        '6h': 'Last 6 hours',
+        '1d': 'Last 24 hours',
+        '7d': 'Last 7 days',
+        '30d': 'Last 30 days',
+        custom: 'Custom range'
+      },
+      actions: {
+        backToConfig: 'Back to Cache Config',
+        refresh: 'Refresh Stats',
+        applyFilters: 'Apply Filters',
+        resetFilters: 'Reset Filters',
+        retry: 'Retry',
+        loading: 'Loading...'
+      },
+      filters: {
+        title: 'Filters',
+        hint: 'Filter cache stats by time range, platform, model, group, and API key scope.',
+        timeRange: 'Time range',
+        platform: 'Platform',
+        model: 'Model',
+        modelPlaceholder: 'Enter a model name or use returned suggestions',
+        group: 'Group',
+        apiKey: 'API Key',
+        apiKeyPlaceholder: 'Search by name or #ID',
+        apiKeyHint: 'Type at least 2 characters to search API keys, or enter #ID directly.',
+        startTime: 'Start time',
+        endTime: 'End time',
+        allPlatforms: 'All platforms',
+        allGroups: 'All groups'
+      },
+      validation: {
+        customRangeRequired: 'Custom ranges require both start and end time.',
+        invalidDate: 'Invalid date format.',
+        invalidRange: 'Start time must be earlier than or equal to end time.',
+        maxRange: 'The maximum supported window is 31 days.'
+      },
+      cards: {
+        totalRequests: 'Total requests',
+        candidateHint: 'Candidate requests {value}',
+        hitRequests: 'Hit requests',
+        requestHitRateHint: 'Request hit rate {value}',
+        hitTokens: 'Cache hit tokens',
+        tokensHitRateHint: 'Token hit rate {value}',
+        inputTokens: 'Input tokens',
+        outputHint: 'Output tokens {value}',
+        estimatedSaved: 'Estimated savings',
+        coverageHint: 'Overall token coverage {value}'
+      },
+      sections: {
+        bypassReasons: 'Bypass reason breakdown',
+        storeSkipReasons: 'Store-skip reason breakdown',
+        reasonHint: 'Shows reasons, counts, and percentages for hit-rate analysis.',
+        modelTable: 'Model summary table',
+        modelTableHint: 'Sorted by cache hit tokens to highlight the highest-value models first.'
+      },
+      table: {
+        model: 'Platform / Model',
+        requests: 'Requests',
+        hits: 'Hits',
+        bypass: 'Bypass',
+        store: 'Store',
+        tokens: 'Tokens',
+        rates: 'Hit rates',
+        saved: 'Estimated savings',
+        candidateShort: 'Candidate',
+        missShort: 'Miss',
+        skipShort: 'Skip',
+        inputShort: 'Input',
+        tokensRateShort: 'Token hit rate'
+      }
+    },
+    settings: {
         title: 'Ops Monitoring Settings',
         loadFailed: 'Failed to load settings',
         saveSuccess: 'Ops monitoring settings saved successfully',

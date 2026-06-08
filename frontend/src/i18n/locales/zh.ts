@@ -5706,7 +5706,89 @@ export default {
           accountHealthThresholdRange: '账号健康错误率阈值必须在 0 到 100 之间'
         }
       },
-      settings: {
+      cacheStats: {
+      title: '缓存统计',
+      description: '按时间、平台、模型和范围查看缓存命中收益、原因分布与模型汇总。',
+      loadFailed: '缓存统计加载失败',
+      hiddenAmount: '无权限',
+      priceMissing: '价格缺失',
+      emptyBypassReasons: '暂无绕过数据',
+      emptyStoreSkipReasons: '暂无写入跳过数据',
+      emptyModelRows: '暂无模型统计',
+      timeRanges: {
+        '1h': '最近 1 小时',
+        '6h': '最近 6 小时',
+        '1d': '最近 24 小时',
+        '7d': '最近 7 天',
+        '30d': '最近 30 天',
+        custom: '自定义时间范围'
+      },
+      actions: {
+        backToConfig: '返回缓存配置',
+        refresh: '刷新统计',
+        applyFilters: '应用筛选',
+        resetFilters: '重置筛选',
+        retry: '重试',
+        loading: '加载中...'
+      },
+      filters: {
+        title: '筛选条件',
+        hint: '支持按时间、平台、模型、分组和 API Key 范围查看缓存命中情况。',
+        timeRange: '时间范围',
+        platform: '平台',
+        model: '模型',
+        modelPlaceholder: '输入模型名称，可结合已返回模型建议',
+        group: '分组',
+        apiKey: 'API Key',
+        apiKeyPlaceholder: '输入名称或 #ID 以筛选 API Key',
+        apiKeyHint: 'API Key 搜索至少输入 2 个字符，也可直接输入 #ID。',
+        startTime: '开始时间',
+        endTime: '结束时间',
+        allPlatforms: '全部平台',
+        allGroups: '全部分组'
+      },
+      validation: {
+        customRangeRequired: '自定义时间范围必须同时填写开始和结束时间。',
+        invalidDate: '时间格式无效，请重新选择时间。',
+        invalidRange: '开始时间必须早于或等于结束时间。',
+        maxRange: '最长支持 31 天。'
+      },
+      cards: {
+        totalRequests: '请求次数',
+        candidateHint: '候选请求 {value}',
+        hitRequests: '命中次数',
+        requestHitRateHint: '请求命中率 {value}',
+        hitTokens: '缓存命中 tokens',
+        tokensHitRateHint: 'tokens 命中率 {value}',
+        inputTokens: '输入 tokens',
+        outputHint: '输出 tokens {value}',
+        estimatedSaved: '预估节省',
+        coverageHint: '整体 tokens 覆盖率 {value}'
+      },
+      sections: {
+        bypassReasons: '绕过原因分布',
+        storeSkipReasons: '写入跳过原因分布',
+        reasonHint: '展示原因、次数和占比，帮助定位命中率偏低的主要因素。',
+        modelTable: '模型汇总表',
+        modelTableHint: '按缓存命中 tokens 从高到低展示平台/模型命中收益。'
+      },
+      table: {
+        model: '平台 / 模型',
+        requests: '请求',
+        hits: '命中',
+        bypass: '绕过',
+        store: '写入',
+        tokens: 'tokens',
+        rates: '命中率',
+        saved: '预估节省',
+        candidateShort: '候选',
+        missShort: '未命中',
+        skipShort: '跳过',
+        inputShort: '输入',
+        tokensRateShort: 'tokens 命中率'
+      }
+    },
+    settings: {
         title: '运维监控设置',
         loadFailed: '加载设置失败',
         saveSuccess: '运维监控设置保存成功',
