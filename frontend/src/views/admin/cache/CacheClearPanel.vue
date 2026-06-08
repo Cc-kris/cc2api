@@ -731,6 +731,77 @@ function formatResultMessage(result: CacheClearResult): string {
   })
 }
 
+function buildAuditParams(): CacheClearAuditFilter {
+  const params: CacheClearAuditFilter = {
+    page: auditPagination.page,
+    page_size: auditPagination.page_size
+  }
+
+  const operatorId = Number(auditFilters.operatorUserId)
+  if (Number.isFinite(operatorId) && operatorId > 0) {
+    params.operator_user_id = operatorId
+  }
+  if (auditFilters.clearType) {
+    params.clear_type = auditFilters.clearType as CacheClearType
+  }
+  if (auditFilters.status) {
+    params.status = auditFilters.status as CacheClearResult['status']
+  }
+  if (auditFilters.startTime) {
+    params.start_time = toISOString(auditFilters.startTime)
+  }
+  if (auditFilters.endTime) {
+    params.end_time = toISOString(auditFilters.endTime)
+  }
+
+  return params
+}
+
+function formatClearType(type: CacheClearType): string {
+  return clearTypeOptions.value.find((item) => item.value === type)?.label ?? type
+}
+
+function formatStatus(status: CacheClearResult['status']): string {
+  return auditStatusOptions.value.find((item) => item.value === status)?.label ?? status
+}
+
+function formatOperator(operatorUserId?: number | null): string {
+  if (typeof operatorUserId === 'number' && operatorUserId > 0) {
+    return `#${operatorUserId}`
+  }
+  return '--'
+}
+
+function formatAuditScope(row: CacheClearAuditRecord): string {
+  const lines: string[] = []
+  if (row.scope.platforms?.length) {
+    lines.push(`${t('admin.cacheManagement.clearPage.fields.platforms')}: ${row.scope.platforms.join(', ')}`)
+  }
+  if (row.scope.models?.length) {
+    lines.push(`${t('admin.cacheManagement.clearPage.fields.models')}: ${row.scope.models.join(', ')}`)
+  }
+  if (row.scope.group_ids?.length) {
+    lines.push(`${t('admin.cacheManagement.clearPage.fields.groups')}: ${row.scope.group_ids.join(', ')}`)
+  }
+  if (row.scope.api_key_ids?.length) {
+    lines.push(`${t('admin.cacheManagement.clearPage.fields.apiKeys')}: ${row.scope.api_key_ids.join(', ')}`)
+  }
+  if (row.scope.start_time || row.scope.end_time) {
+    lines.push(`${t('admin.cacheManagement.clearPage.auditFields.timeRange')}: ${formatDateTimeValue(row.scope.start_time) || '--'} ~ ${formatDateTimeValue(row.scope.end_time) || '--'}`)
+  }
+  return lines.length > 0 ? lines.join('\n') : t('admin.cacheManagement.clearPage.auditScopeAll')
+}
+
+function statusClass(status: CacheClearResult['status']): string {
+  if (status === 'success') {
+    return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/10 dark:text-emerald-200'
+  }
+  if (status === 'partial_success') {
+    return 'bg-amber-50 text-amber-800 dark:bg-amber-900/10 dark:text-amber-200'
+  }
+  return 'bg-red-50 text-red-700 dark:bg-red-900/10 dark:text-red-200'
+}
+
 async function loadGroups(): Promise<void> {
   try {
     groups.value = await adminAPI.groups.getAll()
