@@ -244,7 +244,7 @@ import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import { adminAPI } from '@/api/admin'
-import type { CacheStatsModelRow, CacheStatsReasonRow, CacheStatsResponse } from '@/api/admin/cache'
+import type { CacheStatsResponse } from '@/api/admin/cache'
 import type { AdminGroup } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
@@ -342,41 +342,54 @@ const filterValidationError = computed(() => {
   return ''
 })
 
-const summaryCards = computed(() => {
-  const cards = [
-    {
-      key: 'total',
-      label: t('admin.cacheStats.cards.totalRequests'),
-      value: formatInteger(summary.value.total_requests),
-      hint: t('admin.cacheStats.cards.candidateHint', { value: formatInteger(summary.value.candidate_requests) })
-    },
-    {
-      key: 'hits',
-      label: t('admin.cacheStats.cards.hitRequests'),
-      value: formatInteger(summary.value.hit_requests),
-      hint: t('admin.cacheStats.cards.requestHitRateHint', { value: formatPercent(summary.value.request_hit_rate) })
-    },
-    {
-      key: 'tokens',
-      label: t('admin.cacheStats.cards.hitTokens'),
-      value: formatInteger(summary.value.hit_tokens),
-      hint: t('admin.cacheStats.cards.tokensHitRateHint', { value: formatPercent(summary.value.tokens_hit_rate) })
-    },
-    {
-      key: 'input',
-      label: t('admin.cacheStats.cards.inputTokens'),
-      value: formatInteger(summary.value.input_tokens),
-      hint: t('admin.cacheStats.cards.outputHint', { value: formatInteger(summary.value.output_tokens) })
-    },
-    {
-      key: 'saved',
-      label: t('admin.cacheStats.cards.estimatedSaved'),
-      value: formatSavedAmount(summary.value.estimated_saved_amount),
-      hint: t('admin.cacheStats.cards.coverageHint', { value: formatPercent(summary.value.overall_tokens_coverage) })
-    }
-  ]
-  return cards
-})
+const summaryCards = computed(() => [
+  {
+    key: 'total',
+    label: t('admin.cacheStats.cards.totalRequests'),
+    value: formatInteger(summary.value.total_requests)
+  },
+  {
+    key: 'candidate',
+    label: t('admin.cacheStats.cards.candidateRequests'),
+    value: formatInteger(summary.value.candidate_requests)
+  },
+  {
+    key: 'hits',
+    label: t('admin.cacheStats.cards.hitRequests'),
+    value: formatInteger(summary.value.hit_requests)
+  },
+  {
+    key: 'input',
+    label: t('admin.cacheStats.cards.inputTokens'),
+    value: formatInteger(summary.value.input_tokens)
+  },
+  {
+    key: 'output',
+    label: t('admin.cacheStats.cards.outputTokens'),
+    value: formatInteger(summary.value.output_tokens)
+  },
+  {
+    key: 'hitTokens',
+    label: t('admin.cacheStats.cards.hitTokens'),
+    value: formatInteger(summary.value.hit_tokens)
+  },
+  {
+    key: 'requestHitRate',
+    label: t('admin.cacheStats.cards.requestHitRate'),
+    value: formatPercent(summary.value.request_hit_rate)
+  },
+  {
+    key: 'tokensHitRate',
+    label: t('admin.cacheStats.cards.tokensHitRate'),
+    value: formatPercent(summary.value.tokens_hit_rate),
+    hint: t('admin.cacheStats.cards.coverageHint', { value: formatPercent(summary.value.overall_tokens_coverage) })
+  },
+  {
+    key: 'saved',
+    label: t('admin.cacheStats.cards.estimatedSaved'),
+    value: formatSavedAmount(summary.value.estimated_saved_amount)
+  }
+])
 
 const sortedRows = computed(() => {
   return [...modelRows.value].sort((a, b) => {
@@ -437,7 +450,10 @@ function syncSelectedApiKey(): void {
   const directId = raw.match(/#?(\d+)$/)
   if (directId) {
     filters.api_key_id = directId[1]
+    return
   }
+
+  filters.api_key_id = ''
 }
 
 function formatInteger(value: number | string | null | undefined): string {

@@ -5593,13 +5593,13 @@ export default {
       },
       cards: {
         totalRequests: 'Total requests',
-        candidateHint: 'Candidate requests {value}',
+        candidateRequests: 'Candidate requests',
         hitRequests: 'Hit requests',
-        requestHitRateHint: 'Request hit rate {value}',
-        hitTokens: 'Cache hit tokens',
-        tokensHitRateHint: 'Token hit rate {value}',
         inputTokens: 'Input tokens',
-        outputHint: 'Output tokens {value}',
+        outputTokens: 'Output tokens',
+        hitTokens: 'Cache hit tokens',
+        requestHitRate: 'Request hit rate',
+        tokensHitRate: 'Token hit rate',
         estimatedSaved: 'Estimated savings',
         coverageHint: 'Overall token coverage {value}'
       },

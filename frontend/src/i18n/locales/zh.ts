@@ -5755,13 +5755,13 @@ export default {
       },
       cards: {
         totalRequests: '请求次数',
-        candidateHint: '候选请求 {value}',
+        candidateRequests: '候选请求数',
         hitRequests: '命中次数',
-        requestHitRateHint: '请求命中率 {value}',
-        hitTokens: '缓存命中 tokens',
-        tokensHitRateHint: 'tokens 命中率 {value}',
         inputTokens: '输入 tokens',
-        outputHint: '输出 tokens {value}',
+        outputTokens: '输出 tokens',
+        hitTokens: '缓存命中 tokens',
+        requestHitRate: '请求命中率',
+        tokensHitRate: 'tokens 命中率',
         estimatedSaved: '预估节省',
         coverageHint: '整体 tokens 覆盖率 {value}'
       },
