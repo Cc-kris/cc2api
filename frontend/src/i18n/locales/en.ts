@@ -5808,7 +5808,7 @@ export default {
         advancedTitle: 'Advanced policy',
         advancedDescription: 'Capacity, compression, eviction, hot-key, and savings views are now available.',
         semanticTitle: 'Semantic cache',
-        semanticDescription: 'Semantic cache config, review, and feedback will be added in later tasks.',
+        semanticDescription: 'Config save, connection test, and gray-scope setup are now available; audit list and feedback will be completed in follow-up tasks.',
       },
       summary: {
         global: 'Global cache',

@@ -547,7 +547,7 @@ const navItems = computed(() => [
   { key: 'stats', to: null, label: t('admin.cacheManagement.nav.stats'), active: false },
   { key: 'clear', to: '/admin/settings/cache/clear', label: t('admin.cacheManagement.nav.clear'), active: true },
   { key: 'advanced', to: null, label: t('admin.cacheManagement.nav.advanced'), active: false },
-  { key: 'semantic', to: null, label: t('admin.cacheManagement.nav.semantic'), active: false }
+  { key: 'semantic', to: '/admin/settings/cache/semantic', label: t('admin.cacheManagement.nav.semantic'), active: false }
 ])
 
 const clearTypeOptions = computed(() => [

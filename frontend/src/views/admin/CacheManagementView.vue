@@ -15,8 +15,8 @@
             <RouterLink class="btn btn-secondary" to="/admin/settings/cache/stats">
               {{ t('admin.cacheManagement.openStats') }}
             </RouterLink>
-            <RouterLink class="btn btn-secondary" to="/admin/settings/cache/advanced">
-              {{ t('admin.cacheManagement.openAdvanced') }}
+            <RouterLink class="btn btn-secondary" to="/admin/settings/cache/semantic">
+              {{ t('admin.cacheManagement.nav.semantic') }}
             </RouterLink>
             <button type="button" class="btn btn-secondary" :disabled="loading || saving" @click="loadConfig(true)">
               {{ t('admin.cacheManagement.refresh') }}
@@ -383,8 +383,8 @@ const sections = computed(() => [
     key: 'semantic',
     title: t('admin.cacheManagement.sectionCards.semanticTitle'),
     description: t('admin.cacheManagement.sectionCards.semanticDescription'),
-    badge: t('admin.cacheManagement.sectionCards.pending'),
-    active: false
+    badge: t('admin.cacheManagement.sectionCards.active'),
+    active: true
   }
 ])
 

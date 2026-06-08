@@ -37,14 +37,14 @@ const (
 )
 
 type SemanticCacheConnectionTestResult struct {
-	Success            bool   `json:"success"`
-	Status             string `json:"status"`
-	Message            string `json:"message"`
+	Success              bool   `json:"success"`
+	Status               string `json:"status"`
+	Message              string `json:"message"`
 	SemanticModelBaseURL string `json:"semantic_model_base_url"`
-	Model              string `json:"model"`
-	EmbeddingDimension *int   `json:"embedding_dimension,omitempty"`
-	DurationMS         int64  `json:"duration_ms"`
-	HTTPStatus         int    `json:"http_status,omitempty"`
+	Model                string `json:"model"`
+	EmbeddingDimension   *int   `json:"embedding_dimension,omitempty"`
+	DurationMS           int64  `json:"duration_ms"`
+	HTTPStatus           int    `json:"http_status,omitempty"`
 }
 
 // SemanticEmbeddingResult describes a semantic embedding attempt.
