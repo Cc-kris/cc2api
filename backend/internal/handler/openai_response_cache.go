@@ -157,7 +157,7 @@ func (h *OpenAIGatewayHandler) installLocalResponseCacheCapture(c *gin.Context, 
 	return capture
 }
 
-func (h *OpenAIGatewayHandler) persistLocalResponseCache(c *gin.Context, lookup service.LocalResponseCacheLookup, cfg service.LocalResponseCacheConfig, capture *localResponseCacheCaptureWriter, err error, reqLog *zap.Logger) {
+func (h *OpenAIGatewayHandler) persistLocalResponseCache(c *gin.Context, lookup service.LocalResponseCacheLookup, cfg service.LocalResponseCacheConfig, capture *localResponseCacheCaptureWriter, requestBody []byte, err error, reqLog *zap.Logger) {
 	if lookup.Key == "" || capture == nil {
 		return
 	}
@@ -223,6 +223,19 @@ func (h *OpenAIGatewayHandler) persistLocalResponseCache(c *gin.Context, lookup 
 		return
 	}
 	h.gatewayService.RecordLocalResponseCacheStat(c.Request.Context(), "store_success")
+	if h.gatewayService != nil {
+		h.gatewayService.EnqueueSemanticCacheWrite(service.SemanticCacheWriteRequest{
+			RequestBody:      requestBody,
+			ResponseCacheKey: lookup.Key,
+			Platform:         lookup.Platform,
+			Model:            lookup.Model,
+			APIKeyID:         lookup.APIKeyID,
+			UserID:           service.SemanticCacheUserIDFromContext(c),
+			GroupID:          lookup.GroupID,
+			TTL:              cfg.TTL,
+			StoredAt:         entry.CreatedAt,
+		})
+	}
 	usage, _ := service.ExtractOpenAIUsageFromJSONBytes(capture.body.Bytes())
 	h.recordLocalResponseCacheMinuteStat(c, lookup, service.LocalResponseCacheMinuteStatEvent{
 		Candidate:    true,

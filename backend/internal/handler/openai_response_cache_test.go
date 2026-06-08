@@ -272,7 +272,7 @@ func TestPersistLocalResponseCache_RequiresCompleteSSE(t *testing.T) {
 	_, err := c.Writer.Write([]byte("data: partial\n\n"))
 	require.NoError(t, err)
 
-	h.persistLocalResponseCache(c, lookup, cfg, capture, nil, nil)
+	h.persistLocalResponseCache(c, lookup, cfg, capture, []byte(`{"input":"hello"}`), nil, nil)
 	require.Empty(t, store.entries)
 	store.requireStatEventually(t, "store_skip:stream_incomplete", 1)
 
@@ -286,7 +286,7 @@ func TestPersistLocalResponseCache_RequiresCompleteSSE(t *testing.T) {
 	_, err = c.Writer.Write([]byte("data: complete\n\ndata: [DONE]\n\n"))
 	require.NoError(t, err)
 
-	h.persistLocalResponseCache(c, lookup, cfg, capture, nil, nil)
+	h.persistLocalResponseCache(c, lookup, cfg, capture, []byte(`{"input":"hello"}`), nil, nil)
 	require.NotNil(t, store.entries["stream-key"])
 	require.Equal(t, "data: complete\n\ndata: [DONE]\n\n", string(store.entries["stream-key"].Body))
 	store.requireStatEventually(t, "store_success", 1)
@@ -308,7 +308,7 @@ func TestPersistLocalResponseCache_SkipsWriteError(t *testing.T) {
 	_, err := c.Writer.Write([]byte("data: complete\n\ndata: [DONE]\n\n"))
 	require.NoError(t, err)
 
-	h.persistLocalResponseCache(c, service.LocalResponseCacheLookup{Key: "write-error"}, cfg, capture, nil, nil)
+	h.persistLocalResponseCache(c, service.LocalResponseCacheLookup{Key: "write-error"}, cfg, capture, []byte(`{"input":"hello"}`), nil, nil)
 
 	require.Empty(t, store.entries)
 	store.requireStatEventually(t, "store_skip:write_error", 1)
@@ -333,7 +333,7 @@ func TestPersistLocalResponseCache_RecordsStoreSuccessMinuteStats(t *testing.T) 
 	_, err := c.Writer.Write([]byte(`{"usage":{"input_tokens":5,"output_tokens":4}}`))
 	require.NoError(t, err)
 
-	h.persistLocalResponseCache(c, lookup, cfg, capture, nil, nil)
+	h.persistLocalResponseCache(c, lookup, cfg, capture, []byte(`{"input":"hello"}`), nil, nil)
 
 	got := store.requireMinuteStatEventually(t, func(item *service.LocalResponseCacheMinuteStatEvent) bool {
 		return item.StoreSuccess && item.Candidate && item.Model == "gpt-5.5"

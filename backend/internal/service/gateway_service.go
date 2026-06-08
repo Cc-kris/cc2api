@@ -599,6 +599,7 @@ type GatewayService struct {
 
 	localResponseCacheStatsOnce  sync.Once
 	localResponseCacheStatsQueue chan string
+	semanticCacheWriter          *SemanticCacheAsyncWriter
 }
 
 // NewGatewayService creates a new GatewayService
@@ -680,6 +681,10 @@ func NewGatewayService(
 		svc.initDebugGatewayBodyFile(path)
 	}
 	return svc
+}
+
+func (s *GatewayService) SetSemanticCacheWriter(writer *SemanticCacheAsyncWriter) {
+	s.semanticCacheWriter = writer
 }
 
 // GenerateSessionHash 从预解析请求计算粘性会话 hash
@@ -5238,7 +5243,7 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 		if !clientDisconnect && streamResult.cacheBodyTooLarge {
 			s.RecordLocalResponseCacheStat(ctx, "store_skip:body_too_large")
 		} else if !clientDisconnect && len(streamResult.cacheBody) > 0 {
-			s.persistClaudeLocalResponseCache(ctx, c, localCacheLookup, localCacheCfg, resp.StatusCode, streamResult.cacheContentType, streamResult.cacheBody)
+			s.persistClaudeLocalResponseCache(ctx, c, localCacheLookup, localCacheCfg, input.Body, resp.StatusCode, streamResult.cacheContentType, streamResult.cacheBody)
 		}
 	} else {
 		var responseBody []byte
@@ -5247,7 +5252,7 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 		if err != nil {
 			return nil, err
 		}
-		s.persistClaudeLocalResponseCache(ctx, c, localCacheLookup, localCacheCfg, resp.StatusCode, contentType, responseBody)
+		s.persistClaudeLocalResponseCache(ctx, c, localCacheLookup, localCacheCfg, input.Body, resp.StatusCode, contentType, responseBody)
 	}
 	if usage == nil {
 		usage = &ClaudeUsage{}
@@ -5751,7 +5756,7 @@ func (s *GatewayService) tryWriteClaudeLocalResponseCacheHit(ctx context.Context
 	return usage, true
 }
 
-func (s *GatewayService) persistClaudeLocalResponseCache(ctx context.Context, c *gin.Context, lookup LocalResponseCacheLookup, cfg LocalResponseCacheConfig, status int, contentType string, body []byte) {
+func (s *GatewayService) persistClaudeLocalResponseCache(ctx context.Context, c *gin.Context, lookup LocalResponseCacheLookup, cfg LocalResponseCacheConfig, requestBody []byte, status int, contentType string, body []byte) {
 	if lookup.Key == "" {
 		return
 	}
@@ -5795,6 +5800,20 @@ func (s *GatewayService) persistClaudeLocalResponseCache(ctx context.Context, c 
 	}
 	if s != nil {
 		s.RecordLocalResponseCacheStat(ctx, "store_success")
+		if s.semanticCacheWriter != nil {
+			s.semanticCacheWriter.Enqueue(SemanticCacheWriteRequest{
+				Protocol:         PlatformAnthropic,
+				RequestBody:      requestBody,
+				ResponseCacheKey: lookup.Key,
+				Platform:         lookup.Platform,
+				Model:            lookup.Model,
+				APIKeyID:         lookup.APIKeyID,
+				UserID:           SemanticCacheUserIDFromContext(c),
+				GroupID:          lookup.GroupID,
+				TTL:              cfg.TTL,
+				StoredAt:         entry.CreatedAt,
+			})
+		}
 	}
 }
 

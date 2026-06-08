@@ -105,6 +105,56 @@ func (c *gatewayCache) SetLocalResponse(ctx context.Context, key string, entry *
 	return c.rdb.Set(ctx, buildLocalResponseCacheKey(key), payload, ttl).Err()
 }
 
+func (c *gatewayCache) UpsertSemanticCacheEntry(ctx context.Context, entry *service.SemanticCacheEntry) error {
+	if c == nil || c.db == nil || entry == nil {
+		return nil
+	}
+	query := `
+INSERT INTO ops_semantic_cache_entries (
+    namespace, platform, model, api_key_id, user_id, group_id,
+    system_fingerprint, rule_version, embedding_model, embedding_dimension,
+    embedding_ref, normalized_prompt_hash, response_cache_key, status, expires_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10,
+    $11::jsonb, $12, $13, $14, $15
+)
+ON CONFLICT (namespace, normalized_prompt_hash, rule_version, embedding_model, embedding_dimension)
+WHERE status = 'active'
+DO UPDATE SET
+    platform = EXCLUDED.platform,
+    model = EXCLUDED.model,
+    api_key_id = EXCLUDED.api_key_id,
+    user_id = EXCLUDED.user_id,
+    group_id = EXCLUDED.group_id,
+    system_fingerprint = EXCLUDED.system_fingerprint,
+    embedding_ref = EXCLUDED.embedding_ref,
+    response_cache_key = EXCLUDED.response_cache_key,
+    status = EXCLUDED.status,
+    expires_at = EXCLUDED.expires_at,
+    updated_at = NOW()`
+	_, err := c.db.ExecContext(
+		ctx,
+		query,
+		entry.Namespace,
+		entry.Platform,
+		entry.Model,
+		entry.APIKeyID,
+		entry.UserID,
+		entry.GroupID,
+		entry.SystemFingerprint,
+		entry.RuleVersion,
+		entry.EmbeddingModel,
+		entry.EmbeddingDimension,
+		string(entry.EmbeddingRef),
+		entry.NormalizedPromptHash,
+		entry.ResponseCacheKey,
+		entry.Status,
+		entry.ExpiresAt,
+	)
+	return err
+}
+
 func (c *gatewayCache) touchLocalResponseCacheEntry(ctx context.Context, redisKey string, entry *service.LocalResponseCacheEntry) {
 	if c == nil || c.rdb == nil || entry == nil {
 		return

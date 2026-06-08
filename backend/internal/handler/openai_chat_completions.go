@@ -270,7 +270,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		} else {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, nil)
 		}
-		h.persistLocalResponseCache(c, localCacheLookup, localCacheCfg, localCacheCapture, nil, reqLog)
+		h.persistLocalResponseCache(c, localCacheLookup, localCacheCfg, localCacheCapture, body, nil, reqLog)
 
 		userAgent := c.GetHeader("User-Agent")
 		clientIP := ip.GetClientIP(c)

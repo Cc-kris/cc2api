@@ -59,6 +59,7 @@ type GeminiMessagesCompatService struct {
 
 	localResponseCacheStatsOnce  sync.Once
 	localResponseCacheStatsQueue chan string
+	semanticCacheWriter          *SemanticCacheAsyncWriter
 }
 
 func NewGeminiMessagesCompatService(
@@ -84,6 +85,10 @@ func NewGeminiMessagesCompatService(
 		cfg:                       cfg,
 		responseHeaderFilter:      compileResponseHeaderFilter(cfg),
 	}
+}
+
+func (s *GeminiMessagesCompatService) SetSemanticCacheWriter(writer *SemanticCacheAsyncWriter) {
+	s.semanticCacheWriter = writer
 }
 
 func (s *GeminiMessagesCompatService) SetSettingService(settingService *SettingService) {
@@ -263,7 +268,7 @@ func (s *GeminiMessagesCompatService) tryWriteGeminiLocalResponseCacheHit(ctx co
 	return usage, true
 }
 
-func (s *GeminiMessagesCompatService) persistGeminiLocalResponseCache(ctx context.Context, c *gin.Context, lookup LocalResponseCacheLookup, cfg LocalResponseCacheConfig, status int, contentType string, body []byte, requestStream bool) {
+func (s *GeminiMessagesCompatService) persistGeminiLocalResponseCache(ctx context.Context, c *gin.Context, lookup LocalResponseCacheLookup, cfg LocalResponseCacheConfig, requestBody []byte, status int, contentType string, body []byte, requestStream bool) {
 	if lookup.Key == "" {
 		return
 	}
@@ -313,6 +318,20 @@ func (s *GeminiMessagesCompatService) persistGeminiLocalResponseCache(ctx contex
 	}
 	if s != nil {
 		s.RecordLocalResponseCacheStat(ctx, "store_success")
+		if s.semanticCacheWriter != nil {
+			s.semanticCacheWriter.Enqueue(SemanticCacheWriteRequest{
+				Protocol:         PlatformGemini,
+				RequestBody:      requestBody,
+				ResponseCacheKey: lookup.Key,
+				Platform:         lookup.Platform,
+				Model:            lookup.Model,
+				APIKeyID:         lookup.APIKeyID,
+				UserID:           SemanticCacheUserIDFromContext(c),
+				GroupID:          lookup.GroupID,
+				TTL:              cfg.TTL,
+				StoredAt:         entry.CreatedAt,
+			})
+		}
 	}
 }
 
@@ -1853,7 +1872,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		} else if localCacheLookup.Key != "" && !streamRes.cacheComplete {
 			s.RecordLocalResponseCacheStat(ctx, "store_skip:stream_incomplete")
 		} else if streamRes.cacheComplete && len(streamRes.cacheBody) > 0 {
-			s.persistGeminiLocalResponseCache(ctx, c, localCacheLookup, localCacheCfg, resp.StatusCode, streamRes.cacheContentType, streamRes.cacheBody, true)
+			s.persistGeminiLocalResponseCache(ctx, c, localCacheLookup, localCacheCfg, body, resp.StatusCode, streamRes.cacheContentType, streamRes.cacheBody, true)
 		}
 	} else {
 		if useUpstreamStream {
@@ -1870,7 +1889,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 				return nil, err
 			}
 			usage = usageResp
-			s.persistGeminiLocalResponseCache(ctx, c, localCacheLookup, localCacheCfg, resp.StatusCode, contentType, responseBody, false)
+			s.persistGeminiLocalResponseCache(ctx, c, localCacheLookup, localCacheCfg, body, resp.StatusCode, contentType, responseBody, false)
 		}
 	}
 

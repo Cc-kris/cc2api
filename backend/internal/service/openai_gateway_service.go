@@ -202,6 +202,17 @@ func (s *OpenAICodexUsageSnapshot) Normalize() *NormalizedCodexLimits {
 	return result
 }
 
+func (s *OpenAIGatewayService) SetSemanticCacheWriter(writer *SemanticCacheAsyncWriter) {
+	s.semanticCacheWriter = writer
+}
+
+func (s *OpenAIGatewayService) EnqueueSemanticCacheWrite(req SemanticCacheWriteRequest) bool {
+	if s == nil || s.semanticCacheWriter == nil {
+		return false
+	}
+	return s.semanticCacheWriter.Enqueue(req)
+}
+
 // OpenAIUsage represents OpenAI API response usage
 type OpenAIUsage struct {
 	InputTokens              int `json:"input_tokens"`
@@ -369,6 +380,7 @@ type OpenAIGatewayService struct {
 	localResponseCacheStatsQueue        chan string
 	localResponseCacheMinuteStatsOnce   sync.Once
 	localResponseCacheMinuteStatsQueue  chan LocalResponseCacheMinuteStatEvent
+	semanticCacheWriter                 *SemanticCacheAsyncWriter
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService
