@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/infraerrors"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
 )
 
@@ -54,25 +54,25 @@ type SemanticCacheAuditListFilter struct {
 }
 
 type SemanticCacheAuditListRecord struct {
-	ID              int64      `json:"id"`
-	RequestID       string     `json:"request_id"`
-	SemanticEntryID *int64     `json:"semantic_entry_id,omitempty"`
-	OccurredAt      time.Time  `json:"occurred_at"`
-	Platform        string     `json:"platform"`
-	Model           string     `json:"model"`
-	APIKeyID        *int64     `json:"api_key_id,omitempty"`
-	APIKey          string     `json:"api_key,omitempty"`
-	Similarity      float64    `json:"similarity"`
-	Decision        string     `json:"decision"`
-	BlockReason     string     `json:"block_reason,omitempty"`
-	ReviewStatus    string     `json:"review_status"`
-	FeedbackType    string     `json:"feedback_type,omitempty"`
-	FeedbackNote    string     `json:"feedback_note,omitempty"`
-	OperatorUserID  *int64     `json:"operator_user_id,omitempty"`
-	AutoCloseReason string     `json:"auto_close_reason,omitempty"`
-	SourceSummary   string     `json:"source_summary,omitempty"`
-	TargetSummary   string     `json:"target_summary,omitempty"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	ID              int64     `json:"id"`
+	RequestID       string    `json:"request_id"`
+	SemanticEntryID *int64    `json:"semantic_entry_id,omitempty"`
+	OccurredAt      time.Time `json:"occurred_at"`
+	Platform        string    `json:"platform"`
+	Model           string    `json:"model"`
+	APIKeyID        *int64    `json:"api_key_id,omitempty"`
+	APIKey          string    `json:"api_key,omitempty"`
+	Similarity      float64   `json:"similarity"`
+	Decision        string    `json:"decision"`
+	BlockReason     string    `json:"block_reason,omitempty"`
+	ReviewStatus    string    `json:"review_status"`
+	FeedbackType    string    `json:"feedback_type,omitempty"`
+	FeedbackNote    string    `json:"feedback_note,omitempty"`
+	OperatorUserID  *int64    `json:"operator_user_id,omitempty"`
+	AutoCloseReason string    `json:"auto_close_reason,omitempty"`
+	SourceSummary   string    `json:"source_summary,omitempty"`
+	TargetSummary   string    `json:"target_summary,omitempty"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 type SemanticCacheAuditListPage struct {
