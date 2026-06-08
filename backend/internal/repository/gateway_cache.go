@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -391,7 +392,7 @@ WHERE id = $1`, auditID, strings.TrimSpace(reason))
 		return err
 	}
 	if affected == 0 {
-		return service.ErrAuditNotFound
+		return service.ErrSemanticCacheAuditNotFound
 	}
 	return nil
 }
@@ -412,6 +413,73 @@ WHERE occurred_at >= $1`, since).Scan(&stats.HitCount, &stats.ComplaintCount, &s
 		return nil, err
 	}
 	return stats, nil
+}
+
+func (c *gatewayCache) updateSemanticCacheAudit(ctx context.Context, auditID int64, updateSQL string, args ...any) (*service.SemanticCacheAuditListRecord, error) {
+	if c == nil || c.db == nil {
+		return nil, nil
+	}
+	execArgs := append([]any{auditID}, args...)
+	res, err := c.db.ExecContext(ctx, updateSQL, execArgs...)
+	if err != nil {
+		return nil, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if affected == 0 {
+		return nil, service.ErrSemanticCacheAuditNotFound
+	}
+	row := c.db.QueryRowContext(ctx, `
+SELECT
+  a.id, a.request_id, a.semantic_entry_id, a.occurred_at, a.platform, a.model, a.api_key_id,
+  COALESCE(k.key, ''), a.similarity, a.decision, COALESCE(a.block_reason, ''),
+  a.review_status, a.feedback_type, COALESCE(a.feedback_note, ''), a.operator_user_id,
+  COALESCE(a.auto_close_reason, ''), COALESCE(a.source_summary, ''), COALESCE(a.target_summary, ''), a.updated_at
+FROM ops_semantic_cache_audits a
+LEFT JOIN api_keys k ON a.api_key_id = k.id
+WHERE a.id = $1`, auditID)
+	var record service.SemanticCacheAuditListRecord
+	var entryID sql.NullInt64
+	var apiKeyID sql.NullInt64
+	var operatorUserID sql.NullInt64
+	if err := row.Scan(
+		&record.ID,
+		&record.RequestID,
+		&entryID,
+		&record.OccurredAt,
+		&record.Platform,
+		&record.Model,
+		&apiKeyID,
+		&record.APIKey,
+		&record.Similarity,
+		&record.Decision,
+		&record.BlockReason,
+		&record.ReviewStatus,
+		&record.FeedbackType,
+		&record.FeedbackNote,
+		&operatorUserID,
+		&record.AutoCloseReason,
+		&record.SourceSummary,
+		&record.TargetSummary,
+		&record.UpdatedAt,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, service.ErrSemanticCacheAuditNotFound
+		}
+		return nil, err
+	}
+	if entryID.Valid {
+		record.SemanticEntryID = &entryID.Int64
+	}
+	if apiKeyID.Valid {
+		record.APIKeyID = &apiKeyID.Int64
+	}
+	if operatorUserID.Valid {
+		record.OperatorUserID = &operatorUserID.Int64
+	}
+	return &record, nil
 }
 
 func (c *gatewayCache) touchLocalResponseCacheEntry(ctx context.Context, redisKey string, entry *service.LocalResponseCacheEntry) {
