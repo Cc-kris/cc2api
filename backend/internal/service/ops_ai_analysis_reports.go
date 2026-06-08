@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
 )
 
 func (s *OpsService) GetAIAnalysisTaskDetail(ctx context.Context, taskID int64) (*OpsAIAnalysisTaskDetailResponse, error) {
@@ -25,7 +26,9 @@ func (s *OpsService) GetAIAnalysisTaskDetail(ctx context.Context, taskID int64) 
 		}
 		return nil, err
 	}
-	result := &OpsAIAnalysisTaskDetailResponse{Task: task}
+	sanitizedTask := *task
+	sanitizedTask.ErrorMessage = logredact.RedactAIContext(task.ErrorMessage, 500)
+	result := &OpsAIAnalysisTaskDetailResponse{Task: &sanitizedTask}
 	report, err := s.opsRepo.GetAIAnalysisReport(ctx, taskID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -33,6 +36,42 @@ func (s *OpsService) GetAIAnalysisTaskDetail(ctx context.Context, taskID int64) 
 		}
 		return nil, err
 	}
-	result.Report = report
+	result.Report = sanitizeOpsAIAnalysisReport(report)
 	return result, nil
+}
+
+func sanitizeOpsAIAnalysisReport(report *OpsAIAnalysisReport) *OpsAIAnalysisReport {
+	if report == nil {
+		return nil
+	}
+	out := *report
+	out.Summary = logredact.RedactAIContext(report.Summary, 500)
+	out.RootCause = logredact.RedactAIContext(report.RootCause, 500)
+	out.FeedbackNote = logredact.RedactAIContext(report.FeedbackNote, 500)
+	out.ImpactScope = sanitizeOpsAIAnalysisValue(report.ImpactScope)
+	out.Evidence = sanitizeOpsAIAnalysisValue(report.Evidence)
+	out.SuggestedActions = sanitizeOpsAIAnalysisValue(report.SuggestedActions)
+	out.ErrorBreakdown = sanitizeOpsAIAnalysisValue(report.ErrorBreakdown)
+	return &out
+}
+
+func sanitizeOpsAIAnalysisValue(value any) any {
+	switch v := value.(type) {
+	case string:
+		return logredact.RedactAIContext(v, 500)
+	case []any:
+		out := make([]any, 0, len(v))
+		for _, item := range v {
+			out = append(out, sanitizeOpsAIAnalysisValue(item))
+		}
+		return out
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for key, item := range v {
+			out[key] = sanitizeOpsAIAnalysisValue(item)
+		}
+		return out
+	default:
+		return value
+	}
 }
