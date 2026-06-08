@@ -5974,6 +5974,8 @@ export default {
             modelsPlaceholder: 'Enter a model name and press Enter',
             modelsEmpty: 'No gray models yet',
             addModel: 'Add',
+            selected: 'Selected',
+            select: 'Select',
           },
         },
         validation: {

@@ -177,7 +177,7 @@
                           @click="toggleApiKey(item)"
                         >
                           <span>{{ apiKeyOptionLabel(item) }}</span>
-                          <span class="text-xs text-gray-500 dark:text-gray-400">{{ selectedApiKeyIds.has(item.id) ? t('common.selected') : t('common.select') }}</span>
+                          <span class="text-xs text-gray-500 dark:text-gray-400">{{ selectedApiKeyIds.has(item.id) ? t('admin.cacheManagement.advancedPage.fields.grayScope.selected') : t('admin.cacheManagement.advancedPage.fields.grayScope.select') }}</span>
                         </button>
                         <p v-if="apiKeyKeyword && apiKeyOptions.length === 0" class="text-xs text-gray-500 dark:text-gray-400">
                           {{ t('admin.cacheManagement.advancedPage.fields.grayScope.apiKeyEmpty') }}

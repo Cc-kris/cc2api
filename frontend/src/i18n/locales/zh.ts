@@ -6137,6 +6137,8 @@ export default {
             modelsPlaceholder: '输入模型名称后回车',
             modelsEmpty: '暂无灰度模型',
             addModel: '添加',
+            selected: '已选',
+            select: '选择',
           },
         },
         validation: {
