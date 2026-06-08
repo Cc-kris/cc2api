@@ -28,6 +28,70 @@ export interface CacheManagementConfig {
   bypass_header: CacheManagementBypassHeader
 }
 
+
+export interface CacheStatsParams {
+  time_range?: string
+  start_time?: string
+  end_time?: string
+  platform?: string
+  model?: string
+  api_key_id?: number
+  group_id?: number
+}
+
+export interface CacheStatsSummary {
+  total_requests: number
+  candidate_requests: number
+  hit_requests: number
+  miss_requests: number
+  bypass_requests: number
+  store_success: number
+  store_skip: number
+  request_hit_rate: number
+  input_tokens: number
+  output_tokens: number
+  hit_tokens: number
+  candidate_tokens: number
+  tokens_hit_rate: number
+  overall_tokens_coverage: number
+  estimated_saved_amount: string
+}
+
+export interface CacheStatsModelRow {
+  platform: string
+  model: string
+  total_requests: number
+  candidate_requests: number
+  hit_requests: number
+  miss_requests: number
+  bypass_requests: number
+  store_success: number
+  store_skip: number
+  input_tokens: number
+  output_tokens: number
+  hit_tokens: number
+  candidate_tokens: number
+  all_request_tokens: number
+  request_hit_rate: number
+  tokens_hit_rate: number
+  top_bypass_reason?: string
+  top_store_skip_reason?: string
+  estimated_saved_amount: string
+}
+
+export interface CacheStatsReasonRow {
+  reason: string
+  count: number
+  percent: number
+}
+
+export interface CacheStatsResponse {
+  summary: CacheStatsSummary
+  model_rows: CacheStatsModelRow[]
+  bypass_reasons: CacheStatsReasonRow[]
+  store_skip_reasons: CacheStatsReasonRow[]
+}
+
 export type CacheClearType =
   | 'all'
   | 'by_platform'
@@ -131,6 +195,17 @@ export const cacheAPI = {
 
   updateConfig(data: CacheManagementConfig) {
     return apiClient.put<CacheManagementConfig>('/admin/cache/config', data)
+  },
+
+  getStats(params?: CacheStatsParams) {
+    return apiClient.get<CacheStatsResponse>('/admin/cache/stats', { params: sanitizeCacheStatsParams(params) })
+  },
+
+  exportStats(params?: CacheStatsParams) {
+    return apiClient.get<Blob>('/admin/cache/stats/export', {
+      params: sanitizeCacheStatsParams(params),
+      responseType: 'blob'
+    })
   },
 
   clearLocalResponseCache(data: CacheClearRequest) {

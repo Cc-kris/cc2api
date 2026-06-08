@@ -182,7 +182,7 @@
                       class="input flex-1"
                       :disabled="submitting || !canManage"
                       :placeholder="t('admin.cacheManagement.clearPage.fields.apiKeysPlaceholder')"
-                      @input="debounceApiKeySearch"
+                      @input="() => debounceApiKeySearch()"
                     />
                     <button type="button" class="btn btn-secondary shrink-0" :disabled="submitting || !canManage" @click="debounceApiKeySearch(true)">
                       {{ t('common.search') }}
