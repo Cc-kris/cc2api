@@ -5,17 +5,20 @@
         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div class="flex flex-wrap items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400">
-              <router-link
+              <component
                 v-for="item in navItems"
-                :key="item.to"
-                :to="item.to"
+                :key="item.key"
+                :is="item.to ? 'router-link' : 'span'"
+                v-bind="item.to ? { to: item.to } : {}"
                 class="rounded-full border px-3 py-1 transition-colors"
                 :class="item.active
                   ? 'border-primary-200 bg-primary-50 text-primary-700 dark:border-primary-700/60 dark:bg-primary-900/10 dark:text-primary-200'
-                  : 'border-gray-200 text-gray-500 hover:border-primary-200 hover:text-primary-600 dark:border-dark-700 dark:text-gray-400 dark:hover:border-primary-700/60 dark:hover:text-primary-200'"
+                  : item.to
+                    ? 'border-gray-200 text-gray-500 hover:border-primary-200 hover:text-primary-600 dark:border-dark-700 dark:text-gray-400 dark:hover:border-primary-700/60 dark:hover:text-primary-200'
+                    : 'border-gray-200 bg-gray-50 text-gray-400 dark:border-dark-700 dark:bg-dark-900/20 dark:text-gray-500'"
               >
                 {{ item.label }}
-              </router-link>
+              </component>
             </div>
             <h1 class="mt-4 text-2xl font-semibold text-gray-900 dark:text-white">
               {{ t('admin.cacheManagement.clearPage.title') }}
@@ -393,12 +396,12 @@ const requiresPlatforms = computed(() => form.clearType === 'by_platform')
 const requiresConfirmText = computed(() => form.clearType === 'all')
 
 const navItems = computed(() => [
-  { to: '/admin/settings/cache', label: t('admin.cacheManagement.nav.home'), active: false },
-  { to: '/admin/settings/cache/config', label: t('admin.cacheManagement.nav.config'), active: false },
-  { to: '/admin/settings/cache/stats', label: t('admin.cacheManagement.nav.stats'), active: false },
-  { to: '/admin/settings/cache/clear', label: t('admin.cacheManagement.nav.clear'), active: true },
-  { to: '/admin/settings/cache/advanced', label: t('admin.cacheManagement.nav.advanced'), active: false },
-  { to: '/admin/settings/cache/semantic', label: t('admin.cacheManagement.nav.semantic'), active: false }
+  { key: 'home', to: '/admin/settings/cache', label: t('admin.cacheManagement.nav.home'), active: false },
+  { key: 'config', to: null, label: t('admin.cacheManagement.nav.config'), active: false },
+  { key: 'stats', to: null, label: t('admin.cacheManagement.nav.stats'), active: false },
+  { key: 'clear', to: '/admin/settings/cache/clear', label: t('admin.cacheManagement.nav.clear'), active: true },
+  { key: 'advanced', to: null, label: t('admin.cacheManagement.nav.advanced'), active: false },
+  { key: 'semantic', to: null, label: t('admin.cacheManagement.nav.semantic'), active: false }
 ])
 
 const clearTypeOptions = computed(() => [
