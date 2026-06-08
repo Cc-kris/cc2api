@@ -225,6 +225,15 @@ func allowOpsRoleForAdminPath(role, method, path string) bool {
 	if method == http.MethodGet && path == "/api/v1/admin/cache/clear-audits" {
 		return isOpsAIAnalysisOperatorRole(role)
 	}
+	if method == http.MethodGet && path == "/api/v1/admin/cache/semantic-audits" {
+		return isSemanticAuditReadRole(role)
+	}
+	if method == http.MethodPost && isSemanticAuditReviewPath(path) {
+		return isOpsAIAnalysisOperatorRole(role)
+	}
+	if method == http.MethodPost && isSemanticAuditFeedbackPath(path) {
+		return isOpsAIAnalysisOperatorRole(role)
+	}
 	if method == http.MethodGet && path == "/api/v1/admin/cache/advanced-config" {
 		return isCacheStatsReadRole(role)
 	}
@@ -260,6 +269,10 @@ func isCacheStatsExportRole(role string) bool {
 	return isBusinessOperationRole(role)
 }
 
+func isSemanticAuditReadRole(role string) bool {
+	return isOpsAIAnalysisFeedbackRole(role) || isBusinessOperationRole(role)
+}
+
 func isBusinessOperationRole(role string) bool {
 	role = strings.TrimSpace(role)
 	return strings.EqualFold(role, "business") ||
@@ -292,4 +305,33 @@ func isOpsAIAnalysisTaskDetailPath(path string) bool {
 		}
 	}
 	return true
+}
+
+func isSemanticAuditDetailPath(path string) bool {
+	const prefix = "/api/v1/admin/cache/semantic-audits/"
+	if !strings.HasPrefix(path, prefix) {
+		return false
+	}
+	idPart := strings.TrimPrefix(path, prefix)
+	if idPart == "" || strings.Contains(idPart, "/") {
+		return false
+	}
+	_, err := strconv.ParseInt(idPart, 10, 64)
+	return err == nil
+}
+
+func isSemanticAuditReviewPath(path string) bool {
+	const suffix = "/review"
+	if !strings.HasSuffix(path, suffix) {
+		return false
+	}
+	return isSemanticAuditDetailPath(strings.TrimSuffix(path, suffix))
+}
+
+func isSemanticAuditFeedbackPath(path string) bool {
+	const suffix = "/feedback"
+	if !strings.HasSuffix(path, suffix) {
+		return false
+	}
+	return isSemanticAuditDetailPath(strings.TrimSuffix(path, suffix))
 }

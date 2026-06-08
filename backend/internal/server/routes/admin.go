@@ -115,6 +115,9 @@ func registerCacheManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) 
 		cache.GET("/stats/export", h.Admin.CacheStats.Export)
 		cache.POST("/clear", h.Admin.CacheConfig.Clear)
 		cache.GET("/clear-audits", h.Admin.CacheConfig.ListClearAudits)
+		cache.GET("/semantic-audits", h.Admin.CacheConfig.ListSemanticAudits)
+		cache.POST("/semantic-audits/:id/review", h.Admin.CacheConfig.ReviewSemanticAudit)
+		cache.POST("/semantic-audits/:id/feedback", h.Admin.CacheConfig.FeedbackSemanticAudit)
 	}
 }
 

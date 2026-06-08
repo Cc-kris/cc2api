@@ -87,6 +87,24 @@ func canViewCacheClearAudits(role string) bool {
 	}
 }
 
+func canViewSemanticCacheAudits(role string) bool {
+	switch normalizeFieldPermissionRole(role) {
+	case fieldPermissionOwner, fieldPermissionOps, fieldPermissionBusiness, fieldPermissionSupport:
+		return true
+	default:
+		return false
+	}
+}
+
+func canManageSemanticCacheAudits(role string) bool {
+	switch normalizeFieldPermissionRole(role) {
+	case fieldPermissionOwner, fieldPermissionOps:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *SettingService) GetCacheManagementConfigForRole(ctx context.Context, viewerRole string) (CacheManagementConfig, error) {
 	if !canViewCacheConfig(viewerRole) {
 		return CacheManagementConfig{}, nil
