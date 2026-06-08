@@ -197,9 +197,8 @@
                       :disabled="submitting || !canManage"
                       @click="selectApiKey(item)"
                     >
-                      <span class="font-medium text-gray-900 dark:text-white">{{ item.name || `#${item.id}` }}</span>
-                      <span class="text-xs text-gray-500 dark:text-gray-400">#{{ item.id }}</span>
-                    </button>
+                      <span class="font-medium text-gray-900 dark:text-white">{{ formatApiKeyOptionLabel(item.name, item.id) }}</span>
+                                          </button>
                   </div>
                   <p v-else-if="apiKeySearchTried" class="mt-3 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.cacheManagement.clearPage.fields.apiKeysEmpty') }}</p>
                   <div class="mt-3 flex flex-wrap gap-2" v-if="form.apiKeys.length > 0">
@@ -208,7 +207,7 @@
                       :key="item.id"
                       class="inline-flex items-center gap-2 rounded-full bg-primary-50 px-3 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/20 dark:text-primary-200"
                     >
-                      {{ item.name || `#${item.id}` }} · #{{ item.id }}
+                      {{ formatApiKeyOptionLabel(item.name, item.id) }}
                       <button type="button" class="text-primary-500 hover:text-primary-700 dark:hover:text-primary-100" :disabled="submitting || !canManage" @click="removeApiKey(item.id)">
                         ×
                       </button>
@@ -484,6 +483,7 @@ import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatDateTime as formatDateTimeValue } from '@/utils/format'
+import { formatApiKeyOptionLabel } from '@/utils/adminSensitiveDisplay'
 
 type ClearTypeForm = {
   clearType: CacheClearType
@@ -605,7 +605,7 @@ const scopeSummary = computed(() => {
     summary.push({
       label: t('admin.cacheManagement.clearPage.fields.apiKeys'),
       value: form.apiKeys.length > 0
-        ? form.apiKeys.map((item) => `${item.name || `#${item.id}`} · #${item.id}`).join(', ')
+        ? form.apiKeys.map((item) => `${formatApiKeyOptionLabel(item.name, item.id)}`).join(', ')
         : t('common.notConfigured')
     })
   }

@@ -257,8 +257,7 @@
                         @click="selectGrayApiKey(item)"
                       >
                         <span class="font-medium text-gray-900 dark:text-white">{{ formatApiKeyOptionLabel(item.name, item.id) }}</span>
-                        <span class="text-xs text-gray-500 dark:text-gray-400">#{{ item.id }}</span>
-                      </button>
+                                              </button>
                     </div>
                     <div v-if="selectedGrayApiKeys.length > 0" class="mt-3 flex flex-wrap gap-2">
                       <span
@@ -266,7 +265,7 @@
                         :key="item.id"
                         class="inline-flex items-center gap-2 rounded-full bg-primary-50 px-3 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/20 dark:text-primary-200"
                       >
-                        {{ formatApiKeyOptionLabel(item.name, item.id) }} · #{{ item.id }}
+                        {{ formatApiKeyOptionLabel(item.name, item.id) }}
                         <button type="button" :disabled="!canManage" @click="removeGrayApiKey(item.id)">×</button>
                       </span>
                     </div>

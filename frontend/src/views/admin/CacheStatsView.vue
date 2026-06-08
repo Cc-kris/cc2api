@@ -250,6 +250,7 @@ import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatCurrency } from '@/utils/format'
+import { formatApiKeyOptionLabel } from '@/utils/adminSensitiveDisplay'
 
 interface ApiKeySearchOption {
   id: number
@@ -430,7 +431,7 @@ watch(apiKeySearchText, async (value) => {
 })
 
 function apiKeyOptionLabel(item: ApiKeySearchOption): string {
-  return `${item.name} (#${item.id})`
+  return formatApiKeyOptionLabel(item.name, item.id)
 }
 
 function syncSelectedApiKey(): void {

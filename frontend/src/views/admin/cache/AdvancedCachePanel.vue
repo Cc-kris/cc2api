@@ -402,6 +402,7 @@ import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatCurrency } from '@/utils/format'
+import { formatApiKeyOptionLabel } from '@/utils/adminSensitiveDisplay'
 
 interface ApiKeyOption {
   id: number
@@ -861,7 +862,7 @@ function removeApiKey(id: number): void {
 }
 
 function apiKeyOptionLabel(item: ApiKeyOption): string {
-  return item.name ? `${item.name} (#${item.id})` : `#${item.id}`
+  return formatApiKeyOptionLabel(item.name, item.id)
 }
 
 function formatInteger(value: number | string | null | undefined): string {
