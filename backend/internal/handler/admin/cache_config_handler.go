@@ -104,6 +104,48 @@ func (h *CacheConfigHandler) GetSemanticConfig(c *gin.Context) {
 	response.Success(c, cfg)
 }
 
+func (h *CacheConfigHandler) UpdateSemanticConfig(c *gin.Context) {
+	if h == nil || h.settingService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Semantic cache config service is unavailable")
+		return
+	}
+	var req service.SemanticCacheConfig
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	role, _ := middleware.GetUserRoleFromContext(c)
+	cfg, err := h.settingService.UpdateSemanticCacheConfigForRole(c.Request.Context(), req, role)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, cfg)
+}
+
+func (h *CacheConfigHandler) TestSemanticConfig(c *gin.Context) {
+	if h == nil || h.settingService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Semantic cache config service is unavailable")
+		return
+	}
+	var req service.SemanticCacheConfig
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	role, _ := middleware.GetUserRoleFromContext(c)
+	if !strings.EqualFold(strings.TrimSpace(role), "admin") {
+		response.Forbidden(c, "无权限测试语义缓存配置")
+		return
+	}
+	result, err := h.settingService.TestSemanticCacheConnection(c.Request.Context(), req)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
 func (h *CacheConfigHandler) Clear(c *gin.Context) {
 	var req service.LocalResponseCacheClearRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
