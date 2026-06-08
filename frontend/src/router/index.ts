@@ -10,6 +10,7 @@ import { useAdminSettingsStore } from '@/stores/adminSettings'
 import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
+import { canAccessAdminPath, resolveAdminHomePath } from '@/utils/adminAccess'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveDocumentTitle } from './title'
 
@@ -375,7 +376,10 @@ const routes: RouteRecordRaw[] = [
   // ==================== Admin Routes ====================
   {
     path: '/admin',
-    redirect: '/admin/dashboard'
+    redirect: () => {
+      const authStore = useAuthStore()
+      return resolveAdminHomePath(authStore.user?.role)
+    }
   },
   {
     path: '/admin/dashboard',
@@ -872,7 +876,7 @@ router.beforeEach(async (to, _from, next) => {
         return
       }
       // Admin users go to admin dashboard, regular users go to user dashboard
-      next(authStore.isAdmin ? '/admin/dashboard' : '/dashboard')
+      next(authStore.isAdmin ? '/admin/dashboard' : resolveAdminHomePath(authStore.user?.role))
       return
     }
     // Backend mode: block public pages for unauthenticated users (except login, key-usage, setup)
@@ -899,8 +903,11 @@ router.beforeEach(async (to, _from, next) => {
 
   // Check admin requirement
   if (requiresAdmin && !authStore.isAdmin) {
-    // User is authenticated but not admin, redirect to user dashboard
-    next('/dashboard')
+    if (canAccessAdminPath(to.path, authStore.user?.role)) {
+      next()
+      return
+    }
+    next(resolveAdminHomePath(authStore.user?.role))
     return
   }
 
