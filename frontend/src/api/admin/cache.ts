@@ -28,6 +28,42 @@ export interface CacheManagementConfig {
   bypass_header: CacheManagementBypassHeader
 }
 
+export type SemanticCacheStage = 'observe' | 'review' | 'gray' | 'active' | 'rollback'
+
+export interface SemanticCacheConfig {
+  enabled: boolean
+  stage: SemanticCacheStage
+  platforms: string[]
+  model_allowlist: string[]
+  semantic_model_base_url: string
+  semantic_api_key?: string
+  semantic_api_key_masked: string
+  semantic_model_name: string
+  namespace: string
+  embedding_dimension: number | null
+  rule_version: string
+  similarity_threshold: number
+  max_reuse_minutes: number
+  max_candidates: number
+  gray_api_key_ids: number[]
+  review_mode: boolean
+  quality_rollback_threshold_percent: number
+  auto_closed: boolean
+  auto_close_reason: string | null
+  auto_closed_at: string | null
+}
+
+export interface SemanticCacheConnectionTestResult {
+  success: boolean
+  status: 'success' | 'config_error' | 'auth_failed' | 'network_failed' | 'timeout' | 'failed'
+  message: string
+  semantic_model_base_url: string
+  model: string
+  embedding_dimension?: number | null
+  duration_ms: number
+  http_status?: number
+}
+
 
 
 export interface AdvancedCacheGrayScope {
@@ -237,6 +273,28 @@ export interface CacheClearAuditFilter {
   status?: CacheClearResult['status']
 }
 
+export const defaultSemanticCacheConfig = (): SemanticCacheConfig => ({
+  enabled: false,
+  stage: 'observe',
+  platforms: [],
+  model_allowlist: [],
+  semantic_model_base_url: '',
+  semantic_api_key_masked: '',
+  semantic_model_name: '',
+  namespace: 'default',
+  embedding_dimension: null,
+  rule_version: 'v1',
+  similarity_threshold: 0.98,
+  max_reuse_minutes: 10,
+  max_candidates: 20,
+  gray_api_key_ids: [],
+  review_mode: true,
+  quality_rollback_threshold_percent: 1,
+  auto_closed: false,
+  auto_close_reason: null,
+  auto_closed_at: null
+})
+
 export const defaultCacheManagementConfig = (): CacheManagementConfig => ({
   global_enabled: false,
   platforms: {
@@ -314,12 +372,16 @@ export const cacheAPI = {
     return apiClient.put<CacheManagementConfig>('/admin/cache/config', data)
   },
 
-  getAdvancedConfig() {
-    return apiClient.get<AdvancedCacheConfig>('/admin/cache/advanced-config')
+  getSemanticConfig() {
+    return apiClient.get<SemanticCacheConfig>('/admin/cache/semantic-config')
   },
 
-  updateAdvancedConfig(data: AdvancedCacheConfig) {
-    return apiClient.put<AdvancedCacheConfig>('/admin/cache/advanced-config', data)
+  updateSemanticConfig(data: SemanticCacheConfig) {
+    return apiClient.put<SemanticCacheConfig>('/admin/cache/semantic-config', data)
+  },
+
+  testSemanticConfig(data: SemanticCacheConfig) {
+    return apiClient.post<SemanticCacheConnectionTestResult>('/admin/cache/semantic-config/test', data)
   },
 
   getStats(params?: CacheStatsParams) {
