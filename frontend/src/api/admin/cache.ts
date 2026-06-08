@@ -64,6 +64,56 @@ export interface SemanticCacheConnectionTestResult {
   http_status?: number
 }
 
+export type SemanticCacheAuditDecision = 'observe' | 'hit' | 'miss' | 'blocked' | 'rollback'
+export type SemanticCacheAuditReviewStatus = 'pending' | 'reusable' | 'not_reusable' | 'disputed'
+export type SemanticCacheAuditFeedbackType = 'none' | 'wrong_hit' | 'complaint' | 'manual_mark'
+
+export interface SemanticCacheAuditFilter {
+  page?: number
+  page_size?: number
+  start_time?: string
+  end_time?: string
+  platform?: string
+  model?: string
+  api_key_id?: number
+  review_status?: SemanticCacheAuditReviewStatus | ''
+  decision?: SemanticCacheAuditDecision | ''
+  min_similarity?: number
+  max_similarity?: number
+}
+
+export interface SemanticCacheAuditRecord {
+  id: number
+  request_id: string
+  semantic_entry_id?: number | null
+  occurred_at: string
+  platform: string
+  model: string
+  api_key_id?: number | null
+  api_key?: string
+  similarity: number
+  decision: SemanticCacheAuditDecision
+  block_reason?: string
+  review_status: SemanticCacheAuditReviewStatus
+  feedback_type?: SemanticCacheAuditFeedbackType
+  feedback_note?: string
+  operator_user_id?: number | null
+  auto_close_reason?: string
+  source_summary?: string
+  target_summary?: string
+  updated_at: string
+}
+
+export interface SemanticCacheAuditReviewRequest {
+  review_status: Exclude<SemanticCacheAuditReviewStatus, 'pending'>
+  note?: string
+}
+
+export interface SemanticCacheAuditFeedbackRequest {
+  feedback_type: Exclude<SemanticCacheAuditFeedbackType, 'none'>
+  note: string
+}
+
 export interface AdvancedCacheGrayScope {
   api_key_ids: number[]
   group_ids: number[]
