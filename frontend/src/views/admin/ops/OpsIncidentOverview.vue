@@ -486,6 +486,7 @@
       :error-type="errorDetailsType"
       :preset="errorDetailsPreset"
       @update:show="showErrorDetails = $event"
+      @openErrorDetail="openUnifiedErrorDetail"
     />
   </AppLayout>
 </template>
@@ -494,6 +495,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -512,6 +514,8 @@ import { useAppStore } from '@/stores'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import OpsAlertEventsCard from './components/OpsAlertEventsCard.vue'
 import OpsErrorDetailsModal, { type OpsErrorDetailsPreset } from './components/OpsErrorDetailsModal.vue'
+
+const router = useRouter()
 
 type AdminGroupOption = {
   id: number
@@ -1040,6 +1044,11 @@ function openErrorDetailsFromPreset(preset: OpsErrorDetailsPreset, type: 'reques
   errorDetailsType.value = type
   errorDetailsPreset.value = preset
   showErrorDetails.value = true
+}
+
+function openUnifiedErrorDetail(errorId: number) {
+  if (!errorId) return
+  router.push({ name: 'AdminOpsUnifiedErrorDetail', params: { id: String(errorId) } })
 }
 
 onMounted(async () => {

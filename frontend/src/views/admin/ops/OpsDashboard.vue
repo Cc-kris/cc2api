@@ -505,11 +505,11 @@ function onQueryModeChange(v: string | number | boolean | null) {
 }
 
 function openError(id: number) {
-  selectedErrorId.value = id
-  // Ensure only one modal visible at a time.
+  if (!id) return
   showErrorDetails.value = false
   showRequestDetails.value = false
-  showErrorModal.value = true
+  showErrorModal.value = false
+  router.push({ name: 'AdminOpsUnifiedErrorDetail', params: { id: String(id) } })
 }
 
 function buildApiParams() {

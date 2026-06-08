@@ -1086,6 +1086,112 @@ export interface OpsErrorDetail extends OpsErrorLog {
   is_business_limited: boolean
 }
 
+export interface OpsUnifiedEntityRef {
+  id: number
+  name?: string
+  email?: string
+  display?: string
+}
+
+export interface OpsUnifiedErrorItem {
+  id: number
+  occurred_at: string
+  error_category: string
+  error_subcategory: string
+  client_error_subcategory?: string | null
+  error_result: string
+  severity: string
+  status_code: number
+  user?: OpsUnifiedEntityRef | null
+  api_key?: OpsUnifiedEntityRef | null
+  group?: OpsUnifiedEntityRef | null
+  platform: string
+  model: string
+  upstream_account?: OpsUnifiedEntityRef | null
+  summary: string
+  same_kind_count: number
+  ai_analysis_status: string
+}
+
+export interface OpsUnifiedErrorConclusion {
+  title: string
+  summary: string
+  error_result: string
+  final_failed: boolean
+  recovered: boolean
+  affects_user: boolean
+  recommended_actions: string[]
+}
+
+export interface OpsUnifiedErrorRequestChain {
+  user?: OpsUnifiedEntityRef | null
+  api_key?: OpsUnifiedEntityRef | null
+  group?: OpsUnifiedEntityRef | null
+  platform: string
+  model: string
+  requested_model: string
+  upstream_model: string
+  request_path: string
+  inbound_endpoint: string
+  upstream_endpoint: string
+  upstream_account?: OpsUnifiedEntityRef | null
+  request_id: string
+  client_request_id: string
+}
+
+export interface OpsUnifiedErrorClassification {
+  error_category: string
+  error_subcategory: string
+  client_error_subcategory?: string | null
+  classification_confidence: string
+  classification_reason: string
+  missing_evidence?: string[]
+  status_code: number
+  client_status_code: number
+  error_source: string
+  error_owner: string
+}
+
+export interface OpsUnifiedErrorImpactScope {
+  same_kind_count: number
+  affected_users: number
+  affected_api_keys: number
+  affected_groups: number
+  affected_models: number
+  affected_upstream_accounts: number
+}
+
+export interface OpsUnifiedErrorRecovery {
+  final_failed: boolean
+  recovered: boolean
+  recovery_method: string
+  resolved: boolean
+  resolved_at?: string | null
+}
+
+export interface OpsUnifiedErrorAIAnalysis {
+  status: string
+  task_id?: number | null
+  summary?: string
+}
+
+export interface OpsUnifiedErrorRawRecord {
+  error_log?: OpsErrorDetail | null
+  error_body_preview: string
+  upstream_errors?: string
+}
+
+export interface OpsUnifiedErrorDetail {
+  conclusion: OpsUnifiedErrorConclusion
+  request_chain: OpsUnifiedErrorRequestChain
+  classification: OpsUnifiedErrorClassification
+  impact_scope: OpsUnifiedErrorImpactScope
+  recovery: OpsUnifiedErrorRecovery
+  ai_analysis: OpsUnifiedErrorAIAnalysis
+  raw_record: OpsUnifiedErrorRawRecord
+  same_kind_errors: OpsUnifiedErrorItem[]
+}
+
 export type OpsErrorLogsResponse = PaginatedResponse<OpsErrorLog>
 
 export async function getDashboardOverview(
@@ -1262,6 +1368,11 @@ export async function updateErrorResolved(errorId: number, resolved: boolean): P
 // New split endpoints
 export async function listRequestErrors(params: OpsErrorListQueryParams): Promise<OpsErrorLogsResponse> {
   const { data } = await apiClient.get<OpsErrorLogsResponse>('/admin/ops/request-errors', { params })
+  return data
+}
+
+export async function getUnifiedErrorDetail(id: number): Promise<OpsUnifiedErrorDetail> {
+  const { data } = await apiClient.get<OpsUnifiedErrorDetail>(`/admin/ops/unified-errors/${id}`)
   return data
 }
 
@@ -1478,6 +1589,7 @@ export const opsAPI = {
 
   // New split endpoints
   listRequestErrors,
+  getUnifiedErrorDetail,
   listUpstreamErrors,
   getRequestErrorDetail,
   getUpstreamErrorDetail,

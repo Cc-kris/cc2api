@@ -403,6 +403,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/ops/errors/:id',
+    name: 'AdminOpsUnifiedErrorDetail',
+    component: () => import('@/views/admin/ops/OpsUnifiedErrorDetail.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Unified Error Detail',
+      titleKey: 'admin.ops.unifiedErrorDetail.title',
+      descriptionKey: 'admin.ops.unifiedErrorDetail.description'
+    }
+  },
+  {
     path: '/admin/ops/alert-rules',
     name: 'AdminOpsAlertRules',
     component: () => import('@/views/admin/ops/OpsAlertRulesView.vue'),
