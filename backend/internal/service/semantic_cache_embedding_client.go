@@ -16,6 +16,13 @@ import (
 const (
 	semanticEmbeddingDefaultTimeout = 3 * time.Second
 
+	SemanticCacheConnectionStatusSuccess     = "success"
+	SemanticCacheConnectionStatusConfigError = "config_error"
+	SemanticCacheConnectionStatusAuthFailed  = "auth_failed"
+	SemanticCacheConnectionStatusNetworkFail = "network_failed"
+	SemanticCacheConnectionStatusTimeout     = "timeout"
+	SemanticCacheConnectionStatusFailed      = "failed"
+
 	SemanticEmbeddingSkipDisabled          = "disabled"
 	SemanticEmbeddingSkipConfigIncomplete  = "config_incomplete"
 	SemanticEmbeddingSkipDecryptFailed     = "decrypt_failed"
@@ -28,6 +35,17 @@ const (
 	SemanticEmbeddingSkipEmptyVector       = "empty_vector"
 	SemanticEmbeddingSkipDimensionMismatch = "dimension_mismatch"
 )
+
+type SemanticCacheConnectionTestResult struct {
+	Success            bool   `json:"success"`
+	Status             string `json:"status"`
+	Message            string `json:"message"`
+	SemanticModelBaseURL string `json:"semantic_model_base_url"`
+	Model              string `json:"model"`
+	EmbeddingDimension *int   `json:"embedding_dimension,omitempty"`
+	DurationMS         int64  `json:"duration_ms"`
+	HTTPStatus         int    `json:"http_status,omitempty"`
+}
 
 // SemanticEmbeddingResult describes a semantic embedding attempt.
 // Skipped results are the intended degradation path: callers should treat them
@@ -180,6 +198,108 @@ func (c *semanticEmbeddingClient) GenerateEmbedding(ctx context.Context, input s
 	if model != "" {
 		result.Model = model
 	}
+	return result, nil
+}
+
+func (s *SettingService) TestSemanticCacheConnection(ctx context.Context, req SemanticCacheConfig) (*SemanticCacheConnectionTestResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	result := &SemanticCacheConnectionTestResult{
+		Status:               SemanticCacheConnectionStatusConfigError,
+		SemanticModelBaseURL: strings.TrimSpace(req.SemanticModelBaseURL),
+		Model:                strings.TrimSpace(req.SemanticModelName),
+	}
+
+	existing, err := s.loadSemanticCacheConfigForUpdate(ctx)
+	if err != nil {
+		return nil, err
+	}
+	req.SemanticAPIKeyEncrypted = existing.SemanticAPIKeyEncrypted
+	if plainKey := strings.TrimSpace(req.SemanticAPIKey); plainKey != "" {
+		if s == nil || s.secretEncryptor == nil {
+			result.Message = "语义模型秘钥加密服务不可用"
+			return result, nil
+		}
+		encrypted, err := s.secretEncryptor.Encrypt(plainKey)
+		if err != nil {
+			return nil, err
+		}
+		req.SemanticAPIKeyEncrypted = encrypted
+	}
+	req.Enabled = true
+	req = normalizeSemanticCacheConfig(req)
+	result.SemanticModelBaseURL = req.SemanticModelBaseURL
+	result.Model = req.SemanticModelName
+	if err := validateSemanticCacheConfig(req); err != nil {
+		result.Message = err.Error()
+		return result, nil
+	}
+	if s == nil || s.secretEncryptor == nil {
+		result.Message = "语义模型秘钥解密服务不可用"
+		return result, nil
+	}
+	apiKey, err := s.secretEncryptor.Decrypt(req.SemanticAPIKeyEncrypted)
+	if err != nil || strings.TrimSpace(apiKey) == "" {
+		result.Message = "语义模型秘钥不可用"
+		return result, nil
+	}
+
+	timeout := semanticEmbeddingDefaultTimeout
+	probeCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	probeReq, err := buildSemanticEmbeddingRequest(probeCtx, req, "semantic cache connection probe", strings.TrimSpace(apiKey))
+	if err != nil {
+		result.Message = "语义模型服务地址不可用"
+		return result, nil
+	}
+	if err := validateSemanticEmbeddingOutboundURL(probeCtx, probeReq.URL); err != nil {
+		result.Message = "语义模型服务地址不允许访问"
+		return result, nil
+	}
+
+	client := newSemanticEmbeddingHTTPClient(timeout)
+	started := time.Now()
+	resp, err := client.Do(probeReq)
+	result.DurationMS = time.Since(started).Milliseconds()
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(probeCtx.Err(), context.DeadlineExceeded) || isNetTimeout(err) {
+			result.Status = SemanticCacheConnectionStatusTimeout
+			result.Message = "语义模型连接超时"
+			return result, nil
+		}
+		result.Status = SemanticCacheConnectionStatusNetworkFail
+		result.Message = "无法连接语义模型服务"
+		return result, nil
+	}
+	defer resp.Body.Close()
+	result.HTTPStatus = resp.StatusCode
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			result.Status = SemanticCacheConnectionStatusAuthFailed
+			result.Message = "语义模型认证失败，请检查 API Key"
+			return result, nil
+		}
+		result.Status = SemanticCacheConnectionStatusFailed
+		result.Message = fmt.Sprintf("语义模型返回异常状态：%d", resp.StatusCode)
+		return result, nil
+	}
+
+	embedding, model, err := decodeSemanticEmbeddingResponse(resp.Body)
+	if err != nil {
+		result.Status = SemanticCacheConnectionStatusFailed
+		result.Message = "语义模型返回数据不可解析"
+		return result, nil
+	}
+	dimension := len(embedding)
+	result.EmbeddingDimension = &dimension
+	if model != "" {
+		result.Model = model
+	}
+	result.Success = true
+	result.Status = SemanticCacheConnectionStatusSuccess
+	result.Message = "语义模型连接成功"
 	return result, nil
 }
 
