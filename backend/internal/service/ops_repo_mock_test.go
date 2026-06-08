@@ -341,4 +341,8 @@ func (m *opsRepoMock) ListCacheStatsRows(ctx context.Context, filter *CacheStats
 	return nil, nil
 }
 
+func (m *opsRepoMock) ListPromptCacheStats(ctx context.Context, filter *CacheStatsFilter) (*PromptCacheStatsRaw, error) {
+	return &PromptCacheStatsRaw{}, nil
+}
+
 var _ OpsRepository = (*opsRepoMock)(nil)

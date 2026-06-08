@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const cacheStatsExportMaxRows = 100000
@@ -19,11 +20,30 @@ var ErrCacheStatsExportTooLarge = errors.New("cache stats export row count excee
 var ErrCacheStatsExportEmpty = errors.New("cache stats export has no rows")
 
 type CacheStatsService struct {
-	repo CacheStatsRepository
+	repo           CacheStatsRepository
+	promptRepo     PromptCacheStatsRepository
+	statsStore     LocalResponseCacheStatsStore
+	hotspotStore   LocalResponseCacheHotspotStore
+	settingService *SettingService
 }
 
 func NewCacheStatsService(repo CacheStatsRepository) *CacheStatsService {
 	return &CacheStatsService{repo: repo}
+}
+
+func (s *CacheStatsService) SetAdvancedDependencies(promptRepo PromptCacheStatsRepository, cache GatewayCache, settingService *SettingService) *CacheStatsService {
+	if s == nil {
+		return s
+	}
+	s.promptRepo = promptRepo
+	if store, ok := cache.(LocalResponseCacheStatsStore); ok {
+		s.statsStore = store
+	}
+	if store, ok := cache.(LocalResponseCacheHotspotStore); ok {
+		s.hotspotStore = store
+	}
+	s.settingService = settingService
+	return s
 }
 
 func (s *CacheStatsService) GetStats(ctx context.Context, filter *CacheStatsFilter) (*CacheStatsResponse, error) {
@@ -82,6 +102,119 @@ func (s *CacheStatsService) GetStats(ctx context.Context, filter *CacheStatsFilt
 	resp.BypassReasons = cacheStatsReasonRows(bypassReasons)
 	resp.StoreSkipReasons = cacheStatsReasonRows(storeSkipReasons)
 	return resp, nil
+}
+
+func (s *CacheStatsService) GetAdvancedStats(ctx context.Context, filter *CacheStatsFilter) (*AdvancedCacheStatsResponse, error) {
+	if filter == nil {
+		filter = &CacheStatsFilter{}
+	}
+	baseStats, err := s.GetStats(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	cfg := DefaultAdvancedCacheConfig()
+	if s != nil && s.settingService != nil {
+		if loaded, loadErr := s.settingService.GetAdvancedCacheConfig(ctx); loadErr == nil {
+			cfg = loaded
+		}
+	}
+	localStats := &LocalResponseCacheStats{Counters: map[string]int64{}}
+	if s != nil && s.statsStore != nil {
+		loaded, loadErr := s.statsStore.GetLocalResponseCacheStats(ctx)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		if loaded != nil {
+			localStats = loaded
+		}
+	}
+	promptStats := &PromptCacheStatsRaw{PriceMissingModels: []string{}}
+	if s != nil && s.promptRepo != nil {
+		loaded, loadErr := s.promptRepo.ListPromptCacheStats(ctx, filter)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		if loaded != nil {
+			promptStats = loaded
+		}
+	}
+	hotspots := []AdvancedCacheHotspot{}
+	if s != nil && s.hotspotStore != nil {
+		items, listErr := s.hotspotStore.ListLocalResponseCacheHotspots(ctx, LocalResponseCacheHotspotFilter{
+			Window:   advancedCacheHotWindowDuration(cfg.HotWindow),
+			Limit:    normalizeAdvancedCacheHotspotLimit(filter.HotspotLimit),
+			Platform: filter.Platform,
+			Model:    filter.Model,
+			GroupID:  filter.GroupID,
+			APIKeyID: filter.APIKeyID,
+		})
+		if listErr != nil {
+			return nil, listErr
+		}
+		hotspots = advancedCacheHotspotsFromLocal(items)
+	}
+	capacityLimitBytes := int64(cfg.RedisCapacityMB) * 1024 * 1024
+	memorySafeLimitBytes := int64(cfg.MemorySafeLimitMB) * 1024 * 1024
+	rawBytes := nonNegativeInt64(localStats.RawResponseBytes)
+	storedBytes := nonNegativeInt64(localStats.StoredResponseBytes)
+	savedBytes := rawBytes - storedBytes
+	if savedBytes < 0 {
+		savedBytes = 0
+	}
+	localAmount := normalizeDecimalString(baseStats.Summary.EstimatedSavedAmount)
+	promptAmount := normalizeDecimalString(promptStats.EstimatedSavedAmount)
+	priceMissingModels := mergeUniqueStrings(promptStats.PriceMissingModels, localPriceMissingModels(baseStats.ModelRows))
+	priceMissing := len(priceMissingModels) > 0
+	var localAmountPtr, promptAmountPtr, totalAmountPtr *string
+	if !priceMissing {
+		localAmountPtr = stringPtr(localAmount)
+		promptAmountPtr = stringPtr(promptAmount)
+		totalAmountPtr = stringPtr(addDecimalStrings(localAmount, promptAmount))
+	}
+	fallback := AdvancedCacheFallback{}
+	if !cfg.AdvancedCacheEnabled {
+		reason := "advanced_cache_disabled"
+		fallback.AdvancedCacheFallbackActive = true
+		fallback.FallbackReason = &reason
+	}
+	return &AdvancedCacheStatsResponse{
+		Capacity: AdvancedCacheCapacityStats{
+			CurrentUsedBytes:     nonNegativeInt64(localStats.Bytes),
+			CapacityLimitBytes:   capacityLimitBytes,
+			CapacityUsageRate:    percent(nonNegativeInt64(localStats.Bytes), capacityLimitBytes),
+			MemorySafeLimitBytes: memorySafeLimitBytes,
+			EvictionPolicy:       strings.TrimSpace(cfg.EvictionPolicy),
+			RecentEvictionCount:  nonNegativeInt64(localStats.Counters["eviction_deleted_keys"]),
+		},
+		Compression: AdvancedCacheCompressionStats{
+			Enabled:                  cfg.CompressionEnabled,
+			RawResponseBytes:         rawBytes,
+			StoredResponseBytes:      storedBytes,
+			CompressionSavedBytes:    savedBytes,
+			CompressionSavedRate:     percent(savedBytes, rawBytes),
+			CompressedEntryCount:     nonNegativeInt64(localStats.CompressedEntryCount),
+			CompressionFailedCount:   nonNegativeInt64(localStats.Counters["compression_failed"]),
+			DecompressionFailedCount: nonNegativeInt64(localStats.Counters["decompression_failed"]),
+		},
+		Hotspots: hotspots,
+		Savings: AdvancedCacheSavings{
+			LocalResponseCacheSavedTokens:  nonNegativeInt64(baseStats.Summary.HitTokens),
+			LocalResponseCacheSavedAmount:  localAmountPtr,
+			UpstreamPromptCacheReadTokens:  nonNegativeInt64(promptStats.ReadTokens),
+			UpstreamPromptCacheWriteTokens: nonNegativeInt64(promptStats.WriteTokens),
+			UpstreamPromptCacheSavedAmount: promptAmountPtr,
+			TotalEstimatedSavedAmount:      totalAmountPtr,
+			PriceMissing:                   priceMissing,
+			PriceMissingModels:             priceMissingModels,
+		},
+		EmptyStates: AdvancedCacheEmptyStates{
+			Hotspots:    len(hotspots) == 0,
+			PromptCache: promptStats.ReadTokens == 0 && promptStats.WriteTokens == 0,
+			Price:       priceMissing,
+		},
+		Fallback:  fallback,
+		UpdatedAt: time.Now(),
+	}, nil
 }
 
 func (s *CacheStatsService) ExportCSV(ctx context.Context, filter *CacheStatsFilter) ([]byte, error) {
@@ -322,6 +455,93 @@ func cacheStatsReasonRows(reasons map[string]int64) []CacheStatsReasonRow {
 		return rows[i].Count > rows[j].Count
 	})
 	return rows
+}
+
+func normalizeAdvancedCacheHotspotLimit(limit int) int {
+	if limit <= 0 {
+		return 20
+	}
+	if limit > 100 {
+		return 100
+	}
+	return limit
+}
+
+func advancedCacheHotspotsFromLocal(items []LocalResponseCacheHotspot) []AdvancedCacheHotspot {
+	out := make([]AdvancedCacheHotspot, 0, len(items))
+	for i, item := range items {
+		rank := item.Rank
+		if rank <= 0 {
+			rank = i + 1
+		}
+		out = append(out, AdvancedCacheHotspot{
+			Rank:      rank,
+			Platform:  displayCacheStatsPlatform(item.Platform),
+			Model:     strings.TrimSpace(item.Model),
+			Group:     advancedCacheGroupRef(item.GroupID),
+			APIKey:    advancedCacheAPIKeyRef(item.APIKeyID),
+			HitCount:  nonNegativeInt64(item.HitCount),
+			HitTokens: nonNegativeInt64(item.HitTokens),
+			LastHitAt: item.LastHitAt,
+		})
+	}
+	return out
+}
+
+func advancedCacheGroupRef(id *int64) AdvancedCacheNameRef {
+	if id == nil || *id <= 0 {
+		return AdvancedCacheNameRef{Display: "未分组"}
+	}
+	return AdvancedCacheNameRef{ID: *id, Display: fmt.Sprintf("group #%d", *id)}
+}
+
+func advancedCacheAPIKeyRef(id *int64) AdvancedCacheNameRef {
+	if id == nil || *id <= 0 {
+		return AdvancedCacheNameRef{Display: "未知 Key"}
+	}
+	return AdvancedCacheNameRef{ID: *id, Display: fmt.Sprintf("api-key #%d", *id)}
+}
+
+func localPriceMissingModels(rows []CacheStatsModelRow) []string {
+	out := []string{}
+	for _, row := range rows {
+		if row.HitTokens <= 0 {
+			continue
+		}
+		amount, err := strconv.ParseFloat(strings.TrimSpace(row.EstimatedSavedAmount), 64)
+		if err == nil && amount > 0 {
+			continue
+		}
+		if model := strings.TrimSpace(row.Model); model != "" {
+			out = append(out, model)
+		}
+	}
+	return out
+}
+
+func mergeUniqueStrings(groups ...[]string) []string {
+	seen := map[string]struct{}{}
+	out := []string{}
+	for _, group := range groups {
+		for _, item := range group {
+			item = strings.TrimSpace(item)
+			if item == "" {
+				continue
+			}
+			key := strings.ToLower(item)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, item)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func stringPtr(v string) *string {
+	return &v
 }
 
 func topReason(reasons map[string]int64) string {

@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -133,6 +134,86 @@ ORDER BY m.hit_tokens DESC, m.platform ASC, m.model ASC`, strings.Join(where, " 
 		return nil, fmt.Errorf("iterate cache stats rows: %w", err)
 	}
 	return out, nil
+}
+
+func (r *opsRepository) ListPromptCacheStats(ctx context.Context, filter *service.CacheStatsFilter) (*service.PromptCacheStatsRaw, error) {
+	out := &service.PromptCacheStatsRaw{PriceMissingModels: []string{}}
+	if r == nil || r.db == nil {
+		return out, fmt.Errorf("nil ops repository")
+	}
+	if filter == nil {
+		filter = &service.CacheStatsFilter{}
+	}
+	join, where, args := buildPromptCacheStatsWhere(filter)
+	query := `
+SELECT
+  COALESCE(SUM(ul.cache_read_tokens), 0)::bigint AS read_tokens,
+  COALESCE(SUM(ul.cache_creation_tokens + ul.cache_creation_5m_tokens + ul.cache_creation_1h_tokens), 0)::bigint AS write_tokens,
+  COALESCE(SUM(ul.cache_read_cost + ul.cache_creation_cost), 0)::text AS estimated_saved_amount
+FROM usage_logs ul
+` + join + `
+WHERE ` + strings.Join(where, " AND ")
+	if err := r.db.QueryRowContext(ctx, query, args...).Scan(&out.ReadTokens, &out.WriteTokens, &out.EstimatedSavedAmount); err != nil {
+		return nil, fmt.Errorf("list prompt cache stats: %w", err)
+	}
+	missingQuery := `
+SELECT DISTINCT COALESCE(NULLIF(TRIM(ul.model), ''), 'unknown') AS model
+FROM usage_logs ul
+` + join + `
+WHERE ` + strings.Join(where, " AND ") + `
+  AND (ul.cache_read_tokens + ul.cache_creation_tokens + ul.cache_creation_5m_tokens + ul.cache_creation_1h_tokens) > 0
+GROUP BY COALESCE(NULLIF(TRIM(ul.model), ''), 'unknown')
+HAVING COALESCE(SUM(ul.cache_read_cost + ul.cache_creation_cost), 0) = 0
+ORDER BY model ASC`
+	rows, err := r.db.QueryContext(ctx, missingQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list prompt cache price missing models: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var model string
+		if err := rows.Scan(&model); err != nil {
+			return nil, fmt.Errorf("scan prompt cache price missing model: %w", err)
+		}
+		if strings.TrimSpace(model) != "" {
+			out.PriceMissingModels = append(out.PriceMissingModels, model)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate prompt cache price missing models: %w", err)
+	}
+	return out, nil
+}
+
+func buildPromptCacheStatsWhere(filter *service.CacheStatsFilter) (string, []string, []any) {
+	where := []string{"ul.created_at >= $1", "ul.created_at < $2"}
+	args := []any{filter.StartTime, filter.EndTime}
+	join := ""
+	if platform := normalizeCacheStatsPlatform(filter.Platform); platform != "" {
+		join = "LEFT JOIN groups g ON g.id = ul.group_id LEFT JOIN accounts a ON a.id = ul.account_id"
+		args = append(args, platform)
+		where = append(where, fmt.Sprintf("COALESCE(NULLIF(g.platform,''), a.platform) = $%d", len(args)))
+	}
+	if model := strings.TrimSpace(filter.Model); model != "" {
+		args = append(args, model)
+		where = append(where, fmt.Sprintf("COALESCE(ul.model,'') = $%d", len(args)))
+	}
+	if filter.APIKeyID != nil {
+		args = append(args, *filter.APIKeyID)
+		where = append(where, fmt.Sprintf("ul.api_key_id = $%d", len(args)))
+	}
+	if filter.GroupID != nil {
+		args = append(args, *filter.GroupID)
+		where = append(where, fmt.Sprintf("ul.group_id = $%d", len(args)))
+	}
+	return join, where, args
+}
+
+func scanNullDecimalText(value sql.NullString) string {
+	if !value.Valid {
+		return "0"
+	}
+	return value.String
 }
 
 func normalizeCacheStatsPlatform(platform string) string {
