@@ -18,6 +18,7 @@ const (
 
 	SemanticEmbeddingSkipDisabled          = "disabled"
 	SemanticEmbeddingSkipConfigIncomplete  = "config_incomplete"
+	SemanticEmbeddingSkipConfigReadFailed  = "config_read_failed"
 	SemanticEmbeddingSkipDecryptFailed     = "decrypt_failed"
 	SemanticEmbeddingSkipInvalidInput      = "invalid_input"
 	SemanticEmbeddingSkipInvalidEndpoint   = "invalid_endpoint"
@@ -42,13 +43,13 @@ type SemanticEmbeddingResult struct {
 	HTTPStatus int       `json:"http_status,omitempty"`
 }
 
-type semanticEmbeddingHTTPClient interface {
+type SemanticEmbeddingHTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
 type SemanticEmbeddingClient struct {
 	settingService *SettingService
-	httpClient     semanticEmbeddingHTTPClient
+	httpClient     SemanticEmbeddingHTTPClient
 	timeout        time.Duration
 }
 
@@ -59,7 +60,7 @@ func NewSemanticEmbeddingClient(settingService *SettingService) *SemanticEmbeddi
 	}
 }
 
-func (c *SemanticEmbeddingClient) SetHTTPClient(client semanticEmbeddingHTTPClient) {
+func (c *SemanticEmbeddingClient) SetHTTPClient(client SemanticEmbeddingHTTPClient) {
 	if c == nil {
 		return
 	}
@@ -87,7 +88,7 @@ func (c *SemanticEmbeddingClient) GenerateEmbedding(ctx context.Context, input s
 
 	cfg, err := c.settingService.loadSemanticCacheConfigForUpdate(ctx)
 	if err != nil {
-		return nil, err
+		return semanticEmbeddingSkipped(SemanticEmbeddingSkipConfigReadFailed, ""), nil
 	}
 	cfg = normalizeSemanticCacheConfig(cfg)
 	result := &SemanticEmbeddingResult{Model: cfg.SemanticModelName}
