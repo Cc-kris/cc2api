@@ -337,4 +337,8 @@ func (m *opsRepoMock) GetLatestDailyBucketDate(ctx context.Context) (time.Time, 
 	return time.Time{}, false, nil
 }
 
+func (m *opsRepoMock) ListCacheStatsRows(ctx context.Context, filter *CacheStatsFilter) ([]*CacheStatsRawRow, error) {
+	return nil, nil
+}
+
 var _ OpsRepository = (*opsRepoMock)(nil)
