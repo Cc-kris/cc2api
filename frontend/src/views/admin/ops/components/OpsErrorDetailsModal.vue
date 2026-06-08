@@ -15,6 +15,8 @@ export interface OpsErrorDetailsPreset {
   view?: OpsErrorListView
   statusCodes?: string
   clientFailed?: boolean
+  model?: string
+  upstreamAccountId?: number
 }
 
 interface Props {
@@ -136,6 +138,10 @@ async function fetchErrorLogs() {
     if (typeof preset?.impactPlatformSla === 'boolean') params.impact_platform_sla = preset.impactPlatformSla ? '1' : '0'
     if (typeof preset?.clientFailed === 'boolean') params.client_failed = preset.clientFailed ? '1' : '0'
     if (preset?.statusCodes && !params.status_codes && !params.status_codes_other) params.status_codes = preset.statusCodes
+    if (preset?.model) params.model = preset.model
+    if (typeof preset?.upstreamAccountId === 'number' && preset.upstreamAccountId > 0) {
+      params.upstream_account_id = preset.upstreamAccountId
+    }
 
     const res = props.errorType === 'upstream'
       ? await opsAPI.listUpstreamErrors(params)
