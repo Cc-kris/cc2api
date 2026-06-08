@@ -403,6 +403,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/ops/alert-rules',
+    name: 'AdminOpsAlertRules',
+    component: () => import('@/views/admin/ops/OpsAlertRulesView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Alert Rules',
+      titleKey: 'admin.ops.alertRules.title',
+      descriptionKey: 'admin.ops.alertRules.description'
+    }
+  },
+  {
     path: '/admin/users',
     name: 'AdminUsers',
     component: () => import('@/views/admin/UsersView.vue'),

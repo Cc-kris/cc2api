@@ -34,7 +34,7 @@
         @open-request-details="handleOpenRequestDetails"
         @open-error-details="openErrorDetails"
         @open-settings="showSettingsDialog = true"
-        @open-alert-rules="showAlertRulesCard = true"
+        @open-alert-rules="openAlertRulesPage"
         @enter-fullscreen="enterFullscreen"
         @exit-fullscreen="exitFullscreen"
       />
@@ -107,10 +107,6 @@
       <template v-if="!isFullscreen">
         <OpsSettingsDialog :show="showSettingsDialog" @close="showSettingsDialog = false" @saved="onSettingsSaved" />
 
-        <BaseDialog :show="showAlertRulesCard" :title="t('admin.ops.alertRules.title')" width="extra-wide" @close="showAlertRulesCard = false">
-          <OpsAlertRulesCard />
-        </BaseDialog>
-
         <OpsErrorDetailsModal
           :show="showErrorDetails"
           :time-range="timeRange"
@@ -147,7 +143,6 @@ import { useDebounceFn, useIntervalFn } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
-import BaseDialog from '@/components/common/BaseDialog.vue'
 import {
   opsAPI,
   type OpsDashboardOverview,
@@ -173,7 +168,6 @@ import OpsOpenAITokenStatsCard from './components/OpsOpenAITokenStatsCard.vue'
 import OpsSystemLogTable from './components/OpsSystemLogTable.vue'
 import OpsRequestDetailsModal, { type OpsRequestDetailsPreset } from './components/OpsRequestDetailsModal.vue'
 import OpsSettingsDialog from './components/OpsSettingsDialog.vue'
-import OpsAlertRulesCard from './components/OpsAlertRulesCard.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -238,6 +232,13 @@ function enterFullscreen() {
   router.replace({ query: nextQuery })
 }
 
+function openAlertRulesPage() {
+  const nextQuery = buildQueryFromState()
+  const ruleID = readQueryNumber(QUERY_KEYS.alertRuleId)
+  if (typeof ruleID === 'number' && ruleID > 0) nextQuery[QUERY_KEYS.alertRuleId] = String(ruleID)
+  router.push({ path: '/admin/ops/alert-rules', query: nextQuery })
+}
+
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape' && isFullscreen.value) {
     exitFullscreen()
@@ -297,15 +298,6 @@ const applyRouteQueryToState = () => {
   }
 
   // Deep links
-  const openRules = readQueryString(QUERY_KEYS.openAlertRules)
-  if (openRules === '1' || openRules === 'true') {
-    showAlertRulesCard.value = true
-  }
-
-  const ruleID = readQueryNumber(QUERY_KEYS.alertRuleId)
-  if (typeof ruleID === 'number' && ruleID > 0) {
-    showAlertRulesCard.value = true
-  }
 
   const openErr = readQueryString(QUERY_KEYS.openErrorDetails)
   if (openErr === '1' || openErr === 'true') {
@@ -384,7 +376,6 @@ const requestDetailsPreset = ref<OpsRequestDetailsPreset>({
 })
 
 const showSettingsDialog = ref(false)
-const showAlertRulesCard = ref(false)
 
 applyRouteQueryToState()
 

@@ -5165,20 +5165,20 @@ export default {
       },
       alertRules: {
         title: '告警规则',
-        description: '创建与管理系统阈值告警（仅邮件通知）',
+        description: '查看告警规则列表，按等级、状态和关键词筛选，并进入后续操作。',
         loading: '加载中...',
         empty: '暂无告警规则',
         loadFailed: '加载告警规则失败',
-        saveSuccess: '警报规则保存成功',
+        saveSuccess: '告警规则保存成功',
         saveFailed: '保存告警规则失败',
-        deleteSuccess: '警报规则删除成功',
+        deleteSuccess: '告警规则删除成功',
         deleteFailed: '删除告警规则失败',
         create: '新建规则',
         createTitle: '新建告警规则',
         editTitle: '编辑告警规则',
         deleteConfirmTitle: '确认删除该规则？',
         deleteConfirmMessage: '将删除该规则及其关联的告警事件，是否继续？',
-        manage: '预警规则',
+        manage: '告警规则列表',
         metricGroups: {
           system: '系统指标',
           group: '分组级别指标（需 group_id）',
@@ -5223,11 +5223,43 @@ export default {
           groupRequired: '该指标为分组级别指标，必须选择分组（group_id）。',
           groupOptional: '可选：通过 group_id 将规则限定到某个分组。'
         },
+        filters: {
+          keywordPlaceholder: '搜索规则名称、描述或错误分类',
+          allSeverities: '全部等级',
+          allStatuses: '全部状态',
+          reset: '重置筛选'
+        },
+        channels: {
+          in_app: '站内',
+          email: '邮件',
+          none: '无'
+        },
+        values: {
+          allCategories: '全部错误分类',
+          notLimited: '未限制',
+          migrated: '历史迁移',
+          fixedOneMinuteWindow: '当前版本固定 1 分钟窗口'
+        },
+        scope: {
+          affectedUsers: '影响用户',
+          affectedApiKeys: '影响 API Key',
+          affectedModels: '影响模型',
+          affectedUpstreamAccounts: '影响上游账号'
+        },
         table: {
-          name: '名称',
-          metric: '指标',
-          severity: '级别',
-          enabled: '启用',
+          name: '规则名称',
+          status: '规则状态',
+          window: '时间窗口',
+          categories: '错误分类',
+          triggerLevel: '触发等级',
+          minFinalFailures: '最小最终失败数',
+          minFailureRate: '最小失败率',
+          minSampleCount: '最小样本量',
+          impactScope: '影响范围',
+          autoAIAnalysis: '自动 AI 分析',
+          notificationChannels: '通知方式',
+          silenceMinutes: '静默时间',
+          condition: '规则条件',
           actions: '操作'
         },
         form: {
@@ -5257,7 +5289,8 @@ export default {
           windowRange: '统计窗口必须为 1 / 5 / 60 分钟之一',
           sustainedRange: '连续样本数必须在 1 到 1440 之间',
           cooldownRange: '冷却期必须在 0 到 1440 分钟之间'
-        }
+        },
+        emptyFiltered: '当前筛选条件下暂无规则'
       },
       runtime: {
         title: '运维监控运行设置',

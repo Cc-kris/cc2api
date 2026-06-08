@@ -5003,7 +5003,7 @@ export default {
       },
       alertRules: {
         title: 'Alert Rules',
-        description: 'Create and manage threshold-based system alerts (email-only)',
+        description: 'View alert rules, filter by severity, status, and keyword, then continue with follow-up actions.',
         loading: 'Loading...',
         empty: 'No alert rules',
         loadFailed: 'Failed to load alert rules',
@@ -5011,7 +5011,7 @@ export default {
         saveSuccess: 'Alert rule saved successfully',
         deleteFailed: 'Failed to delete alert rule',
         deleteSuccess: 'Alert rule deleted successfully',
-        manage: 'Manage Alert Rules',
+        manage: 'Alert Rule List',
         create: 'Create Rule',
         createTitle: 'Create Alert Rule',
         editTitle: 'Edit Alert Rule',
@@ -5061,11 +5061,43 @@ export default {
           groupRequired: 'This is a group-level metric; selecting a group (group_id) is required.',
           groupOptional: 'Optional: limit the rule to a specific group via group_id.'
         },
+        filters: {
+          keywordPlaceholder: 'Search by name, description, or error category',
+          allSeverities: 'All severities',
+          allStatuses: 'All statuses',
+          reset: 'Reset filters'
+        },
+        channels: {
+          in_app: 'In-app',
+          email: 'Email',
+          none: 'None'
+        },
+        values: {
+          allCategories: 'All error categories',
+          notLimited: 'Not limited',
+          migrated: 'Migrated',
+          fixedOneMinuteWindow: 'This version uses a fixed 1-minute window'
+        },
+        scope: {
+          affectedUsers: 'Affected users',
+          affectedApiKeys: 'Affected API keys',
+          affectedModels: 'Affected models',
+          affectedUpstreamAccounts: 'Affected upstream accounts'
+        },
         table: {
-          name: 'Name',
-          metric: 'Metric',
-          severity: 'Severity',
-          enabled: 'Enabled',
+          name: 'Rule name',
+          status: 'Status',
+          window: 'Window',
+          categories: 'Error categories',
+          triggerLevel: 'Trigger level',
+          minFinalFailures: 'Min final failures',
+          minFailureRate: 'Min failure rate',
+          minSampleCount: 'Min sample count',
+          impactScope: 'Impact scope',
+          autoAIAnalysis: 'Auto AI analysis',
+          notificationChannels: 'Notifications',
+          silenceMinutes: 'Silence time',
+          condition: 'Condition',
           actions: 'Actions'
         },
         form: {
@@ -5095,7 +5127,8 @@ export default {
           windowRange: 'Window must be one of: 1, 5, 60 minutes',
           sustainedRange: 'Sustained must be between 1 and 1440 samples',
           cooldownRange: 'Cooldown must be between 0 and 1440 minutes'
-        }
+        },
+        emptyFiltered: 'No rules match the current filters'
       },
       runtime: {
         title: 'Ops Runtime Settings',
