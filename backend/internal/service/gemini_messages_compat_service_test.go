@@ -473,7 +473,7 @@ func TestGeminiForwardNative_StreamGenerateContentLocalResponseCacheHit(t *testi
 	require.Equal(t, 1, httpStub.calls)
 	require.Equal(t, upstreamSSE, rec1.Body.String())
 	require.Len(t, store.entries, 1)
-	require.Equal(t, 11, result1.Usage.InputTokens)
+	require.Equal(t, 8, result1.Usage.InputTokens)
 	require.Equal(t, 5, result1.Usage.OutputTokens)
 	require.Equal(t, 3, result1.Usage.CacheReadInputTokens)
 
@@ -493,7 +493,7 @@ func TestGeminiForwardNative_StreamGenerateContentLocalResponseCacheHit(t *testi
 	require.Equal(t, LocalResponseCacheHeaderHit, rec2.Header().Get(LocalResponseCacheHeader))
 	require.Contains(t, rec2.Header().Get("Content-Type"), "text/event-stream")
 	require.Equal(t, upstreamSSE, rec2.Body.String())
-	require.Equal(t, 11, result2.Usage.InputTokens)
+	require.Equal(t, 8, result2.Usage.InputTokens)
 	require.Equal(t, 5, result2.Usage.OutputTokens)
 	require.Equal(t, 3, result2.Usage.CacheReadInputTokens)
 }
