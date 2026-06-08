@@ -390,9 +390,10 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/admin/ops',
-    name: 'AdminOps',
-    component: () => import('@/views/admin/ops/OpsDashboard.vue'),
+    path: '/admin/ops/overview',
+    alias: '/admin/ops',
+    name: 'AdminOpsOverview',
+    component: () => import('@/views/admin/ops/OpsIncidentOverview.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
