@@ -400,28 +400,41 @@ func (w *SemanticCacheAsyncWriter) Probe(ctx context.Context, req SemanticCacheL
 			}
 		}
 	}
-	w.applySemanticLookupDecision(cfg, result)
+	w.applySemanticLookupDecision(cfg, req.APIKeyID, result)
 	return result
 }
 
-func (w *SemanticCacheAsyncWriter) applySemanticLookupDecision(cfg SemanticCacheConfig, result *SemanticCacheLookupResult) {
+func (w *SemanticCacheAsyncWriter) applySemanticLookupDecision(cfg SemanticCacheConfig, apiKeyID *int64, result *SemanticCacheLookupResult) {
 	if result == nil || result.Match == nil {
 		return
 	}
+	stage := strings.TrimSpace(cfg.Stage)
 	result.Reusable = true
 	result.Decision = "hit"
 	result.ReviewStatus = "reusable"
 	switch {
-	case strings.TrimSpace(cfg.Stage) == "observe":
+	case stage == "observe":
 		result.Reusable = false
 		result.Decision = "observe"
 		result.ReviewStatus = "pending"
-	case strings.TrimSpace(cfg.Stage) == "review" || cfg.ReviewMode:
+	case stage == "review" || cfg.ReviewMode:
 		result.Reusable = false
 		result.Decision = "blocked"
 		result.BlockReason = "review_pending"
 		result.ReviewStatus = "pending"
+	case stage == "gray" && !semanticCacheGrayAPIKeyAllowed(cfg.GrayAPIKeyIDs, apiKeyID):
+		result.Reusable = false
+		result.Decision = "blocked"
+		result.BlockReason = "gray_api_key_not_allowed"
+		result.ReviewStatus = "pending"
 	}
+}
+
+func semanticCacheGrayAPIKeyAllowed(allowed []int64, apiKeyID *int64) bool {
+	if len(allowed) == 0 || apiKeyID == nil {
+		return false
+	}
+	return int64InServiceList(*apiKeyID, allowed)
 }
 
 func (w *SemanticCacheAsyncWriter) recordSemanticAudit(ctx context.Context, cfg SemanticCacheConfig, req SemanticCacheLookupRequest, prepared *semanticCachePreparedLookup, result *SemanticCacheLookupResult) {
