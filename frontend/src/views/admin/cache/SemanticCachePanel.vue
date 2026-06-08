@@ -110,7 +110,7 @@
                     <p class="text-sm font-medium text-gray-900 dark:text-white">语义缓存开关</p>
                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">未完成模型配置时不能开启；关闭后仅保留配置，不参与请求复用。</p>
                   </div>
-                  <Toggle v-model="form.enabled" :disabled="!canManage || !canEnableSemantic" />
+                  <Toggle v-model="form.enabled" :disabled="!canManage || (!canEnableSemantic && !form.enabled)" />
                 </div>
 
                 <label class="block">
@@ -399,7 +399,7 @@ const validationErrors = computed(() => {
   if (form.similarity_threshold < 0.9 || form.similarity_threshold > 1) {
     errors.push('相似度阈值必须在 0.90 到 1.00 之间。')
   }
-  if (!Number.isInteger(Math.round(form.similarity_threshold * 10000))) {
+  if (!hasMaxDecimals(form.similarity_threshold, 4)) {
     errors.push('相似度阈值最多保留 4 位小数。')
   }
   if (!Number.isFinite(form.max_reuse_minutes) || form.max_reuse_minutes < 1 || form.max_reuse_minutes > 1440) {
@@ -410,6 +410,9 @@ const validationErrors = computed(() => {
   }
   if (!Number.isFinite(form.quality_rollback_threshold_percent) || form.quality_rollback_threshold_percent < 0 || form.quality_rollback_threshold_percent > 100) {
     errors.push('质量回滚阈值必须在 0 到 100 之间。')
+  }
+  if (!hasMaxDecimals(form.quality_rollback_threshold_percent, 2)) {
+    errors.push('质量回滚阈值最多保留 2 位小数。')
   }
   if (form.enabled && !hasRequiredConnectionFields.value) {
     errors.push('启用语义缓存前，请先完成服务地址、API Key 和模型名称配置。')
@@ -457,6 +460,11 @@ function parseModelList(text: string): string[] {
 
 function rememberSaved(config: SemanticCacheConfig): void {
   lastSavedSnapshot.value = JSON.stringify(config)
+}
+
+function hasMaxDecimals(value: number, decimals: number): boolean {
+  const factor = 10 ** decimals
+  return Math.abs(value * factor - Math.round(value * factor)) < 1e-9
 }
 
 function togglePlatform(platform: string, checked: boolean): void {
@@ -525,8 +533,8 @@ async function loadConfig(force = false): Promise<void> {
   try {
     const config = await adminAPI.cache.getSemanticConfig()
     applyConfig(config)
-    rememberSaved(buildPayload())
     await hydrateSelectedApiKeys()
+    rememberSaved(buildPayload())
   } catch (error) {
     loadError.value = extractApiErrorMessage(error, '语义缓存配置加载失败')
   } finally {
@@ -568,8 +576,8 @@ async function saveConfig(): Promise<void> {
   try {
     const saved = await adminAPI.cache.updateSemanticConfig(buildPayload())
     applyConfig(saved)
-    rememberSaved(buildPayload())
     await hydrateSelectedApiKeys()
+    rememberSaved(buildPayload())
     appStore.showSuccess('语义缓存配置已保存')
   } catch (error) {
     appStore.showError(extractApiErrorMessage(error, '语义缓存配置保存失败'))
