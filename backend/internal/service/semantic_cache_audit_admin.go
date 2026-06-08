@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -12,10 +13,10 @@ import (
 )
 
 const (
-	SemanticCacheDecisionObserve = "observe"
-	SemanticCacheDecisionHit     = "hit"
-	SemanticCacheDecisionMiss    = "miss"
-	SemanticCacheDecisionBlocked = "blocked"
+	SemanticCacheDecisionObserve  = "observe"
+	SemanticCacheDecisionHit      = "hit"
+	SemanticCacheDecisionMiss     = "miss"
+	SemanticCacheDecisionBlocked  = "blocked"
 	SemanticCacheDecisionRollback = "rollback"
 
 	SemanticCacheReviewPending     = "pending"
@@ -30,25 +31,25 @@ const (
 )
 
 var (
-	ErrSemanticCacheAuditUnavailable    = errors.New("semantic cache audit store unavailable")
-	ErrInvalidSemanticCacheAuditList    = errors.New("invalid semantic cache audit list request")
-	ErrInvalidSemanticCacheAuditReview  = errors.New("invalid semantic cache audit review request")
+	ErrSemanticCacheAuditUnavailable     = errors.New("semantic cache audit store unavailable")
+	ErrInvalidSemanticCacheAuditList     = errors.New("invalid semantic cache audit list request")
+	ErrInvalidSemanticCacheAuditReview   = errors.New("invalid semantic cache audit review request")
 	ErrInvalidSemanticCacheAuditFeedback = errors.New("invalid semantic cache audit feedback request")
 )
 
 type SemanticCacheAuditListFilter struct {
-	Page         int
-	PageSize     int
-	StartTime    *time.Time
-	EndTime      *time.Time
-	Platform     string
-	Model        string
-	APIKeyID     *int64
-	ReviewStatus string
-	Decision     string
+	Page          int
+	PageSize      int
+	StartTime     *time.Time
+	EndTime       *time.Time
+	Platform      string
+	Model         string
+	APIKeyID      *int64
+	ReviewStatus  string
+	Decision      string
 	MinSimilarity *float64
 	MaxSimilarity *float64
-	ViewerRole   string
+	ViewerRole    string
 }
 
 type SemanticCacheAuditListRecord struct {
