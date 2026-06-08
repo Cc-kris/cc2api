@@ -1301,6 +1301,67 @@ async function submitAIReportFeedback() {
   }
 }
 
+function feedbackStatusLabel(status?: string | null): string {
+  switch (String(status || '').trim().toLowerCase()) {
+    case 'useful':
+      return '有用'
+    case 'not_useful':
+      return '无用'
+    case 'wrong_category':
+      return '错误归因'
+    default:
+      return '未反馈'
+  }
+}
+
+function syncFeedbackForm(detail: OpsAIAnalysisTaskDetailResponse | null) {
+  const status = String(detail?.report?.feedback_status || '').trim().toLowerCase()
+  if (status === 'useful' || status === 'not_useful' || status === 'wrong_category') {
+    feedbackForm.value.feedback_status = status
+  } else {
+    feedbackForm.value.feedback_status = 'useful'
+  }
+  feedbackForm.value.feedback_note = String(detail?.report?.feedback_note || '')
+}
+
+function resetFeedbackForm() {
+  feedbackForm.value.feedback_status = 'useful'
+  feedbackForm.value.feedback_note = ''
+  feedbackSaving.value = false
+}
+
+async function submitAIReportFeedback() {
+  const taskId = aiTaskDetail.value?.task?.id
+  if (!taskId || feedbackSubmitDisabled.value) return
+
+  feedbackSaving.value = true
+  try {
+    const result = await opsAPI.updateAIAnalysisReportFeedback(taskId, {
+      feedback_status: feedbackForm.value.feedback_status,
+      feedback_note: feedbackForm.value.feedback_note.trim()
+    })
+    if (aiTaskDetail.value?.report) {
+      aiTaskDetail.value = {
+        ...aiTaskDetail.value,
+        report: {
+          ...aiTaskDetail.value.report,
+          feedback_status: result.feedback_status,
+          feedback_note: result.feedback_note || '',
+          feedback_user_id: result.feedback_user_id,
+          feedback_at: result.feedback_at,
+          updated_at: result.feedback_at || aiTaskDetail.value.report.updated_at
+        }
+      }
+    }
+    syncFeedbackForm(aiTaskDetail.value)
+    appStore.showSuccess('AI 反馈已提交')
+  } catch (err: any) {
+    appStore.showError(err?.message || 'AI 反馈提交失败')
+  } finally {
+    feedbackSaving.value = false
+  }
+}
+
 async function triggerManualAIAnalysis() {
   if (manualAIActionDisabled.value) return
 
