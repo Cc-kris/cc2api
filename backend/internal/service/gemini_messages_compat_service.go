@@ -1449,14 +1449,16 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 			Duration:      time.Since(startTime),
 		}, nil
 	}
-	_ = s.probeSemanticCacheCandidate(ctx, SemanticCacheLookupRequest{
-		RequestBody: body,
-		Platform:    localCacheLookup.Platform,
-		Model:       localCacheLookup.Model,
-		APIKeyID:    localCacheLookup.APIKeyID,
-		UserID:      SemanticCacheUserIDFromContext(c),
-		GroupID:     localCacheLookup.GroupID,
-	})
+	if localCacheLookup.Key != "" {
+		_ = s.probeSemanticCacheCandidate(ctx, SemanticCacheLookupRequest{
+			RequestBody: body,
+			Platform:    localCacheLookup.Platform,
+			Model:       localCacheLookup.Model,
+			APIKeyID:    localCacheLookup.APIKeyID,
+			UserID:      SemanticCacheUserIDFromContext(c),
+			GroupID:     localCacheLookup.GroupID,
+		})
+	}
 
 	var requestIDHeader string
 	var buildReq func(ctx context.Context) (*http.Request, string, error)

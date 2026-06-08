@@ -308,14 +308,16 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		if h.tryWriteLocalResponseCacheHit(c, localCacheLookup, reqLog) {
 			return
 		}
-		_ = h.gatewayService.ProbeSemanticCacheCandidate(c.Request.Context(), service.SemanticCacheLookupRequest{
-			RequestBody: body,
-			Platform:    localCacheLookup.Platform,
-			Model:       localCacheLookup.Model,
-			APIKeyID:    localCacheLookup.APIKeyID,
-			UserID:      service.SemanticCacheUserIDFromContext(c),
-			GroupID:     localCacheLookup.GroupID,
-		})
+		if localCacheLookup.Key != "" {
+			_ = h.gatewayService.ProbeSemanticCacheCandidate(c.Request.Context(), service.SemanticCacheLookupRequest{
+				RequestBody: body,
+				Platform:    localCacheLookup.Platform,
+				Model:       localCacheLookup.Model,
+				APIKeyID:    localCacheLookup.APIKeyID,
+				UserID:      service.SemanticCacheUserIDFromContext(c),
+				GroupID:     localCacheLookup.GroupID,
+			})
+		}
 		localCacheCapture = h.installLocalResponseCacheCapture(c, localCacheLookup, localCacheCfg)
 	}
 
@@ -727,14 +729,16 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 	if h.tryWriteLocalResponseCacheHit(c, localCacheLookup, reqLog) {
 		return
 	}
-	_ = h.gatewayService.ProbeSemanticCacheCandidate(c.Request.Context(), service.SemanticCacheLookupRequest{
-		RequestBody: body,
-		Platform:    localCacheLookup.Platform,
-		Model:       localCacheLookup.Model,
-		APIKeyID:    localCacheLookup.APIKeyID,
-		UserID:      service.SemanticCacheUserIDFromContext(c),
-		GroupID:     localCacheLookup.GroupID,
-	})
+	if localCacheLookup.Key != "" {
+		_ = h.gatewayService.ProbeSemanticCacheCandidate(c.Request.Context(), service.SemanticCacheLookupRequest{
+			RequestBody: body,
+			Platform:    localCacheLookup.Platform,
+			Model:       localCacheLookup.Model,
+			APIKeyID:    localCacheLookup.APIKeyID,
+			UserID:      service.SemanticCacheUserIDFromContext(c),
+			GroupID:     localCacheLookup.GroupID,
+		})
+	}
 	localCacheCapture := h.installLocalResponseCacheCapture(c, localCacheLookup, localCacheCfg)
 
 	sessionHash := h.gatewayService.GenerateSessionHash(c, body)

@@ -5074,14 +5074,16 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 			Duration:      time.Since(input.StartTime),
 		}, nil
 	}
-	_ = s.probeSemanticCacheCandidate(ctx, SemanticCacheLookupRequest{
-		RequestBody: input.Body,
-		Platform:    localCacheLookup.Platform,
-		Model:       localCacheLookup.Model,
-		APIKeyID:    localCacheLookup.APIKeyID,
-		UserID:      SemanticCacheUserIDFromContext(c),
-		GroupID:     localCacheLookup.GroupID,
-	})
+	if localCacheLookup.Key != "" {
+		_ = s.probeSemanticCacheCandidate(ctx, SemanticCacheLookupRequest{
+			RequestBody: input.Body,
+			Platform:    localCacheLookup.Platform,
+			Model:       localCacheLookup.Model,
+			APIKeyID:    localCacheLookup.APIKeyID,
+			UserID:      SemanticCacheUserIDFromContext(c),
+			GroupID:     localCacheLookup.GroupID,
+		})
+	}
 
 	var resp *http.Response
 	retryStart := time.Now()
