@@ -42,6 +42,18 @@ type SemanticCacheEntryStore interface {
 	UpsertSemanticCacheEntry(ctx context.Context, entry *SemanticCacheEntry) error
 }
 
+type SemanticCacheStoredCandidate struct {
+	ResponseCacheKey     string
+	NormalizedPromptHash string
+	EmbeddingModel       string
+	EmbeddingDimension   int
+	EmbeddingRef         json.RawMessage
+}
+
+type SemanticCacheCandidateStore interface {
+	ListSemanticCacheCandidates(ctx context.Context, namespace string, limit int) ([]SemanticCacheStoredCandidate, error)
+}
+
 type SemanticCacheWriteRequest struct {
 	Protocol         string
 	RequestBody      []byte
@@ -55,20 +67,47 @@ type SemanticCacheWriteRequest struct {
 	StoredAt         time.Time
 }
 
+type SemanticCacheLookupRequest struct {
+	RequestBody []byte
+	Platform    string
+	Model       string
+	APIKeyID    *int64
+	UserID      *int64
+	GroupID     *int64
+}
+
+type SemanticCacheLookupMatch struct {
+	ResponseCacheKey     string
+	NormalizedPromptHash string
+	EmbeddingModel       string
+	Similarity           float64
+}
+
+type SemanticCacheLookupResult struct {
+	Namespace         string
+	CandidateCount    int
+	HighestSimilarity float64
+	Match             *SemanticCacheLookupMatch
+	SkipReason        string
+}
+
 type SemanticCacheAsyncWriter struct {
 	settingService  *SettingService
 	embeddingClient *semanticEmbeddingClient
 	store           SemanticCacheEntryStore
+	candidateStore  SemanticCacheCandidateStore
 	queue           chan SemanticCacheWriteRequest
 	once            sync.Once
 }
 
 func NewSemanticCacheAsyncWriter(cache GatewayCache, settingService *SettingService) *SemanticCacheAsyncWriter {
 	store, _ := cache.(SemanticCacheEntryStore)
+	candidateStore, _ := cache.(SemanticCacheCandidateStore)
 	writer := &SemanticCacheAsyncWriter{
 		settingService:  settingService,
 		embeddingClient: NewSemanticEmbeddingClient(settingService),
 		store:           store,
+		candidateStore:  candidateStore,
 		queue:           make(chan SemanticCacheWriteRequest, semanticCacheWriteQueueSize),
 	}
 	writer.start()
@@ -175,6 +214,13 @@ type semanticCachePreparedWrite struct {
 	ExpiresAt         time.Time
 }
 
+type semanticCachePreparedLookup struct {
+	NormalizedPrompt  string
+	PromptHash        string
+	SystemFingerprint string
+	Namespace         string
+}
+
 func semanticCacheWriteEnabled(cfg SemanticCacheConfig, platform, model string) bool {
 	if !cfg.Enabled || cfg.AutoClosed || cfg.Stage == "rollback" {
 		return false
@@ -193,7 +239,7 @@ func semanticCacheWriteEnabled(cfg SemanticCacheConfig, platform, model string) 
 	return true
 }
 
-func buildSemanticCacheWritePrepared(req SemanticCacheWriteRequest, cfg SemanticCacheConfig) (*semanticCachePreparedWrite, bool) {
+func buildSemanticCachePreparedLookup(req SemanticCacheLookupRequest, cfg SemanticCacheConfig) (*semanticCachePreparedLookup, bool) {
 	if !json.Valid(req.RequestBody) {
 		return nil, false
 	}
@@ -209,6 +255,32 @@ func buildSemanticCacheWritePrepared(req SemanticCacheWriteRequest, cfg Semantic
 		return nil, false
 	}
 	systemFingerprint := semanticSystemFingerprintFromPayload(payload)
+	return &semanticCachePreparedLookup{
+		NormalizedPrompt:  prompt,
+		PromptHash:        sha256Hex(prompt),
+		SystemFingerprint: systemFingerprint,
+		Namespace: semanticCacheNamespace(cfg, SemanticCacheWriteRequest{
+			Platform: req.Platform,
+			Model:    req.Model,
+			APIKeyID: req.APIKeyID,
+			UserID:   req.UserID,
+			GroupID:  req.GroupID,
+		}, systemFingerprint),
+	}, true
+}
+
+func buildSemanticCacheWritePrepared(req SemanticCacheWriteRequest, cfg SemanticCacheConfig) (*semanticCachePreparedWrite, bool) {
+	prepared, ok := buildSemanticCachePreparedLookup(SemanticCacheLookupRequest{
+		RequestBody: req.RequestBody,
+		Platform:    req.Platform,
+		Model:       req.Model,
+		APIKeyID:    req.APIKeyID,
+		UserID:      req.UserID,
+		GroupID:     req.GroupID,
+	}, cfg)
+	if !ok {
+		return nil, false
+	}
 	storedAt := req.StoredAt
 	if storedAt.IsZero() {
 		storedAt = time.Now()
@@ -218,12 +290,82 @@ func buildSemanticCacheWritePrepared(req SemanticCacheWriteRequest, cfg Semantic
 		ttl = time.Duration(cfg.MaxReuseMinutes) * time.Minute
 	}
 	return &semanticCachePreparedWrite{
-		NormalizedPrompt:  prompt,
-		PromptHash:        sha256Hex(prompt),
-		SystemFingerprint: systemFingerprint,
-		Namespace:         semanticCacheNamespace(cfg, req, systemFingerprint),
+		NormalizedPrompt:  prepared.NormalizedPrompt,
+		PromptHash:        prepared.PromptHash,
+		SystemFingerprint: prepared.SystemFingerprint,
+		Namespace:         prepared.Namespace,
 		ExpiresAt:         storedAt.Add(ttl),
 	}, true
+}
+
+func (w *SemanticCacheAsyncWriter) Probe(ctx context.Context, req SemanticCacheLookupRequest) *SemanticCacheLookupResult {
+	result := &SemanticCacheLookupResult{}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if w == nil || w.settingService == nil || w.embeddingClient == nil || w.candidateStore == nil {
+		result.SkipReason = SemanticEmbeddingSkipConfigIncomplete
+		return result
+	}
+	cfg, err := w.settingService.loadSemanticCacheConfigForUpdate(ctx)
+	if err != nil {
+		result.SkipReason = SemanticEmbeddingSkipConfigIncomplete
+		return result
+	}
+	cfg = normalizeSemanticCacheConfig(cfg)
+	if !semanticCacheWriteEnabled(cfg, req.Platform, req.Model) {
+		result.SkipReason = SemanticEmbeddingSkipDisabled
+		return result
+	}
+	prepared, ok := buildSemanticCachePreparedLookup(req, cfg)
+	if !ok {
+		result.SkipReason = SemanticEmbeddingSkipInvalidInput
+		return result
+	}
+	result.Namespace = prepared.Namespace
+	embedding, err := w.embeddingClient.GenerateEmbedding(ctx, prepared.NormalizedPrompt)
+	if err != nil {
+		result.SkipReason = SemanticEmbeddingSkipRequestFailed
+		return result
+	}
+	if embedding == nil || embedding.Skipped || len(embedding.Vector) == 0 {
+		if embedding != nil {
+			result.SkipReason = embedding.SkipReason
+		} else {
+			result.SkipReason = SemanticEmbeddingSkipEmptyVector
+		}
+		return result
+	}
+	candidates, err := w.candidateStore.ListSemanticCacheCandidates(ctx, prepared.Namespace, cfg.MaxCandidates)
+	if err != nil {
+		result.SkipReason = "candidate_query_failed"
+		return result
+	}
+	bestSimilarity := 0.0
+	for _, candidate := range candidates {
+		vector, ok := semanticCacheInlineVector(candidate.EmbeddingRef)
+		if !ok || len(vector) == 0 || len(vector) != len(embedding.Vector) {
+			continue
+		}
+		similarity, ok := semanticCacheCosineSimilarity(embedding.Vector, vector)
+		if !ok {
+			continue
+		}
+		result.CandidateCount++
+		if similarity > result.HighestSimilarity {
+			result.HighestSimilarity = similarity
+		}
+		if similarity >= cfg.SimilarityThreshold && similarity >= bestSimilarity {
+			bestSimilarity = similarity
+			result.Match = &SemanticCacheLookupMatch{
+				ResponseCacheKey:     candidate.ResponseCacheKey,
+				NormalizedPromptHash: candidate.NormalizedPromptHash,
+				EmbeddingModel:       candidate.EmbeddingModel,
+				Similarity:           similarity,
+			}
+		}
+	}
+	return result
 }
 
 func semanticCacheNamespace(cfg SemanticCacheConfig, req SemanticCacheWriteRequest, systemFingerprint string) string {
@@ -505,4 +647,48 @@ func semanticCacheNonEmptyValue(value any) bool {
 	default:
 		return true
 	}
+}
+
+func semanticCacheInlineVector(raw json.RawMessage) ([]float64, bool) {
+	if len(raw) == 0 {
+		return nil, false
+	}
+	var payload struct {
+		Vector []float64 `json:"vector"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, false
+	}
+	if len(payload.Vector) == 0 {
+		return nil, false
+	}
+	return payload.Vector, true
+}
+
+func semanticCacheCosineSimilarity(left, right []float64) (float64, bool) {
+	if len(left) == 0 || len(left) != len(right) {
+		return 0, false
+	}
+	dot := 0.0
+	leftNorm := 0.0
+	rightNorm := 0.0
+	for i := range left {
+		dot += left[i] * right[i]
+		leftNorm += left[i] * left[i]
+		rightNorm += right[i] * right[i]
+	}
+	if leftNorm == 0 || rightNorm == 0 {
+		return 0, false
+	}
+	similarity := dot / (math.Sqrt(leftNorm) * math.Sqrt(rightNorm))
+	if math.IsNaN(similarity) || math.IsInf(similarity, 0) {
+		return 0, false
+	}
+	if similarity < 0 {
+		similarity = 0
+	}
+	if similarity > 1 {
+		similarity = 1
+	}
+	return similarity, true
 }
