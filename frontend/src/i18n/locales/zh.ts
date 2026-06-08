@@ -5204,6 +5204,83 @@ export default {
           expired: '已过期'
         }
       },
+      aiAnalysis: {
+        title: 'AI 分析配置',
+        description: '维护 AI 分析服务配置，并在保存后执行测试连接。',
+        loadFailed: '加载 AI 配置失败',
+        saveSuccess: 'AI 配置已保存',
+        saveFailed: '保存 AI 配置失败',
+        testFailed: '测试连接失败',
+        testSuccess: '连接成功',
+        testAction: '测试连接',
+        testActionRetry: '重新测试',
+        refresh: '刷新配置',
+        save: '保存配置',
+        saving: '保存中...',
+        testing: '测试中...',
+        noChanges: '当前没有未保存修改。',
+        dirtyHint: '测试连接前会先保存当前配置。',
+        readOnly: '当前账号仅可查看脱敏配置，不能修改或测试连接。',
+        cards: {
+          basic: '基础配置',
+          behavior: '分析行为',
+          testResult: '测试结果'
+        },
+        fields: {
+          enabled: '启用 AI 分析',
+          enabledHint: '关闭后保留配置，但不再触发自动或手动 AI 分析。',
+          baseUrl: 'AI 服务地址',
+          apiKey: 'AI API Key',
+          apiKeyPlaceholder: '留空表示保留当前已保存 Key',
+          apiKeyHint: '已保存 Key：{masked}',
+          model: 'AI 模型名称',
+          interfaceType: '接口类型',
+          timeoutSeconds: '单次分析超时（秒）',
+          maxSamples: '最大样本数',
+          autoDedupMinutes: '自动分析同类去重间隔（分钟）',
+          globalRateLimitPerMinute: '全局 AI 调用频率限制（次/分钟）',
+          autoLevels: '自动分析等级',
+          manualEnabled: '允许手动分析',
+          manualEnabledHint: '关闭后仅保留自动分析能力。'
+        },
+        interfaceTypes: {
+          openai_compatible: 'OpenAI 兼容',
+          responses: 'Responses',
+          anthropic_compatible: 'Anthropic 兼容',
+          gemini_compatible: 'Gemini 兼容'
+        },
+        autoLevels: {
+          P0: 'P0',
+          P1: 'P1',
+          P2: 'P2',
+          observe: '观察'
+        },
+        validation: {
+          title: '请先修正以下问题',
+          baseUrl: '请输入合法 AI 服务地址',
+          apiKey: '请输入 AI API Key',
+          model: '请输入 AI 模型名称',
+          interfaceType: '请选择接口类型',
+          timeoutSeconds: '请输入 5～300 的整数秒',
+          maxSamples: '请输入 1～500 的整数',
+          autoDedupMinutes: '请输入 1～1440 的整数分钟',
+          globalRateLimitPerMinute: '请输入 1～1000 的整数次数'
+        },
+        connectionStatus: {
+          success: '连接成功',
+          config_error: '请先配置 AI 分析服务',
+          auth_failed: '认证失败',
+          network_failed: '连接失败',
+          timeout: '连接超时',
+          failed: '连接失败'
+        },
+        resultMeta: {
+          httpStatus: 'HTTP 状态：{status}',
+          duration: '耗时：{duration} ms',
+          model: '模型：{model}',
+          endpoint: '地址：{baseUrl}'
+        }
+      },
       unifiedErrorDetail: {
         title: '统一错误详情',
         description: '聚合展示请求链路、错误分类、影响范围、恢复状态、AI 分析、原始记录与同类问题。',
