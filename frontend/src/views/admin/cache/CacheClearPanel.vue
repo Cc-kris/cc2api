@@ -342,7 +342,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
@@ -392,7 +392,7 @@ const form = reactive<ClearTypeForm>({
 
 const viewerRole = computed(() => String((authStore.user as { role?: string } | null)?.role || '').trim().toLowerCase())
 const canManage = computed(() => viewerRole.value === '' || viewerRole.value === 'admin')
-const requiresPlatforms = computed(() => form.clearType === 'by_platform')
+const requiresPlatforms = computed(() => form.clearType === 'by_platform' || form.clearType === 'by_model')
 const requiresConfirmText = computed(() => form.clearType === 'all')
 
 const navItems = computed(() => [
@@ -478,6 +478,9 @@ const validationErrors = computed(() => {
       }
       break
     case 'by_model':
+      if (form.platforms.length === 0) {
+        errors.push(t('admin.cacheManagement.clearPage.validation.platforms'))
+      }
       if (form.models.length === 0) {
         errors.push(t('admin.cacheManagement.clearPage.validation.models'))
       }
@@ -611,6 +614,34 @@ function buildPayload(): CacheClearRequest {
     confirm_text: requiresConfirmText.value ? confirmText.value : undefined
   }
 }
+
+watch(
+  () => form.clearType,
+  (nextType) => {
+    confirmText.value = ''
+    apiKeyResults.value = []
+    apiKeySearchTried.value = false
+    apiKeyKeyword.value = ''
+    modelKeyword.value = ''
+
+    if (nextType !== 'by_platform' && nextType !== 'by_model') {
+      form.platforms = []
+    }
+    if (nextType !== 'by_model') {
+      form.models = []
+    }
+    if (nextType !== 'by_group') {
+      form.groupIds = []
+    }
+    if (nextType !== 'by_api_key') {
+      form.apiKeys = []
+    }
+    if (nextType !== 'by_time') {
+      form.startTime = ''
+      form.endTime = ''
+    }
+  }
+)
 
 function openConfirmDialog(): void {
   if (!canSubmit.value) {
