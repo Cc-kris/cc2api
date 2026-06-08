@@ -480,6 +480,27 @@ func (c *gatewayCache) GetLocalResponseCacheStats(ctx context.Context) (*service
 		if memErr == nil && bytes > 0 {
 			stats.Bytes += bytes
 		}
+		payload, getErr := c.rdb.Get(ctx, key).Bytes()
+		if getErr != nil {
+			continue
+		}
+		var entry service.LocalResponseCacheEntry
+		if err := json.Unmarshal(payload, &entry); err != nil {
+			continue
+		}
+		rawBytes := entry.RawBodyBytes
+		if rawBytes <= 0 {
+			rawBytes = int64(len(entry.Body))
+		}
+		storedBytes := entry.StoredBodyBytes
+		if storedBytes <= 0 {
+			storedBytes = int64(len(entry.Body))
+		}
+		stats.RawResponseBytes += rawBytes
+		stats.StoredResponseBytes += storedBytes
+		if strings.EqualFold(strings.TrimSpace(entry.Encoding), "gzip") {
+			stats.CompressedEntryCount++
+		}
 	}
 	if err := iter.Err(); err != nil {
 		return stats, err
