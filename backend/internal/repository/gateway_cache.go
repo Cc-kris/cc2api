@@ -155,6 +155,46 @@ DO UPDATE SET
 	return err
 }
 
+func (c *gatewayCache) ListSemanticCacheCandidates(ctx context.Context, namespace string, limit int) ([]service.SemanticCacheStoredCandidate, error) {
+	if c == nil || c.db == nil || strings.TrimSpace(namespace) == "" || limit <= 0 {
+		return nil, nil
+	}
+	query := `
+SELECT response_cache_key, normalized_prompt_hash, embedding_model, embedding_dimension, embedding_ref::text
+FROM ops_semantic_cache_entries
+WHERE namespace = $1
+  AND status = 'active'
+  AND expires_at > NOW()
+ORDER BY updated_at DESC, id DESC
+LIMIT $2`
+	rows, err := c.db.QueryContext(ctx, query, strings.TrimSpace(namespace), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	candidates := make([]service.SemanticCacheStoredCandidate, 0, limit)
+	for rows.Next() {
+		var candidate service.SemanticCacheStoredCandidate
+		var embeddingRef string
+		if err := rows.Scan(
+			&candidate.ResponseCacheKey,
+			&candidate.NormalizedPromptHash,
+			&candidate.EmbeddingModel,
+			&candidate.EmbeddingDimension,
+			&embeddingRef,
+		); err != nil {
+			return nil, err
+		}
+		candidate.EmbeddingRef = json.RawMessage(embeddingRef)
+		candidates = append(candidates, candidate)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return candidates, nil
+}
+
 func (c *gatewayCache) touchLocalResponseCacheEntry(ctx context.Context, redisKey string, entry *service.LocalResponseCacheEntry) {
 	if c == nil || c.rdb == nil || entry == nil {
 		return

@@ -687,6 +687,13 @@ func (s *GatewayService) SetSemanticCacheWriter(writer *SemanticCacheAsyncWriter
 	s.semanticCacheWriter = writer
 }
 
+func (s *GatewayService) probeSemanticCacheCandidate(ctx context.Context, req SemanticCacheLookupRequest) *SemanticCacheLookupResult {
+	if s == nil || s.semanticCacheWriter == nil {
+		return nil
+	}
+	return s.semanticCacheWriter.Probe(ctx, req)
+}
+
 // GenerateSessionHash 从预解析请求计算粘性会话 hash
 func (s *GatewayService) GenerateSessionHash(parsed *ParsedRequest) string {
 	if parsed == nil {
@@ -5067,6 +5074,14 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 			Duration:      time.Since(input.StartTime),
 		}, nil
 	}
+	_ = s.probeSemanticCacheCandidate(ctx, SemanticCacheLookupRequest{
+		RequestBody: input.Body,
+		Platform:    localCacheLookup.Platform,
+		Model:       localCacheLookup.Model,
+		APIKeyID:    localCacheLookup.APIKeyID,
+		UserID:      SemanticCacheUserIDFromContext(c),
+		GroupID:     localCacheLookup.GroupID,
+	})
 
 	var resp *http.Response
 	retryStart := time.Now()

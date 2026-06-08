@@ -213,6 +213,13 @@ func (s *OpenAIGatewayService) EnqueueSemanticCacheWrite(req SemanticCacheWriteR
 	return s.semanticCacheWriter.Enqueue(req)
 }
 
+func (s *OpenAIGatewayService) ProbeSemanticCacheCandidate(ctx context.Context, req SemanticCacheLookupRequest) *SemanticCacheLookupResult {
+	if s == nil || s.semanticCacheWriter == nil {
+		return nil
+	}
+	return s.semanticCacheWriter.Probe(ctx, req)
+}
+
 // OpenAIUsage represents OpenAI API response usage
 type OpenAIUsage struct {
 	InputTokens              int `json:"input_tokens"`

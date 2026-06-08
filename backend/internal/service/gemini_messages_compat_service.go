@@ -91,6 +91,13 @@ func (s *GeminiMessagesCompatService) SetSemanticCacheWriter(writer *SemanticCac
 	s.semanticCacheWriter = writer
 }
 
+func (s *GeminiMessagesCompatService) probeSemanticCacheCandidate(ctx context.Context, req SemanticCacheLookupRequest) *SemanticCacheLookupResult {
+	if s == nil || s.semanticCacheWriter == nil {
+		return nil
+	}
+	return s.semanticCacheWriter.Probe(ctx, req)
+}
+
 func (s *GeminiMessagesCompatService) SetSettingService(settingService *SettingService) {
 	s.settingService = settingService
 }
@@ -1442,6 +1449,14 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 			Duration:      time.Since(startTime),
 		}, nil
 	}
+	_ = s.probeSemanticCacheCandidate(ctx, SemanticCacheLookupRequest{
+		RequestBody: body,
+		Platform:    localCacheLookup.Platform,
+		Model:       localCacheLookup.Model,
+		APIKeyID:    localCacheLookup.APIKeyID,
+		UserID:      SemanticCacheUserIDFromContext(c),
+		GroupID:     localCacheLookup.GroupID,
+	})
 
 	var requestIDHeader string
 	var buildReq func(ctx context.Context) (*http.Request, string, error)
