@@ -160,7 +160,7 @@ func (c *gatewayCache) ListSemanticCacheCandidates(ctx context.Context, namespac
 		return nil, nil
 	}
 	query := `
-SELECT response_cache_key, normalized_prompt_hash, embedding_model, embedding_dimension, embedding_ref::text
+SELECT id, response_cache_key, normalized_prompt_hash, embedding_model, embedding_dimension, embedding_ref::text
 FROM ops_semantic_cache_entries
 WHERE namespace = $1
   AND status = 'active'
@@ -178,6 +178,7 @@ LIMIT $2`
 		var candidate service.SemanticCacheStoredCandidate
 		var embeddingRef string
 		if err := rows.Scan(
+			&candidate.ID,
 			&candidate.ResponseCacheKey,
 			&candidate.NormalizedPromptHash,
 			&candidate.EmbeddingModel,
@@ -193,6 +194,36 @@ LIMIT $2`
 		return nil, err
 	}
 	return candidates, nil
+}
+
+func (c *gatewayCache) CreateSemanticCacheAudit(ctx context.Context, record *service.SemanticCacheAuditRecord) error {
+	if c == nil || c.db == nil || record == nil {
+		return nil
+	}
+	query := `
+INSERT INTO ops_semantic_cache_audits (
+    request_id, semantic_entry_id, platform, model, api_key_id,
+    similarity, decision, block_reason, review_status, source_summary, target_summary
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, NULLIF($8, ''), $9, NULLIF($10, ''), NULLIF($11, '')
+)`
+	_, err := c.db.ExecContext(
+		ctx,
+		query,
+		strings.TrimSpace(record.RequestID),
+		record.SemanticEntryID,
+		strings.TrimSpace(record.Platform),
+		strings.TrimSpace(record.Model),
+		record.APIKeyID,
+		record.Similarity,
+		strings.TrimSpace(record.Decision),
+		strings.TrimSpace(record.BlockReason),
+		strings.TrimSpace(record.ReviewStatus),
+		strings.TrimSpace(record.SourceSummary),
+		strings.TrimSpace(record.TargetSummary),
+	)
+	return err
 }
 
 func (c *gatewayCache) touchLocalResponseCacheEntry(ctx context.Context, redisKey string, entry *service.LocalResponseCacheEntry) {

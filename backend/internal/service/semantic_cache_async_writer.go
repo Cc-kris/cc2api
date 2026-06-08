@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/gin-gonic/gin"
 )
 
@@ -44,6 +45,7 @@ type SemanticCacheEntryStore interface {
 }
 
 type SemanticCacheStoredCandidate struct {
+	ID                   int64
 	ResponseCacheKey     string
 	NormalizedPromptHash string
 	EmbeddingModel       string
@@ -53,6 +55,24 @@ type SemanticCacheStoredCandidate struct {
 
 type SemanticCacheCandidateStore interface {
 	ListSemanticCacheCandidates(ctx context.Context, namespace string, limit int) ([]SemanticCacheStoredCandidate, error)
+}
+
+type SemanticCacheAuditRecord struct {
+	RequestID       string
+	SemanticEntryID *int64
+	Platform        string
+	Model           string
+	APIKeyID        *int64
+	Similarity      float64
+	Decision        string
+	BlockReason     string
+	ReviewStatus    string
+	SourceSummary   string
+	TargetSummary   string
+}
+
+type SemanticCacheAuditStore interface {
+	CreateSemanticCacheAudit(ctx context.Context, record *SemanticCacheAuditRecord) error
 }
 
 type SemanticCacheWriteRequest struct {
@@ -78,6 +98,7 @@ type SemanticCacheLookupRequest struct {
 }
 
 type SemanticCacheLookupMatch struct {
+	SemanticEntryID      *int64
 	ResponseCacheKey     string
 	NormalizedPromptHash string
 	EmbeddingModel       string
@@ -97,6 +118,7 @@ type SemanticCacheAsyncWriter struct {
 	embeddingClient *semanticEmbeddingClient
 	store           SemanticCacheEntryStore
 	candidateStore  SemanticCacheCandidateStore
+	auditStore      SemanticCacheAuditStore
 	queue           chan SemanticCacheWriteRequest
 	once            sync.Once
 }
@@ -104,11 +126,13 @@ type SemanticCacheAsyncWriter struct {
 func NewSemanticCacheAsyncWriter(cache GatewayCache, settingService *SettingService) *SemanticCacheAsyncWriter {
 	store, _ := cache.(SemanticCacheEntryStore)
 	candidateStore, _ := cache.(SemanticCacheCandidateStore)
+	auditStore, _ := cache.(SemanticCacheAuditStore)
 	writer := &SemanticCacheAsyncWriter{
 		settingService:  settingService,
 		embeddingClient: NewSemanticEmbeddingClient(settingService),
 		store:           store,
 		candidateStore:  candidateStore,
+		auditStore:      auditStore,
 		queue:           make(chan SemanticCacheWriteRequest, semanticCacheWriteQueueSize),
 	}
 	writer.start()
@@ -304,21 +328,25 @@ func (w *SemanticCacheAsyncWriter) Probe(ctx context.Context, req SemanticCacheL
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	var cfg SemanticCacheConfig
+	var prepared *semanticCachePreparedLookup
+	defer w.recordObserveAudit(ctx, cfg, req, prepared, result)
 	if w == nil || w.settingService == nil || w.embeddingClient == nil || w.candidateStore == nil {
 		result.SkipReason = SemanticEmbeddingSkipConfigIncomplete
 		return result
 	}
-	cfg, err := w.settingService.loadSemanticCacheConfigForUpdate(ctx)
+	loadedCfg, err := w.settingService.loadSemanticCacheConfigForUpdate(ctx)
 	if err != nil {
 		result.SkipReason = SemanticEmbeddingSkipConfigIncomplete
 		return result
 	}
-	cfg = normalizeSemanticCacheConfig(cfg)
+	cfg = normalizeSemanticCacheConfig(loadedCfg)
 	if !semanticCacheWriteEnabled(cfg, req.Platform, req.Model) {
 		result.SkipReason = SemanticEmbeddingSkipDisabled
 		return result
 	}
-	prepared, ok := buildSemanticCachePreparedLookup(req, cfg)
+	var ok bool
+	prepared, ok = buildSemanticCachePreparedLookup(req, cfg)
 	if !ok {
 		result.SkipReason = SemanticEmbeddingSkipInvalidInput
 		return result
@@ -358,7 +386,9 @@ func (w *SemanticCacheAsyncWriter) Probe(ctx context.Context, req SemanticCacheL
 		}
 		if similarity >= cfg.SimilarityThreshold && similarity >= bestSimilarity {
 			bestSimilarity = similarity
+			entryID := candidate.ID
 			result.Match = &SemanticCacheLookupMatch{
+				SemanticEntryID:      &entryID,
 				ResponseCacheKey:     candidate.ResponseCacheKey,
 				NormalizedPromptHash: candidate.NormalizedPromptHash,
 				EmbeddingModel:       candidate.EmbeddingModel,
@@ -367,6 +397,67 @@ func (w *SemanticCacheAsyncWriter) Probe(ctx context.Context, req SemanticCacheL
 		}
 	}
 	return result
+}
+
+func (w *SemanticCacheAsyncWriter) recordObserveAudit(ctx context.Context, cfg SemanticCacheConfig, req SemanticCacheLookupRequest, prepared *semanticCachePreparedLookup, result *SemanticCacheLookupResult) {
+	if w == nil || w.auditStore == nil || prepared == nil || result == nil {
+		return
+	}
+	if strings.TrimSpace(cfg.Stage) != "observe" {
+		return
+	}
+
+	if strings.TrimSpace(result.SkipReason) != "" || result.Match == nil {
+		return
+	}
+	similarity := result.Match.Similarity
+	semanticEntryID := result.Match.SemanticEntryID
+	targetSummary := fmt.Sprintf(
+		"cache_key=%s prompt_hash=%s embedding_model=%s",
+		strings.TrimSpace(result.Match.ResponseCacheKey),
+		strings.TrimSpace(result.Match.NormalizedPromptHash),
+		strings.TrimSpace(result.Match.EmbeddingModel),
+	)
+
+	requestID := semanticCacheRequestIDFromContext(ctx)
+	if strings.TrimSpace(requestID) == "" {
+		requestID = "generated:" + generateRequestID()
+	}
+
+	sourceSummary := fmt.Sprintf(
+		"namespace=%s prompt_hash=%s candidates=%d highest_similarity=%.4f",
+		strings.TrimSpace(prepared.Namespace),
+		strings.TrimSpace(prepared.PromptHash),
+		result.CandidateCount,
+		result.HighestSimilarity,
+	)
+
+	_ = w.auditStore.CreateSemanticCacheAudit(ctx, &SemanticCacheAuditRecord{
+		RequestID:       requestID,
+		SemanticEntryID: semanticEntryID,
+		Platform:        strings.TrimSpace(req.Platform),
+		Model:           strings.TrimSpace(req.Model),
+		APIKeyID:        req.APIKeyID,
+		Similarity:      similarity,
+		Decision:        "observe",
+		BlockReason:     "",
+		ReviewStatus:    "pending",
+		SourceSummary:   sourceSummary,
+		TargetSummary:   targetSummary,
+	})
+}
+
+func semanticCacheRequestIDFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if clientRequestID, _ := ctx.Value(ctxkey.ClientRequestID).(string); strings.TrimSpace(clientRequestID) != "" {
+		return "client:" + strings.TrimSpace(clientRequestID)
+	}
+	if requestID, _ := ctx.Value(ctxkey.RequestID).(string); strings.TrimSpace(requestID) != "" {
+		return "local:" + strings.TrimSpace(requestID)
+	}
+	return ""
 }
 
 func semanticCacheNamespace(cfg SemanticCacheConfig, req SemanticCacheWriteRequest, systemFingerprint string) string {
