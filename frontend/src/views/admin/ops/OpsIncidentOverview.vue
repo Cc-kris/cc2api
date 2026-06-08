@@ -475,7 +475,19 @@
         </div>
       </div>
     </BaseDialog>
+  </AppLayout>
+</template>
 
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useDebounceFn } from '@vueuse/core'
+import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
+import AppLayout from '@/components/layout/AppLayout.vue'
+import BaseDialog from '@/components/common/BaseDialog.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
+import Icon from '@/components/icons/Icon.vue'
+import { adminAPI } from '@/api'
 import {
   opsAPI,
   type OpsAIAnalysisTaskCreateRequest,
@@ -538,6 +550,7 @@ const aiReportError = ref('')
 const aiTaskDetail = ref<OpsAIAnalysisTaskDetailResponse | null>(null)
 const activeAITaskId = ref<number | null>(null)
 
+
 const autoRefreshCountdown = ref(30)
 let autoRefreshTimer: ReturnType<typeof setInterval> | null = null
 let aiReportPollTimer: ReturnType<typeof setTimeout> | null = null
@@ -578,7 +591,6 @@ const recommendedActions = computed(() => {
   return actions.length ? actions : [t('admin.ops.incidentOverview.noRecommendedActions')]
 })
 const currentSummary = computed(() => displayOverview.value?.summary || t('admin.ops.incidentOverview.noSummary'))
-const modalTimeRange = computed(() => (timeRange.value === 'custom' ? 'custom' : timeRange.value))
 
 const statusLabel = computed(() => {
   const status = String(displayOverview.value?.status || '').trim().toLowerCase()
@@ -1023,10 +1035,69 @@ function openSummaryDetails() {
   showAlertEventsDialog.value = true
 }
 
+function mapLegacyCategoryToUnifiedCategory(category?: string): string | null {
+  switch (String(category || '').trim()) {
+    case 'upstream_error':
+      return 'upstream'
+    case 'platform_error':
+      return 'platform'
+    case 'client_error':
+      return 'client'
+    default:
+      return null
+  }
+}
+
+function buildUnifiedErrorsQuery(preset: OpsErrorDetailsPreset, type: 'request' | 'upstream'): Record<string, string> {
+  const query: Record<string, string> = {
+    page: '1',
+    page_size: '20',
+    sort_by: 'occurred_at',
+    sort_order: 'desc',
+    ai_analysis: 'all'
+  }
+
+  if (customTimeStartISO.value && customTimeEndISO.value) {
+    query.start_time = customTimeStartISO.value
+    query.end_time = customTimeEndISO.value
+  } else {
+    query.time_range = timeRange.value === 'custom' ? '30m' : timeRange.value
+  }
+
+  if (platform.value.trim()) query.platform = platform.value.trim()
+  if (groupId.value) query.group_id = String(groupId.value)
+  if (model.value.trim()) query.model = model.value.trim()
+  if (preset.model) query.model = preset.model
+  if (preset.statusCodes) query.status_code = preset.statusCodes
+  if (typeof preset.upstreamAccountId === 'number' && preset.upstreamAccountId > 0) {
+    query.upstream_account_id = String(preset.upstreamAccountId)
+  }
+
+  const mappedCategory = mapLegacyCategoryToUnifiedCategory(preset.category)
+  if (mappedCategory) {
+    query.error_categories = mappedCategory
+  } else if (type === 'upstream') {
+    query.error_categories = 'upstream'
+  } else if (preset.clientFailed) {
+    query.error_categories = 'client'
+  }
+
+  if (preset.impactPlatformSla) {
+    query.error_results = 'final_failed'
+  }
+
+  if (preset.title === t('admin.ops.incidentOverview.recoveredFluctuations')) {
+    query.error_results = 'recovered'
+  }
+
+  return query
+}
+
 function openErrorDetailsFromPreset(preset: OpsErrorDetailsPreset, type: 'request' | 'upstream' = 'request') {
-  errorDetailsType.value = type
-  errorDetailsPreset.value = preset
-  showErrorDetails.value = true
+  void router.push({
+    path: '/admin/ops/errors',
+    query: buildUnifiedErrorsQuery(preset, type)
+  })
 }
 
 function openUnifiedErrorDetail(errorId: number) {
