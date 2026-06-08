@@ -311,6 +311,134 @@
           </div>
         </div>
       </div>
+
+      <div class="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-800">
+        <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                {{ t('admin.cacheManagement.clearPage.auditTitle') }}
+              </h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                {{ t('admin.cacheManagement.clearPage.auditHint') }}
+              </p>
+            </div>
+            <button type="button" class="btn btn-secondary" :disabled="auditLoading" @click="loadAudits(true)">
+              {{ auditLoading ? t('admin.cacheManagement.clearPage.auditRefreshing') : t('admin.cacheManagement.clearPage.auditRefresh') }}
+            </button>
+          </div>
+        </div>
+
+        <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <label class="block">
+              <span class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.cacheManagement.clearPage.auditFields.operator') }}</span>
+              <input v-model.trim="auditFilters.operatorUserId" type="number" min="1" step="1" class="input" :placeholder="t('admin.cacheManagement.clearPage.auditPlaceholders.operator')" />
+            </label>
+            <label class="block">
+              <span class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.cacheManagement.clearPage.auditFields.clearType') }}</span>
+              <select v-model="auditFilters.clearType" class="input">
+                <option value="">{{ t('common.all') }}</option>
+                <option v-for="option in clearTypeOptions" :key="`audit-${option.value}`" :value="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.cacheManagement.clearPage.auditFields.status') }}</span>
+              <select v-model="auditFilters.status" class="input">
+                <option value="">{{ t('common.all') }}</option>
+                <option v-for="option in auditStatusOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+            <label class="block">
+              <span class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.cacheManagement.clearPage.auditFields.startTime') }}</span>
+              <input v-model="auditFilters.startTime" type="datetime-local" class="input" />
+            </label>
+            <label class="block">
+              <span class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.cacheManagement.clearPage.auditFields.endTime') }}</span>
+              <input v-model="auditFilters.endTime" type="datetime-local" class="input" />
+            </label>
+          </div>
+
+          <div class="mt-4 flex flex-wrap items-center gap-2">
+            <button type="button" class="btn btn-primary" :disabled="auditLoading || Boolean(auditValidationError)" @click="applyAuditFilters">
+              {{ t('common.search') }}
+            </button>
+            <button type="button" class="btn btn-secondary" :disabled="auditLoading" @click="resetAuditFilters">
+              {{ t('common.reset') }}
+            </button>
+          </div>
+
+          <p v-if="auditValidationError" class="mt-3 text-sm text-red-600 dark:text-red-300">
+            {{ auditValidationError }}
+          </p>
+        </div>
+
+        <div class="px-6 py-5">
+          <div v-if="auditError" class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/10 dark:text-red-200">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <span>{{ auditError }}</span>
+              <button type="button" class="btn btn-secondary" :disabled="auditLoading" @click="loadAudits(true)">
+                {{ t('admin.cacheManagement.retry') }}
+              </button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-dark-700">
+              <thead class="bg-gray-50 dark:bg-dark-900/40">
+                <tr>
+                  <th v-for="column in auditColumns" :key="column.key" class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    {{ column.label }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
+                <tr v-if="auditLoading">
+                  <td :colspan="auditColumns.length" class="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    {{ t('common.loading') }}
+                  </td>
+                </tr>
+                <tr v-else-if="auditRows.length === 0">
+                  <td :colspan="auditColumns.length" class="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    {{ t('admin.cacheManagement.clearPage.auditEmpty') }}
+                  </td>
+                </tr>
+                <tr v-for="row in auditRows" :key="row.id" class="align-top">
+                  <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">#{{ row.id }}</td>
+                  <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{{ formatOperator(row.operator_user_id) }}</td>
+                  <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{{ formatDateTimeValue(row.created_at) || '--' }}</td>
+                  <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">{{ formatClearType(row.clear_type) }}</td>
+                  <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
+                    <div class="max-w-[320px] whitespace-pre-wrap break-words">{{ formatAuditScope(row) }}</div>
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
+                    <div>{{ formatInteger(row.deleted_keys) }}</div>
+                    <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.cacheManagement.clearPage.auditMatchedShort') }} {{ formatInteger(row.matched_keys) }}</div>
+                  </td>
+                  <td class="px-4 py-3 text-sm">
+                    <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-medium" :class="statusClass(row.status)">
+                      {{ formatStatus(row.status) }}
+                    </span>
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
+                    <span v-if="row.error_message">{{ row.error_message }}</span>
+                    <span v-else class="text-gray-400 dark:text-gray-500">--</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <Pagination
+          v-if="auditPagination.total > 0"
+          :page="auditPagination.page"
+          :total="auditPagination.total"
+          :page-size="auditPagination.page_size"
+          @update:page="handleAuditPageChange"
+          @update:pageSize="handleAuditPageSizeChange"
+        />
+      </div>
     </div>
 
     <BaseDialog :show="confirmDialogVisible" width="narrow" :title="t('admin.cacheManagement.clearPage.confirmTitle')" @close="closeConfirmDialog">
@@ -824,6 +952,7 @@ async function submitClear(): Promise<void> {
         ? t('admin.cacheManagement.clearPage.submitSuccess')
         : t('admin.cacheManagement.clearPage.submitPartial')
     )
+    await loadAudits(true)
     confirmDialogVisible.value = false
     confirmText.value = ''
   } catch (error) {
@@ -833,7 +962,66 @@ async function submitClear(): Promise<void> {
   }
 }
 
+async function loadAudits(resetPage = false): Promise<void> {
+  if (auditValidationError.value) {
+    auditError.value = auditValidationError.value
+    return
+  }
+
+  if (resetPage) {
+    auditPagination.page = 1
+  }
+
+  auditLoading.value = true
+  auditError.value = ''
+  try {
+    const { data } = await adminAPI.cache.listClearAudits(buildAuditParams())
+    auditRows.value = Array.isArray(data.items) ? data.items : []
+    auditPagination.total = Number(data.total || 0)
+    auditPagination.page = Number(data.page || auditPagination.page || 1)
+    auditPagination.page_size = Number(data.page_size || auditPagination.page_size || 20)
+    auditPagination.pages = 'pages' in data && typeof data.pages === 'number'
+      ? data.pages
+      : (auditPagination.total > 0 ? Math.ceil(auditPagination.total / auditPagination.page_size) : 0)
+  } catch (error) {
+    auditError.value = extractApiErrorMessage(error, t('admin.cacheManagement.clearPage.auditLoadFailed'))
+  } finally {
+    auditLoading.value = false
+  }
+}
+
+function applyAuditFilters(): void {
+  if (auditValidationError.value) {
+    auditError.value = auditValidationError.value
+    return
+  }
+  void loadAudits(true)
+}
+
+function resetAuditFilters(): void {
+  auditFilters.operatorUserId = ''
+  auditFilters.clearType = ''
+  auditFilters.status = ''
+  auditFilters.startTime = ''
+  auditFilters.endTime = ''
+  auditError.value = ''
+  auditPagination.page = 1
+  void loadAudits(true)
+}
+
+function handleAuditPageChange(page: number): void {
+  auditPagination.page = page
+  void loadAudits()
+}
+
+function handleAuditPageSizeChange(pageSize: number): void {
+  auditPagination.page = 1
+  auditPagination.page_size = pageSize
+  void loadAudits()
+}
+
 onMounted(() => {
   void loadGroups()
+  void loadAudits()
 })
 </script>
