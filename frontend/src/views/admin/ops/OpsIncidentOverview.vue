@@ -476,31 +476,6 @@
       </div>
     </BaseDialog>
 
-    <OpsErrorDetailsModal
-      :show="showErrorDetails"
-      :time-range="modalTimeRange"
-      :platform="platform"
-      :group-id="groupId"
-      :custom-start-time="customTimeStartISO"
-      :custom-end-time="customTimeEndISO"
-      :error-type="errorDetailsType"
-      :preset="errorDetailsPreset"
-      @update:show="showErrorDetails = $event"
-      @openErrorDetail="openUnifiedErrorDetail"
-    />
-  </AppLayout>
-</template>
-
-<script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useDebounceFn } from '@vueuse/core'
-import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
-import AppLayout from '@/components/layout/AppLayout.vue'
-import BaseDialog from '@/components/common/BaseDialog.vue'
-import EmptyState from '@/components/common/EmptyState.vue'
-import Icon from '@/components/icons/Icon.vue'
-import { adminAPI } from '@/api'
 import {
   opsAPI,
   type OpsAIAnalysisTaskCreateRequest,
@@ -513,7 +488,6 @@ import {
 import { useAppStore } from '@/stores'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import OpsAlertEventsCard from './components/OpsAlertEventsCard.vue'
-import OpsErrorDetailsModal, { type OpsErrorDetailsPreset } from './components/OpsErrorDetailsModal.vue'
 
 const router = useRouter()
 
@@ -521,6 +495,19 @@ type AdminGroupOption = {
   id: number
   name: string
   platform?: string
+}
+
+type OpsErrorDetailsPreset = {
+  title?: string
+  category?: string
+  impactPlatformSla?: boolean
+  phase?: string
+  owner?: string
+  view?: 'errors' | 'excluded' | 'all'
+  statusCodes?: string
+  clientFailed?: boolean
+  model?: string
+  upstreamAccountId?: number
 }
 
 const { t } = useI18n()
@@ -550,10 +537,6 @@ const aiReportLoading = ref(false)
 const aiReportError = ref('')
 const aiTaskDetail = ref<OpsAIAnalysisTaskDetailResponse | null>(null)
 const activeAITaskId = ref<number | null>(null)
-
-const showErrorDetails = ref(false)
-const errorDetailsType = ref<'request' | 'upstream'>('request')
-const errorDetailsPreset = ref<OpsErrorDetailsPreset | null>(null)
 
 const autoRefreshCountdown = ref(30)
 let autoRefreshTimer: ReturnType<typeof setInterval> | null = null
