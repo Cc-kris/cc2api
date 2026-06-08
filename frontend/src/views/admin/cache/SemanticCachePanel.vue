@@ -256,7 +256,7 @@
                         :disabled="!canManage"
                         @click="selectGrayApiKey(item)"
                       >
-                        <span class="font-medium text-gray-900 dark:text-white">{{ item.name || `#${item.id}` }}</span>
+                        <span class="font-medium text-gray-900 dark:text-white">{{ formatApiKeyOptionLabel(item.name, item.id) }}</span>
                         <span class="text-xs text-gray-500 dark:text-gray-400">#{{ item.id }}</span>
                       </button>
                     </div>
@@ -266,7 +266,7 @@
                         :key="item.id"
                         class="inline-flex items-center gap-2 rounded-full bg-primary-50 px-3 py-1 text-xs font-medium text-primary-700 dark:bg-primary-900/20 dark:text-primary-200"
                       >
-                        {{ item.name || `#${item.id}` }} · #{{ item.id }}
+                        {{ formatApiKeyOptionLabel(item.name, item.id) }} · #{{ item.id }}
                         <button type="button" :disabled="!canManage" @click="removeGrayApiKey(item.id)">×</button>
                       </span>
                     </div>
@@ -338,6 +338,7 @@ import type { SimpleApiKey } from '@/api/admin/usage'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { extractApiErrorMessage } from '@/utils/apiError'
+import { formatApiKeyOptionLabel } from '@/utils/adminSensitiveDisplay'
 
 const appStore = useAppStore()
 const authStore = useAuthStore()
@@ -499,7 +500,7 @@ async function hydrateSelectedApiKeys(): Promise<void> {
   const resolved: SimpleApiKey[] = []
   for (const id of form.gray_api_key_ids) {
     if (resolved.some((item) => item.id === id)) continue
-    resolved.push({ id, name: `#${id}`, user_id: 0 })
+    resolved.push({ id, name: '', user_id: 0 })
   }
   selectedGrayApiKeys.value = resolved
 }
