@@ -22,7 +22,7 @@
             </div>
             <h1 class="mt-4 text-2xl font-semibold text-gray-900 dark:text-white">语义缓存配置</h1>
             <p class="mt-2 max-w-3xl text-sm text-gray-600 dark:text-gray-400">
-              配置语义模型服务、命中阶段、灰度范围和质量回滚阈值；保存后新请求生效，测试连接不会修改线上配置。
+              配置语义模型服务、命中阶段、灰度范围和质量回滚阈值；保存后新请求生效，测试连接不会修改线上配置，审计记录请在语义审计页处理。
             </p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
@@ -367,7 +367,8 @@ const hasRequiredConnectionFields = computed(() => Boolean(form.semantic_model_b
 const navItems = computed(() => [
   { key: 'home', to: '/admin/settings/cache', label: '管理首页', active: false },
   { key: 'stats', to: '/admin/settings/cache/stats', label: '缓存统计', active: false },
-  { key: 'semantic', to: '/admin/settings/cache/semantic', label: '语义缓存', active: true }
+  { key: 'semantic', to: '/admin/settings/cache/semantic', label: '语义配置', active: true },
+  { key: 'audit', to: '/admin/settings/cache/semantic-audits', label: '语义审计', active: false }
 ])
 
 const stageOptions: Array<{ value: SemanticCacheStage; label: string }> = [

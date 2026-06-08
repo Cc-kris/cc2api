@@ -5971,7 +5971,7 @@ export default {
         advancedTitle: '高级策略',
         advancedDescription: '容量、压缩、淘汰、热点和成本收益页面已接入。',
         semanticTitle: '语义缓存',
-        semanticDescription: '已接入配置保存、连接测试和灰度范围设置；审计列表和反馈在后续任务继续完善。',
+        semanticDescription: '已接入配置页与语义审计页，可处理审核、反馈和灰度观察。',
       },
       summary: {
         global: '全局缓存',
@@ -6046,6 +6046,12 @@ export default {
         clear: '缓存清理',
         advanced: '高级策略',
         semantic: '语义缓存',
+        semanticAudit: '语义审计',
+      },
+
+      semanticAuditPage: {
+        title: '语义缓存审计',
+        description: '查看语义候选命中记录，执行审核和误命中反馈。',
       },
 
       advancedPage: {
