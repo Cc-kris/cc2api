@@ -531,7 +531,7 @@ async function loadConfig(force = false): Promise<void> {
   loading.value = true
   loadError.value = ''
   try {
-    const config = await adminAPI.cache.getSemanticConfig()
+    const { data: config } = await adminAPI.cache.getSemanticConfig()
     applyConfig(config)
     await hydrateSelectedApiKeys()
     rememberSaved(buildPayload())
@@ -545,7 +545,7 @@ async function loadConfig(force = false): Promise<void> {
 async function testConnection(): Promise<void> {
   testing.value = true
   try {
-    const result = await adminAPI.cache.testSemanticConfig(buildPayload())
+    const { data: result } = await adminAPI.cache.testSemanticConfig(buildPayload())
     testResult.value = result
     if (typeof result.embedding_dimension === 'number' && Number.isFinite(result.embedding_dimension)) {
       form.embedding_dimension = result.embedding_dimension
@@ -574,7 +574,7 @@ async function testConnection(): Promise<void> {
 async function saveConfig(): Promise<void> {
   saving.value = true
   try {
-    const saved = await adminAPI.cache.updateSemanticConfig(buildPayload())
+    const { data: saved } = await adminAPI.cache.updateSemanticConfig(buildPayload())
     applyConfig(saved)
     await hydrateSelectedApiKeys()
     rememberSaved(buildPayload())

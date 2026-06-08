@@ -339,8 +339,9 @@ const sanitizeCacheStatsParams = (params?: CacheStatsParams | AdvancedCacheStats
   if (typeof params.group_id === 'number' && Number.isFinite(params.group_id) && params.group_id > 0) {
     query.group_id = params.group_id
   }
-  if ('hotspot_limit' in (params || {}) && typeof params.hotspot_limit === 'number' && Number.isFinite(params.hotspot_limit) && params.hotspot_limit > 0) {
-    query.hotspot_limit = Math.min(100, Math.max(1, Math.round(params.hotspot_limit)))
+  const hotspotLimit = (params as AdvancedCacheStatsParams).hotspot_limit
+  if (typeof hotspotLimit === 'number' && Number.isFinite(hotspotLimit) && hotspotLimit > 0) {
+    query.hotspot_limit = Math.min(100, Math.max(1, Math.round(hotspotLimit)))
   }
   return Object.keys(query).length > 0 ? query : undefined
 }
@@ -370,6 +371,14 @@ export const cacheAPI = {
 
   updateConfig(data: CacheManagementConfig) {
     return apiClient.put<CacheManagementConfig>('/admin/cache/config', data)
+  },
+
+  getAdvancedConfig() {
+    return apiClient.get<AdvancedCacheConfig>('/admin/cache/advanced-config')
+  },
+
+  updateAdvancedConfig(data: AdvancedCacheConfig) {
+    return apiClient.put<AdvancedCacheConfig>('/admin/cache/advanced-config', data)
   },
 
   getSemanticConfig() {
