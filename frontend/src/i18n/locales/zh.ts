@@ -5221,6 +5221,7 @@ export default {
         noChanges: '当前没有未保存修改。',
         dirtyHint: '测试连接前会先保存当前配置。',
         readOnly: '当前账号仅可查看脱敏配置，不能修改或测试连接。',
+        noTestResult: '尚未执行测试连接。',
         cards: {
           basic: '基础配置',
           behavior: '分析行为',

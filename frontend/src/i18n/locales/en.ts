@@ -5059,6 +5059,7 @@ export default {
         noChanges: 'There are no unsaved changes.',
         dirtyHint: 'Current changes will be saved before the connection test runs.',
         readOnly: 'This account can only view the masked configuration and cannot edit or test the connection.',
+        noTestResult: 'No connection test has been run yet.',
         cards: {
           basic: 'Basic Configuration',
           behavior: 'Analysis Behavior',
