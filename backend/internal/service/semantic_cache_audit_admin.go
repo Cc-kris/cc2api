@@ -35,6 +35,7 @@ var (
 	ErrInvalidSemanticCacheAuditList     = errors.New("invalid semantic cache audit list request")
 	ErrInvalidSemanticCacheAuditReview   = errors.New("invalid semantic cache audit review request")
 	ErrInvalidSemanticCacheAuditFeedback = errors.New("invalid semantic cache audit feedback request")
+	ErrSemanticCacheAuditNotFound        = infraerrors.NotFound("SEMANTIC_CACHE_AUDIT_NOT_FOUND", "semantic cache audit not found")
 )
 
 type SemanticCacheAuditListFilter struct {

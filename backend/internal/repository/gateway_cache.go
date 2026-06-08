@@ -226,6 +226,194 @@ INSERT INTO ops_semantic_cache_audits (
 	return err
 }
 
+func (c *gatewayCache) ListSemanticCacheAudits(ctx context.Context, filter service.SemanticCacheAuditListFilter) (*service.SemanticCacheAuditListPage, error) {
+	page := &service.SemanticCacheAuditListPage{Items: []service.SemanticCacheAuditListRecord{}, Page: filter.Page, PageSize: filter.PageSize}
+	if c == nil || c.db == nil {
+		return page, nil
+	}
+
+	where := make([]string, 0, 8)
+	args := make([]any, 0, 12)
+	if filter.StartTime != nil {
+		args = append(args, *filter.StartTime)
+		where = append(where, fmt.Sprintf("a.occurred_at >= $%d", len(args)))
+	}
+	if filter.EndTime != nil {
+		args = append(args, *filter.EndTime)
+		where = append(where, fmt.Sprintf("a.occurred_at <= $%d", len(args)))
+	}
+	if strings.TrimSpace(filter.Platform) != "" {
+		args = append(args, strings.TrimSpace(filter.Platform))
+		where = append(where, fmt.Sprintf("a.platform = $%d", len(args)))
+	}
+	if strings.TrimSpace(filter.Model) != "" {
+		args = append(args, strings.TrimSpace(filter.Model))
+		where = append(where, fmt.Sprintf("a.model = $%d", len(args)))
+	}
+	if filter.APIKeyID != nil {
+		args = append(args, *filter.APIKeyID)
+		where = append(where, fmt.Sprintf("a.api_key_id = $%d", len(args)))
+	}
+	if strings.TrimSpace(filter.ReviewStatus) != "" {
+		args = append(args, strings.TrimSpace(filter.ReviewStatus))
+		where = append(where, fmt.Sprintf("a.review_status = $%d", len(args)))
+	}
+	if strings.TrimSpace(filter.Decision) != "" {
+		args = append(args, strings.TrimSpace(filter.Decision))
+		where = append(where, fmt.Sprintf("a.decision = $%d", len(args)))
+	}
+	if filter.MinSimilarity != nil {
+		args = append(args, *filter.MinSimilarity)
+		where = append(where, fmt.Sprintf("a.similarity >= $%d", len(args)))
+	}
+	if filter.MaxSimilarity != nil {
+		args = append(args, *filter.MaxSimilarity)
+		where = append(where, fmt.Sprintf("a.similarity <= $%d", len(args)))
+	}
+	whereSQL := ""
+	if len(where) > 0 {
+		whereSQL = " WHERE " + strings.Join(where, " AND ")
+	}
+
+	countSQL := "SELECT COUNT(*) FROM ops_semantic_cache_audits a" + whereSQL
+	if err := c.db.QueryRowContext(ctx, countSQL, args...).Scan(&page.Total); err != nil {
+		return nil, err
+	}
+
+	limit := filter.PageSize
+	if limit <= 0 {
+		limit = 20
+	}
+	currentPage := filter.Page
+	if currentPage <= 0 {
+		currentPage = 1
+	}
+	offset := (currentPage - 1) * limit
+	page.Page = currentPage
+	page.PageSize = limit
+
+	queryArgs := append([]any(nil), args...)
+	queryArgs = append(queryArgs, limit, offset)
+	rows, err := c.db.QueryContext(ctx, fmt.Sprintf(`
+SELECT
+  a.id, a.request_id, a.semantic_entry_id, a.occurred_at, a.platform, a.model, a.api_key_id,
+  COALESCE(k.key, ''), a.similarity, a.decision, COALESCE(a.block_reason, ''),
+  a.review_status, a.feedback_type, COALESCE(a.feedback_note, ''), a.operator_user_id,
+  COALESCE(a.auto_close_reason, ''), COALESCE(a.source_summary, ''), COALESCE(a.target_summary, ''), a.updated_at
+FROM ops_semantic_cache_audits a
+LEFT JOIN api_keys k ON a.api_key_id = k.id
+%s
+ORDER BY a.occurred_at DESC, a.id DESC
+LIMIT $%d OFFSET $%d`, whereSQL, len(queryArgs)-1, len(queryArgs)), queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var record service.SemanticCacheAuditListRecord
+		var entryID sql.NullInt64
+		var apiKeyID sql.NullInt64
+		var operatorUserID sql.NullInt64
+		if err := rows.Scan(
+			&record.ID,
+			&record.RequestID,
+			&entryID,
+			&record.OccurredAt,
+			&record.Platform,
+			&record.Model,
+			&apiKeyID,
+			&record.APIKey,
+			&record.Similarity,
+			&record.Decision,
+			&record.BlockReason,
+			&record.ReviewStatus,
+			&record.FeedbackType,
+			&record.FeedbackNote,
+			&operatorUserID,
+			&record.AutoCloseReason,
+			&record.SourceSummary,
+			&record.TargetSummary,
+			&record.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if entryID.Valid {
+			record.SemanticEntryID = &entryID.Int64
+		}
+		if apiKeyID.Valid {
+			record.APIKeyID = &apiKeyID.Int64
+		}
+		if operatorUserID.Valid {
+			record.OperatorUserID = &operatorUserID.Int64
+		}
+		page.Items = append(page.Items, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return page, nil
+}
+
+func (c *gatewayCache) UpdateSemanticCacheAuditReview(ctx context.Context, auditID int64, reviewStatus string, operatorUserID int64) (*service.SemanticCacheAuditListRecord, error) {
+	return c.updateSemanticCacheAudit(ctx, auditID, `
+UPDATE ops_semantic_cache_audits
+SET review_status = $2,
+    operator_user_id = $3,
+    updated_at = NOW()
+WHERE id = $1`, reviewStatus, operatorUserID)
+}
+
+func (c *gatewayCache) UpdateSemanticCacheAuditFeedback(ctx context.Context, auditID int64, feedbackType, feedbackNote string, operatorUserID int64) (*service.SemanticCacheAuditListRecord, error) {
+	return c.updateSemanticCacheAudit(ctx, auditID, `
+UPDATE ops_semantic_cache_audits
+SET feedback_type = $2,
+    feedback_note = NULLIF($3, ''),
+    operator_user_id = $4,
+    updated_at = NOW()
+WHERE id = $1`, feedbackType, feedbackNote, operatorUserID)
+}
+
+func (c *gatewayCache) SetSemanticCacheAuditAutoCloseReason(ctx context.Context, auditID int64, reason string) error {
+	if c == nil || c.db == nil {
+		return nil
+	}
+	res, err := c.db.ExecContext(ctx, `
+UPDATE ops_semantic_cache_audits
+SET auto_close_reason = NULLIF($2, ''),
+    updated_at = NOW()
+WHERE id = $1`, auditID, strings.TrimSpace(reason))
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return service.ErrAuditNotFound
+	}
+	return nil
+}
+
+func (c *gatewayCache) GetSemanticCacheAudit24hQualityStats(ctx context.Context, since time.Time) (*service.SemanticCacheAuditQualityStats, error) {
+	stats := &service.SemanticCacheAuditQualityStats{}
+	if c == nil || c.db == nil {
+		return stats, nil
+	}
+	err := c.db.QueryRowContext(ctx, `
+SELECT
+  COUNT(*) FILTER (WHERE decision = 'hit') AS hit_count,
+  COUNT(*) FILTER (WHERE decision = 'hit' AND feedback_type = 'complaint') AS complaint_count,
+  COUNT(*) FILTER (WHERE decision = 'hit' AND feedback_type IN ('wrong_hit', 'manual_mark')) AS error_feedback_count
+FROM ops_semantic_cache_audits
+WHERE occurred_at >= $1`, since).Scan(&stats.HitCount, &stats.ComplaintCount, &stats.ErrorFeedbackCount)
+	if err != nil {
+		return nil, err
+	}
+	return stats, nil
+}
+
 func (c *gatewayCache) touchLocalResponseCacheEntry(ctx context.Context, redisKey string, entry *service.LocalResponseCacheEntry) {
 	if c == nil || c.rdb == nil || entry == nil {
 		return
