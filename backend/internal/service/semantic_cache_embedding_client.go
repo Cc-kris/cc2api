@@ -46,34 +46,34 @@ type semanticEmbeddingHTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-type semanticEmbeddingClient struct {
+type SemanticEmbeddingClient struct {
 	settingService *SettingService
 	httpClient     semanticEmbeddingHTTPClient
 	timeout        time.Duration
 }
 
-func NewSemanticEmbeddingClient(settingService *SettingService) *semanticEmbeddingClient {
-	return &semanticEmbeddingClient{
+func NewSemanticEmbeddingClient(settingService *SettingService) *SemanticEmbeddingClient {
+	return &SemanticEmbeddingClient{
 		settingService: settingService,
 		timeout:        semanticEmbeddingDefaultTimeout,
 	}
 }
 
-func (c *semanticEmbeddingClient) SetHTTPClient(client semanticEmbeddingHTTPClient) {
+func (c *SemanticEmbeddingClient) SetHTTPClient(client semanticEmbeddingHTTPClient) {
 	if c == nil {
 		return
 	}
 	c.httpClient = client
 }
 
-func (c *semanticEmbeddingClient) SetTimeout(timeout time.Duration) {
+func (c *SemanticEmbeddingClient) SetTimeout(timeout time.Duration) {
 	if c == nil || timeout <= 0 {
 		return
 	}
 	c.timeout = timeout
 }
 
-func (c *semanticEmbeddingClient) GenerateEmbedding(ctx context.Context, input string) (*SemanticEmbeddingResult, error) {
+func (c *SemanticEmbeddingClient) GenerateEmbedding(ctx context.Context, input string) (*SemanticEmbeddingResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
