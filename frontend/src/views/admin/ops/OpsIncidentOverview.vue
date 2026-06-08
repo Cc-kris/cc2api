@@ -497,9 +497,10 @@ import {
   type OpsIncidentOverviewTimeRange,
   type OpsIncidentQuickFilter
 } from '@/api/admin/ops'
-import { useAppStore } from '@/stores'
+import { useAppStore, useAuthStore } from '@/stores'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import OpsAlertEventsCard from './components/OpsAlertEventsCard.vue'
+import { canManageManualAIAnalysis, fetchOpsAIAnalysisConfig, isManualAIAnalysisConfigured, type OpsAIAnalysisConfigSnapshot } from './utils/manualAIAnalysis'
 
 const router = useRouter()
 
@@ -524,6 +525,7 @@ type OpsErrorDetailsPreset = {
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const authStore = useAuthStore()
 
 const timeRange = ref<OpsIncidentOverviewTimeRange>('1m')
 const platform = ref('')
@@ -549,6 +551,9 @@ const aiReportLoading = ref(false)
 const aiReportError = ref('')
 const aiTaskDetail = ref<OpsAIAnalysisTaskDetailResponse | null>(null)
 const activeAITaskId = ref<number | null>(null)
+const manualAIConfig = ref<OpsAIAnalysisConfigSnapshot | null>(null)
+const manualAIConfigLoaded = ref(false)
+const manualAIConfigLoadError = ref('')
 
 
 const autoRefreshCountdown = ref(30)
@@ -665,13 +670,19 @@ const latestAnalysisStatusLabel = computed(() => {
 })
 
 const latestAnalysisStatusClass = computed(() => analysisTaskStatusClass(displayOverview.value?.latest_ai_analysis?.status || 'completed'))
+const currentViewerRole = computed(() => String((authStore.user as { role?: string } | null)?.role || '').trim().toLowerCase())
+const canRunManualAIAnalysis = computed(() => canManageManualAIAnalysis(currentViewerRole.value))
 
 const canOpenSummaryDetails = computed(() => {
   return Boolean(displayOverview.value?.quick_filters?.length)
 })
 
 const manualAIActionDisabledReason = computed(() => {
+  if (!canRunManualAIAnalysis.value) return '当前账号无权限执行此操作'
   if (activeAITaskId.value) return t('admin.ops.incidentOverview.analysisPending')
+  if (manualAIConfigLoadError.value) return manualAIConfigLoadError.value
+  if (!manualAIConfigLoaded.value) return 'AI 配置加载完成后可发起 AI 分析。'
+  if (!isManualAIAnalysisConfigured(manualAIConfig.value)) return '请先配置 AI 分析服务'
   const current = displayOverview.value
   if (!current) return t('admin.ops.incidentOverview.analysisDisabled.loading')
   if (selectedWindowMs.value > 24 * 60 * 60 * 1000) {
@@ -838,6 +849,18 @@ async function loadGroups() {
   } catch (err) {
     console.error('[OpsIncidentOverview] Failed to load groups', err)
     groups.value = []
+  }
+}
+
+async function loadManualAIAnalysisConfig() {
+  manualAIConfigLoadError.value = ''
+  try {
+    manualAIConfig.value = await fetchOpsAIAnalysisConfig()
+  } catch (err: any) {
+    manualAIConfig.value = null
+    manualAIConfigLoadError.value = err?.message || 'AI 配置加载失败，请稍后重试'
+  } finally {
+    manualAIConfigLoaded.value = true
   }
 }
 
@@ -1102,7 +1125,7 @@ function openErrorDetailsFromPreset(preset: OpsErrorDetailsPreset, type: 'reques
 
 
 onMounted(async () => {
-  await loadGroups()
+  await Promise.all([loadGroups(), loadManualAIAnalysisConfig()])
   await fetchOverview()
   startAutoRefresh()
 })

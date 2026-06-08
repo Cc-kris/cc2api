@@ -337,12 +337,14 @@ import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import { useClipboard } from '@/composables/useClipboard'
 import { opsAPI, type OpsUnifiedEntityRef, type OpsUnifiedErrorDetail } from '@/api/admin/ops'
-import { useAppStore } from '@/stores'
+import { useAppStore, useAuthStore } from '@/stores'
 import { formatDateTime } from '@/utils/format'
+import { canManageManualAIAnalysis, fetchOpsAIAnalysisConfig, isManualAIAnalysisConfigured, type OpsAIAnalysisConfigSnapshot } from './utils/manualAIAnalysis'
 
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
+const authStore = useAuthStore()
 const { copyToClipboard } = useClipboard()
 const { t } = useI18n()
 
@@ -350,6 +352,10 @@ const loading = ref(false)
 const errorMessage = ref('')
 const detail = ref<OpsUnifiedErrorDetail | null>(null)
 const rawRecordSection = ref<HTMLElement | null>(null)
+const manualAIConfig = ref<OpsAIAnalysisConfigSnapshot | null>(null)
+const manualAIConfigLoaded = ref(false)
+const manualAIConfigLoadError = ref('')
+const activeManualAITaskId = ref<number | null>(null)
 
 const detailId = computed(() => {
   const parsed = Number.parseInt(String(route.params.id || ''), 10)
@@ -360,10 +366,17 @@ const resultLabel = computed(() => errorResultLabel(detail.value?.conclusion.err
 const aiStatusLabel = computed(() => aiStatusText(detail.value?.ai_analysis.status || ''))
 const resultBadgeClass = computed(() => sameKindResultClass(detail.value?.conclusion.error_result || 'unknown'))
 const aiStatusBadgeClass = computed(() => aiStatusClass(detail.value?.ai_analysis.status || ''))
+const currentViewerRole = computed(() => String((authStore.user as { role?: string } | null)?.role || '').trim().toLowerCase())
+const canRunManualAIAnalysis = computed(() => canManageManualAIAnalysis(currentViewerRole.value))
 
 const manualAIActionDisabledReason = computed(() => {
   const status = String(detail.value?.ai_analysis.status || '').trim().toLowerCase()
+  if (!canRunManualAIAnalysis.value) return '当前账号无权限执行此操作'
   if (!detailId.value || !detail.value) return t('admin.ops.unifiedErrorDetail.aiDisabled.noDetail')
+  if (activeManualAITaskId.value) return '分析任务处理中，请稍后查看'
+  if (manualAIConfigLoadError.value) return manualAIConfigLoadError.value
+  if (!manualAIConfigLoaded.value) return 'AI 配置加载完成后可发起 AI 分析。'
+  if (!isManualAIAnalysisConfigured(manualAIConfig.value)) return '请先配置 AI 分析服务'
   if (status === 'pending' || status === 'running') return t('admin.ops.unifiedErrorDetail.aiDisabled.running')
   return ''
 })
@@ -465,8 +478,13 @@ async function fetchDetail() {
   errorMessage.value = ''
   try {
     detail.value = await opsAPI.getUnifiedErrorDetail(detailId.value)
+    const status = String(detail.value?.ai_analysis.status || '').trim().toLowerCase()
+    if (status !== 'pending' && status !== 'running') {
+      activeManualAITaskId.value = null
+    }
   } catch (error: any) {
     detail.value = null
+    activeManualAITaskId.value = null
     errorMessage.value = error?.message || t('admin.ops.failedToLoadErrorDetail')
   } finally {
     loading.value = false
@@ -525,10 +543,23 @@ async function runManualAIAnalysis() {
       time_end: end.toISOString(),
       filters
     })
+    activeManualAITaskId.value = response.task_id
     appStore.showSuccess(response.message || t('admin.ops.incidentOverview.analysisSubmitted'))
     await fetchDetail()
   } catch (error: any) {
     appStore.showError(error?.message || t('admin.ops.incidentOverview.analysisCreateFailed'))
+  }
+}
+
+async function loadManualAIAnalysisConfig() {
+  manualAIConfigLoadError.value = ''
+  try {
+    manualAIConfig.value = await fetchOpsAIAnalysisConfig()
+  } catch (err: any) {
+    manualAIConfig.value = null
+    manualAIConfigLoadError.value = err?.message || 'AI 配置加载失败，请稍后重试'
+  } finally {
+    manualAIConfigLoaded.value = true
   }
 }
 
@@ -540,7 +571,8 @@ function openSameKindError(id: number) {
 watch(
   () => detailId.value,
   () => {
-    fetchDetail()
+    void fetchDetail()
+    void loadManualAIAnalysisConfig()
   },
   { immediate: true }
 )

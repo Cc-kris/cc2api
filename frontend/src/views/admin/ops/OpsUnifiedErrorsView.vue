@@ -315,7 +315,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -396,6 +396,7 @@ const manualAIConfig = ref<OpsAIAnalysisConfigSnapshot | null>(null)
 const manualAIConfigLoaded = ref(false)
 const manualAIConfigLoadError = ref('')
 const activeManualAITaskId = ref<number | null>(null)
+let manualAIPollTimer: ReturnType<typeof setTimeout> | null = null
 
 const timeRange = ref('30m')
 const customStartInput = ref('')
@@ -755,6 +756,7 @@ async function runManualAIAnalysis() {
     activeManualAITaskId.value = result.task_id
     appStore.showSuccess(result.message || 'AI 分析任务已提交')
     await fetchErrors()
+    startManualAITaskPolling(result.task_id)
   } catch (err: any) {
     appStore.showError(err?.message || '创建 AI 分析任务失败')
   } finally {
@@ -900,10 +902,49 @@ async function loadManualAIAnalysisConfig() {
   }
 }
 
+function stopManualAITaskPolling() {
+  if (manualAIPollTimer) {
+    clearTimeout(manualAIPollTimer)
+    manualAIPollTimer = null
+  }
+}
+
+async function pollManualAITask(taskId: number) {
+  try {
+    const detail = await opsAPI.getAIAnalysisTaskDetail(taskId)
+    const status = String(detail.task.status || '').trim().toLowerCase()
+    if (status === 'pending' || status === 'running') {
+      manualAIPollTimer = setTimeout(() => {
+        void pollManualAITask(taskId)
+      }, 5000)
+      return
+    }
+  } catch {
+    // keep polling best-effort; backend errors should not break the page state
+    manualAIPollTimer = setTimeout(() => {
+      void pollManualAITask(taskId)
+    }, 5000)
+    return
+  }
+
+  activeManualAITaskId.value = null
+  stopManualAITaskPolling()
+  await fetchErrors()
+}
+
+function startManualAITaskPolling(taskId: number) {
+  stopManualAITaskPolling()
+  void pollManualAITask(taskId)
+}
+
 onMounted(async () => {
   initializeFromRoute()
   await Promise.all([loadGroups(), loadManualAIAnalysisConfig()])
   await fetchErrors()
+})
+
+onUnmounted(() => {
+  stopManualAITaskPolling()
 })
 </script>
 
