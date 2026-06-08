@@ -29,6 +29,102 @@ export interface CacheManagementConfig {
 }
 
 
+
+export interface AdvancedCacheGrayScope {
+  api_key_ids: number[]
+  group_ids: number[]
+  models: string[]
+}
+
+export interface AdvancedCacheConfig {
+  advanced_cache_enabled: boolean
+  gray_scope: AdvancedCacheGrayScope
+  redis_capacity_mb: number
+  memory_safe_limit_mb: number
+  compression_enabled: boolean
+  compression_threshold_kb: number
+  eviction_policy: 'LRU' | 'LFU' | 'W-TinyLFU' | string
+  hot_window: '15m' | '1h' | '6h' | '24h' | string
+  hot_threshold: number
+  cost_saving_enabled: boolean
+  upstream_prompt_cache_enabled: boolean
+}
+
+export interface AdvancedCacheStatsParams extends CacheStatsParams {
+  hotspot_limit?: number
+}
+
+export interface AdvancedCacheNameRef {
+  id: number
+  name?: string
+  display?: string
+}
+
+export interface AdvancedCacheCapacityStats {
+  current_used_bytes: number
+  capacity_limit_bytes: number
+  capacity_usage_rate: number
+  memory_safe_limit_bytes: number
+  eviction_policy: string
+  recent_eviction_count: number
+  last_evicted_at?: string | null
+}
+
+export interface AdvancedCacheCompressionStats {
+  enabled: boolean
+  raw_response_bytes: number
+  stored_response_bytes: number
+  compression_saved_bytes: number
+  compression_saved_rate: number
+  compressed_entry_count: number
+  compression_failed_count: number
+  decompression_failed_count: number
+}
+
+export interface AdvancedCacheHotspot {
+  rank: number
+  platform: string
+  model: string
+  group: AdvancedCacheNameRef
+  api_key: AdvancedCacheNameRef
+  hit_count: number
+  hit_tokens: number
+  last_hit_at?: string | null
+}
+
+export interface AdvancedCacheSavings {
+  local_response_cache_saved_tokens: number
+  local_response_cache_saved_amount?: string | null
+  upstream_prompt_cache_read_tokens: number
+  upstream_prompt_cache_write_tokens: number
+  upstream_prompt_cache_saved_amount?: string | null
+  total_estimated_saved_amount?: string | null
+  price_missing: boolean
+  price_missing_models: string[]
+}
+
+export interface AdvancedCacheEmptyStates {
+  hotspots: boolean
+  prompt_cache: boolean
+  price: boolean
+}
+
+export interface AdvancedCacheFallback {
+  advanced_cache_fallback_active: boolean
+  fallback_reason?: string | null
+  last_fallback_at?: string | null
+}
+
+export interface AdvancedCacheStatsResponse {
+  capacity: AdvancedCacheCapacityStats
+  compression: AdvancedCacheCompressionStats
+  hotspots: AdvancedCacheHotspot[]
+  savings: AdvancedCacheSavings
+  empty_states: AdvancedCacheEmptyStates
+  fallback: AdvancedCacheFallback
+  updated_at: string
+}
+
 export interface CacheStatsParams {
   time_range?: string
   start_time?: string
@@ -160,7 +256,7 @@ export const defaultCacheManagementConfig = (): CacheManagementConfig => ({
   }
 })
 
-const sanitizeCacheStatsParams = (params?: CacheStatsParams): Record<string, string | number> | undefined => {
+const sanitizeCacheStatsParams = (params?: CacheStatsParams | AdvancedCacheStatsParams): Record<string, string | number> | undefined => {
   if (!params) return undefined
 
   const query: Record<string, string | number> = {}
@@ -185,8 +281,29 @@ const sanitizeCacheStatsParams = (params?: CacheStatsParams): Record<string, str
   if (typeof params.group_id === 'number' && Number.isFinite(params.group_id) && params.group_id > 0) {
     query.group_id = params.group_id
   }
+  if ('hotspot_limit' in (params || {}) && typeof params.hotspot_limit === 'number' && Number.isFinite(params.hotspot_limit) && params.hotspot_limit > 0) {
+    query.hotspot_limit = Math.min(100, Math.max(1, Math.round(params.hotspot_limit)))
+  }
   return Object.keys(query).length > 0 ? query : undefined
 }
+
+export const defaultAdvancedCacheConfig = (): AdvancedCacheConfig => ({
+  advanced_cache_enabled: false,
+  gray_scope: {
+    api_key_ids: [],
+    group_ids: [],
+    models: []
+  },
+  redis_capacity_mb: 512,
+  memory_safe_limit_mb: 2048,
+  compression_enabled: true,
+  compression_threshold_kb: 64,
+  eviction_policy: 'LRU',
+  hot_window: '1h',
+  hot_threshold: 5,
+  cost_saving_enabled: true,
+  upstream_prompt_cache_enabled: true
+})
 
 export const cacheAPI = {
   getConfig() {
@@ -197,8 +314,20 @@ export const cacheAPI = {
     return apiClient.put<CacheManagementConfig>('/admin/cache/config', data)
   },
 
+  getAdvancedConfig() {
+    return apiClient.get<AdvancedCacheConfig>('/admin/cache/advanced-config')
+  },
+
+  updateAdvancedConfig(data: AdvancedCacheConfig) {
+    return apiClient.put<AdvancedCacheConfig>('/admin/cache/advanced-config', data)
+  },
+
   getStats(params?: CacheStatsParams) {
     return apiClient.get<CacheStatsResponse>('/admin/cache/stats', { params: sanitizeCacheStatsParams(params) })
+  },
+
+  getAdvancedStats(params?: AdvancedCacheStatsParams) {
+    return apiClient.get<AdvancedCacheStatsResponse>('/admin/cache/advanced-stats', { params: sanitizeCacheStatsParams(params) })
   },
 
   exportStats(params?: CacheStatsParams) {
