@@ -718,7 +718,7 @@ const customMenuItemsForAdmin = computed(() => {
 const adminNavItems = computed((): NavItem[] => {
   const baseItems: NavItem[] = [
     { path: '/admin/dashboard', label: t('nav.dashboard'), icon: DashboardIcon },
-    { path: '/admin/ops', label: t('nav.ops'), icon: ChartIcon, featureFlag: flagOpsMonitoring },
+    { path: '/admin/ops/overview', label: t('nav.ops'), icon: ChartIcon, featureFlag: flagOpsMonitoring },
     { path: '/admin/users', label: t('nav.users'), icon: UsersIcon, hideInSimpleMode: true },
     { path: '/admin/groups', label: t('nav.groups'), icon: FolderIcon, hideInSimpleMode: true },
     {
@@ -838,8 +838,14 @@ function handleMenuItemClick(itemPath: string) {
   }
 }
 
+function normalizeNavPath(path: string): string {
+  return path === '/admin/ops' ? '/admin/ops/overview' : path
+}
+
 function isActive(path: string): boolean {
-  return route.path === path || route.path.startsWith(path + '/')
+  const currentPath = normalizeNavPath(route.path)
+  const targetPath = normalizeNavPath(path)
+  return currentPath === targetPath || currentPath.startsWith(targetPath + '/')
 }
 
 function isGroupActive(item: NavItem): boolean {
