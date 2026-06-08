@@ -109,7 +109,6 @@ func registerCacheManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) 
 		cache.GET("/config", h.Admin.CacheConfig.GetConfig)
 		cache.PUT("/config", h.Admin.CacheConfig.UpdateConfig)
 		cache.GET("/stats", h.Admin.CacheStats.GetStats)
-		cache.POST("/clear", h.Admin.CacheConfig.Clear)
 	}
 }
 
