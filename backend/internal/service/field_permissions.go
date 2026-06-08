@@ -61,6 +61,60 @@ func canViewRevenueDashboard(role string) bool {
 	}
 }
 
+func canViewCacheConfig(role string) bool {
+	switch normalizeFieldPermissionRole(role) {
+	case fieldPermissionOwner, fieldPermissionOps:
+		return true
+	default:
+		return false
+	}
+}
+
+func canManageCacheConfig(role string) bool {
+	return normalizeFieldPermissionRole(role) == fieldPermissionOwner
+}
+
+func canClearCache(role string) bool {
+	return normalizeFieldPermissionRole(role) == fieldPermissionOwner
+}
+
+func canViewCacheClearAudits(role string) bool {
+	switch normalizeFieldPermissionRole(role) {
+	case fieldPermissionOwner, fieldPermissionOps:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *SettingService) GetCacheManagementConfigForRole(ctx context.Context, viewerRole string) (CacheManagementConfig, error) {
+	if !canViewCacheConfig(viewerRole) {
+		return CacheManagementConfig{}, nil
+	}
+	return s.GetCacheManagementConfig(ctx)
+}
+
+func (s *SettingService) UpdateCacheManagementConfigForRole(ctx context.Context, cfg CacheManagementConfig, viewerRole string) (CacheManagementConfig, error) {
+	if !canManageCacheConfig(viewerRole) {
+		return CacheManagementConfig{}, ErrInsufficientPerms
+	}
+	return s.UpdateCacheManagementConfig(ctx, cfg)
+}
+
+func (s *SettingService) GetAdvancedCacheConfigForRole(ctx context.Context, viewerRole string) (AdvancedCacheConfig, error) {
+	if !canViewCacheConfig(viewerRole) {
+		return AdvancedCacheConfig{}, nil
+	}
+	return s.GetAdvancedCacheConfig(ctx)
+}
+
+func (s *SettingService) UpdateAdvancedCacheConfigForRole(ctx context.Context, cfg AdvancedCacheConfig, viewerRole string) (AdvancedCacheConfig, error) {
+	if !canManageCacheConfig(viewerRole) {
+		return AdvancedCacheConfig{}, ErrInsufficientPerms
+	}
+	return s.UpdateAdvancedCacheConfig(ctx, cfg)
+}
+
 func viewerRoleFromCacheStatsFilter(filter *CacheStatsFilter) string {
 	if filter == nil {
 		return ""

@@ -44,6 +44,7 @@ type LocalResponseCacheClearRequest struct {
 	Scope          LocalResponseCacheClearScope `json:"scope"`
 	ConfirmText    string                       `json:"confirm_text"`
 	OperatorUserID *int64                       `json:"-"`
+	ViewerRole     string                       `json:"-"`
 }
 
 type LocalResponseCacheClearResult struct {
@@ -85,6 +86,7 @@ type LocalResponseCacheClearAuditFilter struct {
 	OperatorUserID *int64
 	ClearType      string
 	Status         string
+	ViewerRole     string
 }
 
 type LocalResponseCacheClearAuditPage struct {
@@ -104,6 +106,9 @@ type LocalResponseCacheClearAuditStore interface {
 }
 
 func (s *OpenAIGatewayService) ClearLocalResponseCache(ctx context.Context, req LocalResponseCacheClearRequest) (*LocalResponseCacheClearResult, error) {
+	if !canClearCache(req.ViewerRole) {
+		return nil, ErrInvalidLocalResponseCacheClear
+	}
 	req.ClearType = strings.TrimSpace(req.ClearType)
 	if err := validateLocalResponseCacheClearRequest(req); err != nil {
 		return nil, err
@@ -146,6 +151,9 @@ func (s *OpenAIGatewayService) ClearLocalResponseCache(ctx context.Context, req 
 }
 
 func (s *OpenAIGatewayService) ListLocalResponseCacheClearAudits(ctx context.Context, filter LocalResponseCacheClearAuditFilter) (*LocalResponseCacheClearAuditPage, error) {
+	if !canViewCacheClearAudits(filter.ViewerRole) {
+		return &LocalResponseCacheClearAuditPage{Items: []LocalResponseCacheClearAuditRecord{}}, nil
+	}
 	filter.ClearType = strings.TrimSpace(filter.ClearType)
 	filter.Status = strings.TrimSpace(filter.Status)
 	normalized, err := normalizeLocalResponseCacheClearAuditFilter(filter)

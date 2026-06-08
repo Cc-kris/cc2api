@@ -30,7 +30,8 @@ func NewCacheConfigHandler(settingService *service.SettingService, openAIGateway
 }
 
 func (h *CacheConfigHandler) GetConfig(c *gin.Context) {
-	cfg, err := h.settingService.GetCacheManagementConfig(c.Request.Context())
+	role, _ := middleware.GetUserRoleFromContext(c)
+	cfg, err := h.settingService.GetCacheManagementConfigForRole(c.Request.Context(), role)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -44,7 +45,8 @@ func (h *CacheConfigHandler) UpdateConfig(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
-	cfg, err := h.settingService.UpdateCacheManagementConfig(c.Request.Context(), req)
+	role, _ := middleware.GetUserRoleFromContext(c)
+	cfg, err := h.settingService.UpdateCacheManagementConfigForRole(c.Request.Context(), req, role)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -57,7 +59,8 @@ func (h *CacheConfigHandler) GetAdvancedConfig(c *gin.Context) {
 		response.Error(c, http.StatusServiceUnavailable, "Advanced cache config service is unavailable")
 		return
 	}
-	cfg, err := h.settingService.GetAdvancedCacheConfig(c.Request.Context())
+	role, _ := middleware.GetUserRoleFromContext(c)
+	cfg, err := h.settingService.GetAdvancedCacheConfigForRole(c.Request.Context(), role)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -75,7 +78,8 @@ func (h *CacheConfigHandler) UpdateAdvancedConfig(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
-	cfg, err := h.settingService.UpdateAdvancedCacheConfig(c.Request.Context(), req)
+	role, _ := middleware.GetUserRoleFromContext(c)
+	cfg, err := h.settingService.UpdateAdvancedCacheConfigForRole(c.Request.Context(), req, role)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -92,6 +96,7 @@ func (h *CacheConfigHandler) Clear(c *gin.Context) {
 	if subject, ok := middleware.GetAuthSubjectFromContext(c); ok && subject.UserID > 0 {
 		req.OperatorUserID = &subject.UserID
 	}
+	req.ViewerRole, _ = middleware.GetUserRoleFromContext(c)
 	if h.openAIGatewayService == nil {
 		response.Error(c, http.StatusInternalServerError, "Local response cache clear unavailable")
 		return
@@ -126,6 +131,7 @@ func (h *CacheConfigHandler) ListClearAudits(c *gin.Context) {
 		response.BadRequest(c, err.Error())
 		return
 	}
+	filter.ViewerRole, _ = middleware.GetUserRoleFromContext(c)
 	page, err := h.openAIGatewayService.ListLocalResponseCacheClearAudits(c.Request.Context(), filter)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidLocalResponseCacheAuditList) {
