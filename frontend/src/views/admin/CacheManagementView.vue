@@ -15,6 +15,15 @@
             <button type="button" class="btn btn-secondary" :disabled="loading || saving" @click="loadConfig(true)">
               {{ t('admin.cacheManagement.refresh') }}
             </button>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :disabled="exportButtonDisabled"
+              :title="exportButtonTitle || undefined"
+              @click="exportStats"
+            >
+              {{ exporting ? t('admin.cacheManagement.exporting') : t('admin.cacheManagement.export') }}
+            </button>
             <button type="button" class="btn btn-secondary" :disabled="saving || !dirty" @click="resetToLoaded">
               {{ t('admin.cacheManagement.resetChanges') }}
             </button>
@@ -28,6 +37,10 @@
             </button>
           </div>
         </div>
+      </div>
+
+      <div class="-mt-2 text-xs text-gray-500 dark:text-gray-400">
+        {{ exportHint }}
       </div>
 
       <div class="grid grid-cols-1 gap-3 xl:grid-cols-5">
@@ -292,6 +305,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Toggle from '@/components/common/Toggle.vue'
 import { adminAPI } from '@/api/admin'
@@ -303,9 +317,11 @@ import { extractApiErrorMessage } from '@/utils/apiError'
 const { t } = useI18n()
 const appStore = useAppStore()
 const authStore = useAuthStore()
+const route = useRoute()
 
 const loading = ref(true)
 const saving = ref(false)
+const exporting = ref(false)
 const loadError = ref('')
 const allowlistText = ref('')
 const blocklistText = ref('')
@@ -313,8 +329,18 @@ const lastSavedSnapshot = ref('')
 
 const form = reactive<CacheManagementConfig>(defaultCacheManagementConfig())
 
+const cacheStatsExportRoles = new Set(['admin', 'operator', 'operation', 'operations'])
+
 const viewerRole = computed(() => String((authStore.user as { role?: string } | null)?.role || '').trim().toLowerCase())
 const canManage = computed(() => viewerRole.value === '' || viewerRole.value === 'admin')
+const canExport = computed(() => viewerRole.value === '' || cacheStatsExportRoles.has(viewerRole.value))
+const exportButtonDisabled = computed(() => loading.value || exporting.value || !canExport.value)
+const exportButtonTitle = computed(() => {
+  if (exporting.value) return t('admin.cacheManagement.exporting')
+  if (!canExport.value) return t('admin.cacheManagement.exportNoPermission')
+  return t('admin.cacheManagement.exportHint')
+})
+const exportHint = computed(() => canExport.value ? t('admin.cacheManagement.exportHint') : t('admin.cacheManagement.exportHintReadonly'))
 const bypassHeaderValue = computed(() => `${form.bypass_header.name}: ${form.bypass_header.value}`)
 
 const sections = computed(() => [
@@ -471,6 +497,84 @@ function formatBytes(bytes: number): string {
     return `${(bytes / 1024).toFixed(bytes % 1024 === 0 ? 0 : 1)} KB`
   }
   return `${bytes} B`
+}
+
+function buildCacheStatsExportFilename(): string {
+  const now = new Date()
+  const pad2 = (value: number) => String(value).padStart(2, '0')
+  return `cache-stats-${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}.csv`
+}
+
+function firstRouteQueryValue(value: unknown): string | undefined {
+  if (Array.isArray(value)) return typeof value[0] === 'string' && value[0].trim() ? value[0].trim() : undefined
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function parseOptionalPositiveInt(value: string | undefined): number | undefined {
+  if (!value) return undefined
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
+
+function buildStatsExportParams() {
+  return {
+    time_range: firstRouteQueryValue(route.query.time_range),
+    start_time: firstRouteQueryValue(route.query.start_time),
+    end_time: firstRouteQueryValue(route.query.end_time),
+    platform: firstRouteQueryValue(route.query.platform),
+    model: firstRouteQueryValue(route.query.model),
+    api_key_id: parseOptionalPositiveInt(firstRouteQueryValue(route.query.api_key_id)),
+    group_id: parseOptionalPositiveInt(firstRouteQueryValue(route.query.group_id))
+  }
+}
+
+async function extractBlobErrorMessage(error: unknown, fallback: string): Promise<string> {
+  const blob = (error as { response?: { data?: unknown } } | null)?.response?.data
+  if (blob instanceof Blob) {
+    try {
+      const text = await blob.text()
+      if (text.trim()) {
+        try {
+          const parsed = JSON.parse(text) as { message?: string, detail?: string, error?: string }
+          if (typeof parsed.message === 'string' && parsed.message.trim()) return parsed.message.trim()
+          if (typeof parsed.detail === 'string' && parsed.detail.trim()) return parsed.detail.trim()
+          if (typeof parsed.error === 'string' && parsed.error.trim()) return parsed.error.trim()
+        } catch {
+          return text.trim()
+        }
+      }
+    } catch {
+      // fall through to generic extraction below
+    }
+  }
+
+  return extractApiErrorMessage(error, fallback)
+}
+
+async function exportStats(): Promise<void> {
+  if (exporting.value) return
+  if (!canExport.value) {
+    appStore.showError(t('admin.cacheManagement.exportNoPermission'))
+    return
+  }
+
+  exporting.value = true
+  try {
+    const response = await adminAPI.cache.exportStats(buildStatsExportParams())
+    const url = window.URL.createObjectURL(response.data)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = buildCacheStatsExportFilename()
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    appStore.showSuccess(t('admin.cacheManagement.exportSuccess'))
+  } catch (error) {
+    appStore.showError(await extractBlobErrorMessage(error, t('admin.cacheManagement.exportFailed')))
+  } finally {
+    exporting.value = false
+  }
 }
 
 async function loadConfig(force = false): Promise<void> {

@@ -27,6 +27,16 @@ export interface CacheManagementConfig {
   bypass_header: CacheManagementBypassHeader
 }
 
+export interface CacheStatsExportParams {
+  time_range?: string
+  start_time?: string
+  end_time?: string
+  platform?: string
+  model?: string
+  api_key_id?: number
+  group_id?: number
+}
+
 export const defaultCacheManagementConfig = (): CacheManagementConfig => ({
   global_enabled: false,
   platforms: {
@@ -53,6 +63,13 @@ export const cacheAPI = {
 
   updateConfig(data: CacheManagementConfig) {
     return apiClient.put<CacheManagementConfig>('/admin/cache/config', data)
+  },
+
+  exportStats(params?: CacheStatsExportParams) {
+    return apiClient.get<Blob>('/admin/cache/stats/export', {
+      params,
+      responseType: 'blob'
+    })
   }
 }
 
