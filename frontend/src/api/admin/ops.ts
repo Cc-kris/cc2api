@@ -1794,6 +1794,7 @@ export const opsAPI = {
   deleteAlertRule,
   createAIAnalysisTask,
   getAIAnalysisTaskDetail,
+  updateAIAnalysisReportFeedback,
   getAIAnalysisConfig,
   updateAIAnalysisConfig,
   testAIAnalysisConnection,
