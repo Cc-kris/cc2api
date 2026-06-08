@@ -6,20 +6,15 @@ import (
 )
 
 type CacheStatsFilter struct {
-	StartTime    time.Time
-	EndTime      time.Time
-	Platform     string
-	Model        string
-	APIKeyID     *int64
-	GroupID      *int64
-	HotspotLimit int
-}
-
-type PromptCacheStatsRaw struct {
-	ReadTokens           int64
-	WriteTokens          int64
-	EstimatedSavedAmount string
-	PriceMissingModels   []string
+	StartTime time.Time
+	EndTime   time.Time
+	Platform  string
+	Model     string
+	APIKeyID  *int64
+	GroupID   *int64
+	// ViewerRole is the current admin-side viewer role. It keeps field-level
+	// filtering in the service layer instead of relying only on route guards.
+	ViewerRole string
 }
 
 type CacheStatsRawRow struct {

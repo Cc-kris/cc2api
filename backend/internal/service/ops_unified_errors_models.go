@@ -38,6 +38,7 @@ type OpsUnifiedErrorListFilter struct {
 	SortOrder string
 	Page      int
 	PageSize  int
+	ViewerRole string
 }
 
 type OpsUnifiedErrorExportResult struct {

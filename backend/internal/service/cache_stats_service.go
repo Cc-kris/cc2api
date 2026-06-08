@@ -32,6 +32,9 @@ func (s *CacheStatsService) GetStats(ctx context.Context, filter *CacheStatsFilt
 		BypassReasons:    []CacheStatsReasonRow{},
 		StoreSkipReasons: []CacheStatsReasonRow{},
 	}
+	if !canViewCacheStats(viewerRoleFromCacheStatsFilter(filter)) {
+		return resp, nil
+	}
 	if s == nil || s.repo == nil {
 		return resp, nil
 	}
@@ -82,6 +85,9 @@ func (s *CacheStatsService) GetStats(ctx context.Context, filter *CacheStatsFilt
 }
 
 func (s *CacheStatsService) ExportCSV(ctx context.Context, filter *CacheStatsFilter) ([]byte, error) {
+	if !canExportCacheStats(viewerRoleFromCacheStatsFilter(filter)) {
+		return nil, ErrCacheStatsExportEmpty
+	}
 	stats, err := s.GetStats(ctx, filter)
 	if err != nil {
 		return nil, err
