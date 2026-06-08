@@ -2,8 +2,10 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
+import Input from '@/components/common/Input.vue'
 import Select from '@/components/common/Select.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import TextArea from '@/components/common/TextArea.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { opsAPI, type AlertEventsQuery } from '@/api/admin/ops'
 import type { AlertEvent } from '../types'
@@ -26,6 +28,8 @@ const detailLoading = ref(false)
 const detailActionLoading = ref(false)
 const historyLoading = ref(false)
 const history = ref<AlertEvent[]>([])
+const actionNote = ref('')
+const processingAction = ref('')
 const historyRange = ref('7d')
 const historyRangeOptions = computed(() => [
   { value: '7d', label: t('admin.ops.timeRange.7d') },
@@ -64,8 +68,11 @@ const status = ref<string>('')
 const statusOptions = computed(() => [
   { value: '', label: t('common.all') },
   { value: 'firing', label: t('admin.ops.alertEvents.status.firing') },
-  { value: 'resolved', label: t('admin.ops.alertEvents.status.resolved') },
-  { value: 'manual_resolved', label: t('admin.ops.alertEvents.status.manualResolved') }
+  { value: 'acknowledged', label: t('admin.ops.alertEvents.status.acknowledged') },
+  { value: 'processing', label: t('admin.ops.alertEvents.status.processing') },
+  { value: 'recovered', label: t('admin.ops.alertEvents.status.recovered') },
+  { value: 'closed', label: t('admin.ops.alertEvents.status.closed') },
+  { value: 'silenced', label: t('admin.ops.alertEvents.status.silenced') }
 ])
 
 const emailSent = ref<string>('')
@@ -165,16 +172,16 @@ function formatDurationLabel(event: AlertEvent): string {
     const resolvedAt = new Date(resolvedAtStr)
     if (!Number.isNaN(resolvedAt.getTime())) {
       const ms = resolvedAt.getTime() - firedAt.getTime()
-      const prefix = status === 'manual_resolved'
-        ? t('admin.ops.alertEvents.status.manualResolved')
-        : t('admin.ops.alertEvents.status.resolved')
+      const prefix = status === 'closed' || status === 'manual_resolved'
+        ? t('admin.ops.alertEvents.status.closed')
+        : t('admin.ops.alertEvents.status.recovered')
       return `${prefix} ${formatDurationMs(ms)}`
     }
   }
 
   const now = Date.now()
   const ms = now - firedAt.getTime()
-  return `${t('admin.ops.alertEvents.status.firing')} ${formatDurationMs(ms)}`
+  return `${formatStatusLabel(event.status)} ${formatDurationMs(ms)}`
 }
 
 function formatDimensionsSummary(event: AlertEvent): string {
@@ -192,6 +199,8 @@ function closeDetail() {
   showDetail.value = false
   selected.value = null
   history.value = []
+  actionNote.value = ''
+  processingAction.value = ''
 }
 
 async function openDetail(row: AlertEvent) {
@@ -203,6 +212,8 @@ async function openDetail(row: AlertEvent) {
   try {
     const detail = await opsAPI.getAlertEvent(row.id)
     selected.value = detail
+    actionNote.value = ''
+    processingAction.value = ''
   } catch (err: any) {
     console.error('[OpsAlertEventsCard] Failed to load alert detail', err)
     appStore.showError(err?.response?.data?.detail || t('admin.ops.alertEvents.detail.loadFailed'))
@@ -278,10 +289,18 @@ async function silenceAlert() {
       group_id: groupId ?? undefined,
       region: region ?? undefined,
       until: durationToUntilRFC3339(silenceDuration.value),
-      reason: `silence from UI (${silenceDuration.value})`
+      reason: actionNote.value.trim() || `silence from UI (${silenceDuration.value})`
+    })
+    await opsAPI.updateAlertEventStatus(ev.id, {
+      status: 'silenced',
+      note: actionNote.value.trim() || undefined
     })
 
     appStore.showSuccess(t('admin.ops.alertEvents.detail.silenceSuccess'))
+    const detail = await opsAPI.getAlertEvent(ev.id)
+    selected.value = detail
+    await loadFirstPage()
+    await loadHistory()
   } catch (err: any) {
     console.error('[OpsAlertEventsCard] Failed to silence alert', err)
     appStore.showError(err?.response?.data?.detail || t('admin.ops.alertEvents.detail.silenceFailed'))
@@ -290,22 +309,39 @@ async function silenceAlert() {
   }
 }
 
-async function manualResolve() {
-  if (!selected.value) return
+async function submitStatusAction(status: 'acknowledged' | 'processing' | 'closed') {
+  const ev = selected.value
+  if (!ev) return
   if (detailActionLoading.value) return
   detailActionLoading.value = true
   try {
-    await opsAPI.updateAlertEventStatus(selected.value.id, 'manual_resolved')
-    appStore.showSuccess(t('admin.ops.alertEvents.detail.manualResolvedSuccess'))
+    await opsAPI.updateAlertEventStatus(ev.id, {
+      status,
+      note: actionNote.value.trim() || undefined,
+      processing_action: status === 'processing' ? processingAction.value.trim() || undefined : undefined
+    })
 
-    // Refresh detail + first page to reflect new status
-    const detail = await opsAPI.getAlertEvent(selected.value.id)
+    if (status === 'acknowledged') {
+      appStore.showSuccess(t('admin.ops.alertEvents.detail.acknowledgeSuccess'))
+    } else if (status === 'processing') {
+      appStore.showSuccess(t('admin.ops.alertEvents.detail.processingSuccess'))
+    } else {
+      appStore.showSuccess(t('admin.ops.alertEvents.detail.closeSuccess'))
+    }
+
+    const detail = await opsAPI.getAlertEvent(ev.id)
     selected.value = detail
     await loadFirstPage()
     await loadHistory()
   } catch (err: any) {
-    console.error('[OpsAlertEventsCard] Failed to resolve alert', err)
-    appStore.showError(err?.response?.data?.detail || t('admin.ops.alertEvents.detail.manualResolvedFailed'))
+    console.error('[OpsAlertEventsCard] Failed to update alert status', err)
+    if (status === 'acknowledged') {
+      appStore.showError(err?.response?.data?.detail || t('admin.ops.alertEvents.detail.acknowledgeFailed'))
+    } else if (status === 'processing') {
+      appStore.showError(err?.response?.data?.detail || t('admin.ops.alertEvents.detail.processingFailed'))
+    } else {
+      appStore.showError(err?.response?.data?.detail || t('admin.ops.alertEvents.detail.closeFailed'))
+    }
   } finally {
     detailActionLoading.value = false
   }
@@ -337,8 +373,11 @@ function severityBadgeClass(severity: string | undefined): string {
 function statusBadgeClass(status: string | undefined): string {
   const s = String(status || '').trim().toLowerCase()
   if (s === 'firing') return 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-900/30 dark:text-red-300 dark:ring-red-500/30'
-  if (s === 'resolved') return 'bg-green-50 text-green-700 ring-green-600/20 dark:bg-green-900/30 dark:text-green-300 dark:ring-green-500/30'
-  if (s === 'manual_resolved') return 'bg-slate-50 text-slate-700 ring-slate-600/20 dark:bg-slate-900/30 dark:text-slate-300 dark:ring-slate-500/30'
+  if (s === 'acknowledged') return 'bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-900/30 dark:text-blue-300 dark:ring-blue-500/30'
+  if (s === 'processing') return 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-300 dark:ring-amber-500/30'
+  if (s === 'recovered' || s === 'resolved') return 'bg-green-50 text-green-700 ring-green-600/20 dark:bg-green-900/30 dark:text-green-300 dark:ring-green-500/30'
+  if (s === 'closed' || s === 'manual_resolved') return 'bg-slate-50 text-slate-700 ring-slate-600/20 dark:bg-slate-900/30 dark:text-slate-300 dark:ring-slate-500/30'
+  if (s === 'silenced') return 'bg-purple-50 text-purple-700 ring-purple-600/20 dark:bg-purple-900/30 dark:text-purple-300 dark:ring-purple-500/30'
   return 'bg-gray-50 text-gray-700 ring-gray-600/20 dark:bg-gray-900/30 dark:text-gray-300 dark:ring-gray-500/30'
 }
 
@@ -346,9 +385,32 @@ function formatStatusLabel(status: string | undefined): string {
   const s = String(status || '').trim().toLowerCase()
   if (!s) return '-'
   if (s === 'firing') return t('admin.ops.alertEvents.status.firing')
-  if (s === 'resolved') return t('admin.ops.alertEvents.status.resolved')
-  if (s === 'manual_resolved') return t('admin.ops.alertEvents.status.manualResolved')
+  if (s === 'acknowledged') return t('admin.ops.alertEvents.status.acknowledged')
+  if (s === 'processing') return t('admin.ops.alertEvents.status.processing')
+  if (s === 'recovered' || s === 'resolved') return t('admin.ops.alertEvents.status.recovered')
+  if (s === 'closed' || s === 'manual_resolved') return t('admin.ops.alertEvents.status.closed')
+  if (s === 'silenced') return t('admin.ops.alertEvents.status.silenced')
   return s.toUpperCase()
+}
+
+function canAcknowledge(status: string | undefined): boolean {
+  const s = String(status || '').trim().toLowerCase()
+  return s === 'firing' || s === 'silenced'
+}
+
+function canMarkProcessing(status: string | undefined): boolean {
+  const s = String(status || '').trim().toLowerCase()
+  return s === 'firing' || s === 'acknowledged' || s === 'silenced'
+}
+
+function canClose(status: string | undefined): boolean {
+  const s = String(status || '').trim().toLowerCase()
+  return s !== 'closed' && s !== 'manual_resolved' && s !== 'recovered' && s !== 'resolved'
+}
+
+function canSilence(status: string | undefined): boolean {
+  const s = String(status || '').trim().toLowerCase()
+  return s !== 'closed' && s !== 'manual_resolved' && s !== 'recovered' && s !== 'resolved' && s !== 'silenced'
 }
 
 const empty = computed(() => events.value.length === 0 && !loading.value)
@@ -536,24 +598,57 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
             </div>
 
             <div class="flex flex-wrap gap-2">
-              <div class="flex items-center gap-2 rounded-lg bg-white px-2 py-1 ring-1 ring-gray-200 dark:bg-dark-800 dark:ring-dark-700">
-                <span class="text-[11px] font-bold text-gray-600 dark:text-gray-300">{{ t('admin.ops.alertEvents.detail.silence') }}</span>
-                <Select
-                  :model-value="silenceDuration"
-                  :options="silenceDurationOptions"
-                  class="w-[110px]"
-                  @change="silenceDuration = String($event || '1h')"
-                />
-                <button type="button" class="btn btn-secondary btn-sm" :disabled="detailActionLoading" @click="silenceAlert">
-                  <Icon name="ban" size="sm" />
-                  {{ t('common.apply') }}
-                </button>
-              </div>
-
-              <button type="button" class="btn btn-secondary btn-sm" :disabled="detailActionLoading" @click="manualResolve">
+              <button type="button" class="btn btn-secondary btn-sm" :disabled="detailActionLoading || !canAcknowledge(selected.status)" @click="submitStatusAction('acknowledged')">
                 <Icon name="checkCircle" size="sm" />
-                {{ t('admin.ops.alertEvents.detail.manualResolve') }}
+                {{ t('admin.ops.alertEvents.detail.acknowledge') }}
               </button>
+              <button type="button" class="btn btn-secondary btn-sm" :disabled="detailActionLoading || !canMarkProcessing(selected.status)" @click="submitStatusAction('processing')">
+                <Icon name="clock" size="sm" />
+                {{ t('admin.ops.alertEvents.detail.markProcessing') }}
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" :disabled="detailActionLoading || !canClose(selected.status)" @click="submitStatusAction('closed')">
+                <Icon name="xCircle" size="sm" />
+                {{ t('admin.ops.alertEvents.detail.close') }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800">
+          <div class="mb-3">
+            <div class="text-sm font-bold text-gray-900 dark:text-white">{{ t('admin.ops.alertEvents.detail.statusActionsTitle') }}</div>
+            <div class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.alertEvents.detail.statusActionsHint') }}</div>
+          </div>
+          <div class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+            <TextArea
+              v-model="actionNote"
+              :label="t('admin.ops.alertEvents.detail.actionNoteLabel')"
+              :placeholder="t('admin.ops.alertEvents.detail.actionNotePlaceholder')"
+              :disabled="detailActionLoading"
+              :rows="3"
+            />
+            <div class="space-y-3">
+              <Input
+                v-model="processingAction"
+                :label="t('admin.ops.alertEvents.detail.processingActionLabel')"
+                :placeholder="t('admin.ops.alertEvents.detail.processingActionPlaceholder')"
+                :disabled="detailActionLoading"
+              />
+              <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-900">
+                <div class="mb-2 text-[11px] font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.alertEvents.detail.silence') }}</div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <Select
+                    :model-value="silenceDuration"
+                    :options="silenceDurationOptions"
+                    class="w-[120px]"
+                    @change="silenceDuration = String($event || '1h')"
+                  />
+                  <button type="button" class="btn btn-secondary btn-sm" :disabled="detailActionLoading || !canSilence(selected.status)" @click="silenceAlert">
+                    <Icon name="ban" size="sm" />
+                    {{ t('admin.ops.alertEvents.detail.silenceApply') }}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -645,4 +740,3 @@ const empty = computed(() => events.value.length === 0 && !loading.value)
     </BaseDialog>
   </div>
 </template>
-
