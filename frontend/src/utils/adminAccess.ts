@@ -47,6 +47,10 @@ export function canAccessCacheStats(role: unknown): boolean {
   return isPlatformOwnerRole(role) || isOpsRole(role) || isBusinessRole(role)
 }
 
+export function canExportCacheStats(role: unknown): boolean {
+  return isPlatformOwnerRole(role) || isBusinessRole(role)
+}
+
 export function canAccessSemanticCache(role: unknown): boolean {
   return isPlatformOwnerRole(role) || isOpsRole(role)
 }

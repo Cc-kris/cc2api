@@ -319,6 +319,7 @@ import { adminAPI } from '@/api/admin'
 import { defaultCacheManagementConfig, type CacheManagementConfig } from '@/api/admin/cache'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import { canExportCacheStats, normalizeAdminViewerRole } from '@/utils/adminAccess'
 import { extractApiErrorMessage } from '@/utils/apiError'
 
 const { t } = useI18n()
@@ -336,11 +337,9 @@ const lastSavedSnapshot = ref('')
 
 const form = reactive<CacheManagementConfig>(defaultCacheManagementConfig())
 
-const cacheStatsExportRoles = new Set(['admin', 'operator', 'operation', 'operations'])
-
-const viewerRole = computed(() => String((authStore.user as { role?: string } | null)?.role || '').trim().toLowerCase())
+const viewerRole = computed(() => normalizeAdminViewerRole((authStore.user as { role?: string } | null)?.role))
 const canManage = computed(() => viewerRole.value === '' || viewerRole.value === 'admin')
-const canExport = computed(() => viewerRole.value === '' || cacheStatsExportRoles.has(viewerRole.value))
+const canExport = computed(() => canExportCacheStats(viewerRole.value))
 const exportButtonDisabled = computed(() => loading.value || exporting.value || !canExport.value)
 const exportButtonTitle = computed(() => {
   if (exporting.value) return t('admin.cacheManagement.exporting')
