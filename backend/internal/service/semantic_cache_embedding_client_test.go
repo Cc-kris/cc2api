@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/Calcium-Ion/new-api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/config"
 )
 
 type semanticEmbeddingHTTPClientFunc func(req *http.Request) (*http.Response, error)
