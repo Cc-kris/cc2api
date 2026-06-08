@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import BaseDialog from '@/components/common/BaseDialog.vue'
@@ -7,15 +7,235 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
 import { adminAPI } from '@/api'
 import { opsAPI } from '@/api/admin/ops'
-import type { AlertRule, MetricType, Operator } from '../types'
+import type { AlertRule, EmailNotificationConfig } from '../types'
 import type { OpsSeverity } from '@/api/admin/ops'
 import { formatDateTime } from '../utils/opsFormatters'
 
 const { t } = useI18n()
 const appStore = useAppStore()
 
+const ALL_ERROR_CATEGORIES = [
+  'client',
+  'platform',
+  'upstream',
+  'account_pool',
+  'rate_limit',
+  'permission',
+  'balance',
+  'config',
+  'slow_request',
+  'unknown'
+] as const
+
+type AlertTriggerLevel = 'P0' | 'P1' | 'P2' | 'observe'
+type ImpactScopeKey = 'affected_users' | 'affected_api_keys' | 'affected_groups' | 'affected_models' | 'affected_upstream_accounts'
+type RecoveredPolicy = 'record_only' | 'observe_only' | 'alert'
+type NotificationChannel = 'in_app' | 'email' | 'none'
+type SortKey = 'updated_at' | 'name' | 'trigger_level' | 'min_final_failures' | 'min_failure_rate' | 'min_sample_count'
+
+const DEFAULT_RULE_BY_LEVEL: Record<AlertTriggerLevel, {
+  min_final_failures: number
+  min_failure_rate: number
+  min_sample_count: number
+  auto_ai_analysis: boolean
+  notification_channels: NotificationChannel[]
+}> = {
+  P0: {
+    min_final_failures: 20,
+    min_failure_rate: 20,
+    min_sample_count: 50,
+    auto_ai_analysis: true,
+    notification_channels: ['in_app', 'email']
+  },
+  P1: {
+    min_final_failures: 5,
+    min_failure_rate: 10,
+    min_sample_count: 50,
+    auto_ai_analysis: true,
+    notification_channels: ['in_app', 'email']
+  },
+  P2: {
+    min_final_failures: 1,
+    min_failure_rate: 0,
+    min_sample_count: 50,
+    auto_ai_analysis: false,
+    notification_channels: ['in_app']
+  },
+  observe: {
+    min_final_failures: 1,
+    min_failure_rate: 0,
+    min_sample_count: 50,
+    auto_ai_analysis: false,
+    notification_channels: ['in_app']
+  }
+}
+
+const severityRank: Record<string, number> = {
+  P0: 0,
+  P1: 1,
+  P2: 2,
+  observe: 3
+}
+
 const loading = ref(false)
 const rules = ref<AlertRule[]>([])
+const emailConfig = ref<EmailNotificationConfig | null>(null)
+const showEditor = ref(false)
+const saving = ref(false)
+const editingId = ref<number | null>(null)
+const draft = ref<AlertRule | null>(null)
+const showDeleteConfirm = ref(false)
+const pendingDelete = ref<AlertRule | null>(null)
+const keywordFilter = ref('')
+const severityFilter = ref<'' | AlertTriggerLevel>('')
+const enabledFilter = ref<'all' | 'enabled' | 'disabled'>('all')
+const sortKey = ref<SortKey>('updated_at')
+const sortDirection = ref<'asc' | 'desc'>('desc')
+const groupOptionsBase = ref<SelectOption[]>([])
+const syncingDraft = ref(false)
+
+function parsePositiveInt(value: unknown): number | null {
+  if (value == null || value === '') return null
+  if (typeof value === 'boolean') return null
+  const n = typeof value === 'number' ? value : Number.parseInt(String(value), 10)
+  return Number.isInteger(n) && n > 0 ? n : null
+}
+
+function parseNonNegativeInt(value: unknown): number | null {
+  if (value == null || value === '') return null
+  if (typeof value === 'boolean') return null
+  const n = typeof value === 'number' ? value : Number.parseInt(String(value), 10)
+  return Number.isInteger(n) && n >= 0 ? n : null
+}
+
+function hasAtMostTwoDecimals(value: number): boolean {
+  return Math.round(value * 100) === value * 100
+}
+
+function normalizeTriggerLevel(value?: string | null): AlertTriggerLevel {
+  const raw = String(value || '').trim()
+  if (!raw) return 'P2'
+  if (raw === '观察' || /^p3$/i.test(raw) || /^observe$/i.test(raw)) return 'observe'
+  const upper = raw.toUpperCase()
+  if (upper === 'P0' || upper === 'P1' || upper === 'P2') return upper
+  return 'P2'
+}
+
+function normalizeNotificationChannels(
+  channels?: string[] | null,
+  notifyEmail?: boolean,
+  fallback: NotificationChannel[] = ['in_app']
+): NotificationChannel[] {
+  const normalized = Array.isArray(channels)
+    ? channels
+        .map((item) => String(item || '').trim())
+        .filter((item): item is NotificationChannel => item === 'in_app' || item === 'email' || item === 'none')
+    : []
+
+  const deduped = Array.from(new Set(normalized))
+  if (deduped.includes('none')) return ['none']
+  if (deduped.length > 0) return deduped
+  if (notifyEmail) return ['in_app', 'email']
+  return [...fallback]
+}
+
+function sanitizeImpactScope(scope?: Record<string, number> | null): Record<string, number> {
+  const next: Record<string, number> = {}
+  if (!scope || typeof scope !== 'object') return next
+  ;(['affected_users', 'affected_api_keys', 'affected_groups', 'affected_models', 'affected_upstream_accounts'] as ImpactScopeKey[]).forEach((key) => {
+    const value = parsePositiveInt(scope[key])
+    if (value != null) next[key] = value
+  })
+  return next
+}
+
+function getRuleLevel(rule: AlertRule): AlertTriggerLevel {
+  return normalizeTriggerLevel(rule.trigger_level || rule.severity)
+}
+
+function getLevelDefaults(level: AlertTriggerLevel) {
+  return DEFAULT_RULE_BY_LEVEL[level]
+}
+
+function normalizeDraft(source?: AlertRule | null): AlertRule {
+  const level = normalizeTriggerLevel(source?.trigger_level || source?.severity)
+  const defaults = getLevelDefaults(level)
+  const notificationChannels = normalizeNotificationChannels(source?.notification_channels, source?.notify_email, defaults.notification_channels)
+  const minFinalFailures = parsePositiveInt(source?.min_final_failures) ?? defaults.min_final_failures
+  const minSampleCount = parsePositiveInt(source?.min_sample_count) ?? defaults.min_sample_count
+  const minRecovered = parsePositiveInt(source?.min_recovered_fluctuations) ?? 10
+
+  return {
+    ...(source ? JSON.parse(JSON.stringify(source)) : {}),
+    name: source?.name ?? '',
+    description: source?.description ?? '',
+    enabled: source?.enabled ?? true,
+    metric_type: 'compound_rule',
+    operator: '>=',
+    threshold: typeof source?.threshold === 'number' && Number.isFinite(source.threshold) && source.threshold > 0 ? source.threshold : minFinalFailures,
+    window_minutes: 1,
+    sustained_minutes: parsePositiveInt(source?.sustained_minutes) ?? 1,
+    severity: level === 'observe' ? 'P3' : (level as OpsSeverity),
+    cooldown_minutes: parseNonNegativeInt(source?.cooldown_minutes) ?? (parseNonNegativeInt(source?.silence_minutes) ?? 10),
+    notify_email: notificationChannels.includes('email'),
+    filters: source?.filters ? JSON.parse(JSON.stringify(source.filters)) : undefined,
+    rule_version: 'v2',
+    error_categories: Array.isArray(source?.error_categories) && source!.error_categories!.length > 0
+      ? Array.from(new Set(source!.error_categories!.map((item) => String(item).trim()).filter(Boolean)))
+      : [...ALL_ERROR_CATEGORIES],
+    trigger_level: level,
+    min_final_failures: minFinalFailures,
+    min_failure_rate: typeof source?.min_failure_rate === 'number' && Number.isFinite(source.min_failure_rate)
+      ? source.min_failure_rate
+      : defaults.min_failure_rate,
+    min_sample_count: minSampleCount,
+    impact_scope: sanitizeImpactScope(source?.impact_scope),
+    recovered_fluctuation_policy: (source?.recovered_fluctuation_policy as RecoveredPolicy) || 'record_only',
+    min_recovered_fluctuations: minRecovered,
+    auto_ai_analysis: typeof source?.auto_ai_analysis === 'boolean' ? source.auto_ai_analysis : defaults.auto_ai_analysis,
+    notification_channels: notificationChannels,
+    silence_minutes: parseNonNegativeInt(source?.silence_minutes) ?? (parseNonNegativeInt(source?.cooldown_minutes) ?? 10),
+    migration_state: source?.migration_state ?? '',
+    last_triggered_at: source?.last_triggered_at ?? null,
+    created_at: source?.created_at,
+    updated_at: source?.updated_at,
+    id: source?.id
+  }
+}
+
+function buildPayload(rule: AlertRule): AlertRule {
+  const level = normalizeTriggerLevel(rule.trigger_level)
+  const notificationChannels = normalizeNotificationChannels(rule.notification_channels, rule.notify_email, getLevelDefaults(level).notification_channels)
+  const impactScope = sanitizeImpactScope(rule.impact_scope)
+  const minRecovered = level && rule.recovered_fluctuation_policy !== 'record_only'
+    ? (parsePositiveInt(rule.min_recovered_fluctuations) ?? 0)
+    : 0
+
+  return {
+    ...rule,
+    metric_type: 'compound_rule',
+    operator: '>=',
+    threshold: parsePositiveInt(rule.min_final_failures) ?? getLevelDefaults(level).min_final_failures,
+    window_minutes: 1,
+    sustained_minutes: 1,
+    severity: level === 'observe' ? 'P3' : (level as OpsSeverity),
+    cooldown_minutes: parseNonNegativeInt(rule.silence_minutes) ?? 10,
+    notify_email: notificationChannels.includes('email'),
+    rule_version: 'v2',
+    error_categories: Array.from(new Set((rule.error_categories || []).map((item) => String(item).trim()).filter(Boolean))),
+    trigger_level: level,
+    min_final_failures: parsePositiveInt(rule.min_final_failures) ?? getLevelDefaults(level).min_final_failures,
+    min_failure_rate: typeof rule.min_failure_rate === 'number' && Number.isFinite(rule.min_failure_rate) ? rule.min_failure_rate : getLevelDefaults(level).min_failure_rate,
+    min_sample_count: parsePositiveInt(rule.min_sample_count) ?? getLevelDefaults(level).min_sample_count,
+    impact_scope: impactScope,
+    recovered_fluctuation_policy: (rule.recovered_fluctuation_policy as RecoveredPolicy) || 'record_only',
+    min_recovered_fluctuations: minRecovered,
+    auto_ai_analysis: Boolean(rule.auto_ai_analysis),
+    notification_channels: notificationChannels,
+    silence_minutes: parseNonNegativeInt(rule.silence_minutes) ?? 10,
+    description: String(rule.description || '').trim()
+  }
+}
 
 async function load() {
   loading.value = true
@@ -30,75 +250,85 @@ async function load() {
   }
 }
 
+async function loadGroups() {
+  try {
+    const list = await adminAPI.groups.getAll()
+    groupOptionsBase.value = list.map((g) => ({ value: g.id, label: g.name }))
+  } catch (err) {
+    console.error('[OpsAlertRulesCard] Failed to load groups', err)
+    groupOptionsBase.value = []
+  }
+}
+
+async function loadEmailConfig() {
+  try {
+    emailConfig.value = await opsAPI.getEmailNotificationConfig()
+  } catch (err) {
+    console.error('[OpsAlertRulesCard] Failed to load email config', err)
+    emailConfig.value = null
+  }
+}
+
 onMounted(() => {
   load()
   loadGroups()
+  loadEmailConfig()
 })
 
-const showEditor = ref(false)
-const saving = ref(false)
-const editingId = ref<number | null>(null)
-const draft = ref<AlertRule | null>(null)
+const emailRecipients = computed(() => emailConfig.value?.alert?.recipients?.filter((item) => String(item || '').trim()) ?? [])
+const hasEmailRecipients = computed(() => emailRecipients.value.length > 0)
+const isReadOnlyLegacy = computed(() => draft.value?.migration_state === 'readonly_legacy')
 
-const keywordFilter = ref('')
-const severityFilter = ref('')
-const enabledFilter = ref<'all' | 'enabled' | 'disabled'>('all')
-
-type SortKey = 'updated_at' | 'name' | 'trigger_level' | 'min_final_failures' | 'min_failure_rate' | 'min_sample_count'
-const sortKey = ref<SortKey>('updated_at')
-const sortDirection = ref<'asc' | 'desc'>('desc')
-
-type MetricGroup = 'system' | 'group' | 'account'
-
-interface MetricDefinition {
-  type: MetricType
-  group: MetricGroup
-  label: string
-  description: string
-  recommendedOperator: Operator
-  recommendedThreshold: number
-  unit?: string
-}
-
-const groupMetricTypes = new Set<MetricType>([
-  'group_available_accounts',
-  'group_available_ratio',
-  'group_rate_limit_ratio'
+const severityOptions = computed<SelectOption[]>(() => [
+  { value: 'P0', label: t('admin.ops.alertRules.triggerLevels.P0') },
+  { value: 'P1', label: t('admin.ops.alertRules.triggerLevels.P1') },
+  { value: 'P2', label: t('admin.ops.alertRules.triggerLevels.P2') },
+  { value: 'observe', label: t('admin.ops.alertRules.triggerLevels.observe') }
 ])
 
-const severityRank: Record<string, number> = {
-  P0: 0,
-  P1: 1,
-  P2: 2,
-  P3: 3,
-  OBSERVE: 4
-}
+const filterSeverityOptions = computed<SelectOption[]>(() => [
+  { value: '', label: t('admin.ops.alertRules.filters.allSeverities') },
+  ...severityOptions.value
+])
 
-function parsePositiveInt(value: unknown): number | null {
-  if (value == null) return null
-  if (typeof value === 'boolean') return null
-  const n = typeof value === 'number' ? value : Number.parseInt(String(value), 10)
-  return Number.isFinite(n) && n > 0 ? n : null
-}
+const enabledOptions = computed<SelectOption[]>(() => [
+  { value: 'all', label: t('admin.ops.alertRules.filters.allStatuses') },
+  { value: 'enabled', label: t('common.enabled') },
+  { value: 'disabled', label: t('common.disabled') }
+])
 
-function normalizeLevel(value?: string | null): string {
-  return String(value || '').trim().toUpperCase()
-}
+const groupOptions = computed<SelectOption[]>(() => [{ value: null, label: t('admin.ops.alertRules.form.allGroups') }, ...groupOptionsBase.value])
 
-function getRuleLevel(rule: AlertRule): string {
-  const level = normalizeLevel(rule.trigger_level || rule.severity)
-  return level || 'P2'
-}
+const errorCategoryOptions = computed(() =>
+  ALL_ERROR_CATEGORIES.map((value) => ({
+    value,
+    label: t(`admin.ops.alertRules.categories.${value}`)
+  }))
+)
 
-function isCompoundRule(rule: AlertRule): boolean {
-  return rule.rule_version === 'v2' || rule.metric_type === 'compound_rule'
-}
+const recoveredPolicyOptions = computed<SelectOption[]>(() => [
+  { value: 'record_only', label: t('admin.ops.alertRules.recoveredPolicies.record_only') },
+  { value: 'observe_only', label: t('admin.ops.alertRules.recoveredPolicies.observe_only') },
+  { value: 'alert', label: t('admin.ops.alertRules.recoveredPolicies.alert') }
+])
 
-function getNotificationChannels(rule: AlertRule): string[] {
-  if (Array.isArray(rule.notification_channels) && rule.notification_channels.length > 0) {
-    return rule.notification_channels
-  }
-  return rule.notify_email ? ['in_app', 'email'] : ['in_app']
+const notificationChannelOptions = computed(() => [
+  { value: 'in_app', label: t('admin.ops.alertRules.channels.in_app') },
+  { value: 'email', label: t('admin.ops.alertRules.channels.email') },
+  { value: 'none', label: t('admin.ops.alertRules.channels.none') }
+] satisfies Array<{ value: NotificationChannel; label: string }>)
+
+const impactScopeFields = computed(() => [
+  { key: 'affected_users' as const, label: t('admin.ops.alertRules.scope.affectedUsers') },
+  { key: 'affected_api_keys' as const, label: t('admin.ops.alertRules.scope.affectedApiKeys') },
+  { key: 'affected_groups' as const, label: t('admin.ops.alertRules.scope.affectedGroups') },
+  { key: 'affected_models' as const, label: t('admin.ops.alertRules.scope.affectedModels') },
+  { key: 'affected_upstream_accounts' as const, label: t('admin.ops.alertRules.scope.affectedUpstreamAccounts') }
+])
+
+function formatTriggerLevel(level: string): string {
+  const normalized = normalizeTriggerLevel(level)
+  return t(`admin.ops.alertRules.triggerLevels.${normalized}`)
 }
 
 function formatPercent(value?: number | null): string {
@@ -106,36 +336,30 @@ function formatPercent(value?: number | null): string {
   return `${value % 1 === 0 ? value.toFixed(0) : value.toFixed(2).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')}%`
 }
 
+function formatCategories(rule: AlertRule): string[] {
+  const categories = Array.isArray(rule.error_categories) ? rule.error_categories : []
+  return categories.map((category) => t(`admin.ops.alertRules.categories.${category}`))
+}
+
+function getNotificationChannels(rule: AlertRule): NotificationChannel[] {
+  return normalizeNotificationChannels(rule.notification_channels, rule.notify_email)
+}
+
 function formatImpactScopeSummary(rule: AlertRule): string {
-  const impact = rule.impact_scope || {}
-  const items = [
-    { key: 'affected_users', label: t('admin.ops.alertRules.scope.affectedUsers') },
-    { key: 'affected_api_keys', label: t('admin.ops.alertRules.scope.affectedApiKeys') },
-    { key: 'affected_models', label: t('admin.ops.alertRules.scope.affectedModels') },
-    { key: 'affected_upstream_accounts', label: t('admin.ops.alertRules.scope.affectedUpstreamAccounts') }
-  ].flatMap(({ key, label }) => {
+  const impact = sanitizeImpactScope(rule.impact_scope)
+  const items = impactScopeFields.value.flatMap(({ key, label }) => {
     const value = impact[key]
     return typeof value === 'number' && value > 0 ? [`${label} ≥ ${value}`] : []
   })
   return items.length > 0 ? items.join(' · ') : t('admin.ops.alertRules.values.notLimited')
 }
 
-function formatCategories(rule: AlertRule): string[] {
-  if (Array.isArray(rule.error_categories) && rule.error_categories.length > 0) {
-    return rule.error_categories
-  }
-  return []
-}
-
 function formatRuleCondition(rule: AlertRule): string {
-  if (isCompoundRule(rule)) {
-    return [
-      `${t('admin.ops.alertRules.table.minFinalFailures')} ≥ ${rule.min_final_failures || 0}`,
-      `${t('admin.ops.alertRules.table.minFailureRate')} ≥ ${formatPercent(rule.min_failure_rate)}`,
-      `${t('admin.ops.alertRules.table.minSampleCount')} ≥ ${rule.min_sample_count || 0}`
-    ].join(' · ')
-  }
-  return `${rule.metric_type} ${rule.operator} ${rule.threshold}`
+  return [
+    `${t('admin.ops.alertRules.table.minFinalFailures')} ≥ ${rule.min_final_failures || 0}`,
+    `${t('admin.ops.alertRules.table.minFailureRate')} ≥ ${formatPercent(rule.min_failure_rate)}`,
+    `${t('admin.ops.alertRules.table.minSampleCount')} ≥ ${rule.min_sample_count || 0}`
+  ].join(' · ')
 }
 
 function compareRuleValues(a: AlertRule, b: AlertRule, key: SortKey): number {
@@ -165,22 +389,6 @@ function toggleSort(nextKey: SortKey) {
   sortDirection.value = nextKey === 'name' ? 'asc' : 'desc'
 }
 
-const severityOptions = computed(() => {
-  const sev: OpsSeverity[] = ['P0', 'P1', 'P2', 'P3']
-  return sev.map((s) => ({ value: s, label: s }))
-})
-
-const filterSeverityOptions = computed<SelectOption[]>(() => [
-  { value: '', label: t('admin.ops.alertRules.filters.allSeverities') },
-  ...severityOptions.value
-])
-
-const enabledOptions = computed<SelectOption[]>(() => [
-  { value: 'all', label: t('admin.ops.alertRules.filters.allStatuses') },
-  { value: 'enabled', label: t('common.enabled') },
-  { value: 'disabled', label: t('common.disabled') }
-])
-
 const filteredRules = computed(() => {
   const keyword = keywordFilter.value.trim().toLowerCase()
   return rules.value.filter((rule) => {
@@ -192,7 +400,6 @@ const filteredRules = computed(() => {
     const haystack = [
       rule.name,
       rule.description,
-      rule.metric_type,
       rule.trigger_level,
       rule.severity,
       ...(rule.error_categories || [])
@@ -209,9 +416,7 @@ const displayedRules = computed(() => {
   return sortDirection.value === 'asc' ? sorted : sorted.reverse()
 })
 
-const hasActiveFilters = computed(() => {
-  return Boolean(keywordFilter.value.trim()) || Boolean(severityFilter.value) || enabledFilter.value !== 'all'
-})
+const hasActiveFilters = computed(() => Boolean(keywordFilter.value.trim()) || Boolean(severityFilter.value) || enabledFilter.value !== 'all')
 
 function resetFilters() {
   keywordFilter.value = ''
@@ -221,22 +426,26 @@ function resetFilters() {
   sortDirection.value = 'desc'
 }
 
-const groupOptionsBase = ref<SelectOption[]>([])
-
-async function loadGroups() {
-  try {
-    const list = await adminAPI.groups.getAll()
-    groupOptionsBase.value = list.map((g) => ({ value: g.id, label: g.name }))
-  } catch (err) {
-    console.error('[OpsAlertRulesCard] Failed to load groups', err)
-    groupOptionsBase.value = []
-  }
+function applyLevelDefaults(level: AlertTriggerLevel) {
+  if (!draft.value) return
+  const defaults = getLevelDefaults(level)
+  draft.value.trigger_level = level
+  draft.value.severity = level === 'observe' ? 'P3' : (level as OpsSeverity)
+  draft.value.min_final_failures = defaults.min_final_failures
+  draft.value.min_failure_rate = defaults.min_failure_rate
+  draft.value.min_sample_count = defaults.min_sample_count
+  draft.value.auto_ai_analysis = defaults.auto_ai_analysis
+  draft.value.notification_channels = [...defaults.notification_channels]
+  draft.value.notify_email = defaults.notification_channels.includes('email')
 }
 
-const isGroupMetricSelected = computed(() => {
-  const metricType = draft.value?.metric_type
-  return metricType ? groupMetricTypes.has(metricType) : false
-})
+watch(
+  () => draft.value?.trigger_level,
+  (next, prev) => {
+    if (!draft.value || syncingDraft.value || !next || !prev || next === prev) return
+    applyLevelDefaults(normalizeTriggerLevel(next))
+  }
+)
 
 const draftGroupId = computed<number | null>({
   get() {
@@ -247,9 +456,7 @@ const draftGroupId = computed<number | null>({
     if (value == null) {
       if (!draft.value.filters) return
       delete draft.value.filters.group_id
-      if (Object.keys(draft.value.filters).length === 0) {
-        delete draft.value.filters
-      }
+      if (Object.keys(draft.value.filters).length === 0) delete draft.value.filters
       return
     }
     if (!draft.value.filters) draft.value.filters = {}
@@ -257,227 +464,151 @@ const draftGroupId = computed<number | null>({
   }
 })
 
-const groupOptions = computed<SelectOption[]>(() => {
-  if (isGroupMetricSelected.value) return groupOptionsBase.value
-  return [{ value: null, label: t('admin.ops.alertRules.form.allGroups') }, ...groupOptionsBase.value]
-})
-
-const metricDefinitions = computed(() => {
-  return [
-    {
-      type: 'success_rate',
-      group: 'system',
-      label: t('admin.ops.alertRules.metrics.successRate'),
-      description: t('admin.ops.alertRules.metricDescriptions.successRate'),
-      recommendedOperator: '<',
-      recommendedThreshold: 99,
-      unit: '%'
-    },
-    {
-      type: 'error_rate',
-      group: 'system',
-      label: t('admin.ops.alertRules.metrics.errorRate'),
-      description: t('admin.ops.alertRules.metricDescriptions.errorRate'),
-      recommendedOperator: '>',
-      recommendedThreshold: 1,
-      unit: '%'
-    },
-    {
-      type: 'upstream_error_rate',
-      group: 'system',
-      label: t('admin.ops.alertRules.metrics.upstreamErrorRate'),
-      description: t('admin.ops.alertRules.metricDescriptions.upstreamErrorRate'),
-      recommendedOperator: '>',
-      recommendedThreshold: 1,
-      unit: '%'
-    },
-    {
-      type: 'cpu_usage_percent',
-      group: 'system',
-      label: t('admin.ops.alertRules.metrics.cpu'),
-      description: t('admin.ops.alertRules.metricDescriptions.cpu'),
-      recommendedOperator: '>',
-      recommendedThreshold: 80,
-      unit: '%'
-    },
-    {
-      type: 'memory_usage_percent',
-      group: 'system',
-      label: t('admin.ops.alertRules.metrics.memory'),
-      description: t('admin.ops.alertRules.metricDescriptions.memory'),
-      recommendedOperator: '>',
-      recommendedThreshold: 80,
-      unit: '%'
-    },
-    {
-      type: 'concurrency_queue_depth',
-      group: 'system',
-      label: t('admin.ops.alertRules.metrics.queueDepth'),
-      description: t('admin.ops.alertRules.metricDescriptions.queueDepth'),
-      recommendedOperator: '>',
-      recommendedThreshold: 10
-    },
-    {
-      type: 'group_available_accounts',
-      group: 'group',
-      label: t('admin.ops.alertRules.metrics.groupAvailableAccounts'),
-      description: t('admin.ops.alertRules.metricDescriptions.groupAvailableAccounts'),
-      recommendedOperator: '<',
-      recommendedThreshold: 1
-    },
-    {
-      type: 'group_available_ratio',
-      group: 'group',
-      label: t('admin.ops.alertRules.metrics.groupAvailableRatio'),
-      description: t('admin.ops.alertRules.metricDescriptions.groupAvailableRatio'),
-      recommendedOperator: '<',
-      recommendedThreshold: 50,
-      unit: '%'
-    },
-    {
-      type: 'group_rate_limit_ratio',
-      group: 'group',
-      label: t('admin.ops.alertRules.metrics.groupRateLimitRatio'),
-      description: t('admin.ops.alertRules.metricDescriptions.groupRateLimitRatio'),
-      recommendedOperator: '>',
-      recommendedThreshold: 10,
-      unit: '%'
-    },
-    {
-      type: 'account_rate_limited_count',
-      group: 'account',
-      label: t('admin.ops.alertRules.metrics.accountRateLimitedCount'),
-      description: t('admin.ops.alertRules.metricDescriptions.accountRateLimitedCount'),
-      recommendedOperator: '>',
-      recommendedThreshold: 0
-    },
-    {
-      type: 'account_error_count',
-      group: 'account',
-      label: t('admin.ops.alertRules.metrics.accountErrorCount'),
-      description: t('admin.ops.alertRules.metricDescriptions.accountErrorCount'),
-      recommendedOperator: '>',
-      recommendedThreshold: 0
-    },
-    {
-      type: 'account_error_ratio',
-      group: 'account',
-      label: t('admin.ops.alertRules.metrics.accountErrorRatio'),
-      description: t('admin.ops.alertRules.metricDescriptions.accountErrorRatio'),
-      recommendedOperator: '>',
-      recommendedThreshold: 5,
-      unit: '%'
-    },
-    {
-      type: 'overload_account_count',
-      group: 'account',
-      label: t('admin.ops.alertRules.metrics.overloadAccountCount'),
-      description: t('admin.ops.alertRules.metricDescriptions.overloadAccountCount'),
-      recommendedOperator: '>',
-      recommendedThreshold: 0
-    }
-  ] satisfies MetricDefinition[]
-})
-
-const selectedMetricDefinition = computed(() => {
-  const metricType = draft.value?.metric_type
-  if (!metricType) return null
-  return metricDefinitions.value.find((m) => m.type === metricType) ?? null
-})
-
-const metricOptions = computed(() => {
-  const buildGroup = (group: MetricGroup): SelectOption[] => {
-    const items = metricDefinitions.value.filter((m) => m.group === group)
-    if (items.length === 0) return []
-    const headerValue = `__group__${group}`
-    return [
-      {
-        value: headerValue,
-        label: t(`admin.ops.alertRules.metricGroups.${group}`),
-        disabled: true,
-        kind: 'group'
-      },
-      ...items.map((m) => ({ value: m.type, label: m.label }))
-    ]
-  }
-
-  return [...buildGroup('system'), ...buildGroup('group'), ...buildGroup('account')]
-})
-
-const operatorOptions = computed(() => {
-  const ops: Operator[] = ['>', '>=', '<', '<=', '==', '!=']
-  return ops.map((o) => ({ value: o, label: o }))
-})
-
-function newRuleDraft(): AlertRule {
-  return {
-    name: '',
-    description: '',
-    enabled: true,
-    metric_type: 'error_rate',
-    operator: '>',
-    threshold: 1,
-    window_minutes: 1,
-    sustained_minutes: 2,
-    severity: 'P1',
-    cooldown_minutes: 10,
-    notify_email: true
-  }
-}
-
 function openCreate() {
   editingId.value = null
-  draft.value = newRuleDraft()
+  syncingDraft.value = true
+  draft.value = normalizeDraft(null)
   showEditor.value = true
+  syncingDraft.value = false
 }
 
 function openEdit(rule: AlertRule) {
   editingId.value = rule.id ?? null
-  draft.value = JSON.parse(JSON.stringify(rule))
+  syncingDraft.value = true
+  draft.value = normalizeDraft(rule)
   showEditor.value = true
+  syncingDraft.value = false
+}
+
+function closeEditor() {
+  showEditor.value = false
+  draft.value = null
+  editingId.value = null
+}
+
+function toggleNotificationChannel(channel: NotificationChannel, checked: boolean) {
+  if (!draft.value) return
+  const current = new Set(normalizeNotificationChannels(draft.value.notification_channels, draft.value.notify_email))
+  if (checked) {
+    if (channel === 'none') {
+      draft.value.notification_channels = ['none']
+      draft.value.notify_email = false
+      return
+    }
+    current.delete('none')
+    current.add(channel)
+  } else {
+    current.delete(channel)
+  }
+  draft.value.notification_channels = Array.from(current)
+  draft.value.notify_email = draft.value.notification_channels.includes('email')
+}
+
+function onImpactScopeInput(key: ImpactScopeKey, rawValue: string) {
+  if (!draft.value) return
+  const parsed = parsePositiveInt(rawValue)
+  const next = { ...sanitizeImpactScope(draft.value.impact_scope) }
+  if (parsed == null) {
+    delete next[key]
+  } else {
+    next[key] = parsed
+  }
+  draft.value.impact_scope = next
 }
 
 const editorValidation = computed(() => {
   const errors: string[] = []
-  const r = draft.value
-  if (!r) return { valid: true, errors }
-  if (!r.name || !r.name.trim()) errors.push(t('admin.ops.alertRules.validation.nameRequired'))
-  if (!r.metric_type) errors.push(t('admin.ops.alertRules.validation.metricRequired'))
-  if (groupMetricTypes.has(r.metric_type) && !parsePositiveInt(r.filters?.group_id)) {
-    errors.push(t('admin.ops.alertRules.validation.groupIdRequired'))
+  const rule = draft.value
+  if (!rule) return { valid: true, errors }
+
+  const name = String(rule.name || '').trim()
+  if (!name) {
+    errors.push(t('admin.ops.alertRules.validation.nameRequired'))
+  } else if (name.length < 2 || name.length > 50) {
+    errors.push(t('admin.ops.alertRules.validation.nameLength'))
+  } else {
+    const duplicated = rules.value.some((item) => item.id !== editingId.value && item.name.trim() === name)
+    if (duplicated) errors.push(t('admin.ops.alertRules.validation.nameDuplicate'))
   }
-  if (!r.operator) errors.push(t('admin.ops.alertRules.validation.operatorRequired'))
-  if (!(typeof r.threshold === 'number' && Number.isFinite(r.threshold))) {
-    errors.push(t('admin.ops.alertRules.validation.thresholdRequired'))
+
+  if (!Array.isArray(rule.error_categories) || rule.error_categories.length === 0) {
+    errors.push(t('admin.ops.alertRules.validation.categoriesRequired'))
   }
-  if (!(typeof r.window_minutes === 'number' && Number.isFinite(r.window_minutes) && [1, 5, 60].includes(r.window_minutes))) {
-    errors.push(t('admin.ops.alertRules.validation.windowRange'))
+
+  const minFinalFailures = parsePositiveInt(rule.min_final_failures)
+  if (minFinalFailures == null || minFinalFailures < 1 || minFinalFailures > 100000) {
+    errors.push(t('admin.ops.alertRules.validation.minFinalFailuresRange'))
   }
-  if (!(typeof r.sustained_minutes === 'number' && Number.isFinite(r.sustained_minutes) && r.sustained_minutes >= 1 && r.sustained_minutes <= 1440)) {
-    errors.push(t('admin.ops.alertRules.validation.sustainedRange'))
+
+  const minFailureRate = typeof rule.min_failure_rate === 'number' && Number.isFinite(rule.min_failure_rate) ? rule.min_failure_rate : null
+  if (minFailureRate == null || minFailureRate < 0 || minFailureRate > 100 || !hasAtMostTwoDecimals(minFailureRate)) {
+    errors.push(t('admin.ops.alertRules.validation.minFailureRateRange'))
   }
-  if (!(typeof r.cooldown_minutes === 'number' && Number.isFinite(r.cooldown_minutes) && r.cooldown_minutes >= 0 && r.cooldown_minutes <= 1440)) {
-    errors.push(t('admin.ops.alertRules.validation.cooldownRange'))
+
+  const minSampleCount = parsePositiveInt(rule.min_sample_count)
+  if (minSampleCount == null || minSampleCount < 1 || minSampleCount > 1000000) {
+    errors.push(t('admin.ops.alertRules.validation.minSampleCountRange'))
   }
+
+  if (minFailureRate != null && minFailureRate > 0) {
+    if (minFinalFailures == null) errors.push(t('admin.ops.alertRules.validation.minFinalFailuresRequiredForRate'))
+    if (minSampleCount == null) errors.push(t('admin.ops.alertRules.validation.minSampleCountRequiredForRate'))
+    if (minFinalFailures != null && minSampleCount != null && minFinalFailures > minSampleCount) {
+      errors.push(t('admin.ops.alertRules.validation.minFinalFailuresGtSample'))
+    }
+  }
+
+  for (const value of Object.values(sanitizeImpactScope(rule.impact_scope))) {
+    if (value < 1 || value > 100000) {
+      errors.push(t('admin.ops.alertRules.validation.impactScopeRange'))
+      break
+    }
+  }
+
+  const recoveredPolicy = (rule.recovered_fluctuation_policy as RecoveredPolicy) || 'record_only'
+  if (recoveredPolicy !== 'record_only') {
+    const minRecovered = parsePositiveInt(rule.min_recovered_fluctuations)
+    if (minRecovered == null || minRecovered < 1 || minRecovered > 100000) {
+      errors.push(t('admin.ops.alertRules.validation.minRecoveredRequired'))
+    }
+  }
+
+  const channels = normalizeNotificationChannels(rule.notification_channels, rule.notify_email)
+  if (channels.includes('none') && channels.length > 1) {
+    errors.push(t('admin.ops.alertRules.validation.notificationNoneExclusive'))
+  }
+  if (channels.includes('email') && !hasEmailRecipients.value) {
+    errors.push(t('admin.ops.alertRules.validation.emailRecipientsRequired'))
+  }
+
+  const silenceMinutes = parseNonNegativeInt(rule.silence_minutes)
+  if (silenceMinutes == null || silenceMinutes < 0 || silenceMinutes > 1440) {
+    errors.push(t('admin.ops.alertRules.validation.silenceMinutesRange'))
+  }
+
+  if (String(rule.description || '').trim().length > 500) {
+    errors.push(t('admin.ops.alertRules.validation.descriptionLength'))
+  }
+
   return { valid: errors.length === 0, errors }
 })
 
 async function save() {
-  if (!draft.value) return
+  if (!draft.value || isReadOnlyLegacy.value) return
   if (!editorValidation.value.valid) {
     appStore.showError(editorValidation.value.errors[0] || t('admin.ops.alertRules.validation.invalid'))
     return
   }
+
+  const payload = buildPayload(draft.value)
   saving.value = true
   try {
     if (editingId.value) {
-      await opsAPI.updateAlertRule(editingId.value, draft.value)
+      await opsAPI.updateAlertRule(editingId.value, payload)
     } else {
-      await opsAPI.createAlertRule(draft.value)
+      await opsAPI.createAlertRule(payload)
     }
-    showEditor.value = false
-    draft.value = null
-    editingId.value = null
+    closeEditor()
     await load()
     appStore.showSuccess(t('admin.ops.alertRules.saveSuccess'))
   } catch (err: any) {
@@ -487,9 +618,6 @@ async function save() {
     saving.value = false
   }
 }
-
-const showDeleteConfirm = ref(false)
-const pendingDelete = ref<AlertRule | null>(null)
 
 function requestDelete(rule: AlertRule) {
   pendingDelete.value = rule
@@ -670,9 +798,7 @@ function cancelDelete() {
                   {{ row.enabled ? t('common.enabled') : t('common.disabled') }}
                 </span>
               </td>
-              <td class="whitespace-nowrap px-4 py-3 text-xs text-gray-700 dark:text-gray-200">
-                {{ row.window_minutes || 1 }}m
-              </td>
+              <td class="whitespace-nowrap px-4 py-3 text-xs text-gray-700 dark:text-gray-200">1m</td>
               <td class="px-4 py-3 text-xs text-gray-700 dark:text-gray-200">
                 <div v-if="formatCategories(row).length > 0" class="flex max-w-[220px] flex-wrap gap-1">
                   <span
@@ -686,16 +812,16 @@ function cancelDelete() {
                 <span v-else class="text-gray-400">{{ t('admin.ops.alertRules.values.allCategories') }}</span>
               </td>
               <td class="whitespace-nowrap px-4 py-3 text-xs font-bold text-gray-700 dark:text-gray-200">
-                {{ getRuleLevel(row) }}
+                {{ formatTriggerLevel(row.trigger_level || row.severity) }}
               </td>
               <td class="whitespace-nowrap px-4 py-3 text-xs text-gray-700 dark:text-gray-200">
-                {{ isCompoundRule(row) ? row.min_final_failures : '--' }}
+                {{ row.min_final_failures ?? '--' }}
               </td>
               <td class="whitespace-nowrap px-4 py-3 text-xs text-gray-700 dark:text-gray-200">
-                {{ isCompoundRule(row) ? formatPercent(row.min_failure_rate) : '--' }}
+                {{ formatPercent(row.min_failure_rate) }}
               </td>
               <td class="whitespace-nowrap px-4 py-3 text-xs text-gray-700 dark:text-gray-200">
-                {{ isCompoundRule(row) ? row.min_sample_count : '--' }}
+                {{ row.min_sample_count ?? '--' }}
               </td>
               <td class="px-4 py-3 text-xs text-gray-700 dark:text-gray-200">
                 <div class="max-w-[220px] truncate" :title="formatImpactScopeSummary(row)">
@@ -738,9 +864,13 @@ function cancelDelete() {
       :show="showEditor"
       :title="editingId ? t('admin.ops.alertRules.editTitle') : t('admin.ops.alertRules.createTitle')"
       width="wide"
-      @close="showEditor = false"
+      @close="closeEditor"
     >
-      <div class="space-y-4">
+      <div v-if="draft" class="space-y-5">
+        <div v-if="isReadOnlyLegacy" class="rounded-xl bg-amber-50 p-4 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+          {{ t('admin.ops.alertRules.hints.readonlyLegacy') }}
+        </div>
+
         <div v-if="!editorValidation.valid" class="rounded-xl bg-red-50 p-4 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-300">
           <div class="font-bold">{{ t('admin.ops.alertRules.validation.title') }}</div>
           <ul class="mt-1 list-disc pl-5">
@@ -749,99 +879,157 @@ function cancelDelete() {
         </div>
 
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div class="md:col-span-2">
+          <div>
             <label class="input-label">{{ t('admin.ops.alertRules.form.name') }}</label>
-            <input v-model="draft!.name" class="input" type="text" />
+            <input v-model="draft.name" class="input" type="text" :disabled="isReadOnlyLegacy" maxlength="50" />
           </div>
 
-          <div class="md:col-span-2">
-            <label class="input-label">{{ t('admin.ops.alertRules.form.description') }}</label>
-            <input v-model="draft!.description" class="input" type="text" />
-          </div>
-
-          <div>
-            <label class="input-label">{{ t('admin.ops.alertRules.form.metric') }}</label>
-            <Select v-model="draft!.metric_type" :options="metricOptions" />
-            <div v-if="selectedMetricDefinition" class="mt-1 space-y-0.5 text-xs text-gray-500 dark:text-gray-400">
-              <p>{{ selectedMetricDefinition.description }}</p>
-              <p>
-                {{
-                  t('admin.ops.alertRules.hints.recommended', {
-                    operator: selectedMetricDefinition.recommendedOperator,
-                    threshold: selectedMetricDefinition.recommendedThreshold,
-                    unit: selectedMetricDefinition.unit || ''
-                  })
-                }}
-              </p>
-            </div>
+          <div class="flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3 dark:bg-dark-800/50">
+            <span class="text-xs font-bold text-gray-700 dark:text-gray-200">{{ t('admin.ops.alertRules.form.enabled') }}</span>
+            <input v-model="draft.enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" :disabled="isReadOnlyLegacy" />
           </div>
 
           <div>
-            <label class="input-label">{{ t('admin.ops.alertRules.form.operator') }}</label>
-            <Select v-model="draft!.operator" :options="operatorOptions" />
-          </div>
-
-          <div class="md:col-span-2">
-            <label class="input-label">
-              {{ t('admin.ops.alertRules.form.groupId') }}
-              <span v-if="isGroupMetricSelected" class="ml-1 text-red-500">*</span>
-            </label>
-            <Select
-              v-model="draftGroupId"
-              :options="groupOptions"
-              searchable
-              :placeholder="t('admin.ops.alertRules.form.groupPlaceholder')"
-              :error="isGroupMetricSelected && !draftGroupId"
-            />
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {{ isGroupMetricSelected ? t('admin.ops.alertRules.hints.groupRequired') : t('admin.ops.alertRules.hints.groupOptional') }}
-            </p>
-          </div>
-
-          <div>
-            <label class="input-label">{{ t('admin.ops.alertRules.form.threshold') }}</label>
-            <input v-model.number="draft!.threshold" class="input" type="number" />
-          </div>
-
-          <div>
-            <label class="input-label">{{ t('admin.ops.alertRules.form.severity') }}</label>
-            <Select v-model="draft!.severity" :options="severityOptions" />
-          </div>
-
-          <div>
-            <label class="input-label">{{ t('admin.ops.alertRules.form.window') }}</label>
-            <input :value="`${draft!.window_minutes}m`" class="input cursor-not-allowed bg-gray-50 dark:bg-dark-700/50" type="text" disabled />
+            <label class="input-label">{{ t('admin.ops.alertRules.form.timeWindow') }}</label>
+            <input value="1m" class="input cursor-not-allowed bg-gray-50 dark:bg-dark-700/50" type="text" disabled />
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.alertRules.values.fixedOneMinuteWindow') }}</p>
           </div>
 
           <div>
-            <label class="input-label">{{ t('admin.ops.alertRules.form.sustained') }}</label>
-            <input v-model.number="draft!.sustained_minutes" class="input" type="number" min="1" max="1440" />
+            <label class="input-label">{{ t('admin.ops.alertRules.form.triggerLevel') }}</label>
+            <Select v-model="draft.trigger_level" :options="severityOptions" :disabled="isReadOnlyLegacy" />
+          </div>
+
+          <div class="md:col-span-2">
+            <label class="input-label">{{ t('admin.ops.alertRules.form.errorCategories') }}</label>
+            <div class="rounded-2xl border border-gray-200 p-3 dark:border-dark-700">
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                <label
+                  v-for="option in errorCategoryOptions"
+                  :key="option.value"
+                  class="flex items-center gap-2 rounded-lg px-2 py-1 text-sm text-gray-700 dark:text-gray-200"
+                >
+                  <input
+                    v-model="draft.error_categories"
+                    type="checkbox"
+                    :value="option.value"
+                    class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    :disabled="isReadOnlyLegacy"
+                  />
+                  <span>{{ option.label }}</span>
+                </label>
+              </div>
+            </div>
           </div>
 
           <div>
-            <label class="input-label">{{ t('admin.ops.alertRules.form.cooldown') }}</label>
-            <input v-model.number="draft!.cooldown_minutes" class="input" type="number" min="0" max="1440" />
+            <label class="input-label">{{ t('admin.ops.alertRules.form.minFinalFailures') }}</label>
+            <input v-model.number="draft.min_final_failures" class="input" type="number" min="1" max="100000" step="1" :disabled="isReadOnlyLegacy" />
           </div>
 
-          <div class="flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3 dark:bg-dark-800/50 md:col-span-2">
-            <span class="text-xs font-bold text-gray-700 dark:text-gray-200">{{ t('admin.ops.alertRules.form.enabled') }}</span>
-            <input v-model="draft!.enabled" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+          <div>
+            <label class="input-label">{{ t('admin.ops.alertRules.form.minFailureRate') }}</label>
+            <input v-model.number="draft.min_failure_rate" class="input" type="number" min="0" max="100" step="0.01" :disabled="isReadOnlyLegacy" />
           </div>
 
-          <div class="flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3 dark:bg-dark-800/50 md:col-span-2">
-            <span class="text-xs font-bold text-gray-700 dark:text-gray-200">{{ t('admin.ops.alertRules.form.notifyEmail') }}</span>
-            <input v-model="draft!.notify_email" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+          <div>
+            <label class="input-label">{{ t('admin.ops.alertRules.form.minSampleCount') }}</label>
+            <input v-model.number="draft.min_sample_count" class="input" type="number" min="1" max="1000000" step="1" :disabled="isReadOnlyLegacy" />
+          </div>
+
+          <div>
+            <label class="input-label">{{ t('admin.ops.alertRules.form.silenceMinutes') }}</label>
+            <input v-model.number="draft.silence_minutes" class="input" type="number" min="0" max="1440" step="1" :disabled="isReadOnlyLegacy" />
+          </div>
+
+          <div class="md:col-span-2">
+            <label class="input-label">{{ t('admin.ops.alertRules.form.impactScope') }}</label>
+            <div class="grid grid-cols-1 gap-3 rounded-2xl border border-gray-200 p-3 dark:border-dark-700 md:grid-cols-2 xl:grid-cols-3">
+              <div v-for="field in impactScopeFields" :key="field.key">
+                <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300">{{ field.label }}</label>
+                <input
+                  class="input"
+                  type="number"
+                  min="1"
+                  max="100000"
+                  step="1"
+                  :value="draft.impact_scope?.[field.key] ?? ''"
+                  :disabled="isReadOnlyLegacy"
+                  @input="onImpactScopeInput(field.key, ($event.target as HTMLInputElement).value)"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label class="input-label">{{ t('admin.ops.alertRules.form.recoveredPolicy') }}</label>
+            <Select v-model="draft.recovered_fluctuation_policy" :options="recoveredPolicyOptions" :disabled="isReadOnlyLegacy" />
+          </div>
+
+          <div>
+            <label class="input-label">{{ t('admin.ops.alertRules.form.minRecoveredFluctuations') }}</label>
+            <input
+              v-model.number="draft.min_recovered_fluctuations"
+              class="input"
+              type="number"
+              min="1"
+              max="100000"
+              step="1"
+              :disabled="isReadOnlyLegacy || draft.recovered_fluctuation_policy === 'record_only'"
+            />
+          </div>
+
+          <div class="flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3 dark:bg-dark-800/50">
+            <div>
+              <span class="text-xs font-bold text-gray-700 dark:text-gray-200">{{ t('admin.ops.alertRules.form.autoAIAnalysis') }}</span>
+            </div>
+            <input v-model="draft.auto_ai_analysis" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" :disabled="isReadOnlyLegacy" />
+          </div>
+
+          <div>
+            <label class="input-label">{{ t('admin.ops.alertRules.form.groupId') }}</label>
+            <Select v-model="draftGroupId" :options="groupOptions" searchable :placeholder="t('admin.ops.alertRules.form.groupPlaceholder')" :disabled="isReadOnlyLegacy" />
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.alertRules.hints.groupOptional') }}</p>
+          </div>
+
+          <div class="md:col-span-2">
+            <label class="input-label">{{ t('admin.ops.alertRules.form.notificationChannels') }}</label>
+            <div class="rounded-2xl border border-gray-200 p-3 dark:border-dark-700">
+              <div class="grid grid-cols-1 gap-2 md:grid-cols-3">
+                <label
+                  v-for="option in notificationChannelOptions"
+                  :key="option.value"
+                  class="flex items-center gap-2 rounded-lg px-2 py-1 text-sm text-gray-700 dark:text-gray-200"
+                >
+                  <input
+                    :checked="draft.notification_channels?.includes(option.value)"
+                    type="checkbox"
+                    class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    :disabled="isReadOnlyLegacy"
+                    @change="toggleNotificationChannel(option.value, ($event.target as HTMLInputElement).checked)"
+                  />
+                  <span>{{ option.label }}</span>
+                </label>
+              </div>
+              <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                {{ hasEmailRecipients ? t('admin.ops.alertRules.hints.emailRecipientsReady') : t('admin.ops.alertRules.hints.emailRecipientsMissing') }}
+              </p>
+            </div>
+          </div>
+
+          <div class="md:col-span-2">
+            <label class="input-label">{{ t('admin.ops.alertRules.form.description') }}</label>
+            <textarea v-model="draft.description" class="input min-h-[112px]" rows="4" maxlength="500" :disabled="isReadOnlyLegacy" />
           </div>
         </div>
       </div>
 
       <template #footer>
         <div class="flex items-center justify-end gap-2">
-          <button class="btn btn-secondary" :disabled="saving" @click="showEditor = false">
-            {{ t('common.cancel') }}
+          <button class="btn btn-secondary" :disabled="saving" @click="closeEditor">
+            {{ t(isReadOnlyLegacy ? 'common.close' : 'common.cancel') }}
           </button>
-          <button class="btn btn-primary" :disabled="saving" @click="save">
+          <button v-if="!isReadOnlyLegacy" class="btn btn-primary" :disabled="saving" @click="save">
             {{ saving ? t('common.saving') : t('common.save') }}
           </button>
         </div>

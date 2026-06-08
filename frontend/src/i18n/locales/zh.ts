@@ -5275,7 +5275,7 @@ export default {
       },
       alertRules: {
         title: '告警规则',
-        description: '查看告警规则列表，按等级、状态和关键词筛选，并进入后续操作。',
+        description: '查看告警规则列表，按等级、状态和关键词筛选，并维护复合告警规则。',
         loading: '加载中...',
         empty: '暂无告警规则',
         loadFailed: '加载告警规则失败',
@@ -5289,49 +5289,34 @@ export default {
         deleteConfirmTitle: '确认删除该规则？',
         deleteConfirmMessage: '将删除该规则及其关联的告警事件，是否继续？',
         manage: '告警规则列表',
-        metricGroups: {
-          system: '系统指标',
-          group: '分组级别指标（需 group_id）',
-          account: '账号级别指标'
+        triggerLevels: {
+          P0: 'P0',
+          P1: 'P1',
+          P2: 'P2',
+          observe: '观察'
         },
-        metrics: {
-          successRate: '成功率 (%)',
-          errorRate: '错误率 (%)',
-          upstreamErrorRate: '上游错误率 (%)',
-          p95: 'P95 请求时长 (ms)',
-          p99: 'P99 请求时长 (ms)',
-          cpu: 'CPU 使用率 (%)',
-          memory: '内存使用率 (%)',
-          queueDepth: '并发排队深度',
-          groupAvailableAccounts: '分组可用账号数',
-          groupAvailableRatio: '分组可用比例 (%)',
-          groupRateLimitRatio: '分组限流比例 (%)',
-          accountRateLimitedCount: '限流账号数',
-          accountErrorCount: '错误账号数（不含临时不可调度）',
-          accountErrorRatio: '错误账号比例 (%)',
-          overloadAccountCount: '过载账号数'
+        categories: {
+          client: '客户端',
+          platform: '平台',
+          upstream: '上游',
+          account_pool: '账号池',
+          rate_limit: '限流',
+          permission: '权限',
+          balance: '余额',
+          config: '配置',
+          slow_request: '慢请求',
+          unknown: '未知'
         },
-        metricDescriptions: {
-          successRate: '统计窗口内成功请求占比（0~100）。',
-          errorRate: '统计窗口内失败请求占比（0~100）。',
-          upstreamErrorRate: '统计窗口内上游错误占比（0~100）。',
-          p95: '统计窗口内 P95 请求耗时（毫秒）。',
-          p99: '统计窗口内 P99 请求耗时（毫秒）。',
-          cpu: '当前实例 CPU 使用率（0~100）。',
-          memory: '当前实例内存使用率（0~100）。',
-          queueDepth: '统计窗口内并发队列排队深度（等待中的请求数）。',
-          groupAvailableAccounts: '指定分组中当前可用账号数量（需要 group_id 过滤）。',
-          groupAvailableRatio: '指定分组中可用账号占比（0~100，需要 group_id 过滤）。',
-          groupRateLimitRatio: '指定分组中账号被限流的比例（0~100，需要 group_id 过滤）。',
-          accountRateLimitedCount: '统计窗口内被限流的账号数量。',
-          accountErrorCount: '统计窗口内产生错误的账号数量（不含临时不可调度）。',
-          accountErrorRatio: '统计窗口内错误账号占比（0~100）。',
-          overloadAccountCount: '统计窗口内过载账号数量。'
+        recoveredPolicies: {
+          record_only: '只记录不告警',
+          observe_only: '参与观察',
+          alert: '参与告警'
         },
         hints: {
-          recommended: '推荐：运算符 {operator}，阈值 {threshold}{unit}',
-          groupRequired: '该指标为分组级别指标，必须选择分组（group_id）。',
-          groupOptional: '可选：通过 group_id 将规则限定到某个分组。'
+          groupOptional: '可选：通过 group_id 将规则限定到某个分组。',
+          emailRecipientsReady: '邮件通知将复用运维监控设置中的全局接收人。',
+          emailRecipientsMissing: '当前未配置全局邮件接收人，勾选邮件通知将无法保存。',
+          readonlyLegacy: '该历史迁移规则为只读展示，不能在此弹窗中修改。'
         },
         filters: {
           keywordPlaceholder: '搜索规则名称、描述或错误分类',
@@ -5353,6 +5338,7 @@ export default {
         scope: {
           affectedUsers: '影响用户',
           affectedApiKeys: '影响 API Key',
+          affectedGroups: '影响分组',
           affectedModels: '影响模型',
           affectedUpstreamAccounts: '影响上游账号'
         },
@@ -5373,32 +5359,44 @@ export default {
           actions: '操作'
         },
         form: {
-          name: '名称',
-          description: '描述',
-          metric: '指标',
-          operator: '运算符',
+          name: '规则名称',
+          description: '规则说明',
+          timeWindow: '时间窗口',
+          triggerLevel: '触发等级',
+          errorCategories: '错误分类',
+          minFinalFailures: '最小最终失败数',
+          minFailureRate: '最小失败率 (%)',
+          minSampleCount: '最小样本量',
+          impactScope: '影响范围条件',
+          recoveredPolicy: '已恢复波动处理',
+          minRecoveredFluctuations: '最小已恢复波动数',
+          autoAIAnalysis: '是否自动 AI 分析',
+          notificationChannels: '通知方式',
+          silenceMinutes: '静默时间（分钟）',
           groupId: '分组（group_id）',
           groupPlaceholder: '请选择分组',
           allGroups: '全部分组',
-          threshold: '阈值',
-          severity: '级别',
-          window: '统计窗口（分钟）',
-          sustained: '连续样本数（每分钟）',
-          cooldown: '冷却期（分钟）',
-          enabled: '启用',
-          notifyEmail: '发送邮件通知'
+          enabled: '规则状态'
         },
         validation: {
           title: '请先修正以下问题',
           invalid: '规则不合法',
-          nameRequired: '名称不能为空',
-          metricRequired: '指标不能为空',
-          groupIdRequired: '分组级别指标必须指定 group_id',
-          operatorRequired: '运算符不能为空',
-          thresholdRequired: '阈值必须为数字',
-          windowRange: '统计窗口必须为 1 / 5 / 60 分钟之一',
-          sustainedRange: '连续样本数必须在 1 到 1440 之间',
-          cooldownRange: '冷却期必须在 0 到 1440 分钟之间'
+          nameRequired: '请输入规则名称',
+          nameLength: '规则名称长度需为 2～50 个字符',
+          nameDuplicate: '规则名称已存在',
+          categoriesRequired: '请选择错误分类',
+          minFinalFailuresRange: '最小最终失败数需为 1～100000 的整数',
+          minFailureRateRange: '请输入 0～100 的百分比',
+          minSampleCountRange: '请输入大于 0 的整数',
+          minFinalFailuresRequiredForRate: '百分比规则必须配置最小失败数和最小样本量',
+          minSampleCountRequiredForRate: '百分比规则必须配置最小失败数和最小样本量',
+          minFinalFailuresGtSample: '最小最终失败数不能大于最小样本量',
+          impactScopeRange: '影响范围条件需为 1～100000 的整数',
+          minRecoveredRequired: '已恢复波动参与告警需配置最小波动数',
+          notificationNoneExclusive: '通知方式选择“无”时不能同时选择其他方式',
+          emailRecipientsRequired: '请先配置邮件接收人',
+          silenceMinutesRange: '请输入 0～1440 的整数分钟',
+          descriptionLength: '最多 500 字'
         },
         emptyFiltered: '当前筛选条件下暂无规则'
       },
