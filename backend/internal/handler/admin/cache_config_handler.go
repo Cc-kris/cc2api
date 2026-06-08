@@ -56,6 +56,10 @@ func (h *CacheConfigHandler) Clear(c *gin.Context) {
 	if subject, ok := middleware.GetAuthSubjectFromContext(c); ok && subject.UserID > 0 {
 		req.OperatorUserID = &subject.UserID
 	}
+	if h.openAIGatewayService == nil {
+		response.Error(c, http.StatusInternalServerError, "Local response cache clear unavailable")
+		return
+	}
 	result, err := h.openAIGatewayService.ClearLocalResponseCache(c.Request.Context(), req)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidLocalResponseCacheClear) {
