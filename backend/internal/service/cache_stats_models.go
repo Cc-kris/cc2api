@@ -6,12 +6,20 @@ import (
 )
 
 type CacheStatsFilter struct {
-	StartTime time.Time
-	EndTime   time.Time
-	Platform  string
-	Model     string
-	APIKeyID  *int64
-	GroupID   *int64
+	StartTime    time.Time
+	EndTime      time.Time
+	Platform     string
+	Model        string
+	APIKeyID     *int64
+	GroupID      *int64
+	HotspotLimit int
+}
+
+type PromptCacheStatsRaw struct {
+	ReadTokens           int64
+	WriteTokens          int64
+	EstimatedSavedAmount string
+	PriceMissingModels   []string
 }
 
 type CacheStatsRawRow struct {
@@ -86,6 +94,81 @@ type CacheStatsResponse struct {
 	StoreSkipReasons []CacheStatsReasonRow `json:"store_skip_reasons"`
 }
 
+type AdvancedCacheStatsResponse struct {
+	Capacity    AdvancedCacheCapacityStats    `json:"capacity"`
+	Compression AdvancedCacheCompressionStats `json:"compression"`
+	Hotspots    []AdvancedCacheHotspot        `json:"hotspots"`
+	Savings     AdvancedCacheSavings          `json:"savings"`
+	EmptyStates AdvancedCacheEmptyStates      `json:"empty_states"`
+	Fallback    AdvancedCacheFallback         `json:"fallback"`
+	UpdatedAt   time.Time                     `json:"updated_at"`
+}
+
+type AdvancedCacheCapacityStats struct {
+	CurrentUsedBytes     int64      `json:"current_used_bytes"`
+	CapacityLimitBytes   int64      `json:"capacity_limit_bytes"`
+	CapacityUsageRate    float64    `json:"capacity_usage_rate"`
+	MemorySafeLimitBytes int64      `json:"memory_safe_limit_bytes"`
+	EvictionPolicy       string     `json:"eviction_policy"`
+	RecentEvictionCount  int64      `json:"recent_eviction_count"`
+	LastEvictedAt        *time.Time `json:"last_evicted_at"`
+}
+
+type AdvancedCacheCompressionStats struct {
+	Enabled                  bool    `json:"enabled"`
+	RawResponseBytes         int64   `json:"raw_response_bytes"`
+	StoredResponseBytes      int64   `json:"stored_response_bytes"`
+	CompressionSavedBytes    int64   `json:"compression_saved_bytes"`
+	CompressionSavedRate     float64 `json:"compression_saved_rate"`
+	CompressedEntryCount     int64   `json:"compressed_entry_count"`
+	CompressionFailedCount   int64   `json:"compression_failed_count"`
+	DecompressionFailedCount int64   `json:"decompression_failed_count"`
+}
+
+type AdvancedCacheHotspot struct {
+	Rank      int                  `json:"rank"`
+	Platform  string               `json:"platform"`
+	Model     string               `json:"model"`
+	Group     AdvancedCacheNameRef `json:"group"`
+	APIKey    AdvancedCacheNameRef `json:"api_key"`
+	HitCount  int64                `json:"hit_count"`
+	HitTokens int64                `json:"hit_tokens"`
+	LastHitAt time.Time            `json:"last_hit_at"`
+}
+
+type AdvancedCacheNameRef struct {
+	ID      int64  `json:"id"`
+	Name    string `json:"name,omitempty"`
+	Display string `json:"display,omitempty"`
+}
+
+type AdvancedCacheSavings struct {
+	LocalResponseCacheSavedTokens  int64    `json:"local_response_cache_saved_tokens"`
+	LocalResponseCacheSavedAmount  *string  `json:"local_response_cache_saved_amount"`
+	UpstreamPromptCacheReadTokens  int64    `json:"upstream_prompt_cache_read_tokens"`
+	UpstreamPromptCacheWriteTokens int64    `json:"upstream_prompt_cache_write_tokens"`
+	UpstreamPromptCacheSavedAmount *string  `json:"upstream_prompt_cache_saved_amount"`
+	TotalEstimatedSavedAmount      *string  `json:"total_estimated_saved_amount"`
+	PriceMissing                   bool     `json:"price_missing"`
+	PriceMissingModels             []string `json:"price_missing_models"`
+}
+
+type AdvancedCacheEmptyStates struct {
+	Hotspots    bool `json:"hotspots"`
+	PromptCache bool `json:"prompt_cache"`
+	Price       bool `json:"price"`
+}
+
+type AdvancedCacheFallback struct {
+	AdvancedCacheFallbackActive bool       `json:"advanced_cache_fallback_active"`
+	FallbackReason              *string    `json:"fallback_reason"`
+	LastFallbackAt              *time.Time `json:"last_fallback_at"`
+}
+
 type CacheStatsRepository interface {
 	ListCacheStatsRows(ctx context.Context, filter *CacheStatsFilter) ([]*CacheStatsRawRow, error)
+}
+
+type PromptCacheStatsRepository interface {
+	ListPromptCacheStats(ctx context.Context, filter *CacheStatsFilter) (*PromptCacheStatsRaw, error)
 }

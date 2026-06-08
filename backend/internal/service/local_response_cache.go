@@ -143,9 +143,12 @@ type LocalResponseCacheMinuteStatsStore interface {
 }
 
 type LocalResponseCacheStats struct {
-	Entries  int64            `json:"entries"`
-	Bytes    int64            `json:"bytes"`
-	Counters map[string]int64 `json:"counters"`
+	Entries              int64            `json:"entries"`
+	Bytes                int64            `json:"bytes"`
+	RawResponseBytes     int64            `json:"raw_response_bytes"`
+	StoredResponseBytes  int64            `json:"stored_response_bytes"`
+	CompressedEntryCount int64            `json:"compressed_entry_count"`
+	Counters             map[string]int64 `json:"counters"`
 }
 
 type LocalResponseCacheLookup struct {
