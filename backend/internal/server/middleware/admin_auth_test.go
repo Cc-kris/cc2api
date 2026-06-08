@@ -177,6 +177,18 @@ func TestAdminAuthAllowsOpsRoleOnlyForAllowedOpsEndpoints(t *testing.T) {
 		role, _ := GetUserRoleFromContext(c)
 		c.JSON(http.StatusOK, gin.H{"role": role})
 	})
+	router.GET("/api/v1/admin/cache/semantic-audits", func(c *gin.Context) {
+		role, _ := GetUserRoleFromContext(c)
+		c.JSON(http.StatusOK, gin.H{"role": role})
+	})
+	router.POST("/api/v1/admin/cache/semantic-audits/77/review", func(c *gin.Context) {
+		role, _ := GetUserRoleFromContext(c)
+		c.JSON(http.StatusOK, gin.H{"role": role})
+	})
+	router.POST("/api/v1/admin/cache/semantic-audits/77/feedback", func(c *gin.Context) {
+		role, _ := GetUserRoleFromContext(c)
+		c.JSON(http.StatusOK, gin.H{"role": role})
+	})
 	router.GET("/api/v1/admin/cache/advanced-config", func(c *gin.Context) {
 		role, _ := GetUserRoleFromContext(c)
 		c.JSON(http.StatusOK, gin.H{"role": role})
@@ -304,6 +316,12 @@ func TestAdminAuthAllowsOpsRoleOnlyForAllowedOpsEndpoints(t *testing.T) {
 		require.Equal(t, http.StatusOK, w.Code)
 
 		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/semantic-audits", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		w = httptest.NewRecorder()
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/advanced-config", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		router.ServeHTTP(w, req)
@@ -314,6 +332,18 @@ func TestAdminAuthAllowsOpsRoleOnlyForAllowedOpsEndpoints(t *testing.T) {
 		req.Header.Set("Authorization", "Bearer "+token)
 		router.ServeHTTP(w, req)
 		require.Equal(t, http.StatusForbidden, w.Code)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/cache/semantic-audits/77/review", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/cache/semantic-audits/77/feedback", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
 
 		w = httptest.NewRecorder()
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/stats/export", nil)
@@ -355,6 +385,18 @@ func TestAdminAuthAllowsOpsRoleOnlyForAllowedOpsEndpoints(t *testing.T) {
 		require.Equal(t, http.StatusForbidden, w.Code)
 
 		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/semantic-audits", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/cache/semantic-audits/77/review", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusForbidden, w.Code)
+
+		w = httptest.NewRecorder()
 		req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/cache/clear", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		router.ServeHTTP(w, req)
@@ -371,6 +413,18 @@ func TestAdminAuthAllowsOpsRoleOnlyForAllowedOpsEndpoints(t *testing.T) {
 		require.Equal(t, http.StatusForbidden, w.Code)
 		w = httptest.NewRecorder()
 		req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/advanced-config", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusForbidden, w.Code)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/semantic-audits", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/cache/semantic-audits/77/feedback", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		router.ServeHTTP(w, req)
 		require.Equal(t, http.StatusForbidden, w.Code)

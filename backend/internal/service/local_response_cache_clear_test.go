@@ -9,11 +9,15 @@ import (
 )
 
 type localResponseCacheClearStoreStub struct {
-	result *LocalResponseCacheClearResult
-	err    error
-	audit  LocalResponseCacheClearAudit
-	page   *LocalResponseCacheClearAuditPage
-	filter LocalResponseCacheClearAuditFilter
+	result         *LocalResponseCacheClearResult
+	err            error
+	audit          LocalResponseCacheClearAudit
+	page           *LocalResponseCacheClearAuditPage
+	filter         LocalResponseCacheClearAuditFilter
+	semanticPage   *SemanticCacheAuditListPage
+	semanticFilter SemanticCacheAuditListFilter
+	semanticRecord *SemanticCacheAuditListRecord
+	stats          *SemanticCacheAuditQualityStats
 }
 
 func (s *localResponseCacheClearStoreStub) GetSessionAccountID(context.Context, int64, string) (int64, error) {
@@ -38,6 +42,28 @@ func (s *localResponseCacheClearStoreStub) RecordLocalResponseCacheClearAudit(_ 
 func (s *localResponseCacheClearStoreStub) ListLocalResponseCacheClearAudits(_ context.Context, filter LocalResponseCacheClearAuditFilter) (*LocalResponseCacheClearAuditPage, error) {
 	s.filter = filter
 	return s.page, nil
+}
+func (s *localResponseCacheClearStoreStub) ListSemanticCacheAudits(_ context.Context, filter SemanticCacheAuditListFilter) (*SemanticCacheAuditListPage, error) {
+	s.semanticFilter = filter
+	return s.semanticPage, s.err
+}
+func (s *localResponseCacheClearStoreStub) UpdateSemanticCacheAuditReview(_ context.Context, _ int64, _ string, _ int64) (*SemanticCacheAuditListRecord, error) {
+	return s.semanticRecord, s.err
+}
+func (s *localResponseCacheClearStoreStub) UpdateSemanticCacheAuditFeedback(_ context.Context, _ int64, _ string, _ string, _ int64) (*SemanticCacheAuditListRecord, error) {
+	return s.semanticRecord, s.err
+}
+func (s *localResponseCacheClearStoreStub) SetSemanticCacheAuditAutoCloseReason(_ context.Context, _ int64, reason string) error {
+	if s.semanticRecord != nil {
+		s.semanticRecord.AutoCloseReason = reason
+	}
+	return nil
+}
+func (s *localResponseCacheClearStoreStub) GetSemanticCacheAudit24hQualityStats(_ context.Context, _ time.Time) (*SemanticCacheAuditQualityStats, error) {
+	if s.stats == nil {
+		return &SemanticCacheAuditQualityStats{}, nil
+	}
+	return s.stats, nil
 }
 
 func TestOpenAIGatewayServiceClearLocalResponseCacheValidatesAllConfirmText(t *testing.T) {
@@ -95,4 +121,46 @@ func TestOpenAIGatewayServiceListLocalResponseCacheClearAuditsRejectsInvalidStat
 	_, err := svc.ListLocalResponseCacheClearAudits(context.Background(), LocalResponseCacheClearAuditFilter{Status: "done"})
 
 	require.ErrorIs(t, err, ErrInvalidLocalResponseCacheAuditList)
+}
+
+func TestOpenAIGatewayServiceListSemanticCacheAuditsNormalizesFilter(t *testing.T) {
+	store := &localResponseCacheClearStoreStub{semanticPage: &SemanticCacheAuditListPage{}}
+	svc := &OpenAIGatewayService{cache: store}
+
+	got, err := svc.ListSemanticCacheAudits(context.Background(), SemanticCacheAuditListFilter{
+		PageSize:     200,
+		Platform:     "openai",
+		ReviewStatus: SemanticCacheReviewPending,
+		Decision:     SemanticCacheDecisionHit,
+		ViewerRole:   "ops",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Equal(t, 1, store.semanticFilter.Page)
+	require.Equal(t, 100, store.semanticFilter.PageSize)
+	require.Equal(t, "openai", store.semanticFilter.Platform)
+	require.Equal(t, SemanticCacheDecisionHit, store.semanticFilter.Decision)
+}
+
+func TestOpenAIGatewayServiceListSemanticCacheAuditsRejectsInvalidSimilarity(t *testing.T) {
+	tooHigh := 1.1
+	svc := &OpenAIGatewayService{cache: &localResponseCacheClearStoreStub{}}
+
+	_, err := svc.ListSemanticCacheAudits(context.Background(), SemanticCacheAuditListFilter{
+		MinSimilarity: &tooHigh,
+		ViewerRole:    "ops",
+	})
+
+	require.ErrorIs(t, err, ErrInvalidSemanticCacheAuditList)
+}
+
+func TestOpenAIGatewayServiceFeedbackSemanticCacheAuditRequiresNote(t *testing.T) {
+	svc := &OpenAIGatewayService{cache: &localResponseCacheClearStoreStub{}}
+
+	_, err := svc.FeedbackSemanticCacheAudit(context.Background(), 7, SemanticCacheAuditFeedbackRequest{
+		FeedbackType: SemanticCacheFeedbackWrongHit,
+	}, 9, "ops")
+
+	require.ErrorIs(t, err, ErrInvalidSemanticCacheAuditFeedback)
 }

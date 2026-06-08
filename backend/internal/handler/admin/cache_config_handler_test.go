@@ -244,16 +244,16 @@ type cacheClearHandlerServiceStub struct {
 	filter service.LocalResponseCacheClearAuditFilter
 	page   *service.LocalResponseCacheClearAuditPage
 
-	semanticFilter service.SemanticCacheAuditListFilter
-	semanticPage   *service.SemanticCacheAuditListPage
-	semanticRecord *service.SemanticCacheAuditListRecord
-	reviewReq      service.SemanticCacheAuditReviewRequest
-	feedbackReq    service.SemanticCacheAuditFeedbackRequest
-	reviewAuditID  int64
-	feedbackAuditID int64
-	reviewOperator int64
+	semanticFilter   service.SemanticCacheAuditListFilter
+	semanticPage     *service.SemanticCacheAuditListPage
+	semanticRecord   *service.SemanticCacheAuditListRecord
+	reviewReq        service.SemanticCacheAuditReviewRequest
+	feedbackReq      service.SemanticCacheAuditFeedbackRequest
+	reviewAuditID    int64
+	feedbackAuditID  int64
+	reviewOperator   int64
 	feedbackOperator int64
-	viewerRole     string
+	viewerRole       string
 }
 
 func (s *cacheClearHandlerServiceStub) ClearLocalResponseCache(_ context.Context, req service.LocalResponseCacheClearRequest) (*service.LocalResponseCacheClearResult, error) {

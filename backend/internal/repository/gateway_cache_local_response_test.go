@@ -233,6 +233,77 @@ func TestGatewayCacheListLocalResponseCacheClearAudits(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestGatewayCacheListSemanticCacheAudits(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+	cache := &gatewayCache{db: db}
+	ctx := context.Background()
+	apiKeyID := int64(12)
+	entryID := int64(3)
+	operatorID := int64(9)
+	start := time.Date(2026, 6, 8, 0, 0, 0, 0, time.UTC)
+	end := start.Add(time.Hour)
+	occurredAt := start.Add(30 * time.Minute)
+
+	mock.ExpectQuery(`SELECT COUNT\(\*\) FROM ops_semantic_cache_audits a WHERE a\.occurred_at >= \$1 AND a\.occurred_at <= \$2 AND a\.platform = \$3 AND a\.model = \$4 AND a\.api_key_id = \$5 AND a\.review_status = \$6 AND a\.decision = \$7 AND a\.similarity >= \$8 AND a\.similarity <= \$9`).
+		WithArgs(start, end, "openai", "gpt-5.5", apiKeyID, service.SemanticCacheReviewPending, service.SemanticCacheDecisionHit, 0.98, 0.99).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	mock.ExpectQuery(`(?s)SELECT\s+a\.id, a\.request_id, a\.semantic_entry_id, a\.occurred_at.*FROM ops_semantic_cache_audits a.*LEFT JOIN api_keys k ON a\.api_key_id = k\.id.*LIMIT \$10 OFFSET \$11`).
+		WithArgs(start, end, "openai", "gpt-5.5", apiKeyID, service.SemanticCacheReviewPending, service.SemanticCacheDecisionHit, 0.98, 0.99, 10, 10).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "request_id", "semantic_entry_id", "occurred_at", "platform", "model", "api_key_id", "key", "similarity", "decision", "block_reason", "review_status", "feedback_type", "feedback_note", "operator_user_id", "auto_close_reason", "source_summary", "target_summary", "updated_at"}).
+			AddRow(7, "req-1", entryID, occurredAt, "openai", "gpt-5.5", apiKeyID, "sk-test-key", 0.9876, service.SemanticCacheDecisionHit, "", service.SemanticCacheReviewPending, service.SemanticCacheFeedbackNone, "", operatorID, "", "source", "target", occurredAt))
+
+	minSimilarity := 0.98
+	maxSimilarity := 0.99
+	page, err := cache.ListSemanticCacheAudits(ctx, service.SemanticCacheAuditListFilter{
+		Page:          2,
+		PageSize:      10,
+		StartTime:     &start,
+		EndTime:       &end,
+		Platform:      "openai",
+		Model:         "gpt-5.5",
+		APIKeyID:      &apiKeyID,
+		ReviewStatus:  service.SemanticCacheReviewPending,
+		Decision:      service.SemanticCacheDecisionHit,
+		MinSimilarity: &minSimilarity,
+		MaxSimilarity: &maxSimilarity,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(1), page.Total)
+	require.Len(t, page.Items, 1)
+	require.Equal(t, int64(7), page.Items[0].ID)
+	require.Equal(t, "req-1", page.Items[0].RequestID)
+	require.Equal(t, apiKeyID, *page.Items[0].APIKeyID)
+	require.Equal(t, occurredAt, page.Items[0].OccurredAt)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGatewayCacheUpdateSemanticCacheAuditReview(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+	cache := &gatewayCache{db: db}
+	apiKeyID := int64(12)
+	operatorID := int64(9)
+	occurredAt := time.Date(2026, 6, 8, 0, 30, 0, 0, time.UTC)
+
+	mock.ExpectExec(`(?s)UPDATE ops_semantic_cache_audits`).
+		WithArgs(int64(7), service.SemanticCacheReviewReusable, operatorID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(`(?s)SELECT\s+a\.id, a\.request_id, a\.semantic_entry_id, a\.occurred_at.*WHERE a\.id = \$1`).
+		WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "request_id", "semantic_entry_id", "occurred_at", "platform", "model", "api_key_id", "key", "similarity", "decision", "block_reason", "review_status", "feedback_type", "feedback_note", "operator_user_id", "auto_close_reason", "source_summary", "target_summary", "updated_at"}).
+			AddRow(7, "req-1", nil, occurredAt, "openai", "gpt-5.5", apiKeyID, "sk-test-key", 0.9876, service.SemanticCacheDecisionHit, "", service.SemanticCacheReviewReusable, service.SemanticCacheFeedbackNone, "", operatorID, "", "source", "target", occurredAt))
+
+	record, err := cache.UpdateSemanticCacheAuditReview(context.Background(), 7, service.SemanticCacheReviewReusable, operatorID)
+
+	require.NoError(t, err)
+	require.Equal(t, service.SemanticCacheReviewReusable, record.ReviewStatus)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestGatewayCacheEvictLocalResponseCacheLRUDeletesOldestUntilUnderCapacity(t *testing.T) {
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
