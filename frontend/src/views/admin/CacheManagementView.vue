@@ -12,6 +12,9 @@
             </p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
+            <RouterLink class="btn btn-secondary" to="/admin/settings/cache/stats">
+              {{ t('admin.cacheManagement.openStats') }}
+            </RouterLink>
             <button type="button" class="btn btn-secondary" :disabled="loading || saving" @click="loadConfig(true)">
               {{ t('admin.cacheManagement.refresh') }}
             </button>
@@ -304,6 +307,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -355,8 +359,8 @@ const sections = computed(() => [
     key: 'stats',
     title: t('admin.cacheManagement.sectionCards.statsTitle'),
     description: t('admin.cacheManagement.sectionCards.statsDescription'),
-    badge: t('admin.cacheManagement.sectionCards.pending'),
-    active: false
+    badge: t('admin.cacheManagement.sectionCards.active'),
+    active: true
   },
   {
     key: 'maintenance',

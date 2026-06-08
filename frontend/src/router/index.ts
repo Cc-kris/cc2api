@@ -598,15 +598,15 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/admin/settings/cache/clear',
-    name: 'AdminCacheClear',
-    component: () => import('@/views/admin/cache/CacheClearPanel.vue'),
+    path: '/admin/settings/cache/stats',
+    name: 'AdminCacheStats',
+    component: () => import('@/views/admin/CacheStatsView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
-      title: 'Cache Clear',
-      titleKey: 'admin.cacheManagement.clearPage.title',
-      descriptionKey: 'admin.cacheManagement.clearPage.description'
+      title: 'Cache Stats',
+      titleKey: 'admin.cacheStats.title',
+      descriptionKey: 'admin.cacheStats.description'
     }
   },
   {
