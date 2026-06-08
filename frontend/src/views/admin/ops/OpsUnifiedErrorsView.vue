@@ -298,7 +298,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import { adminAPI } from '@/api'
 import { listUnifiedErrors, type OpsUnifiedEntityRef, type OpsUnifiedErrorItem, type OpsUnifiedErrorListQueryParams } from '@/api/admin/ops'
 import { useAppStore } from '@/stores'
-import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
+import { formatDateTime } from '@/utils/format'
 
 type GroupOption = {
   id: number
@@ -405,10 +405,29 @@ function parsePositiveInt(value: string): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
+function formatDateTimeInput(value: string): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+function buildDateTimeQuery(value: string): string | undefined {
+  if (!value) return undefined
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return undefined
+  return date.toISOString()
+}
+
 function initializeFromRoute() {
   timeRange.value = firstQueryValue(route.query.time_range) || '30m'
-  customStartInput.value = formatDateTimeLocalInput(firstQueryValue(route.query.start_time))
-  customEndInput.value = formatDateTimeLocalInput(firstQueryValue(route.query.end_time))
+  customStartInput.value = formatDateTimeInput(firstQueryValue(route.query.start_time))
+  customEndInput.value = formatDateTimeInput(firstQueryValue(route.query.end_time))
   errorCategories.value = splitCSV(firstQueryValue(route.query.error_categories))
   errorSubcategoriesInput.value = firstQueryValue(route.query.error_subcategories)
   clientErrorSubcategories.value = splitCSV(firstQueryValue(route.query.client_error_subcategories))
@@ -440,8 +459,8 @@ function buildQueryObject(): Record<string, string> {
   }
 
   if (timeRange.value === 'custom') {
-    const startIso = parseDateTimeLocalInput(customStartInput.value)
-    const endIso = parseDateTimeLocalInput(customEndInput.value)
+    const startIso = buildDateTimeQuery(customStartInput.value)
+    const endIso = buildDateTimeQuery(customEndInput.value)
     if (startIso) query.start_time = startIso
     if (endIso) query.end_time = endIso
     if (!startIso || !endIso) query.time_range = '30m'
