@@ -403,15 +403,15 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/admin/ops/errors/:id',
-    name: 'AdminOpsUnifiedErrorDetail',
-    component: () => import('@/views/admin/ops/OpsUnifiedErrorDetail.vue'),
+    path: '/admin/ops/errors',
+    name: 'AdminOpsUnifiedErrors',
+    component: () => import('@/views/admin/ops/OpsUnifiedErrorsView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: true,
-      title: 'Unified Error Detail',
-      titleKey: 'admin.ops.unifiedErrorDetail.title',
-      descriptionKey: 'admin.ops.unifiedErrorDetail.description'
+      title: 'Unified Ops Errors',
+      titleKey: 'admin.ops.title',
+      descriptionKey: 'admin.ops.description'
     }
   },
   {
