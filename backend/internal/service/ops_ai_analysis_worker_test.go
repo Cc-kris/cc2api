@@ -159,7 +159,7 @@ func TestRedactAIContextTextRedactsEmailAndToken(t *testing.T) {
 	if strings.Contains(got, "real-user@example.com") || strings.Contains(got, "sk-1234567890abcdef") {
 		t.Fatalf("sensitive text leaked: %s", got)
 	}
-	if !strings.Contains(got, "[REDACTED") {
+	if !strings.Contains(got, "r***@example.com") || !strings.Contains(got, "******") {
 		t.Fatalf("missing redaction marker: %s", got)
 	}
 }
@@ -260,8 +260,10 @@ func TestBuildAIAnalysisContextSamplesAreRedacted(t *testing.T) {
 			t.Fatalf("AI context leaked %q: %s", forbidden, serialized)
 		}
 	}
-	if !strings.Contains(serialized, "[REDACTED]") {
-		t.Fatalf("expected redacted marker: %s", serialized)
+	for _, expected := range []string{"r***@example.com", "******"} {
+		if !strings.Contains(serialized, expected) {
+			t.Fatalf("expected redacted marker %q: %s", expected, serialized)
+		}
 	}
 }
 
