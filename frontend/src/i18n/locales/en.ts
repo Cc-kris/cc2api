@@ -5808,7 +5808,7 @@ export default {
         advancedTitle: 'Advanced policy',
         advancedDescription: 'Capacity, compression, eviction, hot-key, and savings views are now available.',
         semanticTitle: 'Semantic cache',
-        semanticDescription: 'Config save, connection test, and gray-scope setup are now available; audit list and feedback will be completed in follow-up tasks.',
+        semanticDescription: 'Configuration and semantic audit pages are now available, including review, feedback, and gray-stage observation.',
       },
       summary: {
         global: 'Global cache',
@@ -5883,6 +5883,12 @@ export default {
         clear: 'Clear',
         advanced: 'Advanced',
         semantic: 'Semantic',
+        semanticAudit: 'Semantic Audit',
+      },
+
+      semanticAuditPage: {
+        title: 'Semantic Cache Audit',
+        description: 'Review semantic candidate hits and submit audit decisions or feedback.',
       },
 
       advancedPage: {

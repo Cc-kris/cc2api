@@ -18,6 +18,9 @@
             <RouterLink class="btn btn-secondary" to="/admin/settings/cache/semantic">
               {{ t('admin.cacheManagement.nav.semantic') }}
             </RouterLink>
+            <RouterLink class="btn btn-secondary" to="/admin/settings/cache/semantic-audits">
+              {{ t('admin.cacheManagement.nav.semanticAudit') }}
+            </RouterLink>
             <button type="button" class="btn btn-secondary" :disabled="loading || saving" @click="loadConfig(true)">
               {{ t('admin.cacheManagement.refresh') }}
             </button>
