@@ -451,6 +451,12 @@ const validationError = computed(() => {
 
   const minSimilarity = parseOptionalNumber(filters.minSimilarity)
   const maxSimilarity = parseOptionalNumber(filters.maxSimilarity)
+  if (filters.minSimilarity && minSimilarity === undefined) {
+    return '最低相似度格式不正确。'
+  }
+  if (filters.maxSimilarity && maxSimilarity === undefined) {
+    return '最高相似度格式不正确。'
+  }
   if (minSimilarity !== undefined && (minSimilarity < 0 || minSimilarity > 1)) {
     return '最低相似度必须在 0 到 1 之间。'
   }
