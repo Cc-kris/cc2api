@@ -28,6 +28,15 @@
             <button
               type="button"
               class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:disabled:bg-blue-800/60"
+              :disabled="manualAIActionDisabled"
+              :title="manualAIActionDisabledReason || undefined"
+              @click="runManualAIAnalysis"
+            >
+              {{ manualAIActionLoading ? '分析中...' : '手动 AI 分析' }}
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:disabled:bg-blue-800/60"
               :disabled="exportButtonDisabled"
               :title="exportButtonTitle || undefined"
               @click="exportErrors"
@@ -37,8 +46,9 @@
           </div>
         </div>
 
-        <div class="mt-3 text-xs text-gray-500 dark:text-gray-400">
-          {{ exportHint }}
+        <div class="mt-3 space-y-1 text-xs text-gray-500 dark:text-gray-400">
+          <div>{{ exportHint }}</div>
+          <div v-if="manualAIActionDisabledReason">{{ manualAIActionDisabledReason }}</div>
         </div>
 
         <div v-if="errorMessage" class="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
@@ -310,9 +320,10 @@ import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import { adminAPI } from '@/api'
-import { exportUnifiedErrors, listUnifiedErrors, type OpsUnifiedEntityRef, type OpsUnifiedErrorItem, type OpsUnifiedErrorListQueryParams } from '@/api/admin/ops'
+import { exportUnifiedErrors, listUnifiedErrors, opsAPI, type OpsUnifiedEntityRef, type OpsUnifiedErrorItem, type OpsUnifiedErrorListQueryParams } from '@/api/admin/ops'
 import { useAppStore, useAuthStore } from '@/stores'
 import { formatDateTime } from '@/utils/format'
+import { canManageManualAIAnalysis, fetchOpsAIAnalysisConfig, isManualAIAnalysisConfigured, type OpsAIAnalysisConfigSnapshot } from './utils/manualAIAnalysis'
 
 type GroupOption = {
   id: number
@@ -375,11 +386,16 @@ const clientErrorSubcategoryOptions = [
 
 const loading = ref(false)
 const exporting = ref(false)
+const manualAIActionLoading = ref(false)
 const hasLoadedOnce = ref(false)
 const errorMessage = ref('')
 const items = ref<OpsUnifiedErrorItem[]>([])
 const total = ref(0)
 const groups = ref<GroupOption[]>([])
+const manualAIConfig = ref<OpsAIAnalysisConfigSnapshot | null>(null)
+const manualAIConfigLoaded = ref(false)
+const manualAIConfigLoadError = ref('')
+const activeManualAITaskId = ref<number | null>(null)
 
 const timeRange = ref('30m')
 const customStartInput = ref('')
@@ -410,6 +426,7 @@ const exportAllowedRoles = new Set(['admin', 'ops', 'operation', 'operator'])
 
 const currentViewerRole = computed(() => String((authStore.user as { role?: string } | null)?.role || '').trim().toLowerCase())
 const canExport = computed(() => exportAllowedRoles.has(currentViewerRole.value))
+const canRunManualAIAnalysis = computed(() => canManageManualAIAnalysis(currentViewerRole.value))
 const exportButtonDisabled = computed(() => exporting.value || !canExport.value)
 const exportButtonTitle = computed(() => {
   if (exporting.value) return '正在导出错误列表'
@@ -420,6 +437,42 @@ const exportHint = computed(() => {
   if (!canExport.value) return '当前账号无权限导出错误列表。'
   return '仅平台所有者、运维可导出；导出范围最长 7 天，最多 100000 行。'
 })
+
+const selectedWindowMs = computed(() => {
+  if (timeRange.value === 'custom') {
+    const startIso = buildDateTimeQuery(customStartInput.value)
+    const endIso = buildDateTimeQuery(customEndInput.value)
+    if (!startIso || !endIso) return 0
+    return Math.max(0, new Date(endIso).getTime() - new Date(startIso).getTime())
+  }
+  switch (timeRange.value) {
+    case '30m':
+      return 30 * 60 * 1000
+    case '1h':
+      return 60 * 60 * 1000
+    case '6h':
+      return 6 * 60 * 60 * 1000
+    case '24h':
+      return 24 * 60 * 60 * 1000
+    case '7d':
+      return 7 * 24 * 60 * 60 * 1000
+    default:
+      return 0
+  }
+})
+
+const manualAIActionDisabledReason = computed(() => {
+  if (!canRunManualAIAnalysis.value) return '当前账号无权限执行此操作'
+  if (manualAIActionLoading.value || activeManualAITaskId.value) return '分析任务处理中，请稍后查看'
+  if (manualAIConfigLoadError.value) return manualAIConfigLoadError.value
+  if (!manualAIConfigLoaded.value) return 'AI 配置加载完成后可发起分析'
+  if (!isManualAIAnalysisConfigured(manualAIConfig.value)) return '请先配置 AI 分析服务'
+  if (selectedWindowMs.value > 24 * 60 * 60 * 1000) return '手动 AI 分析时间范围不能超过 24 小时'
+  if (total.value <= 0) return '当前范围暂无可分析错误'
+  return ''
+})
+
+const manualAIActionDisabled = computed(() => manualAIActionDisabledReason.value !== '')
 
 function splitCSV(value: string): string[] {
   return value.split(',').map((item) => item.trim()).filter(Boolean)
@@ -626,6 +679,89 @@ async function exportErrors() {
   }
 }
 
+function getCurrentRangeBounds(): { start: string, end: string } | null {
+  if (timeRange.value === 'custom') {
+    const start = buildDateTimeQuery(customStartInput.value)
+    const end = buildDateTimeQuery(customEndInput.value)
+    if (!start || !end) return null
+    return { start, end }
+  }
+
+  const endTime = new Date()
+  const startTime = new Date(endTime.getTime() - selectedWindowMs.value)
+  return {
+    start: startTime.toISOString(),
+    end: endTime.toISOString()
+  }
+}
+
+function buildManualAIAnalysisFilters(): Record<string, any> {
+  const filters: Record<string, any> = {}
+  if (errorCategories.value.length) filters.error_categories = [...errorCategories.value]
+  const errorSubcategories = splitCSV(errorSubcategoriesInput.value)
+  if (errorSubcategories.length) filters.error_subcategories = errorSubcategories
+  if (clientErrorSubcategories.value.length) filters.client_error_subcategories = [...clientErrorSubcategories.value]
+  if (errorResults.value.length) filters.error_results = [...errorResults.value]
+  if (severities.value.length) filters.severity = [...severities.value]
+
+  const statusCodes = statusCode.value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .flatMap((segment) => {
+      const rangeMatch = segment.match(/^(\d{3})-(\d{3})$/)
+      if (rangeMatch) {
+        const start = Number.parseInt(rangeMatch[1], 10)
+        const end = Number.parseInt(rangeMatch[2], 10)
+        if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return []
+        return Array.from({ length: end - start + 1 }, (_, index) => start + index)
+      }
+      const code = Number.parseInt(segment, 10)
+      return Number.isFinite(code) ? [code] : []
+    })
+  if (statusCodes.length) filters.status_code = Array.from(new Set(statusCodes)).sort((a, b) => a - b)
+
+  const parsedUserId = parsePositiveInt(userId.value)
+  if (parsedUserId) filters.user_id = parsedUserId
+  const parsedApiKeyId = parsePositiveInt(apiKeyId.value)
+  if (parsedApiKeyId) filters.api_key_id = parsedApiKeyId
+  const parsedGroupId = parsePositiveInt(groupId.value)
+  if (parsedGroupId) filters.group_id = parsedGroupId
+  if (platform.value.trim()) filters.platform = platform.value.trim()
+  if (model.value.trim()) filters.model = model.value.trim()
+  const parsedUpstreamAccountId = parsePositiveInt(upstreamAccountId.value)
+  if (parsedUpstreamAccountId) filters.upstream_account_id = parsedUpstreamAccountId
+  if (requestId.value.trim()) filters.request_id = requestId.value.trim()
+  if (keyword.value.trim()) filters.keyword = keyword.value.trim()
+  return filters
+}
+
+async function runManualAIAnalysis() {
+  if (manualAIActionDisabled.value || manualAIActionLoading.value) return
+  const currentRange = getCurrentRangeBounds()
+  if (!currentRange) {
+    appStore.showError('请选择完整的开始和结束时间')
+    return
+  }
+
+  manualAIActionLoading.value = true
+  try {
+    const result = await opsAPI.createAIAnalysisTask({
+      source_type: 'manual_filter',
+      time_start: currentRange.start,
+      time_end: currentRange.end,
+      filters: buildManualAIAnalysisFilters()
+    })
+    activeManualAITaskId.value = result.task_id
+    appStore.showSuccess(result.message || 'AI 分析任务已提交')
+    await fetchErrors()
+  } catch (err: any) {
+    appStore.showError(err?.message || '创建 AI 分析任务失败')
+  } finally {
+    manualAIActionLoading.value = false
+  }
+}
+
 function applyFilters() {
   page.value = 1
   void fetchErrors()
@@ -752,9 +888,21 @@ async function loadGroups() {
   }
 }
 
+async function loadManualAIAnalysisConfig() {
+  manualAIConfigLoadError.value = ''
+  try {
+    manualAIConfig.value = await fetchOpsAIAnalysisConfig()
+  } catch (err: any) {
+    manualAIConfig.value = null
+    manualAIConfigLoadError.value = err?.message || 'AI 配置加载失败，请稍后重试'
+  } finally {
+    manualAIConfigLoaded.value = true
+  }
+}
+
 onMounted(async () => {
   initializeFromRoute()
-  await loadGroups()
+  await Promise.all([loadGroups(), loadManualAIAnalysisConfig()])
   await fetchErrors()
 })
 </script>
