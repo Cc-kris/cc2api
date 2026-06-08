@@ -812,6 +812,7 @@ export type MetricType =
   | 'account_error_count'
   | 'account_error_ratio'
   | 'overload_account_count'
+  | 'compound_rule'
 export type Operator = '>' | '>=' | '<' | '<=' | '==' | '!='
 
 export interface AlertRule {
@@ -828,6 +829,19 @@ export interface AlertRule {
   cooldown_minutes: number
   notify_email: boolean
   filters?: Record<string, any>
+  rule_version?: string
+  error_categories?: string[]
+  trigger_level?: string
+  min_final_failures?: number
+  min_failure_rate?: number
+  min_sample_count?: number
+  impact_scope?: Record<string, number>
+  recovered_fluctuation_policy?: string
+  min_recovered_fluctuations?: number
+  auto_ai_analysis?: boolean
+  notification_channels?: string[]
+  silence_minutes?: number
+  migration_state?: string
   created_at?: string
   updated_at?: string
   last_triggered_at?: string | null

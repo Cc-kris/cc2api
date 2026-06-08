@@ -658,7 +658,7 @@ function cancelDelete() {
                     {{ row.description }}
                   </div>
                   <div class="mt-1 text-[10px] text-gray-400">
-                    {{ formatDateTime(row.updated_at || row.created_at) }}
+                    {{ row.updated_at || row.created_at ? formatDateTime((row.updated_at || row.created_at) as string) : '--' }}
                   </div>
                 </button>
               </td>
