@@ -647,7 +647,9 @@ import Icon from '@/components/icons/Icon.vue'
 import { adminAPI } from '@/api'
 import {
   opsAPI,
+  type OpsAIAnalysisEvidenceItem,
   type OpsAIAnalysisFeedbackStatus,
+  type OpsAIAnalysisImpactScope,
   type OpsAIAnalysisTaskCreateRequest,
   type OpsAIAnalysisTaskDetailResponse,
   type OpsIncidentOverview,
@@ -897,6 +899,108 @@ const analysisActions = computed(() => {
   if (typeof value === 'string' && value.trim()) return [value.trim()]
   return []
 })
+const analysisTaskTimeLabel = computed(() => {
+  const task = aiTaskDetail.value?.task
+  return timeFallback(task?.finished_at || task?.started_at || task?.created_at)
+})
+const analysisTaskRangeLabel = computed(() => {
+  const task = aiTaskDetail.value?.task
+  if (!task?.time_start || !task?.time_end) return '—'
+  return `${formatDateTime(task.time_start)} ~ ${formatDateTime(task.time_end)}`
+})
+const analysisTaskStatus = computed(() => String(aiTaskDetail.value?.task.status || '').trim().toLowerCase())
+const analysisTaskStateClass = computed(() => {
+  switch (analysisTaskStatus.value) {
+    case 'failed':
+      return 'rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300'
+    case 'expired':
+      return 'rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300'
+    default:
+      return 'rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-600 dark:bg-dark-800/70 dark:text-gray-300'
+  }
+})
+const analysisTaskStateMessage = computed(() => {
+  if (aiReportLoading.value || aiReportError.value || !aiTaskDetail.value?.task) return ''
+  if (analysisTaskStatus.value === 'pending' || analysisTaskStatus.value === 'running') {
+    return t('admin.ops.incidentOverview.analysisPending')
+  }
+  if (analysisTaskStatus.value === 'completed' && !aiTaskDetail.value?.report) {
+    return t('admin.ops.incidentOverview.analysisReportGenerating')
+  }
+  if (analysisTaskStatus.value === 'failed') {
+    return aiTaskDetail.value.task.error_message || t('admin.ops.incidentOverview.analysisFailed')
+  }
+  if (analysisTaskStatus.value === 'expired') {
+    return t('admin.ops.incidentOverview.analysisStatus.expired')
+  }
+  return ''
+})
+const analysisTaskFallbackMessage = computed(() => {
+  if (aiReportLoading.value) return t('admin.ops.incidentOverview.analysisLoading')
+  if (aiReportError.value) return aiReportError.value
+  return t('admin.ops.incidentOverview.analysisPending')
+})
+const analysisEvidenceItems = computed(() => {
+  const value = aiTaskDetail.value?.report?.evidence
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === 'string') return item.trim()
+        const entry = item as OpsAIAnalysisEvidenceItem
+        return [entry.text, entry.label, entry.value]
+          .map((part) => String(part ?? '').trim())
+          .find(Boolean) || ''
+      })
+      .filter(Boolean)
+  }
+  if (typeof value === 'string' && value.trim()) return [value.trim()]
+  return []
+})
+const analysisImpactItems = computed(() => {
+  const raw = aiTaskDetail.value?.report?.impact_scope
+  if (!raw || typeof raw !== 'object') return []
+  const impact = raw as OpsAIAnalysisImpactScope
+  const fields = [
+    { key: 'affected_users', label: t('admin.ops.incidentOverview.impact.affectedUsers') },
+    { key: 'affected_api_keys', label: t('admin.ops.incidentOverview.impact.affectedApiKeys') },
+    { key: 'affected_models', label: t('admin.ops.incidentOverview.impact.affectedModels') },
+    { key: 'affected_upstream_accounts', label: t('admin.ops.incidentOverview.impact.affectedAccounts') }
+  ] as const
+  return fields
+    .map(({ key, label }) => {
+      const value = impact[key]
+      return typeof value === 'number' && Number.isFinite(value)
+        ? { label, value: String(value) }
+        : null
+    })
+    .filter((item): item is { label: string, value: string } => Boolean(item))
+})
+const analysisConfidenceLevel = computed(() => String(aiTaskDetail.value?.report?.confidence || '').trim().toLowerCase())
+const analysisConfidenceBadgeLabel = computed(() => {
+  switch (analysisConfidenceLevel.value) {
+    case 'high':
+      return t('admin.ops.incidentOverview.confidence.high')
+    case 'medium':
+      return t('admin.ops.incidentOverview.confidence.medium')
+    case 'low':
+      return t('admin.ops.incidentOverview.confidence.low')
+    default:
+      return ''
+  }
+})
+const analysisConfidenceBadgeClass = computed(() => {
+  switch (analysisConfidenceLevel.value) {
+    case 'high':
+      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+    case 'medium':
+      return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+    case 'low':
+      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+    default:
+      return 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-200'
+  }
+})
+const analysisConfidenceText = computed(() => analysisConfidenceBadgeLabel.value || t('admin.ops.unifiedErrorDetail.unknown'))
 
 const feedbackNoteLength = computed(() => Array.from(feedbackForm.value.feedback_note.trim()).length)
 const feedbackSubmitDisabled = computed(() => {
@@ -1246,6 +1350,11 @@ function analysisTaskStatusClass(status: string): string {
     default:
       return 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-200'
   }
+}
+
+function timeFallback(value: string | null | undefined): string {
+  if (!value) return '—'
+  return formatDateTime(value)
 }
 
 function handleTimeRangeChange(nextValue: OpsIncidentOverviewTimeRange) {
