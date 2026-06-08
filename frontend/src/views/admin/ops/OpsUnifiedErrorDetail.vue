@@ -255,9 +255,96 @@
                   <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.aiTaskId') }}</div>
                   <div class="detail-field__value">{{ numberFallback(detail.ai_analysis.task_id) }}</div>
                 </div>
+                <div class="detail-field">
+                  <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.analysisTime') }}</div>
+                  <div class="detail-field__value">{{ aiAnalysisTimeLabel }}</div>
+                </div>
+                <div class="detail-field">
+                  <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.analysisRange') }}</div>
+                  <div class="detail-field__value">{{ aiAnalysisRangeLabel }}</div>
+                </div>
                 <div class="detail-field detail-field--full">
                   <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.aiSummary') }}</div>
-                  <div class="detail-field__value whitespace-pre-wrap">{{ fallback(detail.ai_analysis.summary, t('admin.ops.unifiedErrorDetail.notAnalyzed')) }}</div>
+                  <div class="detail-field__value whitespace-pre-wrap">{{ aiAnalysisSummary }}</div>
+                </div>
+              </div>
+
+              <div v-if="aiReportLoading" class="mt-4 rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-600 dark:bg-dark-800/70 dark:text-gray-300">
+                {{ t('admin.ops.unifiedErrorDetail.analysisLoading') }}
+              </div>
+
+              <div v-else-if="aiReportError" class="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
+                {{ aiReportError }}
+              </div>
+
+              <div v-else-if="aiReportStateMessage" :class="['mt-4 rounded-2xl px-4 py-3 text-sm', aiReportStateClass]">
+                {{ aiReportStateMessage }}
+              </div>
+
+              <div v-if="aiTaskDetail?.report" class="mt-5 space-y-4">
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
+                    <div class="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      <span>{{ t('admin.ops.unifiedErrorDetail.fields.analysisConfidence') }}</span>
+                      <span
+                        v-if="aiAnalysisConfidenceBadgeLabel"
+                        :class="['rounded-full px-2 py-0.5 text-[11px] font-semibold normal-case tracking-normal', aiAnalysisConfidenceBadgeClass]"
+                      >
+                        {{ aiAnalysisConfidenceBadgeLabel }}
+                      </span>
+                    </div>
+                    <div class="mt-2 text-sm text-gray-800 dark:text-gray-100">
+                      {{ aiAnalysisConfidenceText }}
+                    </div>
+                    <div v-if="aiAnalysisConfidenceLevel === 'low'" class="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                      {{ t('admin.ops.unifiedErrorDetail.lowConfidenceHint') }}
+                    </div>
+                  </div>
+
+                  <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
+                    <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      {{ t('admin.ops.unifiedErrorDetail.fields.analysisImpact') }}
+                    </div>
+                    <ul v-if="aiAnalysisImpactItems.length" class="mt-2 space-y-2 text-sm text-gray-800 dark:text-gray-100">
+                      <li v-for="item in aiAnalysisImpactItems" :key="item.label" class="flex items-center justify-between gap-3">
+                        <span>{{ item.label }}</span>
+                        <span class="font-semibold">{{ item.value }}</span>
+                      </li>
+                    </ul>
+                    <div v-else class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                      {{ t('admin.ops.unifiedErrorDetail.noImpactScope') }}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
+                  <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    {{ t('admin.ops.unifiedErrorDetail.fields.analysisEvidence') }}
+                  </div>
+                  <ul v-if="aiAnalysisEvidenceItems.length" class="mt-2 space-y-2 text-sm text-gray-800 dark:text-gray-100">
+                    <li v-for="item in aiAnalysisEvidenceItems" :key="item" class="flex gap-2">
+                      <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                      <span>{{ item }}</span>
+                    </li>
+                  </ul>
+                  <div v-else class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                    {{ t('admin.ops.unifiedErrorDetail.noEvidence') }}
+                  </div>
+                </div>
+
+                <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
+                  <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    {{ t('admin.ops.unifiedErrorDetail.fields.analysisActions') }}
+                  </div>
+                  <ul v-if="aiAnalysisActions.length" class="mt-2 space-y-2 text-sm text-gray-800 dark:text-gray-100">
+                    <li v-for="item in aiAnalysisActions" :key="item" class="flex gap-2">
+                      <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                      <span>{{ item }}</span>
+                    </li>
+                  </ul>
+                  <div v-else class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                    {{ t('admin.ops.unifiedErrorDetail.noRecommendations') }}
+                  </div>
                 </div>
               </div>
             </article>
@@ -331,12 +418,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import { useClipboard } from '@/composables/useClipboard'
-import { opsAPI, type OpsUnifiedEntityRef, type OpsUnifiedErrorDetail } from '@/api/admin/ops'
+import {
+  opsAPI,
+  type OpsAIAnalysisEvidenceItem,
+  type OpsAIAnalysisImpactScope,
+  type OpsAIAnalysisTaskDetailResponse,
+  type OpsUnifiedEntityRef,
+  type OpsUnifiedErrorDetail
+} from '@/api/admin/ops'
 import { useAppStore, useAuthStore } from '@/stores'
 import { formatDateTime } from '@/utils/format'
 import { canManageManualAIAnalysis, fetchOpsAIAnalysisConfig, isManualAIAnalysisConfigured, type OpsAIAnalysisConfigSnapshot } from './utils/manualAIAnalysis'
@@ -356,6 +450,10 @@ const manualAIConfig = ref<OpsAIAnalysisConfigSnapshot | null>(null)
 const manualAIConfigLoaded = ref(false)
 const manualAIConfigLoadError = ref('')
 const activeManualAITaskId = ref<number | null>(null)
+const aiTaskDetail = ref<OpsAIAnalysisTaskDetailResponse | null>(null)
+const aiReportLoading = ref(false)
+const aiReportError = ref('')
+let aiReportPollTimer: ReturnType<typeof setTimeout> | null = null
 
 const detailId = computed(() => {
   const parsed = Number.parseInt(String(route.params.id || ''), 10)
@@ -363,14 +461,124 @@ const detailId = computed(() => {
 })
 
 const resultLabel = computed(() => errorResultLabel(detail.value?.conclusion.error_result || 'unknown'))
-const aiStatusLabel = computed(() => aiStatusText(detail.value?.ai_analysis.status || ''))
 const resultBadgeClass = computed(() => sameKindResultClass(detail.value?.conclusion.error_result || 'unknown'))
-const aiStatusBadgeClass = computed(() => aiStatusClass(detail.value?.ai_analysis.status || ''))
 const currentViewerRole = computed(() => String((authStore.user as { role?: string } | null)?.role || '').trim().toLowerCase())
 const canRunManualAIAnalysis = computed(() => canManageManualAIAnalysis(currentViewerRole.value))
+const aiAnalysisSummary = computed(() => {
+  const reportSummary = String(aiTaskDetail.value?.report?.summary || '').trim()
+  if (reportSummary) return reportSummary
+  return fallback(detail.value?.ai_analysis.summary, t('admin.ops.unifiedErrorDetail.notAnalyzed'))
+})
+const aiAnalysisTimeLabel = computed(() => {
+  const task = aiTaskDetail.value?.task
+  return timeFallback(task?.finished_at || task?.started_at || task?.created_at)
+})
+const aiAnalysisRangeLabel = computed(() => {
+  const task = aiTaskDetail.value?.task
+  if (!task?.time_start || !task?.time_end) return '—'
+  return `${formatDateTime(task.time_start)} ~ ${formatDateTime(task.time_end)}`
+})
+const aiAnalysisEvidenceItems = computed(() => {
+  const value = aiTaskDetail.value?.report?.evidence
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === 'string') return item.trim()
+        const entry = item as OpsAIAnalysisEvidenceItem
+        return [entry.text, entry.label, entry.value]
+          .map((part) => String(part ?? '').trim())
+          .find(Boolean) || ''
+      })
+      .filter(Boolean)
+  }
+  if (typeof value === 'string' && value.trim()) return [value.trim()]
+  return []
+})
+const aiAnalysisActions = computed(() => {
+  const value = aiTaskDetail.value?.report?.suggested_actions
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || '').trim()).filter(Boolean)
+  }
+  if (typeof value === 'string' && value.trim()) return [value.trim()]
+  return []
+})
+const aiAnalysisImpactItems = computed(() => {
+  const raw = aiTaskDetail.value?.report?.impact_scope
+  if (!raw || typeof raw !== 'object') return []
+  const impact = raw as OpsAIAnalysisImpactScope
+  const fields = [
+    { key: 'affected_users', label: t('admin.ops.unifiedErrorDetail.impact.affectedUsers') },
+    { key: 'affected_api_keys', label: t('admin.ops.unifiedErrorDetail.impact.affectedApiKeys') },
+    { key: 'affected_models', label: t('admin.ops.unifiedErrorDetail.impact.affectedModels') },
+    { key: 'affected_upstream_accounts', label: t('admin.ops.unifiedErrorDetail.impact.affectedAccounts') }
+  ] as const
+  return fields
+    .map(({ key, label }) => {
+      const value = impact[key]
+      return typeof value === 'number' && Number.isFinite(value)
+        ? { label, value: String(value) }
+        : null
+    })
+    .filter((item): item is { label: string, value: string } => Boolean(item))
+})
+const aiAnalysisConfidenceLevel = computed(() => String(aiTaskDetail.value?.report?.confidence || '').trim().toLowerCase())
+const aiAnalysisConfidenceBadgeLabel = computed(() => {
+  switch (aiAnalysisConfidenceLevel.value) {
+    case 'high':
+      return t('admin.ops.unifiedErrorDetail.confidence.high')
+    case 'medium':
+      return t('admin.ops.unifiedErrorDetail.confidence.medium')
+    case 'low':
+      return t('admin.ops.unifiedErrorDetail.confidence.low')
+    default:
+      return ''
+  }
+})
+const aiAnalysisConfidenceBadgeClass = computed(() => {
+  switch (aiAnalysisConfidenceLevel.value) {
+    case 'high':
+      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+    case 'medium':
+      return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+    case 'low':
+      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+    default:
+      return 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-200'
+  }
+})
+const aiAnalysisConfidenceText = computed(() => aiAnalysisConfidenceBadgeLabel.value || t('admin.ops.unifiedErrorDetail.unknown'))
+const aiReportStatus = computed(() => String(aiTaskDetail.value?.task.status || detail.value?.ai_analysis.status || '').trim().toLowerCase())
+const aiStatusLabel = computed(() => aiStatusText(aiReportStatus.value))
+const aiStatusBadgeClass = computed(() => aiStatusClass(aiReportStatus.value))
+const aiReportStateClass = computed(() => {
+  switch (aiReportStatus.value) {
+    case 'failed':
+      return 'border border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300'
+    case 'expired':
+      return 'border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300'
+    default:
+      return 'bg-gray-50 text-gray-600 dark:bg-dark-800/70 dark:text-gray-300'
+  }
+})
+const aiReportStateMessage = computed(() => {
+  if (aiReportLoading.value || aiReportError.value || !detail.value?.ai_analysis.task_id) return ''
+  if (aiReportStatus.value === 'pending' || aiReportStatus.value === 'running') {
+    return t('admin.ops.unifiedErrorDetail.analysisPending')
+  }
+  if (aiReportStatus.value === 'completed' && !aiTaskDetail.value?.report) {
+    return t('admin.ops.unifiedErrorDetail.analysisReportGenerating')
+  }
+  if (aiReportStatus.value === 'failed') {
+    return aiTaskDetail.value?.task.error_message || t('admin.ops.unifiedErrorDetail.analysisFailed')
+  }
+  if (aiReportStatus.value === 'expired') {
+    return t('admin.ops.unifiedErrorDetail.analysisExpired')
+  }
+  return ''
+})
 
 const manualAIActionDisabledReason = computed(() => {
-  const status = String(detail.value?.ai_analysis.status || '').trim().toLowerCase()
+  const status = aiReportStatus.value
   if (!canRunManualAIAnalysis.value) return '当前账号无权限执行此操作'
   if (!detailId.value || !detail.value) return t('admin.ops.unifiedErrorDetail.aiDisabled.noDetail')
   if (activeManualAITaskId.value) return '分析任务处理中，请稍后查看'
@@ -416,6 +624,7 @@ function aiStatusClass(status: string): string {
   const normalized = String(status || '').trim().toLowerCase()
   if (normalized === 'completed' || normalized === 'analyzed') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
   if (normalized === 'pending' || normalized === 'running') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+  if (normalized === 'expired') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
   if (normalized === 'failed') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
   return 'bg-gray-100 text-gray-700 dark:bg-dark-800 dark:text-gray-300'
 }
@@ -444,6 +653,8 @@ function aiStatusText(status: string): string {
       return t('admin.ops.unifiedErrorDetail.aiStatus.running')
     case 'failed':
       return t('admin.ops.unifiedErrorDetail.aiStatus.failed')
+    case 'expired':
+      return t('admin.ops.unifiedErrorDetail.analysisExpired')
     default:
       return t('admin.ops.unifiedErrorDetail.aiStatus.notAnalyzed')
   }
@@ -489,6 +700,55 @@ async function fetchDetail() {
   } finally {
     loading.value = false
   }
+}
+
+function stopAIReportPolling() {
+  if (aiReportPollTimer) {
+    clearTimeout(aiReportPollTimer)
+    aiReportPollTimer = null
+  }
+}
+
+async function fetchAIAnalysisTaskDetail(taskId: number, poll = false) {
+  aiReportLoading.value = true
+  aiReportError.value = ''
+  try {
+    const response = await opsAPI.getAIAnalysisTaskDetail(taskId)
+    aiTaskDetail.value = response
+    const status = String(response.task.status || '').trim().toLowerCase()
+    const shouldContinuePolling =
+      status === 'pending' ||
+      status === 'running' ||
+      (status === 'completed' && !response.report)
+    if (poll && shouldContinuePolling) {
+      stopAIReportPolling()
+      aiReportPollTimer = setTimeout(() => {
+        void fetchAIAnalysisTaskDetail(taskId, true)
+      }, 5000)
+    } else {
+      if (activeManualAITaskId.value === taskId) {
+        activeManualAITaskId.value = null
+      }
+      stopAIReportPolling()
+    }
+  } catch (error: any) {
+    aiTaskDetail.value = null
+    aiReportError.value = error?.message || t('admin.ops.unifiedErrorDetail.analysisLoadFailed')
+    if (activeManualAITaskId.value === taskId) {
+      activeManualAITaskId.value = null
+    }
+    stopAIReportPolling()
+  } finally {
+    aiReportLoading.value = false
+  }
+}
+
+async function syncAIAnalysisReport(detailValue: OpsUnifiedErrorDetail | null) {
+  stopAIReportPolling()
+  aiTaskDetail.value = null
+  aiReportError.value = ''
+  if (!detailValue?.ai_analysis.task_id) return
+  await fetchAIAnalysisTaskDetail(detailValue.ai_analysis.task_id, true)
 }
 
 function goBack() {
@@ -546,6 +806,7 @@ async function runManualAIAnalysis() {
     activeManualAITaskId.value = response.task_id
     appStore.showSuccess(response.message || t('admin.ops.incidentOverview.analysisSubmitted'))
     await fetchDetail()
+    await fetchAIAnalysisTaskDetail(response.task_id, true)
   } catch (error: any) {
     appStore.showError(error?.message || t('admin.ops.incidentOverview.analysisCreateFailed'))
   }
@@ -576,6 +837,17 @@ watch(
   },
   { immediate: true }
 )
+
+watch(
+  () => detail.value,
+  (nextDetail) => {
+    void syncAIAnalysisReport(nextDetail)
+  }
+)
+
+onUnmounted(() => {
+  stopAIReportPolling()
+})
 </script>
 
 <style scoped>

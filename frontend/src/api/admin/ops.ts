@@ -310,18 +310,36 @@ export interface OpsAIAnalysisTask {
   sample_count: number
   matched_error_count: number
   error_message?: string
+  started_at?: string
+  finished_at?: string
   created_at: string
   updated_at: string
+}
+
+export interface OpsAIAnalysisImpactScope {
+  affected_users?: number
+  affected_api_keys?: number
+  affected_groups?: number
+  affected_models?: number
+  affected_upstream_accounts?: number
+  [key: string]: unknown
+}
+
+export interface OpsAIAnalysisEvidenceItem {
+  text?: string
+  label?: string
+  value?: string | number
+  [key: string]: unknown
 }
 
 export interface OpsAIAnalysisReport {
   task_id: number
   summary: string
   root_cause?: string
-  impact_scope?: any
-  evidence?: any
-  suggested_actions?: any
-  error_breakdown?: any
+  impact_scope?: OpsAIAnalysisImpactScope
+  evidence?: OpsAIAnalysisEvidenceItem[] | string[] | string
+  suggested_actions?: string[] | string
+  error_breakdown?: Record<string, number> | string
   confidence?: string
   feedback_status?: string
   feedback_note?: string

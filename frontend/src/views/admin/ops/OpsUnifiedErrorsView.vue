@@ -913,7 +913,11 @@ async function pollManualAITask(taskId: number) {
   try {
     const detail = await opsAPI.getAIAnalysisTaskDetail(taskId)
     const status = String(detail.task.status || '').trim().toLowerCase()
-    if (status === 'pending' || status === 'running') {
+    const shouldContinuePolling =
+      status === 'pending' ||
+      status === 'running' ||
+      (status === 'completed' && !detail.report)
+    if (shouldContinuePolling) {
       manualAIPollTimer = setTimeout(() => {
         void pollManualAITask(taskId)
       }, 5000)

@@ -5157,10 +5157,20 @@ export default {
         analysisLoadFailed: '加载 AI 分析详情失败',
         analysisSummary: '分析摘要',
         analysisRootCause: '根因判断',
+        analysisTime: '分析时间',
+        analysisRange: '分析范围',
+        analysisConfidence: '置信度',
+        analysisImpact: '影响范围',
+        analysisEvidence: '证据摘要',
         analysisActions: '建议动作',
         analysisSubmitted: 'AI 分析任务已提交',
         analysisCreateFailed: '创建 AI 分析任务失败',
         analysisPending: 'AI 分析进行中，请稍后查看。',
+        analysisReportGenerating: 'AI 分析已完成，报告正在生成中。',
+        analysisFailed: 'AI 分析失败',
+        lowConfidenceHint: '低置信度结论需人工确认。',
+        noImpactScope: '暂无影响范围数据',
+        noEvidence: '暂无证据摘要',
         openAlertEvents: '查看告警事件',
         quickFiltersTitle: '快捷筛选',
         quickFiltersDescription: '从当前事故自动提取的高价值筛选入口。',
@@ -5202,6 +5212,11 @@ export default {
           completed: '已完成',
           failed: '分析失败',
           expired: '已过期'
+        },
+        confidence: {
+          high: '高',
+          medium: '中',
+          low: '低'
         }
       },
       aiAnalysis: {
@@ -5303,6 +5318,15 @@ export default {
         noRecommendations: '暂无建议',
         noSameKindErrors: '暂无同类问题',
         logNotFound: '未找到日志记录',
+        analysisLoading: '正在加载 AI 报告...',
+        analysisLoadFailed: '加载 AI 报告失败',
+        analysisPending: 'AI 分析进行中，请稍后查看。',
+        analysisReportGenerating: 'AI 分析已完成，报告正在生成中。',
+        analysisFailed: 'AI 分析失败',
+        analysisExpired: 'AI 报告已过期',
+        lowConfidenceHint: '低置信度结论需人工确认。',
+        noImpactScope: '暂无影响范围数据',
+        noEvidence: '暂无证据摘要',
         sameKindCountLabel: '同类问题 {count} 条',
         sections: {
           requestChain: '请求链路',
@@ -5345,6 +5369,12 @@ export default {
           recommendedActions: '处理建议',
           aiStatus: 'AI 状态',
           aiTaskId: 'AI 任务 ID',
+          analysisTime: '分析时间',
+          analysisRange: '分析范围',
+          analysisConfidence: 'AI 置信度',
+          analysisImpact: 'AI 影响范围',
+          analysisEvidence: 'AI 证据摘要',
+          analysisActions: 'AI 建议动作',
           aiSummary: 'AI 结论',
           rawErrorBodyPreview: '错误正文摘要',
           rawUpstreamErrors: '上游错误记录',
@@ -5354,7 +5384,8 @@ export default {
           sameKindCount: '同类问题数',
           affectedUsers: '影响用户数',
           affectedApiKeys: '影响 API Key 数',
-          affectedAccounts: '影响上游账号数'
+          affectedAccounts: '影响上游账号数',
+          affectedModels: '影响模型数'
         },
         results: {
           finalFailed: '最终失败',
@@ -5368,6 +5399,11 @@ export default {
           running: '分析中',
           failed: '分析失败',
           notAnalyzed: '未分析'
+        },
+        confidence: {
+          high: '高',
+          medium: '中',
+          low: '低'
         },
         aiDisabled: {
           noDetail: '错误详情加载完成后可发起 AI 分析。',

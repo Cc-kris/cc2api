@@ -438,6 +438,30 @@
           </span>
         </div>
 
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
+            <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              {{ t('admin.ops.incidentOverview.analysisTime') }}
+            </div>
+            <div class="mt-2 text-sm text-gray-800 dark:text-gray-100">
+              {{ analysisTaskTimeLabel }}
+            </div>
+          </div>
+
+          <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
+            <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              {{ t('admin.ops.incidentOverview.analysisRange') }}
+            </div>
+            <div class="mt-2 text-sm text-gray-800 dark:text-gray-100">
+              {{ analysisTaskRangeLabel }}
+            </div>
+          </div>
+        </div>
+
+        <div v-if="analysisTaskStateMessage" :class="analysisTaskStateClass">
+          {{ analysisTaskStateMessage }}
+        </div>
+
         <div v-if="aiTaskDetail.report" class="space-y-4">
           <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
             <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
@@ -457,6 +481,59 @@
             </div>
           </div>
 
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
+              <div class="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                <span>{{ t('admin.ops.incidentOverview.analysisConfidence') }}</span>
+                <span
+                  v-if="analysisConfidenceBadgeLabel"
+                  :class="['rounded-full px-2 py-0.5 text-[11px] font-semibold normal-case tracking-normal', analysisConfidenceBadgeClass]"
+                >
+                  {{ analysisConfidenceBadgeLabel }}
+                </span>
+              </div>
+              <div class="mt-2 text-sm text-gray-800 dark:text-gray-100">
+                {{ analysisConfidenceText }}
+              </div>
+              <div
+                v-if="analysisConfidenceLevel === 'low'"
+                class="mt-2 text-xs text-amber-700 dark:text-amber-300"
+              >
+                {{ t('admin.ops.incidentOverview.lowConfidenceHint') }}
+              </div>
+            </div>
+
+            <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
+              <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                {{ t('admin.ops.incidentOverview.analysisImpact') }}
+              </div>
+              <ul v-if="analysisImpactItems.length" class="mt-2 space-y-2 text-sm text-gray-800 dark:text-gray-100">
+                <li v-for="item in analysisImpactItems" :key="item.label" class="flex items-center justify-between gap-3">
+                  <span>{{ item.label }}</span>
+                  <span class="font-semibold">{{ item.value }}</span>
+                </li>
+              </ul>
+              <div v-else class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                {{ t('admin.ops.incidentOverview.noImpactScope') }}
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
+            <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              {{ t('admin.ops.incidentOverview.analysisEvidence') }}
+            </div>
+            <ul v-if="analysisEvidenceItems.length" class="mt-2 space-y-2 text-sm text-gray-800 dark:text-gray-100">
+              <li v-for="item in analysisEvidenceItems" :key="item" class="flex gap-2">
+                <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
+                <span>{{ item }}</span>
+              </li>
+            </ul>
+            <div v-else class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('admin.ops.incidentOverview.noEvidence') }}
+            </div>
+          </div>
+
           <div v-if="analysisActions.length" class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
             <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
               {{ t('admin.ops.incidentOverview.analysisActions') }}
@@ -471,7 +548,7 @@
         </div>
 
         <div v-else class="rounded-2xl bg-gray-50 p-4 text-sm text-gray-600 dark:bg-dark-800/70 dark:text-gray-300">
-          {{ aiTaskDetail.task.error_message || t('admin.ops.incidentOverview.analysisPending') }}
+          {{ analysisTaskFallbackMessage }}
         </div>
       </div>
     </BaseDialog>
@@ -490,6 +567,8 @@ import Icon from '@/components/icons/Icon.vue'
 import { adminAPI } from '@/api'
 import {
   opsAPI,
+  type OpsAIAnalysisEvidenceItem,
+  type OpsAIAnalysisImpactScope,
   type OpsAIAnalysisTaskCreateRequest,
   type OpsAIAnalysisTaskDetailResponse,
   type OpsIncidentOverview,
@@ -713,6 +792,120 @@ const analysisActions = computed(() => {
   return []
 })
 
+const analysisEvidenceItems = computed(() => {
+  const value = aiTaskDetail.value?.report?.evidence
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === 'string') return item.trim()
+        const entry = item as OpsAIAnalysisEvidenceItem
+        return [entry.text, entry.label, entry.value]
+          .map((part) => String(part ?? '').trim())
+          .find(Boolean) || ''
+      })
+      .filter(Boolean)
+  }
+  if (typeof value === 'string' && value.trim()) return [value.trim()]
+  return []
+})
+
+const analysisImpactItems = computed(() => {
+  const raw = aiTaskDetail.value?.report?.impact_scope
+  if (!raw || typeof raw !== 'object') return []
+  const impact = raw as OpsAIAnalysisImpactScope
+  const fields = [
+    { key: 'affected_users', label: t('admin.ops.incidentOverview.affectedUsers') },
+    { key: 'affected_api_keys', label: t('admin.ops.incidentOverview.affectedApiKeys') },
+    { key: 'affected_models', label: t('admin.ops.incidentOverview.affectedModels') },
+    { key: 'affected_upstream_accounts', label: t('admin.ops.incidentOverview.affectedAccounts') }
+  ] as const
+  return fields
+    .map(({ key, label }) => {
+      const value = impact[key]
+      return typeof value === 'number' && Number.isFinite(value)
+        ? { label, value: formatInteger(value) }
+        : null
+    })
+    .filter((item): item is { label: string, value: string } => Boolean(item))
+})
+
+const analysisConfidenceLevel = computed(() => String(aiTaskDetail.value?.report?.confidence || '').trim().toLowerCase())
+
+const analysisConfidenceBadgeLabel = computed(() => {
+  switch (analysisConfidenceLevel.value) {
+    case 'high':
+      return t('admin.ops.incidentOverview.confidence.high')
+    case 'medium':
+      return t('admin.ops.incidentOverview.confidence.medium')
+    case 'low':
+      return t('admin.ops.incidentOverview.confidence.low')
+    default:
+      return ''
+  }
+})
+
+const analysisConfidenceBadgeClass = computed(() => {
+  switch (analysisConfidenceLevel.value) {
+    case 'high':
+      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+    case 'medium':
+      return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+    case 'low':
+      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+    default:
+      return 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-200'
+  }
+})
+
+const analysisConfidenceText = computed(() => analysisConfidenceBadgeLabel.value || t('admin.ops.incidentOverview.none'))
+
+const analysisTaskTimeLabel = computed(() => {
+  const task = aiTaskDetail.value?.task
+  return formatDateTime(task?.finished_at || task?.started_at || task?.created_at) || '--'
+})
+
+const analysisTaskRangeLabel = computed(() => {
+  const task = aiTaskDetail.value?.task
+  if (!task?.time_start || !task?.time_end) return '--'
+  return `${formatDateTime(task.time_start)} ~ ${formatDateTime(task.time_end)}`
+})
+
+const analysisTaskState = computed(() => String(aiTaskDetail.value?.task.status || '').trim().toLowerCase())
+
+const analysisTaskStateClass = computed(() => {
+  switch (analysisTaskState.value) {
+    case 'failed':
+      return 'rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300'
+    case 'expired':
+      return 'rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300'
+    case 'pending':
+    case 'running':
+    case 'completed':
+      return 'rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300'
+    default:
+      return 'rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600 dark:border-dark-700 dark:bg-dark-800/70 dark:text-gray-300'
+  }
+})
+
+const analysisTaskStateMessage = computed(() => {
+  if (!aiTaskDetail.value) return ''
+  if (analysisTaskState.value === 'pending' || analysisTaskState.value === 'running') {
+    return t('admin.ops.incidentOverview.analysisPending')
+  }
+  if (analysisTaskState.value === 'completed' && !aiTaskDetail.value.report) {
+    return t('admin.ops.incidentOverview.analysisReportGenerating')
+  }
+  if (analysisTaskState.value === 'failed') {
+    return aiTaskDetail.value.task.error_message || t('admin.ops.incidentOverview.analysisFailed')
+  }
+  if (analysisTaskState.value === 'expired') {
+    return t('admin.ops.incidentOverview.analysisExpired')
+  }
+  return ''
+})
+
+const analysisTaskFallbackMessage = computed(() => analysisTaskStateMessage.value || t('admin.ops.incidentOverview.noAnalysis'))
+
 const debouncedFetchOverview = useDebounceFn(() => {
   void fetchOverview()
 }, 300)
@@ -905,7 +1098,11 @@ async function fetchAIAnalysisTaskDetail(taskId: number, poll = false) {
     const detail = await opsAPI.getAIAnalysisTaskDetail(taskId)
     aiTaskDetail.value = detail
     const status = String(detail.task.status || '').trim().toLowerCase()
-    if (poll && (status === 'pending' || status === 'running')) {
+    const shouldContinuePolling =
+      status === 'pending' ||
+      status === 'running' ||
+      (status === 'completed' && !detail.report)
+    if (poll && shouldContinuePolling) {
       stopAIReportPolling()
       aiReportPollTimer = setTimeout(() => {
         void fetchAIAnalysisTaskDetail(taskId, true)
@@ -932,7 +1129,7 @@ async function openLatestAIAnalysis() {
   if (!taskId) return
   aiTaskDetail.value = null
   showAIReportDialog.value = true
-  await fetchAIAnalysisTaskDetail(taskId)
+  await fetchAIAnalysisTaskDetail(taskId, true)
 }
 
 async function triggerManualAIAnalysis() {

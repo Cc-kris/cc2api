@@ -4995,10 +4995,20 @@ export default {
         analysisLoadFailed: 'Failed to load AI analysis details',
         analysisSummary: 'Summary',
         analysisRootCause: 'Root cause',
+        analysisTime: 'Analysis time',
+        analysisRange: 'Analysis range',
+        analysisConfidence: 'Confidence',
+        analysisImpact: 'Impact scope',
+        analysisEvidence: 'Evidence summary',
         analysisActions: 'Suggested actions',
         analysisSubmitted: 'AI analysis task submitted',
         analysisCreateFailed: 'Failed to create AI analysis task',
         analysisPending: 'AI analysis is in progress. Please check back shortly.',
+        analysisReportGenerating: 'AI analysis finished and the report is still being generated.',
+        analysisFailed: 'AI analysis failed',
+        lowConfidenceHint: 'Low-confidence conclusions require manual confirmation.',
+        noImpactScope: 'No impact scope data available',
+        noEvidence: 'No evidence summary available',
         openAlertEvents: 'Open Alert Events',
         quickFiltersTitle: 'Quick Filters',
         quickFiltersDescription: 'High-value shortcuts derived from the current incident.',
@@ -5040,6 +5050,11 @@ export default {
           completed: 'Completed',
           failed: 'Failed',
           expired: 'Expired'
+        },
+        confidence: {
+          high: 'High',
+          medium: 'Medium',
+          low: 'Low'
         }
       },
       aiAnalysis: {
@@ -5141,6 +5156,15 @@ export default {
         noRecommendations: 'No recommendations',
         noSameKindErrors: 'No same-kind issues',
         logNotFound: 'No log record found',
+        analysisLoading: 'Loading AI report...',
+        analysisLoadFailed: 'Failed to load AI report',
+        analysisPending: 'AI analysis is in progress. Please check back shortly.',
+        analysisReportGenerating: 'AI analysis finished and the report is still being generated.',
+        analysisFailed: 'AI analysis failed',
+        analysisExpired: 'AI report expired',
+        lowConfidenceHint: 'Low-confidence conclusions require manual confirmation.',
+        noImpactScope: 'No impact scope data available',
+        noEvidence: 'No evidence summary available',
         sameKindCountLabel: '{count} same-kind issues',
         sections: {
           requestChain: 'Request Chain',
@@ -5183,6 +5207,12 @@ export default {
           recommendedActions: 'Recommended Actions',
           aiStatus: 'AI Status',
           aiTaskId: 'AI Task ID',
+          analysisTime: 'Analysis Time',
+          analysisRange: 'Analysis Range',
+          analysisConfidence: 'AI Confidence',
+          analysisImpact: 'AI Impact Scope',
+          analysisEvidence: 'AI Evidence Summary',
+          analysisActions: 'AI Suggested Actions',
           aiSummary: 'AI Summary',
           rawErrorBodyPreview: 'Error Body Preview',
           rawUpstreamErrors: 'Upstream Errors',
@@ -5192,7 +5222,8 @@ export default {
           sameKindCount: 'Same-kind Count',
           affectedUsers: 'Affected Users',
           affectedApiKeys: 'Affected API Keys',
-          affectedAccounts: 'Affected Upstream Accounts'
+          affectedAccounts: 'Affected Upstream Accounts',
+          affectedModels: 'Affected Models'
         },
         results: {
           finalFailed: 'Final Failed',
@@ -5206,6 +5237,11 @@ export default {
           running: 'Running',
           failed: 'Failed',
           notAnalyzed: 'Not Analyzed'
+        },
+        confidence: {
+          high: 'High',
+          medium: 'Medium',
+          low: 'Low'
         },
         aiDisabled: {
           noDetail: 'AI analysis becomes available after the detail finishes loading.',
