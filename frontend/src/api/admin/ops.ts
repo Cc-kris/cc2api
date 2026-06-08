@@ -354,6 +354,21 @@ export interface OpsAIAnalysisTaskDetailResponse {
   report?: OpsAIAnalysisReport | null
 }
 
+export type OpsAIAnalysisFeedbackStatus = 'none' | 'useful' | 'not_useful' | 'wrong_category'
+
+export interface OpsAIAnalysisFeedbackRequest {
+  feedback_status: OpsAIAnalysisFeedbackStatus
+  feedback_note?: string
+}
+
+export interface OpsAIAnalysisFeedbackResponse {
+  task_id: number
+  feedback_status: OpsAIAnalysisFeedbackStatus
+  feedback_note?: string
+  feedback_user_id: number
+  feedback_at: string
+}
+
 export type OpsAIAnalysisInterfaceType =
   | 'openai_compatible'
   | 'responses'
@@ -1593,6 +1608,14 @@ export async function createAIAnalysisTask(
 
 export async function getAIAnalysisTaskDetail(id: number): Promise<OpsAIAnalysisTaskDetailResponse> {
   const { data } = await apiClient.get<OpsAIAnalysisTaskDetailResponse>(`/admin/ops/ai-analysis/tasks/${id}`)
+  return data
+}
+
+export async function updateAIAnalysisReportFeedback(
+  id: number,
+  payload: OpsAIAnalysisFeedbackRequest
+): Promise<OpsAIAnalysisFeedbackResponse> {
+  const { data } = await apiClient.post<OpsAIAnalysisFeedbackResponse>(`/admin/ops/ai-analysis/tasks/${id}/feedback`, payload)
   return data
 }
 
