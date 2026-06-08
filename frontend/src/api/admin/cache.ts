@@ -27,7 +27,7 @@ export interface CacheManagementConfig {
   bypass_header: CacheManagementBypassHeader
 }
 
-export interface CacheStatsExportParams {
+export interface CacheStatsParams {
   time_range?: string
   start_time?: string
   end_time?: string
@@ -35,6 +35,59 @@ export interface CacheStatsExportParams {
   model?: string
   api_key_id?: number
   group_id?: number
+}
+
+export interface CacheStatsSummary {
+  total_requests: number
+  candidate_requests: number
+  hit_requests: number
+  miss_requests: number
+  bypass_requests: number
+  store_success: number
+  store_skip: number
+  request_hit_rate: number
+  input_tokens: number
+  output_tokens: number
+  hit_tokens: number
+  candidate_tokens: number
+  tokens_hit_rate: number
+  overall_tokens_coverage: number
+  estimated_saved_amount: string
+}
+
+export interface CacheStatsModelRow {
+  platform: string
+  model: string
+  total_requests: number
+  candidate_requests: number
+  hit_requests: number
+  miss_requests: number
+  bypass_requests: number
+  store_success: number
+  store_skip: number
+  input_tokens: number
+  output_tokens: number
+  hit_tokens: number
+  candidate_tokens: number
+  all_request_tokens: number
+  request_hit_rate: number
+  tokens_hit_rate: number
+  top_bypass_reason?: string
+  top_store_skip_reason?: string
+  estimated_saved_amount: string
+}
+
+export interface CacheStatsReasonRow {
+  reason: string
+  count: number
+  percent: number
+}
+
+export interface CacheStatsResponse {
+  summary: CacheStatsSummary
+  model_rows: CacheStatsModelRow[]
+  bypass_reasons: CacheStatsReasonRow[]
+  store_skip_reasons: CacheStatsReasonRow[]
 }
 
 export const defaultCacheManagementConfig = (): CacheManagementConfig => ({
@@ -56,6 +109,34 @@ export const defaultCacheManagementConfig = (): CacheManagementConfig => ({
   }
 })
 
+const sanitizeCacheStatsParams = (params?: CacheStatsParams): Record<string, string | number> | undefined => {
+  if (!params) return undefined
+
+  const query: Record<string, string | number> = {}
+  if (typeof params.time_range === 'string' && params.time_range.trim()) {
+    query.time_range = params.time_range.trim()
+  }
+  if (typeof params.start_time === 'string' && params.start_time.trim()) {
+    query.start_time = params.start_time.trim()
+  }
+  if (typeof params.end_time === 'string' && params.end_time.trim()) {
+    query.end_time = params.end_time.trim()
+  }
+  if (typeof params.platform === 'string' && params.platform.trim()) {
+    query.platform = params.platform.trim()
+  }
+  if (typeof params.model === 'string' && params.model.trim()) {
+    query.model = params.model.trim()
+  }
+  if (typeof params.api_key_id === 'number' && Number.isFinite(params.api_key_id) && params.api_key_id > 0) {
+    query.api_key_id = params.api_key_id
+  }
+  if (typeof params.group_id === 'number' && Number.isFinite(params.group_id) && params.group_id > 0) {
+    query.group_id = params.group_id
+  }
+  return Object.keys(query).length > 0 ? query : undefined
+}
+
 export const cacheAPI = {
   getConfig() {
     return apiClient.get<CacheManagementConfig>('/admin/cache/config')
@@ -65,10 +146,9 @@ export const cacheAPI = {
     return apiClient.put<CacheManagementConfig>('/admin/cache/config', data)
   },
 
-  exportStats(params?: CacheStatsExportParams) {
-    return apiClient.get<Blob>('/admin/cache/stats/export', {
-      params,
-      responseType: 'blob'
+  getStats(params?: CacheStatsParams) {
+    return apiClient.get<CacheStatsResponse>('/admin/cache/stats', {
+      params: sanitizeCacheStatsParams(params)
     })
   }
 }
