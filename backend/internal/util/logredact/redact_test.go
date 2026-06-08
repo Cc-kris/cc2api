@@ -38,6 +38,17 @@ func TestRedactText_GOCSPX(t *testing.T) {
 	}
 }
 
+func TestRedactText_AuthorizationBearerWithColon(t *testing.T) {
+	in := "authorization: Bearer secret-token"
+	out := RedactText(in)
+	if strings.Contains(out, "secret-token") {
+		t.Fatalf("expected bearer token redacted, got %q", out)
+	}
+	if !strings.Contains(strings.ToLower(out), "bearer ***") {
+		t.Fatalf("expected bearer marker retained with redacted value, got %q", out)
+	}
+}
+
 func TestRedactText_ExtraKeyCacheUsesNormalizedSortedKey(t *testing.T) {
 	clearExtraTextPatternCache()
 

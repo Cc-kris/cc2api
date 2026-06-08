@@ -1,8 +1,10 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 import { defineComponent } from 'vue'
 import OpsRequestDetailsModal from '../OpsRequestDetailsModal.vue'
 import { opsAPI } from '@/api/admin/ops'
+import { useAuthStore } from '@/stores/auth'
 
 vi.mock('vue-i18n', async (importOriginal) => {
   const actual = await importOriginal<typeof import('vue-i18n')>()
@@ -18,11 +20,16 @@ vi.mock('vue-i18n', async (importOriginal) => {
   }
 })
 
-vi.mock('@/api/admin/ops', () => ({
-  opsAPI: {
+vi.mock('@/api/admin/ops', () => {
+  const opsAPI = {
     listRequestDetails: vi.fn(),
-  },
-}))
+  }
+
+  return {
+    opsAPI,
+    default: opsAPI,
+  }
+})
 
 vi.mock('@/stores', () => ({
   useAppStore: () => ({
@@ -62,6 +69,12 @@ const PaginationStub = defineComponent({
 })
 
 describe('OpsRequestDetailsModal', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    const authStore = useAuthStore()
+    authStore.user = { id: 1, email: 'admin@example.com', role: 'admin' } as any
+  })
+
   it('失败请求列表展示分组、请求账号、上游账号和模型，并可点击进入错误详情', async () => {
     vi.mocked(opsAPI.listRequestDetails).mockResolvedValueOnce({
       items: [

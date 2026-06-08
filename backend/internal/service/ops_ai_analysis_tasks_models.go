@@ -109,7 +109,9 @@ type OpsAIAnalysisSample struct {
 	GroupID                *int64    `json:"group_id,omitempty"`
 	APIKeyID               *int64    `json:"api_key_id,omitempty"`
 	UserID                 *int64    `json:"user_id,omitempty"`
+	UserEmail              string    `json:"user_email,omitempty"`
 	UpstreamAccountID      *int64    `json:"upstream_account_id,omitempty"`
+	UpstreamAccountName    string    `json:"upstream_account_name,omitempty"`
 	Summary                string    `json:"summary"`
 	SameKindCount          int       `json:"same_kind_count"`
 }

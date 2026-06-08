@@ -43,10 +43,13 @@ type textRedactPatterns struct {
 }
 
 var (
-	reGOCSPX = regexp.MustCompile(`GOCSPX-[0-9A-Za-z_-]{24,}`)
-	reAIza   = regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`)
-	reEmail  = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
-	reToken  = regexp.MustCompile(`(?i)\b(?:sk|ak|pk|rk|ya29|ghp|gho|ghu|ghs|github_pat)[-_A-Za-z0-9]{8,}\b`)
+	reGOCSPX                       = regexp.MustCompile(`GOCSPX-[0-9A-Za-z_-]{24,}`)
+	reAIza                         = regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`)
+	reEmail                        = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
+	reToken                        = regexp.MustCompile(`(?i)\b(?:sk|ak|pk|rk|ya29|ghp|gho|ghu|ghs|github_pat)[-_A-Za-z0-9]{8,}\b`)
+	reAuthorizationBearer          = regexp.MustCompile("(?i)\\bauthorization\\s*[:=]?\\s*bearer\\s+[^\\s,\"'`]+")
+	reBearerToken                  = regexp.MustCompile("(?i)\\bbearer\\s+[^\\s,\"'`]+")
+	reAuthorizationRedactedResidue = regexp.MustCompile("(?i)\\bauthorization\\s*[:=]\\s*(?:bearer\\s*)?\\*{3,}(?:\\s+\\*{3,})?")
 
 	defaultTextRedactPatterns = compileTextRedactPatterns(nil)
 	extraTextPatternCache     sync.Map // map[string]*textRedactPatterns
@@ -106,6 +109,8 @@ func RedactText(input string, extraKeys ...string) string {
 	out = reAIza.ReplaceAllString(out, "AIza***")
 	out = reEmail.ReplaceAllStringFunc(out, RedactEmail)
 	out = reToken.ReplaceAllString(out, "******")
+	out = reAuthorizationBearer.ReplaceAllString(out, "Authorization: Bearer ***")
+	out = reBearerToken.ReplaceAllString(out, "Bearer ***")
 	out = patterns.reJSONLike.ReplaceAllString(out, `$1***$3`)
 	out = patterns.reQueryLike.ReplaceAllString(out, `$1=***`)
 	out = patterns.rePlain.ReplaceAllString(out, `$1$2***`)
@@ -330,6 +335,9 @@ func redactBody(value string, maxRunes int) string {
 		"proxy_url",
 		"proxyurl",
 	)
+	value = reAuthorizationRedactedResidue.ReplaceAllString(value, "Authorization ******")
+	value = reAuthorizationBearer.ReplaceAllString(value, "Authorization ******")
+	value = reBearerToken.ReplaceAllString(value, "credential ******")
 	value = redactProxyURLCandidates(value)
 	if maxRunes > 0 {
 		value = truncateRunes(value, maxRunes)

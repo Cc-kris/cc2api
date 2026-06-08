@@ -108,6 +108,29 @@ func TestCacheStatsHandlerExportReturnsCSV(t *testing.T) {
 	require.Equal(t, []string{"openai", "gpt-5.5", "2", "2", "1", "1", "0", "100", "10", "50", "50.00%", "50.00%", ""}, records[1])
 }
 
+func TestCacheStatsHandlerExportUsesFilteredRowsAndDoesNotLeakSensitiveScope(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &cacheStatsHandlerRepoStub{rows: []*service.CacheStatsRawRow{{
+		Platform: "anthropic", Model: "claude-sonnet-4-5", TotalRequests: 10, CandidateRequests: 10, HitRequests: 9,
+		InputTokens: 1000, OutputTokens: 500, HitTokens: 1350, CandidateTokens: 1500,
+		BypassReasonsJSON: `{"authorization: Bearer secret-token":1}`,
+	}}}
+	handler := NewCacheStatsHandler(service.NewCacheStatsService(repo))
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/cache/stats/export?time_range=1d&platform=claude&api_key_id=123&group_id=456", nil)
+
+	handler.Export(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "claude", repo.filter.Platform)
+	require.Equal(t, int64(123), *repo.filter.APIKeyID)
+	require.Equal(t, int64(456), *repo.filter.GroupID)
+	require.NotContains(t, rec.Body.String(), "secret-token")
+	require.NotContains(t, rec.Body.String(), "api_key_id")
+	require.NotContains(t, rec.Body.String(), "group_id")
+}
+
 func TestCacheStatsHandlerExportRejectsEmptyRows(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	handler := NewCacheStatsHandler(service.NewCacheStatsService(&cacheStatsHandlerRepoStub{}))

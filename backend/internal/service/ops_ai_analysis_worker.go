@@ -308,7 +308,9 @@ func buildOpsAIAnalysisSample(item *OpsUnifiedErrorItem) *OpsAIAnalysisSample {
 		GroupID:                entityID(item.Group),
 		APIKeyID:               entityID(item.APIKey),
 		UserID:                 entityID(item.User),
+		UserEmail:              redactedEntityEmail(item.User),
 		UpstreamAccountID:      entityID(item.UpstreamAccount),
+		UpstreamAccountName:    redactedEntityName(item.UpstreamAccount),
 		Summary:                redactAIContextText(item.Summary, 500),
 		SameKindCount:          item.SameKindCount,
 	}
@@ -320,6 +322,29 @@ func entityID(ref *OpsUnifiedEntityRef) *int64 {
 	}
 	id := ref.ID
 	return &id
+}
+
+func redactedEntityEmail(ref *OpsUnifiedEntityRef) string {
+	if ref == nil {
+		return ""
+	}
+	if strings.TrimSpace(ref.Email) != "" {
+		return logredact.RedactEmail(ref.Email)
+	}
+	return ""
+}
+
+func redactedEntityName(ref *OpsUnifiedEntityRef) string {
+	if ref == nil {
+		return ""
+	}
+	if strings.TrimSpace(ref.Name) != "" {
+		return logredact.RedactUpstreamAccountName(ref.Name)
+	}
+	if strings.TrimSpace(ref.Display) != "" {
+		return redactAIContextText(ref.Display, 120)
+	}
+	return ""
 }
 
 func (s *OpsService) aiAnalysisMaxSamples() int {

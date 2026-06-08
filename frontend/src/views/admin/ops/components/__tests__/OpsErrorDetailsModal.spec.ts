@@ -14,12 +14,17 @@ vi.mock('vue-i18n', async (importOriginal) => {
   }
 })
 
-vi.mock('@/api/admin/ops', () => ({
-  opsAPI: {
+vi.mock('@/api/admin/ops', () => {
+  const opsAPI = {
     listRequestErrors: vi.fn(),
     listUpstreamErrors: vi.fn(),
-  },
-}))
+  }
+
+  return {
+    opsAPI,
+    default: opsAPI,
+  }
+})
 
 const BaseDialogStub = defineComponent({
   name: 'BaseDialog',

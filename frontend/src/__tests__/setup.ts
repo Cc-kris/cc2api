@@ -57,6 +57,18 @@ if (typeof globalThis.cancelIdleCallback === 'undefined') {
   }) as unknown as typeof cancelIdleCallback
 }
 
+if (typeof globalThis.requestAnimationFrame === 'undefined') {
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+    return window.setTimeout(() => callback(Date.now()), 16)
+  }) as unknown as typeof requestAnimationFrame
+}
+
+if (typeof globalThis.cancelAnimationFrame === 'undefined') {
+  globalThis.cancelAnimationFrame = ((id: number) => {
+    window.clearTimeout(id)
+  }) as unknown as typeof cancelAnimationFrame
+}
+
 // Mock IntersectionObserver
 class MockIntersectionObserver {
   observe = vi.fn()

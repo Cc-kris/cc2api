@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -83,6 +84,101 @@ func TestBuildLocalResponseCacheLookup_CanonicalJSON(t *testing.T) {
 
 	require.NotEmpty(t, a.Key)
 	require.Equal(t, a.Key, b.Key)
+}
+
+func TestBuildLocalResponseCacheLookup_AcceptanceThreePlatformsExactCacheStable(t *testing.T) {
+	cfg := DefaultLocalResponseCacheConfig()
+	cfg.Enabled = true
+	groupID := int64(1)
+	cases := []struct {
+		name     string
+		platform string
+		endpoint string
+		model    string
+		body     []byte
+	}{
+		{name: "openai", platform: PlatformOpenAI, endpoint: "/v1/responses", model: "gpt-5.5", body: []byte(`{"model":"gpt-5.5","input":"hello","temperature":0.1}`)},
+		{name: "claude", platform: PlatformAnthropic, endpoint: "/v1/messages", model: "claude-sonnet-4-5", body: []byte(`{"model":"claude-sonnet-4-5","messages":[{"role":"user","content":"hello"}],"temperature":0.1}`)},
+		{name: "gemini", platform: PlatformGemini, endpoint: "/v1beta/models/gemini-2.5-pro:generateContent", model: "gemini-2.5-pro", body: []byte(`{"contents":[{"role":"user","parts":[{"text":"hello"}]}],"generationConfig":{"temperature":0.1}}`)},
+	}
+
+	seen := map[string]string{}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			first := BuildLocalResponseCacheLookup(cfg, 10, &groupID, tc.endpoint, tc.platform, tc.model, tc.body, false)
+			reordered := BuildLocalResponseCacheLookup(cfg, 10, &groupID, tc.endpoint, tc.platform, tc.model, tc.body, false)
+			require.NotEmpty(t, first.Key)
+			require.Equal(t, first.Key, reordered.Key)
+			require.Contains(t, first.Key, tc.platform)
+			for otherName, otherKey := range seen {
+				require.NotEqual(t, otherKey, first.Key, "cache key must not cross platform: %s vs %s", otherName, tc.name)
+			}
+			seen[tc.name] = first.Key
+		})
+	}
+}
+
+func TestLocalResponseCacheAcceptanceThreePlatformsWarmupThenNineHits(t *testing.T) {
+	ctx := context.Background()
+	cfg := DefaultLocalResponseCacheConfig()
+	cfg.Enabled = true
+	groupID := int64(1)
+	apiKeyID := int64(10)
+	type platformCase struct {
+		name     string
+		platform string
+		endpoint string
+		model    string
+		body     []byte
+		input    int64
+		output   int64
+	}
+	cases := []platformCase{
+		{name: "openai", platform: PlatformOpenAI, endpoint: "/v1/responses", model: "gpt-5.5", body: []byte(`{"model":"gpt-5.5","input":"hello","temperature":0.1}`), input: 100, output: 50},
+		{name: "claude", platform: PlatformAnthropic, endpoint: "/v1/messages", model: "claude-sonnet-4-5", body: []byte(`{"model":"claude-sonnet-4-5","messages":[{"role":"user","content":"hello"}],"temperature":0.1}`), input: 120, output: 30},
+		{name: "gemini", platform: PlatformGemini, endpoint: "/v1beta/models/gemini-2.5-pro:generateContent", model: "gemini-2.5-pro", body: []byte(`{"contents":[{"role":"user","parts":[{"text":"hello"}]}],"generationConfig":{"temperature":0.1}}`), input: 90, output: 60},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := newLocalResponseCacheMemoryStore()
+			svc := &OpenAIGatewayService{cache: store}
+			lookup := BuildLocalResponseCacheLookup(cfg, apiKeyID, &groupID, tc.endpoint, tc.platform, tc.model, tc.body, false)
+			require.NotEmpty(t, lookup.Key)
+
+			var candidateRequests int64
+			var hitRequests int64
+			var candidateTokens int64
+			var hitTokens int64
+
+			for i := 0; i < 10; i++ {
+				candidateRequests++
+				candidateTokens += tc.input + tc.output
+				entry, err := svc.GetLocalResponseCache(ctx, lookup.Key)
+				require.NoError(t, err)
+				if i == 0 {
+					require.Nil(t, entry, "first request should warm cache and miss")
+					require.NoError(t, svc.SetLocalResponseCache(ctx, lookup.Key, &LocalResponseCacheEntry{
+						StatusCode:  http.StatusOK,
+						ContentType: "application/json",
+						Body:        []byte(`{"id":"cached","usage":{"input_tokens":1,"output_tokens":1}}`),
+						Platform:    tc.platform,
+						Model:       tc.model,
+						GroupID:     &groupID,
+						APIKeyID:    &apiKeyID,
+					}, time.Minute))
+					continue
+				}
+				require.NotNil(t, entry, "repeat request %d should hit cache", i+1)
+				require.Equal(t, http.StatusOK, entry.StatusCode)
+				hitRequests++
+				hitTokens += tc.input + tc.output
+			}
+
+			require.Equal(t, 90.0, percent(hitRequests, candidateRequests))
+			require.Equal(t, 90.0, percent(hitTokens, candidateTokens))
+		})
+	}
 }
 
 func TestBuildLocalResponseCacheLookup_BypassRules(t *testing.T) {

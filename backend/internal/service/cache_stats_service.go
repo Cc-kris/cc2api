@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
 )
 
 const cacheStatsExportMaxRows = 100000
@@ -268,7 +270,7 @@ func (s *CacheStatsService) ExportCSV(ctx context.Context, filter *CacheStatsFil
 			strconv.FormatInt(row.HitTokens, 10),
 			formatCacheStatsPercent(row.RequestHitRate),
 			formatCacheStatsPercent(row.TokensHitRate),
-			row.TopBypassReason,
+			redactCacheStatsExportField(row.TopBypassReason),
 		}); err != nil {
 			return nil, err
 		}
@@ -592,6 +594,10 @@ func displayCacheStatsPlatform(platform string) string {
 	default:
 		return strings.ToLower(strings.TrimSpace(platform))
 	}
+}
+
+func redactCacheStatsExportField(value string) string {
+	return logredact.RedactText(strings.TrimSpace(value))
 }
 
 func formatCacheStatsPercent(value float64) string {

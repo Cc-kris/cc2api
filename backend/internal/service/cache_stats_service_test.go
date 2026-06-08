@@ -57,6 +57,39 @@ func TestCacheStatsServiceCalculatesRatesAndReasons(t *testing.T) {
 	}, got.StoreSkipReasons)
 }
 
+func TestCacheStatsServiceAcceptanceThreePlatformsHitRatesMeetTarget(t *testing.T) {
+	rows := []*CacheStatsRawRow{
+		{
+			Platform: PlatformOpenAI, Model: "gpt-5.5", TotalRequests: 10, CandidateRequests: 10, HitRequests: 9,
+			InputTokens: 1000, OutputTokens: 500, HitTokens: 1350, CandidateTokens: 1500, AllRequestTokens: 1500,
+		},
+		{
+			Platform: PlatformAnthropic, Model: "claude-sonnet-4-5", TotalRequests: 10, CandidateRequests: 10, HitRequests: 9,
+			InputTokens: 1200, OutputTokens: 300, HitTokens: 1350, CandidateTokens: 1500, AllRequestTokens: 1500,
+		},
+		{
+			Platform: PlatformGemini, Model: "gemini-2.5-pro", TotalRequests: 10, CandidateRequests: 10, HitRequests: 9,
+			InputTokens: 900, OutputTokens: 600, HitTokens: 1350, CandidateTokens: 1500, AllRequestTokens: 1500,
+		},
+	}
+	svc := NewCacheStatsService(&cacheStatsRepoStub{rows: rows})
+
+	got, err := svc.GetStats(context.Background(), &CacheStatsFilter{StartTime: time.Now().Add(-time.Hour), EndTime: time.Now()})
+
+	require.NoError(t, err)
+	require.Equal(t, int64(30), got.Summary.CandidateRequests)
+	require.Equal(t, int64(27), got.Summary.HitRequests)
+	require.Equal(t, 90.0, got.Summary.RequestHitRate)
+	require.Equal(t, int64(4050), got.Summary.HitTokens)
+	require.Equal(t, int64(4500), got.Summary.CandidateTokens)
+	require.Equal(t, 90.0, got.Summary.TokensHitRate)
+	require.Len(t, got.ModelRows, 3)
+	for _, row := range got.ModelRows {
+		require.GreaterOrEqual(t, row.RequestHitRate, 90.0, "%s/%s request hit rate", row.Platform, row.Model)
+		require.GreaterOrEqual(t, row.TokensHitRate, 90.0, "%s/%s tokens hit rate", row.Platform, row.Model)
+	}
+}
+
 func TestCacheStatsServiceZeroDenominators(t *testing.T) {
 	svc := NewCacheStatsService(&cacheStatsRepoStub{rows: []*CacheStatsRawRow{{Platform: "openai", Model: "gpt-5.5"}}})
 	got, err := svc.GetStats(context.Background(), &CacheStatsFilter{})
