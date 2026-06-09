@@ -317,22 +317,6 @@
                 }}
               </p>
             </div>
-            <div>
-              <label class="input-label">{{ t('admin.accounts.upstreamPrepaidAmount') }}</label>
-              <div class="relative">
-                <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">$</span>
-                <input
-                  v-model.number="upstreamPrepaidAmount"
-                  type="number"
-                  min="0"
-                  step="0.000001"
-                  required
-                  class="input pl-7"
-                  data-testid="upstream-prepaid-amount"
-                />
-              </div>
-              <p class="input-hint">{{ t('admin.accounts.upstreamPrepaidAmountHint') }}</p>
-            </div>
           </div>
         </div>
 
@@ -1034,22 +1018,6 @@
                   })
                 }}
               </p>
-            </div>
-            <div>
-              <label class="input-label">{{ t('admin.accounts.upstreamPrepaidAmount') }}</label>
-              <div class="relative">
-                <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">$</span>
-                <input
-                  v-model.number="upstreamPrepaidAmount"
-                  type="number"
-                  min="0"
-                  step="0.000001"
-                  required
-                  class="input pl-7"
-                  data-testid="upstream-prepaid-amount"
-                />
-              </div>
-              <p class="input-hint">{{ t('admin.accounts.upstreamPrepaidAmountHint') }}</p>
             </div>
           </div>
         </div>
@@ -2409,7 +2377,6 @@ const DEFAULT_POOL_MODE_RETRY_COUNT = 3
 const MAX_POOL_MODE_RETRY_COUNT = 10
 const poolModeEnabled = ref(false)
 const poolModeRetryCount = ref(DEFAULT_POOL_MODE_RETRY_COUNT)
-const upstreamPrepaidAmount = ref<number | null>(null)
 const customErrorCodesEnabled = ref(false)
 const selectedErrorCodes = ref<number[]>([])
 const customErrorCodeInput = ref<number | null>(null)
@@ -2703,36 +2670,10 @@ const normalizePoolModeRetryCount = (value: number) => {
   return normalized
 }
 
-const toPositiveAmount = (value: unknown) => {
-  const amount = Number(value)
-  return Number.isFinite(amount) && amount > 0 ? amount : null
-}
-
-const resetUpstreamPrepaidState = () => {
-  upstreamPrepaidAmount.value = null
-}
-
-const loadUpstreamPrepaidState = (extra?: Record<string, unknown>) => {
-  upstreamPrepaidAmount.value = toPositiveAmount(extra?.upstream_prepaid_amount)
-}
-
-const applyUpstreamPrepaidToExtra = (extra: Record<string, unknown>) => {
+const removeUpstreamPrepaidFromExtra = (extra: Record<string, unknown>) => {
   delete extra.upstream_warning_amount
   delete extra.upstream_notify_enabled
-
-  if (!poolModeEnabled.value) {
-    delete extra.upstream_prepaid_amount
-    return true
-  }
-
-  const prepaid = toPositiveAmount(upstreamPrepaidAmount.value)
-  if (prepaid == null) {
-    appStore.showError(t('admin.accounts.upstreamPrepaidAmountRequired'))
-    return false
-  }
-
-  extra.upstream_prepaid_amount = prepaid
-  return true
+  delete extra.upstream_prepaid_amount
 }
 
 const loadModelRestrictionFromMapping = (rawMapping?: Record<string, unknown>) => {
@@ -2930,7 +2871,6 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     poolModeRetryCount.value = normalizePoolModeRetryCount(
       Number(credentials.pool_mode_retry_count ?? DEFAULT_POOL_MODE_RETRY_COUNT)
     )
-    loadUpstreamPrepaidState(extra)
 
     // Load custom error codes
     customErrorCodesEnabled.value = credentials.custom_error_codes_enabled === true
@@ -2959,7 +2899,6 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     poolModeEnabled.value = bedrockCreds.pool_mode === true
     const retryCount = bedrockCreds.pool_mode_retry_count
     poolModeRetryCount.value = (typeof retryCount === 'number' && retryCount >= 0) ? retryCount : DEFAULT_POOL_MODE_RETRY_COUNT
-    loadUpstreamPrepaidState(bedrockExtra)
 
     // Load quota limits for bedrock
     editQuotaLimit.value = typeof bedrockExtra.quota_limit === 'number' ? bedrockExtra.quota_limit : null
@@ -3001,7 +2940,6 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     }
     poolModeEnabled.value = false
     poolModeRetryCount.value = DEFAULT_POOL_MODE_RETRY_COUNT
-    resetUpstreamPrepaidState()
     customErrorCodesEnabled.value = false
     selectedErrorCodes.value = []
   }
@@ -4042,9 +3980,7 @@ const handleSubmit = async () => {
       }
       // Quota notify config
       writeQuotaNotifyToExtra(newExtra, 'update')
-      if (!applyUpstreamPrepaidToExtra(newExtra)) {
-        return
-      }
+      removeUpstreamPrepaidFromExtra(newExtra)
       updatePayload.extra = newExtra
     }
 

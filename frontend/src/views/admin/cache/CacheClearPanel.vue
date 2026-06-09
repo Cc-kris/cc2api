@@ -4,22 +4,7 @@
       <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-dark-700 dark:bg-dark-800">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div class="flex flex-wrap items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400">
-              <component
-                v-for="item in navItems"
-                :key="item.key"
-                :is="item.to ? 'router-link' : 'span'"
-                v-bind="item.to ? { to: item.to } : {}"
-                class="rounded-full border px-3 py-1 transition-colors"
-                :class="item.active
-                  ? 'border-primary-200 bg-primary-50 text-primary-700 dark:border-primary-700/60 dark:bg-primary-900/10 dark:text-primary-200'
-                  : item.to
-                    ? 'border-gray-200 text-gray-500 hover:border-primary-200 hover:text-primary-600 dark:border-dark-700 dark:text-gray-400 dark:hover:border-primary-700/60 dark:hover:text-primary-200'
-                    : 'border-gray-200 bg-gray-50 text-gray-400 dark:border-dark-700 dark:bg-dark-900/20 dark:text-gray-500'"
-              >
-                {{ item.label }}
-              </component>
-            </div>
+            <CacheNavPills active="clear" />
             <h1 class="mt-4 text-2xl font-semibold text-gray-900 dark:text-white">
               {{ t('admin.cacheManagement.clearPage.title') }}
             </h1>
@@ -472,6 +457,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import CacheNavPills from './CacheNavPills.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
 import Pagination from '@/components/common/Pagination.vue'
@@ -540,15 +526,6 @@ const auditFilters = reactive({
   startTime: '',
   endTime: ''
 })
-
-const navItems = computed(() => [
-  { key: 'home', to: '/admin/settings/cache', label: t('admin.cacheManagement.nav.home'), active: false },
-  { key: 'config', to: null, label: t('admin.cacheManagement.nav.config'), active: false },
-  { key: 'stats', to: null, label: t('admin.cacheManagement.nav.stats'), active: false },
-  { key: 'clear', to: '/admin/settings/cache/clear', label: t('admin.cacheManagement.nav.clear'), active: true },
-  { key: 'advanced', to: null, label: t('admin.cacheManagement.nav.advanced'), active: false },
-  { key: 'semantic', to: '/admin/settings/cache/semantic', label: t('admin.cacheManagement.nav.semantic'), active: false }
-])
 
 const clearTypeOptions = computed(() => [
   { value: 'expired', label: t('admin.cacheManagement.clearPage.types.expired'), hint: t('admin.cacheManagement.clearPage.typeHints.expired') },

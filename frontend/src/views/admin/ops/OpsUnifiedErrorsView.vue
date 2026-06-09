@@ -5,11 +5,16 @@
         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">统一错误列表</h1>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              统一查看错误分类、影响范围、处理结果和 AI 分析状态。
-            </p>
           </div>
           <div class="flex flex-wrap items-center gap-3">
+            <button
+              v-if="fromOverview"
+              type="button"
+              class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:border-blue-300 hover:text-blue-600 dark:border-dark-600 dark:text-gray-200 dark:hover:border-blue-500 dark:hover:text-blue-300"
+              @click="backToOverview"
+            >
+              返回运维总览
+            </button>
             <button
               type="button"
               class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:border-blue-300 hover:text-blue-600 dark:border-dark-600 dark:text-gray-200 dark:hover:border-blue-500 dark:hover:text-blue-300"
@@ -19,6 +24,7 @@
               刷新
             </button>
             <button
+              v-if="canRunManualAIAnalysis"
               type="button"
               class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:border-blue-300 hover:text-blue-600 dark:border-dark-600 dark:text-gray-200 dark:hover:border-blue-500 dark:hover:text-blue-300"
               @click="resetFilters"
@@ -57,7 +63,7 @@
 
         <div class="mt-5 space-y-4">
           <div class="grid grid-cols-1 gap-3 xl:grid-cols-6">
-            <div class="xl:col-span-2">
+            <div>
               <label class="filter-label">时间范围</label>
               <select v-model="timeRange" class="input">
                 <option v-for="option in timeRangeOptions" :key="option.value" :value="option.value">
@@ -85,16 +91,20 @@
               </select>
             </div>
             <div>
-              <label class="filter-label">模型</label>
-              <input v-model.trim="model" type="text" class="input" placeholder="输入模型名">
+              <label class="filter-label">错误大类</label>
+              <select v-model="errorCategories" class="input input-multi" multiple>
+                <option v-for="option in errorCategoryOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
             </div>
             <div>
-              <label class="filter-label">AI 分析</label>
-              <select v-model="aiAnalysis" class="input">
-                <option value="all">全部</option>
-                <option value="analyzed">已分析</option>
-                <option value="not_analyzed">未分析</option>
-              </select>
+              <label class="filter-label">状态码</label>
+              <input v-model.trim="statusCode" type="text" class="input" placeholder="429,500-504">
+            </div>
+            <div>
+              <label class="filter-label">关键词</label>
+              <input v-model.trim="keyword" type="text" class="input" placeholder="搜索脱敏摘要">
             </div>
           </div>
 
@@ -109,13 +119,17 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 gap-3 xl:grid-cols-5">
+          <div v-if="showMoreFilters" class="grid grid-cols-1 gap-3 xl:grid-cols-5">
             <div>
-              <label class="filter-label">错误大类</label>
-              <select v-model="errorCategories" class="input input-multi" multiple>
-                <option v-for="option in errorCategoryOptions" :key="option.value" :value="option.value">
-                  {{ option.label }}
-                </option>
+              <label class="filter-label">模型</label>
+              <input v-model.trim="model" type="text" class="input" placeholder="输入模型名">
+            </div>
+            <div>
+              <label class="filter-label">AI 分析</label>
+              <select v-model="aiAnalysis" class="input">
+                <option value="all">全部</option>
+                <option value="analyzed">已分析</option>
+                <option value="not_analyzed">未分析</option>
               </select>
             </div>
             <div>
@@ -148,11 +162,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 gap-3 xl:grid-cols-6">
-            <div>
-              <label class="filter-label">状态码</label>
-              <input v-model.trim="statusCode" type="text" class="input" placeholder="429,500-504">
-            </div>
+          <div v-if="showMoreFilters" class="grid grid-cols-1 gap-3 xl:grid-cols-6">
             <div>
               <label class="filter-label">用户 ID</label>
               <input v-model.trim="userId" type="text" class="input" placeholder="数字 ID">
@@ -169,10 +179,6 @@
               <label class="filter-label">请求 ID</label>
               <input v-model.trim="requestId" type="text" class="input" placeholder="最长 128 字符">
             </div>
-            <div>
-              <label class="filter-label">关键词</label>
-              <input v-model.trim="keyword" type="text" class="input" placeholder="搜索脱敏摘要">
-            </div>
           </div>
 
           <div class="flex flex-wrap items-center gap-3">
@@ -184,8 +190,22 @@
             >
               查询
             </button>
-            <span class="text-xs text-gray-500 dark:text-gray-400">
-              默认最近 30 分钟；时间跨度最大 7 天；多选列表按住 Command 或 Ctrl 可多选。
+            <button
+              type="button"
+              class="inline-flex items-center rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:border-blue-300 hover:text-blue-600 dark:border-dark-600 dark:text-gray-200 dark:hover:border-blue-500 dark:hover:text-blue-300"
+              @click="showMoreFilters = !showMoreFilters"
+            >
+              {{ showMoreFilters ? '收起筛选项' : moreFiltersButtonLabel }}
+            </button>
+          </div>
+
+          <div v-if="!showMoreFilters && advancedFilterSummaries.length" class="flex flex-wrap gap-2">
+            <span
+              v-for="summary in advancedFilterSummaries"
+              :key="summary"
+              class="rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-700 dark:bg-blue-900/20 dark:text-blue-200"
+            >
+              {{ summary }}
             </span>
           </div>
         </div>
@@ -211,7 +231,7 @@
         </div>
 
         <div v-else class="min-h-0 min-w-0 overflow-auto">
-          <table class="min-w-[1800px] border-separate border-spacing-0">
+          <table class="min-w-[1300px] border-separate border-spacing-0">
             <thead class="sticky top-0 z-10 bg-gray-50 dark:bg-dark-800">
               <tr>
                 <th class="table-th">
@@ -222,14 +242,7 @@
                 </th>
                 <th class="table-th">错误分类</th>
                 <th class="table-th">错误子类</th>
-                <th class="table-th">客户端错误细分</th>
                 <th class="table-th">错误摘要</th>
-                <th class="table-th">
-                  <button type="button" class="sort-button" @click="toggleSort('severity')">
-                    严重度
-                    <span>{{ sortIndicator('severity') }}</span>
-                  </button>
-                </th>
                 <th class="table-th">错误结果</th>
                 <th class="table-th">
                   <button type="button" class="sort-button" @click="toggleSort('status_code')">
@@ -238,10 +251,8 @@
                   </button>
                 </th>
                 <th class="table-th">用户</th>
-                <th class="table-th">API Key</th>
                 <th class="table-th">分组</th>
                 <th class="table-th">平台</th>
-                <th class="table-th">模型</th>
                 <th class="table-th">上游账号</th>
                 <th class="table-th">
                   <button type="button" class="sort-button" @click="toggleSort('same_kind_count')">
@@ -254,7 +265,7 @@
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
               <tr v-if="items.length === 0">
-                <td colspan="16" class="py-16 text-center text-sm text-gray-400 dark:text-dark-500">
+                <td colspan="12" class="py-16 text-center text-sm text-gray-400 dark:text-dark-500">
                   暂无符合条件的错误记录
                 </td>
               </tr>
@@ -269,14 +280,10 @@
                   <span class="badge badge-neutral">{{ formatCategory(item.error_category) }}</span>
                 </td>
                 <td class="table-td">{{ item.error_subcategory || '未细分' }}</td>
-                <td class="table-td">{{ item.client_error_subcategory || '--' }}</td>
                 <td class="table-td">
                   <div class="max-w-[320px] truncate" :title="item.summary || '暂无摘要'">
                     {{ item.summary || '暂无摘要' }}
                   </div>
-                </td>
-                <td class="table-td">
-                  <span :class="['badge', severityBadgeClass(item.severity)]">{{ item.severity || 'normal' }}</span>
                 </td>
                 <td class="table-td">
                   <span class="badge badge-result">{{ formatErrorResult(item.error_result) }}</span>
@@ -285,10 +292,8 @@
                   <span class="badge badge-status">{{ item.status_code || '--' }}</span>
                 </td>
                 <td class="table-td">{{ formatEntity(item.user, '未知用户') }}</td>
-                <td class="table-td">{{ formatEntity(item.api_key, '未知 Key') }}</td>
                 <td class="table-td">{{ formatEntity(item.group, '未分组') }}</td>
                 <td class="table-td">{{ item.platform || '未知平台' }}</td>
-                <td class="table-td">{{ item.model || '未知模型' }}</td>
                 <td class="table-td">{{ formatEntity(item.upstream_account, '未命中上游') }}</td>
                 <td class="table-td">{{ item.same_kind_count || 1 }}</td>
                 <td class="table-td">
@@ -416,6 +421,7 @@ const upstreamAccountId = ref('')
 const requestId = ref('')
 const keyword = ref('')
 const aiAnalysis = ref<'all' | 'analyzed' | 'not_analyzed'>('all')
+const showMoreFilters = ref(false)
 const sortBy = ref<'occurred_at' | 'status_code' | 'severity' | 'same_kind_count'>('occurred_at')
 const sortOrder = ref<'asc' | 'desc'>('desc')
 const page = ref(1)
@@ -434,6 +440,43 @@ const exportButtonTitle = computed(() => {
   if (!canExport.value) return '当前账号无权限执行此操作'
   return '导出当前筛选条件下的错误列表 CSV'
 })
+const fromOverview = computed(() => firstQueryValue(route.query.from_overview) === '1')
+const advancedFilterCount = computed(() => {
+  let count = 0
+  if (model.value.trim()) count++
+  if (aiAnalysis.value !== 'all') count++
+  if (errorResults.value.length) count++
+  if (severities.value.length) count++
+  if (errorSubcategoriesInput.value.trim()) count++
+  if (clientErrorSubcategories.value.length) count++
+  if (userId.value.trim()) count++
+  if (apiKeyId.value.trim()) count++
+  if (upstreamAccountId.value.trim()) count++
+  if (requestId.value.trim()) count++
+  return count
+})
+const advancedFilterSummaries = computed(() => {
+  const summaries: string[] = []
+  const modelValue = model.value.trim()
+  const errorSubcategoryValue = errorSubcategoriesInput.value.trim()
+  const userIdValue = userId.value.trim()
+  const apiKeyIdValue = apiKeyId.value.trim()
+  const upstreamAccountIdValue = upstreamAccountId.value.trim()
+  const requestIdValue = requestId.value.trim()
+
+  if (modelValue) summaries.push(`模型：${modelValue}`)
+  if (aiAnalysis.value !== 'all') summaries.push(`AI 分析：${aiAnalysis.value === 'analyzed' ? '已分析' : '未分析'}`)
+  if (errorResults.value.length) summaries.push(`错误结果：${formatOptionValues(errorResultOptions, errorResults.value)}`)
+  if (severities.value.length) summaries.push(`严重度：${formatOptionValues(severityOptions, severities.value)}`)
+  if (errorSubcategoryValue) summaries.push(`错误子类：${errorSubcategoryValue}`)
+  if (clientErrorSubcategories.value.length) summaries.push(`客户端错误细分：${formatOptionValues(clientErrorSubcategoryOptions, clientErrorSubcategories.value)}`)
+  if (userIdValue) summaries.push(`用户 ID：${userIdValue}`)
+  if (apiKeyIdValue) summaries.push(`API Key ID：${apiKeyIdValue}`)
+  if (upstreamAccountIdValue) summaries.push(`上游账号 ID：${upstreamAccountIdValue}`)
+  if (requestIdValue) summaries.push(`请求 ID：${requestIdValue}`)
+  return summaries
+})
+const moreFiltersButtonLabel = computed(() => advancedFilterCount.value > 0 ? `更多筛选项（${advancedFilterCount.value}）` : '更多筛选项')
 const exportHint = computed(() => {
   if (!canExport.value) return '当前账号无权限导出错误列表。'
   return '仅平台所有者、运维可导出；导出范围最长 7 天，最多 100000 行。'
@@ -482,6 +525,11 @@ function splitCSV(value: string): string[] {
 function firstQueryValue(value: unknown): string {
   if (Array.isArray(value)) return String(value[0] ?? '')
   return typeof value === 'string' ? value : ''
+}
+
+function formatOptionValues(options: Array<{ value: string; label: string }>, values: string[]): string {
+  const optionLabelMap = new Map(options.map((option) => [option.value, option.label]))
+  return values.map((value) => optionLabelMap.get(value) || value).join('、')
 }
 
 function parsePositiveInt(value: string): number | null {
@@ -567,6 +615,7 @@ function buildQueryObject(): Record<string, string> {
   if (upstreamAccountId.value.trim()) query.upstream_account_id = upstreamAccountId.value.trim()
   if (requestId.value.trim()) query.request_id = requestId.value.trim()
   if (keyword.value.trim()) query.keyword = keyword.value.trim()
+  if (fromOverview.value) query.from_overview = '1'
 
   return query
 }
@@ -788,11 +837,16 @@ function resetFilters() {
   requestId.value = ''
   keyword.value = ''
   aiAnalysis.value = 'all'
+  showMoreFilters.value = false
   sortBy.value = 'occurred_at'
   sortOrder.value = 'desc'
   page.value = 1
   pageSize.value = '20'
   void fetchErrors()
+}
+
+function backToOverview() {
+  void router.push({ name: 'AdminOpsOverview' })
 }
 
 function toggleSort(field: 'occurred_at' | 'status_code' | 'severity' | 'same_kind_count') {
@@ -860,21 +914,6 @@ function formatAIStatus(value: string): string {
 function openDetail(id: number) {
   if (!id) return
   void router.push({ name: 'AdminOpsUnifiedErrorDetail', params: { id: String(id) } })
-}
-
-function severityBadgeClass(value: string): string {
-  switch (value) {
-    case 'P0':
-      return 'badge-p0'
-    case 'P1':
-      return 'badge-p1'
-    case 'P2':
-      return 'badge-p2'
-    case 'observe':
-      return 'badge-observe'
-    default:
-      return 'badge-normal'
-  }
 }
 
 async function loadGroups() {

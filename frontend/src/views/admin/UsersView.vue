@@ -90,6 +90,14 @@
                 class="input w-full sm:w-32"
                 @keyup.enter="applyFilter"
               />
+              <button
+                type="button"
+                class="btn btn-primary px-4"
+                :disabled="Boolean(balanceFilterError)"
+                @click="applyFilter"
+              >
+                {{ t('common.search') }}
+              </button>
               <p v-if="balanceFilterError" class="w-full text-xs text-red-600 dark:text-red-400">
                 {{ balanceFilterError }}
               </p>

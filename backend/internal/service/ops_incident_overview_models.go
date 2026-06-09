@@ -54,6 +54,7 @@ type OpsIncidentOverview struct {
 	AffectedAPIKeys  int64                         `json:"affected_api_keys"`
 	AffectedModels   []string                      `json:"affected_models"`
 	AffectedAccounts []*OpsIncidentAffectedAccount `json:"affected_accounts"`
+	SystemMetrics    *OpsSystemMetricsSnapshot     `json:"system_metrics,omitempty"`
 
 	LatestAIAnalysis   *OpsIncidentLatestAIAnalysis `json:"latest_ai_analysis"`
 	QuickFilters       []*OpsIncidentQuickFilter    `json:"quick_filters"`

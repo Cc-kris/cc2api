@@ -82,6 +82,7 @@ func (s *OpsService) GetIncidentOverview(ctx context.Context, filter *OpsDashboa
 		AffectedAPIKeys:       impact.AffectedAPIKeys,
 		AffectedModels:        impact.AffectedModels,
 		AffectedAccounts:      impact.AffectedAccounts,
+		SystemMetrics:         overview.SystemMetrics,
 		LatestAIAnalysis:      nil,
 		QuickFilters:          quickFilters,
 		RecommendedActions:    buildOpsIncidentRecommendedActions(status, topAlert, overview),
@@ -211,20 +212,44 @@ func opsIncidentScoreReasonStrings(reasons []*OpsHealthScoreReason) []string {
 		if message == "" && value == "" {
 			continue
 		}
-		if message == "" {
-			out = append(out, value)
-			continue
+		text := ""
+		switch {
+		case message == "":
+			text = value
+		case value == "":
+			text = message
+		default:
+			text = fmt.Sprintf("%s：%s", message, value)
 		}
-		if value == "" {
-			out = append(out, message)
-			continue
+		if meaning := opsIncidentScoreReasonMeaning(reason); meaning != "" && !strings.Contains(text, "（") {
+			text = fmt.Sprintf("%s（%s）", text, meaning)
 		}
-		out = append(out, fmt.Sprintf("%s：%s", message, value))
+		out = append(out, text)
 	}
 	if len(out) == 0 {
 		return []string{"暂无异常原因"}
 	}
 	return out
+}
+
+func opsIncidentScoreReasonMeaning(reason *OpsHealthScoreReason) string {
+	if reason == nil {
+		return ""
+	}
+	switch strings.TrimSpace(reason.Code) {
+	case OpsHealthReasonFinalFailures:
+		return "当前窗口内真正失败并影响用户的请求次数"
+	case OpsHealthReasonFailureRate:
+		return "最终失败占有效请求的比例，比例越高客户体感越差"
+	case OpsHealthReasonEffectiveRequests:
+		return "参与本次判断的有效请求量，样本越小分数越需要结合明细判断"
+	case OpsHealthReasonImpactScope:
+		return "错误主要分布在平台、上游或客户端，用来判断优先排查方向"
+	case OpsHealthReasonDependencyStatus:
+		return "数据库、Redis、后台任务等基础依赖的健康情况"
+	default:
+		return "该项参与健康风险分数计算"
+	}
 }
 
 func buildOpsIncidentSummary(status string, alert *OpsAlertEvent, failures int64, failureRate float64, impact *OpsIncidentImpact) string {

@@ -756,7 +756,7 @@ function goBack() {
     router.back()
     return
   }
-  router.push({ name: 'AdminOpsOverview' })
+  router.push({ name: 'AdminOpsUnifiedErrors' })
 }
 
 async function copyRequestId() {

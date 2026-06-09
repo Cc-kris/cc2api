@@ -4,7 +4,8 @@
       <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-dark-700 dark:bg-dark-800">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
+            <CacheNavPills active="stats" />
+            <h1 class="mt-4 text-2xl font-semibold text-gray-900 dark:text-white">
               {{ t('admin.cacheStats.title') }}
             </h1>
             <p class="mt-2 max-w-3xl text-sm text-gray-600 dark:text-gray-400">
@@ -12,9 +13,6 @@
             </p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <RouterLink class="btn btn-secondary" to="/admin/settings/cache">
-              {{ t('admin.cacheStats.actions.backToConfig') }}
-            </RouterLink>
             <button type="button" class="btn btn-secondary" :disabled="loading" @click="loadStats(true)">
               {{ t('admin.cacheStats.actions.refresh') }}
             </button>
@@ -142,7 +140,7 @@
             <div v-else class="space-y-4">
               <div v-for="row in bypassReasonRows" :key="`bypass-${row.reason}`" class="space-y-2">
                 <div class="flex items-center justify-between gap-3 text-sm">
-                  <span class="truncate font-medium text-gray-900 dark:text-white">{{ row.reason }}</span>
+                  <span class="truncate font-medium text-gray-900 dark:text-white">{{ formatCacheReason(row.reason) }}</span>
                   <span class="shrink-0 text-gray-500 dark:text-gray-400">{{ formatInteger(row.count) }} · {{ formatPercent(row.percent) }}</span>
                 </div>
                 <div class="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
@@ -165,7 +163,7 @@
             <div v-else class="space-y-4">
               <div v-for="row in storeSkipReasonRows" :key="`skip-${row.reason}`" class="space-y-2">
                 <div class="flex items-center justify-between gap-3 text-sm">
-                  <span class="truncate font-medium text-gray-900 dark:text-white">{{ row.reason }}</span>
+                  <span class="truncate font-medium text-gray-900 dark:text-white">{{ formatCacheReason(row.reason) }}</span>
                   <span class="shrink-0 text-gray-500 dark:text-gray-400">{{ formatInteger(row.count) }} · {{ formatPercent(row.percent) }}</span>
                 </div>
                 <div class="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-dark-700">
@@ -212,7 +210,7 @@
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
                   <div>{{ formatInteger(row.bypass_requests) }}</div>
-                  <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ row.top_bypass_reason || '--' }}</div>
+                  <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ formatCacheReason(row.top_bypass_reason) }}</div>
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
                   <div>{{ formatInteger(row.store_success) }}</div>
@@ -240,9 +238,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import CacheNavPills from './cache/CacheNavPills.vue'
 import { adminAPI } from '@/api/admin'
 import type { CacheStatsResponse } from '@/api/admin/cache'
 import type { AdminGroup } from '@/types'
@@ -478,6 +476,38 @@ function formatSavedAmount(value: string | number | null | undefined): string {
     return t('admin.cacheStats.priceMissing')
   }
   return formatCurrency(numeric)
+}
+
+function formatCacheReason(value: string | null | undefined): string {
+  const normalized = String(value || '').trim()
+  if (!normalized) return '--'
+  const map: Record<string, string> = {
+    disabled: '缓存未开启',
+    explicit_bypass: '请求明确跳过缓存',
+    no_api_key: '缺少 API Key',
+    no_group: '缺少分组',
+    request_too_large: '请求过大',
+    body_too_large: '请求体过大',
+    response_too_large: '响应过大',
+    forward_error: '转发请求失败',
+    write_error: '写入缓存失败',
+    status_not_ok: '响应状态不适合缓存',
+    empty_body: '响应内容为空',
+    content_type: '响应类型不适合缓存',
+    stream_incomplete: '流式响应未完整结束',
+    store_failed: '缓存存储失败',
+    unsafe_content: '内容安全检查未通过',
+    invalid_json: '请求格式不是有效 JSON',
+    tools_or_functions: '包含工具调用或函数调用',
+    sensitive_content: '包含敏感内容',
+    temperature_too_high: '温度参数过高',
+    model_not_allowed: '模型未加入缓存范围',
+    platform_disabled: '该平台未启用缓存',
+    cache_miss: '未命中缓存',
+    no_cacheable_content: '无可缓存内容',
+    streaming_unsupported: '当前流式响应不支持缓存'
+  }
+  return map[normalized] || normalized
 }
 
 function buildQuery() {

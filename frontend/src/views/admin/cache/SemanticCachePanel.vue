@@ -4,25 +4,10 @@
       <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-dark-700 dark:bg-dark-800">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div class="flex flex-wrap items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400">
-              <component
-                v-for="item in navItems"
-                :key="item.key"
-                :is="item.to ? 'router-link' : 'span'"
-                v-bind="item.to ? { to: item.to } : {}"
-                class="rounded-full border px-3 py-1 transition-colors"
-                :class="item.active
-                  ? 'border-primary-200 bg-primary-50 text-primary-700 dark:border-primary-700/60 dark:bg-primary-900/10 dark:text-primary-200'
-                  : item.to
-                    ? 'border-gray-200 text-gray-500 hover:border-primary-200 hover:text-primary-600 dark:border-dark-700 dark:text-gray-400 dark:hover:border-primary-700/60 dark:hover:text-primary-200'
-                    : 'border-gray-200 bg-gray-50 text-gray-400 dark:border-dark-700 dark:bg-dark-900/20 dark:text-gray-500'"
-              >
-                {{ item.label }}
-              </component>
-            </div>
+            <CacheNavPills active="semantic" />
             <h1 class="mt-4 text-2xl font-semibold text-gray-900 dark:text-white">语义缓存配置</h1>
             <p class="mt-2 max-w-3xl text-sm text-gray-600 dark:text-gray-400">
-              配置语义模型服务、命中阶段、灰度范围和质量回滚阈值；保存后新请求生效，测试连接不会修改线上配置，审计记录请在语义审计页处理。
+              语义缓存用于把意思相近的重复问题命中已有回答，减少重复上游请求；它不是精确缓存，必须先配置语义模型，并经过观察、审核或灰度后才会影响线上请求。
             </p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
@@ -330,6 +315,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import CacheNavPills from './CacheNavPills.vue'
 import Toggle from '@/components/common/Toggle.vue'
 import { adminAPI } from '@/api/admin'
 import { defaultSemanticCacheConfig, type SemanticCacheConfig, type SemanticCacheConnectionTestResult, type SemanticCacheStage } from '@/api/admin/cache'
@@ -363,13 +349,6 @@ const canManage = computed(() => viewerRole.value === '' || viewerRole.value ===
 const canEnableSemantic = computed(() => hasRequiredConnectionFields.value)
 const currentStageLabel = computed(() => stageOptions.find((item) => item.value === form.stage)?.label ?? form.stage)
 const hasRequiredConnectionFields = computed(() => Boolean(form.semantic_model_base_url.trim() && (semanticApiKeyInput.value.trim() || form.semantic_api_key_masked) && form.semantic_model_name.trim()))
-
-const navItems = computed(() => [
-  { key: 'home', to: '/admin/settings/cache', label: '管理首页', active: false },
-  { key: 'stats', to: '/admin/settings/cache/stats', label: '缓存统计', active: false },
-  { key: 'semantic', to: '/admin/settings/cache/semantic', label: '语义配置', active: true },
-  { key: 'audit', to: '/admin/settings/cache/semantic-audits', label: '语义审计', active: false }
-])
 
 const stageOptions: Array<{ value: SemanticCacheStage; label: string }> = [
   { value: 'observe', label: 'Observe 观察模式' },

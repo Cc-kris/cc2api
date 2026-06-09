@@ -4,7 +4,8 @@
       <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-dark-700 dark:bg-dark-800">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
+            <CacheNavPills active="home" />
+            <h1 class="mt-4 text-2xl font-semibold text-gray-900 dark:text-white">
               {{ t('admin.cacheManagement.title') }}
             </h1>
             <p class="mt-2 max-w-3xl text-sm text-gray-600 dark:text-gray-400">
@@ -12,15 +13,6 @@
             </p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <RouterLink class="btn btn-secondary" to="/admin/settings/cache/stats">
-              {{ t('admin.cacheManagement.openStats') }}
-            </RouterLink>
-            <RouterLink class="btn btn-secondary" to="/admin/settings/cache/semantic">
-              {{ t('admin.cacheManagement.nav.semantic') }}
-            </RouterLink>
-            <RouterLink class="btn btn-secondary" to="/admin/settings/cache/semantic-audits">
-              {{ t('admin.cacheManagement.nav.semanticAudit') }}
-            </RouterLink>
             <button type="button" class="btn btn-secondary" :disabled="loading || saving" @click="loadConfig(true)">
               {{ t('admin.cacheManagement.refresh') }}
             </button>
@@ -313,11 +305,11 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, onMounted } from 'vue'
-import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Toggle from '@/components/common/Toggle.vue'
+import CacheNavPills from './cache/CacheNavPills.vue'
 import { adminAPI } from '@/api/admin'
 import { defaultCacheManagementConfig, type CacheManagementConfig } from '@/api/admin/cache'
 import { useAppStore } from '@/stores/app'

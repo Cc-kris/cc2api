@@ -36,6 +36,22 @@
               {{ t('common.refresh') }}
             </button>
             <button
+              v-if="canManageOpsSettings"
+              type="button"
+              class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:border-blue-300 hover:text-blue-600 dark:border-dark-600 dark:text-gray-200 dark:hover:border-blue-500 dark:hover:text-blue-300"
+              @click="showOpsSettingsDialog = true"
+            >
+              告警与阈值设置
+            </button>
+            <button
+              v-if="canManageOpsSettings"
+              type="button"
+              class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:border-blue-300 hover:text-blue-600 dark:border-dark-600 dark:text-gray-200 dark:hover:border-blue-500 dark:hover:text-blue-300"
+              @click="openAIAnalysisConfig"
+            >
+              AI 分析配置
+            </button>
+            <button
               type="button"
               class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:disabled:bg-blue-800/60"
               :disabled="manualAIActionDisabled"
@@ -56,7 +72,7 @@
           {{ errorMessage }}
         </div>
 
-        <div class="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)]">
+        <div class="mt-5 grid grid-cols-1 gap-3">
           <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/80">
             <div class="flex flex-wrap gap-2">
               <button
@@ -136,24 +152,6 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-3">
-            <div class="rounded-2xl bg-blue-50 p-4 dark:bg-blue-900/20">
-              <div class="text-xs font-medium uppercase tracking-wide text-blue-700 dark:text-blue-300">
-                {{ t('admin.ops.incidentOverview.lastUpdated') }}
-              </div>
-              <div class="mt-2 text-sm font-semibold text-blue-900 dark:text-blue-100">
-                {{ formattedUpdatedAt }}
-              </div>
-            </div>
-            <div class="rounded-2xl bg-amber-50 p-4 dark:bg-amber-900/20">
-              <div class="text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
-                {{ t('admin.ops.incidentOverview.currentWindow') }}
-              </div>
-              <div class="mt-2 text-sm font-semibold text-amber-900 dark:text-amber-100">
-                {{ currentWindowLabel }}
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -163,6 +161,16 @@
 
       <template v-else-if="displayOverview">
         <section class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900 lg:col-span-3">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">运维判断</h2>
+            <div class="mt-4 overflow-hidden rounded-2xl border border-gray-100 dark:border-dark-700">
+              <div v-for="row in decisionRows" :key="row.label" class="grid grid-cols-1 gap-2 border-b border-gray-100 px-4 py-3 last:border-b-0 dark:border-dark-700 md:grid-cols-[140px_minmax(0,1fr)]">
+                <div class="text-sm text-gray-500 dark:text-gray-400">{{ row.label }}</div>
+                <div class="text-sm leading-6 text-gray-800 dark:text-gray-100">{{ row.value }}</div>
+              </div>
+            </div>
+          </div>
+
           <button
             type="button"
             class="rounded-3xl border border-gray-200 bg-white p-5 text-left shadow-sm transition hover:border-blue-300 hover:shadow-md dark:border-dark-700 dark:bg-dark-900 dark:hover:border-blue-500"
@@ -221,7 +229,7 @@
                 <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
                   {{ t('admin.ops.incidentOverview.primarySummary') }}
                 </div>
-                <div class="mt-2 text-lg font-semibold text-gray-900 dark:text-white">
+                <div class="mt-2 text-sm leading-6 text-gray-700 dark:text-gray-200">
                   {{ currentSummary }}
                 </div>
               </div>
@@ -325,6 +333,40 @@
           </div>
         </section>
 
+        <section class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900">
+          <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">硬件实时情况</h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">CPU、内存、数据库、Redis 和队列的最新状态。</p>
+            </div>
+          </div>
+          <div v-if="displayOverview.system_metrics" class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
+              <div class="text-xs text-gray-500 dark:text-gray-400">CPU 使用率</div>
+              <div class="mt-2 text-xl font-semibold text-gray-900 dark:text-white">{{ formatOptionalPercent(displayOverview.system_metrics.cpu_usage_percent) }}</div>
+            </div>
+            <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
+              <div class="text-xs text-gray-500 dark:text-gray-400">内存使用率</div>
+              <div class="mt-2 text-xl font-semibold text-gray-900 dark:text-white">{{ formatOptionalPercent(displayOverview.system_metrics.memory_usage_percent) }}</div>
+            </div>
+            <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
+              <div class="text-xs text-gray-500 dark:text-gray-400">数据库</div>
+              <div class="mt-2 text-xl font-semibold text-gray-900 dark:text-white">{{ formatBooleanStatus(displayOverview.system_metrics.db_ok) }}</div>
+            </div>
+            <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
+              <div class="text-xs text-gray-500 dark:text-gray-400">Redis</div>
+              <div class="mt-2 text-xl font-semibold text-gray-900 dark:text-white">{{ formatBooleanStatus(displayOverview.system_metrics.redis_ok) }}</div>
+            </div>
+            <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
+              <div class="text-xs text-gray-500 dark:text-gray-400">并发队列</div>
+              <div class="mt-2 text-xl font-semibold text-gray-900 dark:text-white">{{ formatOptionalInteger(displayOverview.system_metrics.concurrency_queue_depth) }}</div>
+            </div>
+          </div>
+          <div v-else class="mt-4 rounded-2xl border border-dashed border-gray-200 p-4 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400">
+            暂无硬件实时数据
+          </div>
+        </section>
+
         <section class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           <div class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900">
             <div class="flex items-start justify-between gap-3">
@@ -420,6 +462,13 @@
     <BaseDialog :show="showAlertEventsDialog" :title="t('admin.ops.alertEvents.title')" width="extra-wide" @close="showAlertEventsDialog = false">
       <OpsAlertEventsCard />
     </BaseDialog>
+
+    <OpsSettingsDialog
+      v-if="canManageOpsSettings"
+      :show="showOpsSettingsDialog"
+      @close="showOpsSettingsDialog = false"
+      @saved="handleOpsSettingsSaved"
+    />
 
     <BaseDialog :show="showAIReportDialog" :title="t('admin.ops.incidentOverview.analysisDialogTitle')" width="wide" @close="closeAIReportDialog">
       <div v-if="aiReportLoading" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
@@ -660,6 +709,7 @@ import {
 import { useAppStore, useAuthStore } from '@/stores'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import OpsAlertEventsCard from './components/OpsAlertEventsCard.vue'
+import OpsSettingsDialog from './components/OpsSettingsDialog.vue'
 import { canManageManualAIAnalysis, fetchOpsAIAnalysisConfig, isManualAIAnalysisConfigured, type OpsAIAnalysisConfigSnapshot } from './utils/manualAIAnalysis'
 
 const router = useRouter()
@@ -725,6 +775,7 @@ const customTimeEndISO = ref<string | null>(null)
 const showScoreReasonsDialog = ref(false)
 const showAlertEventsDialog = ref(false)
 const showAIReportDialog = ref(false)
+const showOpsSettingsDialog = ref(false)
 const aiReportLoading = ref(false)
 const aiReportError = ref('')
 const aiTaskDetail = ref<OpsAIAnalysisTaskDetailResponse | null>(null)
@@ -828,18 +879,6 @@ const scoreValue = computed(() => {
   return typeof value === 'number' && Number.isFinite(value) ? String(value) : '--'
 })
 
-const formattedUpdatedAt = computed(() => formatDateTime(displayOverview.value?.updated_at) || '--')
-
-const currentWindowLabel = computed(() => {
-  if (timeRange.value !== 'custom') {
-    return t(`admin.ops.incidentOverview.timeRanges.${timeRange.value}`)
-  }
-  if (customTimeStartISO.value && customTimeEndISO.value) {
-    return `${formatDateTime(customTimeStartISO.value)} ~ ${formatDateTime(customTimeEndISO.value)}`
-  }
-  return t('admin.ops.timeRange.custom')
-})
-
 const latestAnalysisState = computed<'none' | 'ready' | 'expired'>(() => {
   const analysis = displayOverview.value?.latest_ai_analysis
   if (!analysis) return 'none'
@@ -859,6 +898,36 @@ const latestAnalysisStatusClass = computed(() => analysisTaskStatusClass(display
 const currentViewerRole = computed(() => String((authStore.user as { role?: string } | null)?.role || '').trim().toLowerCase())
 const canRunManualAIAnalysis = computed(() => canManageManualAIAnalysis(currentViewerRole.value))
 const canSubmitAIReportFeedback = computed(() => aiFeedbackAllowedRoles.has(currentViewerRole.value))
+const canManageOpsSettings = computed(() => canManageManualAIAnalysis(currentViewerRole.value))
+
+const actionRequiredLabel = computed(() => {
+  const current = displayOverview.value
+  if (!current) return '等待数据'
+  const status = String(current.status || '').trim().toLowerCase()
+  if (status === 'incident' || status === 'risk') return '需要处理'
+  if (status === 'observing' || current.final_failures > 0 || current.recovered_fluctuations > 0) return '需要观察'
+  return '无需处理'
+})
+
+const actionRequiredReason = computed(() => {
+  const current = displayOverview.value
+  if (!current) return '当前还没有监控数据。'
+  if (current.final_failures > 0) return `当前窗口有 ${formatInteger(current.final_failures)} 次最终失败。`
+  if (current.recovered_fluctuations > 0) return `当前窗口有 ${formatInteger(current.recovered_fluctuations)} 次已恢复波动。`
+  return '当前窗口没有最终失败。'
+})
+
+const decisionRows = computed(() => {
+  const current = displayOverview.value
+  if (!current) return []
+  return [
+    { label: '健康风险分数', value: `${scoreValue.value}（${scoreLevelLabel.value}）` },
+    { label: '为什么扣分', value: primaryScoreReason.value },
+    { label: '主要问题', value: currentSummary.value },
+    { label: '影响范围', value: `失败 ${formatInteger(current.final_failures)} 次，影响用户 ${formatInteger(current.affected_users)} 个、API Key ${formatInteger(current.affected_api_keys)} 个` },
+    { label: '是否需要处理', value: `${actionRequiredLabel.value}：${actionRequiredReason.value}` }
+  ]
+})
 
 const canOpenSummaryDetails = computed(() => {
   return Boolean(displayOverview.value?.quick_filters?.length)
@@ -1057,6 +1126,29 @@ function formatInteger(value: number): string {
 function formatPercent(value: number): string {
   if (!Number.isFinite(value)) return '--'
   return `${(value * 100).toFixed(value >= 0.1 ? 1 : 2)}%`
+}
+
+function formatOptionalInteger(value: number | null | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value) ? formatInteger(value) : '--'
+}
+
+function formatOptionalPercent(value: number | null | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)}%` : '--'
+}
+
+function formatBooleanStatus(value: boolean | null | undefined): string {
+  if (value === true) return '正常'
+  if (value === false) return '异常'
+  return '--'
+}
+
+function openAIAnalysisConfig() {
+  void router.push({ path: '/admin/ops/ai-analysis' })
+}
+
+async function handleOpsSettingsSaved() {
+  showOpsSettingsDialog.value = false
+  await Promise.all([loadManualAIAnalysisConfig(), fetchOverview()])
 }
 
 function buildOverviewParams(): OpsIncidentOverviewParams {
@@ -1399,11 +1491,6 @@ function openAccountDetails(accountId: number, accountName: string) {
 
 function openQuickFilter(filter: OpsIncidentQuickFilter) {
   const params = filter.params || {}
-  if (params.model) {
-    applyModelFilter(params.model)
-    return
-  }
-
   const accountId = Number.parseInt(String(params.upstream_account_id || params.account_id || ''), 10)
   if (Number.isFinite(accountId) && accountId > 0) {
     openAccountDetails(accountId, filter.label.replace(/^上游账号：/, ''))
@@ -1448,7 +1535,8 @@ function buildUnifiedErrorsQuery(preset: OpsErrorDetailsPreset, type: 'request' 
     page_size: '20',
     sort_by: 'occurred_at',
     sort_order: 'desc',
-    ai_analysis: 'all'
+    ai_analysis: 'all',
+    from_overview: '1'
   }
 
   if (customTimeStartISO.value && customTimeEndISO.value) {

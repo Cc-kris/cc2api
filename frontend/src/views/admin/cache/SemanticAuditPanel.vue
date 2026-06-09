@@ -4,22 +4,7 @@
       <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-dark-700 dark:bg-dark-800">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <div class="flex flex-wrap items-center gap-2 text-xs font-medium text-gray-500 dark:text-gray-400">
-              <component
-                v-for="item in navItems"
-                :key="item.key"
-                :is="item.to ? 'router-link' : 'span'"
-                v-bind="item.to ? { to: item.to } : {}"
-                class="rounded-full border px-3 py-1 transition-colors"
-                :class="item.active
-                  ? 'border-primary-200 bg-primary-50 text-primary-700 dark:border-primary-700/60 dark:bg-primary-900/10 dark:text-primary-200'
-                  : item.to
-                    ? 'border-gray-200 text-gray-500 hover:border-primary-200 hover:text-primary-600 dark:border-dark-700 dark:text-gray-400 dark:hover:border-primary-700/60 dark:hover:text-primary-200'
-                    : 'border-gray-200 bg-gray-50 text-gray-400 dark:border-dark-700 dark:bg-dark-900/20 dark:text-gray-500'"
-              >
-                {{ item.label }}
-              </component>
-            </div>
+            <CacheNavPills active="semanticAudit" />
             <h1 class="mt-4 text-2xl font-semibold text-gray-900 dark:text-white">语义缓存审计</h1>
             <p class="mt-2 max-w-3xl text-sm text-gray-600 dark:text-gray-400">
               查看语义候选的命中记录、审核状态和反馈结果；页面仅展示脱敏摘要，不展示完整原请求和完整命中响应。
@@ -300,6 +285,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import CacheNavPills from './CacheNavPills.vue'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import { adminAPI } from '@/api/admin'
@@ -372,13 +358,6 @@ const dialog = reactive<{
   value: '',
   note: ''
 })
-
-const navItems = computed(() => [
-  { key: 'home', to: '/admin/settings/cache', label: '管理首页', active: false },
-  { key: 'stats', to: '/admin/settings/cache/stats', label: '缓存统计', active: false },
-  { key: 'semantic', to: '/admin/settings/cache/semantic', label: '语义配置', active: false },
-  { key: 'audit', to: '/admin/settings/cache/semantic-audits', label: '语义审计', active: true }
-])
 
 const viewerRole = computed(() => normalizeRole(String((authStore.user as { role?: string } | null)?.role || '')))
 const canView = computed(() => ['owner', 'ops', 'business', 'support'].includes(viewerRole.value))

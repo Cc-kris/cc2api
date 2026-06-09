@@ -59,6 +59,9 @@ export function canAccessAdminPath(path: string, role: unknown): boolean {
   if (isPlatformOwnerRole(role)) {
     return true
   }
+  if (/^\/admin\/ops\/errors\/\d+$/.test(path)) {
+    return canAccessOpsOverview(role)
+  }
 
   switch (path) {
     case '/admin':
@@ -77,6 +80,7 @@ export function canAccessAdminPath(path: string, role: unknown): boolean {
     case '/admin/settings/cache/stats':
       return canAccessCacheStats(role)
     case '/admin/settings/cache/semantic':
+    case '/admin/settings/cache/semantic-audits':
       return canAccessSemanticCache(role)
     default:
       return false

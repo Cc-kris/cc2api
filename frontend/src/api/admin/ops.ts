@@ -264,6 +264,7 @@ export interface OpsIncidentOverview {
   affected_api_keys: number
   affected_models: string[]
   affected_accounts: OpsIncidentAffectedAccount[]
+  system_metrics?: OpsSystemMetricsSnapshot | null
   latest_ai_analysis: OpsIncidentLatestAIAnalysis | null
   quick_filters: OpsIncidentQuickFilter[]
   recommended_actions: string[]
