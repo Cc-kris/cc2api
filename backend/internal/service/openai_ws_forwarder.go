@@ -2782,10 +2782,21 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			}
 			normalized = next
 		}
-		imageIntent := IsImageGenerationIntent(openAIResponsesEndpoint, originalModel, normalized)
-		if imageIntent && !GroupAllowsImageGeneration(apiKeyGroup(getAPIKeyFromContext(c))) {
+		imagePermissionIntent := IsImageGenerationPermissionIntent(openAIResponsesEndpoint, originalModel, normalized)
+		groupAllowsImageGeneration := GroupAllowsImageGeneration(apiKeyGroup(getAPIKeyFromContext(c)))
+		if imagePermissionIntent && !groupAllowsImageGeneration {
 			return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, ImageGenerationPermissionMessage(), nil)
 		}
+		if !groupAllowsImageGeneration {
+			stripped, didStrip, stripErr := stripOpenAIImageGenerationToolDeclarationsFromBody(normalized)
+			if stripErr != nil {
+				return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", stripErr)
+			}
+			if didStrip {
+				normalized = stripped
+			}
+		}
+		imageIntent := IsImageGenerationIntent(openAIResponsesEndpoint, originalModel, normalized)
 		imageBillingModel := ""
 		imageSizeTier := ""
 		imageInputSize := ""

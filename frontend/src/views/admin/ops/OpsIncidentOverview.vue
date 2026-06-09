@@ -1,59 +1,58 @@
 <template>
   <AppLayout>
-    <div class="space-y-6 pb-12">
-      <section class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900">
-        <div class="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div class="space-y-2">
-            <div class="flex items-center gap-2">
-              <span :class="['inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold', statusBadgeClass]">
-                {{ statusLabel }}
-              </span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">
-                {{ t('admin.ops.incidentOverview.autoRefresh', { seconds: autoRefreshCountdown }) }}
-              </span>
-            </div>
-            <div>
-              <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">
-                {{ t('admin.ops.incidentOverview.title') }}
-              </h1>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                {{ t('admin.ops.incidentOverview.description') }}
-              </p>
-            </div>
-            <p class="text-sm text-gray-600 dark:text-gray-300">
-              {{ currentSummary }}
-            </p>
+    <div class="pb-12">
+
+      <!-- ─── A · 操作栏 ─── -->
+      <div class="ov-actionbar">
+        <div class="flex min-h-[52px] flex-wrap items-center gap-2 px-1">
+          <!-- Title -->
+          <div class="flex shrink-0 items-center gap-2">
+            <h1 class="text-sm font-bold text-gray-900 dark:text-white">运维监控</h1>
+            <span class="text-xs text-gray-400 dark:text-gray-500">事故总览</span>
           </div>
 
-          <div class="flex flex-wrap items-center gap-3">
+          <!-- Time chips (centered) -->
+          <div class="mx-auto flex flex-wrap gap-1">
+            <button
+              v-for="option in timeRangeOptions.filter(o => o.value !== 'custom')"
+              :key="option.value"
+              type="button"
+              :class="['ov-chip', timeRange === option.value ? 'ov-chip--active' : '']"
+              @click="handleTimeRangeChange(option.value)"
+            >{{ option.label }}</button>
             <button
               type="button"
-              class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:border-blue-300 hover:text-blue-600 dark:border-dark-600 dark:text-gray-200 dark:hover:border-blue-500 dark:hover:text-blue-300"
+              :class="['ov-chip', timeRange === 'custom' ? 'ov-chip--active' : '']"
+              @click="handleTimeRangeChange('custom')"
+            >自定义</button>
+          </div>
+
+          <!-- Right side buttons + countdown -->
+          <div class="ml-auto flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              class="ov-btn"
               :disabled="loading"
               @click="fetchOverview"
             >
               <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
-              {{ t('common.refresh') }}
+              刷新
             </button>
             <button
               v-if="canManageOpsSettings"
               type="button"
-              class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:border-blue-300 hover:text-blue-600 dark:border-dark-600 dark:text-gray-200 dark:hover:border-blue-500 dark:hover:text-blue-300"
+              class="ov-btn"
               @click="showOpsSettingsDialog = true"
-            >
-              告警与阈值设置
-            </button>
+            >告警与阈值</button>
             <button
               v-if="canManageOpsSettings"
               type="button"
-              class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:border-blue-300 hover:text-blue-600 dark:border-dark-600 dark:text-gray-200 dark:hover:border-blue-500 dark:hover:text-blue-300"
+              class="ov-btn"
               @click="openAIAnalysisConfig"
-            >
-              AI 分析配置
-            </button>
+            >AI 配置</button>
             <button
               type="button"
-              class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:disabled:bg-blue-800/60"
+              class="ov-btn ov-btn--primary"
               :disabled="manualAIActionDisabled"
               :title="manualAIActionDisabledReason || undefined"
               @click="triggerManualAIAnalysis"
@@ -61,383 +60,451 @@
               <Icon name="sparkles" size="sm" />
               {{ t('admin.ops.incidentOverview.manualAnalysis') }}
             </button>
+            <span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">
+              {{ t('admin.ops.incidentOverview.autoRefresh', { seconds: autoRefreshCountdown }) }}
+            </span>
           </div>
         </div>
 
-        <div v-if="manualAIActionDisabledReason" class="mt-3 text-xs text-gray-500 dark:text-gray-400">
-          {{ manualAIActionDisabledReason }}
+        <!-- Filters row -->
+        <div class="flex flex-wrap items-end gap-2 border-t border-gray-100 px-1 py-2 dark:border-dark-800">
+          <select v-model="platform" class="ov-input-sm w-28">
+            <option value="">{{ t('common.all') }} 平台</option>
+            <option value="openai">OpenAI</option>
+            <option value="claude">Claude</option>
+            <option value="gemini">Gemini</option>
+          </select>
+          <input
+            v-model="model"
+            type="text"
+            class="ov-input-sm w-36"
+            :placeholder="t('admin.ops.incidentOverview.modelPlaceholder')"
+          >
+          <select v-model="groupSelection" class="ov-input-sm w-36">
+            <option value="">{{ t('common.all') }} 分组</option>
+            <option v-for="group in filteredGroups" :key="group.id" :value="String(group.id)">
+              {{ group.name }}
+            </option>
+          </select>
+          <template v-if="timeRange === 'custom'">
+            <input v-model="customTimeStartInput" type="datetime-local" class="ov-input-sm">
+            <span class="text-xs text-gray-400">—</span>
+            <input v-model="customTimeEndInput" type="datetime-local" class="ov-input-sm">
+            <button type="button" class="ov-btn ov-btn--primary" @click="applyCustomTimeRange">
+              {{ t('common.confirm') }}
+            </button>
+          </template>
         </div>
+      </div>
 
-        <div v-if="errorMessage" class="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
-          {{ errorMessage }}
-        </div>
+      <!-- Error message -->
+      <div
+        v-if="errorMessage"
+        class="mt-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300"
+      >{{ errorMessage }}</div>
 
-        <div class="mt-5 grid grid-cols-1 gap-3">
-          <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/80">
-            <div class="flex flex-wrap gap-2">
-              <button
-                v-for="option in timeRangeOptions"
-                :key="option.value"
-                type="button"
-                :class="[
-                  'rounded-xl px-3 py-2 text-sm font-medium transition',
-                  timeRange === option.value
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-white text-gray-600 hover:bg-gray-100 dark:bg-dark-900 dark:text-gray-300 dark:hover:bg-dark-700'
-                ]"
-                @click="handleTimeRangeChange(option.value)"
-              >
-                {{ option.label }}
-              </button>
-            </div>
+      <!-- AI action hint -->
+      <div
+        v-if="manualAIActionDisabledReason"
+        class="mt-1.5 text-xs text-gray-400 dark:text-gray-500"
+      >{{ manualAIActionDisabledReason }}</div>
 
-            <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div>
-                <label class="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  {{ t('admin.ops.requestDetails.table.platform') }}
-                </label>
-                <select v-model="platform" class="input">
-                  <option value="">{{ t('common.all') }}</option>
-                  <option value="openai">OpenAI</option>
-                  <option value="claude">Claude</option>
-                  <option value="gemini">Gemini</option>
-                </select>
-              </div>
-              <div>
-                <label class="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  {{ t('admin.ops.requestDetails.table.model') }}
-                </label>
-                <input
-                  v-model="model"
-                  type="text"
-                  class="input"
-                  :placeholder="t('admin.ops.incidentOverview.modelPlaceholder')"
-                >
-              </div>
-              <div>
-                <label class="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  {{ t('admin.ops.requestDetails.table.group') }}
-                </label>
-                <select v-model="groupSelection" class="input">
-                  <option value="">{{ t('common.all') }}</option>
-                  <option v-for="group in filteredGroups" :key="group.id" :value="String(group.id)">
-                    {{ group.name }}
-                  </option>
-                </select>
-              </div>
-            </div>
-
-            <div v-if="timeRange === 'custom'" class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
-              <div>
-                <label class="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  {{ t('admin.ops.customTimeRange.startTime') }}
-                </label>
-                <input v-model="customTimeStartInput" type="datetime-local" class="input">
-              </div>
-              <div>
-                <label class="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  {{ t('admin.ops.customTimeRange.endTime') }}
-                </label>
-                <input v-model="customTimeEndInput" type="datetime-local" class="input">
-              </div>
-              <div class="flex items-end">
-                <button
-                  type="button"
-                  class="inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                  @click="applyCustomTimeRange"
-                >
-                  {{ t('common.confirm') }}
-                </button>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      <div v-if="!displayOverview && loading" class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div v-for="index in 3" :key="index" class="h-40 animate-pulse rounded-3xl bg-gray-100 dark:bg-dark-800" />
+      <!-- Loading skeleton -->
+      <div v-if="!displayOverview && loading" class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[320px_1fr]">
+        <div class="h-64 animate-pulse rounded-3xl bg-gray-100 dark:bg-dark-800" />
+        <div class="h-64 animate-pulse rounded-3xl bg-gray-100 dark:bg-dark-800" />
       </div>
 
       <template v-else-if="displayOverview">
-        <section class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900 lg:col-span-3">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">运维判断</h2>
-            <div class="mt-4 overflow-hidden rounded-2xl border border-gray-100 dark:border-dark-700">
-              <div v-for="row in decisionRows" :key="row.label" class="grid grid-cols-1 gap-2 border-b border-gray-100 px-4 py-3 last:border-b-0 dark:border-dark-700 md:grid-cols-[140px_minmax(0,1fr)]">
-                <div class="text-sm text-gray-500 dark:text-gray-400">{{ row.label }}</div>
-                <div class="text-sm leading-6 text-gray-800 dark:text-gray-100">{{ row.value }}</div>
+
+        <!-- ─── Row 1 · 健康分 + 状态 Banner ─── -->
+        <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[320px_1fr]">
+
+          <!-- B · 健康分 -->
+          <div class="ov-card">
+            <div class="ov-section-label">
+              <span :class="['ov-dot', scoreDotClass]" />健康分
+            </div>
+            <button type="button" class="w-full text-left" @click="showScoreReasonsDialog = true">
+              <div :class="['ov-hero-score', scoreColorClass]">{{ scoreValue }}</div>
+              <div class="mt-2 flex items-center gap-2">
+                <span :class="['ov-badge', scoreLevelBadgeClass]">{{ scoreLevelLabel }}</span>
+                <span class="text-xs text-blue-500 dark:text-blue-400">查看扣分明细 →</span>
               </div>
+            </button>
+            <!-- Score track bar -->
+            <div v-if="scoreNumeric !== null" class="ov-score-track mt-3">
+              <div class="ov-score-arrow" :style="`left: ${scoreNumeric}%`" />
+            </div>
+            <div class="ov-score-track-labels">
+              <span>0</span><span>50</span><span>70</span><span>90</span><span>100</span>
+            </div>
+            <div
+              v-if="showSmallSampleProtection"
+              class="mt-2 text-xs text-gray-400 dark:text-gray-500"
+            >
+              小样本保护中：1 分钟内最终失败 ≤ 2，分数最低不低于 70
+            </div>
+            <div class="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+              {{ currentSummary }}
             </div>
           </div>
 
-          <button
-            type="button"
-            class="rounded-3xl border border-gray-200 bg-white p-5 text-left shadow-sm transition hover:border-blue-300 hover:shadow-md dark:border-dark-700 dark:bg-dark-900 dark:hover:border-blue-500"
-            @click="showAlertEventsDialog = true"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  {{ t('admin.ops.incidentOverview.statusCard') }}
-                </div>
-                <div class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">
-                  {{ statusLabel }}
-                </div>
+          <!-- C · 状态 Banner (指标行) -->
+          <div :class="['ov-banner rounded-3xl overflow-hidden border', bannerBorderClass]">
+            <div :class="['ov-banner-top flex flex-wrap items-center gap-3 px-5 py-3', bannerTopBgClass]">
+              <div :class="['text-base font-extrabold flex items-center gap-2', bannerVerdictTextClass]">
+                {{ statusIcon }} {{ statusLabel }}
               </div>
-              <span :class="['rounded-full px-3 py-1 text-xs font-semibold', statusBadgeClass]">
-                {{ displayOverview.status.toUpperCase() }}
-              </span>
+              <div class="flex flex-wrap gap-1.5">
+                <span
+                  v-if="infraCritical"
+                  class="ov-apill ov-apill--red"
+                >基础设施异常</span>
+                <span
+                  v-if="displayOverview.final_failures > 0"
+                  :class="['ov-apill', statusPillClass]"
+                >{{ formatInteger(displayOverview.final_failures) }} 次失败</span>
+                <span
+                  v-if="displayOverview.recovered_fluctuations > 0"
+                  class="ov-apill ov-apill--amber"
+                >{{ formatInteger(displayOverview.recovered_fluctuations) }} 次波动</span>
+              </div>
+              <template v-if="displayOverview.quick_filters.length">
+                <button
+                  v-for="filter in displayOverview.quick_filters.slice(0, 3)"
+                  :key="filter.label"
+                  type="button"
+                  class="ov-tag"
+                  @click="openQuickFilter(filter)"
+                >{{ filter.label }}</button>
+              </template>
+              <div class="ml-auto">
+                <button
+                  type="button"
+                  class="ov-btn"
+                  @click="openSummaryDetails"
+                >查看告警时间线 ↓</button>
+              </div>
             </div>
-            <p class="mt-3 text-sm text-gray-600 dark:text-gray-300">
-              {{ currentSummary }}
-            </p>
-            <div class="mt-4 text-xs font-medium text-blue-600 dark:text-blue-300">
-              {{ t('admin.ops.incidentOverview.openAlertEvents') }}
+            <!-- Stat rows -->
+            <div class="border-t border-gray-100 bg-white dark:border-dark-700 dark:bg-dark-900">
+              <div class="ov-stat-row">
+                <span class="ov-stat-label">最终失败</span>
+                <span :class="['ov-stat-value', displayOverview.final_failures > 0 ? 'text-red-700 dark:text-red-400' : '']">
+                  {{ formatInteger(displayOverview.final_failures) }} 次
+                  <span class="ov-stat-sub">
+                    候选请求 {{ formatInteger(displayOverview.total_requests) }} 次 · 失败率 {{ formatPercent(displayOverview.final_failure_rate) }}
+                  </span>
+                </span>
+              </div>
+              <div class="ov-stat-row">
+                <span class="ov-stat-label">已恢复波动</span>
+                <span class="ov-stat-value">
+                  {{ formatInteger(displayOverview.recovered_fluctuations) }} 次
+                  <span class="ov-stat-sub">中途失败但最终成功，不计入健康分</span>
+                </span>
+              </div>
+              <div class="ov-stat-row">
+                <span class="ov-stat-label">影响用户</span>
+                <span class="ov-stat-value">
+                  {{ formatInteger(displayOverview.affected_users) }} 个用户
+                  <span class="ov-stat-sub">去重</span>
+                </span>
+              </div>
+              <div class="ov-stat-row">
+                <span class="ov-stat-label">影响 API Key</span>
+                <span class="ov-stat-value">
+                  {{ formatInteger(displayOverview.affected_api_keys) }} 个 Key
+                  <span class="ov-stat-sub">去重</span>
+                </span>
+              </div>
+              <div v-if="displayOverview.affected_models.length" class="ov-stat-row">
+                <span class="ov-stat-label">受影响模型</span>
+                <span class="ov-stat-value flex flex-wrap gap-1">
+                  <button
+                    v-for="item in displayOverview.affected_models"
+                    :key="item"
+                    type="button"
+                    class="ov-tag ov-tag--model"
+                    @click="applyModelFilter(item)"
+                  >{{ item || t('admin.ops.incidentOverview.unknownModel') }}</button>
+                </span>
+              </div>
+              <div v-if="displayOverview.affected_accounts.length" class="ov-stat-row">
+                <span class="ov-stat-label">受影响账号</span>
+                <span class="ov-stat-value flex flex-wrap gap-1">
+                  <button
+                    v-for="account in displayOverview.affected_accounts"
+                    :key="account.id"
+                    type="button"
+                    class="ov-tag ov-tag--account"
+                    @click="openAccountDetails(account.id, account.name)"
+                  >{{ account.name || t('admin.ops.incidentOverview.unknownAccount') }}</button>
+                </span>
+              </div>
             </div>
-          </button>
+          </div>
+        </div>
 
-          <button
-            type="button"
-            class="rounded-3xl border border-gray-200 bg-white p-5 text-left shadow-sm transition hover:border-blue-300 hover:shadow-md dark:border-dark-700 dark:bg-dark-900 dark:hover:border-blue-500"
-            @click="showScoreReasonsDialog = true"
-          >
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  {{ t('admin.ops.incidentOverview.riskScore') }}
-                </div>
-                <div class="mt-2 text-3xl font-semibold text-gray-900 dark:text-white">
-                  {{ scoreValue }}
-                </div>
-              </div>
-              <span :class="['rounded-full px-3 py-1 text-xs font-semibold', scoreLevelBadgeClass]">
-                {{ scoreLevelLabel }}
-              </span>
-            </div>
-            <div class="mt-4 text-sm text-gray-600 dark:text-gray-300">
-              {{ primaryScoreReason }}
-            </div>
-            <div class="mt-4 text-xs font-medium text-blue-600 dark:text-blue-300">
-              {{ t('admin.ops.incidentOverview.viewScoreReasons') }}
-            </div>
-          </button>
+        <!-- ─── Row 2 · 需处理清单 + 扣分明细 + 错误分类 ─── -->
+        <div class="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-3">
 
-          <div class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900">
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  {{ t('admin.ops.incidentOverview.primarySummary') }}
-                </div>
-                <div class="mt-2 text-sm leading-6 text-gray-700 dark:text-gray-200">
-                  {{ currentSummary }}
-                </div>
+          <!-- D · 需要立即处理 -->
+          <div class="ov-card">
+            <div class="ov-section-label mb-3">
+              <span :class="['ov-dot', actionSectionDotClass]" />
+              {{ actionSectionLabel }}
+            </div>
+            <div v-if="recommendedActions.length" class="flex flex-col gap-2">
+              <div
+                v-for="(action, index) in recommendedActions"
+                :key="action"
+                :class="['ov-action-item', actionItemClass(index)]"
+              >
+                <div :class="['ov-action-num', actionNumClass(index)]">{{ index + 1 }}</div>
+                <div class="flex-1 text-sm font-medium leading-snug text-gray-900 dark:text-gray-100">{{ action }}</div>
               </div>
+            </div>
+            <div
+              v-else
+              class="rounded-2xl bg-gray-50 p-4 text-sm text-gray-500 dark:bg-dark-800/70 dark:text-gray-400"
+            >{{ t('admin.ops.incidentOverview.noRecommendedActions') }}</div>
+            <div class="mt-3 flex items-center gap-2">
               <button
                 type="button"
-                class="rounded-xl border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:border-blue-300 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-600 dark:text-gray-300 dark:hover:border-blue-500 dark:hover:text-blue-300"
-                :disabled="!canOpenSummaryDetails"
-                @click="openSummaryDetails"
+                class="ov-btn ov-btn--primary"
+                :disabled="manualAIActionDisabled"
+                :title="manualAIActionDisabledReason || undefined"
+                @click="triggerManualAIAnalysis"
               >
-                {{ canOpenSummaryDetails ? t('admin.ops.incidentOverview.viewDetails') : t('admin.ops.incidentOverview.noDetails') }}
+                <Icon name="sparkles" size="sm" />
+                {{ t('admin.ops.incidentOverview.manualAnalysis') }}
               </button>
             </div>
-
-            <ul class="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-300">
-              <li v-for="action in recommendedActions" :key="action" class="flex gap-2">
-                <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
-                <span>{{ action }}</span>
-              </li>
-            </ul>
-          </div>
-        </section>
-
-        <section class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900">
-          <div class="flex items-center justify-between gap-3">
-            <div>
-              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
-                {{ t('admin.ops.incidentOverview.impactTitle') }}
-              </h2>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                {{ t('admin.ops.incidentOverview.impactDescription') }}
-              </p>
-            </div>
           </div>
 
-          <div class="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <button type="button" class="impact-card" @click="openErrorDetailsFromPreset({ title: t('admin.ops.incidentOverview.finalFailures'), impactPlatformSla: true })">
-              <span class="impact-card__label">{{ t('admin.ops.incidentOverview.finalFailures') }}</span>
-              <span class="impact-card__value">{{ formatInteger(displayOverview.final_failures) }}</span>
-              <span class="impact-card__hint">{{ formatPercent(displayOverview.final_failure_rate) }}</span>
-            </button>
-
-            <button type="button" class="impact-card" @click="openErrorDetailsFromPreset({ title: t('admin.ops.incidentOverview.recoveredFluctuations'), view: 'all' })">
-              <span class="impact-card__label">{{ t('admin.ops.incidentOverview.recoveredFluctuations') }}</span>
-              <span class="impact-card__value">{{ formatInteger(displayOverview.recovered_fluctuations) }}</span>
-              <span class="impact-card__hint">{{ t('admin.ops.incidentOverview.recoveredHint') }}</span>
-            </button>
-
-            <button type="button" class="impact-card" @click="openErrorDetailsFromPreset({ title: t('admin.ops.incidentOverview.affectedUsers'), view: 'all' })">
-              <span class="impact-card__label">{{ t('admin.ops.incidentOverview.affectedUsers') }}</span>
-              <span class="impact-card__value">{{ formatInteger(displayOverview.affected_users) }}</span>
-              <span class="impact-card__hint">{{ t('admin.ops.incidentOverview.userImpactHint') }}</span>
-            </button>
-
-            <button type="button" class="impact-card" @click="openErrorDetailsFromPreset({ title: t('admin.ops.incidentOverview.affectedApiKeys'), view: 'all' })">
-              <span class="impact-card__label">{{ t('admin.ops.incidentOverview.affectedApiKeys') }}</span>
-              <span class="impact-card__value">{{ formatInteger(displayOverview.affected_api_keys) }}</span>
-              <span class="impact-card__hint">{{ t('admin.ops.incidentOverview.apiKeyImpactHint') }}</span>
-            </button>
-          </div>
-
-          <div class="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
-              <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                {{ t('admin.ops.incidentOverview.affectedModels') }}
+          <!-- E · 扣分明细 -->
+          <div class="ov-card">
+            <div class="ov-section-label mb-3 flex items-center justify-between">
+              <div class="flex items-center gap-1.5">
+                <span class="ov-dot ov-dot--gray" />扣分明细
               </div>
-              <div v-if="displayOverview.affected_models.length" class="mt-3 flex flex-wrap gap-2">
-                <button
-                  v-for="item in displayOverview.affected_models"
-                  :key="item"
-                  type="button"
-                  class="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm text-blue-700 hover:border-blue-300 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-200 dark:hover:border-blue-600"
-                  @click="applyModelFilter(item)"
-                >
-                  {{ item || t('admin.ops.incidentOverview.unknownModel') }}
-                </button>
-              </div>
-              <div v-else class="mt-3 text-sm text-gray-500 dark:text-gray-400">
-                {{ t('admin.ops.incidentOverview.none') }}
-              </div>
+              <span class="text-xs font-normal normal-case tracking-normal text-gray-400 dark:text-gray-500">
+                分 = 100 − 扣减合计
+              </span>
             </div>
+            <div class="flex flex-col gap-2">
+              <div
+                v-for="reason in scoreReasons"
+                :key="reason"
+                class="rounded-xl bg-gray-50 px-3 py-2.5 text-sm text-gray-700 dark:bg-dark-800/70 dark:text-gray-200"
+              >{{ reason }}</div>
+            </div>
+            <div class="mt-3 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-dark-700">
+              <span class="text-xs text-gray-500 dark:text-gray-400">
+                健康分 <strong :class="scoreColorClass">{{ scoreValue }}</strong>
+              </span>
+              <button
+                type="button"
+                class="ov-btn"
+                @click="openErrorDetailsFromPreset({ title: t('admin.ops.incidentOverview.finalFailures'), impactPlatformSla: true })"
+              >查看全部错误 →</button>
+            </div>
+          </div>
 
-            <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
-              <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                {{ t('admin.ops.incidentOverview.affectedAccounts') }}
-              </div>
-              <div v-if="displayOverview.affected_accounts.length" class="mt-3 flex flex-wrap gap-2">
-                <button
-                  v-for="account in displayOverview.affected_accounts"
-                  :key="account.id"
-                  type="button"
-                  class="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-sm text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200 dark:hover:border-emerald-600"
-                  @click="openAccountDetails(account.id, account.name)"
-                >
-                  {{ account.name || t('admin.ops.incidentOverview.unknownAccount') }}
-                </button>
-              </div>
-              <div v-else class="mt-3 text-sm text-gray-500 dark:text-gray-400">
-                {{ t('admin.ops.incidentOverview.none') }}
-              </div>
+          <!-- E2 · 错误分类柱状图 -->
+          <div class="ov-card">
+            <div class="ov-section-label mb-4">
+              <span class="ov-dot ov-dot--gray" />错误分类分布
             </div>
-          </div>
-        </section>
+            <div v-if="!errorCategoryChartData || errorCategoryChartData.length === 0" class="rounded-2xl bg-gray-50 px-4 py-6 text-center text-sm text-gray-500 dark:bg-dark-800/70 dark:text-gray-400">
+              当前窗口无最终失败
+            </div>
+            <div v-else class="flex items-end justify-between gap-2" style="height: 120px">
+              <button
+                v-for="item in errorCategoryChartData"
+                :key="item.key"
+                type="button"
+                class="flex flex-1 flex-col items-center gap-1.5"
+                :title="`${item.label}: ${item.count} 次`"
+                @click="navigateToErrorCategory(item.key)"
+              >
+                <!-- Bar -->
+                <div class="flex w-full items-end justify-center">
+                  <div
+                    :class="['rounded-t-lg transition-all hover:opacity-80', item.color]"
+                    :style="{ height: `${item.height}px`, width: '100%', minHeight: item.count > 0 ? '4px' : '0px' }"
+                  />
+                </div>
+                <!-- Count (top of bar) -->
+                <div v-if="item.count > 0" class="text-xs font-bold text-gray-700 dark:text-gray-200">
+                  {{ item.count }}
+                </div>
+                <!-- Label -->
+                <div class="text-xs font-medium text-gray-600 dark:text-gray-300">
+                  {{ item.label }}
+                </div>
+              </button>
+            </div>
+	          </div>
 
-        <section class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900">
-          <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">硬件实时情况</h2>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">CPU、内存、数据库、Redis 和队列的最新状态。</p>
-            </div>
-          </div>
-          <div v-if="displayOverview.system_metrics" class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
-              <div class="text-xs text-gray-500 dark:text-gray-400">CPU 使用率</div>
-              <div class="mt-2 text-xl font-semibold text-gray-900 dark:text-white">{{ formatOptionalPercent(displayOverview.system_metrics.cpu_usage_percent) }}</div>
-            </div>
-            <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
-              <div class="text-xs text-gray-500 dark:text-gray-400">内存使用率</div>
-              <div class="mt-2 text-xl font-semibold text-gray-900 dark:text-white">{{ formatOptionalPercent(displayOverview.system_metrics.memory_usage_percent) }}</div>
-            </div>
-            <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
-              <div class="text-xs text-gray-500 dark:text-gray-400">数据库</div>
-              <div class="mt-2 text-xl font-semibold text-gray-900 dark:text-white">{{ formatBooleanStatus(displayOverview.system_metrics.db_ok) }}</div>
-            </div>
-            <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
-              <div class="text-xs text-gray-500 dark:text-gray-400">Redis</div>
-              <div class="mt-2 text-xl font-semibold text-gray-900 dark:text-white">{{ formatBooleanStatus(displayOverview.system_metrics.redis_ok) }}</div>
-            </div>
-            <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
-              <div class="text-xs text-gray-500 dark:text-gray-400">并发队列</div>
-              <div class="mt-2 text-xl font-semibold text-gray-900 dark:text-white">{{ formatOptionalInteger(displayOverview.system_metrics.concurrency_queue_depth) }}</div>
-            </div>
-          </div>
-          <div v-else class="mt-4 rounded-2xl border border-dashed border-gray-200 p-4 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400">
-            暂无硬件实时数据
-          </div>
-        </section>
+	        </div>
 
-        <section class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          <div class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900">
+	        <!-- ─── F · 依赖健康 ─── -->
+	        <div v-if="displayOverview.system_metrics" class="ov-card mt-3">
+          <div class="ov-section-label mb-3 flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <span class="ov-dot ov-dot--gray" />依赖健康
+            </div>
+            <span class="text-xs text-gray-400 dark:text-gray-500">
+              最后采集：{{ formatDateTime(displayOverview.system_metrics.created_at) }}
+            </span>
+          </div>
+          <!-- Infrastructure exception banner -->
+          <div
+            v-if="infraCritical"
+            class="ov-action-item ov-action-item--red flex items-center justify-between"
+          >
+            <div class="flex items-center gap-3">
+              <div class="ov-action-num ov-action-num--red">!</div>
+              <div class="text-sm font-medium text-red-700 dark:text-red-300">
+                基础设施异常：
+                <span v-if="displayOverview.system_metrics.db_ok === false && displayOverview.system_metrics.redis_ok === false">
+                  DB · Redis 不可用
+                </span>
+                <span v-else-if="displayOverview.system_metrics.db_ok === false">
+                  DB 不可用
+                </span>
+                <span v-else>
+                  Redis 不可用
+                </span>
+                · 可能影响主请求处理
+              </div>
+            </div>
+            <button
+              type="button"
+              class="ov-btn shrink-0"
+              @click="showInfraDetails = true"
+            >查看详情 ↓</button>
+          </div>
+          <!-- Normal cards (hidden when critical) -->
+          <div
+            v-if="!infraCritical"
+            class="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5"
+          >
+            <div :class="['ov-infra-card', infraCardClass(displayOverview.system_metrics.cpu_usage_percent, 70, 90)]">
+              <div class="ov-infra-label">CPU</div>
+              <div class="ov-infra-val">{{ formatOptionalPercent(displayOverview.system_metrics.cpu_usage_percent) }}</div>
+              <div class="ov-infra-hint">{{ infraHint('cpu', displayOverview.system_metrics.cpu_usage_percent) }}</div>
+            </div>
+            <div :class="['ov-infra-card', infraCardClass(displayOverview.system_metrics.memory_usage_percent, 70, 90)]">
+              <div class="ov-infra-label">内存</div>
+              <div class="ov-infra-val">{{ formatOptionalPercent(displayOverview.system_metrics.memory_usage_percent) }}</div>
+              <div class="ov-infra-hint">{{ infraHint('memory', displayOverview.system_metrics.memory_usage_percent) }}</div>
+            </div>
+            <div :class="['ov-infra-card', infraBoolCardClass(displayOverview.system_metrics.db_ok)]">
+              <div class="ov-infra-label">数据库</div>
+              <div class="ov-infra-val">{{ formatBooleanStatus(displayOverview.system_metrics.db_ok) }}</div>
+              <div class="ov-infra-hint">{{ displayOverview.system_metrics.db_ok === true ? '连接正常' : displayOverview.system_metrics.db_ok === false ? '连接异常' : '--' }}</div>
+            </div>
+            <div :class="['ov-infra-card', infraBoolCardClass(displayOverview.system_metrics.redis_ok)]">
+              <div class="ov-infra-label">Redis</div>
+              <div class="ov-infra-val">{{ formatBooleanStatus(displayOverview.system_metrics.redis_ok) }}</div>
+              <div class="ov-infra-hint">{{ displayOverview.system_metrics.redis_ok === true ? '连接正常' : displayOverview.system_metrics.redis_ok === false ? '连接异常' : '--' }}</div>
+            </div>
+            <div :class="['ov-infra-card', infraCardClass(displayOverview.system_metrics.concurrency_queue_depth, 100, 300)]">
+              <div class="ov-infra-label">并发队列</div>
+              <div class="ov-infra-val">{{ formatOptionalInteger(displayOverview.system_metrics.concurrency_queue_depth) }}</div>
+              <div class="ov-infra-hint">{{ infraHint('queue', displayOverview.system_metrics.concurrency_queue_depth) }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── AI 分析 + 快捷筛选 ─── -->
+        <div class="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          <div class="ov-card">
             <div class="flex items-start justify-between gap-3">
               <div>
-                <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                <h2 class="text-sm font-semibold text-gray-900 dark:text-white">
                   {{ t('admin.ops.incidentOverview.latestAnalysisTitle') }}
                 </h2>
-                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                   {{ t('admin.ops.incidentOverview.latestAnalysisDescription') }}
                 </p>
               </div>
               <button
                 type="button"
-                class="rounded-xl border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 hover:border-blue-300 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-600 dark:text-gray-300 dark:hover:border-blue-500 dark:hover:text-blue-300"
+                class="ov-btn shrink-0"
                 :disabled="!displayOverview.latest_ai_analysis"
                 @click="openLatestAIAnalysis"
               >
                 {{ displayOverview.latest_ai_analysis ? t('admin.ops.incidentOverview.openAnalysis') : t('admin.ops.incidentOverview.noAnalysis') }}
               </button>
             </div>
-
-            <div v-if="latestAnalysisState === 'ready' && displayOverview.latest_ai_analysis" class="mt-4 rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
+            <div v-if="latestAnalysisState === 'ready' && displayOverview.latest_ai_analysis" class="mt-3 rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
               <div class="flex items-center gap-2">
-                <span :class="['rounded-full px-3 py-1 text-xs font-semibold', latestAnalysisStatusClass]">
+                <span :class="['rounded-full px-2.5 py-0.5 text-xs font-semibold', latestAnalysisStatusClass]">
                   {{ latestAnalysisStatusLabel }}
                 </span>
                 <span class="text-xs text-gray-500 dark:text-gray-400">
                   {{ formatDateTime(displayOverview.latest_ai_analysis.created_at) }}
                 </span>
               </div>
-              <p class="mt-3 text-sm text-gray-700 dark:text-gray-200">
+              <p class="mt-2 text-sm text-gray-700 dark:text-gray-200">
                 {{ displayOverview.latest_ai_analysis.summary }}
               </p>
             </div>
-
-            <div v-else-if="latestAnalysisState === 'expired'" class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
+            <div v-else-if="latestAnalysisState === 'expired'" class="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
               {{ t('admin.ops.incidentOverview.analysisExpired') }}
             </div>
-
-            <div v-else class="mt-4 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500 dark:border-dark-700 dark:bg-dark-800/70 dark:text-gray-400">
+            <div v-else class="mt-3 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-3 text-sm text-gray-500 dark:border-dark-700 dark:bg-dark-800/70 dark:text-gray-400">
               {{ t('admin.ops.incidentOverview.noAnalysis') }}
             </div>
           </div>
 
-          <div class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900">
-            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+          <div class="ov-card">
+            <h2 class="text-sm font-semibold text-gray-900 dark:text-white">
               {{ t('admin.ops.incidentOverview.quickFiltersTitle') }}
             </h2>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.ops.incidentOverview.quickFiltersDescription') }}
             </p>
-
-            <div v-if="displayOverview.quick_filters.length" class="mt-4 flex flex-wrap gap-2">
+            <div v-if="displayOverview.quick_filters.length" class="mt-3 flex flex-wrap gap-2">
               <button
                 v-for="filter in displayOverview.quick_filters"
                 :key="`${filter.label}-${JSON.stringify(filter.params)}`"
                 type="button"
-                class="rounded-full border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:border-blue-300 hover:text-blue-600 dark:border-dark-600 dark:text-gray-200 dark:hover:border-blue-500 dark:hover:text-blue-300"
+                class="rounded-full border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:border-blue-300 hover:text-blue-600 dark:border-dark-600 dark:text-gray-200 dark:hover:border-blue-500 dark:hover:text-blue-300"
                 @click="openQuickFilter(filter)"
-              >
-                {{ filter.label }}
-              </button>
+              >{{ filter.label }}</button>
             </div>
-            <div v-else class="mt-4 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 text-sm text-gray-500 dark:border-dark-700 dark:bg-dark-800/70 dark:text-gray-400">
+            <div v-else class="mt-3 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-3 text-sm text-gray-500 dark:border-dark-700 dark:bg-dark-800/70 dark:text-gray-400">
               {{ t('admin.ops.incidentOverview.noQuickFilters') }}
             </div>
           </div>
-        </section>
+        </div>
+
+        <!-- ─── Alert Timeline (inline) ─── -->
+        <div class="mt-4">
+          <div class="ov-section-label mb-3">
+            <span :class="['ov-dot', statusDotClass]" />
+            事故时间线 · 触发中告警
+          </div>
+
+          <!-- Three-column alert cards by priority -->
+          <OpsAlertGroupsByPriority />
+
+          <!-- Full alert events table -->
+          <div class="mt-4">
+            <OpsAlertEventsCard />
+          </div>
+        </div>
+
       </template>
 
-      <section v-else class="rounded-3xl border border-dashed border-gray-200 bg-white p-10 shadow-sm dark:border-dark-700 dark:bg-dark-900">
+      <!-- Empty state -->
+      <section v-else class="mt-4 rounded-3xl border border-dashed border-gray-200 bg-white p-10 shadow-sm dark:border-dark-700 dark:bg-dark-900">
         <EmptyState
           :title="t('admin.ops.incidentOverview.emptyTitle')"
           :description="t('admin.ops.incidentOverview.emptyDescription')"
@@ -447,18 +514,18 @@
       </section>
     </div>
 
+    <!-- Score reasons dialog -->
     <BaseDialog :show="showScoreReasonsDialog" :title="t('admin.ops.incidentOverview.scoreReasonsTitle')" width="wide" @close="showScoreReasonsDialog = false">
       <div class="space-y-3">
         <div
           v-for="reason in scoreReasons"
           :key="reason"
           class="rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:bg-dark-800 dark:text-gray-200"
-        >
-          {{ reason }}
-        </div>
+        >{{ reason }}</div>
       </div>
     </BaseDialog>
 
+    <!-- Alert events dialog -->
     <BaseDialog :show="showAlertEventsDialog" :title="t('admin.ops.alertEvents.title')" width="extra-wide" @close="showAlertEventsDialog = false">
       <OpsAlertEventsCard />
     </BaseDialog>
@@ -709,6 +776,7 @@ import {
 import { useAppStore, useAuthStore } from '@/stores'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import OpsAlertEventsCard from './components/OpsAlertEventsCard.vue'
+import OpsAlertGroupsByPriority from './components/OpsAlertGroupsByPriority.vue'
 import OpsSettingsDialog from './components/OpsSettingsDialog.vue'
 import { canManageManualAIAnalysis, fetchOpsAIAnalysisConfig, isManualAIAnalysisConfigured, type OpsAIAnalysisConfigSnapshot } from './utils/manualAIAnalysis'
 
@@ -731,6 +799,14 @@ type OpsErrorDetailsPreset = {
   clientFailed?: boolean
   model?: string
   upstreamAccountId?: number
+}
+
+type ErrorCategoryChartItem = {
+  key: string
+  label: string
+  color: string
+  count: number
+  height: number
 }
 
 const { t } = useI18n()
@@ -776,6 +852,7 @@ const showScoreReasonsDialog = ref(false)
 const showAlertEventsDialog = ref(false)
 const showAIReportDialog = ref(false)
 const showOpsSettingsDialog = ref(false)
+const showInfraDetails = ref(false)
 const aiReportLoading = ref(false)
 const aiReportError = ref('')
 const aiTaskDetail = ref<OpsAIAnalysisTaskDetailResponse | null>(null)
@@ -827,31 +904,28 @@ const groupSelection = computed({
 
 const displayOverview = computed(() => overview.value ?? lastSuccessfulOverview.value)
 const scoreReasons = computed(() => displayOverview.value?.score_reasons ?? [t('admin.ops.incidentOverview.scoreReasonEmpty')])
-const primaryScoreReason = computed(() => scoreReasons.value[0] || t('admin.ops.incidentOverview.scoreReasonEmpty'))
 const recommendedActions = computed(() => {
   const actions = displayOverview.value?.recommended_actions ?? []
   return actions.length ? actions : [t('admin.ops.incidentOverview.noRecommendedActions')]
 })
 const currentSummary = computed(() => displayOverview.value?.summary || t('admin.ops.incidentOverview.noSummary'))
 
+const infraCritical = computed(() => {
+  const m = displayOverview.value?.system_metrics
+  return m !== null && m !== undefined && (m.db_ok === false || m.redis_ok === false)
+})
+
+const showSmallSampleProtection = computed(() => {
+  const ov = displayOverview.value
+  if (!ov) return false
+  return ov.final_failures <= 2 && ov.total_requests > 0
+})
+
 const statusLabel = computed(() => {
   const status = String(displayOverview.value?.status || '').trim().toLowerCase()
   const key = `admin.ops.incidentOverview.status.${status || 'normal'}`
   const translated = t(key)
   return translated === key ? t('admin.ops.incidentOverview.status.normal') : translated
-})
-
-const statusBadgeClass = computed(() => {
-  switch (String(displayOverview.value?.status || '').trim().toLowerCase()) {
-    case 'incident':
-      return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-    case 'risk':
-      return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300'
-    case 'observing':
-      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-    default:
-      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-  }
 })
 
 const scoreLevelLabel = computed(() => {
@@ -899,39 +973,6 @@ const currentViewerRole = computed(() => String((authStore.user as { role?: stri
 const canRunManualAIAnalysis = computed(() => canManageManualAIAnalysis(currentViewerRole.value))
 const canSubmitAIReportFeedback = computed(() => aiFeedbackAllowedRoles.has(currentViewerRole.value))
 const canManageOpsSettings = computed(() => canManageManualAIAnalysis(currentViewerRole.value))
-
-const actionRequiredLabel = computed(() => {
-  const current = displayOverview.value
-  if (!current) return '等待数据'
-  const status = String(current.status || '').trim().toLowerCase()
-  if (status === 'incident' || status === 'risk') return '需要处理'
-  if (status === 'observing' || current.final_failures > 0 || current.recovered_fluctuations > 0) return '需要观察'
-  return '无需处理'
-})
-
-const actionRequiredReason = computed(() => {
-  const current = displayOverview.value
-  if (!current) return '当前还没有监控数据。'
-  if (current.final_failures > 0) return `当前窗口有 ${formatInteger(current.final_failures)} 次最终失败。`
-  if (current.recovered_fluctuations > 0) return `当前窗口有 ${formatInteger(current.recovered_fluctuations)} 次已恢复波动。`
-  return '当前窗口没有最终失败。'
-})
-
-const decisionRows = computed(() => {
-  const current = displayOverview.value
-  if (!current) return []
-  return [
-    { label: '健康风险分数', value: `${scoreValue.value}（${scoreLevelLabel.value}）` },
-    { label: '为什么扣分', value: primaryScoreReason.value },
-    { label: '主要问题', value: currentSummary.value },
-    { label: '影响范围', value: `失败 ${formatInteger(current.final_failures)} 次，影响用户 ${formatInteger(current.affected_users)} 个、API Key ${formatInteger(current.affected_api_keys)} 个` },
-    { label: '是否需要处理', value: `${actionRequiredLabel.value}：${actionRequiredReason.value}` }
-  ]
-})
-
-const canOpenSummaryDetails = computed(() => {
-  return Boolean(displayOverview.value?.quick_filters?.length)
-})
 
 const manualAIActionDisabledReason = computed(() => {
   if (!canRunManualAIAnalysis.value) return '当前账号无权限执行此操作'
@@ -1079,6 +1120,43 @@ const feedbackSubmitDisabled = computed(() => {
   return feedbackNoteLength.value > 500
 })
 const currentFeedbackStatusLabel = computed(() => feedbackStatusLabel(aiTaskDetail.value?.report?.feedback_status))
+
+const errorCategoryConfig = computed(() => [
+  { key: 'client', label: '客户端', color: 'bg-blue-400' },
+  { key: 'platform', label: '平台', color: 'bg-indigo-400' },
+  { key: 'upstream', label: '上游', color: 'bg-orange-400' },
+  { key: 'account_pool', label: '账号池', color: 'bg-amber-400' },
+  { key: 'rate_limit', label: '限流', color: 'bg-yellow-400' },
+  { key: 'permission', label: '权限', color: 'bg-purple-400' },
+  { key: 'balance', label: '余额', color: 'bg-rose-400' },
+  { key: 'config', label: '配置', color: 'bg-gray-400' },
+  { key: 'slow_request', label: '慢请求', color: 'bg-cyan-400' },
+  { key: 'unknown', label: '未知', color: 'bg-slate-400' }
+])
+
+const errorCategoryChartData = computed<ErrorCategoryChartItem[]>(() => {
+  const counts = displayOverview.value?.error_category_counts
+  if (!counts || Object.keys(counts).length === 0) {
+    return []
+  }
+
+  const maxCount = Math.max(...Object.values(counts).map(v => typeof v === 'number' ? v : 0), 1)
+  const items: ErrorCategoryChartItem[] = []
+
+  for (const config of errorCategoryConfig.value) {
+    const count = counts[config.key] || 0
+    const height = count > 0 ? Math.max(4, (count / maxCount) * 80) : 0
+    items.push({
+      key: config.key,
+      label: config.label,
+      color: config.color,
+      count,
+      height
+    })
+  }
+
+  return items
+})
 
 const debouncedFetchOverview = useDebounceFn(() => {
   void fetchOverview()
@@ -1575,6 +1653,15 @@ function buildUnifiedErrorsQuery(preset: OpsErrorDetailsPreset, type: 'request' 
   return query
 }
 
+function navigateToErrorCategory(categoryKey: string) {
+  const preset: OpsErrorDetailsPreset = {
+    title: `${categoryKey} 错误`,
+    category: categoryKey,
+    impactPlatformSla: true
+  }
+  openErrorDetailsFromPreset(preset)
+}
+
 function openErrorDetailsFromPreset(preset: OpsErrorDetailsPreset, type: 'request' | 'upstream' = 'request') {
   void router.push({
     path: '/admin/ops/errors',
@@ -1582,6 +1669,161 @@ function openErrorDetailsFromPreset(preset: OpsErrorDetailsPreset, type: 'reques
   })
 }
 
+
+// ─── New layout helpers ───────────────────────────────────────────────────────
+
+const scoreNumeric = computed(() => {
+  const v = displayOverview.value?.health_risk_score
+  return typeof v === 'number' && Number.isFinite(v) ? v : null
+})
+
+const scoreColorClass = computed(() => {
+  switch (String(displayOverview.value?.score_level || '').trim().toLowerCase()) {
+    case 'incident': return 'text-red-600 dark:text-red-400'
+    case 'risk': return 'text-amber-600 dark:text-amber-400'
+    case 'observing': return 'text-blue-600 dark:text-blue-400'
+    default: return 'text-emerald-600 dark:text-emerald-400'
+  }
+})
+
+const scoreDotClass = computed(() => {
+  switch (String(displayOverview.value?.score_level || '').trim().toLowerCase()) {
+    case 'incident': return 'ov-dot--red'
+    case 'risk': return 'ov-dot--amber'
+    case 'observing': return 'ov-dot--blue'
+    default: return 'ov-dot--green'
+  }
+})
+
+const statusDotClass = computed(() => scoreDotClass.value)
+
+const bannerBorderClass = computed(() => {
+  switch (String(displayOverview.value?.status || '').trim().toLowerCase()) {
+    case 'incident': return 'border-red-300 dark:border-red-800'
+    case 'risk': return 'border-amber-300 dark:border-amber-800'
+    case 'observing': return 'border-blue-300 dark:border-blue-700'
+    default: return 'border-emerald-300 dark:border-emerald-800'
+  }
+})
+
+const bannerTopBgClass = computed(() => {
+  switch (String(displayOverview.value?.status || '').trim().toLowerCase()) {
+    case 'incident': return 'bg-red-50 dark:bg-red-900/20'
+    case 'risk': return 'bg-amber-50 dark:bg-amber-900/20'
+    case 'observing': return 'bg-blue-50 dark:bg-blue-900/20'
+    default: return 'bg-emerald-50 dark:bg-emerald-900/20'
+  }
+})
+
+const bannerVerdictTextClass = computed(() => {
+  switch (String(displayOverview.value?.status || '').trim().toLowerCase()) {
+    case 'incident': return 'text-red-800 dark:text-red-300'
+    case 'risk': return 'text-amber-800 dark:text-amber-300'
+    case 'observing': return 'text-blue-800 dark:text-blue-300'
+    default: return 'text-emerald-800 dark:text-emerald-300'
+  }
+})
+
+const statusIcon = computed(() => {
+  switch (String(displayOverview.value?.status || '').trim().toLowerCase()) {
+    case 'incident': return '⚡'
+    case 'risk': return '⚠'
+    case 'observing': return '👁'
+    default: return '✓'
+  }
+})
+
+const statusPillClass = computed(() => {
+  switch (String(displayOverview.value?.status || '').trim().toLowerCase()) {
+    case 'incident': return 'ov-apill--red'
+    case 'risk': return 'ov-apill--amber'
+    default: return 'ov-apill--blue'
+  }
+})
+
+const actionSectionLabel = computed(() => {
+  const status = String(displayOverview.value?.status || '').trim().toLowerCase()
+  if (status === 'incident' || status === 'risk') return '需要立即处理'
+  if (status === 'observing') return '需要关注'
+  return '建议操作'
+})
+
+const actionSectionDotClass = computed(() => {
+  const status = String(displayOverview.value?.status || '').trim().toLowerCase()
+  if (status === 'incident') return 'ov-dot--red'
+  if (status === 'risk') return 'ov-dot--amber'
+  return 'ov-dot--blue'
+})
+
+function actionItemClass(index: number): string {
+  const status = String(displayOverview.value?.status || '').trim().toLowerCase()
+  if (status === 'incident') {
+    if (index === 0) return 'ov-action-item--red'
+    if (index === 1) return 'ov-action-item--amber'
+    return 'ov-action-item--blue'
+  }
+  if (status === 'risk') {
+    if (index === 0) return 'ov-action-item--amber'
+    return 'ov-action-item--blue'
+  }
+  return 'ov-action-item--blue'
+}
+
+function actionNumClass(index: number): string {
+  const status = String(displayOverview.value?.status || '').trim().toLowerCase()
+  if (status === 'incident') {
+    if (index === 0) return 'ov-action-num--red'
+    if (index === 1) return 'ov-action-num--amber'
+    return 'ov-action-num--blue'
+  }
+  if (status === 'risk') {
+    return index === 0 ? 'ov-action-num--amber' : 'ov-action-num--blue'
+  }
+  return 'ov-action-num--blue'
+}
+
+function infraCardClass(
+  value: number | null | undefined,
+  warnThreshold: number,
+  errorThreshold: number
+): string {
+  if (value === null || value === undefined) return 'ov-infra-card--neutral'
+  if (value >= errorThreshold) return 'ov-infra-card--error'
+  if (value >= warnThreshold) return 'ov-infra-card--warn'
+  return 'ov-infra-card--ok'
+}
+
+function infraBoolCardClass(value: boolean | null | undefined): string {
+  if (value === null || value === undefined) return 'ov-infra-card--neutral'
+  return value ? 'ov-infra-card--ok' : 'ov-infra-card--error'
+}
+
+function infraHint(type: string, value: number | boolean | null | undefined): string {
+  if (type === 'cpu') {
+    if (value === null || value === undefined) return '--'
+    const v = value as number
+    if (v >= 90) return '使用率过高'
+    if (v >= 70) return '使用率偏高'
+    return '正常'
+  }
+  if (type === 'memory') {
+    if (value === null || value === undefined) return '--'
+    const v = value as number
+    if (v >= 90) return '内存紧张'
+    if (v >= 70) return '使用率偏高'
+    return '正常'
+  }
+  if (type === 'queue') {
+    if (value === null || value === undefined) return '--'
+    const v = value as number
+    if (v >= 300) return '队列积压严重'
+    if (v >= 100) return '队列积压偏高'
+    return '正常'
+  }
+  return '--'
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 onMounted(async () => {
   await Promise.all([loadGroups(), loadManualAIAnalysisConfig()])
@@ -1597,23 +1839,157 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.input {
-  @apply w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-dark-600 dark:bg-dark-900 dark:text-white;
+/* ── Action bar ── */
+.ov-actionbar {
+  @apply sticky top-0 z-40 -mx-4 bg-white px-4 pb-0 border-b border-gray-200 dark:bg-dark-900 dark:border-dark-700 md:-mx-6 md:px-6;
 }
 
-.impact-card {
-  @apply rounded-2xl bg-gray-50 p-4 text-left transition hover:bg-gray-100 dark:bg-dark-800/70 dark:hover:bg-dark-800;
+/* ── Time chips ── */
+.ov-chip {
+  @apply rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 transition hover:border-blue-300 hover:text-blue-600 dark:border-dark-600 dark:text-gray-300 dark:hover:border-blue-500;
+}
+.ov-chip--active {
+  @apply bg-blue-600 border-blue-600 text-white dark:bg-blue-500 dark:border-blue-500;
 }
 
-.impact-card__label {
-  @apply text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400;
+/* ── Buttons ── */
+.ov-btn {
+  @apply inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-blue-300 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-600 dark:text-gray-200 dark:hover:border-blue-500 dark:hover:text-blue-300;
+}
+.ov-btn--primary {
+  @apply bg-blue-600 border-blue-600 text-white hover:bg-blue-700 hover:border-blue-700 hover:text-white dark:bg-blue-500 dark:border-blue-500 dark:hover:bg-blue-600;
 }
 
-.impact-card__value {
-  @apply mt-2 block text-2xl font-semibold text-gray-900 dark:text-white;
+/* ── Inputs ── */
+.ov-input-sm {
+  @apply h-8 rounded-lg border border-gray-300 bg-white px-2.5 text-xs text-gray-900 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-dark-600 dark:bg-dark-900 dark:text-white;
 }
 
-.impact-card__hint {
-  @apply mt-2 block text-xs text-gray-500 dark:text-gray-400;
+/* ── Card ── */
+.ov-card {
+  @apply rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900;
 }
+
+/* ── Section label ── */
+.ov-section-label {
+  @apply mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500;
+}
+
+/* ── Dot ── */
+.ov-dot {
+  @apply inline-block h-1.5 w-1.5 shrink-0 rounded-full;
+}
+.ov-dot--red { @apply bg-red-500; }
+.ov-dot--amber { @apply bg-amber-500; }
+.ov-dot--blue { @apply bg-blue-500; }
+.ov-dot--green { @apply bg-emerald-500; }
+.ov-dot--gray { @apply bg-gray-400; }
+
+/* ── Badge ── */
+.ov-badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+}
+
+/* ── Hero score ── */
+.ov-hero-score {
+  @apply text-6xl font-black leading-none tracking-tight;
+}
+
+/* ── Score track bar ── */
+.ov-score-track {
+  @apply relative h-2 w-full max-w-[200px] overflow-visible rounded-full;
+  background: linear-gradient(90deg, #ef4444 0 49%, #f59e0b 49% 69%, #60a5fa 69% 89%, #10b981 89%);
+}
+.ov-score-arrow {
+  @apply absolute top-[-5px] h-[18px] w-0.5 -translate-x-1/2 rounded-sm bg-gray-900 dark:bg-gray-100;
+}
+.ov-score-track-labels {
+  @apply mt-1 flex max-w-[200px] justify-between text-[10px] text-gray-400 dark:text-gray-500;
+}
+
+/* ── Status banner ── */
+.ov-banner-top {
+  @apply min-h-[52px];
+}
+
+/* ── Alert pills ── */
+.ov-apill {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold;
+}
+.ov-apill--red { @apply bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300; }
+.ov-apill--amber { @apply bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300; }
+.ov-apill--blue { @apply bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300; }
+
+/* ── Tags ── */
+.ov-tag {
+  @apply inline-flex cursor-pointer items-center rounded-full border border-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600 transition hover:border-blue-300 hover:text-blue-600 dark:border-dark-600 dark:text-gray-400;
+}
+.ov-tag--model {
+  @apply border-red-200 bg-red-50 text-red-700 hover:border-red-300 hover:bg-red-100 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300;
+}
+.ov-tag--account {
+  @apply border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-300 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300;
+}
+
+/* ── Stat rows ── */
+.ov-stat-row {
+  @apply flex min-h-[34px] items-center gap-0 border-b border-gray-100 px-5 last:border-b-0 dark:border-dark-800;
+}
+.ov-stat-label {
+  @apply w-28 shrink-0 text-xs font-semibold text-gray-400 dark:text-gray-500;
+}
+.ov-stat-value {
+  @apply flex flex-wrap items-center gap-2 text-sm font-bold text-gray-900 dark:text-gray-100;
+}
+.ov-stat-sub {
+  @apply text-xs font-normal text-gray-400 dark:text-gray-500;
+}
+
+/* ── Action items ── */
+.ov-action-item {
+  @apply flex items-start gap-2.5 rounded-xl border p-3;
+}
+.ov-action-item--red { @apply border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20; }
+.ov-action-item--amber { @apply border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20; }
+.ov-action-item--blue { @apply border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20; }
+
+.ov-action-num {
+  @apply flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white;
+}
+.ov-action-num--red { @apply bg-red-500; }
+.ov-action-num--amber { @apply bg-amber-500; }
+.ov-action-num--blue { @apply bg-blue-500; }
+
+/* ── Infra cards ── */
+.ov-infra-card {
+  @apply rounded-2xl p-4 text-center;
+}
+.ov-infra-card--ok { @apply bg-emerald-50 dark:bg-emerald-900/20; }
+.ov-infra-card--warn { @apply bg-amber-50 dark:bg-amber-900/20; }
+.ov-infra-card--error { @apply bg-red-50 dark:bg-red-900/20; }
+.ov-infra-card--neutral { @apply bg-gray-50 dark:bg-dark-800/70; }
+
+.ov-infra-label {
+  @apply mb-1.5 text-xs font-bold uppercase tracking-wide;
+}
+.ov-infra-card--ok .ov-infra-label { @apply text-emerald-700 dark:text-emerald-400; }
+.ov-infra-card--warn .ov-infra-label { @apply text-amber-700 dark:text-amber-400; }
+.ov-infra-card--error .ov-infra-label { @apply text-red-700 dark:text-red-400; }
+.ov-infra-card--neutral .ov-infra-label { @apply text-gray-500 dark:text-gray-400; }
+
+.ov-infra-val {
+  @apply text-xl font-black;
+}
+.ov-infra-card--ok .ov-infra-val { @apply text-emerald-700 dark:text-emerald-400; }
+.ov-infra-card--warn .ov-infra-val { @apply text-amber-700 dark:text-amber-400; }
+.ov-infra-card--error .ov-infra-val { @apply text-red-700 dark:text-red-400; }
+.ov-infra-card--neutral .ov-infra-val { @apply text-gray-600 dark:text-gray-300; }
+
+.ov-infra-hint {
+  @apply mt-1 text-[10px];
+}
+.ov-infra-card--ok .ov-infra-hint { @apply text-emerald-600 dark:text-emerald-500; }
+.ov-infra-card--warn .ov-infra-hint { @apply text-amber-600 dark:text-amber-500; }
+.ov-infra-card--error .ov-infra-hint { @apply text-red-600 dark:text-red-500; }
+.ov-infra-card--neutral .ov-infra-hint { @apply text-gray-400 dark:text-gray-500; }
 </style>

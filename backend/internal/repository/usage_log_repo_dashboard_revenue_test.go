@@ -37,6 +37,14 @@ WHERE u.role <> $1
 		WithArgs(service.RoleAdmin, service.StatusUsed, service.RedeemTypeBalance, service.AdjustmentTypeAdminBalance).
 		WillReturnRows(sqlmock.NewRows([]string{"total_credit_amount", "credited_user_count"}).AddRow(125.50, int64(2)))
 
+	mock.ExpectQuery(regexp.QuoteMeta(`
+SELECT COALESCE(SUM(ul.actual_cost), 0)::float8 AS used_amount
+FROM usage_logs ul
+JOIN users u ON u.id = ul.user_id
+WHERE u.role <> $1`)).
+		WithArgs(service.RoleAdmin).
+		WillReturnRows(sqlmock.NewRows([]string{"used_amount"}).AddRow(45.25))
+
 	got, err := repo.GetDashboardRevenueOverview(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, "125.50", got.TotalCreditAmount)
@@ -44,12 +52,12 @@ WHERE u.role <> $1
 	require.Equal(t, "80.25", got.UnusedAmount)
 	require.Equal(t, int64(4), got.NonAdminUserCount)
 	require.Equal(t, int64(2), got.CreditedUserCount)
-	require.True(t, got.IsEstimated)
+	require.False(t, got.IsEstimated)
 	require.NotEmpty(t, got.UpdatedAt)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestUsageLogRepository_GetDashboardRevenueOverview_ClampsNegativeUsedAmount(t *testing.T) {
+func TestUsageLogRepository_GetDashboardRevenueOverview_ZeroUsage(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
@@ -61,6 +69,9 @@ func TestUsageLogRepository_GetDashboardRevenueOverview_ClampsNegativeUsedAmount
 	mock.ExpectQuery("FROM redeem_codes rc").
 		WithArgs(service.RoleAdmin, service.StatusUsed, service.RedeemTypeBalance, service.AdjustmentTypeAdminBalance).
 		WillReturnRows(sqlmock.NewRows([]string{"total_credit_amount", "credited_user_count"}).AddRow(50.00, int64(1)))
+	mock.ExpectQuery("FROM usage_logs ul").
+		WithArgs(service.RoleAdmin).
+		WillReturnRows(sqlmock.NewRows([]string{"used_amount"}).AddRow(0.00))
 
 	got, err := repo.GetDashboardRevenueOverview(context.Background())
 	require.NoError(t, err)

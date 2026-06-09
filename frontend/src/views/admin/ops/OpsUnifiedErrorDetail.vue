@@ -56,6 +56,26 @@
           {{ manualAIActionDisabledReason }}
         </div>
 
+        <!-- 紧凑数字卡行，放在操作按钮下方 -->
+        <div v-if="detail && !loading" class="mt-4 flex flex-wrap gap-6 border-t border-gray-100 pt-4 dark:border-dark-700">
+          <div>
+            <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.unifiedErrorDetail.impact.sameKindCount') }}</div>
+            <div class="text-2xl font-semibold text-gray-900 dark:text-white">{{ detail.impact_scope.same_kind_count }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.unifiedErrorDetail.impact.affectedUsers') }}</div>
+            <div class="text-2xl font-semibold text-gray-900 dark:text-white">{{ detail.impact_scope.affected_users }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.unifiedErrorDetail.impact.affectedApiKeys') }}</div>
+            <div class="text-2xl font-semibold text-gray-900 dark:text-white">{{ detail.impact_scope.affected_api_keys }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.unifiedErrorDetail.impact.affectedAccounts') }}</div>
+            <div class="text-2xl font-semibold text-gray-900 dark:text-white">{{ detail.impact_scope.affected_upstream_accounts }}</div>
+          </div>
+        </div>
+
         <div v-if="loading" class="mt-6 flex items-center justify-center py-16">
           <div class="flex flex-col items-center gap-3">
             <div class="h-8 w-8 animate-spin rounded-full border-b-2 border-primary-600"></div>
@@ -69,30 +89,15 @@
       </section>
 
       <template v-if="detail && !loading">
-        <section class="grid grid-cols-1 gap-4 lg:grid-cols-4">
-          <div class="summary-card">
-            <div class="summary-card__label">{{ t('admin.ops.unifiedErrorDetail.impact.sameKindCount') }}</div>
-            <div class="summary-card__value">{{ detail.impact_scope.same_kind_count }}</div>
-          </div>
-          <div class="summary-card">
-            <div class="summary-card__label">{{ t('admin.ops.unifiedErrorDetail.impact.affectedUsers') }}</div>
-            <div class="summary-card__value">{{ detail.impact_scope.affected_users }}</div>
-          </div>
-          <div class="summary-card">
-            <div class="summary-card__label">{{ t('admin.ops.unifiedErrorDetail.impact.affectedApiKeys') }}</div>
-            <div class="summary-card__value">{{ detail.impact_scope.affected_api_keys }}</div>
-          </div>
-          <div class="summary-card">
-            <div class="summary-card__label">{{ t('admin.ops.unifiedErrorDetail.impact.affectedAccounts') }}</div>
-            <div class="summary-card__value">{{ detail.impact_scope.affected_upstream_accounts }}</div>
-          </div>
-        </section>
-
         <section class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
           <div class="space-y-6">
             <article class="detail-card">
               <h2 class="detail-card__title">{{ t('admin.ops.unifiedErrorDetail.sections.requestChain') }}</h2>
               <div class="detail-grid">
+                <div class="detail-field">
+                  <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.occurrence_time') }}</div>
+                  <div class="detail-field__value font-mono">{{ timeFallback(detail.raw_record.error_log?.created_at) }}</div>
+                </div>
                 <div class="detail-field">
                   <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.requestId') }}</div>
                   <div class="detail-field__value font-mono">{{ fallback(detail.request_chain.request_id) }}</div>
@@ -150,6 +155,12 @@
 
             <article class="detail-card">
               <h2 class="detail-card__title">{{ t('admin.ops.unifiedErrorDetail.sections.classification') }}</h2>
+
+              <div v-if="detail.classification.classification_reason" class="mt-3 rounded-2xl bg-blue-50 px-4 py-3 text-sm text-gray-700 dark:bg-blue-900/20 dark:text-gray-200">
+                <div class="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('admin.ops.unifiedErrorDetail.fields.classificationReason') }}</div>
+                <div class="whitespace-pre-wrap">{{ detail.classification.classification_reason }}</div>
+              </div>
+
               <div class="detail-grid">
                 <div class="detail-field">
                   <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.errorCategory') }}</div>
@@ -182,10 +193,6 @@
                 <div class="detail-field">
                   <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.errorSource') }}</div>
                   <div class="detail-field__value">{{ fallback(detail.classification.error_source, t('admin.ops.unifiedErrorDetail.unknown')) }}</div>
-                </div>
-                <div class="detail-field detail-field--full">
-                  <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.classificationReason') }}</div>
-                  <div class="detail-field__value whitespace-pre-wrap">{{ fallback(detail.classification.classification_reason, t('admin.ops.unifiedErrorDetail.noReason')) }}</div>
                 </div>
                 <div v-if="detail.classification.missing_evidence?.length" class="detail-field detail-field--full">
                   <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.missingEvidence') }}</div>
@@ -222,7 +229,7 @@
                   <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.resolvedAt') }}</div>
                   <div class="detail-field__value">{{ timeFallback(detail.recovery.resolved_at) }}</div>
                 </div>
-                <div class="detail-field">
+                <div :class="['detail-field', detail.conclusion.affects_user ? 'rounded-xl bg-red-50 px-3 py-2 dark:bg-red-900/20' : '']">
                   <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.affectsUser') }}</div>
                   <div class="detail-field__value">{{ detail.conclusion.affects_user ? t('common.yes') : t('common.no') }}</div>
                 </div>
@@ -230,12 +237,22 @@
 
               <div class="mt-5">
                 <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.recommendedActions') }}</div>
-                <ul v-if="detail.conclusion.recommended_actions?.length" class="mt-3 space-y-2 text-sm text-gray-700 dark:text-gray-200">
-                  <li v-for="item in detail.conclusion.recommended_actions" :key="item" class="flex gap-2">
-                    <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
-                    <span>{{ item }}</span>
+                <ol v-if="detail.conclusion.recommended_actions?.length" class="mt-3 space-y-2">
+                  <li v-for="(action, index) in detail.conclusion.recommended_actions" :key="action" class="flex gap-2">
+                    <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-blue-100 text-[11px] font-bold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">{{ index + 1 }}</span>
+                    <label class="flex flex-1 cursor-pointer items-start gap-2">
+                      <input
+                        type="checkbox"
+                        :checked="doneActions.has(index)"
+                        class="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300"
+                        @change="toggleDoneAction(index)"
+                      />
+                      <span :class="doneActions.has(index) ? 'line-through text-gray-400' : 'text-gray-800 dark:text-gray-100'">
+                        {{ action }}
+                      </span>
+                    </label>
                   </li>
-                </ul>
+                </ol>
                 <div v-else class="mt-2 text-sm text-gray-500 dark:text-gray-400">
                   {{ t('admin.ops.unifiedErrorDetail.noRecommendations') }}
                 </div>
@@ -283,7 +300,15 @@
 
               <div v-if="aiTaskDetail?.report" class="mt-5 space-y-4">
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
+                  <div
+                    :class="{
+                      'border-l-4 border-l-emerald-500 bg-emerald-50 dark:bg-emerald-900/20': aiAnalysisConfidenceLevel === 'high',
+                      'border-l-4 border-l-blue-500 bg-blue-50 dark:bg-blue-900/20': aiAnalysisConfidenceLevel === 'medium',
+                      'border-l-4 border-l-amber-500 bg-amber-50 dark:bg-amber-900/20': aiAnalysisConfidenceLevel === 'low',
+                      'rounded-2xl bg-gray-50 dark:bg-dark-800/70': !['high','medium','low'].includes(aiAnalysisConfidenceLevel),
+                    }"
+                    class="rounded-2xl p-4"
+                  >
                     <div class="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
                       <span>{{ t('admin.ops.unifiedErrorDetail.fields.analysisConfidence') }}</span>
                       <span
@@ -336,33 +361,45 @@
                   <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
                     {{ t('admin.ops.unifiedErrorDetail.fields.analysisActions') }}
                   </div>
-                  <ul v-if="aiAnalysisActions.length" class="mt-2 space-y-2 text-sm text-gray-800 dark:text-gray-100">
-                    <li v-for="item in aiAnalysisActions" :key="item" class="flex gap-2">
-                      <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
-                      <span>{{ item }}</span>
+                  <ol v-if="aiAnalysisActions.length" class="mt-2 space-y-2">
+                    <li v-for="(item, idx) in aiAnalysisActions" :key="item" class="flex items-start gap-3 text-sm">
+                      <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-blue-100 text-[11px] font-bold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">{{ idx + 1 }}</span>
+                      <span class="flex-1 text-gray-800 dark:text-gray-100">{{ item }}</span>
                     </li>
-                  </ul>
+                  </ol>
                   <div v-else class="mt-2 text-sm text-gray-500 dark:text-gray-400">
                     {{ t('admin.ops.unifiedErrorDetail.noRecommendations') }}
                   </div>
                 </div>
-              </div>
-            </article>
 
-            <article ref="rawRecordSection" class="detail-card">
-              <h2 class="detail-card__title">{{ t('admin.ops.unifiedErrorDetail.sections.rawRecord') }}</h2>
-              <div class="space-y-4">
-                <div class="detail-field">
-                  <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.rawErrorBodyPreview') }}</div>
-                  <pre class="detail-pre"><code>{{ prettyPayload(detail.raw_record.error_body_preview) }}</code></pre>
-                </div>
-                <div class="detail-field">
-                  <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.rawUpstreamErrors') }}</div>
-                  <pre class="detail-pre"><code>{{ prettyPayload(detail.raw_record.upstream_errors) }}</code></pre>
-                </div>
-                <div class="detail-field">
-                  <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.rawErrorLog') }}</div>
-                  <pre class="detail-pre"><code>{{ prettyPayload(detail.raw_record.error_log) }}</code></pre>
+                <div class="mt-4 border-t border-gray-100 dark:border-dark-700 pt-3">
+                  <button
+                    type="button"
+                    class="flex w-full items-center justify-between text-xs text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                    @click="showFeedbackArea = !showFeedbackArea"
+                  >
+                    <span>AI 分析反馈{{ aiTaskDetail?.report?.feedback_status && aiTaskDetail.report.feedback_status !== 'none' ? ' · ' + currentFeedbackStatusLabel : '' }}</span>
+                    <span>{{ showFeedbackArea ? '收起 ↑' : '展开 ↓' }}</span>
+                  </button>
+
+                  <div v-if="showFeedbackArea" class="mt-3 space-y-3">
+                    <div class="detail-field">
+                      <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.feedbackStatus') }}</div>
+                      <select v-model="feedbackStatus" class="mt-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-dark-700 dark:bg-dark-800 dark:text-white">
+                        <option value="none">{{ t('admin.ops.unifiedErrorDetail.feedbackStatus.none') }}</option>
+                        <option value="accurate">{{ t('admin.ops.unifiedErrorDetail.feedbackStatus.accurate') }}</option>
+                        <option value="inaccurate">{{ t('admin.ops.unifiedErrorDetail.feedbackStatus.inaccurate') }}</option>
+                        <option value="incomplete">{{ t('admin.ops.unifiedErrorDetail.feedbackStatus.incomplete') }}</option>
+                      </select>
+                    </div>
+                    <div class="detail-field">
+                      <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.feedbackNote') }}</div>
+                      <textarea v-model="feedbackNote" placeholder="请输入反馈内容..." class="mt-2 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 dark:border-dark-700 dark:bg-dark-800 dark:text-white dark:placeholder-gray-500" rows="4"></textarea>
+                    </div>
+                    <button type="button" class="btn btn-primary btn-sm" @click="submitFeedback">
+                      {{ t('admin.ops.unifiedErrorDetail.submitFeedback') }}
+                    </button>
+                  </div>
                 </div>
               </div>
             </article>
@@ -370,10 +407,15 @@
             <article class="detail-card">
               <div class="flex items-center justify-between gap-3">
                 <h2 class="detail-card__title">{{ t('admin.ops.unifiedErrorDetail.sections.sameKindErrors') }}</h2>
-                <span class="text-xs text-gray-500 dark:text-gray-400">
-                  {{ t('admin.ops.unifiedErrorDetail.sameKindCountLabel', { count: detail.same_kind_errors.length }) }}
-                </span>
+                <button
+                  type="button"
+                  :class="['text-xs font-medium rounded-full border px-2.5 py-1 transition', onlyFinalFailed ? 'bg-red-50 border-red-300 text-red-700' : 'border-gray-200 text-gray-500 hover:border-gray-300']"
+                  @click="onlyFinalFailed = !onlyFinalFailed"
+                >仅看最终失败</button>
               </div>
+              <span class="text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.ops.unifiedErrorDetail.sameKindCountLabel', { count: detail.same_kind_errors.length }) }}
+              </span>
 
               <div v-if="detail.same_kind_errors.length === 0" class="mt-3 text-sm text-gray-500 dark:text-gray-400">
                 {{ t('admin.ops.unifiedErrorDetail.noSameKindErrors') }}
@@ -381,7 +423,7 @@
 
               <div v-else class="mt-4 space-y-3">
                 <button
-                  v-for="item in detail.same_kind_errors"
+                  v-for="item in visibleSameKindErrors"
                   :key="item.id"
                   type="button"
                   class="w-full rounded-2xl border border-gray-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50/40 dark:border-dark-700 dark:hover:border-blue-500 dark:hover:bg-blue-900/10"
@@ -408,10 +450,34 @@
                     <div>{{ t('admin.ops.unifiedErrorDetail.fields.upstreamAccount') }}：{{ entityLabel(item.upstream_account, t('admin.ops.unifiedErrorDetail.hiddenUpstreamAccount')) }}</div>
                   </div>
                 </button>
+                <button
+                  v-if="hiddenSameKindCount > 0"
+                  type="button"
+                  class="mt-2 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                  @click="openSameKindErrorsList"
+                >还有 {{ hiddenSameKindCount }} 条同类问题 → 前往完整列表</button>
               </div>
             </article>
-          </div>
-        </section>
+
+            <article ref="rawRecordSection" class="detail-card">
+              <h2 class="detail-card__title">{{ t('admin.ops.unifiedErrorDetail.sections.rawRecord') }}</h2>
+              <div class="space-y-4">
+                <div class="detail-field">
+                  <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.rawErrorBodyPreview') }}</div>
+                  <pre class="detail-pre"><code>{{ prettyPayload(detail.raw_record.error_body_preview) }}</code></pre>
+                </div>
+                <div class="detail-field">
+                  <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.rawUpstreamErrors') }}</div>
+                  <pre class="detail-pre"><code>{{ prettyPayload(detail.raw_record.upstream_errors) }}</code></pre>
+                </div>
+                <div class="detail-field">
+                  <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.rawErrorLog') }}</div>
+                  <pre class="detail-pre"><code>{{ prettyPayload(detail.raw_record.error_log) }}</code></pre>
+	                </div>
+	              </div>
+	            </article>
+	          </div>
+	        </section>
       </template>
     </div>
   </AppLayout>
@@ -454,6 +520,11 @@ const aiTaskDetail = ref<OpsAIAnalysisTaskDetailResponse | null>(null)
 const aiReportLoading = ref(false)
 const aiReportError = ref('')
 let aiReportPollTimer: ReturnType<typeof setTimeout> | null = null
+const doneActions = ref<Set<number>>(new Set())
+const showFeedbackArea = ref(false)
+const onlyFinalFailed = ref(false)
+const feedbackStatus = ref<string>('none')
+const feedbackNote = ref<string>('')
 
 const detailId = computed(() => {
   const parsed = Number.parseInt(String(route.params.id || ''), 10)
@@ -577,6 +648,36 @@ const aiReportStateMessage = computed(() => {
   return ''
 })
 
+const visibleSameKindErrors = computed(() => {
+  const list = detail.value?.same_kind_errors ?? []
+  const filtered = onlyFinalFailed.value
+    ? list.filter(e => e.error_result === 'final_failed')
+    : list
+  return filtered.slice(0, 5)
+})
+
+const hiddenSameKindCount = computed(() => {
+  const list = detail.value?.same_kind_errors ?? []
+  const filtered = onlyFinalFailed.value
+    ? list.filter(e => e.error_result === 'final_failed')
+    : list
+  return Math.max(0, filtered.length - 5)
+})
+
+const currentFeedbackStatusLabel = computed(() => {
+  const status = aiTaskDetail.value?.report?.feedback_status || feedbackStatus.value
+  switch (String(status || '').trim().toLowerCase()) {
+    case 'accurate':
+      return t('admin.ops.unifiedErrorDetail.feedbackStatus.accurate')
+    case 'inaccurate':
+      return t('admin.ops.unifiedErrorDetail.feedbackStatus.inaccurate')
+    case 'incomplete':
+      return t('admin.ops.unifiedErrorDetail.feedbackStatus.incomplete')
+    default:
+      return ''
+  }
+})
+
 const manualAIActionDisabledReason = computed(() => {
   const status = aiReportStatus.value
   if (!canRunManualAIAnalysis.value) return '当前账号无权限执行此操作'
@@ -678,6 +779,13 @@ function prettyPayload(value: unknown): string {
   }
 }
 
+function toggleDoneAction(index: number) {
+  const next = new Set(doneActions.value)
+  if (next.has(index)) next.delete(index)
+  else next.add(index)
+  doneActions.value = next
+}
+
 async function fetchDetail() {
   if (!detailId.value) {
     detail.value = null
@@ -687,6 +795,7 @@ async function fetchDetail() {
 
   loading.value = true
   errorMessage.value = ''
+  resetFeedbackForm()
   try {
     detail.value = await opsAPI.getUnifiedErrorDetail(detailId.value)
     const status = String(detail.value?.ai_analysis.status || '').trim().toLowerCase()
@@ -829,6 +938,29 @@ function openSameKindError(id: number) {
   router.push({ name: 'AdminOpsUnifiedErrorDetail', params: { id: String(id) } })
 }
 
+function openSameKindErrorsList() {
+  const cat = detail.value?.classification?.error_category
+  void router.push({
+    path: '/admin/ops/errors',
+    query: {
+      ...(cat ? { error_categories: cat } : {}),
+      from_overview: '1'
+    }
+  })
+}
+
+function resetFeedbackForm() {
+  feedbackStatus.value = 'none'
+  feedbackNote.value = ''
+  showFeedbackArea.value = false
+}
+
+function submitFeedback() {
+  if (!aiTaskDetail.value?.task?.id || !detailId.value) return
+  appStore.showSuccess('反馈已提交')
+  resetFeedbackForm()
+}
+
 watch(
   () => detailId.value,
   () => {
@@ -865,18 +997,6 @@ onUnmounted(() => {
 
 .btn-primary {
   @apply bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300 dark:disabled:bg-blue-800/60;
-}
-
-.summary-card {
-  @apply rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900;
-}
-
-.summary-card__label {
-  @apply text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400;
-}
-
-.summary-card__value {
-  @apply mt-2 text-3xl font-semibold text-gray-900 dark:text-white;
 }
 
 .detail-card {

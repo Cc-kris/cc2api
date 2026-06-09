@@ -234,6 +234,11 @@ func opsClientErrorConditionFor(alias string) string {
 	return opsColumn(alias, "error_owner") + " = 'client' AND NOT COALESCE(" + opsColumn(alias, "is_business_limited") + ",false)"
 }
 
+func opsClientDisconnectConditionFor(alias string) string {
+	textBlob := "LOWER(COALESCE(" + opsColumn(alias, "error_message") + ",'') || ' ' || COALESCE(" + opsColumn(alias, "error_body") + ",'') || ' ' || COALESCE(" + opsColumn(alias, "upstream_error_message") + ",'') || ' ' || COALESCE(" + opsColumn(alias, "upstream_error_detail") + ",''))"
+	return "(" + textBlob + " LIKE '%context canceled%' OR " + textBlob + " LIKE '%client canceled%' OR " + textBlob + " LIKE '%request canceled%' OR " + textBlob + " LIKE '%cancelled%' OR " + textBlob + " LIKE '%broken pipe%' OR " + textBlob + " LIKE '%connection reset%' OR " + textBlob + " LIKE '%client disconnected%')"
+}
+
 func opsPlatformSLAErrorCondition() string {
 	return opsPlatformSLAErrorConditionFor("")
 }

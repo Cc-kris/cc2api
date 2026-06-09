@@ -68,6 +68,9 @@ func (s *OpsService) GetIncidentOverview(ctx context.Context, filter *OpsDashboa
 	status := opsIncidentStatus(topAlert, score, finalFailures, finalRate)
 	quickFilters := buildOpsIncidentQuickFilters(filter, overview, impact)
 
+	// Query error category counts for final_failed errors
+	errorCategoryCounts, _ := s.getErrorCategoryCounts(ctx, filter)
+
 	return &OpsIncidentOverview{
 		Status:                status,
 		HealthRiskScore:       score,
@@ -86,6 +89,7 @@ func (s *OpsService) GetIncidentOverview(ctx context.Context, filter *OpsDashboa
 		LatestAIAnalysis:      nil,
 		QuickFilters:          quickFilters,
 		RecommendedActions:    buildOpsIncidentRecommendedActions(status, topAlert, overview),
+		ErrorCategoryCounts:   errorCategoryCounts,
 		UpdatedAt:             time.Now().UTC(),
 	}, nil
 }
@@ -377,4 +381,40 @@ func dedupeNonEmptyStrings(in []string) []string {
 
 func roundIncidentFloat(v float64) float64 {
 	return math.Round(v*10000) / 10000
+}
+
+func (s *OpsService) getErrorCategoryCounts(ctx context.Context, filter *OpsDashboardFilter) (map[string]int64, error) {
+	if s.opsRepo == nil || filter == nil {
+		return nil, nil
+	}
+
+	// Query error logs with error_result = 'final_failed'
+	result, err := s.opsRepo.ListErrorLogs(ctx, &OpsErrorLogFilter{
+		StartTime:   &filter.StartTime,
+		EndTime:     &filter.EndTime,
+		Platform:    filter.Platform,
+		Model:       filter.Model,
+		GroupID:     filter.GroupID,
+		ErrorResult: "final_failed",
+		Page:        1,
+		PageSize:    10000, // Large page size to get all errors
+		View:        "all",
+	})
+	if err != nil || result == nil {
+		return nil, nil
+	}
+
+	counts := make(map[string]int64)
+	for _, item := range result.Errors {
+		if item == nil {
+			continue
+		}
+		category := strings.TrimSpace(strings.ToLower(item.ErrorCategory))
+		if category == "" {
+			category = "unknown"
+		}
+		counts[category]++
+	}
+
+	return counts, nil
 }

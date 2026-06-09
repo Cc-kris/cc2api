@@ -232,6 +232,29 @@ func (h *OpsHandler) GetAIAnalysisTask(c *gin.Context) {
 	response.Success(c, result)
 }
 
+// GetLatestAutoAIAnalysisTask returns the most recent auto-triggered AI analysis task.
+// GET /api/v1/admin/ops/ai-analysis/tasks/latest-auto
+func (h *OpsHandler) GetLatestAutoAIAnalysisTask(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if !canOperateOpsAIAnalysis(c) {
+		response.Forbidden(c, "无权限查看 AI 分析任务")
+		return
+	}
+	result, err := h.opsService.GetLatestAutoAIAnalysisTask(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
 // UpdateAIAnalysisReportFeedback saves operator feedback for an AI analysis report.
 // POST /api/v1/admin/ops/ai-analysis/tasks/:id/feedback
 func (h *OpsHandler) UpdateAIAnalysisReportFeedback(c *gin.Context) {

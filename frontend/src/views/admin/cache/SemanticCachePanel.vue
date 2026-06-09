@@ -11,19 +11,201 @@
             </p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <button type="button" class="btn btn-secondary" :disabled="loading || saving || testing" @click="loadConfig(true)">
+            <button type="button" class="btn btn-secondary" :disabled="loading || saving || testing || (showStepper && stepperDone)" @click="loadConfig(true)">
               刷新
             </button>
-            <button type="button" class="btn btn-secondary" :disabled="saving || testing || !dirty" @click="resetToLoaded">
-              撤销修改
-            </button>
-            <button type="button" class="btn btn-secondary" :disabled="!canManage || saving || testing || validationErrors.length > 0" @click="testConnection">
+            <template v-if="!showStepper || stepperDone">
+              <button type="button" class="btn btn-secondary" :disabled="saving || testing || !dirty" @click="resetToLoaded">
+                撤销修改
+              </button>
+              <button type="button" class="btn btn-secondary" :disabled="!canManage || saving || testing || validationErrors.length > 0" @click="testConnection">
+                {{ testing ? '测试中...' : '测试连接' }}
+              </button>
+              <button type="button" class="btn btn-primary" :disabled="!canManage || loading || saving || testing || validationErrors.length > 0 || !dirty" @click="saveConfig">
+                {{ saving ? '保存中...' : '保存配置' }}
+              </button>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stepper for first-time configuration -->
+      <div v-if="showStepper && !stepperDone" class="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-800">
+        <!-- Stepper header with progress -->
+        <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">4 步配置向导</h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">完成语义模型配置并通过测试后，语义缓存将可启用</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span v-for="step in 4" :key="step" class="flex items-center">
+                <div
+                  :class="[
+                    'h-8 w-8 flex items-center justify-center rounded-full text-xs font-semibold transition-colors',
+                    currentStep === step
+                      ? 'bg-primary-600 text-white'
+                      : currentStep > step
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-gray-200 text-gray-600 dark:bg-dark-700 dark:text-gray-400'
+                  ]"
+                >
+                  {{ step }}
+                </div>
+                <div v-if="step < 4" :class="['w-8 h-0.5 transition-colors', currentStep > step ? 'bg-emerald-600' : 'bg-gray-200 dark:bg-dark-700']"></div>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step content -->
+        <div class="px-6 py-5">
+          <!-- Step 1: Semantic Model Service -->
+          <div v-if="currentStep === 1" class="space-y-5">
+            <div>
+              <h3 class="mb-4 text-base font-semibold text-gray-900 dark:text-white">第 1 步：语义模型服务</h3>
+              <div class="space-y-4">
+                <label class="block">
+                  <span class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">语义模型服务地址 <span class="text-red-600">*</span></span>
+                  <input v-model.trim="form.semantic_model_base_url" type="text" class="input" :disabled="!canManage" placeholder="https://example.com/v1" />
+                </label>
+                <label class="block">
+                  <span class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">语义模型 API Key <span class="text-red-600">*</span></span>
+                  <input v-model.trim="semanticApiKeyInput" type="password" class="input" :disabled="!canManage" placeholder="输入 API Key" />
+                </label>
+                <label class="block">
+                  <span class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">语义模型名称 <span class="text-red-600">*</span></span>
+                  <input v-model.trim="form.semantic_model_name" type="text" class="input" :disabled="!canManage" placeholder="text-embedding-3-large" />
+                </label>
+              </div>
+            </div>
+            <button type="button" class="btn btn-secondary w-full" :disabled="!canManage || testing" @click="testConnectionInStepper">
               {{ testing ? '测试中...' : '测试连接' }}
             </button>
-            <button type="button" class="btn btn-primary" :disabled="!canManage || loading || saving || testing || validationErrors.length > 0 || !dirty" @click="saveConfig">
-              {{ saving ? '保存中...' : '保存配置' }}
-            </button>
+            <div v-if="testResult" :class="['rounded-lg px-4 py-3 text-sm', testResult.success ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/10 dark:text-emerald-200' : 'bg-red-50 text-red-700 dark:bg-red-900/10 dark:text-red-200']">
+              {{ testResult.message }}
+            </div>
           </div>
+
+          <!-- Step 2: Embedding Dimension -->
+          <div v-if="currentStep === 2" class="space-y-5">
+            <div>
+              <h3 class="mb-4 text-base font-semibold text-gray-900 dark:text-white">第 2 步：向量维度确认</h3>
+              <div class="space-y-4">
+                <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-900/30">
+                  <p class="text-xs text-gray-500 dark:text-gray-400">向量维度（自动获取）</p>
+                  <p class="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">
+                    {{ form.embedding_dimension && form.embedding_dimension > 0 ? form.embedding_dimension : '-- 维度未获取' }}
+                  </p>
+                </div>
+                <div v-if="!form.embedding_dimension || form.embedding_dimension <= 0" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/10 dark:text-amber-200">
+                  维度为空或无效。请返回上一步重新测试连接以获取正确的维度。
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 3: Matching Parameters -->
+          <div v-if="currentStep === 3" class="space-y-5">
+            <div>
+              <h3 class="mb-4 text-base font-semibold text-gray-900 dark:text-white">第 3 步：匹配参数</h3>
+              <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label class="block">
+                  <span class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">相似度阈值</span>
+                  <input v-model.number="form.similarity_threshold" type="number" min="0.9" max="1" step="0.0001" class="input" :disabled="!canManage" />
+                </label>
+                <label class="block">
+                  <span class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">最大复用时间（分钟）</span>
+                  <input v-model.number="form.max_reuse_minutes" type="number" min="1" max="1440" step="1" class="input" :disabled="!canManage" />
+                </label>
+                <label class="block">
+                  <span class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">最大候选数</span>
+                  <input v-model.number="form.max_candidates" type="number" min="1" max="200" step="1" class="input" :disabled="!canManage" />
+                </label>
+                <label class="block">
+                  <span class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">质量回滚阈值（%）</span>
+                  <input v-model.number="form.quality_rollback_threshold_percent" type="number" min="0" max="100" step="0.01" class="input" :disabled="!canManage" />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 4: Pilot & Review -->
+          <div v-if="currentStep === 4" class="space-y-5">
+            <div>
+              <h3 class="mb-4 text-base font-semibold text-gray-900 dark:text-white">第 4 步：灰度与审核</h3>
+              <div class="space-y-5">
+                <div>
+                  <div class="mb-3 flex items-center justify-between gap-3">
+                    <p class="text-sm font-medium text-gray-900 dark:text-white">适用平台</p>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">{{ form.platforms.length }} 项</span>
+                  </div>
+                  <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <label v-for="platform in platformOptions" :key="platform.value" class="flex cursor-pointer items-center justify-between rounded-lg border border-gray-200 px-4 py-3 text-sm dark:border-dark-700">
+                      <span class="font-medium text-gray-900 dark:text-white">{{ platform.label }}</span>
+                      <input
+                        type="checkbox"
+                        :checked="form.platforms.includes(platform.value)"
+                        :disabled="!canManage"
+                        class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        @change="togglePlatform(platform.value, ($event.target as HTMLInputElement).checked)"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div class="space-y-3">
+                  <p class="text-sm font-medium text-gray-900 dark:text-white">适用模型白名单</p>
+                  <textarea
+                    v-model="modelAllowlistText"
+                    rows="3"
+                    class="input min-h-[84px]"
+                    :disabled="!canManage"
+                    placeholder="每行一个模型，支持通配符"
+                  />
+                </div>
+
+                <div class="flex items-center justify-between gap-4 rounded-xl border border-gray-200 px-4 py-3 dark:border-dark-700">
+                  <div>
+                    <p class="text-sm font-medium text-gray-900 dark:text-white">人工审核模式</p>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">命中候选先进入审核，不直接返回</p>
+                  </div>
+                  <Toggle v-model="form.review_mode" :disabled="!canManage" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step navigation buttons -->
+        <div class="border-t border-gray-100 flex items-center justify-between gap-3 px-6 py-4 dark:border-dark-700">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="currentStep === 1 || loading || saving || testing"
+            @click="goToPreviousStep"
+          >
+            上一步
+          </button>
+          <div class="text-sm text-gray-500 dark:text-gray-400">第 {{ currentStep }} 步，共 4 步</div>
+          <button
+            v-if="currentStep < 4"
+            type="button"
+            class="btn btn-primary"
+            :disabled="!canStepperContinue || loading || saving || testing"
+            @click="goToNextStep"
+          >
+            下一步
+          </button>
+          <button
+            v-else
+            type="button"
+            class="btn btn-primary"
+            :disabled="!canManage || loading || saving || testing || !stepperFormValid"
+            @click="completeStepperAndSave"
+          >
+            {{ saving ? '保存中...' : '完成配置' }}
+          </button>
         </div>
       </div>
 
@@ -63,11 +245,19 @@
         <div class="h-8 w-8 animate-spin rounded-full border-b-2 border-primary-600"></div>
       </div>
 
-      <template v-else>
+      <template v-else-if="!showStepper || stepperDone">
         <div class="grid grid-cols-1 gap-4 xl:grid-cols-4">
-          <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-800">
+          <div :class="['rounded-xl border p-4 shadow-sm dark:border-dark-700', form.auto_closed ? 'border-red-200 bg-red-50 dark:border-red-900/60 dark:bg-red-900/20' : 'border-gray-200 bg-white dark:bg-dark-800']">
             <p class="text-xs text-gray-500 dark:text-gray-400">当前状态</p>
-            <p class="mt-2 text-xl font-semibold text-gray-900 dark:text-white">{{ form.enabled ? '已启用' : '已关闭' }}</p>
+            <p class="mt-2 text-xl font-semibold" :class="form.auto_closed ? 'text-red-700 dark:text-red-300' : 'text-gray-900 dark:text-white'">{{ form.enabled ? '已启用' : '已关闭' }}</p>
+            <div v-if="form.auto_closed" class="mt-3 space-y-2">
+              <button type="button" class="w-full rounded-lg bg-red-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-red-700" :disabled="!canManage" @click="scrollToThreshold">
+                调整回滚阈值
+              </button>
+              <button type="button" class="w-full rounded-lg bg-red-100 px-3 py-2 text-xs font-medium text-red-700 transition hover:bg-red-200 dark:bg-red-900/30 dark:text-red-200 dark:hover:bg-red-900/50" :disabled="!canManage" @click="manuallyReEnable">
+                手动重新启用
+              </button>
+            </div>
           </div>
           <div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-800">
             <p class="text-xs text-gray-500 dark:text-gray-400">命中阶段</p>
@@ -308,6 +498,135 @@
           </div>
         </div>
       </template>
+
+      <!-- Embedded Audit List (shown after stepper is done) -->
+      <div v-if="!showStepper || stepperDone" class="rounded-xl border border-gray-200 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-800">
+        <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-white">审计记录</h2>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">语义缓存候选的命中记录与快速审核</p>
+        </div>
+
+        <!-- Quick filters -->
+        <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              :class="[
+                'rounded-full px-3 py-1.5 text-sm font-medium transition-colors',
+                auditFilters.onlyDisputed
+                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/20 dark:text-primary-200'
+                  : 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-dark-600'
+              ]"
+              @click="auditFilters.onlyDisputed = !auditFilters.onlyDisputed"
+            >
+              仅争议
+            </button>
+            <button
+              type="button"
+              :class="[
+                'rounded-full px-3 py-1.5 text-sm font-medium transition-colors',
+                auditFilters.onlyPending
+                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/20 dark:text-primary-200'
+                  : 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-dark-600'
+              ]"
+              @click="auditFilters.onlyPending = !auditFilters.onlyPending"
+            >
+              仅未审核
+            </button>
+            <div class="flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5 dark:border-dark-700 dark:bg-dark-800">
+              <span class="text-xs font-medium text-gray-600 dark:text-gray-400">相似度:</span>
+              <select v-model="auditFilters.similarityBand" class="border-0 bg-transparent text-xs font-medium text-gray-700 focus:ring-0 dark:text-gray-300">
+                <option value="">全部</option>
+                <option value="veryHigh">≥0.99</option>
+                <option value="high">0.95-0.99</option>
+                <option value="normal">&lt;0.95</option>
+              </select>
+            </div>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm ml-auto"
+              :disabled="auditLoading"
+              @click="loadAuditsInline(true)"
+            >
+              刷新
+            </button>
+          </div>
+        </div>
+
+        <!-- Audit list -->
+        <div class="px-6 py-5">
+          <div v-if="auditLoadError" class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/10 dark:text-red-200">
+            {{ auditLoadError }}
+          </div>
+
+          <div v-if="auditLoading" class="flex items-center justify-center py-8">
+            <div class="h-6 w-6 animate-spin rounded-full border-b-2 border-primary-600"></div>
+          </div>
+
+          <div v-else class="space-y-3">
+            <div
+              v-for="record in auditRows"
+              :key="record.id"
+              class="flex flex-col gap-3 rounded-lg border border-gray-200 p-4 dark:border-dark-700 sm:flex-row sm:items-start sm:justify-between"
+            >
+              <div class="space-y-2">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 dark:bg-dark-700 dark:text-gray-200">#{{ record.id }}</span>
+                  <span :class="['rounded-full px-2.5 py-1 text-xs font-medium', decisionClass(record.decision)]">
+                    {{ decisionLabel(record.decision) }}
+                  </span>
+                  <span :class="['rounded-full px-2.5 py-1 text-xs font-medium', reviewClass(record.review_status)]">
+                    {{ reviewLabel(record.review_status) }}
+                  </span>
+                  <span class="text-xs text-gray-600 dark:text-gray-400">相似度：{{ formatSimilarity(record.similarity) }}</span>
+                </div>
+                <div class="text-xs text-gray-600 dark:text-gray-400">
+                  {{ record.platform }} / {{ record.model }} · {{ record.api_key || '--' }}
+                </div>
+              </div>
+
+              <!-- Quick action buttons -->
+              <div class="flex shrink-0 gap-2 sm:flex-col">
+                <button
+                  type="button"
+                  class="btn btn-sm inline-flex items-center gap-1 rounded-lg bg-emerald-100 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-200 disabled:opacity-50 dark:bg-emerald-900/20 dark:text-emerald-200 dark:hover:bg-emerald-900/30"
+                  :disabled="!canManage || auditRowLoading[record.id] || (record.review_status !== 'pending' && record.review_status !== 'disputed')"
+                  @click="quickReview(record, 'reusable')"
+                >
+                  {{ auditRowLoading[record.id] ? '...' : '可复用' }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-sm inline-flex items-center gap-1 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-200 disabled:opacity-50 dark:bg-red-900/20 dark:text-red-200 dark:hover:bg-red-900/30"
+                  :disabled="!canManage || auditRowLoading[record.id] || (record.review_status !== 'pending' && record.review_status !== 'disputed')"
+                  @click="quickReview(record, 'not_reusable')"
+                >
+                  {{ auditRowLoading[record.id] ? '...' : '不可复用' }}
+                </button>
+              </div>
+            </div>
+
+            <div
+              v-if="auditRows.length === 0"
+              class="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-center text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400"
+            >
+              当前无审计记录
+            </div>
+
+            <!-- Load more button -->
+            <div v-if="auditPagination.total > auditRows.length" class="flex justify-center pt-2">
+              <button
+                type="button"
+                class="btn btn-secondary"
+                :disabled="auditLoading"
+                @click="loadMoreAudits"
+              >
+                加载更多
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </AppLayout>
 </template>
@@ -318,7 +637,7 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import CacheNavPills from './CacheNavPills.vue'
 import Toggle from '@/components/common/Toggle.vue'
 import { adminAPI } from '@/api/admin'
-import { defaultSemanticCacheConfig, type SemanticCacheConfig, type SemanticCacheConnectionTestResult, type SemanticCacheStage } from '@/api/admin/cache'
+import { defaultSemanticCacheConfig, type SemanticCacheConfig, type SemanticCacheConnectionTestResult, type SemanticCacheStage, type SemanticCacheAuditRecord, type SemanticCacheAuditReviewStatus, type SemanticCacheAuditDecision } from '@/api/admin/cache'
 import type { SimpleApiKey } from '@/api/admin/usage'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
@@ -341,6 +660,27 @@ const selectedGrayApiKeys = ref<SimpleApiKey[]>([])
 const testResult = ref<SemanticCacheConnectionTestResult | null>(null)
 const lastSavedSnapshot = ref('')
 let apiKeySearchTimeout: ReturnType<typeof setTimeout> | null = null
+
+// Stepper state
+const currentStep = ref(1)
+const stepperDone = ref(false)
+
+// Audit list state
+const auditLoading = ref(false)
+const auditLoadError = ref('')
+const auditRows = ref<SemanticCacheAuditRecord[]>([])
+const auditRowLoading = reactive<Record<number, boolean>>({})
+const auditPagination = reactive({
+  page: 1,
+  page_size: 20,
+  total: 0
+})
+
+const auditFilters = reactive({
+  onlyDisputed: false,
+  onlyPending: false,
+  similarityBand: '' as '' | 'veryHigh' | 'high' | 'normal'
+})
 
 const form = reactive<SemanticCacheConfig>(defaultSemanticCacheConfig())
 
@@ -407,6 +747,19 @@ const validationErrors = computed(() => {
 })
 
 const dirty = computed(() => JSON.stringify(buildPayload()) !== lastSavedSnapshot.value)
+
+// Stepper specific computations
+const showStepper = computed(() => !form.semantic_model_base_url.trim() || !form.semantic_model_name.trim())
+const stepperFormValid = computed(() => hasRequiredConnectionFields.value && (form.embedding_dimension ?? 0) > 0)
+const canStepperContinue = computed(() => {
+  if (currentStep.value === 1) {
+    return testResult.value?.success === true && (form.embedding_dimension ?? 0) > 0
+  }
+  if (currentStep.value === 2) {
+    return (form.embedding_dimension ?? 0) > 0
+  }
+  return true
+})
 
 function applyConfig(config: SemanticCacheConfig): void {
   const next = JSON.parse(JSON.stringify(config)) as SemanticCacheConfig
@@ -515,10 +868,43 @@ async function loadConfig(force = false): Promise<void> {
     applyConfig(config)
     await hydrateSelectedApiKeys()
     rememberSaved(buildPayload())
+
+    // Initialize stepper state from localStorage
+    const savedStepperDone = localStorage.getItem('semantic_stepper_done') === 'true'
+    stepperDone.value = !showStepper.value || savedStepperDone
   } catch (error) {
     loadError.value = extractApiErrorMessage(error, '语义缓存配置加载失败')
   } finally {
     loading.value = false
+  }
+}
+
+async function testConnectionInStepper(): Promise<void> {
+  testing.value = true
+  try {
+    const { data: result } = await adminAPI.cache.testSemanticConfig(buildPayload())
+    testResult.value = result
+    if (typeof result.embedding_dimension === 'number' && Number.isFinite(result.embedding_dimension)) {
+      form.embedding_dimension = result.embedding_dimension
+    }
+    if (result.success) {
+      appStore.showSuccess('语义模型连接成功')
+    } else {
+      appStore.showError(result.message)
+    }
+  } catch (error) {
+    const message = extractApiErrorMessage(error, '语义模型连接测试失败')
+    testResult.value = {
+      success: false,
+      status: 'failed',
+      message,
+      semantic_model_base_url: form.semantic_model_base_url,
+      model: form.semantic_model_name,
+      duration_ms: 0
+    }
+    appStore.showError(message)
+  } finally {
+    testing.value = false
   }
 }
 
@@ -564,6 +950,195 @@ async function saveConfig(): Promise<void> {
   } finally {
     saving.value = false
   }
+}
+
+function goToPreviousStep(): void {
+  if (currentStep.value > 1) {
+    currentStep.value--
+  }
+}
+
+function goToNextStep(): void {
+  if (currentStep.value < 4 && canStepperContinue.value) {
+    currentStep.value++
+  }
+}
+
+async function completeStepperAndSave(): Promise<void> {
+  if (!stepperFormValid.value) return
+
+  saving.value = true
+  try {
+    const { data: saved } = await adminAPI.cache.updateSemanticConfig(buildPayload())
+    applyConfig(saved)
+    await hydrateSelectedApiKeys()
+    rememberSaved(buildPayload())
+
+    // Mark stepper as done
+    localStorage.setItem('semantic_stepper_done', 'true')
+    stepperDone.value = true
+
+    appStore.showSuccess('语义缓存配置已保存，向导完成')
+
+    // Load audits after config saved
+    void loadAuditsInline(true)
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error, '语义缓存配置保存失败'))
+  } finally {
+    saving.value = false
+  }
+}
+
+// Audit list functions
+async function loadAuditsInline(resetPage = false): Promise<void> {
+  if (resetPage) {
+    auditPagination.page = 1
+    auditRows.value = []
+  }
+
+  auditLoading.value = true
+  auditLoadError.value = ''
+  try {
+    const params: Record<string, any> = {
+      page: auditPagination.page,
+      page_size: auditPagination.page_size
+    }
+
+    if (auditFilters.onlyDisputed) {
+      params.review_status = 'disputed'
+    } else if (auditFilters.onlyPending) {
+      params.review_status = 'pending'
+    }
+
+    if (auditFilters.similarityBand === 'veryHigh') {
+      params.min_similarity = 0.99
+    } else if (auditFilters.similarityBand === 'high') {
+      params.min_similarity = 0.95
+      params.max_similarity = 0.99
+    } else if (auditFilters.similarityBand === 'normal') {
+      params.max_similarity = 0.95
+    }
+
+    const { data } = await adminAPI.cache.listSemanticAudits(params)
+    const items = Array.isArray(data.items) ? data.items : []
+
+    if (resetPage) {
+      auditRows.value = items
+    } else {
+      auditRows.value = [...auditRows.value, ...items]
+    }
+
+    auditPagination.total = Number(data.total || 0)
+    auditPagination.page = Number(data.page || auditPagination.page || 1)
+    auditPagination.page_size = Number(data.page_size || auditPagination.page_size || 20)
+  } catch (error) {
+    auditLoadError.value = extractApiErrorMessage(error, '审计记录加载失败')
+  } finally {
+    auditLoading.value = false
+  }
+}
+
+async function loadMoreAudits(): Promise<void> {
+  auditPagination.page++
+  await loadAuditsInline(false)
+}
+
+async function quickReview(record: SemanticCacheAuditRecord, status: Exclude<SemanticCacheAuditReviewStatus, 'pending'>): Promise<void> {
+  auditRowLoading[record.id] = true
+  try {
+    await adminAPI.cache.reviewSemanticAudit(record.id, {
+      review_status: status,
+      note: undefined
+    })
+    appStore.showSuccess('审核已提交')
+
+    // Update the row status
+    const idx = auditRows.value.findIndex(r => r.id === record.id)
+    if (idx >= 0) {
+      auditRows.value[idx].review_status = status
+    }
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error, '审核失败'))
+  } finally {
+    auditRowLoading[record.id] = false
+  }
+}
+
+function formatSimilarity(value: number): string {
+  if (!Number.isFinite(value)) return '--'
+  return value.toFixed(4)
+}
+
+function decisionLabel(value: SemanticCacheAuditDecision): string {
+  const labels: Record<SemanticCacheAuditDecision, string> = {
+    observe: '观察',
+    hit: '命中',
+    miss: '未命中',
+    blocked: '已阻断',
+    rollback: '已回滚'
+  }
+  return labels[value] ?? value
+}
+
+function reviewLabel(value: SemanticCacheAuditReviewStatus): string {
+  const labels: Record<SemanticCacheAuditReviewStatus, string> = {
+    pending: '未审核',
+    reusable: '可复用',
+    not_reusable: '不可复用',
+    disputed: '争议'
+  }
+  return labels[value] ?? value
+}
+
+function decisionClass(value: SemanticCacheAuditDecision): string {
+  switch (value) {
+    case 'hit':
+      return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/10 dark:text-emerald-200'
+    case 'blocked':
+    case 'rollback':
+      return 'bg-red-50 text-red-700 dark:bg-red-900/10 dark:text-red-200'
+    case 'miss':
+      return 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-200'
+    default:
+      return 'bg-blue-50 text-blue-700 dark:bg-blue-900/10 dark:text-blue-200'
+  }
+}
+
+function reviewClass(value: SemanticCacheAuditReviewStatus): string {
+  switch (value) {
+    case 'reusable':
+      return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/10 dark:text-emerald-200'
+    case 'not_reusable':
+      return 'bg-red-50 text-red-700 dark:bg-red-900/10 dark:text-red-200'
+    case 'disputed':
+      return 'bg-amber-50 text-amber-800 dark:bg-amber-900/10 dark:text-amber-200'
+    default:
+      return 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-200'
+  }
+}
+
+function scrollToThreshold(): void {
+  let thresholdElement = document.querySelector('input[placeholder*="质量回滚阈值"]') as HTMLElement | null
+
+  if (!thresholdElement) {
+    const elements = document.querySelectorAll('label span, input, select')
+    for (const el of elements) {
+      if (el.textContent && el.textContent.includes('质量回滚阈值')) {
+        thresholdElement = el.closest('label') as HTMLElement | null
+        break
+      }
+    }
+  }
+
+  if (thresholdElement) {
+    thresholdElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+}
+
+function manuallyReEnable(): void {
+  if (!canManage.value) return
+  form.enabled = true
+  appStore.showSuccess('已手动重新启用语义缓存，请保存配置')
 }
 
 onMounted(() => {

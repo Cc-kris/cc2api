@@ -1549,6 +1549,11 @@ WHERE u.role <> $1
   AND rc.value > 0
   AND rc.type IN ($3, $4)
   AND rc.used_by IS NOT NULL`
+	const usedAmountQuery = `
+SELECT COALESCE(SUM(ul.actual_cost), 0)::float8 AS used_amount
+FROM usage_logs ul
+JOIN users u ON u.id = ul.user_id
+WHERE u.role <> $1`
 
 	var nonAdminUserCount int64
 	var unusedAmount float64
@@ -1567,9 +1572,9 @@ WHERE u.role <> $1
 		return nil, err
 	}
 
-	usedAmount := totalCreditAmount - unusedAmount
-	if usedAmount < 0 {
-		usedAmount = 0
+	var usedAmount float64
+	if err := scanSingleRow(ctx, r.sql, usedAmountQuery, []any{service.RoleAdmin}, &usedAmount); err != nil {
+		return nil, err
 	}
 
 	return &service.DashboardRevenueOverview{
@@ -1578,7 +1583,7 @@ WHERE u.role <> $1
 		UnusedAmount:      formatDashboardAmount(unusedAmount),
 		NonAdminUserCount: nonAdminUserCount,
 		CreditedUserCount: creditedUserCount,
-		IsEstimated:       true,
+		IsEstimated:       false,
 		UpdatedAt:         time.Now().UTC().Format(time.RFC3339),
 	}, nil
 }

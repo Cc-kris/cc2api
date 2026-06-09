@@ -938,6 +938,11 @@ func buildOpsErrorLogsWhere(filter *service.OpsErrorLogFilter) (string, []any) {
 		args = append(args, p)
 		clauses = append(clauses, "e.platform = $"+itoa(len(args)))
 	}
+	if model := strings.TrimSpace(filter.Model); model != "" {
+		args = append(args, model)
+		n := itoa(len(args))
+		clauses = append(clauses, "(COALESCE(e.model,'') = $"+n+" OR COALESCE(e.requested_model,'') = $"+n+" OR COALESCE(e.upstream_model,'') = $"+n+")")
+	}
 	if filter.GroupID != nil && *filter.GroupID > 0 {
 		args = append(args, *filter.GroupID)
 		clauses = append(clauses, "e.group_id = $"+itoa(len(args)))
@@ -991,6 +996,16 @@ func buildOpsErrorLogsWhere(filter *service.OpsErrorLogFilter) (string, []any) {
 			clauses = append(clauses, opsUpstreamLimitedConditionFor("e"))
 		case "business_limited":
 			clauses = append(clauses, "COALESCE(e.is_business_limited,false) = true")
+		}
+		switch strings.TrimSpace(strings.ToLower(filter.ErrorResult)) {
+		case service.OpsUnifiedErrorResultFinalFailed:
+			clauses = append(clauses, "COALESCE(e.status_code, 0) >= 400")
+		case service.OpsUnifiedErrorResultRecovered:
+			clauses = append(clauses, "COALESCE(e.status_code, 0) > 0 AND COALESCE(e.status_code, 0) < 400")
+		case service.OpsUnifiedErrorResultUnknown:
+			clauses = append(clauses, "COALESCE(e.status_code, 0) = 0")
+		case service.OpsUnifiedErrorResultClientAborted:
+			clauses = append(clauses, opsClientDisconnectConditionFor("e"))
 		}
 	}
 

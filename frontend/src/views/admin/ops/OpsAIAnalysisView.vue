@@ -56,9 +56,28 @@
         <div v-if="loadError" class="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
           {{ loadError }}
         </div>
+
+        <!-- Status Summary Bar -->
+        <div class="mt-4 rounded-2xl border px-4 py-3 text-sm" :class="configStatusBarClass">
+          <div class="flex items-center justify-between gap-3">
+            <div class="font-medium">{{ configStatusLabel }}</div>
+            <span v-if="testResult" class="text-xs opacity-75">
+              上次测试：{{ testResult.success ? '连接成功' : '连接失败' }}
+            </span>
+          </div>
+          <div class="mt-2 border-t border-current/10 pt-2">
+            <template v-if="latestAutoLoading">
+              <div class="h-3 w-48 animate-pulse rounded bg-current/20"></div>
+            </template>
+            <template v-else-if="latestAutoTaskDisplay">
+              <div class="opacity-75">{{ latestAutoTaskDisplay.text }}</div>
+              <div v-if="latestAutoTaskDisplay.summary" class="mt-0.5 opacity-60 text-xs">{{ latestAutoTaskDisplay.summary }}</div>
+            </template>
+          </div>
+        </div>
       </section>
 
-      <section class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+      <section class="space-y-6">
         <div class="space-y-6">
           <div class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900">
             <div class="mb-4 flex items-center justify-between gap-3">
@@ -75,17 +94,19 @@
               </ul>
             </div>
 
-            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div class="md:col-span-2 rounded-2xl border border-gray-200 p-4 dark:border-dark-700">
-                <label class="flex items-start justify-between gap-4">
-                  <div>
-                    <div class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.ops.aiAnalysis.fields.enabled') }}</div>
-                    <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.aiAnalysis.fields.enabledHint') }}</div>
-                  </div>
-                  <input v-model="form.enabled" type="checkbox" class="mt-1 h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" :disabled="!isEditable">
-                </label>
-              </div>
+            <!-- Global Toggle (always visible and interactive) -->
+            <div class="mb-4 rounded-2xl border border-gray-200 p-4 dark:border-dark-700">
+              <label class="flex items-start justify-between gap-4">
+                <div>
+                  <div class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.ops.aiAnalysis.fields.enabled') }}</div>
+                  <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.aiAnalysis.fields.enabledHint') }}</div>
+                </div>
+                <input v-model="form.enabled" type="checkbox" class="mt-1 h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" :disabled="!isEditable">
+              </label>
+            </div>
 
+            <!-- Configuration Fields (degraded when disabled) -->
+            <div :class="['grid grid-cols-1 gap-4 md:grid-cols-2', !form.enabled ? 'opacity-60 pointer-events-none' : '']">
               <div class="md:col-span-2">
                 <label class="filter-label">{{ t('admin.ops.aiAnalysis.fields.baseUrl') }}</label>
                 <input v-model.trim="form.base_url" type="url" class="input" :disabled="!isEditable" placeholder="https://example.com/v1">
@@ -149,6 +170,14 @@
                     <span>{{ option.label }}</span>
                   </label>
                 </div>
+                <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  <template v-if="form.auto_levels.length === 0">
+                    当前配置：不自动触发任何等级的 AI 分析
+                  </template>
+                  <template v-else>
+                    当前配置：{{ autoLevelsDescription }} 级事件将自动触发分析
+                  </template>
+                </p>
               </div>
 
               <div class="md:col-span-2 rounded-2xl border border-gray-200 p-4 dark:border-dark-700">
@@ -162,9 +191,8 @@
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="space-y-6">
+          <!-- Test Result Card (moved to bottom, full width) -->
           <div class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.aiAnalysis.cards.testResult') }}</h2>
             <div v-if="testResult" class="mt-4 rounded-2xl border p-4" :class="testResultClasses">
@@ -189,8 +217,8 @@
                 </div>
               </div>
             </div>
-            <div v-else class="mt-4 rounded-2xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400">
-              {{ t('admin.ops.aiAnalysis.noTestResult') }}
+            <div v-else class="mt-4 rounded-2xl bg-gray-50 px-4 py-4 text-sm text-gray-500 dark:bg-dark-800/70 dark:text-gray-400">
+              尚未测试连接。点击上方"测试连接"按钮可验证服务是否可用。
             </div>
           </div>
         </div>
@@ -209,6 +237,7 @@ import {
   type OpsAIAnalysisConfig,
   type OpsAIAnalysisConnectionStatus,
   type OpsAIAnalysisInterfaceType,
+  type OpsAIAnalysisTaskDetailResponse,
   type OpsAIAnalysisTestResponse,
   type UpdateOpsAIAnalysisConfigRequest,
 } from '@/api/admin/ops'
@@ -235,6 +264,8 @@ const loadError = ref('')
 const storedMaskedKey = ref('')
 const originalConfigSignature = ref('')
 const testResult = ref<OpsAIAnalysisTestResponse | null>(null)
+const latestAutoTask = ref<OpsAIAnalysisTaskDetailResponse | null>(null)
+const latestAutoLoading = ref(false)
 
 const form = reactive<FormState>({
   enabled: false,
@@ -355,6 +386,68 @@ const testResultBadgeClasses = computed(() => {
   return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-200'
 })
 
+const configStatusLabel = computed(() => {
+  const hasBaseUrl = form.base_url.trim() !== ''
+  const hasApiKey = form.api_key.trim() !== '' || storedMaskedKey.value.trim() !== ''
+
+  if (!hasBaseUrl || !hasApiKey) {
+    return '未配置 AI 分析服务 · 请填写服务地址和 API Key'
+  }
+
+  if (!form.enabled) {
+    return 'AI 分析已关闭 · 自动分析和手动分析均不会触发'
+  }
+
+  if (form.enabled && testResult.value?.success === false) {
+    return 'AI 分析已启用 · 上次连接测试失败，请检查配置'
+  }
+
+  return 'AI 分析已启用'
+})
+
+const configStatusBarClass = computed(() => {
+  const hasBaseUrl = form.base_url.trim() !== ''
+  const hasApiKey = form.api_key.trim() !== '' || storedMaskedKey.value.trim() !== ''
+
+  if (!hasBaseUrl || !hasApiKey) {
+    return 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300'
+  }
+
+  if (!form.enabled) {
+    return 'border-gray-200 bg-gray-50 text-gray-600 dark:border-dark-700 dark:bg-dark-800/70 dark:text-gray-300'
+  }
+
+  return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-300'
+})
+
+const autoLevelsDescription = computed(() => {
+  if (form.auto_levels.length === 0) return ''
+  const levelMap: Record<string, string> = {
+    'P0': 'P0',
+    'P1': 'P1',
+    'P2': 'P2',
+    'observe': '观测',
+  }
+  return form.auto_levels.map((level) => levelMap[level] || level).join('、')
+})
+
+const latestAutoTaskDisplay = computed(() => {
+  if (latestAutoLoading.value) return null
+  const t_task = latestAutoTask.value
+  if (!t_task || !t_task.task) return { text: '暂无自动分析记录', summary: '' }
+  const task = t_task.task
+  const time = task.finished_at ?? task.created_at
+  const dateStr = new Date(time).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  const statusMap: Record<string, string> = { completed: '已完成', failed: '失败', running: '运行中', pending: '等待中' }
+  const statusText = statusMap[task.status] ?? task.status
+  let summary = ''
+  if (task.status === 'completed' && t_task.report?.summary) {
+    summary = t_task.report.summary.length > 60 ? t_task.report.summary.slice(0, 60) + '…' : t_task.report.summary
+  }
+  return { text: `最近自动分析：${dateStr} · ${statusText}`, summary }
+})
+
+
 function applyConfig(config: OpsAIAnalysisConfig) {
   form.enabled = config.enabled
   form.base_url = config.base_url || ''
@@ -390,6 +483,17 @@ async function loadConfig() {
     loadError.value = extractApiErrorMessage(err, t('admin.ops.aiAnalysis.loadFailed'))
   } finally {
     loading.value = false
+  }
+}
+
+async function loadLatestAutoTask() {
+  latestAutoLoading.value = true
+  try {
+    latestAutoTask.value = await opsAPI.getLatestAutoAIAnalysisTask()
+  } catch {
+    latestAutoTask.value = null
+  } finally {
+    latestAutoLoading.value = false
   }
 }
 
@@ -454,5 +558,6 @@ function resolvedStatusMessage(result: OpsAIAnalysisTestResponse): string {
 
 onMounted(() => {
   void loadConfig()
+  void loadLatestAutoTask()
 })
 </script>

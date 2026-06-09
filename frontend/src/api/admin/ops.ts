@@ -268,6 +268,7 @@ export interface OpsIncidentOverview {
   latest_ai_analysis: OpsIncidentLatestAIAnalysis | null
   quick_filters: OpsIncidentQuickFilter[]
   recommended_actions: string[]
+  error_category_counts?: Record<string, number> | null
   updated_at: string
 }
 
@@ -957,6 +958,8 @@ export interface AlertEvent {
   resolved_at?: string | null
   email_sent: boolean
   created_at: string
+  latest_ai_summary?: string | null
+  latest_ai_status?: string | null
 }
 
 export interface EmailNotificationConfig {
@@ -1612,6 +1615,11 @@ export async function getAIAnalysisTaskDetail(id: number): Promise<OpsAIAnalysis
   return data
 }
 
+export async function getLatestAutoAIAnalysisTask(): Promise<OpsAIAnalysisTaskDetailResponse | null> {
+  const { data } = await apiClient.get<OpsAIAnalysisTaskDetailResponse | null>('/admin/ops/ai-analysis/tasks/latest-auto')
+  return data
+}
+
 export async function updateAIAnalysisReportFeedback(
   id: number,
   payload: OpsAIAnalysisFeedbackRequest
@@ -1795,6 +1803,7 @@ export const opsAPI = {
   deleteAlertRule,
   createAIAnalysisTask,
   getAIAnalysisTaskDetail,
+  getLatestAutoAIAnalysisTask,
   updateAIAnalysisReportFeedback,
   getAIAnalysisConfig,
   updateAIAnalysisConfig,

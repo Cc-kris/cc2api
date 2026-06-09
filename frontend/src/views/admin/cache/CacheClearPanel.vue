@@ -93,6 +93,9 @@
               </p>
             </div>
             <div class="space-y-5 px-6 py-5">
+              <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
+                ⚠ 缓存清理操作不可逆，清理后相关缓存数据将永久删除
+              </div>
               <div v-if="requiresPlatforms" class="space-y-3">
                 <div class="flex items-center justify-between gap-3">
                   <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.cacheManagement.clearPage.fields.platforms') }}</p>
@@ -427,6 +430,9 @@
 
     <BaseDialog :show="confirmDialogVisible" width="narrow" :title="t('admin.cacheManagement.clearPage.confirmTitle')" @close="closeConfirmDialog">
       <div class="space-y-4">
+        <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/10 dark:text-red-200">
+          ⚠ 此操作不可逆，确认继续执行缓存清理？
+        </div>
         <p class="text-sm text-gray-600 dark:text-gray-300">{{ t('admin.cacheManagement.clearPage.confirmDescription') }}</p>
         <div class="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-900/30">
           <ul class="space-y-2 text-sm text-gray-600 dark:text-gray-300">

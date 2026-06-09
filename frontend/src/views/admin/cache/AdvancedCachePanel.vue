@@ -54,6 +54,10 @@
           </ul>
         </div>
 
+        <div v-if="!form.advanced_cache_enabled" class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
+          ⚠ 高级策略未启用 · 线上请求使用精确缓存 · 以下统计为历史数据
+        </div>
+
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div v-for="card in summaryCards" :key="card.key" class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-800">
             <p class="text-xs text-gray-500 dark:text-gray-400">{{ card.label }}</p>

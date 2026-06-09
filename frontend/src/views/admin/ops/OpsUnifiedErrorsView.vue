@@ -61,8 +61,16 @@
           {{ errorMessage }}
         </div>
 
+        <div v-if="fromOverview && hasActiveFilters" class="mt-4 flex items-center justify-between rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300">
+          <div>当前筛选来自运维总览</div>
+          <button type="button" class="ml-4 inline-flex rounded border border-blue-300 px-3 py-1 text-xs font-medium hover:bg-blue-100 dark:border-blue-700 dark:hover:bg-blue-900/40" @click="resetFilters">
+            清空并重置
+          </button>
+        </div>
+
         <div class="mt-5 space-y-4">
-          <div class="grid grid-cols-1 gap-3 xl:grid-cols-6">
+          <!-- Row 1: 时间范围 + 关键词 + 状态码 -->
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             <div>
               <label class="filter-label">时间范围</label>
               <select v-model="timeRange" class="input">
@@ -72,15 +80,72 @@
               </select>
             </div>
             <div>
-              <label class="filter-label">平台</label>
-              <select v-model="platform" class="input">
-                <option value="">全部</option>
-                <option value="openai">OpenAI</option>
-                <option value="claude">Claude</option>
-                <option value="gemini">Gemini</option>
-                <option value="other">其他</option>
-              </select>
+              <label class="filter-label">关键词</label>
+              <input v-model.trim="keyword" type="text" class="input" placeholder="搜索脱敏摘要">
             </div>
+            <div>
+              <label class="filter-label">状态码</label>
+              <input v-model.trim="statusCode" type="text" class="input" placeholder="429,500-504">
+            </div>
+          </div>
+
+          <!-- Row 2: 错误大类 Toggle 组 (全宽，flex wrap) -->
+          <div>
+            <label class="filter-label">错误大类</label>
+            <div class="flex flex-wrap gap-2">
+              <button
+                v-for="option in errorCategoryOptions"
+                :key="option.value"
+                type="button"
+                :class="['toggle-button', errorCategories.includes(option.value) ? 'toggle-button-active' : 'toggle-button-inactive']"
+                @click="toggleCategory(option.value)"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Row 3: 错误结果 Toggle 组 + 平台 Toggle 组 (同行) -->
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label class="filter-label">错误结果</label>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  v-for="option in errorResultOptions"
+                  :key="option.value"
+                  type="button"
+                  :class="['toggle-button', errorResults.includes(option.value) ? 'toggle-button-active' : 'toggle-button-inactive']"
+                  @click="toggleErrorResult(option.value)"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label class="filter-label">平台</label>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  :class="['toggle-button', !platform ? 'toggle-button-active' : 'toggle-button-inactive']"
+                  @click="platform = ''"
+                >
+                  全部
+                </button>
+                <button
+                  v-for="value in ['openai', 'claude', 'gemini', 'other']"
+                  :key="value"
+                  type="button"
+                  :class="['toggle-button', platform === value ? 'toggle-button-active' : 'toggle-button-inactive']"
+                  @click="platform = value"
+                >
+                  {{ formatPlatformLabel(value) }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 分组（保留在"更多筛选"中） -->
+          <div v-if="showMoreFilters" class="grid grid-cols-1 gap-3 xl:grid-cols-5">
             <div>
               <label class="filter-label">分组</label>
               <select v-model="groupId" class="input">
@@ -91,36 +156,6 @@
               </select>
             </div>
             <div>
-              <label class="filter-label">错误大类</label>
-              <select v-model="errorCategories" class="input input-multi" multiple>
-                <option v-for="option in errorCategoryOptions" :key="option.value" :value="option.value">
-                  {{ option.label }}
-                </option>
-              </select>
-            </div>
-            <div>
-              <label class="filter-label">状态码</label>
-              <input v-model.trim="statusCode" type="text" class="input" placeholder="429,500-504">
-            </div>
-            <div>
-              <label class="filter-label">关键词</label>
-              <input v-model.trim="keyword" type="text" class="input" placeholder="搜索脱敏摘要">
-            </div>
-          </div>
-
-          <div v-if="timeRange === 'custom'" class="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div>
-              <label class="filter-label">开始时间</label>
-              <input v-model="customStartInput" type="datetime-local" class="input">
-            </div>
-            <div>
-              <label class="filter-label">结束时间</label>
-              <input v-model="customEndInput" type="datetime-local" class="input">
-            </div>
-          </div>
-
-          <div v-if="showMoreFilters" class="grid grid-cols-1 gap-3 xl:grid-cols-5">
-            <div>
               <label class="filter-label">模型</label>
               <input v-model.trim="model" type="text" class="input" placeholder="输入模型名">
             </div>
@@ -130,14 +165,6 @@
                 <option value="all">全部</option>
                 <option value="analyzed">已分析</option>
                 <option value="not_analyzed">未分析</option>
-              </select>
-            </div>
-            <div>
-              <label class="filter-label">错误结果</label>
-              <select v-model="errorResults" class="input input-multi" multiple>
-                <option v-for="option in errorResultOptions" :key="option.value" :value="option.value">
-                  {{ option.label }}
-                </option>
               </select>
             </div>
             <div>
@@ -159,6 +186,17 @@
                   {{ option.label }}
                 </option>
               </select>
+            </div>
+          </div>
+
+          <div v-if="timeRange === 'custom'" class="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div>
+              <label class="filter-label">开始时间</label>
+              <input v-model="customStartInput" type="datetime-local" class="input">
+            </div>
+            <div>
+              <label class="filter-label">结束时间</label>
+              <input v-model="customEndInput" type="datetime-local" class="input">
             </div>
           </div>
 
@@ -231,73 +269,173 @@
         </div>
 
         <div v-else class="min-h-0 min-w-0 overflow-auto">
+          <!-- Batch operations bar -->
+          <transition name="slide-down">
+            <div v-if="selectedCount > 0" class="sticky top-0 z-20 border-b border-gray-200 bg-blue-50 px-5 py-3 dark:border-dark-700 dark:bg-blue-900/20">
+              <div class="flex items-center justify-between">
+                <div class="text-sm font-medium text-gray-700 dark:text-gray-200">
+                  已选 {{ selectedCount }} 条 / {{ total }} 条
+                </div>
+                <div class="flex items-center gap-3">
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:disabled:bg-blue-800/60"
+                    :disabled="batchAnalysisDisabled"
+                    :title="batchAnalysisTitle"
+                    @click="batchAnalyzeSelected"
+                  >
+                    {{ batchAnalyzing ? '分析中...' : '合并时段 AI 分析' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:border-blue-300 hover:text-blue-600 dark:border-dark-600 dark:text-gray-200 dark:hover:border-blue-500 dark:hover:text-blue-300"
+                    @click="clearSelection"
+                  >
+                    取消选择
+                  </button>
+                </div>
+              </div>
+            </div>
+          </transition>
+
           <table class="min-w-[1300px] border-separate border-spacing-0">
             <thead class="sticky top-0 z-10 bg-gray-50 dark:bg-dark-800">
               <tr>
-                <th class="table-th">
+                <th class="table-th w-12">
+                  <input
+                    type="checkbox"
+                    :checked="allSelected"
+                    :indeterminate="indeterminate"
+                    class="rounded border-gray-300"
+                    @change="toggleAllSelection"
+                  >
+                </th>
+                <th v-if="visibleColumns.has('occurred_at')" class="table-th">
                   <button type="button" class="sort-button" @click="toggleSort('occurred_at')">
                     发生时间
                     <span>{{ sortIndicator('occurred_at') }}</span>
                   </button>
                 </th>
-                <th class="table-th">错误分类</th>
-                <th class="table-th">错误子类</th>
-                <th class="table-th">错误摘要</th>
-                <th class="table-th">错误结果</th>
-                <th class="table-th">
+                <th v-if="visibleColumns.has('error_category')" class="table-th">错误分类</th>
+                <th v-if="visibleColumns.has('error_subcategory')" class="table-th">错误子类</th>
+                <th v-if="visibleColumns.has('severity')" class="table-th">严重度</th>
+                <th v-if="visibleColumns.has('summary')" class="table-th">错误摘要</th>
+                <th v-if="visibleColumns.has('error_result')" class="table-th">错误结果</th>
+                <th v-if="visibleColumns.has('status_code')" class="table-th">
                   <button type="button" class="sort-button" @click="toggleSort('status_code')">
                     状态码
                     <span>{{ sortIndicator('status_code') }}</span>
                   </button>
                 </th>
-                <th class="table-th">用户</th>
-                <th class="table-th">分组</th>
-                <th class="table-th">平台</th>
-                <th class="table-th">上游账号</th>
-                <th class="table-th">
+                <th v-if="visibleColumns.has('user')" class="table-th">用户</th>
+                <th v-if="visibleColumns.has('group')" class="table-th">分组</th>
+                <th v-if="visibleColumns.has('platform')" class="table-th">平台</th>
+                <th v-if="visibleColumns.has('model')" class="table-th">模型</th>
+                <th v-if="visibleColumns.has('upstream_account')" class="table-th">上游账号</th>
+                <th v-if="visibleColumns.has('api_key')" class="table-th">API Key</th>
+                <th v-if="visibleColumns.has('request_id')" class="table-th">请求 ID</th>
+                <th v-if="visibleColumns.has('same_kind_count')" class="table-th">
                   <button type="button" class="sort-button" @click="toggleSort('same_kind_count')">
                     同类数量
                     <span>{{ sortIndicator('same_kind_count') }}</span>
                   </button>
                 </th>
-                <th class="table-th">AI 状态</th>
+                <th v-if="visibleColumns.has('ai_analysis_status')" class="table-th">AI 状态</th>
+                <th class="table-th w-12 relative">
+                  <button
+                    type="button"
+                    class="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-dark-700"
+                    @click="columnPopoverOpen = !columnPopoverOpen"
+                  >
+                    ⚙
+                  </button>
+                  <!-- Column control popover -->
+                  <div v-if="columnPopoverOpen" class="absolute right-0 top-full z-30 mt-1 rounded-lg border border-gray-200 bg-white shadow-lg dark:border-dark-600 dark:bg-dark-900">
+                    <div class="p-3 space-y-2 max-h-96 overflow-y-auto">
+                      <div v-for="col in allColumns" :key="col.key" class="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          :id="`col-${col.key}`"
+                          :checked="visibleColumns.has(col.key)"
+                          class="rounded border-gray-300"
+                          @change="toggleColumnVisibility(col.key)"
+                        >
+                        <label :for="`col-${col.key}`" class="text-sm text-gray-700 dark:text-gray-200">
+                          {{ col.label }}
+                          <span v-if="col.lowFreq" class="text-xs text-gray-500 dark:text-gray-400">(低频)</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
               <tr v-if="items.length === 0">
-                <td colspan="12" class="py-16 text-center text-sm text-gray-400 dark:text-dark-500">
+                <td :colspan="visibleColumns.size + 2" class="py-16 text-center text-sm text-gray-400 dark:text-dark-500">
                   暂无符合条件的错误记录
                 </td>
               </tr>
               <tr
                 v-for="item in items"
                 :key="item.id"
-                class="cursor-pointer transition hover:bg-gray-50 dark:hover:bg-dark-800/50"
-                @click="openDetail(item.id)"
+                :class="['cursor-pointer transition hover:bg-gray-50 dark:hover:bg-dark-800/50', getSeverityBorderClass(item.severity)]"
               >
-                <td class="table-td whitespace-nowrap font-mono text-xs">{{ formatDateTime(item.occurred_at) }}</td>
-                <td class="table-td">
+                <td class="table-td w-12">
+                  <input
+                    type="checkbox"
+                    :checked="selectedIds.has(item.id)"
+                    class="rounded border-gray-300"
+                    @change="toggleRowSelection(item.id)"
+                    @click.stop
+                  >
+                </td>
+                <td v-if="visibleColumns.has('occurred_at')" class="table-td whitespace-nowrap font-mono text-xs" @click="openDetail(item.id)">{{ formatDateTime(item.occurred_at) }}</td>
+                <td v-if="visibleColumns.has('error_category')" class="table-td" @click="openDetail(item.id)">
                   <span class="badge badge-neutral">{{ formatCategory(item.error_category) }}</span>
                 </td>
-                <td class="table-td">{{ item.error_subcategory || '未细分' }}</td>
-                <td class="table-td">
+                <td v-if="visibleColumns.has('error_subcategory')" class="table-td" @click="openDetail(item.id)">{{ item.error_subcategory || '未细分' }}</td>
+                <td v-if="visibleColumns.has('severity')" class="table-td" @click="openDetail(item.id)">
+                  <span :class="getSeverityBadgeClass(item.severity)">{{ formatSeverity(item.severity) }}</span>
+                </td>
+                <td v-if="visibleColumns.has('summary')" class="table-td" @click="openDetail(item.id)">
                   <div class="max-w-[320px] truncate" :title="item.summary || '暂无摘要'">
                     {{ item.summary || '暂无摘要' }}
                   </div>
                 </td>
-                <td class="table-td">
+                <td v-if="visibleColumns.has('error_result')" class="table-td" @click="openDetail(item.id)">
                   <span class="badge badge-result">{{ formatErrorResult(item.error_result) }}</span>
                 </td>
-                <td class="table-td">
+                <td v-if="visibleColumns.has('status_code')" class="table-td" @click="openDetail(item.id)">
                   <span class="badge badge-status">{{ item.status_code || '--' }}</span>
                 </td>
-                <td class="table-td">{{ formatEntity(item.user, '未知用户') }}</td>
-                <td class="table-td">{{ formatEntity(item.group, '未分组') }}</td>
-                <td class="table-td">{{ item.platform || '未知平台' }}</td>
-                <td class="table-td">{{ formatEntity(item.upstream_account, '未命中上游') }}</td>
-                <td class="table-td">{{ item.same_kind_count || 1 }}</td>
-                <td class="table-td">
-                  <span class="badge badge-ai">{{ formatAIStatus(item.ai_analysis_status) }}</span>
+                <td v-if="visibleColumns.has('user')" class="table-td" @click="openDetail(item.id)">{{ formatEntity(item.user, '未知用户') }}</td>
+                <td v-if="visibleColumns.has('group')" class="table-td" @click="openDetail(item.id)">{{ formatEntity(item.group, '未分组') }}</td>
+                <td v-if="visibleColumns.has('platform')" class="table-td" @click="openDetail(item.id)">{{ item.platform || '未知平台' }}</td>
+                <td v-if="visibleColumns.has('model')" class="table-td" @click="openDetail(item.id)">{{ item.model || '--' }}</td>
+                <td v-if="visibleColumns.has('upstream_account')" class="table-td" @click="openDetail(item.id)">{{ formatEntity(item.upstream_account, '未命中上游') }}</td>
+                <td v-if="visibleColumns.has('api_key')" class="table-td" @click="openDetail(item.id)">{{ formatEntity(item.api_key, '--') }}</td>
+                <td v-if="visibleColumns.has('request_id')" class="table-td" @click="openDetail(item.id)">{{ '--' }}</td>
+                <td v-if="visibleColumns.has('same_kind_count')" class="table-td" @click="openDetail(item.id)">{{ item.same_kind_count || 1 }}</td>
+                <td v-if="visibleColumns.has('ai_analysis_status')" class="table-td" @click.stop>
+                  <button
+                    v-if="item.ai_analysis_status === 'not_analyzed'"
+                    type="button"
+                    class="badge badge-ai hover:opacity-80 cursor-pointer"
+                    :disabled="rowsBeingAnalyzed.has(item.id)"
+                    @click="triggerRowAIAnalysis(item)"
+                  >
+                    {{ rowsBeingAnalyzed.has(item.id) ? '分析中' : formatAIStatus(item.ai_analysis_status) }}
+                  </button>
+                  <button
+                    v-else-if="item.ai_analysis_status === 'analyzed' || item.ai_analysis_status === 'completed'"
+                    type="button"
+                    class="badge badge-ai hover:opacity-80 cursor-pointer"
+                    @click="showAIReport(item)"
+                  >
+                    {{ formatAIStatus(item.ai_analysis_status) }}
+                  </button>
+                  <span v-else class="badge badge-ai">{{ formatAIStatus(item.ai_analysis_status) }}</span>
                 </td>
               </tr>
             </tbody>
@@ -316,6 +454,66 @@
         </div>
       </section>
     </div>
+
+    <!-- EL04: AI Report Drawer -->
+    <transition name="slide-from-right">
+      <div v-if="drawerOpen" class="fixed inset-0 z-40 overflow-hidden">
+        <div class="absolute inset-0 bg-black/30 dark:bg-black/50" @click="drawerOpen = false"></div>
+        <div class="absolute right-0 top-0 bottom-0 w-full max-w-md overflow-y-auto rounded-l-2xl border-l border-gray-200 bg-white shadow-xl dark:border-dark-700 dark:bg-dark-900">
+          <div class="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">AI 分析报告</h2>
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-dark-800"
+              @click="drawerOpen = false"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div v-if="drawerLoading" class="flex items-center justify-center py-12">
+            <div class="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
+          </div>
+
+          <div v-else-if="drawerReport" class="space-y-4 p-5">
+            <div>
+              <h3 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">分析结论</h3>
+              <p class="mt-2 text-sm text-gray-700 dark:text-gray-200">{{ drawerReport.summary || '--' }}</p>
+            </div>
+
+            <div v-if="drawerReport.confidence" class="rounded-lg bg-gray-50 p-3 dark:bg-dark-800">
+              <div class="text-xs font-semibold text-gray-600 dark:text-gray-300">置信度</div>
+              <div class="mt-1 text-sm font-medium text-blue-600 dark:text-blue-300">{{ drawerReport.confidence }}</div>
+            </div>
+
+            <div v-if="drawerReport.suggested_actions">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">建议行动</h3>
+              <ul class="mt-2 space-y-2">
+                <li
+                  v-for="(action, idx) in ((typeof drawerReport.suggested_actions === 'string' ? [drawerReport.suggested_actions] : drawerReport.suggested_actions) || []).slice(0, 3)"
+                  :key="idx"
+                  class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200"
+                >
+                  <span class="mt-1 flex-shrink-0 h-1.5 w-1.5 rounded-full bg-blue-500"></span>
+                  <span>{{ action }}</span>
+                </li>
+              </ul>
+            </div>
+
+            <div v-if="drawerReport.root_cause" class="rounded-lg bg-amber-50 p-3 dark:bg-amber-900/20">
+              <div class="text-xs font-semibold text-amber-700 dark:text-amber-300">根本原因</div>
+              <div class="mt-1 text-sm text-amber-900 dark:text-amber-100">{{ drawerReport.root_cause }}</div>
+            </div>
+          </div>
+
+          <div v-else class="flex items-center justify-center py-12">
+            <div class="text-center">
+              <p class="text-sm text-gray-500 dark:text-gray-400">暂无 AI 报告数据</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
   </AppLayout>
 </template>
 
@@ -403,6 +601,54 @@ const manualAIConfigLoadError = ref('')
 const activeManualAITaskId = ref<number | null>(null)
 let manualAIPollTimer: ReturnType<typeof setTimeout> | null = null
 
+// EL04: AI status column interactions
+const rowsBeingAnalyzed = ref<Set<number>>(new Set())
+const drawerOpen = ref(false)
+const drawerLoading = ref(false)
+const drawerErrorId = ref<number | null>(null)
+const drawerTaskId = ref<number | null>(null)
+const drawerReport = ref<any>(null)
+
+// EL05: Multi-select + batch operations
+const selectedIds = ref<Set<number>>(new Set())
+const batchAnalyzing = ref(false)
+
+// EL06: Column control
+const visibleColumns = ref<Set<string>>(new Set([
+  'occurred_at',
+  'error_category',
+  'error_subcategory',
+  'severity',
+  'summary',
+  'error_result',
+  'status_code',
+  'user',
+  'group',
+  'platform',
+  'model',
+  'same_kind_count',
+  'ai_analysis_status'
+]))
+const allColumns = [
+  { key: 'occurred_at', label: '发生时间', lowFreq: false },
+  { key: 'error_category', label: '错误分类', lowFreq: false },
+  { key: 'error_subcategory', label: '错误子类', lowFreq: false },
+  { key: 'severity', label: '严重度', lowFreq: false },
+  { key: 'summary', label: '错误摘要', lowFreq: false },
+  { key: 'error_result', label: '错误结果', lowFreq: false },
+  { key: 'status_code', label: '状态码', lowFreq: false },
+  { key: 'user', label: '用户', lowFreq: false },
+  { key: 'group', label: '分组', lowFreq: false },
+  { key: 'platform', label: '平台', lowFreq: false },
+  { key: 'model', label: '模型', lowFreq: false },
+  { key: 'upstream_account', label: '上游账号', lowFreq: true },
+  { key: 'api_key', label: 'API Key', lowFreq: true },
+  { key: 'request_id', label: '请求 ID', lowFreq: true },
+  { key: 'same_kind_count', label: '同类数量', lowFreq: false },
+  { key: 'ai_analysis_status', label: 'AI 状态', lowFreq: false }
+]
+const columnPopoverOpen = ref(false)
+
 const timeRange = ref('30m')
 const customStartInput = ref('')
 const customEndInput = ref('')
@@ -440,7 +686,30 @@ const exportButtonTitle = computed(() => {
   if (!canExport.value) return '当前账号无权限执行此操作'
   return '导出当前筛选条件下的错误列表 CSV'
 })
+
+// EL05: Batch selection
+const allSelected = computed(() => items.value.length > 0 && items.value.length === selectedIds.value.size)
+const indeterminate = computed(() => selectedIds.value.size > 0 && !allSelected.value)
+const selectedCount = computed(() => selectedIds.value.size)
+const batchAnalysisDisabled = computed(() => selectedCount.value === 0 || selectedCount.value > 50 || batchAnalyzing.value)
+const batchAnalysisTitle = computed(() => {
+  if (selectedCount.value === 0) return '请先选择至少一条错误'
+  if (selectedCount.value > 50) return '最多只能选择 50 条错误'
+  return `合并分析已选择的 ${selectedCount.value} 条错误`
+})
+
 const fromOverview = computed(() => firstQueryValue(route.query.from_overview) === '1')
+const hasActiveFilters = computed(() => {
+  return (
+    errorCategories.value.length > 0 ||
+    errorResults.value.length > 0 ||
+    platform.value.trim() !== '' ||
+    statusCode.value.trim() !== '' ||
+    keyword.value.trim() !== '' ||
+    timeRange.value !== '30m' ||
+    groupId.value.trim() !== ''
+  )
+})
 const advancedFilterCount = computed(() => {
   let count = 0
   if (model.value.trim()) count++
@@ -530,6 +799,34 @@ function firstQueryValue(value: unknown): string {
 function formatOptionValues(options: Array<{ value: string; label: string }>, values: string[]): string {
   const optionLabelMap = new Map(options.map((option) => [option.value, option.label]))
   return values.map((value) => optionLabelMap.get(value) || value).join('、')
+}
+
+function toggleCategory(value: string) {
+  const index = errorCategories.value.indexOf(value)
+  if (index >= 0) {
+    errorCategories.value.splice(index, 1)
+  } else {
+    errorCategories.value.push(value)
+  }
+}
+
+function toggleErrorResult(value: string) {
+  const index = errorResults.value.indexOf(value)
+  if (index >= 0) {
+    errorResults.value.splice(index, 1)
+  } else {
+    errorResults.value.push(value)
+  }
+}
+
+function formatPlatformLabel(value: string): string {
+  const map: Record<string, string> = {
+    openai: 'OpenAI',
+    claude: 'Claude',
+    gemini: 'Gemini',
+    other: '其他'
+  }
+  return map[value] || value
 }
 
 function parsePositiveInt(value: string): number | null {
@@ -911,9 +1208,182 @@ function formatAIStatus(value: string): string {
   }
 }
 
+function getSeverityBadgeClass(severity: string | undefined): string {
+  switch (severity) {
+    case 'P0':
+      return 'badge badge-p0'
+    case 'P1':
+      return 'badge badge-p1'
+    case 'P2':
+      return 'badge badge-p2'
+    case 'observe':
+      return 'badge badge-observe'
+    case 'normal':
+      return 'badge badge-normal'
+    default:
+      return 'badge badge-normal'
+  }
+}
+
+function getSeverityBorderClass(severity: string | undefined): string {
+  switch (severity) {
+    case 'P0':
+      return 'border-l-4 border-l-red-500'
+    case 'P1':
+      return 'border-l-4 border-l-orange-500'
+    case 'P2':
+      return 'border-l-4 border-l-blue-500'
+    default:
+      return 'border-l-4 border-l-transparent'
+  }
+}
+
+function formatSeverity(value: string | undefined): string {
+  switch (value) {
+    case 'P0': return 'P0'
+    case 'P1': return 'P1'
+    case 'P2': return 'P2'
+    case 'observe': return '观察'
+    case 'normal': return '普通'
+    default: return value || '--'
+  }
+}
+
 function openDetail(id: number) {
   if (!id) return
   void router.push({ name: 'AdminOpsUnifiedErrorDetail', params: { id: String(id) } })
+}
+
+// EL04: Single row AI analysis trigger
+async function triggerRowAIAnalysis(item: OpsUnifiedErrorItem) {
+  if (rowsBeingAnalyzed.value.has(item.id)) return
+
+  const rangeStart = new Date(new Date(item.occurred_at).getTime() - 15 * 60 * 1000)
+  const rangeEnd = new Date(new Date(item.occurred_at).getTime() + 15 * 60 * 1000)
+
+  rowsBeingAnalyzed.value.add(item.id)
+  try {
+    await opsAPI.createAIAnalysisTask({
+      source_type: 'manual_filter',
+      time_start: rangeStart.toISOString(),
+      time_end: rangeEnd.toISOString(),
+      filters: {
+        error_categories: [item.error_category]
+      }
+    })
+    appStore.showSuccess('AI 分析任务已提交')
+    await fetchErrors()
+  } catch (err: any) {
+    appStore.showError(err?.message || 'AI 分析任务提交失败')
+  } finally {
+    rowsBeingAnalyzed.value.delete(item.id)
+  }
+}
+
+// EL04: Show AI report drawer
+async function showAIReport(item: OpsUnifiedErrorItem) {
+  if (!item.id) return
+  drawerErrorId.value = item.id
+  drawerOpen.value = true
+  drawerLoading.value = true
+  drawerReport.value = null
+  drawerTaskId.value = null
+
+  try {
+    const detail = await opsAPI.getUnifiedErrorDetail(item.id)
+    if (detail.ai_analysis?.task_id) {
+      drawerTaskId.value = detail.ai_analysis.task_id
+      const taskDetail = await opsAPI.getAIAnalysisTaskDetail(detail.ai_analysis.task_id)
+      drawerReport.value = taskDetail.report || null
+    }
+  } catch (err: any) {
+    appStore.showError(err?.message || '加载 AI 报告失败')
+    drawerOpen.value = false
+  } finally {
+    drawerLoading.value = false
+  }
+}
+
+// EL05: Toggle row selection
+function toggleRowSelection(id: number) {
+  if (selectedIds.value.has(id)) {
+    selectedIds.value.delete(id)
+  } else {
+    selectedIds.value.add(id)
+  }
+}
+
+// EL05: Toggle all selections
+function toggleAllSelection() {
+  if (allSelected.value) {
+    selectedIds.value.clear()
+  } else {
+    selectedIds.value.clear()
+    items.value.forEach(item => selectedIds.value.add(item.id))
+  }
+}
+
+// EL05: Clear selections
+function clearSelection() {
+  selectedIds.value.clear()
+}
+
+// EL05: Batch AI analysis
+async function batchAnalyzeSelected() {
+  if (selectedIds.value.size === 0 || selectedIds.value.size > 50 || batchAnalyzing.value) return
+
+  const selectedItems = items.value.filter(item => selectedIds.value.has(item.id))
+  if (selectedItems.length === 0) return
+
+  const occurredTimes = selectedItems.map(item => new Date(item.occurred_at).getTime())
+  const startTime = new Date(Math.min(...occurredTimes))
+  const endTime = new Date(Math.max(...occurredTimes))
+
+  batchAnalyzing.value = true
+  try {
+    await opsAPI.createAIAnalysisTask({
+      source_type: 'manual_filter',
+      time_start: startTime.toISOString(),
+      time_end: endTime.toISOString(),
+      filters: {}
+    })
+    appStore.showSuccess(`已为 ${selectedItems.length} 条错误提交合并分析`)
+    clearSelection()
+    await fetchErrors()
+  } catch (err: any) {
+    appStore.showError(err?.message || '批量分析提交失败')
+  } finally {
+    batchAnalyzing.value = false
+  }
+}
+
+// EL06: Toggle column visibility
+function toggleColumnVisibility(key: string) {
+  if (visibleColumns.value.has(key)) {
+    visibleColumns.value.delete(key)
+  } else {
+    visibleColumns.value.add(key)
+  }
+  saveColumnSettings()
+}
+
+// EL06: Save column settings to localStorage
+function saveColumnSettings() {
+  const cols = Array.from(visibleColumns.value)
+  localStorage.setItem('ops_errors_visible_cols', JSON.stringify(cols))
+}
+
+// EL06: Load column settings from localStorage
+function loadColumnSettings() {
+  try {
+    const saved = localStorage.getItem('ops_errors_visible_cols')
+    if (saved) {
+      const cols = JSON.parse(saved) as string[]
+      visibleColumns.value = new Set(cols)
+    }
+  } catch {
+    // Fall back to defaults if localStorage is corrupted
+  }
 }
 
 async function loadGroups() {
@@ -982,6 +1452,7 @@ function startManualAITaskPolling(taskId: number) {
 
 onMounted(async () => {
   initializeFromRoute()
+  loadColumnSettings()
   await Promise.all([loadGroups(), loadManualAIAnalysisConfig()])
   await fetchErrors()
 })
@@ -1002,6 +1473,18 @@ onUnmounted(() => {
 
 .filter-label {
   @apply mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400;
+}
+
+.toggle-button {
+  @apply inline-flex items-center rounded-lg border px-3 py-2 text-sm font-medium transition;
+}
+
+.toggle-button-active {
+  @apply border-blue-600 bg-blue-600 text-white;
+}
+
+.toggle-button-inactive {
+  @apply border-gray-300 bg-white text-gray-700 hover:border-blue-400 dark:border-dark-600 dark:bg-dark-900 dark:text-gray-200 dark:hover:border-blue-500;
 }
 
 .table-th {
@@ -1055,4 +1538,31 @@ onUnmounted(() => {
 .badge-normal {
   @apply bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-200;
 }
+
+/* Transitions */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.2s ease;
+}
+
+.slide-down-enter-from {
+  transform: translateY(-100%);
+  opacity: 0;
+}
+
+.slide-down-leave-to {
+  transform: translateY(-100%);
+  opacity: 0;
+}
+
+.slide-from-right-enter-active,
+.slide-from-right-leave-active {
+  transition: all 0.3s ease;
+}
+
+.slide-from-right-enter-from,
+.slide-from-right-leave-to {
+  transform: translateX(100%);
+}
+
 </style>

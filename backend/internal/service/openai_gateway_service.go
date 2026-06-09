@@ -2202,7 +2202,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		imageGenerationAllowed = GroupAllowsImageGeneration(apiKey.Group)
 	}
 	codexImageGenerationBridgeEnabled := isCodexCLI && imageGenerationAllowed && s.isCodexImageGenerationBridgeEnabled(ctx, account, apiKey)
-	if IsImageGenerationIntentMap(openAIResponsesEndpoint, reqModel, reqBody) && !imageGenerationAllowed {
+	if IsImageGenerationPermissionIntentMap(openAIResponsesEndpoint, reqModel, reqBody) && !imageGenerationAllowed {
 		setOpsUpstreamError(c, http.StatusForbidden, ImageGenerationPermissionMessage(), "")
 		c.JSON(http.StatusForbidden, gin.H{
 			"error": gin.H{
@@ -2262,6 +2262,12 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	}
 	disablePatch := func() {
 		patchDisabled = true
+	}
+
+	if !imageGenerationAllowed && stripOpenAIImageGenerationToolDeclarations(reqBody) {
+		bodyModified = true
+		disablePatch()
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Removed /responses image_generation tool declaration for disabled group")
 	}
 
 	// 非透传模式下，instructions 为空时注入默认指令。
@@ -2531,7 +2537,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		}
 	}
 
-	if IsImageGenerationIntentMap(openAIResponsesEndpoint, reqModel, reqBody) && !imageGenerationAllowed {
+	if IsImageGenerationPermissionIntentMap(openAIResponsesEndpoint, reqModel, reqBody) && !imageGenerationAllowed {
 		setOpsUpstreamError(c, http.StatusForbidden, ImageGenerationPermissionMessage(), "")
 		c.JSON(http.StatusForbidden, gin.H{
 			"error": gin.H{
@@ -3065,7 +3071,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	body = updatedBody
 
 	apiKey := getAPIKeyFromContext(c)
-	if IsImageGenerationIntent(openAIResponsesEndpoint, reqModel, body) && !GroupAllowsImageGeneration(apiKeyGroup(apiKey)) {
+	if IsImageGenerationPermissionIntent(openAIResponsesEndpoint, reqModel, body) && !GroupAllowsImageGeneration(apiKeyGroup(apiKey)) {
 		setOpsUpstreamError(c, http.StatusForbidden, ImageGenerationPermissionMessage(), "")
 		c.JSON(http.StatusForbidden, gin.H{
 			"error": gin.H{
@@ -3074,6 +3080,16 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			},
 		})
 		return nil, errors.New("image generation disabled for group")
+	}
+	if !GroupAllowsImageGeneration(apiKeyGroup(apiKey)) {
+		strippedBody, stripped, stripErr := stripOpenAIImageGenerationToolDeclarationsFromBody(body)
+		if stripErr != nil {
+			return nil, stripErr
+		}
+		if stripped {
+			body = strippedBody
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI 自动透传] Removed /responses image_generation tool declaration for disabled group")
+		}
 	}
 	imageBillingModel := ""
 	imageSizeTier := ""

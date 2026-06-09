@@ -316,6 +316,28 @@ WHERE task_id = $1`, taskID)
 	return scanOpsAIAnalysisReport(row)
 }
 
+func (r *opsRepository) GetLatestAutoAIAnalysisTask(ctx context.Context) (*service.OpsAIAnalysisTask, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("nil ops repository")
+	}
+	row := r.db.QueryRowContext(ctx, `
+SELECT id, source_type, source_id, trigger_type, trigger_user_id, time_start, time_end,
+       filters::text, status, sample_count, provider, model, COALESCE(error_message,''),
+       started_at, finished_at, created_at, updated_at
+FROM ops_ai_analysis_tasks
+WHERE trigger_type = 'auto'
+ORDER BY created_at DESC
+LIMIT 1`)
+	task, err := scanOpsAIAnalysisTask(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return task, nil
+}
+
 func (r *opsRepository) UpdateAIAnalysisReportFeedback(ctx context.Context, input *service.OpsAIAnalysisFeedbackInput) (*service.OpsAIAnalysisReport, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil ops repository")

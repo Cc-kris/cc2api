@@ -43,6 +43,24 @@ func IsImageGenerationIntent(endpoint string, requestedModel string, body []byte
 	return openAIJSONToolChoiceSelectsImageGeneration(gjson.GetBytes(body, "tool_choice"))
 }
 
+// IsImageGenerationPermissionIntent classifies requests that must be blocked when image generation is disabled.
+// A plain image_generation tool declaration is only a capability advertisement for Codex Desktop and is not enough.
+func IsImageGenerationPermissionIntent(endpoint string, requestedModel string, body []byte) bool {
+	if IsImageGenerationEndpoint(endpoint) {
+		return true
+	}
+	if isOpenAIImageGenerationModel(requestedModel) {
+		return true
+	}
+	if len(body) == 0 || !gjson.ValidBytes(body) {
+		return false
+	}
+	if model := strings.TrimSpace(gjson.GetBytes(body, "model").String()); isOpenAIImageGenerationModel(model) {
+		return true
+	}
+	return openAIJSONToolChoiceSelectsImageGeneration(gjson.GetBytes(body, "tool_choice"))
+}
+
 // IsImageGenerationIntentMap is the map-backed variant used after service-side request mutation.
 func IsImageGenerationIntentMap(endpoint string, requestedModel string, reqBody map[string]any) bool {
 	if IsImageGenerationEndpoint(endpoint) {
@@ -58,6 +76,23 @@ func IsImageGenerationIntentMap(endpoint string, requestedModel string, reqBody 
 		return true
 	}
 	if hasOpenAIImageGenerationTool(reqBody) {
+		return true
+	}
+	return openAIAnyToolChoiceSelectsImageGeneration(reqBody["tool_choice"])
+}
+
+// IsImageGenerationPermissionIntentMap is the map-backed permission-gate variant.
+func IsImageGenerationPermissionIntentMap(endpoint string, requestedModel string, reqBody map[string]any) bool {
+	if IsImageGenerationEndpoint(endpoint) {
+		return true
+	}
+	if isOpenAIImageGenerationModel(requestedModel) {
+		return true
+	}
+	if reqBody == nil {
+		return false
+	}
+	if isOpenAIImageGenerationModel(firstNonEmptyString(reqBody["model"])) {
 		return true
 	}
 	return openAIAnyToolChoiceSelectsImageGeneration(reqBody["tool_choice"])
@@ -138,6 +173,58 @@ func openAIAnyToolChoiceSelectsImageGeneration(choice any) bool {
 		}
 	}
 	return false
+}
+
+func stripOpenAIImageGenerationToolDeclarations(reqBody map[string]any) bool {
+	if reqBody == nil {
+		return false
+	}
+	rawTools, ok := reqBody["tools"]
+	if !ok || rawTools == nil {
+		return false
+	}
+	tools, ok := rawTools.([]any)
+	if !ok {
+		return false
+	}
+
+	filtered := make([]any, 0, len(tools))
+	removed := false
+	for _, rawTool := range tools {
+		toolMap, ok := rawTool.(map[string]any)
+		if ok && strings.TrimSpace(firstNonEmptyString(toolMap["type"])) == "image_generation" {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, rawTool)
+	}
+	if !removed {
+		return false
+	}
+	if len(filtered) == 0 {
+		delete(reqBody, "tools")
+		return true
+	}
+	reqBody["tools"] = filtered
+	return true
+}
+
+func stripOpenAIImageGenerationToolDeclarationsFromBody(body []byte) ([]byte, bool, error) {
+	if len(body) == 0 || !gjson.ValidBytes(body) {
+		return body, false, nil
+	}
+	var reqBody map[string]any
+	if err := json.Unmarshal(body, &reqBody); err != nil {
+		return body, false, err
+	}
+	if !stripOpenAIImageGenerationToolDeclarations(reqBody) {
+		return body, false, nil
+	}
+	updated, err := json.Marshal(reqBody)
+	if err != nil {
+		return body, false, err
+	}
+	return updated, true, nil
 }
 
 func getAPIKeyFromContext(c interface{ Get(string) (any, bool) }) *APIKey {

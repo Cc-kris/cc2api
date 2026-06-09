@@ -541,7 +541,6 @@ const emptyRevenueOverview = computed<DashboardRevenueOverview>(() => revenueOve
 
 const revenueCards = computed(() => {
   const overview = emptyRevenueOverview.value
-  const estimatedNote = overview.is_estimated ? t('admin.dashboard.estimatedData') : ''
   return [
     {
       key: 'total_credit_amount',
@@ -553,7 +552,7 @@ const revenueCards = computed(() => {
       key: 'used_amount',
       label: t('admin.dashboard.usedAmount'),
       value: formatMoney(overview.used_amount),
-      note: estimatedNote
+      note: '实际 API 调用消耗，不含未消耗余额'
     },
     {
       key: 'unused_amount',

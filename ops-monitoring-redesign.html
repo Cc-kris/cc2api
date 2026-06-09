@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sub2API 运维监控 · 事故总览</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f5f9;
+  --surface: #ffffff;
+  --surface2: #f0f2f7;
+  --border: #e2e6f0;
+  --text: #1a1d2e;
+  --text2: #5a6072;
+  --text3: #8b93a8;
+  --red: #ef4444; --red-bg: #fef2f2; --red-text: #b91c1c; --red-border: #fca5a5;
+  --amber: #f59e0b; --amber-bg: #fffbeb; --amber-text: #92400e; --amber-border: #fcd34d;
+  --green: #10b981; --green-bg: #ecfdf5; --green-text: #065f46; --green-border: #6ee7b7;
+  --blue: #3b82f6; --blue-bg: #eff6ff; --blue-text: #1d4ed8; --blue-border: #93c5fd;
+  --r: 14px; --rs: 10px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; font-size: 14px; line-height: 1.55; }
+.page { max-width: 1440px; margin: 0 auto; padding: 0 20px 80px; }
+
+/* ── Topbar ── */
+.topbar { background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+.topbar-inner { max-width: 1440px; margin: 0 auto; padding: 0 20px; height: 52px; display: flex; align-items: center; gap: 12px; }
+.topbar-title { font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.topbar-title span { color: var(--text3); font-weight: 400; font-size: 13px; }
+.topbar-mid { flex: 1; display: flex; justify-content: center; }
+.time-chips { display: flex; gap: 3px; }
+.chip { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; border: 1px solid var(--border); background: transparent; color: var(--text2); cursor: pointer; transition: all .15s; }
+.chip.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+.topbar-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.btn { display: inline-flex; align-items: center; gap: 5px; padding: 5px 13px; border-radius: var(--rs); border: 1px solid var(--border); background: var(--surface); color: var(--text2); font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--blue); color: var(--blue); }
+.btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+.btn-primary:hover { background: #2563eb; }
+.btn-danger { background: var(--red); color: #fff; border-color: var(--red); }
+.refresh-note { font-size: 11px; color: var(--text3); white-space: nowrap; }
+
+/* ── Status banner ── */
+.status-banner { margin: 14px 0 0; border-radius: var(--r); border: 1.5px solid; padding: 0; overflow: hidden; }
+.status-banner.incident { border-color: var(--red-border); }
+.status-banner.risk { border-color: var(--amber-border); }
+.status-banner.ok { border-color: var(--green-border); }
+
+/* Top row: verdict + alert pills */
+.banner-top { padding: 12px 18px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.banner-verdict { font-size: 17px; font-weight: 800; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.banner-top.incident { background: var(--red-bg); }
+.banner-top.risk { background: var(--amber-bg); }
+.banner-top.ok { background: var(--green-bg); }
+.banner-top.incident .banner-verdict { color: var(--red-text); }
+.banner-top.risk .banner-verdict { color: var(--amber-text); }
+.banner-top.ok .banner-verdict { color: var(--green-text); }
+.alert-pills { display: flex; gap: 5px; }
+.apill { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+.apill-red { background: var(--red-bg); color: var(--red-text); border: 1px solid var(--red-border); }
+.apill-amber { background: var(--amber-bg); color: var(--amber-text); border: 1px solid var(--amber-border); }
+.apill-blue { background: var(--blue-bg); color: var(--blue-text); border: 1px solid var(--blue-border); }
+.banner-top-right { margin-left: auto; display: flex; gap: 7px; align-items: center; }
+
+/* Stat rows: key metrics as horizontal rows */
+.banner-stats { background: var(--surface); border-top: 1px solid var(--border); padding: 10px 18px; display: flex; flex-direction: column; gap: 0; }
+.stat-row { display: flex; align-items: center; gap: 0; min-height: 32px; border-bottom: 1px solid var(--border); }
+.stat-row:last-child { border-bottom: none; }
+.stat-row-label { width: 140px; font-size: 12px; color: var(--text3); font-weight: 600; flex-shrink: 0; }
+.stat-row-value { font-size: 13px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.stat-row-value.red { color: var(--red-text); }
+.stat-row-value.amber { color: var(--amber-text); }
+.stat-row-sub { font-size: 11px; color: var(--text3); font-weight: 400; }
+
+/* tags / badges */
+.badge { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.badge-red { background: var(--red-bg); color: var(--red-text); }
+.badge-amber { background: var(--amber-bg); color: var(--amber-text); }
+.badge-green { background: var(--green-bg); color: var(--green-text); }
+.badge-blue { background: var(--blue-bg); color: var(--blue-text); }
+.badge-gray { background: #f3f4f6; color: #4b5563; }
+.tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 20px; font-size: 11px; border: 1px solid; cursor: pointer; font-weight: 500; }
+.tag-red { background: var(--red-bg); color: var(--red-text); border-color: var(--red-border); }
+.tag-amber { background: var(--amber-bg); color: var(--amber-text); border-color: var(--amber-border); }
+.tag-green { background: var(--green-bg); color: var(--green-text); border-color: var(--green-border); }
+.tag-blue { background: var(--blue-bg); color: var(--blue-text); border-color: var(--blue-border); }
+.tag-gray { background: #f3f4f6; color: #4b5563; border-color: #d1d5db; }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.dot-red { background: var(--red); } .dot-amber { background: var(--amber); } .dot-green { background: var(--green); }
+
+/* ── Section ── */
+.section-gap { margin-top: 16px; }
+.section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: var(--text3); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 18px 20px; }
+
+/* ── Row 1: score + banner side by side ── */
+.row1 { display: grid; grid-template-columns: 320px 1fr; gap: 14px; align-items: stretch; margin-top: 14px; }
+@media (max-width: 900px) { .row1 { grid-template-columns: 1fr; } }
+.row1 .status-banner { height: 100%; }
+
+/* ── Row 2: action + breakdown side by side ── */
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .row2 { grid-template-columns: 1fr; } }
+
+/* B: Health Score */
+.hero-score-num { font-size: 68px; font-weight: 900; line-height: 1; letter-spacing: -2px; }
+.hero-score-num.red { color: var(--red); }
+.hero-score-num.amber { color: var(--amber); }
+.hero-score-num.blue { color: var(--blue); }
+.hero-score-num.green { color: var(--green); }
+.score-track { width: 100%; max-width: 220px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--red) 0 49%, var(--amber) 49% 69%, #60a5fa 69% 89%, var(--green) 89%); position: relative; margin: 6px 0 2px; }
+.score-arrow { position: absolute; top: -5px; width: 2px; height: 18px; background: #1a1d2e; border-radius: 1px; transform: translateX(-50%); }
+.score-track-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--text3); max-width: 220px; }
+.hero-delta { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 4px; margin-top: 6px; }
+.hero-delta.down { color: var(--red); }
+.hero-delta.up { color: var(--green); }
+.trend-wrap { margin-top: 12px; }
+.trend-label { font-size: 11px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+.trend-chart-box { position: relative; height: 120px; }
+
+/* C: Action List (需要立即处理) */
+.action-list { display: flex; flex-direction: column; gap: 10px; }
+.action-item { display: flex; align-items: flex-start; gap: 10px; background: var(--red-bg); border: 1px solid var(--red-border); border-radius: 10px; padding: 10px 12px; }
+.action-item.amber { background: var(--amber-bg); border-color: var(--amber-border); }
+.action-item.blue { background: var(--blue-bg); border-color: var(--blue-border); }
+.action-num { width: 20px; height: 20px; border-radius: 50%; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+.action-item .action-num { background: var(--red); color: #fff; }
+.action-item.amber .action-num { background: var(--amber); color: #fff; }
+.action-item.blue .action-num { background: var(--blue); color: #fff; }
+.action-item-body { flex: 1; }
+.action-item-text { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.45; }
+.action-item-meta { font-size: 11px; color: var(--text3); margin-top: 3px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.action-link { font-size: 11px; color: var(--blue); cursor: pointer; text-decoration: underline dotted; }
+.action-done-btn { padding: 3px 8px; border-radius: 6px; border: 1px solid; font-size: 11px; font-weight: 600; cursor: pointer; flex-shrink: 0; margin-top: 1px; background: transparent; }
+.action-done-btn.red { border-color: var(--red-border); color: var(--red-text); }
+.action-done-btn.amber { border-color: var(--amber-border); color: var(--amber-text); }
+.action-done-btn.blue { border-color: var(--blue-border); color: var(--blue-text); }
+
+/* D: Score Breakdown */
+.breakdown-list { display: flex; flex-direction: column; gap: 11px; }
+.bdrow { display: flex; flex-direction: column; gap: 3px; }
+.bdrow-header { display: flex; justify-content: space-between; align-items: center; }
+.bdrow-name { font-size: 12px; font-weight: 500; color: var(--text); }
+.bdrow-right { display: flex; align-items: center; gap: 8px; }
+.bdrow-obs { font-size: 11px; color: var(--text2); }
+.bdrow-ded { font-size: 12px; font-weight: 800; color: var(--red); min-width: 28px; text-align: right; }
+.bdrow-ded.zero { color: var(--text3); }
+.bdrow-track { height: 5px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+.bdrow-fill { height: 100%; border-radius: 3px; background: var(--red); transition: width .4s; }
+.bdrow-fill.zero { background: var(--border); }
+.bdrow-link { font-size: 11px; color: var(--blue); cursor: pointer; text-decoration: underline dotted; }
+
+/* ── Error category section ── */
+.errors-layout { display: grid; grid-template-columns: 1fr 260px; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .errors-layout { grid-template-columns: 1fr; } }
+.chart-wrap { position: relative; height: 200px; }
+.impact-mini { display: flex; flex-direction: column; gap: 8px; }
+.impact-row { background: var(--surface2); border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+.impact-row:hover { background: #e4e8f2; }
+.impact-row-label { font-size: 12px; color: var(--text2); font-weight: 600; }
+.impact-row-val { font-size: 20px; font-weight: 800; color: var(--text); }
+.impact-row-val.red { color: var(--red); }
+.impact-row-sub { font-size: 10px; color: var(--text3); text-align: right; }
+.tag-group { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+
+/* ── Infra ── */
+.infra-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+@media (max-width: 900px) { .infra-grid { grid-template-columns: repeat(3, 1fr); } }
+.infra-card { border-radius: 12px; padding: 14px; text-align: center; }
+.infra-card.ok { background: var(--green-bg); }
+.infra-card.warn { background: var(--amber-bg); }
+.infra-card.error { background: var(--red-bg); }
+.infra-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+.infra-card.ok .infra-label { color: var(--green-text); }
+.infra-card.warn .infra-label { color: var(--amber-text); }
+.infra-card.error .infra-label { color: var(--red-text); }
+.infra-val { font-size: 20px; font-weight: 800; }
+.infra-card.ok .infra-val { color: var(--green-text); }
+.infra-card.warn .infra-val { color: var(--amber-text); }
+.infra-card.error .infra-val { color: var(--red-text); }
+.infra-hint { font-size: 10px; color: var(--text3); margin-top: 3px; }
+.infra-card.warn .infra-hint { color: var(--amber-text); }
+.infra-card.error .infra-hint { color: var(--red-text); }
+
+/* ── Timeline (D) ── */
+.timeline-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+@media (max-width: 900px) { .timeline-grid { grid-template-columns: 1fr; } }
+.tl-col-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.tl-col-title { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.tl-count { font-size: 11px; background: var(--surface2); padding: 2px 8px; border-radius: 10px; color: var(--text2); font-weight: 600; }
+.alert-card { border-radius: 12px; border: 1.5px solid var(--border); background: var(--surface); padding: 14px; position: relative; overflow: hidden; margin-bottom: 10px; }
+.alert-card:last-child { margin-bottom: 0; }
+.alert-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+.alert-card.p0::before { background: var(--red); }
+.alert-card.p1::before { background: var(--amber); }
+.alert-card.p2::before { background: var(--blue); }
+.ac-inner { padding-left: 8px; }
+.ac-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+.ac-dur { font-size: 11px; color: var(--text3); margin-bottom: 5px; }
+.ac-reason { font-size: 12px; color: var(--text2); line-height: 1.5; margin-bottom: 8px; }
+.ac-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 9px; }
+.ac-stat { font-size: 11px; background: var(--surface2); padding: 2px 7px; border-radius: 6px; color: var(--text2); }
+.ac-ai { display: flex; align-items: flex-start; gap: 6px; border-radius: 8px; padding: 8px 10px; margin-bottom: 9px; border: 1px solid; }
+.ac-ai.has-result { background: var(--blue-bg); border-color: var(--blue-border); }
+.ac-ai.ok-result { background: var(--green-bg); border-color: var(--green-border); }
+.ac-ai.pending { background: var(--surface2); border-color: var(--border); }
+.ac-ai-icon { font-size: 13px; flex-shrink: 0; margin-top: 1px; }
+.ac-ai-text { font-size: 12px; line-height: 1.5; }
+.ac-ai.has-result .ac-ai-text { color: var(--blue-text); }
+.ac-ai.ok-result .ac-ai-text { color: var(--green-text); }
+.ac-ai.pending .ac-ai-text { color: var(--text2); }
+.ac-ai-status { font-size: 10px; color: var(--text3); font-style: italic; margin-top: 2px; }
+.ac-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ac-btn { padding: 3px 9px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--text2); font-size: 11px; font-weight: 500; cursor: pointer; }
+.ac-btn:hover { border-color: var(--blue); color: var(--blue); }
+.ac-merged { font-size: 10px; color: var(--text3); font-style: italic; margin-bottom: 4px; }
+.tl-empty { background: var(--surface2); border: 1.5px dashed var(--border); border-radius: 12px; padding: 28px; text-align: center; color: var(--text3); font-size: 13px; }
+
+/* utils */
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.row-between { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.mt2 { margin-top: 8px; }
+.text-xs { font-size: 11px; color: var(--text3); }
+</style>
+</head>
+<body>
+
+<!-- ══ Topbar ══ -->
+<nav class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-title">Sub2API 运维<span>事故总览</span></div>
+    <div class="topbar-mid">
+      <div class="time-chips">
+        <button class="chip active" onclick="setChip(this)">1分钟</button>
+        <button class="chip" onclick="setChip(this)">5分钟</button>
+        <button class="chip" onclick="setChip(this)">30分钟</button>
+        <button class="chip" onclick="setChip(this)">1小时</button>
+        <button class="chip" onclick="setChip(this)">6小时</button>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <button class="btn" onclick="alert('刷新')">↻ 刷新</button>
+      <button class="btn" onclick="alert('告警规则')">告警规则</button>
+      <button class="btn btn-primary" onclick="alert('AI 配置')">✦ AI 配置</button>
+      <span class="refresh-note">自动刷新 <span id="countdown">28</span>s</span>
+    </div>
+  </div>
+</nav>
+
+<div class="page">
+
+<!-- ══ 第一行：健康分 + 系统风险 ══ -->
+<div class="row1">
+
+  <!-- 左：健康分 -->
+  <div class="card" style="min-width:0">
+    <div class="section-label"><span class="dot dot-red"></span> 健康分</div>
+    <div class="hero-score-num red">62</div>
+    <div class="row" style="gap:6px;margin-top:6px">
+      <span class="badge badge-red">风险</span>
+      <span class="hero-delta down">▼ 18 <span style="font-weight:400;color:var(--text3);font-size:11px">vs 30min前</span></span>
+    </div>
+    <div class="score-track" style="margin-top:10px">
+      <div class="score-arrow" style="left:62%"></div>
+    </div>
+    <div class="score-track-labels"><span>0</span><span>50</span><span>70</span><span>90</span><span>100</span></div>
+    <div class="trend-wrap">
+      <div class="trend-label">30 分钟趋势</div>
+      <div class="trend-chart-box"><canvas id="trendChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- 右：系统风险 banner（含指标行） -->
+  <div class="status-banner incident" style="margin-top:0">
+    <div class="banner-top incident">
+      <div class="banner-verdict">⚡ 系统风险 · P0 事故触发</div>
+      <div class="alert-pills">
+        <span class="apill apill-red">P0 · 2</span>
+        <span class="apill apill-amber">P1 · 5</span>
+        <span class="apill apill-blue">P2 · 3</span>
+      </div>
+      <span class="tag tag-red">上游错误</span>
+      <span class="tag tag-amber">账号池</span>
+      <div style="margin-left:auto;display:flex;gap:7px">
+        <button class="btn btn-danger" onclick="scrollId('timeline')">查看告警时间线 ↓</button>
+      </div>
+    </div>
+    <div class="banner-stats">
+      <div class="stat-row">
+        <span class="stat-row-label">最终失败</span>
+        <span class="stat-row-value red">12 次
+          <span class="stat-row-sub">候选请求 73 次 · 失败率 16.4%</span>
+          <span class="badge badge-red" style="margin-left:4px">高于告警阈值</span>
+        </span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-row-label">已恢复波动</span>
+        <span class="stat-row-value">3 次
+          <span class="stat-row-sub">中途失败但最终成功，不计入健康分</span>
+        </span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-row-label">影响用户</span>
+        <span class="stat-row-value">4 个用户 <span class="stat-row-sub">去重</span></span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-row-label">影响 API Key</span>
+        <span class="stat-row-value">6 个 Key <span class="stat-row-sub">去重</span></span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-row-label">受影响模型</span>
+        <span class="stat-row-value" style="gap:5px">
+          <span class="tag tag-red" onclick="alert('筛选 gpt-5.5')">gpt-5.5</span>
+          <span class="tag tag-amber" onclick="alert('筛选 gpt-image-1')">gpt-image-1</span>
+          <span class="tag tag-gray" onclick="alert('筛选 claude-3-7-sonnet')">claude-3-7-sonnet</span>
+        </span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-row-label">受影响账号</span>
+        <span class="stat-row-value" style="gap:5px">
+          <span class="tag tag-red" onclick="alert('筛选账号#95')">账号 #95（quota 超限）</span>
+          <span class="tag tag-amber" onclick="alert('筛选账号#96')">账号 #96（权限不足）</span>
+        </span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ 第二行：需要立即处理 + 扣分明细 ══ -->
+<div class="row2 section-gap">
+
+  <!-- 需要立即处理 -->
+  <div class="card" style="min-width:0">
+    <div class="section-label" style="margin-bottom:12px">🔴 需要立即处理</div>
+    <div class="action-list">
+      <div class="action-item">
+        <div class="action-num">1</div>
+        <div class="action-item-body">
+          <div class="action-item-text">检查上游账号 #95 的 OpenAI 余额并充值，或暂停该账号调度</div>
+          <div class="action-item-meta">
+            <span class="badge badge-red">P0 关联</span>
+            <span>AI 建议（高置信）</span>
+            <span class="action-link" onclick="alert('统一错误列表 · upstream_account_id=95')">→ 查看账号错误</span>
+          </div>
+        </div>
+        <button class="action-done-btn red" onclick="markDone(this)">完成</button>
+      </div>
+      <div class="action-item">
+        <div class="action-num">2</div>
+        <div class="action-item-body">
+          <div class="action-item-text">向 GPT-VIP-分组补充至少 1 个可用账号，账号池当前为 0</div>
+          <div class="action-item-meta">
+            <span class="badge badge-red">P0 关联</span>
+            <span>系统规则（账号池为空）</span>
+            <span class="action-link" onclick="alert('分组管理 · GPT-VIP-分组')">→ 前往分组配置</span>
+          </div>
+        </div>
+        <button class="action-done-btn red" onclick="markDone(this)">完成</button>
+      </div>
+      <div class="action-item amber">
+        <div class="action-num">3</div>
+        <div class="action-item-body">
+          <div class="action-item-text">确认账号 #96 是否具备 gpt-image-1 权限，或从该账号移除此模型路由</div>
+          <div class="action-item-meta">
+            <span class="badge badge-amber">P1 关联</span>
+            <span>AI 建议（高置信）</span>
+            <span class="action-link" onclick="alert('账号管理 · 账号 #96')">→ 前往账号管理</span>
+          </div>
+        </div>
+        <button class="action-done-btn amber" onclick="markDone(this)">完成</button>
+      </div>
+      <div class="action-item amber">
+        <div class="action-num">4</div>
+        <div class="action-item-body">
+          <div class="action-item-text">内存使用率 88%，建议排查近期异常流量或潜在内存泄漏</div>
+          <div class="action-item-meta">
+            <span class="badge badge-amber">系统健康</span>
+            <span>系统规则（内存阈值）</span>
+            <span class="action-link" onclick="scrollId('infra')">→ 查看依赖健康</span>
+          </div>
+        </div>
+        <button class="action-done-btn amber" onclick="markDone(this)">完成</button>
+      </div>
+      <div class="action-item blue">
+        <div class="action-num">5</div>
+        <div class="action-item-body">
+          <div class="action-item-text">user-9023 使用了失效 API Key，平台侧无需操作，通知用户更新即可</div>
+          <div class="action-item-meta">
+            <span class="badge badge-blue">P2 · 可忽略</span>
+            <span>AI 建议（高置信）</span>
+          </div>
+        </div>
+        <button class="action-done-btn blue" onclick="markDone(this)">完成</button>
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+      <button class="btn btn-primary" onclick="alert('手动触发 AI 分析')">✦ AI 分析当前筛选</button>
+      <span class="text-xs">已完成 <span id="doneCount">0</span> / 5 项</span>
+    </div>
+  </div>
+
+  <!-- 扣分明细 -->
+  <div class="card" style="min-width:0">
+    <div class="section-label">🔍 扣分明细 <span class="text-xs" style="margin-left:auto;text-transform:none;letter-spacing:0">分 = 100 − 扣减合计</span></div>
+    <div class="breakdown-list">
+      <div class="bdrow">
+        <div class="bdrow-header">
+          <span class="bdrow-name">最终失败请求数</span>
+          <div class="bdrow-right"><span class="bdrow-obs">12 次</span><span class="bdrow-ded">−18</span></div>
+        </div>
+        <div class="bdrow-track"><div class="bdrow-fill" style="width:72%"></div></div>
+        <span class="bdrow-link" onclick="alert('统一错误列表 · 最终失败')">→ 查看相关错误</span>
+      </div>
+      <div class="bdrow">
+        <div class="bdrow-header">
+          <span class="bdrow-name">最终失败率</span>
+          <div class="bdrow-right"><span class="bdrow-obs">16.4%</span><span class="bdrow-ded">−12</span></div>
+        </div>
+        <div class="bdrow-track"><div class="bdrow-fill" style="width:48%"></div></div>
+        <span class="bdrow-link" onclick="alert('统一错误列表 · 按失败率排序')">→ 查看失败率分布</span>
+      </div>
+      <div class="bdrow">
+        <div class="bdrow-header">
+          <span class="bdrow-name">集中影响用户数</span>
+          <div class="bdrow-right"><span class="bdrow-obs">4 个用户</span><span class="bdrow-ded">−5</span></div>
+        </div>
+        <div class="bdrow-track"><div class="bdrow-fill" style="width:20%"></div></div>
+        <span class="bdrow-link" onclick="alert('统一错误列表 · 按用户分组')">→ 查看受影响用户</span>
+      </div>
+      <div class="bdrow">
+        <div class="bdrow-header">
+          <span class="bdrow-name">同一账号集中失败</span>
+          <div class="bdrow-right"><span class="bdrow-obs">账号 #95，8 次</span><span class="bdrow-ded">−3</span></div>
+        </div>
+        <div class="bdrow-track"><div class="bdrow-fill" style="width:12%"></div></div>
+        <span class="bdrow-link" onclick="alert('统一错误列表 · upstream_account_id=95')">→ 查看此账号错误</span>
+      </div>
+      <div class="bdrow">
+        <div class="bdrow-header">
+          <span class="bdrow-name">同一模型集中失败</span>
+          <div class="bdrow-right"><span class="bdrow-obs">gpt-5.5，11 次</span><span class="bdrow-ded">−2</span></div>
+        </div>
+        <div class="bdrow-track"><div class="bdrow-fill" style="width:8%"></div></div>
+        <span class="bdrow-link" onclick="alert('统一错误列表 · model=gpt-5.5')">→ 查看此模型错误</span>
+      </div>
+      <div class="bdrow">
+        <div class="bdrow-header">
+          <span class="bdrow-name">依赖健康</span>
+          <div class="bdrow-right"><span class="bdrow-obs">DB ✓ Redis ✓</span><span class="bdrow-ded zero">−0</span></div>
+        </div>
+        <div class="bdrow-track"><div class="bdrow-fill zero" style="width:0%"></div></div>
+        <span class="bdrow-link" onclick="scrollId('infra')">→ 查看依赖健康</span>
+      </div>
+    </div>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <span class="text-xs">扣减合计 <strong style="color:var(--red-text)">38 分</strong> · 健康分 <strong>62</strong></span>
+      <button class="btn" onclick="alert('查看全部错误')">查看全部错误 →</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ E: 错误分类 ══ -->
+<div class="section-gap">
+  <div class="card">
+    <div class="row-between" style="margin-bottom:12px">
+      <div class="section-label" style="margin-bottom:0">📊 错误大类分布（当前窗口最终失败）</div>
+      <span class="text-xs">点击柱子进入统一错误列表</span>
+    </div>
+    <div class="errors-layout">
+      <div class="chart-wrap"><canvas id="errorCatChart"></canvas></div>
+      <div class="impact-mini">
+        <div class="impact-row" onclick="alert('统一错误列表 · 最终失败')">
+          <div><div class="impact-row-label">最终失败</div><div class="impact-row-sub">候选 73 · 失败率 16.4%</div></div>
+          <div class="impact-row-val red">12</div>
+        </div>
+        <div class="impact-row" onclick="alert('统一错误列表 · 已恢复波动')">
+          <div><div class="impact-row-label">已恢复波动</div><div class="impact-row-sub">不计入失败</div></div>
+          <div class="impact-row-val">3</div>
+        </div>
+        <div class="impact-row" onclick="alert('按用户分组')">
+          <div><div class="impact-row-label">影响用户</div><div class="impact-row-sub">去重</div></div>
+          <div class="impact-row-val">4</div>
+        </div>
+        <div class="impact-row" onclick="alert('按 API Key 分组')">
+          <div><div class="impact-row-label">影响 API Key</div><div class="impact-row-sub">去重</div></div>
+          <div class="impact-row-val">6</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ F: 依赖健康 ══ -->
+<div class="section-gap" id="infra">
+  <div class="card">
+    <div class="row-between" style="margin-bottom:12px">
+      <div class="section-label" style="margin-bottom:0">🔧 依赖健康</div>
+      <span class="text-xs">最后采集：2 秒前</span>
+    </div>
+    <div class="infra-grid">
+      <div class="infra-card ok"><div class="infra-label">CPU</div><div class="infra-val">34%</div><div class="infra-hint">正常</div></div>
+      <div class="infra-card warn"><div class="infra-label">内存</div><div class="infra-val">88%</div><div class="infra-hint">较 30m 均值 +12%</div></div>
+      <div class="infra-card ok"><div class="infra-label">数据库</div><div class="infra-val">正常</div><div class="infra-hint">延迟 3ms</div></div>
+      <div class="infra-card ok"><div class="infra-label">Redis</div><div class="infra-val">正常</div><div class="infra-hint">延迟 1ms</div></div>
+      <div class="infra-card warn"><div class="infra-label">并发队列</div><div class="infra-val">142</div><div class="infra-hint">较 30m 均值 3.1×</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ D: 事故时间线 ══ -->
+<div class="section-gap" id="timeline">
+  <div class="section-label"><span class="dot dot-red"></span> 事故时间线 · 触发中告警</div>
+  <div class="timeline-grid">
+
+    <!-- P0 -->
+    <div>
+      <div class="tl-col-header">
+        <span class="tl-col-title"><span class="badge badge-red">P0</span> 事故级</span>
+        <span class="tl-count">2 条</span>
+      </div>
+      <div class="alert-card p0">
+        <div class="ac-inner">
+          <div class="ac-title">账号池不可用：GPT-VIP-分组 gpt-5.5</div>
+          <div class="ac-dur">⏱ 持续 7 分 23 秒</div>
+          <div class="ac-reason">GPT-VIP-分组中启用的账号可用数降至 0，所有新请求无法调度上游。</div>
+          <div class="ac-meta">
+            <span class="ac-stat">失败 12 次</span><span class="ac-stat">用户 4 个</span><span class="ac-stat">Key 6 个</span><span class="tag tag-red">账号池</span>
+          </div>
+          <div class="ac-ai has-result">
+            <span class="ac-ai-icon">✦</span>
+            <div>
+              <div class="ac-ai-text">账号 #95 余额耗尽（429），账号 #96 权限不足（403）。分组内两个账号均不可用，池归零。建议立即补充账号或切换路由。</div>
+              <div class="ac-ai-status">AI 已完成 · 置信度：高 · 5分钟前</div>
+            </div>
+          </div>
+          <div class="ac-actions">
+            <button class="ac-btn" onclick="alert('查看相关错误')">查看相关错误</button>
+            <button class="ac-btn" onclick="alert('AI 完整报告')">AI 报告</button>
+            <button class="ac-btn" style="color:var(--amber-text);border-color:var(--amber-border)" onclick="this.textContent='✓ 处理中';this.style.background='var(--amber-bg)'">标记处理中</button>
+          </div>
+        </div>
+      </div>
+      <div class="alert-card p0">
+        <div class="ac-inner">
+          <div class="ac-title">同模型大面积失败：gpt-5.5</div>
+          <div class="ac-dur">⏱ 持续 3 分 01 秒</div>
+          <div class="ac-reason">gpt-5.5 在 1 分钟内最终失败 11 次，失败率 23.4%（超 P0 阈值 20%/5 条）。</div>
+          <div class="ac-meta">
+            <span class="ac-stat">失败 11 次</span><span class="ac-stat">失败率 23.4%</span><span class="tag tag-red">上游错误</span>
+          </div>
+          <div class="ac-ai pending">
+            <span class="ac-ai-icon">✦</span>
+            <div>
+              <div class="ac-ai-text">分析中，预计 15 秒后完成...</div>
+              <div class="ac-ai-status">AI 分析中</div>
+            </div>
+          </div>
+          <div class="ac-actions">
+            <button class="ac-btn" onclick="alert('查看错误')">查看相关错误</button>
+            <button class="ac-btn" style="color:var(--red-text);border-color:var(--red-border)" onclick="this.textContent='✓ 已确认';this.style.background='var(--red-bg)'">确认</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- P1 -->
+    <div>
+      <div class="tl-col-header">
+        <span class="tl-col-title"><span class="badge badge-amber">P1</span> 高优先级</span>
+        <span class="tl-count">5 条（展示前 3）</span>
+      </div>
+      <div class="alert-card p1">
+        <div class="ac-inner">
+          <div class="ac-title">上游账号集中失败：账号 #95</div>
+          <div class="ac-dur">⏱ 持续 9 分 44 秒</div>
+          <div class="ac-reason">账号 #95 在 1 分钟内最终失败 8 次（≥3 次触发规则）。</div>
+          <div class="ac-meta">
+            <span class="ac-stat">失败 8 次</span><span class="ac-stat">quota_exceeded</span><span class="tag tag-amber">上游错误</span>
+          </div>
+          <div class="ac-ai has-result">
+            <span class="ac-ai-icon">✦</span>
+            <div>
+              <div class="ac-ai-text">账号 #95 余额耗尽（429）。建议暂停调度并检查充值状态。</div>
+              <div class="ac-ai-status">AI 已完成 · 置信度：高</div>
+            </div>
+          </div>
+          <div class="ac-actions">
+            <button class="ac-btn" onclick="alert('查看账号#95错误')">查看相关错误</button>
+            <button class="ac-btn" onclick="alert('AI 完整报告')">AI 报告</button>
+            <button class="ac-btn" onclick="this.textContent='✓ 处理中'">标记处理中</button>
+          </div>
+        </div>
+      </div>
+      <div class="alert-card p1">
+        <div class="ac-inner">
+          <div class="ac-title">权限错误集中：账号 #96 × gpt-image-1</div>
+          <div class="ac-dur">⏱ 持续 12 分 07 秒</div>
+          <div class="ac-reason">账号 #96 请求 gpt-image-1 持续 403 permission_denied（3 次）。</div>
+          <div class="ac-meta">
+            <span class="ac-stat">3 次</span><span class="ac-stat">403 permission_denied</span><span class="tag tag-amber">权限</span>
+          </div>
+          <div class="ac-ai has-result">
+            <span class="ac-ai-icon">✦</span>
+            <div>
+              <div class="ac-ai-text">账号 #96 未开通 gpt-image-1 权限。建议在 OpenAI 控制台确认订阅级别，或移除该模型路由。</div>
+              <div class="ac-ai-status">AI 已完成 · 置信度：高</div>
+            </div>
+          </div>
+          <div class="ac-actions">
+            <button class="ac-btn" onclick="alert('查看账号#96错误')">查看相关错误</button>
+            <button class="ac-btn" onclick="alert('AI 完整报告')">AI 报告</button>
+          </div>
+        </div>
+      </div>
+      <div class="alert-card p1">
+        <div class="ac-inner">
+          <div class="ac-title">用户严重受影响：user-4812</div>
+          <div class="ac-dur">⏱ 持续 4 分 55 秒</div>
+          <div class="ac-merged">已聚合 3 次触发</div>
+          <div class="ac-reason">同一用户在 1 分钟内最终失败 5 次。</div>
+          <div class="ac-meta">
+            <span class="ac-stat">失败 5 次</span><span class="ac-stat">1 个用户</span><span class="tag tag-amber">上游错误</span>
+          </div>
+          <div class="ac-ai has-result">
+            <span class="ac-ai-icon">✦</span>
+            <div>
+              <div class="ac-ai-text">user-4812 的失败均来自 gpt-5.5 账号池耗尽，与 P0 关联。待 P0 修复后预计自动恢复。</div>
+              <div class="ac-ai-status">AI 已完成 · 置信度：中</div>
+            </div>
+          </div>
+          <div class="ac-actions">
+            <button class="ac-btn" onclick="alert('查看user-4812错误')">查看相关错误</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- P2 -->
+    <div>
+      <div class="tl-col-header">
+        <span class="tl-col-title"><span class="badge badge-blue">P2 / 观察</span></span>
+        <span class="tl-count">3 条</span>
+      </div>
+      <div class="alert-card p2">
+        <div class="ac-inner">
+          <div class="ac-title">单用户鉴权错误：user-9023</div>
+          <div class="ac-dur">⏱ 持续 1 分 12 秒</div>
+          <div class="ac-reason">user-9023 使用已失效 API Key，触发 401。失败数 2，P2 观察级。</div>
+          <div class="ac-meta">
+            <span class="ac-stat">失败 2 次</span><span class="ac-stat">401 Unauthorized</span><span class="tag tag-blue">客户端</span>
+          </div>
+          <div class="ac-ai ok-result">
+            <span class="ac-ai-icon">✦</span>
+            <div>
+              <div class="ac-ai-text">客户端鉴权错误，用户侧问题，平台无需干预。建议通知用户更新 API Key。</div>
+              <div class="ac-ai-status">AI 已完成 · 置信度：高</div>
+            </div>
+          </div>
+          <div class="ac-actions">
+            <button class="ac-btn" onclick="alert('查看user-9023错误')">查看相关错误</button>
+          </div>
+        </div>
+      </div>
+      <div class="alert-card p2">
+        <div class="ac-inner">
+          <div class="ac-title">已恢复上游波动：Claude-Standard</div>
+          <div class="ac-dur">⏱ 已恢复，6 分前</div>
+          <div class="ac-reason">Anthropic API 出现 3 次 529 过载，最终请求均重试成功，无最终失败。</div>
+          <div class="ac-meta">
+            <span class="ac-stat">波动 3 次</span><span class="ac-stat">最终成功</span><span class="badge badge-green">已恢复</span>
+          </div>
+          <div class="ac-ai pending">
+            <span class="ac-ai-icon">✦</span>
+            <div>
+              <div class="ac-ai-text">Anthropic 短暂过载波动，重试机制有效。无需处理，继续观察频率。</div>
+              <div class="ac-ai-status">AI 已完成</div>
+            </div>
+          </div>
+          <div class="ac-actions">
+            <button class="ac-btn" onclick="alert('查看波动记录')">查看波动记录</button>
+          </div>
+        </div>
+      </div>
+      <div class="alert-card p2">
+        <div class="ac-inner">
+          <div class="ac-title">慢请求波动：Gemini Standard P99 偏高</div>
+          <div class="ac-dur">⏱ 持续 2 分 30 秒</div>
+          <div class="ac-reason">P99 延迟 4.2s（阈值 3s），低样本（6 次请求），无最终失败。</div>
+          <div class="ac-meta">
+            <span class="ac-stat">P99 = 4.2s</span><span class="ac-stat">样本 6 次</span><span class="tag tag-blue">慢请求</span>
+          </div>
+          <div class="ac-ai pending">
+            <span class="ac-ai-icon">✦</span>
+            <div>
+              <div class="ac-ai-text">低样本下 P99 不稳定，暂未触发最终失败，继续观察。</div>
+              <div class="ac-ai-status">暂无 AI 分析（P2 默认不自动触发）</div>
+            </div>
+          </div>
+          <div class="ac-actions">
+            <button class="ac-btn" onclick="alert('查看慢请求')">查看慢请求</button>
+            <button class="ac-btn" style="background:var(--blue);color:#fff;border-color:var(--blue)" onclick="alert('手动触发 AI 分析')">手动 AI 分析</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</div><!-- /page -->
+
+<script>
+// Countdown
+let cd = 28;
+setInterval(() => { cd = cd <= 1 ? 30 : cd - 1; document.getElementById('countdown').textContent = cd; }, 1000);
+
+// Time chips
+function setChip(el) { document.querySelectorAll('.chip').forEach(c => c.classList.remove('active')); el.classList.add('active'); }
+
+// Scroll to
+function scrollId(id) { document.getElementById(id).scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+
+// Mark done
+let done = 0;
+function markDone(btn) {
+  const item = btn.closest('.action-item');
+  item.style.opacity = '.4';
+  btn.textContent = '✓ 已完成';
+  btn.disabled = true;
+  done++;
+  document.getElementById('doneCount').textContent = done;
+}
+
+// Trend chart
+const scores = [98,95,93,90,88,86,82,79,76,74,72,70,68,66,64,63,62,62,62,62,62,62,62,62,62,62,62,62,62,62];
+new Chart(document.getElementById('trendChart').getContext('2d'), {
+  type: 'line',
+  data: {
+    labels: scores.map((_, i) => { const m = 30 - i; return m === 0 ? '现在' : (m % 10 === 0 ? `-${m}m` : ''); }),
+    datasets: [{ data: scores, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,.07)', borderWidth: 2, tension: .35, fill: true, pointRadius: scores.map((_, i) => i === 29 ? 4 : 0), pointBackgroundColor: '#ef4444' }]
+  },
+  options: { responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { title: items => items[0].label || '', label: i => `健康分: ${i.raw}` } } },
+    scales: { x: { ticks: { font: { size: 10 }, color: '#8b93a8' }, grid: { display: false } }, y: { min: 0, max: 100, ticks: { stepSize: 25, font: { size: 10 }, color: '#8b93a8' }, grid: { color: '#f0f2f7' } } }
+  }
+});
+
+// Error category chart
+const cats = ['客户端', '平台', '上游', '账号池', '限流', '权限', '余额', '配置', '慢请求', '未知'];
+const vals  = [2, 0, 5, 3, 0, 1, 0, 0, 1, 0];
+const clrs  = ['#6366f1','#8b5cf6','#ef4444','#f59e0b','#f97316','#06b6d4','#10b981','#64748b','#a3a3a3','#d1d5db'];
+new Chart(document.getElementById('errorCatChart').getContext('2d'), {
+  type: 'bar',
+  data: { labels: cats, datasets: [{ data: vals, backgroundColor: clrs.map((c, i) => vals[i] > 0 ? c : '#e5e7eb'), borderRadius: 6 }] },
+  options: { responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => `最终失败: ${i.raw} 次` } } },
+    scales: {
+      x: { ticks: { font: { size: 11 }, color: '#5a6072' }, grid: { display: false } },
+      y: { min: 0, ticks: { stepSize: 2, font: { size: 10 }, color: '#8b93a8' }, grid: { color: '#f0f2f7' } }
+    },
+    onClick: (evt, el) => { if (el.length && vals[el[0].index] > 0) alert(`统一错误列表 · error_categories=${cats[el[0].index]}`); }
+  }
+});
+</script>
+</body>
+</html>

@@ -64,6 +64,36 @@ func TestIsImageGenerationIntent(t *testing.T) {
 	}
 }
 
+func TestIsImageGenerationPermissionIntentIgnoresToolDeclarationOnly(t *testing.T) {
+	tests := []struct {
+		name string
+		body []byte
+		want bool
+	}{
+		{
+			name: "codex desktop capability declaration only",
+			body: []byte(`{"model":"gpt-5.4","input":"write code","tools":[{"type":"image_generation"},{"type":"function","name":"shell"}]}`),
+			want: false,
+		},
+		{
+			name: "explicit image tool choice",
+			body: []byte(`{"model":"gpt-5.4","input":"draw","tools":[{"type":"image_generation"}],"tool_choice":{"type":"image_generation"}}`),
+			want: true,
+		},
+		{
+			name: "image model",
+			body: []byte(`{"model":"gpt-image-2","input":"draw"}`),
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, IsImageGenerationPermissionIntent("/v1/responses", "gpt-5.4", tt.body))
+		})
+	}
+}
+
 func TestResolveOpenAIResponsesImageBillingConfigUsesCurrentBodyModel(t *testing.T) {
 	imageModel, imageSize, err := resolveOpenAIResponsesImageBillingConfigFromBody(
 		[]byte(`{"model":"mapped-image-model","tools":[{"type":"image_generation","size":"1024x1024"}]}`),

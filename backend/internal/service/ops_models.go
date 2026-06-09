@@ -102,6 +102,7 @@ type OpsErrorLogFilter struct {
 	EndTime   *time.Time
 
 	Platform  string
+	Model     string
 	GroupID   *int64
 	AccountID *int64
 
@@ -126,6 +127,7 @@ type OpsErrorLogFilter struct {
 	Category          string
 	ImpactPlatformSLA *bool
 	ClientFailed      *bool
+	ErrorResult       string
 
 	Page     int
 	PageSize int
