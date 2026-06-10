@@ -1528,6 +1528,18 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				zap.String("close_reason", closeReason),
 			)
 
+			// Record WS upstream error so OpsErrorLoggerMiddleware can persist it.
+			// WS requests have HTTP 101 status, which bypasses the normal error path.
+			if closeStatus != "" && closeStatus != "-" {
+				service.AppendOpsUpstreamError(c, service.OpsUpstreamErrorEvent{
+					AccountID: account.ID,
+					Platform:  account.Platform,
+					Kind:      "ws_error",
+					Message:   closeReason,
+					Detail:    closeStatus + ": " + err.Error(),
+				})
+			}
+
 			if currentAccountRelease != nil {
 				currentAccountRelease()
 				currentAccountRelease = nil

@@ -122,6 +122,13 @@ type OpsUpstreamErrorEvent struct {
 	Detail  string `json:"detail,omitempty"`
 }
 
+// AppendOpsUpstreamError appends an upstream error event to the gin context for
+// later consumption by OpsErrorLoggerMiddleware. Used by WS handlers that bypass
+// the normal HTTP response flow.
+func AppendOpsUpstreamError(c *gin.Context, ev OpsUpstreamErrorEvent) {
+	appendOpsUpstreamError(c, ev)
+}
+
 func appendOpsUpstreamError(c *gin.Context, ev OpsUpstreamErrorEvent) {
 	if c == nil {
 		return
