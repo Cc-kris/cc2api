@@ -1,55 +1,21 @@
 <template>
   <AppLayout>
-    <div class="pb-12">
+    <div class="ov-page">
 
-      <!-- ─── A · 操作栏 ─── -->
+      <!-- ─── 操作栏 ─── -->
       <div class="ov-actionbar">
-        <div class="flex min-h-[52px] flex-wrap items-center gap-2 px-1">
-          <!-- Title -->
-          <div class="flex shrink-0 items-center gap-2">
-            <h1 class="text-sm font-bold text-gray-900 dark:text-white">运维监控</h1>
-            <span class="text-xs text-gray-400 dark:text-gray-500">事故总览</span>
-          </div>
-
-          <!-- Time chips (centered) -->
-          <div class="mx-auto flex flex-wrap gap-1">
-            <button
-              v-for="option in timeRangeOptions.filter(o => o.value !== 'custom')"
-              :key="option.value"
-              type="button"
-              :class="['ov-chip', timeRange === option.value ? 'ov-chip--active' : '']"
-              @click="handleTimeRangeChange(option.value)"
-            >{{ option.label }}</button>
-            <button
-              type="button"
-              :class="['ov-chip', timeRange === 'custom' ? 'ov-chip--active' : '']"
-              @click="handleTimeRangeChange('custom')"
-            >自定义</button>
-          </div>
-
-          <!-- Right side buttons + countdown -->
-          <div class="ml-auto flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              class="ov-btn"
-              :disabled="loading"
-              @click="fetchOverview"
-            >
+        <!-- 第一行：标题 + 右侧按钮组（始终同行，不折） -->
+        <div class="flex min-h-[40px] items-center justify-between gap-2 px-1">
+          <h1 class="shrink-0 text-sm font-bold text-gray-900 dark:text-white">运维监控</h1>
+          <div class="flex shrink-0 items-center gap-1.5">
+            <span class="hidden text-xs text-gray-400 dark:text-gray-500 sm:inline mr-1">
+              <span class="inline-block h-2 w-2 rounded-full bg-emerald-400 mr-0.5 align-middle" />
+              {{ t('admin.ops.incidentOverview.autoRefresh', { seconds: autoRefreshCountdown }) }}
+            </span>
+            <button type="button" class="ov-btn" :disabled="loading" @click="fetchOverview">
               <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
               刷新
             </button>
-            <button
-              v-if="canManageOpsSettings"
-              type="button"
-              class="ov-btn"
-              @click="showOpsSettingsDialog = true"
-            >告警与阈值</button>
-            <button
-              v-if="canManageOpsSettings"
-              type="button"
-              class="ov-btn"
-              @click="openAIAnalysisConfig"
-            >AI 配置</button>
             <button
               type="button"
               class="ov-btn ov-btn--primary"
@@ -58,485 +24,474 @@
               @click="triggerManualAIAnalysis"
             >
               <Icon name="sparkles" size="sm" />
-              {{ t('admin.ops.incidentOverview.manualAnalysis') }}
+              <span class="hidden sm:inline">手动 AI 分析</span>
+              <span class="sm:hidden">AI</span>
             </button>
-            <span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">
-              {{ t('admin.ops.incidentOverview.autoRefresh', { seconds: autoRefreshCountdown }) }}
-            </span>
+            <button type="button" class="ov-btn hidden sm:inline-flex" @click="openErrorDetailsFromPreset({ title: '全部错误', impactPlatformSla: true })">
+              <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/></svg>
+              查看错误列表
+            </button>
+            <button v-if="canManageOpsSettings" type="button" class="ov-btn" @click="showOpsSettingsDialog = true">
+              <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+              <span class="hidden sm:inline">运维设置</span>
+            </button>
           </div>
         </div>
-
-        <!-- Filters row -->
-        <div class="flex flex-wrap items-end gap-2 border-t border-gray-100 px-1 py-2 dark:border-dark-800">
-          <select v-model="platform" class="ov-input-sm w-28">
-            <option value="">{{ t('common.all') }} 平台</option>
+        <!-- 第二行：筛选器（独立行，flex-wrap 安全） -->
+        <div class="flex flex-wrap items-center gap-1.5 px-1 pb-2 pt-1">
+          <label class="ov-filter-label">时间范围</label>
+          <select v-model="timeRange" class="ov-select" @change="handleTimeRangeChange(timeRange)">
+            <option v-for="opt in timeRangeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+          </select>
+          <label class="ov-filter-label ml-1">平台</label>
+          <select v-model="platform" class="ov-select w-24">
+            <option value="">全部</option>
             <option value="openai">OpenAI</option>
             <option value="claude">Claude</option>
             <option value="gemini">Gemini</option>
           </select>
-          <input
-            v-model="model"
-            type="text"
-            class="ov-input-sm w-36"
-            :placeholder="t('admin.ops.incidentOverview.modelPlaceholder')"
-          >
-          <select v-model="groupSelection" class="ov-input-sm w-36">
-            <option value="">{{ t('common.all') }} 分组</option>
-            <option v-for="group in filteredGroups" :key="group.id" :value="String(group.id)">
-              {{ group.name }}
-            </option>
+          <label class="ov-filter-label ml-1">分组</label>
+          <select v-model="groupSelection" class="ov-select w-28">
+            <option value="">全部分组</option>
+            <option v-for="group in filteredGroups" :key="group.id" :value="String(group.id)">{{ group.name }}</option>
           </select>
+          <input v-model="model" type="text" class="ov-select w-28" :placeholder="t('admin.ops.incidentOverview.modelPlaceholder')">
           <template v-if="timeRange === 'custom'">
-            <input v-model="customTimeStartInput" type="datetime-local" class="ov-input-sm">
+            <input v-model="customTimeStartInput" type="datetime-local" class="ov-select w-40">
             <span class="text-xs text-gray-400">—</span>
-            <input v-model="customTimeEndInput" type="datetime-local" class="ov-input-sm">
-            <button type="button" class="ov-btn ov-btn--primary" @click="applyCustomTimeRange">
-              {{ t('common.confirm') }}
-            </button>
+            <input v-model="customTimeEndInput" type="datetime-local" class="ov-select w-40">
+            <button type="button" class="ov-btn ov-btn--primary text-xs" @click="applyCustomTimeRange">{{ t('common.confirm') }}</button>
           </template>
         </div>
       </div>
 
-      <!-- Error message -->
-      <div
-        v-if="errorMessage"
-        class="mt-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300"
-      >{{ errorMessage }}</div>
+      <!-- 错误提示 -->
+      <div v-if="errorMessage" class="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">{{ errorMessage }}</div>
 
-      <!-- AI action hint -->
-      <div
-        v-if="manualAIActionDisabledReason"
-        class="mt-1.5 text-xs text-gray-400 dark:text-gray-500"
-      >{{ manualAIActionDisabledReason }}</div>
-
-      <!-- Loading skeleton -->
-      <div v-if="!displayOverview && loading" class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[320px_1fr]">
-        <div class="h-64 animate-pulse rounded-3xl bg-gray-100 dark:bg-dark-800" />
-        <div class="h-64 animate-pulse rounded-3xl bg-gray-100 dark:bg-dark-800" />
+      <!-- Loading skeleton（首次加载无数据时） -->
+      <div v-if="!displayOverview && loading" class="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+        <div v-for="i in 3" :key="i" class="h-48 animate-pulse rounded-2xl bg-gray-100 dark:bg-dark-800" />
       </div>
 
-      <template v-else-if="displayOverview">
+      <template v-if="!loading || displayOverview">
 
-        <!-- ─── Row 1 · 健康分 + 状态 Banner ─── -->
-        <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[320px_1fr]">
+        <!-- ═══ 第一行：健康分 | 事故摘要 | 推荐操作 ═══ -->
+        <div class="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
 
-          <!-- B · 健康分 -->
-          <div class="ov-card">
-            <div class="ov-section-label">
-              <span :class="['ov-dot', scoreDotClass]" />健康分
-            </div>
-            <button type="button" class="w-full text-left" @click="showScoreReasonsDialog = true">
-              <div :class="['ov-hero-score', scoreColorClass]">{{ scoreValue }}</div>
-              <div class="mt-2 flex items-center gap-2">
-                <span :class="['ov-badge', scoreLevelBadgeClass]">{{ scoreLevelLabel }}</span>
-                <span class="text-xs text-blue-500 dark:text-blue-400">查看扣分明细 →</span>
+          <!-- A · 健康分 -->
+          <div class="ov-card flex gap-4">
+            <!-- 圆形进度 -->
+            <div class="flex shrink-0 flex-col items-center">
+              <div class="ov-score-ring" :style="`--score: ${scoreNumeric ?? 0}`">
+                <svg viewBox="0 0 80 80" class="ov-score-ring-svg">
+                  <circle cx="40" cy="40" r="34" fill="none" stroke="#e5e7eb" stroke-width="7" class="dark:stroke-dark-700"/>
+                  <circle
+                    cx="40" cy="40" r="34" fill="none"
+                    :stroke="scoreNumeric !== null && scoreNumeric >= 90 ? '#10b981' : scoreNumeric !== null && scoreNumeric >= 70 ? '#3b82f6' : scoreNumeric !== null && scoreNumeric >= 50 ? '#f59e0b' : '#ef4444'"
+                    stroke-width="7"
+                    stroke-linecap="round"
+                    stroke-dasharray="213.6"
+                    :stroke-dashoffset="scoreNumeric !== null ? 213.6 - (scoreNumeric / 100) * 213.6 : 213.6"
+                    transform="rotate(-90 40 40)"
+                    class="transition-all duration-700"
+                  />
+                </svg>
+                <div class="ov-score-ring-inner">
+                  <span :class="['text-2xl font-black leading-none', scoreColorClass]">{{ scoreValue }}</span>
+                  <span class="text-[10px] text-gray-400">/100</span>
+                </div>
               </div>
-            </button>
-            <!-- Score track bar -->
-            <div v-if="scoreNumeric !== null" class="ov-score-track mt-3">
-              <div class="ov-score-arrow" :style="`left: ${scoreNumeric}%`" />
+              <span :class="['mt-2 rounded-full px-2.5 py-0.5 text-[11px] font-semibold', scoreLevelBadgeClass]">{{ scoreLevelLabel }}</span>
             </div>
-            <div class="ov-score-track-labels">
-              <span>0</span><span>50</span><span>70</span><span>90</span><span>100</span>
+            <!-- 右侧内容 -->
+            <div class="flex-1 min-w-0">
+              <div class="mb-2 flex items-center gap-1.5">
+                <span class="ov-section-title">健康分</span>
+                <span v-if="showSmallSampleProtection" class="text-[10px] text-amber-500">小样本保护</span>
+              </div>
+              <p v-if="parsedScoreDeductions.length === 0" class="text-xs text-gray-500 dark:text-gray-400">当前无扣分，系统运行正常</p>
+              <div v-else class="space-y-1">
+                <div
+                  v-for="item in parsedScoreDeductions.slice(0, 4)"
+                  :key="item.label"
+                  class="flex items-center justify-between gap-2"
+                >
+                  <span class="truncate text-xs text-gray-600 dark:text-gray-300">{{ item.label }}</span>
+                  <span class="shrink-0 text-xs font-bold text-red-600 dark:text-red-400">−{{ item.points }}</span>
+                </div>
+                <div v-if="parsedScoreDeductions.length > 4" class="text-[10px] text-gray-400">还有 {{ parsedScoreDeductions.length - 4 }} 项...</div>
+              </div>
+              <button type="button" class="mt-2 text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 cursor-pointer" @click="showScoreReasonsDialog = true">查看扣分明细 →</button>
             </div>
-            <div
-              v-if="showSmallSampleProtection"
-              class="mt-2 text-xs text-gray-400 dark:text-gray-500"
-            >
-              小样本保护中：1 分钟内最终失败 ≤ 2，分数最低不低于 70
+          </div>
+
+          <!-- B · 事故摘要 -->
+          <div class="ov-card">
+            <div class="mb-2 flex items-center justify-between">
+              <span class="ov-section-title">事故摘要（{{ timeRangeOptions.find(o => o.value === timeRange)?.label || timeRange }}）</span>
+              <div :class="['ov-status-badge', statusBadgeClass]">
+                {{ statusIcon }} {{ statusLabel }}
+              </div>
             </div>
-            <div class="mt-3 text-sm leading-relaxed text-gray-600 dark:text-gray-300">
+            <!-- 6指标网格 -->
+            <div class="grid grid-cols-3 gap-2">
+              <div class="ov-metric-cell">
+                <div class="ov-metric-label">最终失败</div>
+                <div :class="['ov-metric-val', (displayOverview?.final_failures ?? 0) > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white']">
+                  {{ formatInteger(displayOverview?.final_failures ?? 0) }}
+                </div>
+              </div>
+              <div class="ov-metric-cell">
+                <div class="ov-metric-label">失败率</div>
+                <div :class="['ov-metric-val', (displayOverview?.final_failure_rate ?? 0) > 0.05 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white']">
+                  {{ formatPercent(displayOverview?.final_failure_rate ?? 0) }}
+                </div>
+              </div>
+              <div class="ov-metric-cell">
+                <div class="ov-metric-label">已恢复波动</div>
+                <div class="ov-metric-val text-amber-600 dark:text-amber-400">{{ formatInteger(displayOverview?.recovered_fluctuations ?? 0) }}</div>
+              </div>
+              <div class="ov-metric-cell">
+                <div class="ov-metric-label">总请求数</div>
+                <div class="ov-metric-val text-gray-900 dark:text-white">{{ formatInteger(displayOverview?.total_requests ?? 0) }}</div>
+              </div>
+              <div class="ov-metric-cell">
+                <div class="ov-metric-label">影响用户数</div>
+                <div class="ov-metric-val text-gray-900 dark:text-white">{{ formatInteger(displayOverview?.affected_users ?? 0) }}</div>
+              </div>
+              <div class="ov-metric-cell">
+                <div class="ov-metric-label">影响 API Key</div>
+                <div class="ov-metric-val text-gray-900 dark:text-white">{{ formatInteger(displayOverview?.affected_api_keys ?? 0) }}</div>
+              </div>
+            </div>
+            <!-- AI 结论 -->
+            <div v-if="currentSummary" class="mt-2.5 rounded-xl bg-blue-50 px-3 py-2 text-xs text-blue-700 leading-relaxed dark:bg-blue-900/15 dark:text-blue-300">
               {{ currentSummary }}
             </div>
           </div>
 
-          <!-- C · 状态 Banner (指标行) -->
-          <div :class="['ov-banner rounded-3xl overflow-hidden border', bannerBorderClass]">
-            <div :class="['ov-banner-top flex flex-wrap items-center gap-3 px-5 py-3', bannerTopBgClass]">
-              <div :class="['text-base font-extrabold flex items-center gap-2', bannerVerdictTextClass]">
-                {{ statusIcon }} {{ statusLabel }}
-              </div>
-              <div class="flex flex-wrap gap-1.5">
-                <span
-                  v-if="infraCritical"
-                  class="ov-apill ov-apill--red"
-                >基础设施异常</span>
-                <span
-                  v-if="displayOverview.final_failures > 0"
-                  :class="['ov-apill', statusPillClass]"
-                >{{ formatInteger(displayOverview.final_failures) }} 次失败</span>
-                <span
-                  v-if="displayOverview.recovered_fluctuations > 0"
-                  class="ov-apill ov-apill--amber"
-                >{{ formatInteger(displayOverview.recovered_fluctuations) }} 次波动</span>
-              </div>
-              <div class="ml-auto">
-                <button
-                  type="button"
-                  class="ov-btn"
-                  @click="openSummaryDetails"
-                >查看告警时间线 ↓</button>
-              </div>
-            </div>
-            <!-- Stat rows -->
-            <div class="border-t border-gray-100 bg-white dark:border-dark-700 dark:bg-dark-900">
-              <div v-if="displayOverview.final_failures > 0" class="ov-stat-row">
-                <span class="ov-stat-label">最终失败</span>
-                <span class="ov-stat-value text-red-700 dark:text-red-400">
-                  {{ formatInteger(displayOverview.final_failures) }} 次
-                  <span class="ov-stat-sub">
-                    候选请求 {{ formatInteger(displayOverview.total_requests) }} 次 · 失败率 {{ formatPercent(displayOverview.final_failure_rate) }}
-                  </span>
-                </span>
-              </div>
-              <div v-if="displayOverview.recovered_fluctuations > 0" class="ov-stat-row">
-                <span class="ov-stat-label">已恢复波动</span>
-                <span class="ov-stat-value">
-                  {{ formatInteger(displayOverview.recovered_fluctuations) }} 次
-                  <span class="ov-stat-sub">中途失败但最终成功，不计入健康分</span>
-                </span>
-              </div>
-              <div class="ov-stat-row">
-                <span class="ov-stat-label">影响用户</span>
-                <span class="ov-stat-value">
-                  {{ formatInteger(displayOverview.affected_users) }} 个用户
-                  <span class="ov-stat-sub">去重</span>
-                </span>
-              </div>
-              <div class="ov-stat-row">
-                <span class="ov-stat-label">影响 API Key</span>
-                <span class="ov-stat-value">
-                  {{ formatInteger(displayOverview.affected_api_keys) }} 个 Key
-                  <span class="ov-stat-sub">去重</span>
-                </span>
-              </div>
-              <div v-if="displayOverview.affected_models.length" class="ov-stat-row">
-                <span class="ov-stat-label">受影响模型</span>
-                <span class="ov-stat-value flex flex-wrap gap-1">
-                  <button
-                    v-for="item in displayOverview.affected_models"
-                    :key="item"
-                    type="button"
-                    class="ov-tag ov-tag--model"
-                    @click="applyModelFilter(item)"
-                  >{{ item || t('admin.ops.incidentOverview.unknownModel') }}</button>
-                </span>
-              </div>
-              <div v-if="displayOverview.affected_accounts.length" class="ov-stat-row">
-                <span class="ov-stat-label">受影响账号</span>
-                <span class="ov-stat-value flex flex-wrap gap-1">
-                  <button
-                    v-for="account in displayOverview.affected_accounts"
-                    :key="account.id"
-                    type="button"
-                    class="ov-tag ov-tag--account"
-                    @click="openAccountDetails(account.id, account.name)"
-                  >{{ account.name || t('admin.ops.incidentOverview.unknownAccount') }}</button>
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ─── Row 2 · 需处理清单 + 扣分明细 + 错误分类 ─── -->
-        <div class="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-3">
-
-          <!-- D · 需要立即处理 -->
+          <!-- C · 推荐操作 -->
           <div class="ov-card">
-            <div class="ov-section-label mb-3">
-              <span :class="['ov-dot', actionSectionDotClass]" />
-              {{ actionSectionLabel }}
+            <div class="mb-2 flex items-center justify-between">
+              <span class="ov-section-title">{{ actionSectionLabel }}</span>
+              <button
+                type="button"
+                class="ov-btn ov-btn--primary text-[11px] py-1 px-2"
+                :disabled="manualAIActionDisabled"
+                @click="triggerManualAIAnalysis"
+              >
+                <Icon name="sparkles" size="sm" />
+                AI 分析
+              </button>
             </div>
-            <div v-if="recommendedActions.length" class="flex flex-col gap-2">
+            <div v-if="recommendedActions.length" class="space-y-2">
               <div
-                v-for="(action, index) in recommendedActions"
+                v-for="(action, index) in recommendedActions.slice(0, 4)"
                 :key="action"
                 :class="['ov-action-item', actionItemClass(index)]"
               >
                 <div :class="['ov-action-num', actionNumClass(index)]">{{ index + 1 }}</div>
-                <div class="flex-1 text-sm font-medium leading-snug text-gray-900 dark:text-gray-100">{{ action }}</div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-xs font-semibold leading-snug text-gray-900 dark:text-gray-100">{{ action }}</div>
+                </div>
               </div>
             </div>
-            <div
-              v-else
-              class="rounded-2xl bg-gray-50 p-4 text-sm text-gray-500 dark:bg-dark-800/70 dark:text-gray-400"
-            >{{ t('admin.ops.incidentOverview.noRecommendedActions') }}</div>
-            <div class="mt-3 flex items-center gap-2">
+            <div v-else class="rounded-xl bg-gray-50 px-3 py-4 text-center text-xs text-gray-500 dark:bg-dark-800/70 dark:text-gray-400">
+              {{ t('admin.ops.incidentOverview.noRecommendedActions') }}
+            </div>
+            <button v-if="recommendedActions.length > 4" class="mt-2 text-xs text-blue-500 hover:text-blue-600 cursor-pointer" @click="triggerManualAIAnalysis">
+              查看更多建议 →
+            </button>
+          </div>
+        </div>
+
+        <!-- ═══ 第二行：错误分类 | 依赖健康 | 影响范围 ═══ -->
+        <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+
+          <!-- D · 错误分类分布（水平柱状图） -->
+          <div class="ov-card">
+            <div class="mb-3 flex items-center justify-between">
+              <span class="ov-section-title">错误分类分布</span>
+              <span class="text-xs text-gray-400 dark:text-gray-500">总错误数：{{ formatInteger(displayOverview?.total_requests ?? 0) }}</span>
+            </div>
+            <div v-if="errorCategoryHorizontalData.length === 0" class="rounded-xl bg-gray-50 px-3 py-6 text-center text-xs text-gray-500 dark:bg-dark-800/70 dark:text-gray-400">
+              当前窗口无错误
+            </div>
+            <div v-else class="space-y-2.5">
               <button
+                v-for="item in errorCategoryHorizontalData.slice(0, 6)"
+                :key="item.key"
                 type="button"
-                class="ov-btn ov-btn--primary"
-                :disabled="manualAIActionDisabled"
-                :title="manualAIActionDisabledReason || undefined"
-                @click="triggerManualAIAnalysis"
+                class="w-full cursor-pointer group"
+                @click="navigateToErrorCategory(item.key)"
               >
-                <Icon name="sparkles" size="sm" />
-                {{ t('admin.ops.incidentOverview.manualAnalysis') }}
+                <div class="flex items-center gap-2 mb-0.5">
+                  <span class="inline-block h-2 w-2 shrink-0 rounded-full" :style="`background:${item.color}`" />
+                  <span class="flex-1 text-left text-xs text-gray-700 dark:text-gray-200 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{{ item.label }}</span>
+                  <span class="shrink-0 text-xs font-semibold text-gray-900 dark:text-white">{{ formatInteger(item.count) }}</span>
+                  <span class="shrink-0 w-10 text-right text-xs text-gray-400">{{ item.percent.toFixed(1) }}%</span>
+                </div>
+                <div class="ml-4 h-1.5 w-full rounded-full bg-gray-100 dark:bg-dark-700 overflow-hidden">
+                  <div class="h-full rounded-full transition-all duration-500" :style="`width:${item.percent}%;background:${item.color}`" />
+                </div>
+              </button>
+            </div>
+            <div class="mt-3 border-t border-gray-100 pt-2.5 dark:border-dark-700">
+              <button type="button" class="text-xs text-blue-500 hover:text-blue-600 cursor-pointer" @click="openErrorDetailsFromPreset({ title: '全部错误', impactPlatformSla: true })">
+                查看错误列表（带筛选）→
               </button>
             </div>
           </div>
 
-          <!-- E · 扣分明细 -->
+          <!-- E · 依赖健康 -->
           <div class="ov-card">
-            <div class="ov-section-label mb-3 flex items-center justify-between">
-              <div class="flex items-center gap-1.5">
-                <span class="ov-dot ov-dot--gray" />健康分扣分明细
-              </div>
-              <span class="text-xs font-normal normal-case tracking-normal text-gray-400 dark:text-gray-500">
-                满分 100 · 当前 <strong :class="scoreColorClass">{{ scoreValue }}</strong>
-                <span v-if="totalDeductionPoints > 0" class="ml-1 text-red-500">（已扣 {{ totalDeductionPoints }} 分）</span>
+            <div class="mb-3 flex items-center justify-between">
+              <span class="ov-section-title">依赖健康</span>
+              <span v-if="displayOverview?.system_metrics" class="text-[10px] text-gray-400 dark:text-gray-500">
+                {{ formatDateTime(displayOverview?.system_metrics.created_at) }}
               </span>
             </div>
-            <div v-if="parsedScoreDeductions.length === 0" class="rounded-xl bg-gray-50 px-3 py-4 text-sm text-gray-500 dark:bg-dark-800/70 dark:text-gray-400 text-center">
-              当前时间段内无扣分，系统运行正常
+            <div v-if="!displayOverview?.system_metrics" class="rounded-xl bg-gray-50 px-3 py-6 text-center text-xs text-gray-500 dark:bg-dark-800/70 dark:text-gray-400">
+              暂无系统指标
             </div>
-            <div v-else class="flex flex-col gap-1.5">
-              <div
-                v-for="item in parsedScoreDeductions"
-                :key="`${item.label}-${item.points}`"
-                class="flex items-start gap-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 dark:border-red-900/30 dark:bg-red-900/10"
-              >
-                <span class="mt-0.5 shrink-0 rounded-md bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700 dark:bg-red-900/40 dark:text-red-300">
-                  −{{ item.points }} 分
-                </span>
-                <div class="flex-1 min-w-0">
-                  <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ item.label }}</div>
-                  <div v-if="item.reason" class="mt-0.5 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{{ item.reason }}</div>
-                </div>
+            <div v-else-if="infraCritical" class="rounded-xl border border-red-200 bg-red-50 p-3 dark:border-red-900/40 dark:bg-red-900/15">
+              <div class="flex items-center gap-2 text-xs font-semibold text-red-700 dark:text-red-300">
+                <span class="text-red-500">⚠</span>
+                基础设施异常：
+                <span v-if="displayOverview?.system_metrics.db_ok === false && displayOverview?.system_metrics.redis_ok === false">DB · Redis 不可用</span>
+                <span v-else-if="displayOverview?.system_metrics.db_ok === false">DB 不可用</span>
+                <span v-else>Redis 不可用</span>
               </div>
             </div>
-            <div class="mt-3 flex justify-end border-t border-gray-100 pt-3 dark:border-dark-700">
-              <button
-                type="button"
-                class="ov-btn"
-                @click="openErrorDetailsFromPreset({ title: t('admin.ops.incidentOverview.finalFailures'), impactPlatformSla: true })"
-              >查看全部错误 →</button>
+            <div v-else class="grid grid-cols-2 gap-x-4 gap-y-2.5">
+              <div class="ov-infra-row">
+                <span class="ov-infra-name">CPU 使用率</span>
+                <span :class="['ov-infra-status', infraTextClass(displayOverview?.system_metrics.cpu_usage_percent, 70, 90)]">
+                  {{ formatOptionalPercent(displayOverview?.system_metrics.cpu_usage_percent) }}
+                  <span class="ml-1 text-[10px]">{{ infraStatusTag(displayOverview?.system_metrics.cpu_usage_percent, 70, 90) }}</span>
+                </span>
+              </div>
+              <div class="ov-infra-row">
+                <span class="ov-infra-name">内存使用率</span>
+                <span :class="['ov-infra-status', infraTextClass(displayOverview?.system_metrics.memory_usage_percent, 70, 90)]">
+                  {{ formatOptionalPercent(displayOverview?.system_metrics.memory_usage_percent) }}
+                  <span class="ml-1 text-[10px]">{{ infraStatusTag(displayOverview?.system_metrics.memory_usage_percent, 70, 90) }}</span>
+                </span>
+              </div>
+              <div class="ov-infra-row">
+                <span class="ov-infra-name">数据库状态</span>
+                <span :class="['ov-infra-status font-semibold', displayOverview?.system_metrics.db_ok === true ? 'text-emerald-600 dark:text-emerald-400' : displayOverview?.system_metrics.db_ok === false ? 'text-red-600 dark:text-red-400' : 'text-gray-400']">
+                  {{ formatBooleanStatus(displayOverview?.system_metrics.db_ok) }}
+                </span>
+              </div>
+              <div class="ov-infra-row">
+                <span class="ov-infra-name">Redis 状态</span>
+                <span :class="['ov-infra-status font-semibold', displayOverview?.system_metrics.redis_ok === true ? 'text-emerald-600 dark:text-emerald-400' : displayOverview?.system_metrics.redis_ok === false ? 'text-red-600 dark:text-red-400' : 'text-gray-400']">
+                  {{ formatBooleanStatus(displayOverview?.system_metrics.redis_ok) }}
+                </span>
+              </div>
+              <div class="ov-infra-row">
+                <span class="ov-infra-name">并发队列深度</span>
+                <span :class="['ov-infra-status', infraTextClass(displayOverview?.system_metrics.concurrency_queue_depth, 100, 300)]">
+                  {{ formatOptionalInteger(displayOverview?.system_metrics.concurrency_queue_depth) }}
+                  <span class="ml-1 text-[10px]">{{ infraStatusTag(displayOverview?.system_metrics.concurrency_queue_depth, 100, 300) }}</span>
+                </span>
+              </div>
+            </div>
+            <div class="mt-3 border-t border-gray-100 pt-2.5 dark:border-dark-700">
+              <div class="flex items-center gap-3 text-[10px] text-gray-400">
+                <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-emerald-400" />正常</span>
+                <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-amber-400" />关注</span>
+                <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-red-400" />异常</span>
+              </div>
             </div>
           </div>
 
-          <!-- E2 · 错误分类柱状图 -->
+          <!-- F · 影响范围 -->
           <div class="ov-card">
-            <div class="ov-section-label mb-4">
-              <span class="ov-dot ov-dot--gray" />错误分类分布
+            <div class="mb-3 flex items-center justify-between">
+              <span class="ov-section-title">影响范围（{{ timeRangeOptions.find(o => o.value === timeRange)?.label || timeRange }}）</span>
             </div>
-            <div v-if="!errorCategoryChartData || errorCategoryChartData.length === 0" class="rounded-2xl bg-gray-50 px-4 py-6 text-center text-sm text-gray-500 dark:bg-dark-800/70 dark:text-gray-400">
-              当前窗口无最终失败
+            <div class="grid grid-cols-3 gap-2">
+              <!-- 影响用户数 -->
+              <div class="ov-impact-cell">
+                <svg class="ov-impact-icon text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                <div class="ov-impact-val">{{ formatInteger(displayOverview?.affected_users ?? 0) }}</div>
+                <div class="ov-impact-label">影响用户数</div>
+              </div>
+              <!-- 影响API Key -->
+              <div class="ov-impact-cell">
+                <svg class="ov-impact-icon text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                <div class="ov-impact-val">{{ formatInteger(displayOverview?.affected_api_keys ?? 0) }}</div>
+                <div class="ov-impact-label">影响 API Key</div>
+              </div>
+              <!-- 影响分组数 -->
+              <div class="ov-impact-cell">
+                <svg class="ov-impact-icon text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                <div class="ov-impact-val">{{ displayOverview?.affected_models.length }}</div>
+                <div class="ov-impact-label">影响模型数</div>
+              </div>
+              <!-- 影响账号 -->
+              <div class="ov-impact-cell">
+                <svg class="ov-impact-icon text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/></svg>
+                <div class="ov-impact-val">{{ formatInteger(displayOverview?.affected_accounts?.length ?? 0) }}</div>
+                <div class="ov-impact-label">影响上游账号</div>
+              </div>
+              <!-- 最终失败 -->
+              <div class="ov-impact-cell">
+                <svg class="ov-impact-icon text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <div :class="['ov-impact-val', (displayOverview?.final_failures ?? 0) > 0 ? 'text-red-600 dark:text-red-400' : '']">{{ formatInteger(displayOverview?.final_failures ?? 0) }}</div>
+                <div class="ov-impact-label">最终失败请求</div>
+              </div>
+              <!-- 已恢复波动 -->
+              <div class="ov-impact-cell">
+                <svg class="ov-impact-icon text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                <div class="ov-impact-val text-amber-600 dark:text-amber-400">{{ formatInteger(displayOverview?.recovered_fluctuations ?? 0) }}</div>
+                <div class="ov-impact-label">已恢复波动</div>
+              </div>
             </div>
-            <div v-else>
-              <!-- 柱状图区域：固定高度，柱子底部对齐 -->
-              <div class="flex items-end gap-1" style="height: 80px">
+          </div>
+        </div>
+
+        <!-- ═══ 第三行：三个趋势图 ═══ -->
+        <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-3">
+          <!-- 错误趋势图（复用现有组件） -->
+          <div style="height: 240px">
+            <OpsErrorTrendChart
+              :points="errorTrend?.points ?? []"
+              :loading="loadingErrorTrend"
+              :time-range="timeRange"
+              @open-request-errors="openErrorDetailsFromPreset({ title: t('admin.ops.clientErrors'), category: 'client_error' }, 'request')"
+              @open-upstream-errors="openErrorDetailsFromPreset({ title: t('admin.ops.upstreamErrors'), category: 'upstream_error' }, 'upstream')"
+            />
+          </div>
+          <!-- 请求趋势图（占位，数据未接入时显示提示） -->
+          <div class="ov-card flex flex-col" style="height: 240px">
+            <div class="mb-2 flex items-center justify-between shrink-0">
+              <span class="ov-section-title">请求趋势</span>
+            </div>
+            <div class="flex-1 flex items-center justify-center text-xs text-gray-400 dark:text-gray-500">
+              <span>请前往运维仪表盘查看完整请求趋势</span>
+            </div>
+          </div>
+          <!-- 延迟趋势图（占位） -->
+          <div class="ov-card flex flex-col" style="height: 240px">
+            <div class="mb-2 flex items-center justify-between shrink-0">
+              <span class="ov-section-title">延迟趋势</span>
+            </div>
+            <div class="flex-1 flex items-center justify-center text-xs text-gray-400 dark:text-gray-500">
+              <span>请前往运维仪表盘查看完整延迟趋势</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ 第四行：告警时间线 | AI分析报告 ═══ -->
+        <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2 xl:grid-cols-[1fr_2fr]">
+
+          <!-- G · 告警事件时间线 -->
+          <OpsAlertEventsCard />
+
+          <!-- H · AI分析报告 -->
+          <div class="ov-card flex flex-col" style="min-height: 300px">
+            <div class="mb-3 flex items-center justify-between shrink-0">
+              <span class="ov-section-title">最近 AI 分析报告</span>
+              <div class="flex items-center gap-2">
                 <button
-                  v-for="item in errorCategoryChartData"
-                  :key="item.key"
+                  v-if="displayOverview?.latest_ai_analysis"
                   type="button"
-                  class="relative flex flex-1 flex-col items-center"
-                  style="height: 100%"
-                  :title="`${item.label}: ${item.count} 次`"
-                  @click="navigateToErrorCategory(item.key)"
+                  class="ov-btn"
+                  @click="openLatestAIAnalysis"
+                >查看完整报告 →</button>
+                <button
+                  type="button"
+                  class="ov-btn ov-btn--primary"
+                  :disabled="manualAIActionDisabled"
+                  :title="manualAIActionDisabledReason || undefined"
+                  @click="triggerManualAIAnalysis"
                 >
-                  <div class="absolute bottom-0 w-full">
-                    <div
-                      :class="['rounded-t-lg transition-all hover:opacity-80', item.color]"
-                      :style="{ height: `${item.height}px`, minHeight: item.count > 0 ? '4px' : '0px' }"
-                    />
-                  </div>
-                  <div v-if="item.count > 0" class="absolute text-[10px] font-bold text-gray-700 dark:text-gray-200" :style="{ bottom: `${item.height + 2}px` }">
-                    {{ item.count }}
-                  </div>
+                  <Icon name="sparkles" size="sm" />
+                  手动分析
                 </button>
               </div>
-              <!-- 标签行：固定在下方，截断超长文字 -->
-              <div class="mt-2 flex gap-1">
-                <div
-                  v-for="item in errorCategoryChartData"
-                  :key="`label-${item.key}`"
-                  class="flex flex-1 justify-center overflow-hidden"
-                  :title="item.label"
-                >
-                  <span :class="['text-[9px] font-medium text-center leading-tight block truncate w-full', item.count > 0 ? 'text-gray-600 dark:text-gray-300' : 'text-gray-300 dark:text-gray-600']">
-                    {{ item.label }}
-                  </span>
+            </div>
+
+            <!-- 有报告 -->
+            <template v-if="latestAnalysisState === 'ready' && displayOverview?.latest_ai_analysis">
+              <!-- 元信息行 -->
+              <div class="mb-3 flex flex-wrap items-center gap-2 shrink-0">
+                <span :class="['rounded-full px-2.5 py-0.5 text-xs font-semibold', latestAnalysisStatusClass]">{{ latestAnalysisStatusLabel }}</span>
+                <span class="text-xs font-semibold text-gray-800 dark:text-gray-100 truncate max-w-xs">
+                  AI 分析报告
+                </span>
+                <span class="text-[11px] text-gray-400 dark:text-gray-500">
+                  分析时间：{{ formatDateTime(displayOverview?.latest_ai_analysis.created_at) }}
+                </span>
+              </div>
+              <!-- 5列横向内容 -->
+              <div class="grid grid-cols-2 gap-3 flex-1 min-h-0 md:grid-cols-5">
+                <div class="ov-report-col">
+                  <div class="ov-report-col-title">摘要</div>
+                  <p class="ov-report-col-body">{{ displayOverview?.latest_ai_analysis.summary || '报告已生成，点击查看完整内容。' }}</p>
+                </div>
+                <div class="ov-report-col">
+                  <div class="ov-report-col-title">根因判断</div>
+                  <p class="ov-report-col-body text-amber-700 dark:text-amber-300">点击"查看完整报告"获取根因分析</p>
+                </div>
+                <div class="ov-report-col">
+                  <div class="ov-report-col-title">影响范围</div>
+                  <p class="ov-report-col-body">点击"查看完整报告"获取影响范围</p>
+                </div>
+                <div class="ov-report-col">
+                  <div class="ov-report-col-title">证据（部分）</div>
+                  <p class="ov-report-col-body">点击"查看完整报告"获取证据列表</p>
+                </div>
+                <div class="ov-report-col">
+                  <div class="ov-report-col-title">推荐操作</div>
+                  <p class="ov-report-col-body">点击"查看完整报告"获取建议操作</p>
                 </div>
               </div>
-            </div>
-          </div>
+              <div class="mt-3 flex justify-end border-t border-gray-100 pt-2.5 shrink-0 dark:border-dark-700">
+                <button type="button" class="text-xs text-blue-500 hover:text-blue-600 cursor-pointer dark:text-blue-400" @click="openLatestAIAnalysis">
+                  查看全部分析报告 →
+                </button>
+              </div>
+            </template>
 
-	        </div>
-
-	        <!-- ─── F · 依赖健康 ─── -->
-	        <div v-if="displayOverview.system_metrics" class="ov-card mt-3">
-          <div class="ov-section-label mb-3 flex items-center justify-between">
-            <div class="flex items-center gap-1.5">
-              <span class="ov-dot ov-dot--gray" />依赖健康
-            </div>
-            <span class="text-xs text-gray-400 dark:text-gray-500">
-              最后采集：{{ formatDateTime(displayOverview.system_metrics.created_at) }}
-            </span>
-          </div>
-          <!-- Infrastructure exception banner -->
-          <div
-            v-if="infraCritical"
-            class="ov-action-item ov-action-item--red flex items-center justify-between"
-          >
-            <div class="flex items-center gap-3">
-              <div class="ov-action-num ov-action-num--red">!</div>
-              <div class="text-sm font-medium text-red-700 dark:text-red-300">
-                基础设施异常：
-                <span v-if="displayOverview.system_metrics.db_ok === false && displayOverview.system_metrics.redis_ok === false">
-                  DB · Redis 不可用
-                </span>
-                <span v-else-if="displayOverview.system_metrics.db_ok === false">
-                  DB 不可用
-                </span>
-                <span v-else>
-                  Redis 不可用
-                </span>
-                · 可能影响主请求处理
+            <!-- 分析中 -->
+            <div v-else-if="latestAnalysisState === 'pending'" class="flex-1 flex items-center justify-center">
+              <div class="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300">
+                AI 分析正在进行中，请稍候...
               </div>
             </div>
-            <button
-              type="button"
-              class="ov-btn shrink-0"
-              @click="showInfraDetails = true"
-            >查看详情 ↓</button>
-          </div>
-          <!-- Normal cards (hidden when critical) -->
-          <div
-            v-if="!infraCritical"
-            class="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5"
-          >
-            <div :class="['ov-infra-card', infraCardClass(displayOverview.system_metrics.cpu_usage_percent, 70, 90)]">
-              <div class="ov-infra-label">CPU</div>
-              <div class="ov-infra-val">{{ formatOptionalPercent(displayOverview.system_metrics.cpu_usage_percent) }}</div>
-              <div class="ov-infra-hint">{{ infraHint('cpu', displayOverview.system_metrics.cpu_usage_percent) }}</div>
-            </div>
-            <div :class="['ov-infra-card', infraCardClass(displayOverview.system_metrics.memory_usage_percent, 70, 90)]">
-              <div class="ov-infra-label">内存</div>
-              <div class="ov-infra-val">{{ formatOptionalPercent(displayOverview.system_metrics.memory_usage_percent) }}</div>
-              <div class="ov-infra-hint">{{ infraHint('memory', displayOverview.system_metrics.memory_usage_percent) }}</div>
-            </div>
-            <div :class="['ov-infra-card', infraBoolCardClass(displayOverview.system_metrics.db_ok)]">
-              <div class="ov-infra-label">数据库</div>
-              <div class="ov-infra-val">{{ formatBooleanStatus(displayOverview.system_metrics.db_ok) }}</div>
-              <div class="ov-infra-hint">{{ displayOverview.system_metrics.db_ok === true ? '连接正常' : displayOverview.system_metrics.db_ok === false ? '连接异常' : '--' }}</div>
-            </div>
-            <div :class="['ov-infra-card', infraBoolCardClass(displayOverview.system_metrics.redis_ok)]">
-              <div class="ov-infra-label">Redis</div>
-              <div class="ov-infra-val">{{ formatBooleanStatus(displayOverview.system_metrics.redis_ok) }}</div>
-              <div class="ov-infra-hint">{{ displayOverview.system_metrics.redis_ok === true ? '连接正常' : displayOverview.system_metrics.redis_ok === false ? '连接异常' : '--' }}</div>
-            </div>
-            <div :class="['ov-infra-card', infraCardClass(displayOverview.system_metrics.concurrency_queue_depth, 100, 300)]">
-              <div class="ov-infra-label">并发队列</div>
-              <div class="ov-infra-val">{{ formatOptionalInteger(displayOverview.system_metrics.concurrency_queue_depth) }}</div>
-              <div class="ov-infra-hint">{{ infraHint('queue', displayOverview.system_metrics.concurrency_queue_depth) }}</div>
-            </div>
-          </div>
-        </div>
 
-        <!-- ─── G · 错误趋势图 ─── -->
-        <div class="mt-3 grid grid-cols-1 gap-3">
-          <div style="height: 260px">
-          <OpsErrorTrendChart
-            :points="errorTrend?.points ?? []"
-            :loading="loadingErrorTrend"
-            :time-range="timeRange"
-            @open-request-errors="openErrorDetailsFromPreset({ title: t('admin.ops.clientErrors'), category: 'client_error' }, 'request')"
-            @open-upstream-errors="openErrorDetailsFromPreset({ title: t('admin.ops.upstreamErrors'), category: 'upstream_error' }, 'upstream')"
-          />
-          </div>
-        </div>
-
-        <!-- ─── AI 分析报告 ─── -->
-        <div class="mt-3 ov-card">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <h2 class="text-sm font-semibold text-gray-900 dark:text-white">
-                {{ t('admin.ops.incidentOverview.latestAnalysisTitle') }}
-              </h2>
-              <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                AI 基于当前时间窗口内的错误数据生成分析报告，包含根因判断、影响范围和建议操作
-              </p>
+            <!-- 过期 -->
+            <div v-else-if="latestAnalysisState === 'expired'" class="flex-1 flex items-center justify-center">
+              <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
+                {{ t('admin.ops.incidentOverview.analysisExpired') }}
+              </div>
             </div>
-            <div class="flex shrink-0 items-center gap-2">
+
+            <!-- 无报告 -->
+            <div v-else class="flex-1 flex flex-col items-center justify-center gap-3">
+              <div class="text-sm text-gray-400 dark:text-gray-500 text-center">{{ t('admin.ops.incidentOverview.noAnalysis') }}</div>
+              <div v-if="manualAIActionDisabledReason" class="text-xs text-gray-400 dark:text-gray-500 text-center">{{ manualAIActionDisabledReason }}</div>
               <button
                 type="button"
                 class="ov-btn ov-btn--primary"
                 :disabled="manualAIActionDisabled"
-                :title="manualAIActionDisabledReason || undefined"
                 @click="triggerManualAIAnalysis"
               >
                 <Icon name="sparkles" size="sm" />
-                {{ t('admin.ops.incidentOverview.manualAnalysis') }}
-              </button>
-              <button
-                v-if="displayOverview.latest_ai_analysis"
-                type="button"
-                class="ov-btn"
-                @click="openLatestAIAnalysis"
-              >
-                查看完整报告 →
+                立即发起 AI 分析
               </button>
             </div>
-          </div>
-
-          <!-- 有报告时展示摘要 -->
-          <div v-if="latestAnalysisState === 'ready' && displayOverview.latest_ai_analysis" class="mt-3">
-            <div class="flex flex-wrap items-center gap-2">
-              <span :class="['rounded-full px-2.5 py-0.5 text-xs font-semibold', latestAnalysisStatusClass]">
-                {{ latestAnalysisStatusLabel }}
-              </span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">
-                分析时间：{{ formatDateTime(displayOverview.latest_ai_analysis.created_at) }}
-              </span>
-            </div>
-            <div class="mt-2 rounded-2xl bg-blue-50 p-4 dark:bg-blue-900/10">
-              <div class="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400 mb-1">AI 分析摘要</div>
-              <p class="text-sm text-gray-800 dark:text-gray-100 leading-relaxed">
-                {{ displayOverview.latest_ai_analysis.summary || '分析报告已生成，点击"查看完整报告"查看详细内容。' }}
-              </p>
-            </div>
-          </div>
-
-          <!-- 分析中提示 -->
-          <div v-else-if="latestAnalysisState === 'pending'" class="mt-3 rounded-2xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300">
-            AI 分析正在进行中，请稍候...
-          </div>
-
-          <!-- 过期提示 -->
-          <div v-else-if="latestAnalysisState === 'expired'" class="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
-            {{ t('admin.ops.incidentOverview.analysisExpired') }}
-          </div>
-
-          <!-- 无报告时提示 -->
-          <div v-else class="mt-3 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/70">
-            <div class="text-sm text-gray-500 dark:text-gray-400">
-              {{ t('admin.ops.incidentOverview.noAnalysis') }}
-            </div>
-            <div v-if="manualAIActionDisabledReason" class="mt-1 text-xs text-gray-400 dark:text-gray-500">
-              {{ manualAIActionDisabledReason }}
-            </div>
-          </div>
-        </div>
-
-        <!-- ─── Alert Timeline (inline) ─── -->
-        <div class="mt-4">
-          <div class="ov-section-label mb-3">
-            <span :class="['ov-dot', statusDotClass]" />
-            事故时间线 · 告警事件
-          </div>
-
-          <!-- Three-column alert cards by priority -->
-          <OpsAlertGroupsByPriority />
-
-          <!-- Full alert events table -->
-          <div class="mt-4">
-            <OpsAlertEventsCard />
           </div>
         </div>
 
       </template>
 
       <!-- Empty state -->
-      <section v-else class="mt-4 rounded-3xl border border-dashed border-gray-200 bg-white p-10 shadow-sm dark:border-dark-700 dark:bg-dark-900">
+      <section v-else class="mt-4 rounded-2xl border border-dashed border-gray-200 bg-white p-10 shadow-sm dark:border-dark-700 dark:bg-dark-900">
         <EmptyState
           :title="t('admin.ops.incidentOverview.emptyTitle')"
           :description="t('admin.ops.incidentOverview.emptyDescription')"
@@ -546,18 +501,13 @@
       </section>
     </div>
 
-    <!-- Score reasons dialog -->
+    <!-- ── Dialogs ── -->
     <BaseDialog :show="showScoreReasonsDialog" :title="t('admin.ops.incidentOverview.scoreReasonsTitle')" width="wide" @close="showScoreReasonsDialog = false">
       <div class="space-y-3">
-        <div
-          v-for="reason in scoreReasons"
-          :key="reason"
-          class="rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:bg-dark-800 dark:text-gray-200"
-        >{{ reason }}</div>
+        <div v-for="reason in scoreReasons" :key="reason" class="rounded-xl bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:bg-dark-800 dark:text-gray-200">{{ reason }}</div>
       </div>
     </BaseDialog>
 
-    <!-- Alert events dialog -->
     <BaseDialog :show="showAlertEventsDialog" :title="t('admin.ops.alertEvents.title')" width="extra-wide" @close="showAlertEventsDialog = false">
       <OpsAlertEventsCard />
     </BaseDialog>
@@ -573,7 +523,7 @@
       <div v-if="aiReportLoading" class="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
         {{ t('admin.ops.incidentOverview.analysisLoading') }}
       </div>
-      <div v-else-if="aiReportError" class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
+      <div v-else-if="aiReportError" class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
         {{ aiReportError }}
       </div>
       <div v-else-if="aiTaskDetail" class="space-y-4">
@@ -581,203 +531,94 @@
           <span :class="['rounded-full px-3 py-1 text-xs font-semibold', analysisTaskStatusClass(aiTaskDetail.task.status)]">
             {{ analysisTaskStatusLabel(aiTaskDetail.task.status) }}
           </span>
-          <span class="text-xs text-gray-500 dark:text-gray-400">
-            {{ formatDateTime(aiTaskDetail.task.created_at) }}
-          </span>
+          <span class="text-xs text-gray-500 dark:text-gray-400">{{ formatDateTime(aiTaskDetail.task.created_at) }}</span>
         </div>
-
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
-            <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {{ t('admin.ops.incidentOverview.analysisTime') }}
-            </div>
-            <div class="mt-2 text-sm text-gray-800 dark:text-gray-100">
-              {{ analysisTaskTimeLabel }}
-            </div>
+          <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-800/70">
+            <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('admin.ops.incidentOverview.analysisTime') }}</div>
+            <div class="mt-2 text-sm text-gray-800 dark:text-gray-100">{{ analysisTaskTimeLabel }}</div>
           </div>
-
-          <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
-            <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {{ t('admin.ops.incidentOverview.analysisRange') }}
-            </div>
-            <div class="mt-2 text-sm text-gray-800 dark:text-gray-100">
-              {{ analysisTaskRangeLabel }}
-            </div>
+          <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-800/70">
+            <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('admin.ops.incidentOverview.analysisRange') }}</div>
+            <div class="mt-2 text-sm text-gray-800 dark:text-gray-100">{{ analysisTaskRangeLabel }}</div>
           </div>
         </div>
-
-        <div v-if="analysisTaskStateMessage" :class="analysisTaskStateClass">
-          {{ analysisTaskStateMessage }}
-        </div>
-
+        <div v-if="analysisTaskStateMessage" :class="analysisTaskStateClass">{{ analysisTaskStateMessage }}</div>
         <div v-if="aiTaskDetail.report" class="space-y-4">
-          <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
-            <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {{ t('admin.ops.incidentOverview.analysisSummary') }}
-            </div>
-            <div class="mt-2 text-sm text-gray-800 dark:text-gray-100">
-              {{ aiTaskDetail.report.summary }}
-            </div>
+          <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-800/70">
+            <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('admin.ops.incidentOverview.analysisSummary') }}</div>
+            <div class="mt-2 text-sm text-gray-800 dark:text-gray-100">{{ aiTaskDetail.report.summary }}</div>
           </div>
-
-          <div v-if="aiTaskDetail.report.root_cause" class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
-            <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {{ t('admin.ops.incidentOverview.analysisRootCause') }}
-            </div>
-            <div class="mt-2 text-sm text-gray-800 dark:text-gray-100">
-              {{ aiTaskDetail.report.root_cause }}
-            </div>
+          <div v-if="aiTaskDetail.report.root_cause" class="rounded-xl bg-gray-50 p-4 dark:bg-dark-800/70">
+            <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('admin.ops.incidentOverview.analysisRootCause') }}</div>
+            <div class="mt-2 text-sm text-gray-800 dark:text-gray-100">{{ aiTaskDetail.report.root_cause }}</div>
           </div>
-
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
+            <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-800/70">
               <div class="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
                 <span>{{ t('admin.ops.incidentOverview.analysisConfidence') }}</span>
-                <span
-                  v-if="analysisConfidenceBadgeLabel"
-                  :class="['rounded-full px-2 py-0.5 text-[11px] font-semibold normal-case tracking-normal', analysisConfidenceBadgeClass]"
-                >
-                  {{ analysisConfidenceBadgeLabel }}
-                </span>
+                <span v-if="analysisConfidenceBadgeLabel" :class="['rounded-full px-2 py-0.5 text-[11px] font-semibold normal-case tracking-normal', analysisConfidenceBadgeClass]">{{ analysisConfidenceBadgeLabel }}</span>
               </div>
-              <div class="mt-2 text-sm text-gray-800 dark:text-gray-100">
-                {{ analysisConfidenceText }}
-              </div>
-              <div
-                v-if="analysisConfidenceLevel === 'low'"
-                class="mt-2 text-xs text-amber-700 dark:text-amber-300"
-              >
-                {{ t('admin.ops.incidentOverview.lowConfidenceHint') }}
-              </div>
+              <div class="mt-2 text-sm text-gray-800 dark:text-gray-100">{{ analysisConfidenceText }}</div>
             </div>
-
-            <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
-              <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                {{ t('admin.ops.incidentOverview.analysisImpact') }}
-              </div>
+            <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-800/70">
+              <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('admin.ops.incidentOverview.analysisImpact') }}</div>
               <ul v-if="analysisImpactItems.length" class="mt-2 space-y-2 text-sm text-gray-800 dark:text-gray-100">
                 <li v-for="item in analysisImpactItems" :key="item.label" class="flex items-center justify-between gap-3">
-                  <span>{{ item.label }}</span>
-                  <span class="font-semibold">{{ item.value }}</span>
+                  <span>{{ item.label }}</span><span class="font-semibold">{{ item.value }}</span>
                 </li>
               </ul>
-              <div v-else class="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                {{ t('admin.ops.incidentOverview.noImpactScope') }}
-              </div>
+              <div v-else class="mt-2 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ops.incidentOverview.noImpactScope') }}</div>
             </div>
           </div>
-
-          <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
-            <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {{ t('admin.ops.incidentOverview.analysisEvidence') }}
-            </div>
+          <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-800/70">
+            <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('admin.ops.incidentOverview.analysisEvidence') }}</div>
             <ul v-if="analysisEvidenceItems.length" class="mt-2 space-y-2 text-sm text-gray-800 dark:text-gray-100">
-              <li v-for="item in analysisEvidenceItems" :key="item" class="flex gap-2">
-                <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
-                <span>{{ item }}</span>
-              </li>
+              <li v-for="item in analysisEvidenceItems" :key="item" class="flex gap-2"><span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" /><span>{{ item }}</span></li>
             </ul>
-            <div v-else class="mt-2 text-sm text-gray-500 dark:text-gray-400">
-              {{ t('admin.ops.incidentOverview.noEvidence') }}
-            </div>
           </div>
-
-          <div v-if="analysisActions.length" class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
-            <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-              {{ t('admin.ops.incidentOverview.analysisActions') }}
-            </div>
+          <div v-if="analysisActions.length" class="rounded-xl bg-gray-50 p-4 dark:bg-dark-800/70">
+            <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('admin.ops.incidentOverview.analysisActions') }}</div>
             <ul class="mt-2 space-y-2 text-sm text-gray-800 dark:text-gray-100">
-              <li v-for="item in analysisActions" :key="item" class="flex gap-2">
-                <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
-                <span>{{ item }}</span>
-              </li>
+              <li v-for="item in analysisActions" :key="item" class="flex gap-2"><span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" /><span>{{ item }}</span></li>
             </ul>
           </div>
-
-          <div class="rounded-2xl border border-gray-200 p-4 dark:border-dark-700">
+          <div class="rounded-xl border border-gray-200 p-4 dark:border-dark-700">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  AI 反馈
-                </div>
-                <div class="mt-2 text-sm text-gray-800 dark:text-gray-100">
-                  当前状态：{{ currentFeedbackStatusLabel }}
-                </div>
-                <div v-if="aiTaskDetail.report.feedback_at" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  最近提交：{{ formatDateTime(aiTaskDetail.report.feedback_at) }}
-                </div>
+                <div class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">AI 反馈</div>
+                <div class="mt-2 text-sm text-gray-800 dark:text-gray-100">当前状态：{{ currentFeedbackStatusLabel }}</div>
+                <div v-if="aiTaskDetail.report.feedback_at" class="mt-1 text-xs text-gray-500 dark:text-gray-400">最近提交：{{ formatDateTime(aiTaskDetail.report.feedback_at) }}</div>
               </div>
-              <span
-                :class="[
-                  'rounded-full px-3 py-1 text-xs font-semibold',
-                  aiTaskDetail.report.feedback_status && aiTaskDetail.report.feedback_status !== 'none'
-                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                    : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-gray-300'
-                ]"
-              >
-                {{ currentFeedbackStatusLabel }}
-              </span>
+              <span :class="['rounded-full px-3 py-1 text-xs font-semibold', aiTaskDetail.report.feedback_status && aiTaskDetail.report.feedback_status !== 'none' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-gray-100 text-gray-600 dark:bg-dark-800 dark:text-gray-300']">{{ currentFeedbackStatusLabel }}</span>
             </div>
-
             <div v-if="canSubmitAIReportFeedback" class="mt-4 space-y-4">
               <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <button
                   v-for="option in feedbackOptions"
                   :key="option.value"
                   type="button"
-                  :class="[
-                    'rounded-2xl border px-4 py-3 text-sm font-medium transition',
-                    feedbackForm.feedback_status === option.value
-                      ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300'
-                      : 'border-gray-200 text-gray-700 hover:border-blue-300 hover:text-blue-600 dark:border-dark-700 dark:text-gray-200'
-                  ]"
+                  :class="['rounded-xl border px-4 py-3 text-sm font-medium transition', feedbackForm.feedback_status === option.value ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300' : 'border-gray-200 text-gray-700 hover:border-blue-300 hover:text-blue-600 dark:border-dark-700 dark:text-gray-200']"
                   @click="feedbackForm.feedback_status = option.value"
-                >
-                  {{ option.label }}
-                </button>
+                >{{ option.label }}</button>
               </div>
-
               <div>
                 <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-200">补充说明</label>
-                <textarea
-                  v-model="feedbackForm.feedback_note"
-                  rows="4"
-                  maxlength="500"
-                  class="input min-h-[112px]"
-                  placeholder="补充判断依据、遗漏信息或错误原因"
-                />
+                <textarea v-model="feedbackForm.feedback_note" rows="4" maxlength="500" class="input min-h-[112px]" placeholder="补充判断依据、遗漏信息或错误原因" />
                 <div class="mt-2 flex items-center justify-between text-xs">
                   <span class="text-gray-500 dark:text-gray-400">最多 500 字，可留空。</span>
-                  <span :class="feedbackNoteLength > 500 ? 'text-red-600 dark:text-red-300' : 'text-gray-500 dark:text-gray-400'">
-                    {{ feedbackNoteLength }}/500
-                  </span>
+                  <span :class="feedbackNoteLength > 500 ? 'text-red-600 dark:text-red-300' : 'text-gray-500 dark:text-gray-400'">{{ feedbackNoteLength }}/500</span>
                 </div>
               </div>
-
               <div class="flex flex-wrap items-center justify-between gap-3">
-                <div class="text-xs text-gray-500 dark:text-gray-400">
-                  提交后会覆盖该报告最近一次人工反馈。
-                </div>
-                <button
-                  type="button"
-                  class="inline-flex items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:disabled:bg-blue-800/60"
-                  :disabled="feedbackSubmitDisabled"
-                  @click="submitAIReportFeedback"
-                >
-                  {{ feedbackSaving ? '提交中...' : '提交反馈' }}
-                </button>
+                <div class="text-xs text-gray-500 dark:text-gray-400">提交后会覆盖该报告最近一次人工反馈。</div>
+                <button type="button" class="inline-flex items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:disabled:bg-blue-800/60" :disabled="feedbackSubmitDisabled" @click="submitAIReportFeedback">{{ feedbackSaving ? '提交中...' : '提交反馈' }}</button>
               </div>
             </div>
-
-            <div v-else class="mt-4 rounded-2xl border border-dashed border-gray-200 px-4 py-3 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400">
-              当前账号无权限反馈 AI 分析报告。
-            </div>
+            <div v-else class="mt-4 rounded-xl border border-dashed border-gray-200 px-4 py-3 text-sm text-gray-500 dark:border-dark-700 dark:text-gray-400">当前账号无权限反馈 AI 分析报告。</div>
           </div>
         </div>
-
-        <div v-else class="rounded-2xl bg-gray-50 p-4 text-sm text-gray-600 dark:bg-dark-800/70 dark:text-gray-300">
-          {{ analysisTaskFallbackMessage }}
-        </div>
+        <div v-else class="rounded-xl bg-gray-50 p-4 text-sm text-gray-600 dark:bg-dark-800/70 dark:text-gray-300">{{ analysisTaskFallbackMessage }}</div>
       </div>
     </BaseDialog>
   </AppLayout>
@@ -803,13 +644,11 @@ import {
   type OpsErrorTrendResponse,
   type OpsIncidentOverview,
   type OpsIncidentOverviewParams,
-  type OpsIncidentOverviewTimeRange,
-  type OpsIncidentQuickFilter
+  type OpsIncidentOverviewTimeRange
 } from '@/api/admin/ops'
 import { useAppStore, useAuthStore } from '@/stores'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import OpsAlertEventsCard from './components/OpsAlertEventsCard.vue'
-import OpsAlertGroupsByPriority from './components/OpsAlertGroupsByPriority.vue'
 import OpsErrorTrendChart from './components/OpsErrorTrendChart.vue'
 import OpsSettingsDialog from './components/OpsSettingsDialog.vue'
 import { canManageManualAIAnalysis, fetchOpsAIAnalysisConfig, isManualAIAnalysisConfigured, type OpsAIAnalysisConfigSnapshot } from './utils/manualAIAnalysis'
@@ -833,14 +672,6 @@ type OpsErrorDetailsPreset = {
   clientFailed?: boolean
   model?: string
   upstreamAccountId?: number
-}
-
-type ErrorCategoryChartItem = {
-  key: string
-  label: string
-  color: string
-  count: number
-  height: number
 }
 
 const { t } = useI18n()
@@ -889,7 +720,6 @@ const showScoreReasonsDialog = ref(false)
 const showAlertEventsDialog = ref(false)
 const showAIReportDialog = ref(false)
 const showOpsSettingsDialog = ref(false)
-const showInfraDetails = ref(false)
 const aiReportLoading = ref(false)
 const aiReportError = ref('')
 const aiTaskDetail = ref<OpsAIAnalysisTaskDetailResponse | null>(null)
@@ -941,7 +771,7 @@ const groupSelection = computed({
 })
 
 const displayOverview = computed(() => overview.value ?? lastSuccessfulOverview.value)
-const scoreReasons = computed(() => displayOverview.value?.score_reasons ?? [t('admin.ops.incidentOverview.scoreReasonEmpty')])
+const scoreReasons = computed(() => displayOverview?.value?.score_reasons ?? [t('admin.ops.incidentOverview.scoreReasonEmpty')])
 
 type ParsedScoreDeduction = {
   label: string
@@ -952,7 +782,7 @@ type ParsedScoreDeduction = {
 // Parse score_reasons strings into structured items.
 // Backend may send strings like "失败率过高 (-15分): 原因说明" or plain explanatory text.
 const parsedScoreDeductions = computed<ParsedScoreDeduction[]>(() => {
-  const reasons = displayOverview.value?.score_reasons ?? []
+  const reasons = displayOverview?.value?.score_reasons ?? []
   return reasons
     .map(reason => {
       const str = String(reason || '').trim()
@@ -970,43 +800,40 @@ const parsedScoreDeductions = computed<ParsedScoreDeduction[]>(() => {
     .filter((item): item is ParsedScoreDeduction => item !== null)
 })
 
-const totalDeductionPoints = computed(() =>
-  parsedScoreDeductions.value.reduce((sum, item) => sum + item.points, 0)
-)
 
 const recommendedActions = computed(() => {
-  const actions = displayOverview.value?.recommended_actions ?? []
+  const actions = displayOverview?.value?.recommended_actions ?? []
   return actions.filter(a => String(a || '').trim())
 })
-const currentSummary = computed(() => displayOverview.value?.summary || t('admin.ops.incidentOverview.noSummary'))
+const currentSummary = computed(() => displayOverview?.value?.summary || t('admin.ops.incidentOverview.noSummary'))
 
 const infraCritical = computed(() => {
-  const m = displayOverview.value?.system_metrics
+  const m = displayOverview?.value?.system_metrics
   return m !== null && m !== undefined && (m.db_ok === false || m.redis_ok === false)
 })
 
 const showSmallSampleProtection = computed(() => {
-  const ov = displayOverview.value
+  const ov = displayOverview?.value
   if (!ov) return false
   return ov.final_failures <= 2 && ov.total_requests > 0
 })
 
 const statusLabel = computed(() => {
-  const status = String(displayOverview.value?.status || '').trim().toLowerCase()
+  const status = String(displayOverview?.value?.status || '').trim().toLowerCase()
   const key = `admin.ops.incidentOverview.status.${status || 'normal'}`
   const translated = t(key)
   return translated === key ? t('admin.ops.incidentOverview.status.normal') : translated
 })
 
 const scoreLevelLabel = computed(() => {
-  const level = String(displayOverview.value?.score_level || '').trim().toLowerCase()
+  const level = String(displayOverview?.value?.score_level || '').trim().toLowerCase()
   const key = `admin.ops.incidentOverview.scoreLevel.${level || 'normal'}`
   const translated = t(key)
   return translated === key ? t('admin.ops.incidentOverview.scoreLevel.normal') : translated
 })
 
 const scoreLevelBadgeClass = computed(() => {
-  switch (String(displayOverview.value?.score_level || '').trim().toLowerCase()) {
+  switch (String(displayOverview?.value?.score_level || '').trim().toLowerCase()) {
     case 'incident':
       return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
     case 'risk':
@@ -1019,12 +846,12 @@ const scoreLevelBadgeClass = computed(() => {
 })
 
 const scoreValue = computed(() => {
-  const value = displayOverview.value?.health_risk_score
+  const value = displayOverview?.value?.health_risk_score
   return typeof value === 'number' && Number.isFinite(value) ? String(value) : '--'
 })
 
 const latestAnalysisState = computed<'none' | 'ready' | 'pending' | 'expired'>(() => {
-  const analysis = displayOverview.value?.latest_ai_analysis
+  const analysis = displayOverview?.value?.latest_ai_analysis
   if (!analysis) return 'none'
   const status = String(analysis.status || '').trim().toLowerCase()
   if (status === 'expired') return 'expired'
@@ -1033,14 +860,14 @@ const latestAnalysisState = computed<'none' | 'ready' | 'pending' | 'expired'>((
 })
 
 const latestAnalysisStatusLabel = computed(() => {
-  const status = String(displayOverview.value?.latest_ai_analysis?.status || '').trim().toLowerCase()
+  const status = String(displayOverview?.value?.latest_ai_analysis?.status || '').trim().toLowerCase()
   if (!status) return t('admin.ops.incidentOverview.analysisStatus.completed')
   const key = `admin.ops.incidentOverview.analysisStatus.${status}`
   const translated = t(key)
   return translated === key ? status : translated
 })
 
-const latestAnalysisStatusClass = computed(() => analysisTaskStatusClass(displayOverview.value?.latest_ai_analysis?.status || 'completed'))
+const latestAnalysisStatusClass = computed(() => analysisTaskStatusClass(displayOverview?.value?.latest_ai_analysis?.status || 'completed'))
 const currentViewerRole = computed(() => String((authStore.user as { role?: string } | null)?.role || '').trim().toLowerCase())
 const canRunManualAIAnalysis = computed(() => canManageManualAIAnalysis(currentViewerRole.value))
 const canSubmitAIReportFeedback = computed(() => aiFeedbackAllowedRoles.has(currentViewerRole.value))
@@ -1052,7 +879,7 @@ const manualAIActionDisabledReason = computed(() => {
   if (manualAIConfigLoadError.value) return manualAIConfigLoadError.value
   if (!manualAIConfigLoaded.value) return 'AI 配置加载完成后可发起 AI 分析。'
   if (!isManualAIAnalysisConfigured(manualAIConfig.value)) return '请先配置 AI 分析服务'
-  const current = displayOverview.value
+  const current = displayOverview?.value
   if (!current) return t('admin.ops.incidentOverview.analysisDisabled.loading')
   if (selectedWindowMs.value > 24 * 60 * 60 * 1000) {
     return t('admin.ops.incidentOverview.analysisDisabled.timeTooLarge')
@@ -1193,41 +1020,31 @@ const feedbackSubmitDisabled = computed(() => {
 })
 const currentFeedbackStatusLabel = computed(() => feedbackStatusLabel(aiTaskDetail.value?.report?.feedback_status))
 
-const errorCategoryConfig = computed(() => [
-  { key: 'client', label: '客户端', color: 'bg-blue-400' },
-  { key: 'platform', label: '平台', color: 'bg-indigo-400' },
-  { key: 'upstream', label: '上游', color: 'bg-orange-400' },
-  { key: 'account_pool', label: '账号池', color: 'bg-amber-400' },
-  { key: 'rate_limit', label: '限流', color: 'bg-yellow-400' },
-  { key: 'permission', label: '权限', color: 'bg-purple-400' },
-  { key: 'balance', label: '余额', color: 'bg-rose-400' },
-  { key: 'config', label: '配置', color: 'bg-gray-400' },
-  { key: 'slow_request', label: '慢请求', color: 'bg-cyan-400' },
-  { key: 'unknown', label: '未知', color: 'bg-slate-400' }
-])
-
-const errorCategoryChartData = computed<ErrorCategoryChartItem[]>(() => {
-  const counts = displayOverview.value?.error_category_counts
-  if (!counts || Object.keys(counts).length === 0) {
-    return []
+// 가로형 바 차트 데이터 (참조 이미지 스타일)
+const errorCategoryHorizontalData = computed(() => {
+  const counts = displayOverview?.value?.error_category_counts
+  if (!counts || Object.keys(counts).length === 0) return []
+  const colorHexMap: Record<string, string> = {
+    client: '#60a5fa', platform: '#818cf8', upstream: '#fb923c',
+    account_pool: '#fbbf24', rate_limit: '#facc15', permission: '#c084fc',
+    balance: '#fb7185', config: '#9ca3af', slow_request: '#22d3ee', unknown: '#94a3b8'
   }
-
-  const maxCount = Math.max(...Object.values(counts).map(v => typeof v === 'number' ? v : 0), 1)
-  const items: ErrorCategoryChartItem[] = []
-
-  for (const config of errorCategoryConfig.value) {
-    const count = counts[config.key] || 0
-    const height = count > 0 ? Math.max(4, (count / maxCount) * 80) : 0
-    items.push({
-      key: config.key,
-      label: config.label,
-      color: config.color,
-      count,
-      height
-    })
+  const total = Object.values(counts).reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0) || 1
+  const labelMap: Record<string, string> = {
+    client: '客户端错误', platform: '平台错误', upstream: '上游错误',
+    account_pool: '账号池错误', rate_limit: '上游限流', permission: '权限错误',
+    balance: '余额不足', config: '配置错误', slow_request: '慢请求', unknown: '未分类'
   }
-
-  return items
+  return Object.entries(counts)
+    .filter(([, v]) => typeof v === 'number' && v > 0)
+    .sort(([, a], [, b]) => (b as number) - (a as number))
+    .map(([key, count]) => ({
+      key,
+      label: labelMap[key] || key,
+      count: count as number,
+      percent: ((count as number) / total) * 100,
+      color: colorHexMap[key] || '#9ca3af'
+    }))
 })
 
 const debouncedFetchOverview = useDebounceFn(() => {
@@ -1290,10 +1107,6 @@ function formatBooleanStatus(value: boolean | null | undefined): string {
   if (value === true) return '正常'
   if (value === false) return '异常'
   return '--'
-}
-
-function openAIAnalysisConfig() {
-  void router.push({ path: '/admin/ops/ai-analysis' })
 }
 
 async function handleOpsSettingsSaved() {
@@ -1476,7 +1289,9 @@ function stopAIReportPolling() {
 }
 
 async function fetchAIAnalysisTaskDetail(taskId: number, poll = false) {
-  aiReportLoading.value = true
+  // 轮询更新时不显示 loading（避免内容区闪烁），只有初始加载才显示
+  const isInitialLoad = !aiTaskDetail.value
+  if (isInitialLoad) aiReportLoading.value = true
   aiReportError.value = ''
   try {
     const detail = await opsAPI.getAIAnalysisTaskDetail(taskId)
@@ -1510,7 +1325,7 @@ async function fetchAIAnalysisTaskDetail(taskId: number, poll = false) {
 }
 
 async function openLatestAIAnalysis() {
-  const taskId = displayOverview.value?.latest_ai_analysis?.id
+  const taskId = displayOverview?.value?.latest_ai_analysis?.id
   if (!taskId) return
   aiTaskDetail.value = null
   resetFeedbackForm()
@@ -1663,44 +1478,6 @@ function applyCustomTimeRange() {
   void fetchOverview()
 }
 
-function applyModelFilter(value: string) {
-  model.value = value
-  appStore.showInfo(t('admin.ops.incidentOverview.filterApplied', { field: t('admin.ops.requestDetails.table.model'), value }))
-}
-
-function openAccountDetails(accountId: number, accountName: string) {
-  openErrorDetailsFromPreset({
-    title: t('admin.ops.incidentOverview.accountDetailsTitle', { name: accountName || t('admin.ops.incidentOverview.unknownAccount') }),
-    upstreamAccountId: accountId
-  }, 'upstream')
-}
-
-function openQuickFilter(filter: OpsIncidentQuickFilter) {
-  const params = filter.params || {}
-  const accountId = Number.parseInt(String(params.upstream_account_id || params.account_id || ''), 10)
-  if (Number.isFinite(accountId) && accountId > 0) {
-    openAccountDetails(accountId, filter.label.replace(/^上游账号：/, ''))
-    return
-  }
-
-  const preset: OpsErrorDetailsPreset = {
-    title: filter.label,
-    category: params.category,
-    impactPlatformSla: params.impact_platform_sla === 'true' || params.impact_platform_sla === '1',
-    model: params.model
-  }
-
-  openErrorDetailsFromPreset(preset, params.category === 'upstream_error' ? 'upstream' : 'request')
-}
-
-function openSummaryDetails() {
-  const firstFilter = displayOverview.value?.quick_filters?.[0]
-  if (firstFilter) {
-    openQuickFilter(firstFilter)
-    return
-  }
-  showAlertEventsDialog.value = true
-}
 
 function mapLegacyCategoryToUnifiedCategory(category?: string): string | null {
   switch (String(category || '').trim()) {
@@ -1781,12 +1558,12 @@ function openErrorDetailsFromPreset(preset: OpsErrorDetailsPreset, type: 'reques
 // ─── New layout helpers ───────────────────────────────────────────────────────
 
 const scoreNumeric = computed(() => {
-  const v = displayOverview.value?.health_risk_score
+  const v = displayOverview?.value?.health_risk_score
   return typeof v === 'number' && Number.isFinite(v) ? v : null
 })
 
 const scoreColorClass = computed(() => {
-  switch (String(displayOverview.value?.score_level || '').trim().toLowerCase()) {
+  switch (String(displayOverview?.value?.score_level || '').trim().toLowerCase()) {
     case 'incident': return 'text-red-600 dark:text-red-400'
     case 'risk': return 'text-amber-600 dark:text-amber-400'
     case 'observing': return 'text-blue-600 dark:text-blue-400'
@@ -1794,46 +1571,8 @@ const scoreColorClass = computed(() => {
   }
 })
 
-const scoreDotClass = computed(() => {
-  switch (String(displayOverview.value?.score_level || '').trim().toLowerCase()) {
-    case 'incident': return 'ov-dot--red'
-    case 'risk': return 'ov-dot--amber'
-    case 'observing': return 'ov-dot--blue'
-    default: return 'ov-dot--green'
-  }
-})
-
-const statusDotClass = computed(() => scoreDotClass.value)
-
-const bannerBorderClass = computed(() => {
-  switch (String(displayOverview.value?.status || '').trim().toLowerCase()) {
-    case 'incident': return 'border-red-300 dark:border-red-800'
-    case 'risk': return 'border-amber-300 dark:border-amber-800'
-    case 'observing': return 'border-blue-300 dark:border-blue-700'
-    default: return 'border-emerald-300 dark:border-emerald-800'
-  }
-})
-
-const bannerTopBgClass = computed(() => {
-  switch (String(displayOverview.value?.status || '').trim().toLowerCase()) {
-    case 'incident': return 'bg-red-50 dark:bg-red-900/20'
-    case 'risk': return 'bg-amber-50 dark:bg-amber-900/20'
-    case 'observing': return 'bg-blue-50 dark:bg-blue-900/20'
-    default: return 'bg-emerald-50 dark:bg-emerald-900/20'
-  }
-})
-
-const bannerVerdictTextClass = computed(() => {
-  switch (String(displayOverview.value?.status || '').trim().toLowerCase()) {
-    case 'incident': return 'text-red-800 dark:text-red-300'
-    case 'risk': return 'text-amber-800 dark:text-amber-300'
-    case 'observing': return 'text-blue-800 dark:text-blue-300'
-    default: return 'text-emerald-800 dark:text-emerald-300'
-  }
-})
-
 const statusIcon = computed(() => {
-  switch (String(displayOverview.value?.status || '').trim().toLowerCase()) {
+  switch (String(displayOverview?.value?.status || '').trim().toLowerCase()) {
     case 'incident': return '⚡'
     case 'risk': return '⚠'
     case 'observing': return '👁'
@@ -1841,30 +1580,15 @@ const statusIcon = computed(() => {
   }
 })
 
-const statusPillClass = computed(() => {
-  switch (String(displayOverview.value?.status || '').trim().toLowerCase()) {
-    case 'incident': return 'ov-apill--red'
-    case 'risk': return 'ov-apill--amber'
-    default: return 'ov-apill--blue'
-  }
-})
-
 const actionSectionLabel = computed(() => {
-  const status = String(displayOverview.value?.status || '').trim().toLowerCase()
+  const status = String(displayOverview?.value?.status || '').trim().toLowerCase()
   if (status === 'incident' || status === 'risk') return '需要立即处理'
   if (status === 'observing') return '需要关注'
   return '建议操作'
 })
 
-const actionSectionDotClass = computed(() => {
-  const status = String(displayOverview.value?.status || '').trim().toLowerCase()
-  if (status === 'incident') return 'ov-dot--red'
-  if (status === 'risk') return 'ov-dot--amber'
-  return 'ov-dot--blue'
-})
-
 function actionItemClass(index: number): string {
-  const status = String(displayOverview.value?.status || '').trim().toLowerCase()
+  const status = String(displayOverview?.value?.status || '').trim().toLowerCase()
   if (status === 'incident') {
     if (index === 0) return 'ov-action-item--red'
     if (index === 1) return 'ov-action-item--amber'
@@ -1878,7 +1602,7 @@ function actionItemClass(index: number): string {
 }
 
 function actionNumClass(index: number): string {
-  const status = String(displayOverview.value?.status || '').trim().toLowerCase()
+  const status = String(displayOverview?.value?.status || '').trim().toLowerCase()
   if (status === 'incident') {
     if (index === 0) return 'ov-action-num--red'
     if (index === 1) return 'ov-action-num--amber'
@@ -1890,48 +1614,32 @@ function actionNumClass(index: number): string {
   return 'ov-action-num--blue'
 }
 
-function infraCardClass(
-  value: number | null | undefined,
-  warnThreshold: number,
-  errorThreshold: number
-): string {
-  if (value === null || value === undefined) return 'ov-infra-card--neutral'
-  if (value >= errorThreshold) return 'ov-infra-card--error'
-  if (value >= warnThreshold) return 'ov-infra-card--warn'
-  return 'ov-infra-card--ok'
-}
-
-function infraBoolCardClass(value: boolean | null | undefined): string {
-  if (value === null || value === undefined) return 'ov-infra-card--neutral'
-  return value ? 'ov-infra-card--ok' : 'ov-infra-card--error'
-}
-
-function infraHint(type: string, value: number | boolean | null | undefined): string {
-  if (type === 'cpu') {
-    if (value === null || value === undefined) return '--'
-    const v = value as number
-    if (v >= 90) return '使用率过高'
-    if (v >= 70) return '使用率偏高'
-    return '正常'
-  }
-  if (type === 'memory') {
-    if (value === null || value === undefined) return '--'
-    const v = value as number
-    if (v >= 90) return '内存紧张'
-    if (v >= 70) return '使用率偏高'
-    return '正常'
-  }
-  if (type === 'queue') {
-    if (value === null || value === undefined) return '--'
-    const v = value as number
-    if (v >= 300) return '队列积压严重'
-    if (v >= 100) return '队列积压偏高'
-    return '正常'
-  }
-  return '--'
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
+
+// 新增：infra 文字颜色 helper
+function infraTextClass(value: number | null | undefined, warnThreshold: number, errorThreshold: number): string {
+  if (value === null || value === undefined) return 'text-gray-400 dark:text-gray-500'
+  if (value >= errorThreshold) return 'text-red-600 dark:text-red-400'
+  if (value >= warnThreshold) return 'text-amber-600 dark:text-amber-400'
+  return 'text-emerald-600 dark:text-emerald-400'
+}
+
+function infraStatusTag(value: number | null | undefined, warnThreshold: number, errorThreshold: number): string {
+  if (value === null || value === undefined) return ''
+  if (value >= errorThreshold) return '异常'
+  if (value >= warnThreshold) return '关注'
+  return '正常'
+}
+
+// 新增：状态徽标 class
+const statusBadgeClass = computed(() => {
+  switch (String(displayOverview?.value?.status || '').trim().toLowerCase()) {
+    case 'incident': return 'ov-status-badge--red'
+    case 'risk': return 'ov-status-badge--amber'
+    case 'observing': return 'ov-status-badge--blue'
+    default: return 'ov-status-badge--green'
+  }
+})
 
 onMounted(async () => {
   await Promise.all([loadGroups(), loadManualAIAnalysisConfig()])
@@ -2100,4 +1808,91 @@ onUnmounted(() => {
 .ov-infra-card--warn .ov-infra-hint { @apply text-amber-600 dark:text-amber-500; }
 .ov-infra-card--error .ov-infra-hint { @apply text-red-600 dark:text-red-500; }
 .ov-infra-card--neutral .ov-infra-hint { @apply text-gray-400 dark:text-gray-500; }
+
+/* ── Page wrapper ── */
+.ov-page {
+  @apply pb-12;
+}
+
+/* ── Filter label ── */
+.ov-filter-label {
+  @apply text-xs font-medium text-gray-500 dark:text-gray-400;
+}
+
+/* ── Select ── */
+.ov-select {
+  @apply h-7 rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-900 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-dark-600 dark:bg-dark-900 dark:text-white;
+}
+
+/* ── Section title ── */
+.ov-section-title {
+  @apply text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400;
+}
+
+/* ── Metric cell ── */
+.ov-metric-cell {
+  @apply rounded-xl bg-gray-50 px-3 py-2.5 dark:bg-dark-800/60;
+}
+.ov-metric-label {
+  @apply mb-1 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500;
+}
+.ov-metric-val {
+  @apply text-lg font-black leading-none;
+}
+
+/* ── Score ring ── */
+.ov-score-ring {
+  @apply relative flex h-20 w-20 items-center justify-center;
+}
+.ov-score-ring-svg {
+  @apply absolute inset-0 h-full w-full;
+}
+.ov-score-ring-inner {
+  @apply relative flex flex-col items-center;
+}
+
+/* ── Status badge ── */
+.ov-status-badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold;
+}
+.ov-status-badge--green { @apply bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300; }
+.ov-status-badge--blue { @apply bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300; }
+.ov-status-badge--amber { @apply bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300; }
+.ov-status-badge--red { @apply bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300; }
+
+/* ── Infra row (new design) ── */
+.ov-infra-row {
+  @apply flex items-center justify-between gap-2;
+}
+.ov-infra-name {
+  @apply text-xs text-gray-500 dark:text-gray-400 truncate;
+}
+.ov-infra-status {
+  @apply shrink-0 text-xs font-semibold;
+}
+
+/* ── Impact cell ── */
+.ov-impact-cell {
+  @apply flex flex-col items-center rounded-xl bg-gray-50 px-2 py-3 dark:bg-dark-800/60;
+}
+.ov-impact-icon {
+  @apply mb-1.5 h-5 w-5;
+}
+.ov-impact-val {
+  @apply text-xl font-black leading-none text-gray-900 dark:text-white;
+}
+.ov-impact-label {
+  @apply mt-1 text-[10px] font-medium text-gray-400 dark:text-gray-500 text-center;
+}
+
+/* ── Report columns ── */
+.ov-report-col {
+  @apply rounded-xl bg-gray-50 p-3 dark:bg-dark-800/60;
+}
+.ov-report-col-title {
+  @apply mb-1.5 text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500;
+}
+.ov-report-col-body {
+  @apply text-xs text-gray-700 dark:text-gray-200 leading-relaxed;
+}
 </style>

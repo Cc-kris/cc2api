@@ -23,6 +23,8 @@ const (
 	maxDecompressedBodySize = 64 << 20
 )
 
+const RequestBodyTooLargeClientMessage = "上传的图片太大，请压缩上传的图片"
+
 type RequestBodyReadErrorKind string
 
 const (

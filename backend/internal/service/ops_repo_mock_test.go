@@ -107,6 +107,10 @@ func (m *opsRepoMock) GetAIAnalysisReport(ctx context.Context, taskID int64) (*O
 	return nil, sql.ErrNoRows
 }
 
+func (m *opsRepoMock) InsertAIAnalysisReport(ctx context.Context, report *OpsAIAnalysisReport) error {
+	return nil
+}
+
 func (m *opsRepoMock) UpdateAIAnalysisReportFeedback(ctx context.Context, input *OpsAIAnalysisFeedbackInput) (*OpsAIAnalysisReport, error) {
 	if m.UpdateAIAnalysisReportFeedbackFn != nil {
 		return m.UpdateAIAnalysisReportFeedbackFn(ctx, input)

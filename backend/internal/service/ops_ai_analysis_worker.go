@@ -48,6 +48,12 @@ func (s *OpsService) StartAIAnalysisWorker() {
 		logger.LegacyPrintf("service.ops_ai_analysis_worker", "[%s] not started (missing deps)", opsAIAnalysisWorkerName)
 		return
 	}
+	// 注入真实的 LLM executor（如果尚未设置）
+	s.aiExecutorMu.Lock()
+	if s.aiAnalysisTaskExecutor == nil {
+		s.aiAnalysisTaskExecutor = NewOpsAIAnalysisLLMExecutor(s)
+	}
+	s.aiExecutorMu.Unlock()
 	s.aiWorkerStartOnce.Do(func() {
 		s.aiWorkerCtx, s.aiWorkerCancel = context.WithCancel(context.Background())
 		go s.runAIAnalysisWorkerLoop()

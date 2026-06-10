@@ -1896,7 +1896,40 @@ func TestLoad_DefaultGatewayImageStreamConfig(t *testing.T) {
 	if cfg.Gateway.ImageConcurrency.MaxWaitingRequests != 100 {
 		t.Fatalf("image_concurrency.max_waiting_requests = %d, want 100", cfg.Gateway.ImageConcurrency.MaxWaitingRequests)
 	}
+	if cfg.Server.MaxRequestBodySize != DefaultMaxRequestBodySize {
+		t.Fatalf("server.max_request_body_size = %d, want %d", cfg.Server.MaxRequestBodySize, DefaultMaxRequestBodySize)
+	}
+	if cfg.Gateway.MaxBodySize != DefaultMaxRequestBodySize {
+		t.Fatalf("gateway.max_body_size = %d, want %d", cfg.Gateway.MaxBodySize, DefaultMaxRequestBodySize)
+	}
+	if !cfg.Gateway.LargeRequestConcurrency.Enabled {
+		t.Fatalf("large_request_concurrency.enabled = false, want true")
+	}
+	if cfg.Gateway.LargeRequestConcurrency.ThresholdBytes != DefaultLargeRequestThresholdBytes {
+		t.Fatalf("large_request_concurrency.threshold_bytes = %d, want %d", cfg.Gateway.LargeRequestConcurrency.ThresholdBytes, DefaultLargeRequestThresholdBytes)
+	}
+	if cfg.Gateway.LargeRequestConcurrency.MaxConcurrentRequests != DefaultLargeRequestMaxConcurrent {
+		t.Fatalf("large_request_concurrency.max_concurrent_requests = %d, want %d", cfg.Gateway.LargeRequestConcurrency.MaxConcurrentRequests, DefaultLargeRequestMaxConcurrent)
+	}
+	if cfg.Gateway.LargeRequestConcurrency.WaitTimeoutSeconds != DefaultLargeRequestWaitTimeoutSecond {
+		t.Fatalf("large_request_concurrency.wait_timeout_seconds = %d, want %d", cfg.Gateway.LargeRequestConcurrency.WaitTimeoutSeconds, DefaultLargeRequestWaitTimeoutSecond)
+	}
 	if cfg.Gateway.ImageStreamDataIntervalTimeout <= cfg.Gateway.StreamDataIntervalTimeout {
 		t.Fatalf("image stream timeout = %d, want greater than ordinary stream timeout %d", cfg.Gateway.ImageStreamDataIntervalTimeout, cfg.Gateway.StreamDataIntervalTimeout)
 	}
+}
+
+func TestLoad_LargeRequestConcurrencyEnvOverrides(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("GATEWAY_LARGE_REQUEST_CONCURRENCY_ENABLED", "false")
+	t.Setenv("GATEWAY_LARGE_REQUEST_CONCURRENCY_THRESHOLD_BYTES", "1024")
+	t.Setenv("GATEWAY_LARGE_REQUEST_CONCURRENCY_MAX_CONCURRENT_REQUESTS", "3")
+	t.Setenv("GATEWAY_LARGE_REQUEST_CONCURRENCY_WAIT_TIMEOUT_SECONDS", "9")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.False(t, cfg.Gateway.LargeRequestConcurrency.Enabled)
+	require.EqualValues(t, 1024, cfg.Gateway.LargeRequestConcurrency.ThresholdBytes)
+	require.Equal(t, 3, cfg.Gateway.LargeRequestConcurrency.MaxConcurrentRequests)
+	require.Equal(t, 9, cfg.Gateway.LargeRequestConcurrency.WaitTimeoutSeconds)
 }

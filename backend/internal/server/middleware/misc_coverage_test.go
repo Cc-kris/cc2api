@@ -5,7 +5,6 @@ package middleware
 import (
 	"bytes"
 	"context"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -60,16 +59,18 @@ func TestRequestBodyLimit_LimitsBody(t *testing.T) {
 
 	r := gin.New()
 	r.Use(RequestBodyLimit(4))
+	called := false
 	r.POST("/t", func(c *gin.Context) {
-		_, err := io.ReadAll(c.Request.Body)
-		require.Error(t, err)
+		called = true
 		c.Status(http.StatusOK)
 	})
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/t", bytes.NewBufferString("12345"))
 	r.ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+	require.False(t, called)
+	require.Contains(t, w.Body.String(), "上传的图片太大，请压缩上传的图片")
 }
 
 func TestForcePlatform_SetsContextAndGinValue(t *testing.T) {

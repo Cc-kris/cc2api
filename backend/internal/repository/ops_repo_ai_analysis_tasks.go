@@ -300,6 +300,58 @@ WHERE id = $1`, taskID)
 	return scanOpsAIAnalysisTask(row)
 }
 
+func (r *opsRepository) InsertAIAnalysisReport(ctx context.Context, report *service.OpsAIAnalysisReport) error {
+	if r == nil || r.db == nil {
+		return fmt.Errorf("nil ops repository")
+	}
+	if report == nil || report.TaskID <= 0 {
+		return errors.New("invalid AI analysis report")
+	}
+	impactScope := report.ImpactScopeJSON
+	if impactScope == "" {
+		impactScope = "{}"
+	}
+	evidence := report.EvidenceJSON
+	if evidence == "" {
+		evidence = "[]"
+	}
+	actions := report.ActionsJSON
+	if actions == "" {
+		actions = "[]"
+	}
+	breakdown := report.BreakdownJSON
+	if breakdown == "" {
+		breakdown = "{}"
+	}
+	confidence := report.Confidence
+	if confidence == "" {
+		confidence = "medium"
+	}
+	_, err := r.db.ExecContext(ctx, `
+INSERT INTO ops_ai_analysis_reports
+  (task_id, summary, root_cause, impact_scope, evidence, suggested_actions, error_breakdown, confidence)
+VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7::jsonb, $8)
+ON CONFLICT (task_id) DO UPDATE SET
+  summary = EXCLUDED.summary,
+  root_cause = EXCLUDED.root_cause,
+  impact_scope = EXCLUDED.impact_scope,
+  evidence = EXCLUDED.evidence,
+  suggested_actions = EXCLUDED.suggested_actions,
+  error_breakdown = EXCLUDED.error_breakdown,
+  confidence = EXCLUDED.confidence,
+  updated_at = now()`,
+		report.TaskID,
+		report.Summary,
+		report.RootCause,
+		impactScope,
+		evidence,
+		actions,
+		breakdown,
+		confidence,
+	)
+	return err
+}
+
 func (r *opsRepository) GetAIAnalysisReport(ctx context.Context, taskID int64) (*service.OpsAIAnalysisReport, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil ops repository")

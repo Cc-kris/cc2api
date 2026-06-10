@@ -16,6 +16,7 @@ type OpsRepository interface {
 	UpdateAIAnalysisTask(ctx context.Context, taskID int64, update *OpsAIAnalysisTaskUpdate) (*OpsAIAnalysisTask, error)
 	GetAIAnalysisTask(ctx context.Context, taskID int64) (*OpsAIAnalysisTask, error)
 	GetAIAnalysisReport(ctx context.Context, taskID int64) (*OpsAIAnalysisReport, error)
+	InsertAIAnalysisReport(ctx context.Context, report *OpsAIAnalysisReport) error
 	UpdateAIAnalysisReportFeedback(ctx context.Context, input *OpsAIAnalysisFeedbackInput) (*OpsAIAnalysisReport, error)
 	GetLatestAutoAIAnalysisTask(ctx context.Context) (*OpsAIAnalysisTask, error)
 	GetErrorLogByID(ctx context.Context, id int64) (*OpsErrorLogDetail, error)

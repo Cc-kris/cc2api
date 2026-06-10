@@ -58,6 +58,13 @@ const (
 // 可通过 gateway.upstream_response_read_max_bytes 配置项覆盖。
 const DefaultUpstreamResponseReadMaxBytes int64 = 128 * 1024 * 1024
 
+const (
+	DefaultMaxRequestBodySize            int64 = 512_000_000
+	DefaultLargeRequestThresholdBytes    int64 = 128 * 1024 * 1024
+	DefaultLargeRequestMaxConcurrent           = 2
+	DefaultLargeRequestWaitTimeoutSecond       = 30
+)
+
 type Config struct {
 	Server                  ServerConfig                  `mapstructure:"server"`
 	Log                     LogConfig                     `mapstructure:"log"`
@@ -676,6 +683,17 @@ type ImageConcurrencyConfig struct {
 	MaxWaitingRequests int `mapstructure:"max_waiting_requests"`
 }
 
+type LargeRequestConcurrencyConfig struct {
+	// Enabled: 是否启用大请求并发保护，默认开启以避免多路超大请求同时占用内存
+	Enabled bool `mapstructure:"enabled"`
+	// ThresholdBytes: 请求 Content-Length 达到该值时进入大请求队列
+	ThresholdBytes int64 `mapstructure:"threshold_bytes"`
+	// MaxConcurrentRequests: 当前进程允许同时处理的大请求数，0表示不限制
+	MaxConcurrentRequests int `mapstructure:"max_concurrent_requests"`
+	// WaitTimeoutSeconds: 等待大请求槽位的最长时间（秒），0表示不等待
+	WaitTimeoutSeconds int `mapstructure:"wait_timeout_seconds"`
+}
+
 const (
 	ImageConcurrencyOverflowModeReject = "reject"
 	ImageConcurrencyOverflowModeWait   = "wait"
@@ -720,6 +738,8 @@ type GatewayConfig struct {
 	OpenAIHTTP2 GatewayOpenAIHTTP2Config `mapstructure:"openai_http2"`
 	// ImageConcurrency: 图片生成独立并发限制配置（默认关闭）
 	ImageConcurrency ImageConcurrencyConfig `mapstructure:"image_concurrency"`
+	// LargeRequestConcurrency: 大请求并发保护配置
+	LargeRequestConcurrency LargeRequestConcurrencyConfig `mapstructure:"large_request_concurrency"`
 
 	// HTTP 上游连接池配置（性能优化：支持高并发场景调优）
 	// MaxIdleConns: 所有主机的最大空闲连接总数
@@ -1504,7 +1524,7 @@ func setDefaults() {
 	viper.SetDefault("server.read_header_timeout", 30) // 30秒读取请求头
 	viper.SetDefault("server.idle_timeout", 120)       // 120秒空闲超时
 	viper.SetDefault("server.trusted_proxies", []string{})
-	viper.SetDefault("server.max_request_body_size", int64(256*1024*1024))
+	viper.SetDefault("server.max_request_body_size", DefaultMaxRequestBodySize)
 	// H2C 默认配置
 	viper.SetDefault("server.h2c.enabled", false)
 	viper.SetDefault("server.h2c.max_concurrent_streams", uint32(50))      // 50 个并发流
@@ -1837,9 +1857,13 @@ func setDefaults() {
 	viper.SetDefault("gateway.image_concurrency.overflow_mode", ImageConcurrencyOverflowModeReject)
 	viper.SetDefault("gateway.image_concurrency.wait_timeout_seconds", 30)
 	viper.SetDefault("gateway.image_concurrency.max_waiting_requests", 100)
+	viper.SetDefault("gateway.large_request_concurrency.enabled", true)
+	viper.SetDefault("gateway.large_request_concurrency.threshold_bytes", DefaultLargeRequestThresholdBytes)
+	viper.SetDefault("gateway.large_request_concurrency.max_concurrent_requests", DefaultLargeRequestMaxConcurrent)
+	viper.SetDefault("gateway.large_request_concurrency.wait_timeout_seconds", DefaultLargeRequestWaitTimeoutSecond)
 	viper.SetDefault("gateway.antigravity_fallback_cooldown_minutes", 1)
 	viper.SetDefault("gateway.antigravity_extra_retries", 10)
-	viper.SetDefault("gateway.max_body_size", int64(256*1024*1024))
+	viper.SetDefault("gateway.max_body_size", DefaultMaxRequestBodySize)
 	viper.SetDefault("gateway.upstream_response_read_max_bytes", DefaultUpstreamResponseReadMaxBytes)
 	viper.SetDefault("gateway.proxy_probe_response_read_max_bytes", int64(1024*1024))
 	viper.SetDefault("gateway.gemini_debug_response_headers", false)
@@ -2427,6 +2451,15 @@ func (c *Config) Validate() error {
 	}
 	if c.Gateway.ImageConcurrency.MaxWaitingRequests < 0 {
 		return fmt.Errorf("gateway.image_concurrency.max_waiting_requests must be non-negative")
+	}
+	if c.Gateway.LargeRequestConcurrency.ThresholdBytes < 0 {
+		return fmt.Errorf("gateway.large_request_concurrency.threshold_bytes must be non-negative")
+	}
+	if c.Gateway.LargeRequestConcurrency.MaxConcurrentRequests < 0 {
+		return fmt.Errorf("gateway.large_request_concurrency.max_concurrent_requests must be non-negative")
+	}
+	if c.Gateway.LargeRequestConcurrency.WaitTimeoutSeconds < 0 {
+		return fmt.Errorf("gateway.large_request_concurrency.wait_timeout_seconds must be non-negative")
 	}
 	if c.Gateway.MaxIdleConns <= 0 {
 		return fmt.Errorf("gateway.max_idle_conns must be positive")

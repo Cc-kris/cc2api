@@ -27,11 +27,11 @@ server:
   # Trusted proxies for X-Forwarded-For parsing (CIDR/IP). Empty disables trusted proxies.
   # 信任的代理地址（CIDR/IP 格式），用于解析 X-Forwarded-For 头。留空则禁用代理信任。
   trusted_proxies: []
-  # Global max request body size in bytes (default: 256MB)
-  # 全局最大请求体大小（字节，默认 256MB）
+  # Global max request body size in bytes (default: 512MB)
+  # 全局最大请求体大小（字节，默认 512MB）
   # Applies to all requests, especially important for h2c first request memory protection
   # 适用于所有请求，对 h2c 第一请求的内存保护尤为重要
-  max_request_body_size: 268435456
+  max_request_body_size: 512000000
   # HTTP/2 Cleartext (h2c) configuration
   # HTTP/2 Cleartext (h2c) 配置
   h2c:
@@ -152,9 +152,9 @@ gateway:
   # OpenAI/Codex upstream response header timeout (seconds, 0=disabled)
   # OpenAI/Codex 等待上游响应头超时时间（秒，0=禁用本地响应头超时）
   openai_response_header_timeout: 0
-  # Max request body size in bytes (default: 256MB)
-  # 请求体最大字节数（默认 256MB）
-  max_body_size: 268435456
+  # Max request body size in bytes (default: 512MB)
+  # 请求体最大字节数（默认 512MB）
+  max_body_size: 512000000
   # Max bytes to read for non-stream upstream responses (default: 8MB)
   # 非流式上游响应体读取上限（默认 8MB）
   upstream_response_read_max_bytes: 8388608
@@ -383,6 +383,21 @@ gateway:
     # Max image requests waiting in this process when overflow_mode=wait, 0=unlimited
     # wait 模式当前进程允许排队等待的图片请求数，0=不限制
     max_waiting_requests: 100
+  # Large request concurrency limiter (process-local)
+  # 大请求并发保护（进程级；避免多个超大请求同时占用内存）
+  large_request_concurrency:
+    # Enable large request queueing based on Content-Length
+    # 按 Content-Length 启用大请求队列
+    enabled: true
+    # Requests with Content-Length >= this value enter the large-request queue
+    # Content-Length 大于等于该值的请求进入大请求队列
+    threshold_bytes: 134217728
+    # Max concurrent large requests in this process, 0=unlimited
+    # 当前进程允许同时处理的大请求数量，0=不限制
+    max_concurrent_requests: 2
+    # Wait timeout for a large-request slot (seconds), 0=do not wait
+    # 等待大请求槽位的最长时间（秒），0=不等待
+    wait_timeout_seconds: 30
   # SSE max line size in bytes (default: 40MB)
   # SSE 单行最大字节数（默认 40MB）
   max_line_size: 41943040
