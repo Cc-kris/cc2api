@@ -81,9 +81,9 @@ const reportRecipientInput = ref('')
 // 严重级别选项
 const severityOptions: Array<{ value: AlertSeverity | ''; label: string }> = [
   { value: '', label: t('admin.ops.email.minSeverityAll') },
-  { value: 'critical', label: t('common.critical') },
-  { value: 'warning', label: t('common.warning') },
-  { value: 'info', label: t('common.info') }
+  { value: 'critical', label: 'Critical（仅 P0）' },
+  { value: 'warning', label: 'Warning（P0 + P1）' },
+  { value: 'info', label: 'Info（P0 + P1 + P2+）' }
 ]
 
 // 验证邮箱
