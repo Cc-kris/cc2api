@@ -170,15 +170,6 @@
                   class="ov-apill ov-apill--amber"
                 >{{ formatInteger(displayOverview.recovered_fluctuations) }} 次波动</span>
               </div>
-              <template v-if="displayOverview.quick_filters.length">
-                <button
-                  v-for="filter in displayOverview.quick_filters.slice(0, 3)"
-                  :key="filter.label"
-                  type="button"
-                  class="ov-tag"
-                  @click="openQuickFilter(filter)"
-                >{{ filter.label }}</button>
-              </template>
               <div class="ml-auto">
                 <button
                   type="button"
@@ -189,9 +180,9 @@
             </div>
             <!-- Stat rows -->
             <div class="border-t border-gray-100 bg-white dark:border-dark-700 dark:bg-dark-900">
-              <div class="ov-stat-row">
+              <div v-if="displayOverview.final_failures > 0" class="ov-stat-row">
                 <span class="ov-stat-label">最终失败</span>
-                <span :class="['ov-stat-value', displayOverview.final_failures > 0 ? 'text-red-700 dark:text-red-400' : '']">
+                <span class="ov-stat-value text-red-700 dark:text-red-400">
                   {{ formatInteger(displayOverview.final_failures) }} 次
                   <span class="ov-stat-sub">
                     候选请求 {{ formatInteger(displayOverview.total_requests) }} 次 · 失败率 {{ formatPercent(displayOverview.final_failure_rate) }}
@@ -288,35 +279,32 @@
           <div class="ov-card">
             <div class="ov-section-label mb-3 flex items-center justify-between">
               <div class="flex items-center gap-1.5">
-                <span class="ov-dot ov-dot--gray" />扣分明细
+                <span class="ov-dot ov-dot--gray" />健康分扣分明细
               </div>
               <span class="text-xs font-normal normal-case tracking-normal text-gray-400 dark:text-gray-500">
-                初始 100 分，按下表扣减
+                满分 100 · 当前 <strong :class="scoreColorClass">{{ scoreValue }}</strong>
+                <span v-if="totalDeductionPoints > 0" class="ml-1 text-red-500">（已扣 {{ totalDeductionPoints }} 分）</span>
               </span>
             </div>
             <div v-if="parsedScoreDeductions.length === 0" class="rounded-xl bg-gray-50 px-3 py-4 text-sm text-gray-500 dark:bg-dark-800/70 dark:text-gray-400 text-center">
-              当前时间段内无扣分项
+              当前时间段内无扣分，系统运行正常
             </div>
-            <div v-else class="flex flex-col gap-2">
+            <div v-else class="flex flex-col gap-1.5">
               <div
                 v-for="item in parsedScoreDeductions"
-                :key="`${item.label}-${item.points ?? 'info'}-${item.reason}`"
-                class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 dark:border-dark-700 dark:bg-dark-800/70"
+                :key="`${item.label}-${item.points}`"
+                class="flex items-start gap-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2.5 dark:border-red-900/30 dark:bg-red-900/10"
               >
-                <div class="flex items-center justify-between gap-2">
-                  <span class="text-sm font-medium text-gray-800 dark:text-gray-100">{{ item.label }}</span>
-                  <span :class="['shrink-0 rounded-full px-2 py-0.5 text-xs font-bold', item.points !== null && item.points > 0 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' : 'bg-gray-100 text-gray-500 dark:bg-dark-700 dark:text-gray-400']">
-                    {{ item.points !== null && item.points > 0 ? `−${item.points}` : '说明' }}
-                  </span>
+                <span class="mt-0.5 shrink-0 rounded-md bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                  −{{ item.points }} 分
+                </span>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ item.label }}</div>
+                  <div v-if="item.reason" class="mt-0.5 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">{{ item.reason }}</div>
                 </div>
-                <div v-if="item.reason" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ item.reason }}</div>
               </div>
             </div>
-            <div class="mt-3 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-dark-700">
-              <span class="text-xs text-gray-500 dark:text-gray-400">
-                健康分 <strong :class="scoreColorClass">{{ scoreValue }}</strong>
-                <span v-if="totalDeductionPoints > 0" class="ml-1 text-red-500">（合计扣 {{ totalDeductionPoints }} 分）</span>
-              </span>
+            <div class="mt-3 flex justify-end border-t border-gray-100 pt-3 dark:border-dark-700">
               <button
                 type="button"
                 class="ov-btn"
@@ -356,14 +344,15 @@
                   </div>
                 </button>
               </div>
-              <!-- 标签行：固定在下方，不影响柱子 -->
+              <!-- 标签行：固定在下方，截断超长文字 -->
               <div class="mt-2 flex gap-1">
                 <div
                   v-for="item in errorCategoryChartData"
                   :key="`label-${item.key}`"
-                  class="flex flex-1 justify-center"
+                  class="flex flex-1 justify-center overflow-hidden"
+                  :title="item.label"
                 >
-                  <span :class="['text-[10px] font-medium text-center leading-tight', item.count > 0 ? 'text-gray-600 dark:text-gray-300' : 'text-gray-300 dark:text-gray-600']">
+                  <span :class="['text-[9px] font-medium text-center leading-tight block truncate w-full', item.count > 0 ? 'text-gray-600 dark:text-gray-300' : 'text-gray-300 dark:text-gray-600']">
                     {{ item.label }}
                   </span>
                 </div>
@@ -445,6 +434,7 @@
 
         <!-- ─── G · 错误趋势图 ─── -->
         <div class="mt-3 grid grid-cols-1 gap-3">
+          <div style="height: 260px">
           <OpsErrorTrendChart
             :points="errorTrend?.points ?? []"
             :loading="loadingErrorTrend"
@@ -452,6 +442,7 @@
             @open-request-errors="openErrorDetailsFromPreset({ title: t('admin.ops.clientErrors'), category: 'client_error' }, 'request')"
             @open-upstream-errors="openErrorDetailsFromPreset({ title: t('admin.ops.upstreamErrors'), category: 'upstream_error' }, 'upstream')"
           />
+          </div>
         </div>
 
         <!-- ─── AI 分析报告 ─── -->
@@ -500,9 +491,14 @@
             <div class="mt-2 rounded-2xl bg-blue-50 p-4 dark:bg-blue-900/10">
               <div class="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400 mb-1">AI 分析摘要</div>
               <p class="text-sm text-gray-800 dark:text-gray-100 leading-relaxed">
-                {{ displayOverview.latest_ai_analysis.summary }}
+                {{ displayOverview.latest_ai_analysis.summary || '分析报告已生成，点击"查看完整报告"查看详细内容。' }}
               </p>
             </div>
+          </div>
+
+          <!-- 分析中提示 -->
+          <div v-else-if="latestAnalysisState === 'pending'" class="mt-3 rounded-2xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300">
+            AI 分析正在进行中，请稍候...
           </div>
 
           <!-- 过期提示 -->
@@ -949,7 +945,7 @@ const scoreReasons = computed(() => displayOverview.value?.score_reasons ?? [t('
 
 type ParsedScoreDeduction = {
   label: string
-  points: number | null
+  points: number
   reason: string
 }
 
@@ -968,19 +964,19 @@ const parsedScoreDeductions = computed<ParsedScoreDeduction[]>(() => {
         if (points === 0) return null  // 过滤零扣分项
         return { label: match[1].trim(), points, reason: match[3]?.trim() || '' }
       }
-      // Fallback: keep backend explanations visible even when they are not explicit deduction rows.
-      return { label: str, points: null, reason: '' }
+      // 不显示纯说明文字（无扣分点的行）
+      return null
     })
     .filter((item): item is ParsedScoreDeduction => item !== null)
 })
 
 const totalDeductionPoints = computed(() =>
-  parsedScoreDeductions.value.reduce((sum, item) => sum + (item.points ?? 0), 0)
+  parsedScoreDeductions.value.reduce((sum, item) => sum + item.points, 0)
 )
 
 const recommendedActions = computed(() => {
   const actions = displayOverview.value?.recommended_actions ?? []
-  return actions.length ? actions : [t('admin.ops.incidentOverview.noRecommendedActions')]
+  return actions.filter(a => String(a || '').trim())
 })
 const currentSummary = computed(() => displayOverview.value?.summary || t('admin.ops.incidentOverview.noSummary'))
 
@@ -1027,10 +1023,12 @@ const scoreValue = computed(() => {
   return typeof value === 'number' && Number.isFinite(value) ? String(value) : '--'
 })
 
-const latestAnalysisState = computed<'none' | 'ready' | 'expired'>(() => {
+const latestAnalysisState = computed<'none' | 'ready' | 'pending' | 'expired'>(() => {
   const analysis = displayOverview.value?.latest_ai_analysis
   if (!analysis) return 'none'
-  if (String(analysis.status || '').trim().toLowerCase() === 'expired') return 'expired'
+  const status = String(analysis.status || '').trim().toLowerCase()
+  if (status === 'expired') return 'expired'
+  if (status === 'pending' || status === 'running') return 'pending'
   return 'ready'
 })
 
