@@ -9,6 +9,7 @@ const appStore = useAppStore()
 
 const loading = ref(false)
 const alertEvents = ref<AlertEvent[]>([])
+const isHistoryMode = ref(false) // true when showing recent resolved events instead of firing
 const MAX_VISIBLE_PER_COLUMN = 3
 
 const p0Events = computed(() =>
@@ -110,11 +111,17 @@ function getAISummaryClass(summaryStatus: 'loading' | 'error' | 'ready' | 'none'
 async function loadAlertEvents() {
   loading.value = true
   try {
-    const data = await opsAPI.listAlertEvents({
-      status: 'firing',
-      limit: 50
-    })
-    alertEvents.value = data
+    // 优先显示触发中的告警，不足时补充最近已解决的
+    const firing = await opsAPI.listAlertEvents({ status: 'firing', limit: 50 })
+    if (firing.length > 0) {
+      alertEvents.value = firing
+      isHistoryMode.value = false
+    } else {
+      // 没有触发中的告警，显示最近 50 条（不限状态）
+      const recent = await opsAPI.listAlertEvents({ limit: 50 })
+      alertEvents.value = recent
+      isHistoryMode.value = true
+    }
   } catch (err: any) {
     console.error('[OpsAlertGroupsByPriority] Failed to load alert events', err)
     appStore.showError(err?.response?.data?.detail || t('admin.ops.alertEvents.loadFailed'))
@@ -146,14 +153,21 @@ onMounted(() => {
     </div>
 
     <div v-else class="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <!-- history mode hint -->
+      <div v-if="isHistoryMode && alertEvents.length > 0" class="col-span-full rounded-xl bg-blue-50 px-4 py-2 text-xs text-blue-600 dark:bg-blue-900/20 dark:text-blue-300">
+        当前无触发中告警，展示最近历史记录
+      </div>
+      <div v-else-if="!isHistoryMode && alertEvents.length === 0" class="col-span-full rounded-xl bg-gray-50 px-4 py-3 text-center text-sm text-gray-500 dark:bg-dark-800/70 dark:text-gray-400">
+        暂无告警事件
+      </div>
       <!-- P0 Column -->
       <div class="ov-alert-column">
         <div class="ov-alert-column-header">
           <div class="ov-alert-column-badge" :style="{ backgroundColor: getSeverityColor('P0') }">P0</div>
-          <span class="text-xs font-bold text-gray-600 dark:text-gray-300">{{ p0Events.length }} 条告警</span>
+          <span class="text-xs font-bold text-gray-600 dark:text-gray-300">{{ p0Events.length }} 条</span>
         </div>
         <div v-if="p0Events.length === 0" class="ov-alert-column-empty">
-          暂无 P0 触发中告警
+          {{ isHistoryMode ? '历史无 P0 告警' : '暂无 P0 触发中告警' }}
         </div>
         <div v-else class="ov-alert-column-body">
           <div
@@ -181,10 +195,10 @@ onMounted(() => {
       <div class="ov-alert-column">
         <div class="ov-alert-column-header">
           <div class="ov-alert-column-badge" :style="{ backgroundColor: getSeverityColor('P1') }">P1</div>
-          <span class="text-xs font-bold text-gray-600 dark:text-gray-300">{{ p1Events.length }} 条告警</span>
+          <span class="text-xs font-bold text-gray-600 dark:text-gray-300">{{ p1Events.length }} 条</span>
         </div>
         <div v-if="p1Events.length === 0" class="ov-alert-column-empty">
-          暂无 P1 触发中告警
+          {{ isHistoryMode ? '历史无 P1 告警' : '暂无 P1 触发中告警' }}
         </div>
         <div v-else class="ov-alert-column-body">
           <div
@@ -211,11 +225,11 @@ onMounted(() => {
       <!-- P2+ Column -->
       <div class="ov-alert-column">
         <div class="ov-alert-column-header">
-          <div class="ov-alert-column-badge" :style="{ backgroundColor: getSeverityColor('P2') }">P2+观察</div>
-          <span class="text-xs font-bold text-gray-600 dark:text-gray-300">{{ p2PlusEvents.length }} 条告警</span>
+          <div class="ov-alert-column-badge" :style="{ backgroundColor: getSeverityColor('P2') }">P2+</div>
+          <span class="text-xs font-bold text-gray-600 dark:text-gray-300">{{ p2PlusEvents.length }} 条</span>
         </div>
         <div v-if="p2PlusEvents.length === 0" class="ov-alert-column-empty">
-          暂无 P2 及以下触发中告警
+          {{ isHistoryMode ? '历史无 P2+ 告警' : '暂无 P2 及以下触发中告警' }}
         </div>
         <div v-else class="ov-alert-column-body">
           <div

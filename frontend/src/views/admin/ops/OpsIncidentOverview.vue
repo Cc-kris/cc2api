@@ -198,7 +198,7 @@
                   </span>
                 </span>
               </div>
-              <div class="ov-stat-row">
+              <div v-if="displayOverview.recovered_fluctuations > 0" class="ov-stat-row">
                 <span class="ov-stat-label">已恢复波动</span>
                 <span class="ov-stat-value">
                   {{ formatInteger(displayOverview.recovered_fluctuations) }} 次
@@ -291,19 +291,31 @@
                 <span class="ov-dot ov-dot--gray" />扣分明细
               </div>
               <span class="text-xs font-normal normal-case tracking-normal text-gray-400 dark:text-gray-500">
-                分 = 100 − 扣减合计
+                初始 100 分，按下表扣减
               </span>
             </div>
-            <div class="flex flex-col gap-2">
+            <div v-if="parsedScoreDeductions.length === 0" class="rounded-xl bg-gray-50 px-3 py-4 text-sm text-gray-500 dark:bg-dark-800/70 dark:text-gray-400 text-center">
+              当前时间段内无扣分项
+            </div>
+            <div v-else class="flex flex-col gap-2">
               <div
-                v-for="reason in scoreReasons"
-                :key="reason"
-                class="rounded-xl bg-gray-50 px-3 py-2.5 text-sm text-gray-700 dark:bg-dark-800/70 dark:text-gray-200"
-              >{{ reason }}</div>
+                v-for="item in parsedScoreDeductions"
+                :key="`${item.label}-${item.points ?? 'info'}-${item.reason}`"
+                class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 dark:border-dark-700 dark:bg-dark-800/70"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-sm font-medium text-gray-800 dark:text-gray-100">{{ item.label }}</span>
+                  <span :class="['shrink-0 rounded-full px-2 py-0.5 text-xs font-bold', item.points !== null && item.points > 0 ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' : 'bg-gray-100 text-gray-500 dark:bg-dark-700 dark:text-gray-400']">
+                    {{ item.points !== null && item.points > 0 ? `−${item.points}` : '说明' }}
+                  </span>
+                </div>
+                <div v-if="item.reason" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ item.reason }}</div>
+              </div>
             </div>
             <div class="mt-3 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-dark-700">
               <span class="text-xs text-gray-500 dark:text-gray-400">
                 健康分 <strong :class="scoreColorClass">{{ scoreValue }}</strong>
+                <span v-if="totalDeductionPoints > 0" class="ml-1 text-red-500">（合计扣 {{ totalDeductionPoints }} 分）</span>
               </span>
               <button
                 type="button"
@@ -321,33 +333,43 @@
             <div v-if="!errorCategoryChartData || errorCategoryChartData.length === 0" class="rounded-2xl bg-gray-50 px-4 py-6 text-center text-sm text-gray-500 dark:bg-dark-800/70 dark:text-gray-400">
               当前窗口无最终失败
             </div>
-            <div v-else class="flex items-end justify-between gap-2" style="height: 120px">
-              <button
-                v-for="item in errorCategoryChartData"
-                :key="item.key"
-                type="button"
-                class="flex flex-1 flex-col items-center gap-1.5"
-                :title="`${item.label}: ${item.count} 次`"
-                @click="navigateToErrorCategory(item.key)"
-              >
-                <!-- Bar -->
-                <div class="flex w-full items-end justify-center">
-                  <div
-                    :class="['rounded-t-lg transition-all hover:opacity-80', item.color]"
-                    :style="{ height: `${item.height}px`, width: '100%', minHeight: item.count > 0 ? '4px' : '0px' }"
-                  />
+            <div v-else>
+              <!-- 柱状图区域：固定高度，柱子底部对齐 -->
+              <div class="flex items-end gap-1" style="height: 80px">
+                <button
+                  v-for="item in errorCategoryChartData"
+                  :key="item.key"
+                  type="button"
+                  class="relative flex flex-1 flex-col items-center"
+                  style="height: 100%"
+                  :title="`${item.label}: ${item.count} 次`"
+                  @click="navigateToErrorCategory(item.key)"
+                >
+                  <div class="absolute bottom-0 w-full">
+                    <div
+                      :class="['rounded-t-lg transition-all hover:opacity-80', item.color]"
+                      :style="{ height: `${item.height}px`, minHeight: item.count > 0 ? '4px' : '0px' }"
+                    />
+                  </div>
+                  <div v-if="item.count > 0" class="absolute text-[10px] font-bold text-gray-700 dark:text-gray-200" :style="{ bottom: `${item.height + 2}px` }">
+                    {{ item.count }}
+                  </div>
+                </button>
+              </div>
+              <!-- 标签行：固定在下方，不影响柱子 -->
+              <div class="mt-2 flex gap-1">
+                <div
+                  v-for="item in errorCategoryChartData"
+                  :key="`label-${item.key}`"
+                  class="flex flex-1 justify-center"
+                >
+                  <span :class="['text-[10px] font-medium text-center leading-tight', item.count > 0 ? 'text-gray-600 dark:text-gray-300' : 'text-gray-300 dark:text-gray-600']">
+                    {{ item.label }}
+                  </span>
                 </div>
-                <!-- Count (top of bar) -->
-                <div v-if="item.count > 0" class="text-xs font-bold text-gray-700 dark:text-gray-200">
-                  {{ item.count }}
-                </div>
-                <!-- Label -->
-                <div class="text-xs font-medium text-gray-600 dark:text-gray-300">
-                  {{ item.label }}
-                </div>
-              </button>
+              </div>
             </div>
-	          </div>
+          </div>
 
 	        </div>
 
@@ -421,66 +443,80 @@
           </div>
         </div>
 
-        <!-- ─── AI 分析 + 快捷筛选 ─── -->
-        <div class="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          <div class="ov-card">
-            <div class="flex items-start justify-between gap-3">
-              <div>
-                <h2 class="text-sm font-semibold text-gray-900 dark:text-white">
-                  {{ t('admin.ops.incidentOverview.latestAnalysisTitle') }}
-                </h2>
-                <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                  {{ t('admin.ops.incidentOverview.latestAnalysisDescription') }}
-                </p>
-              </div>
-              <button
-                type="button"
-                class="ov-btn shrink-0"
-                :disabled="!displayOverview.latest_ai_analysis"
-                @click="openLatestAIAnalysis"
-              >
-                {{ displayOverview.latest_ai_analysis ? t('admin.ops.incidentOverview.openAnalysis') : t('admin.ops.incidentOverview.noAnalysis') }}
-              </button>
-            </div>
-            <div v-if="latestAnalysisState === 'ready' && displayOverview.latest_ai_analysis" class="mt-3 rounded-2xl bg-gray-50 p-4 dark:bg-dark-800/70">
-              <div class="flex items-center gap-2">
-                <span :class="['rounded-full px-2.5 py-0.5 text-xs font-semibold', latestAnalysisStatusClass]">
-                  {{ latestAnalysisStatusLabel }}
-                </span>
-                <span class="text-xs text-gray-500 dark:text-gray-400">
-                  {{ formatDateTime(displayOverview.latest_ai_analysis.created_at) }}
-                </span>
-              </div>
-              <p class="mt-2 text-sm text-gray-700 dark:text-gray-200">
-                {{ displayOverview.latest_ai_analysis.summary }}
+        <!-- ─── G · 错误趋势图 ─── -->
+        <div class="mt-3 grid grid-cols-1 gap-3">
+          <OpsErrorTrendChart
+            :points="errorTrend?.points ?? []"
+            :loading="loadingErrorTrend"
+            :time-range="timeRange"
+            @open-request-errors="openErrorDetailsFromPreset({ title: t('admin.ops.clientErrors'), category: 'client_error' }, 'request')"
+            @open-upstream-errors="openErrorDetailsFromPreset({ title: t('admin.ops.upstreamErrors'), category: 'upstream_error' }, 'upstream')"
+          />
+        </div>
+
+        <!-- ─── AI 分析报告 ─── -->
+        <div class="mt-3 ov-card">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h2 class="text-sm font-semibold text-gray-900 dark:text-white">
+                {{ t('admin.ops.incidentOverview.latestAnalysisTitle') }}
+              </h2>
+              <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                AI 基于当前时间窗口内的错误数据生成分析报告，包含根因判断、影响范围和建议操作
               </p>
             </div>
-            <div v-else-if="latestAnalysisState === 'expired'" class="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
-              {{ t('admin.ops.incidentOverview.analysisExpired') }}
-            </div>
-            <div v-else class="mt-3 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-3 text-sm text-gray-500 dark:border-dark-700 dark:bg-dark-800/70 dark:text-gray-400">
-              {{ t('admin.ops.incidentOverview.noAnalysis') }}
+            <div class="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                class="ov-btn ov-btn--primary"
+                :disabled="manualAIActionDisabled"
+                :title="manualAIActionDisabledReason || undefined"
+                @click="triggerManualAIAnalysis"
+              >
+                <Icon name="sparkles" size="sm" />
+                {{ t('admin.ops.incidentOverview.manualAnalysis') }}
+              </button>
+              <button
+                v-if="displayOverview.latest_ai_analysis"
+                type="button"
+                class="ov-btn"
+                @click="openLatestAIAnalysis"
+              >
+                查看完整报告 →
+              </button>
             </div>
           </div>
 
-          <div class="ov-card">
-            <h2 class="text-sm font-semibold text-gray-900 dark:text-white">
-              {{ t('admin.ops.incidentOverview.quickFiltersTitle') }}
-            </h2>
-            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-              {{ t('admin.ops.incidentOverview.quickFiltersDescription') }}
-            </p>
-            <div v-if="displayOverview.quick_filters.length" class="mt-3 flex flex-wrap gap-2">
-              <button
-                v-for="filter in displayOverview.quick_filters"
-                :key="`${filter.label}-${JSON.stringify(filter.params)}`"
-                type="button"
-                class="rounded-full border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:border-blue-300 hover:text-blue-600 dark:border-dark-600 dark:text-gray-200 dark:hover:border-blue-500 dark:hover:text-blue-300"
-                @click="openQuickFilter(filter)"
-              >{{ filter.label }}</button>
+          <!-- 有报告时展示摘要 -->
+          <div v-if="latestAnalysisState === 'ready' && displayOverview.latest_ai_analysis" class="mt-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <span :class="['rounded-full px-2.5 py-0.5 text-xs font-semibold', latestAnalysisStatusClass]">
+                {{ latestAnalysisStatusLabel }}
+              </span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">
+                分析时间：{{ formatDateTime(displayOverview.latest_ai_analysis.created_at) }}
+              </span>
             </div>
-            <div v-else class="mt-3 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-3 text-sm text-gray-500 dark:border-dark-700 dark:bg-dark-800/70 dark:text-gray-400">
-              {{ t('admin.ops.incidentOverview.noQuickFilters') }}
+            <div class="mt-2 rounded-2xl bg-blue-50 p-4 dark:bg-blue-900/10">
+              <div class="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400 mb-1">AI 分析摘要</div>
+              <p class="text-sm text-gray-800 dark:text-gray-100 leading-relaxed">
+                {{ displayOverview.latest_ai_analysis.summary }}
+              </p>
+            </div>
+          </div>
+
+          <!-- 过期提示 -->
+          <div v-else-if="latestAnalysisState === 'expired'" class="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
+            {{ t('admin.ops.incidentOverview.analysisExpired') }}
+          </div>
+
+          <!-- 无报告时提示 -->
+          <div v-else class="mt-3 rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/70">
+            <div class="text-sm text-gray-500 dark:text-gray-400">
+              {{ t('admin.ops.incidentOverview.noAnalysis') }}
+            </div>
+            <div v-if="manualAIActionDisabledReason" class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+              {{ manualAIActionDisabledReason }}
             </div>
           </div>
         </div>
@@ -489,7 +525,7 @@
         <div class="mt-4">
           <div class="ov-section-label mb-3">
             <span :class="['ov-dot', statusDotClass]" />
-            事故时间线 · 触发中告警
+            事故时间线 · 告警事件
           </div>
 
           <!-- Three-column alert cards by priority -->
@@ -768,6 +804,7 @@ import {
   type OpsAIAnalysisImpactScope,
   type OpsAIAnalysisTaskCreateRequest,
   type OpsAIAnalysisTaskDetailResponse,
+  type OpsErrorTrendResponse,
   type OpsIncidentOverview,
   type OpsIncidentOverviewParams,
   type OpsIncidentOverviewTimeRange,
@@ -777,6 +814,7 @@ import { useAppStore, useAuthStore } from '@/stores'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import OpsAlertEventsCard from './components/OpsAlertEventsCard.vue'
 import OpsAlertGroupsByPriority from './components/OpsAlertGroupsByPriority.vue'
+import OpsErrorTrendChart from './components/OpsErrorTrendChart.vue'
 import OpsSettingsDialog from './components/OpsSettingsDialog.vue'
 import { canManageManualAIAnalysis, fetchOpsAIAnalysisConfig, isManualAIAnalysisConfigured, type OpsAIAnalysisConfigSnapshot } from './utils/manualAIAnalysis'
 
@@ -843,6 +881,9 @@ const errorMessage = ref('')
 const overview = ref<OpsIncidentOverview | null>(null)
 const lastSuccessfulOverview = ref<OpsIncidentOverview | null>(null)
 
+const errorTrend = ref<OpsErrorTrendResponse | null>(null)
+const loadingErrorTrend = ref(false)
+
 const customTimeStartInput = ref('')
 const customTimeEndInput = ref('')
 const customTimeStartISO = ref<string | null>(null)
@@ -874,6 +915,7 @@ const autoRefreshCountdown = ref(30)
 let autoRefreshTimer: ReturnType<typeof setInterval> | null = null
 let aiReportPollTimer: ReturnType<typeof setTimeout> | null = null
 let fetchController: AbortController | null = null
+let errorTrendRequestId = 0
 
 const timeRangeOptions = computed(() => [
   { value: '1m' as OpsIncidentOverviewTimeRange, label: t('admin.ops.incidentOverview.timeRanges.1m') },
@@ -904,6 +946,38 @@ const groupSelection = computed({
 
 const displayOverview = computed(() => overview.value ?? lastSuccessfulOverview.value)
 const scoreReasons = computed(() => displayOverview.value?.score_reasons ?? [t('admin.ops.incidentOverview.scoreReasonEmpty')])
+
+type ParsedScoreDeduction = {
+  label: string
+  points: number | null
+  reason: string
+}
+
+// Parse score_reasons strings into structured items.
+// Backend may send strings like "失败率过高 (-15分): 原因说明" or plain explanatory text.
+const parsedScoreDeductions = computed<ParsedScoreDeduction[]>(() => {
+  const reasons = displayOverview.value?.score_reasons ?? []
+  return reasons
+    .map(reason => {
+      const str = String(reason || '').trim()
+      if (!str) return null
+      // Pattern: "Label (-N分): Reason" or "Label (-N分)"
+      const match = str.match(/^(.+?)\s*\(-(\d+)\s*分\)(?:[:：]\s*(.+))?$/)
+      if (match) {
+        const points = Number.parseInt(match[2], 10)
+        if (points === 0) return null  // 过滤零扣分项
+        return { label: match[1].trim(), points, reason: match[3]?.trim() || '' }
+      }
+      // Fallback: keep backend explanations visible even when they are not explicit deduction rows.
+      return { label: str, points: null, reason: '' }
+    })
+    .filter((item): item is ParsedScoreDeduction => item !== null)
+})
+
+const totalDeductionPoints = computed(() =>
+  parsedScoreDeductions.value.reduce((sum, item) => sum + (item.points ?? 0), 0)
+)
+
 const recommendedActions = computed(() => {
   const actions = displayOverview.value?.recommended_actions ?? []
   return actions.length ? actions : [t('admin.ops.incidentOverview.noRecommendedActions')]
@@ -1287,7 +1361,10 @@ async function fetchOverview() {
   loading.value = true
 
   try {
-    const data = await opsAPI.getIncidentOverview(buildOverviewParams(), { signal: fetchController.signal })
+    const [data] = await Promise.all([
+      opsAPI.getIncidentOverview(buildOverviewParams(), { signal: fetchController.signal }),
+      fetchErrorTrend(fetchController.signal)
+    ])
     overview.value = data
     lastSuccessfulOverview.value = data
     errorMessage.value = ''
@@ -1303,6 +1380,39 @@ async function fetchOverview() {
     }
   } finally {
     loading.value = false
+  }
+}
+
+async function fetchErrorTrend(signal?: AbortSignal) {
+  const requestId = ++errorTrendRequestId
+  loadingErrorTrend.value = true
+  try {
+    const params: Record<string, any> = {
+      platform: platform.value.trim() || undefined,
+      group_id: groupId.value
+    }
+    if (timeRange.value === 'custom') {
+      if (customTimeStartISO.value && customTimeEndISO.value) {
+        params.start_time = customTimeStartISO.value
+        params.end_time = customTimeEndISO.value
+      }
+    } else {
+      const tr = timeRange.value as '1m' | '5m' | '30m' | '1h' | '6h' | '24h'
+      // Map 1m to 5m for trend (1m has no trend data)
+      params.time_range = tr === '1m' ? '5m' : tr
+    }
+    const data = await opsAPI.getErrorTrend(params, { signal })
+    if (requestId !== errorTrendRequestId) return
+    errorTrend.value = data
+  } catch (err) {
+    if (isCanceledRequest(err)) return
+    if (requestId !== errorTrendRequestId) return
+    console.error('[OpsIncidentOverview] Failed to load error trend', err)
+    errorTrend.value = null
+  } finally {
+    if (requestId === errorTrendRequestId) {
+      loadingErrorTrend.value = false
+    }
   }
 }
 

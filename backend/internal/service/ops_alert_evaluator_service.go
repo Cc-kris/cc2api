@@ -969,11 +969,14 @@ func (s *OpsAlertEvaluatorService) maybeSendAlertEmail(ctx context.Context, runt
 				anySent = true
 				continue
 			} else if !shouldFallbackNotificationEmail(err) {
+				if isNotificationEmailDeliveryError(err) {
+					logger.LegacyPrintf("service.ops_alert_evaluator", "[OpsAlertEvaluator] alert email delivery failed (rule=%d event=%d to=%s): %v", rule.ID, event.ID, addr, err)
+				}
 				continue
 			}
 		}
 		if err := s.emailService.SendEmail(ctx, addr, subject, body); err != nil {
-			// Ignore per-recipient failures; continue best-effort.
+			logger.LegacyPrintf("service.ops_alert_evaluator", "[OpsAlertEvaluator] alert email send failed (rule=%d event=%d to=%s): %v", rule.ID, event.ID, addr, err)
 			continue
 		}
 		anySent = true

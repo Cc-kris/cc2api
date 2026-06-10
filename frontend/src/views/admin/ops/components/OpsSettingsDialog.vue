@@ -264,6 +264,10 @@ async function saveAllSettings() {
       <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-700/50">
         <h4 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.settings.alertConfig') }}</h4>
 
+        <div class="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800/40 dark:bg-amber-900/20 dark:text-amber-300">
+          邮件通知依赖系统 SMTP 配置（系统设置 → 邮件），未配置 SMTP 时告警邮件无法发出。同时告警规则的通知方式需包含"邮件"才会触发推送。
+        </div>
+
         <div class="space-y-4">
           <div class="flex items-center justify-between">
             <div>

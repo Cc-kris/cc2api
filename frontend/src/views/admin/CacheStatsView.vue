@@ -505,7 +505,17 @@ function formatCacheReason(value: string | null | undefined): string {
     platform_disabled: '该平台未启用缓存',
     cache_miss: '未命中缓存',
     no_cacheable_content: '无可缓存内容',
-    streaming_unsupported: '当前流式响应不支持缓存'
+    streaming_unsupported: '当前流式响应不支持缓存',
+    // 语义缓存相关
+    config_incomplete: '语义缓存配置不完整',
+    decrypt_failed: '密钥解密失败',
+    invalid_input: '输入内容无法向量化',
+    invalid_endpoint: '向量化服务地址无效',
+    request_failed: '向量化请求失败',
+    timeout: '向量化请求超时',
+    http_status: '向量化服务返回异常状态',
+    invalid_response: '向量化服务返回无效响应',
+    empty_vector: '向量结果为空'
   }
   return map[normalized] || normalized
 }

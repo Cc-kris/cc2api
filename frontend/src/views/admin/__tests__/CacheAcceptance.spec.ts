@@ -445,6 +445,15 @@ describe('cache management product acceptance', () => {
     await flushPromises()
     expect(advanced.text()).toContain('admin.cacheManagement.advancedPage.validation.redisCapacity')
 
+    getSemanticConfig.mockResolvedValueOnce({
+      data: {
+        ...defaultSemanticConfig(),
+        semantic_model_base_url: 'https://embed.example.com/v1',
+        semantic_api_key_masked: 'sk-****',
+        semantic_model_name: 'text-embedding-3-large',
+        embedding_dimension: 3072
+      }
+    })
     const semantic = mountSemanticCache('admin')
     await flushPromises()
     expect(semantic.text()).toContain('Observe 观察模式')
