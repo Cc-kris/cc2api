@@ -2303,6 +2303,11 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		markPatchSet("model", billingModel)
 	}
 	upstreamModel := billingModel
+	if imageGenerationAllowed && normalizeOpenAIResponsesImageGenerationToolsForModel(reqBody, billingModel) {
+		bodyModified = true
+		disablePatch()
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Normalized /responses image_generation tool model")
+	}
 	if imageGenerationAllowed && normalizeOpenAIResponsesImageOnlyModel(reqBody) {
 		bodyModified = true
 		disablePatch()

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func TestApplyCodexOAuthTransform_ToolContinuationPreservesInput(t *testing.T) {
@@ -543,6 +544,40 @@ func TestNormalizeOpenAIResponsesImageGenerationTools_RewritesLegacyFields(t *te
 	require.False(t, hasFormat)
 	_, hasCompression := first["compression"]
 	require.False(t, hasCompression)
+}
+
+func TestNormalizeOpenAIResponsesImageGenerationToolsForModel_RewritesMappedImageModel(t *testing.T) {
+	reqBody := map[string]any{
+		"tools": []any{
+			map[string]any{
+				"type":   "image_generation",
+				"model":  "gpt-image-2-pro",
+				"format": "png",
+			},
+		},
+	}
+
+	modified := normalizeOpenAIResponsesImageGenerationToolsForModel(reqBody, "gpt-image-2")
+	require.True(t, modified)
+
+	tools, ok := reqBody["tools"].([]any)
+	require.True(t, ok)
+	first, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "gpt-image-2", first["model"])
+	require.Equal(t, "png", first["output_format"])
+	require.NotContains(t, first, "format")
+}
+
+func TestNormalizeOpenAIResponsesImageGenerationToolsInBody_RewritesWSImageToolModel(t *testing.T) {
+	body := []byte(`{"type":"response.create","model":"gpt-image-2","tools":[{"type":"image_generation","model":"gpt-image-2-pro","format":"png"}],"tool_choice":{"type":"image_generation"}}`)
+
+	updated, modified, err := normalizeOpenAIResponsesImageGenerationToolsInBody(body, "gpt-image-2")
+	require.NoError(t, err)
+	require.True(t, modified)
+	require.Equal(t, "gpt-image-2", gjson.GetBytes(updated, `tools.#(type=="image_generation").model`).String())
+	require.Equal(t, "png", gjson.GetBytes(updated, `tools.#(type=="image_generation").output_format`).String())
+	require.False(t, gjson.GetBytes(updated, `tools.#(type=="image_generation").format`).Exists())
 }
 
 func TestEnsureOpenAIResponsesImageGenerationTool_NoTools(t *testing.T) {

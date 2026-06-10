@@ -2795,6 +2795,14 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			if didStrip {
 				normalized = stripped
 			}
+		} else if isOpenAIImageGenerationModel(upstreamModel) {
+			updated, didNormalize, normalizeErr := normalizeOpenAIResponsesImageGenerationToolsInBody(normalized, upstreamModel)
+			if normalizeErr != nil {
+				return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", normalizeErr)
+			}
+			if didNormalize {
+				normalized = updated
+			}
 		}
 		imageIntent := IsImageGenerationIntent(openAIResponsesEndpoint, originalModel, normalized)
 		imageBillingModel := ""

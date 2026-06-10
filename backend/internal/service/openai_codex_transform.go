@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/tidwall/gjson"
 )
 
 var codexModelMap = map[string]string{
@@ -629,6 +631,10 @@ func validateCodexSparkInput(reqBody map[string]any, model string) error {
 }
 
 func normalizeOpenAIResponsesImageGenerationTools(reqBody map[string]any) bool {
+	return normalizeOpenAIResponsesImageGenerationToolsForModel(reqBody, "")
+}
+
+func normalizeOpenAIResponsesImageGenerationToolsForModel(reqBody map[string]any, mappedImageModel string) bool {
 	rawTools, ok := reqBody["tools"]
 	if !ok || rawTools == nil {
 		return false
@@ -639,10 +645,23 @@ func normalizeOpenAIResponsesImageGenerationTools(reqBody map[string]any) bool {
 	}
 
 	modified := false
+	mappedImageModel = strings.TrimSpace(mappedImageModel)
+	if !isOpenAIImageGenerationModel(mappedImageModel) {
+		mappedImageModel = ""
+	}
 	for _, rawTool := range tools {
 		toolMap, ok := rawTool.(map[string]any)
 		if !ok || strings.TrimSpace(firstNonEmptyString(toolMap["type"])) != "image_generation" {
 			continue
+		}
+		if mappedImageModel != "" {
+			toolModel := strings.TrimSpace(firstNonEmptyString(toolMap["model"]))
+			if toolModel == "" || isOpenAIImageGenerationModel(toolModel) {
+				if toolModel != mappedImageModel {
+					toolMap["model"] = mappedImageModel
+					modified = true
+				}
+			}
 		}
 		if _, ok := toolMap["output_format"]; !ok {
 			if value := strings.TrimSpace(firstNonEmptyString(toolMap["format"])); value != "" {
@@ -666,6 +685,24 @@ func normalizeOpenAIResponsesImageGenerationTools(reqBody map[string]any) bool {
 		}
 	}
 	return modified
+}
+
+func normalizeOpenAIResponsesImageGenerationToolsInBody(body []byte, mappedImageModel string) ([]byte, bool, error) {
+	if len(body) == 0 || !gjson.ValidBytes(body) {
+		return body, false, nil
+	}
+	var reqBody map[string]any
+	if err := json.Unmarshal(body, &reqBody); err != nil {
+		return body, false, err
+	}
+	if !normalizeOpenAIResponsesImageGenerationToolsForModel(reqBody, mappedImageModel) {
+		return body, false, nil
+	}
+	updated, err := json.Marshal(reqBody)
+	if err != nil {
+		return body, false, err
+	}
+	return updated, true, nil
 }
 
 func ensureOpenAIResponsesImageGenerationTool(reqBody map[string]any) bool {

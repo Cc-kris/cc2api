@@ -174,6 +174,7 @@ func TestOpenAIGatewayService_Forward_WSv2_SuccessAndBindSticky(t *testing.T) {
 func TestOpenAIGatewayService_Forward_WSv2_ImageGenerationCountsOutputs(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
+	receivedCh := make(chan string, 1)
 	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
 	wsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -190,6 +191,7 @@ func TestOpenAIGatewayService_Forward_WSv2_ImageGenerationCountsOutputs(t *testi
 			t.Errorf("read ws request failed: %v", err)
 			return
 		}
+		receivedCh <- requestToJSONString(request)
 
 		if err := conn.WriteJSON(map[string]any{
 			"type": "response.output_item.done",
@@ -272,13 +274,16 @@ func TestOpenAIGatewayService_Forward_WSv2_ImageGenerationCountsOutputs(t *testi
 		Credentials: map[string]any{
 			"api_key":  "sk-test",
 			"base_url": wsServer.URL,
+			"model_mapping": map[string]any{
+				"gpt-5.4-mini": "gpt-image-2",
+			},
 		},
 		Extra: map[string]any{
 			"responses_websockets_v2_enabled": true,
 		},
 	}
 
-	body := []byte(`{"model":"gpt-5.4","stream":false,"input":"draw","tools":[{"type":"image_generation","model":"gpt-image-2","size":"1024x1024"}],"tool_choice":{"type":"image_generation"}}`)
+	body := []byte(`{"model":"gpt-5.4-mini","stream":false,"input":"draw","tools":[{"type":"image_generation","model":"gpt-image-2-pro","size":"1024x1024","format":"png"}],"tool_choice":{"type":"image_generation"}}`)
 	result, err := svc.Forward(context.Background(), c, account, body)
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -290,6 +295,12 @@ func TestOpenAIGatewayService_Forward_WSv2_ImageGenerationCountsOutputs(t *testi
 	require.Equal(t, 4, result.Usage.OutputTokens)
 	require.True(t, result.OpenAIWSMode)
 	require.Equal(t, "resp_ws_image_1", gjson.GetBytes(rec.Body.Bytes(), "id").String())
+
+	received := <-receivedCh
+	require.Equal(t, openAIImagesResponsesMainModel, gjson.Get(received, "model").String())
+	require.Equal(t, "gpt-image-2", gjson.Get(received, `tools.#(type=="image_generation").model`).String())
+	require.Equal(t, "png", gjson.Get(received, `tools.#(type=="image_generation").output_format`).String())
+	require.False(t, gjson.Get(received, `tools.#(type=="image_generation").format`).Exists())
 }
 
 func requestToJSONString(payload map[string]any) string {
