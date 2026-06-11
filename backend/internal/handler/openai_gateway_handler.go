@@ -1341,7 +1341,16 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	// 应用渠道模型映射到 WebSocket 首条消息。后续安全静默重试会复用同一首帧。
 	wsFirstMessage := firstMessage
 	if channelMappingWS.Mapped {
-		wsFirstMessage = h.gatewayService.ReplaceModelInBody(firstMessage, channelMappingWS.MappedModel)
+		mappedImageBody, mappedImageBodyChanged, mapErr := service.NormalizeOpenAIWSImageGenerationChannelMapping(firstMessage, reqModel, channelMappingWS.MappedModel)
+		if mapErr != nil {
+			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "invalid websocket request payload")
+			return
+		}
+		if mappedImageBodyChanged {
+			wsFirstMessage = mappedImageBody
+		} else {
+			wsFirstMessage = h.gatewayService.ReplaceModelInBody(firstMessage, channelMappingWS.MappedModel)
+		}
 	}
 
 	excludedAccountIDs := map[int64]struct{}{}

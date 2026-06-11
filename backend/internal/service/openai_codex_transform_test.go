@@ -580,6 +580,36 @@ func TestNormalizeOpenAIResponsesImageGenerationToolsInBody_RewritesWSImageToolM
 	require.False(t, gjson.GetBytes(updated, `tools.#(type=="image_generation").format`).Exists())
 }
 
+func TestNormalizeOpenAIWSImageGenerationChannelMapping_PreservesTopLevelTextModel(t *testing.T) {
+	body := []byte(`{"type":"response.create","model":"gpt-5.5","tools":[{"type":"image_generation","format":"png"}],"tool_choice":{"type":"image_generation"}}`)
+
+	updated, modified, err := NormalizeOpenAIWSImageGenerationChannelMapping(body, "gpt-5.5", "gpt-image-2")
+	require.NoError(t, err)
+	require.True(t, modified)
+	require.Equal(t, "gpt-5.5", gjson.GetBytes(updated, "model").String())
+	require.Equal(t, "gpt-image-2", gjson.GetBytes(updated, `tools.#(type=="image_generation").model`).String())
+	require.Equal(t, "png", gjson.GetBytes(updated, `tools.#(type=="image_generation").output_format`).String())
+	require.False(t, gjson.GetBytes(updated, `tools.#(type=="image_generation").format`).Exists())
+}
+
+func TestNormalizeOpenAIWSImageGenerationChannelMapping_SuppressesTopLevelImageReplacementWhenAlreadyMapped(t *testing.T) {
+	body := []byte(`{"type":"response.create","model":"gpt-5.5","tools":[{"type":"image_generation","model":"gpt-image-2","output_format":"png"}],"tool_choice":{"type":"image_generation"}}`)
+
+	updated, handled, err := NormalizeOpenAIWSImageGenerationChannelMapping(body, "gpt-5.5", "gpt-image-2")
+	require.NoError(t, err)
+	require.True(t, handled)
+	require.JSONEq(t, string(body), string(updated))
+}
+
+func TestNormalizeOpenAIWSImageGenerationChannelMapping_IgnoresPlainTextRequest(t *testing.T) {
+	body := []byte(`{"type":"response.create","model":"gpt-5.5","input":"write code"}`)
+
+	updated, modified, err := NormalizeOpenAIWSImageGenerationChannelMapping(body, "gpt-5.5", "gpt-image-2")
+	require.NoError(t, err)
+	require.False(t, modified)
+	require.JSONEq(t, string(body), string(updated))
+}
+
 func TestEnsureOpenAIResponsesImageGenerationTool_NoTools(t *testing.T) {
 	reqBody := map[string]any{
 		"model": "gpt-5.4",

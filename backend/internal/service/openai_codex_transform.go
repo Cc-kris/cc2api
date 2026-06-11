@@ -705,6 +705,48 @@ func normalizeOpenAIResponsesImageGenerationToolsInBody(body []byte, mappedImage
 	return updated, true, nil
 }
 
+// NormalizeOpenAIWSImageGenerationChannelMapping applies a channel-level image
+// model mapping to the image_generation tool while preserving the top-level
+// Responses model. WebSocket/Codex requests backed by ChatGPT accounts require
+// a text-capable top-level model (for example gpt-5.5) and reject image-only
+// models such as gpt-image-2 there.
+func NormalizeOpenAIWSImageGenerationChannelMapping(body []byte, requestedModel string, mappedImageModel string) ([]byte, bool, error) {
+	mappedImageModel = strings.TrimSpace(mappedImageModel)
+	if !isOpenAIImageGenerationModel(mappedImageModel) {
+		return body, false, nil
+	}
+	if !IsImageGenerationIntent(openAIResponsesEndpoint, requestedModel, body) {
+		return body, false, nil
+	}
+	if len(body) == 0 || !gjson.ValidBytes(body) {
+		return body, false, nil
+	}
+	var reqBody map[string]any
+	if err := json.Unmarshal(body, &reqBody); err != nil {
+		return body, false, err
+	}
+	modified := false
+	if !hasOpenAIImageGenerationTool(reqBody) {
+		if ensureOpenAIResponsesImageGenerationTool(reqBody) {
+			modified = true
+		}
+	}
+	if normalizeOpenAIResponsesImageGenerationToolsForModel(reqBody, mappedImageModel) {
+		modified = true
+	}
+	if !modified {
+		return body, true, nil
+	}
+	if strings.TrimSpace(firstNonEmptyString(reqBody["model"])) != strings.TrimSpace(requestedModel) {
+		reqBody["model"] = strings.TrimSpace(requestedModel)
+	}
+	updated, err := json.Marshal(reqBody)
+	if err != nil {
+		return body, false, err
+	}
+	return updated, true, nil
+}
+
 func ensureOpenAIResponsesImageGenerationTool(reqBody map[string]any) bool {
 	if len(reqBody) == 0 {
 		return false

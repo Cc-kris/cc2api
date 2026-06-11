@@ -909,6 +909,23 @@ func TestOpenAIResponsesWebSocket_PassthroughUsageLogInfersReasoningFromInitialR
 		"usage log reasoning effort 必须使用渠道映射前首帧模型后缀推导")
 }
 
+func TestOpenAIResponsesWebSocket_ChannelImageMappingPreservesTopLevelTextModel(t *testing.T) {
+	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+		firstPayload: `{"type":"response.create","model":"gpt-5.5","stream":true,"tools":[{"type":"image_generation","format":"png"}],"tool_choice":{"type":"image_generation"}}`,
+		userAgent:    testStringPtr("Codex Desktop test"),
+		channelMapping: map[string]string{
+			"gpt-5.5": "gpt-image-2",
+		},
+	})
+
+	require.Equal(t, "gpt-5.5", gjson.GetBytes(got.upstreamFirstPayload, "model").String(),
+		"WebSocket 生图不应把顶层 Responses 模型替换成 image-only 模型")
+	require.Equal(t, "gpt-image-2", gjson.GetBytes(got.upstreamFirstPayload, `tools.#(type=="image_generation").model`).String(),
+		"渠道图片模型映射应写入 image_generation 工具")
+	require.Equal(t, "png", gjson.GetBytes(got.upstreamFirstPayload, `tools.#(type=="image_generation").output_format`).String())
+	require.False(t, gjson.GetBytes(got.upstreamFirstPayload, `tools.#(type=="image_generation").format`).Exists())
+}
+
 func TestOpenAIResponsesWebSocket_PassthroughUsageLogLeavesUserAgentNilWhenMissing(t *testing.T) {
 	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
 		firstPayload: `{"type":"response.create","model":"gpt-5.4","stream":false,"reasoning":{"effort":"medium"}}`,
