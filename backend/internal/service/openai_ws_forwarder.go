@@ -301,7 +301,7 @@ type OpenAIWSIngressHooks struct {
 	// 的 reasoning effort 后缀推导，禁止用于上游请求或计费模型。
 	InitialRequestModel string
 	BeforeTurn          func(turn int) error
-	BeforeRequest       func(turn int, payload []byte, originalModel string) error
+	BeforeRequest       func(turn int, payload []byte, originalModel string) ([]byte, error)
 	AfterTurn           func(turn int, result *OpenAIForwardResult, turnErr error)
 }
 
@@ -3530,8 +3530,16 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	}
 	for {
 		if turn > 1 && !skipBeforeTurn && hooks != nil && hooks.BeforeRequest != nil {
-			if err := hooks.BeforeRequest(turn, currentPayload, currentOriginalModel); err != nil {
+			updatedPayload, err := hooks.BeforeRequest(turn, currentPayload, currentOriginalModel)
+			if err != nil {
 				return err
+			}
+			if updatedPayload != nil {
+				currentPayload = updatedPayload
+				currentPayloadBytes = len(updatedPayload)
+				if model := strings.TrimSpace(gjson.GetBytes(currentPayload, "model").String()); model != "" {
+					currentOriginalModel = model
+				}
 			}
 		}
 		if !skipBeforeTurn && hooks != nil && hooks.BeforeTurn != nil {

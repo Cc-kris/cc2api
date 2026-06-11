@@ -715,9 +715,6 @@ func NormalizeOpenAIWSImageGenerationChannelMapping(body []byte, requestedModel 
 	if !isOpenAIImageGenerationModel(mappedImageModel) {
 		return body, false, nil
 	}
-	if !IsImageGenerationIntent(openAIResponsesEndpoint, requestedModel, body) {
-		return body, false, nil
-	}
 	if len(body) == 0 || !gjson.ValidBytes(body) {
 		return body, false, nil
 	}

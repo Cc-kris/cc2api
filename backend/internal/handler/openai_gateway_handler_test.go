@@ -926,6 +926,37 @@ func TestOpenAIResponsesWebSocket_ChannelImageMappingPreservesTopLevelTextModel(
 	require.False(t, gjson.GetBytes(got.upstreamFirstPayload, `tools.#(type=="image_generation").format`).Exists())
 }
 
+func TestOpenAIResponsesWebSocket_ChannelImageMappingInjectsToolWithoutIntent(t *testing.T) {
+	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+		firstPayload: `{"type":"response.create","model":"gpt-5.5","stream":true,"input":"draw a candy on white background"}`,
+		userAgent:    testStringPtr("Codex Desktop test"),
+		channelMapping: map[string]string{
+			"gpt-5.5": "gpt-image-2",
+		},
+	})
+
+	require.Equal(t, "gpt-5.5", gjson.GetBytes(got.upstreamFirstPayload, "model").String(),
+		"缺少显式 image_generation tool 时也不应把顶层 Responses 模型替换成 image-only 模型")
+	require.Equal(t, "gpt-image-2", gjson.GetBytes(got.upstreamFirstPayload, `tools.#(type=="image_generation").model`).String(),
+		"图片专用渠道应注入 image_generation 工具并写入渠道图片模型")
+}
+
+func TestOpenAIResponsesWebSocket_ChannelImageMappingAppliesToFollowupTurn(t *testing.T) {
+	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+		firstPayload: `{"type":"response.create","model":"gpt-5.5","stream":true,"input":"first turn"}`,
+		nextPayload:  `{"type":"response.create","model":"gpt-5.5","stream":true,"input":"draw another candy","previous_response_id":"resp_usage_e2e"}`,
+		userAgent:    testStringPtr("Codex Desktop test"),
+		channelMapping: map[string]string{
+			"gpt-5.5": "gpt-image-2",
+		},
+	})
+
+	require.Equal(t, "gpt-5.5", gjson.GetBytes(got.upstreamSecondPayload, "model").String(),
+		"后续 WS turn 也不应把顶层 Responses 模型替换成 image-only 模型")
+	require.Equal(t, "gpt-image-2", gjson.GetBytes(got.upstreamSecondPayload, `tools.#(type=="image_generation").model`).String(),
+		"后续 WS turn 也应保留渠道图片模型到 image_generation 工具")
+}
+
 func TestOpenAIResponsesWebSocket_PassthroughUsageLogLeavesUserAgentNilWhenMissing(t *testing.T) {
 	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
 		firstPayload: `{"type":"response.create","model":"gpt-5.4","stream":false,"reasoning":{"effort":"medium"}}`,
@@ -1085,13 +1116,15 @@ func newOpenAIWSHandlerTestServer(t *testing.T, h *OpenAIGatewayHandler, subject
 
 type openAIResponsesWSUsageLogCase struct {
 	firstPayload   string
+	nextPayload    string
 	userAgent      *string
 	channelMapping map[string]string
 }
 
 type openAIResponsesWSUsageLogResult struct {
-	log                  *service.UsageLog
-	upstreamFirstPayload []byte
+	log                   *service.UsageLog
+	upstreamFirstPayload  []byte
+	upstreamSecondPayload []byte
 }
 
 type openAIWSUsageHandlerAccountRepoStub struct {
@@ -1445,7 +1478,7 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
-	upstreamPayloadCh := make(chan []byte, 1)
+	upstreamPayloadCh := make(chan []byte, 2)
 	upstreamErrCh := make(chan error, 1)
 	upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := coderws.Accept(w, r, &coderws.AcceptOptions{
@@ -1480,6 +1513,30 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		if writeErr != nil {
 			upstreamErrCh <- writeErr
 			return
+		}
+		if strings.TrimSpace(tc.nextPayload) != "" {
+			readCtx, cancelRead = context.WithTimeout(r.Context(), 3*time.Second)
+			msgType, payload, readErr = conn.Read(readCtx)
+			cancelRead()
+			if readErr != nil {
+				upstreamErrCh <- readErr
+				return
+			}
+			if msgType != coderws.MessageText && msgType != coderws.MessageBinary {
+				upstreamErrCh <- errors.New("unexpected upstream websocket second message type")
+				return
+			}
+			upstreamPayloadCh <- payload
+
+			writeCtx, cancelWrite = context.WithTimeout(r.Context(), 3*time.Second)
+			writeErr = conn.Write(writeCtx, coderws.MessageText, []byte(
+				`{"type":"response.completed","response":{"id":"resp_usage_e2e_2","model":"gpt-5.4","usage":{"input_tokens":3,"output_tokens":1}}}`,
+			))
+			cancelWrite()
+			if writeErr != nil {
+				upstreamErrCh <- writeErr
+				return
+			}
 		}
 		_ = conn.Close(coderws.StatusNormalClosure, "done")
 		upstreamErrCh <- nil
@@ -1616,6 +1673,12 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 	cancelRead()
 	require.NoError(t, err)
 	require.Equal(t, "response.completed", gjson.GetBytes(event, "type").String())
+	if strings.TrimSpace(tc.nextPayload) != "" {
+		writeCtx, cancelWrite = context.WithTimeout(context.Background(), 3*time.Second)
+		err = clientConn.Write(writeCtx, coderws.MessageText, []byte(tc.nextPayload))
+		cancelWrite()
+		require.NoError(t, err)
+	}
 	_ = clientConn.Close(coderws.StatusNormalClosure, "done")
 
 	var usageLog *service.UsageLog
@@ -1632,17 +1695,30 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 	case <-time.After(3 * time.Second):
 		t.Fatal("等待上游 WebSocket 首帧超时")
 	}
+	var upstreamSecondPayload []byte
+	if strings.TrimSpace(tc.nextPayload) != "" {
+		select {
+		case upstreamSecondPayload = <-upstreamPayloadCh:
+		case <-time.After(3 * time.Second):
+			t.Fatal("等待上游 WebSocket 第二帧超时")
+		}
+	}
 
 	select {
 	case upstreamErr := <-upstreamErrCh:
-		require.NoError(t, upstreamErr)
+		if strings.TrimSpace(tc.nextPayload) == "" {
+			require.NoError(t, upstreamErr)
+		}
 	case <-time.After(3 * time.Second):
-		t.Fatal("等待上游 WebSocket 结束超时")
+		if strings.TrimSpace(tc.nextPayload) == "" {
+			t.Fatal("等待上游 WebSocket 结束超时")
+		}
 	}
 
 	return openAIResponsesWSUsageLogResult{
-		log:                  usageLog,
-		upstreamFirstPayload: upstreamFirstPayload,
+		log:                   usageLog,
+		upstreamFirstPayload:  upstreamFirstPayload,
+		upstreamSecondPayload: upstreamSecondPayload,
 	}
 }
 

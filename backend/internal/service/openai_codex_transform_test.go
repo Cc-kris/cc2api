@@ -601,13 +601,15 @@ func TestNormalizeOpenAIWSImageGenerationChannelMapping_SuppressesTopLevelImageR
 	require.JSONEq(t, string(body), string(updated))
 }
 
-func TestNormalizeOpenAIWSImageGenerationChannelMapping_IgnoresPlainTextRequest(t *testing.T) {
+func TestNormalizeOpenAIWSImageGenerationChannelMapping_InjectsToolForImageOnlyChannel(t *testing.T) {
 	body := []byte(`{"type":"response.create","model":"gpt-5.5","input":"write code"}`)
 
-	updated, modified, err := NormalizeOpenAIWSImageGenerationChannelMapping(body, "gpt-5.5", "gpt-image-2")
+	updated, handled, err := NormalizeOpenAIWSImageGenerationChannelMapping(body, "gpt-5.5", "gpt-image-2")
 	require.NoError(t, err)
-	require.False(t, modified)
-	require.JSONEq(t, string(body), string(updated))
+	require.True(t, handled)
+	require.Equal(t, "gpt-5.5", gjson.GetBytes(updated, "model").String())
+	require.Equal(t, "gpt-image-2", gjson.GetBytes(updated, `tools.#(type=="image_generation").model`).String())
+	require.Equal(t, "png", gjson.GetBytes(updated, `tools.#(type=="image_generation").output_format`).String())
 }
 
 func TestEnsureOpenAIResponsesImageGenerationTool_NoTools(t *testing.T) {

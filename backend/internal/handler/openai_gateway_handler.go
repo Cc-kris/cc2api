@@ -1338,19 +1338,33 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		firstMessage,
 		openAIWSIngressFallbackSessionSeed(subject.UserID, apiKey.ID, apiKey.GroupID),
 	)
+	applyWSChannelMapping := func(payload []byte, model string) ([]byte, error) {
+		mapping := channelMappingWS
+		if strings.TrimSpace(model) != strings.TrimSpace(reqModel) {
+			resolvedMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, model)
+			mapping = resolvedMapping
+		}
+		if !mapping.Mapped {
+			return payload, nil
+		}
+		mappedImageBody, handled, mapErr := service.NormalizeOpenAIWSImageGenerationChannelMapping(payload, model, mapping.MappedModel)
+		if mapErr != nil {
+			return nil, mapErr
+		}
+		if handled {
+			return mappedImageBody, nil
+		}
+		return h.gatewayService.ReplaceModelInBody(payload, mapping.MappedModel), nil
+	}
 	// 应用渠道模型映射到 WebSocket 首条消息。后续安全静默重试会复用同一首帧。
 	wsFirstMessage := firstMessage
 	if channelMappingWS.Mapped {
-		mappedImageBody, mappedImageBodyChanged, mapErr := service.NormalizeOpenAIWSImageGenerationChannelMapping(firstMessage, reqModel, channelMappingWS.MappedModel)
+		mappedBody, mapErr := applyWSChannelMapping(firstMessage, reqModel)
 		if mapErr != nil {
 			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "invalid websocket request payload")
 			return
 		}
-		if mappedImageBodyChanged {
-			wsFirstMessage = mappedImageBody
-		} else {
-			wsFirstMessage = h.gatewayService.ReplaceModelInBody(firstMessage, channelMappingWS.MappedModel)
-		}
+		wsFirstMessage = mappedBody
 	}
 
 	excludedAccountIDs := map[int64]struct{}{}
@@ -1428,12 +1442,12 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		completedWSTurns := 0
 		hooks := &service.OpenAIWSIngressHooks{
 			InitialRequestModel: reqModel,
-			BeforeRequest: func(turn int, payload []byte, originalModel string) error {
+			BeforeRequest: func(turn int, payload []byte, originalModel string) ([]byte, error) {
 				if turn == 1 {
-					return nil
+					return payload, nil
 				}
 				if !gjson.ValidBytes(payload) {
-					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", errors.New("invalid json"))
+					return nil, service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", errors.New("invalid json"))
 				}
 				model := strings.TrimSpace(originalModel)
 				if model == "" {
@@ -1442,11 +1456,15 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if model == "" {
 					model = reqModel
 				}
+				mappedPayload, mapErr := applyWSChannelMapping(payload, model)
+				if mapErr != nil {
+					return nil, service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", mapErr)
+				}
 				if decision := h.checkContentModeration(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIResponses, model, payload); decision != nil && decision.Blocked {
 					writeContentModerationWSError(ctx, wsConn, decision)
-					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, decision.Message, nil)
+					return nil, service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, decision.Message, nil)
 				}
-				return nil
+				return mappedPayload, nil
 			},
 			BeforeTurn: func(turn int) error {
 				if turn == 1 {
