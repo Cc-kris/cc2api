@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -22,6 +23,7 @@ func setupAdminRouter() (*gin.Engine, *stubAdminService) {
 	redeemHandler := NewRedeemHandler(adminSvc, nil)
 
 	router.GET("/api/v1/admin/users", userHandler.List)
+	router.POST("/api/v1/admin/users/batch", userHandler.BatchAction)
 	router.GET("/api/v1/admin/users/:id", userHandler.GetByID)
 	router.POST("/api/v1/admin/users/:id/auth-identities", userHandler.BindAuthIdentity)
 	router.POST("/api/v1/admin/users", userHandler.Create)
@@ -157,6 +159,101 @@ func TestUserHandlerBindAuthIdentityMapsRequest(t *testing.T) {
 	require.Equal(t, "subject-123", adminSvc.boundAuthIdentity.ProviderSubject)
 	require.Nil(t, adminSvc.boundAuthIdentity.Channel)
 	require.Equal(t, float64(12), adminSvc.boundAuthIdentity.Metadata["report_id"])
+}
+
+func TestUserHandlerBatchActionDeleteAndDisable(t *testing.T) {
+	router, adminSvc := setupAdminRouter()
+
+	body, err := json.Marshal(map[string]any{
+		"user_ids": []int64{1, 2, 2, 0},
+		"action":   "delete",
+	})
+	require.NoError(t, err)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/batch", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, []int64{1, 2}, adminSvc.deletedUserIDs)
+
+	var deleteResp struct {
+		Code int                     `json:"code"`
+		Data BatchUserActionResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &deleteResp))
+	require.Equal(t, 0, deleteResp.Code)
+	require.Equal(t, BatchUserActionResponse{Total: 2, Success: 2}, deleteResp.Data)
+
+	body, err = json.Marshal(map[string]any{
+		"user_ids": []int64{1, 2},
+		"action":   "disable",
+	})
+	require.NoError(t, err)
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/batch", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, []int64{1, 2}, adminSvc.updatedUserIDs)
+	require.Len(t, adminSvc.updatedUsers, 2)
+	require.Equal(t, service.StatusDisabled, adminSvc.updatedUsers[0].Status)
+	require.Equal(t, service.StatusDisabled, adminSvc.updatedUsers[1].Status)
+}
+
+func TestUserHandlerBatchActionAddTagsAppendsWithoutClearingExistingTags(t *testing.T) {
+	router, adminSvc := setupAdminRouter()
+	adminSvc.users = []service.User{
+		{
+			ID:     1,
+			Email:  "tagged@example.com",
+			Role:   service.RoleUser,
+			Status: service.StatusActive,
+			Tags:   []service.UserTag{{ID: 7, Name: "existing"}},
+		},
+		{
+			ID:     2,
+			Email:  "plain@example.com",
+			Role:   service.RoleUser,
+			Status: service.StatusActive,
+		},
+	}
+
+	body, err := json.Marshal(map[string]any{
+		"user_ids": []int64{1, 2},
+		"action":   "add_tags",
+		"tag_ids":  []int64{7, 9, 9},
+	})
+	require.NoError(t, err)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/batch", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, []int64{1, 2}, adminSvc.updatedUserIDs)
+	require.Len(t, adminSvc.updatedUsers, 2)
+	require.NotNil(t, adminSvc.updatedUsers[0].TagIDs)
+	require.NotNil(t, adminSvc.updatedUsers[1].TagIDs)
+	require.Equal(t, []int64{7, 9}, *adminSvc.updatedUsers[0].TagIDs)
+	require.Equal(t, []int64{7, 9}, *adminSvc.updatedUsers[1].TagIDs)
+}
+
+func TestUserHandlerBatchActionAddTagsRequiresTags(t *testing.T) {
+	router, _ := setupAdminRouter()
+
+	body, err := json.Marshal(map[string]any{
+		"user_ids": []int64{1},
+		"action":   "add_tags",
+	})
+	require.NoError(t, err)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/batch", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestGroupHandlerEndpoints(t *testing.T) {

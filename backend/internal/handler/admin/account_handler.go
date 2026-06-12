@@ -787,6 +787,7 @@ func (h *AccountHandler) BatchTestActive(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	accounts = filterBatchTestEligibleAccounts(accounts)
 	results := make([]BatchAccountTestItem, 0, len(accounts))
 	for i := range accounts {
 		acc := accounts[i]
@@ -819,6 +820,16 @@ func (h *AccountHandler) BatchTestActive(c *gin.Context) {
 		}
 	}
 	response.Success(c, out)
+}
+
+func filterBatchTestEligibleAccounts(accounts []service.Account) []service.Account {
+	eligible := make([]service.Account, 0, len(accounts))
+	for _, account := range accounts {
+		if account.IsSchedulable() {
+			eligible = append(eligible, account)
+		}
+	}
+	return eligible
 }
 
 func extractAccountTestStatusCode(message string) int {

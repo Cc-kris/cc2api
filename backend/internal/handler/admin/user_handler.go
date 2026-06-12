@@ -97,6 +97,24 @@ type UpdateBalanceRequest struct {
 	Notes     string  `json:"notes"`
 }
 
+type BatchUserActionRequest struct {
+	UserIDs []int64 `json:"user_ids"`
+	Action  string  `json:"action" binding:"required,oneof=delete disable add_tags"`
+	TagIDs  []int64 `json:"tag_ids"`
+}
+
+type BatchUserActionError struct {
+	UserID  int64  `json:"user_id"`
+	Message string `json:"message"`
+}
+
+type BatchUserActionResponse struct {
+	Total   int                    `json:"total"`
+	Success int                    `json:"success"`
+	Failed  int                    `json:"failed"`
+	Errors  []BatchUserActionError `json:"errors,omitempty"`
+}
+
 type BindUserAuthIdentityRequest struct {
 	ProviderType    string                              `json:"provider_type"`
 	ProviderKey     string                              `json:"provider_key"`
@@ -479,6 +497,113 @@ func (h *UserHandler) Delete(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{"message": "User deleted successfully"})
+}
+
+// BatchAction handles batch user operations.
+// POST /api/v1/admin/users/batch
+func (h *UserHandler) BatchAction(c *gin.Context) {
+	var req BatchUserActionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	userIDs := uniquePositiveInt64(req.UserIDs)
+	if len(userIDs) == 0 {
+		response.BadRequest(c, "user_ids is required")
+		return
+	}
+	if len(userIDs) > 500 {
+		response.BadRequest(c, "user_ids cannot exceed 500")
+		return
+	}
+
+	tagIDs := uniquePositiveInt64(req.TagIDs)
+	if req.Action == "add_tags" && len(tagIDs) == 0 {
+		response.BadRequest(c, "tag_ids is required")
+		return
+	}
+
+	result := BatchUserActionResponse{
+		Total: len(userIDs),
+	}
+	for _, userID := range userIDs {
+		if err := h.applyBatchUserAction(c.Request.Context(), userID, req.Action, tagIDs); err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, BatchUserActionError{
+				UserID:  userID,
+				Message: err.Error(),
+			})
+			continue
+		}
+		result.Success++
+	}
+	response.Success(c, result)
+}
+
+func (h *UserHandler) applyBatchUserAction(ctx context.Context, userID int64, action string, tagIDs []int64) error {
+	switch action {
+	case "delete":
+		return h.adminService.DeleteUser(ctx, userID)
+	case "disable":
+		_, err := h.adminService.UpdateUser(ctx, userID, &service.UpdateUserInput{
+			Status: service.StatusDisabled,
+		})
+		return err
+	case "add_tags":
+		return h.addTagsToUser(ctx, userID, tagIDs)
+	default:
+		return fmt.Errorf("unsupported batch user action")
+	}
+}
+
+func (h *UserHandler) addTagsToUser(ctx context.Context, userID int64, tagIDs []int64) error {
+	user, err := h.adminService.GetUser(ctx, userID)
+	if err != nil {
+		return err
+	}
+	merged := make([]int64, 0, len(user.Tags)+len(tagIDs))
+	seen := make(map[int64]struct{}, len(user.Tags)+len(tagIDs))
+	for _, tag := range user.Tags {
+		if tag.ID <= 0 {
+			continue
+		}
+		if _, ok := seen[tag.ID]; ok {
+			continue
+		}
+		seen[tag.ID] = struct{}{}
+		merged = append(merged, tag.ID)
+	}
+	for _, tagID := range tagIDs {
+		if tagID <= 0 {
+			continue
+		}
+		if _, ok := seen[tagID]; ok {
+			continue
+		}
+		seen[tagID] = struct{}{}
+		merged = append(merged, tagID)
+	}
+	_, err = h.adminService.UpdateUser(ctx, userID, &service.UpdateUserInput{
+		TagIDs: &merged,
+	})
+	return err
+}
+
+func uniquePositiveInt64(values []int64) []int64 {
+	result := make([]int64, 0, len(values))
+	seen := make(map[int64]struct{}, len(values))
+	for _, value := range values {
+		if value <= 0 {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
 }
 
 // UpdateBalance handles updating user balance

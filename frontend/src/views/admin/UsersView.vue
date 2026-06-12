@@ -79,6 +79,7 @@
                 step="0.0001"
                 :placeholder="balanceMinPlaceholder"
                 class="input w-full sm:w-32"
+                @input="clearBalanceFilterError"
                 @keyup.enter="applyFilter"
               />
               <input
@@ -88,6 +89,7 @@
                 step="0.0001"
                 :placeholder="balanceMaxPlaceholder"
                 class="input w-full sm:w-32"
+                @input="clearBalanceFilterError"
                 @keyup.enter="applyFilter"
               />
               <button
@@ -292,6 +294,61 @@
 
       <!-- Users Table -->
       <template #table>
+        <div
+          v-if="selectedUserCount > 0"
+          class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-primary-50 p-3 dark:bg-primary-900/20"
+          data-test="user-bulk-actions"
+        >
+          <div class="flex flex-wrap items-center gap-3">
+            <span class="text-sm font-medium text-primary-900 dark:text-primary-100">
+              {{ t('admin.users.bulk.selected', { count: selectedUserCount }) }}
+            </span>
+            <button
+              type="button"
+              class="text-xs font-medium text-primary-700 hover:text-primary-800 dark:text-primary-300 dark:hover:text-primary-200"
+              @click="toggleVisibleUsers(true)"
+            >
+              {{ t('admin.users.bulk.selectCurrentPage') }}
+            </button>
+            <span class="text-gray-300 dark:text-primary-800">•</span>
+            <button
+              type="button"
+              class="text-xs font-medium text-primary-700 hover:text-primary-800 dark:text-primary-300 dark:hover:text-primary-200"
+              @click="clearSelectedUsers"
+            >
+              {{ t('admin.users.bulk.clear') }}
+            </button>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              :disabled="bulkWorking"
+              data-test="bulk-tag-users"
+              @click="openBulkTagDialog"
+            >
+              {{ t('admin.users.bulk.addTags') }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-warning btn-sm"
+              :disabled="bulkWorking"
+              data-test="bulk-disable-users"
+              @click="handleBulkDisable"
+            >
+              {{ t('admin.users.bulk.disable') }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-danger btn-sm"
+              :disabled="bulkWorking"
+              data-test="bulk-delete-users"
+              @click="handleBulkDelete"
+            >
+              {{ t('admin.users.bulk.delete') }}
+            </button>
+          </div>
+        </div>
         <DataTable
           :columns="columns"
           :data="sortedUsers"
@@ -303,6 +360,26 @@
           :sort-storage-key="USER_SORT_STORAGE_KEY"
           @sort="handleSort"
         >
+          <template #header-select>
+            <input
+              type="checkbox"
+              class="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              :checked="allVisibleUsersSelected"
+              @click.stop
+              @change="handleToggleVisibleUsers"
+            />
+          </template>
+
+          <template #cell-select="{ row }">
+            <input
+              type="checkbox"
+              class="h-4 w-4 cursor-pointer rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              :checked="isUserSelected(row.id)"
+              @click.stop
+              @change="toggleUserSelection(row.id)"
+            />
+          </template>
+
           <template #cell-email="{ value }">
             <div class="flex items-center gap-2">
               <div
@@ -784,6 +861,66 @@
     </Teleport>
 
     <ConfirmDialog :show="showDeleteDialog" :title="t('admin.users.deleteUser')" :message="t('admin.users.deleteConfirm', { email: deletingUser?.email })" :danger="true" @confirm="confirmDelete" @cancel="showDeleteDialog = false" />
+    <BaseDialog
+      :show="showBulkTagDialog"
+      :title="t('admin.users.bulk.addTagsTitle')"
+      width="normal"
+      @close="closeBulkTagDialog"
+    >
+      <div class="space-y-4" data-test="bulk-tag-dialog">
+        <p class="text-sm text-gray-600 dark:text-gray-300">
+          {{ t('admin.users.bulk.addTagsHint', { count: selectedUserCount }) }}
+        </p>
+        <div
+          v-if="loadingTags"
+          class="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-500 dark:border-dark-700 dark:text-dark-400"
+        >
+          {{ t('common.loading') }}
+        </div>
+        <div
+          v-else-if="availableTags.length === 0"
+          class="rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500 dark:border-dark-600 dark:text-dark-400"
+        >
+          {{ t('admin.users.bulk.noTags') }}
+        </div>
+        <div
+          v-else
+          class="flex max-h-48 flex-wrap gap-2 overflow-y-auto rounded-lg border border-gray-200 p-3 dark:border-dark-700"
+        >
+          <label
+            v-for="tag in availableTags"
+            :key="tag.id"
+            class="inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors"
+            :class="bulkTagIds.includes(tag.id) ? 'border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-700 dark:bg-primary-900/30 dark:text-primary-200' : 'border-gray-200 text-gray-600 hover:border-primary-200 dark:border-dark-600 dark:text-dark-300'"
+          >
+            <input
+              v-model="bulkTagIds"
+              type="checkbox"
+              class="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              :value="tag.id"
+              data-test="bulk-tag-checkbox"
+            />
+            <span>{{ tag.name }}</span>
+          </label>
+        </div>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <button type="button" class="btn btn-secondary" :disabled="bulkWorking" @click="closeBulkTagDialog">
+            {{ t('common.cancel') }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="bulkWorking || bulkTagIds.length === 0"
+            data-test="bulk-tag-submit"
+            @click="handleBulkTagSubmit"
+          >
+            {{ bulkWorking ? t('common.saving') : t('admin.users.bulk.addTags') }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
     <UserCreateModal :show="showCreateModal" @close="showCreateModal = false" @success="loadUsers" />
     <UserEditModal :show="showEditModal" :user="editingUser" @close="closeEditModal" @success="loadUsers" />
     <UserPlatformQuotaModal
@@ -797,7 +934,7 @@
     <UserBalanceModal :show="showBalanceModal" :user="balanceUser" :operation="balanceOperation" @close="closeBalanceModal" @success="loadUsers" />
     <UserBalanceHistoryModal :show="showBalanceHistoryModal" :user="balanceHistoryUser" @close="closeBalanceHistoryModal" @deposit="handleDepositFromHistory" @withdraw="handleWithdrawFromHistory" />
     <GroupReplaceModal :show="showGroupReplaceModal" :user="groupReplaceUser" :old-group="groupReplaceOldGroup" :all-groups="allGroups" @close="closeGroupReplaceModal" @success="loadUsers" />
-    <UserTagManagementModal :show="showTagManager" @close="showTagManager = false" @changed="loadUsers" />
+    <UserTagManagementModal :show="showTagManager" @close="showTagManager = false" @changed="handleUserTagsChanged" />
     <UserAttributesConfigModal :show="showAttributesModal" @close="handleAttributesModalClose" />
   </AppLayout>
 </template>
@@ -807,18 +944,20 @@ import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
+import { useTableSelection } from '@/composables/useTableSelection'
 import { formatDateTime } from '@/utils/format'
 import Icon from '@/components/icons/Icon.vue'
 
 const { t } = useI18n()
 import { adminAPI } from '@/api/admin'
-import type { AdminUser, AdminGroup, UserAttributeDefinition } from '@/types'
+import type { AdminUser, AdminGroup, UserAttributeDefinition, UserTag } from '@/types'
 import type { BatchUserUsageStats } from '@/api/admin/dashboard'
 import type { PlatformQuotaItem } from '@/api/admin/users'
 import type { Column } from '@/components/common/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -891,6 +1030,7 @@ const getAttributeValue = (userId: number, attrId: number): string => {
 
 // All possible columns (for column settings)
 const allColumns = computed<Column[]>(() => [
+  { key: 'select', label: '', sortable: false, class: 'w-12' },
   { key: 'email', label: t('admin.users.columns.user'), sortable: true },
   { key: 'id', label: t('admin.users.columns.id'), sortable: true },
   { key: 'username', label: t('admin.users.columns.username'), sortable: true },
@@ -916,9 +1056,9 @@ const allColumns = computed<Column[]>(() => [
   { key: 'actions', label: t('admin.users.columns.actions'), sortable: false }
 ])
 
-// Columns that can be toggled (exclude email and actions which are always visible)
+// Columns that can be toggled (exclude select/email/actions which are always visible)
 const toggleableColumns = computed(() =>
-  allColumns.value.filter(col => col.key !== 'email' && col.key !== 'actions')
+  allColumns.value.filter(col => col.key !== 'select' && col.key !== 'email' && col.key !== 'actions')
 )
 
 // Hidden columns (stored in Set - columns NOT in this set are visible)
@@ -933,8 +1073,7 @@ const DEFAULT_HIDDEN_COLUMNS = [
 ]
 const REMOVED_COLUMNS = new Set(['last_login_at'])
 // 强制可见列：加载时会被强制移出 hiddenColumns，并在列设置 UI 上 disabled。
-// 当前没有列需要强制可见 —— last_active_at 已改为可被用户隐藏。
-const FORCED_VISIBLE_COLUMNS = new Set<string>()
+const FORCED_VISIBLE_COLUMNS = new Set<string>(['select'])
 
 // localStorage keys for column settings
 const HIDDEN_COLUMNS_KEY = 'user-hidden-columns'
@@ -1047,14 +1186,42 @@ const hasVisibleAttributeColumns = computed(() =>
 // Filtered columns based on visibility
 const columns = computed<Column[]>(() =>
   allColumns.value.filter(col =>
-    col.key === 'email' || col.key === 'actions' || !hiddenColumns.has(col.key)
+    col.key === 'select' || col.key === 'email' || col.key === 'actions' || !hiddenColumns.has(col.key)
   )
 )
 
 const users = ref<AdminUser[]>([])
 const loading = ref(false)
 const searchQuery = ref('')
+const availableTags = ref<UserTag[]>([])
+const loadingTags = ref(false)
+const showBulkTagDialog = ref(false)
+const bulkTagIds = ref<number[]>([])
+const bulkWorking = ref(false)
 const USER_SORT_STORAGE_KEY = 'admin-users-table-sort'
+const {
+  selectedIds: selectedUserIds,
+  selectedCount: selectedUserCount,
+  allVisibleSelected: allVisibleUsersSelected,
+  isSelected: isUserSelected,
+  toggleVisible: toggleVisibleUsers,
+  setSelectedIds: setSelectedUserIds,
+  clear: clearSelectedUsers
+} = useTableSelection<AdminUser>({
+  rows: users,
+  getId: (user) => user.id
+})
+const toggleUserSelection = (userId: number) => {
+  if (isUserSelected(userId)) {
+    setSelectedUserIds(selectedUserIds.value.filter((id) => id !== userId))
+    return
+  }
+  setSelectedUserIds([...selectedUserIds.value, userId])
+}
+const handleToggleVisibleUsers = (event: Event) => {
+  const checked = (event.target as HTMLInputElement).checked
+  toggleVisibleUsers(checked)
+}
 const loadInitialSortState = (): { sort_by: string; sort_order: 'asc' | 'desc' } => {
   const fallback = { sort_by: 'created_at', sort_order: 'desc' as 'asc' | 'desc' }
   const sortable = new Set(['email', 'id', 'username', 'role', 'balance', 'concurrency', 'status', 'last_used_at', 'last_active_at', 'created_at'])
@@ -1083,6 +1250,24 @@ const loadAllGroups = async () => {
   } catch (e) {
     console.error('Failed to load groups:', e)
   }
+}
+
+const loadAvailableTags = async () => {
+  if (availableTags.value.length > 0 || loadingTags.value) return
+  loadingTags.value = true
+  try {
+    availableTags.value = await adminAPI.users.listTags()
+  } catch (error) {
+    console.error('Failed to load user tags:', error)
+    availableTags.value = []
+  } finally {
+    loadingTags.value = false
+  }
+}
+
+const handleUserTagsChanged = () => {
+  availableTags.value = []
+  loadUsers()
 }
 // Resolve user's accessible groups: exclusive groups first, then public groups
 const getUserGroups = (user: AdminUser) => {
@@ -1119,8 +1304,8 @@ const filters = reactive({
   status: '',
   group: '',  // group name for fuzzy match, '' = all
   balanceType: 'none' as BalanceFilterType,
-  balanceMin: '',
-  balanceMax: ''
+  balanceMin: '' as string | number,
+  balanceMax: '' as string | number
 })
 const activeAttributeFilters = reactive<Record<number, string>>({})
 
@@ -1178,15 +1363,21 @@ const balanceMaxPlaceholder = computed(() => (
 ))
 const balanceFilterError = ref('')
 
-const parseBalanceInput = (value: string): number | null => {
-  const trimmed = value.trim()
+const balanceInputText = (value: string | number): string => String(value).trim()
+
+const parseBalanceInput = (value: string | number): number | null => {
+  const trimmed = balanceInputText(value)
   if (trimmed === '') return null
   if (!/^-?\d+(?:\.\d{1,4})?$/.test(trimmed)) return Number.NaN
   return Number(trimmed)
 }
 
-const validateBalanceFilter = (): boolean => {
+const clearBalanceFilterError = () => {
   balanceFilterError.value = ''
+}
+
+const validateBalanceFilter = (): boolean => {
+  clearBalanceFilterError()
   if (filters.balanceType === 'none') return true
 
   const minValue = parseBalanceInput(filters.balanceMin)
@@ -1211,8 +1402,15 @@ const validateBalanceFilter = (): boolean => {
   return true
 }
 
+const hasRequiredBalanceFilterValues = (): boolean => {
+  if (filters.balanceType === 'none') return true
+  if (showBalanceMinInput.value && !balanceInputText(filters.balanceMin)) return false
+  if (showBalanceMaxInput.value && !balanceInputText(filters.balanceMax)) return false
+  return true
+}
+
 const handleBalanceFilterTypeChange = () => {
-  balanceFilterError.value = ''
+  clearBalanceFilterError()
   if (filters.balanceType === 'none') {
     filters.balanceMin = ''
     filters.balanceMax = ''
@@ -1220,6 +1418,11 @@ const handleBalanceFilterTypeChange = () => {
     filters.balanceMin = ''
   } else if (!showBalanceMaxInput.value) {
     filters.balanceMax = ''
+  }
+
+  saveFiltersToStorage()
+  if (!hasRequiredBalanceFilterValues()) {
+    return
   }
   applyFilter()
 }
@@ -1651,8 +1854,8 @@ const loadUsers = async () => {
         search: searchQuery.value || undefined,
         group_name: filters.group || undefined,
         balance_filter_type: balanceFilterType,
-        balance_min: balanceFilterActive && showBalanceMinInput.value ? filters.balanceMin.trim() || undefined : undefined,
-        balance_max: balanceFilterActive && showBalanceMaxInput.value ? filters.balanceMax.trim() || undefined : undefined,
+        balance_min: balanceFilterActive && showBalanceMinInput.value ? balanceInputText(filters.balanceMin) || undefined : undefined,
+        balance_max: balanceFilterActive && showBalanceMaxInput.value ? balanceInputText(filters.balanceMax) || undefined : undefined,
         attributes: Object.keys(attrFilters).length > 0 ? attrFilters : undefined,
         // 始终请求 subscriptions：列隐藏时仍需用于 UserPlatformQuotaModal 的 active-subscription 警示 banner
         include_subscriptions: true,
@@ -1852,6 +2055,100 @@ const confirmDelete = async () => {
   } catch (error: any) {
     appStore.showError(error.response?.data?.detail || t('admin.users.failedToDelete'))
     console.error('Error deleting user:', error)
+  }
+}
+
+const openBulkTagDialog = async () => {
+  if (selectedUserCount.value === 0) return
+  bulkTagIds.value = []
+  showBulkTagDialog.value = true
+  await loadAvailableTags()
+}
+
+const closeBulkTagDialog = () => {
+  showBulkTagDialog.value = false
+  bulkTagIds.value = []
+}
+
+const applyBatchUserActionResult = (result: { failed: number; errors?: { user_id: number }[] }, ids: number[]) => {
+  const failedIds = new Set((result.errors || []).map((item) => item.user_id))
+  const successIds = ids.filter((id) => !failedIds.has(id))
+  if (result.failed > 0) {
+    setSelectedUserIds(ids.filter((id) => failedIds.has(id)))
+  } else {
+    clearSelectedUsers()
+  }
+  return { failedIds, successIds }
+}
+
+const handleBulkDelete = async () => {
+  const userIds = [...selectedUserIds.value]
+  if (userIds.length === 0) return
+  if (!window.confirm(t('admin.users.bulk.deleteConfirm', { count: userIds.length }))) return
+  bulkWorking.value = true
+  try {
+    const result = await adminAPI.users.batchAction({ user_ids: userIds, action: 'delete' })
+    applyBatchUserActionResult(result, userIds)
+    if (result.failed > 0) {
+      appStore.showError(t('admin.users.bulk.partialSuccess', { success: result.success, failed: result.failed }))
+    } else {
+      appStore.showSuccess(t('admin.users.bulk.deleteSuccess', { count: result.success }))
+    }
+    loadUsers()
+  } catch (error: any) {
+    appStore.showError(error.response?.data?.detail || t('admin.users.failedToDelete'))
+    console.error('Error bulk deleting users:', error)
+  } finally {
+    bulkWorking.value = false
+  }
+}
+
+const handleBulkDisable = async () => {
+  const userIds = [...selectedUserIds.value]
+  if (userIds.length === 0) return
+  if (!window.confirm(t('admin.users.bulk.disableConfirm', { count: userIds.length }))) return
+  bulkWorking.value = true
+  try {
+    const result = await adminAPI.users.batchAction({ user_ids: userIds, action: 'disable' })
+    applyBatchUserActionResult(result, userIds)
+    if (result.failed > 0) {
+      appStore.showError(t('admin.users.bulk.partialSuccess', { success: result.success, failed: result.failed }))
+    } else {
+      appStore.showSuccess(t('admin.users.bulk.disableSuccess', { count: result.success }))
+    }
+    loadUsers()
+  } catch (error: any) {
+    appStore.showError(error.response?.data?.detail || t('admin.users.failedToToggle'))
+    console.error('Error bulk disabling users:', error)
+  } finally {
+    bulkWorking.value = false
+  }
+}
+
+const handleBulkTagSubmit = async () => {
+  const userIds = [...selectedUserIds.value]
+  if (userIds.length === 0) return
+  const tagIds = [...new Set(bulkTagIds.value)].filter((id) => id > 0)
+  if (tagIds.length === 0) {
+    appStore.showError(t('admin.users.bulk.tagRequired'))
+    return
+  }
+  bulkWorking.value = true
+  try {
+    const result = await adminAPI.users.batchAction({ user_ids: userIds, action: 'add_tags', tag_ids: tagIds })
+    applyBatchUserActionResult(result, userIds)
+    if (result.failed > 0) {
+      appStore.showError(t('admin.users.bulk.partialSuccess', { success: result.success, failed: result.failed }))
+    } else {
+      appStore.showSuccess(t('admin.users.bulk.tagSuccess', { count: result.success }))
+    }
+    closeBulkTagDialog()
+    loadUsers()
+  } catch (error: any) {
+    appStore.showError(error.response?.data?.detail || t('admin.users.failedToUpdate'))
+    console.error('Error bulk tagging users:', error)
+  } finally {
+    bulkWorking.value = false
   }
 }
 

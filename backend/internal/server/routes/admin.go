@@ -276,6 +276,7 @@ func registerUserManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		users.GET("/tags", h.Admin.User.ListTags)
 		users.POST("/tags", h.Admin.User.CreateTag)
 		users.DELETE("/tags/:tagID", h.Admin.User.DeleteTag)
+		users.POST("/batch", h.Admin.User.BatchAction)
 		users.GET("/:id", h.Admin.User.GetByID)
 		users.POST("/:id/auth-identities", h.Admin.User.BindAuthIdentity)
 		users.POST("", h.Admin.User.Create)

@@ -1223,18 +1223,47 @@ const toggleSelectAllVisible = (event: Event) => {
   toggleVisible(target.checked)
 }
 
+const isFutureTime = (value: string | number | null | undefined): boolean => {
+  if (value === null || value === undefined || value === '') return false
+  const time = typeof value === 'number' ? value : new Date(value).getTime()
+  return Number.isFinite(time) && time > Date.now()
+}
+
+const isExpiredAccount = (account: Account): boolean => {
+  if (!account.auto_pause_on_expired || account.expires_at === null || account.expires_at === undefined) return false
+  const expiresAt = typeof account.expires_at === 'number'
+    ? account.expires_at * 1000
+    : new Date(account.expires_at).getTime()
+  return Number.isFinite(expiresAt) && expiresAt <= Date.now()
+}
+
+const isBatchTestEligibleAccount = (account: Account): boolean => {
+  return (
+    account.status === 'active' &&
+    account.schedulable !== false &&
+    !isExpiredAccount(account) &&
+    !isFutureTime(account.rate_limit_reset_at) &&
+    !isFutureTime(account.overload_until) &&
+    !isFutureTime(account.temp_unschedulable_until)
+  )
+}
+
 const handleBatchTestActive = async () => {
   if (batchTesting.value) return
   showAccountToolsDropdown.value = false
   batchTesting.value = true
-  const currentActiveIds = accounts.value.filter((a) => a.status === 'active').map((a) => a.id)
-  accounts.value = accounts.value.map((a) => currentActiveIds.includes(a.id) ? { ...a, test_status: 'testing' } : a)
+  const currentTestableIds = accounts.value.filter(isBatchTestEligibleAccount).map((a) => a.id)
+  accounts.value = accounts.value.map((a) => currentTestableIds.includes(a.id) ? { ...a, test_status: 'testing' } : a)
   try {
     const result = await adminAPI.accounts.batchTestActive()
     const byID = new Map(result.results.map((item) => [item.account_id, item]))
     accounts.value = accounts.value.map((a) => {
       const item = byID.get(a.id)
-      if (!item) return a
+      if (!item) {
+        return currentTestableIds.includes(a.id)
+          ? { ...a, test_status: undefined, test_code: undefined, test_message: '' }
+          : a
+      }
       return {
         ...a,
         test_status: item.status,
@@ -1245,7 +1274,7 @@ const handleBatchTestActive = async () => {
     })
     appStore.showSuccess(t('admin.accounts.batchTest.done', { total: result.total, passed: result.passed, failed: result.failed }))
   } catch (error: any) {
-    accounts.value = accounts.value.map((a) => currentActiveIds.includes(a.id) ? { ...a, test_status: 'error', test_message: error.response?.data?.detail || error.message || '' } : a)
+    accounts.value = accounts.value.map((a) => currentTestableIds.includes(a.id) ? { ...a, test_status: 'error', test_message: error.response?.data?.detail || error.message || '' } : a)
     appStore.showError(error.response?.data?.detail || t('admin.accounts.batchTest.failed'))
   } finally {
     batchTesting.value = false

@@ -8,13 +8,15 @@ const {
   listWithEtag,
   getBatchTodayStats,
   getAllProxies,
-  getAllGroups
+  getAllGroups,
+  batchTestActive
 } = vi.hoisted(() => ({
   listAccounts: vi.fn(),
   listWithEtag: vi.fn(),
   getBatchTodayStats: vi.fn(),
   getAllProxies: vi.fn(),
-  getAllGroups: vi.fn()
+  getAllGroups: vi.fn(),
+  batchTestActive: vi.fn()
 }))
 
 vi.mock('@/api/admin', () => ({
@@ -26,7 +28,8 @@ vi.mock('@/api/admin', () => ({
       delete: vi.fn(),
       batchClearError: vi.fn(),
       batchRefresh: vi.fn(),
-      toggleSchedulable: vi.fn()
+      toggleSchedulable: vi.fn(),
+      batchTestActive
     },
     proxies: {
       getAll: getAllProxies
@@ -63,7 +66,13 @@ vi.mock('vue-i18n', async () => {
 
 const DataTableStub = {
   props: ['columns', 'data'],
-  template: '<div data-test="data-table"></div>'
+  template: `
+    <div data-test="data-table">
+      <div v-for="row in data" :key="row.id" :data-test="'account-' + row.id">
+        {{ row.test_status || 'empty' }}
+      </div>
+    </div>
+  `
 }
 
 const AccountBulkActionsBarStub = {
@@ -86,6 +95,7 @@ describe('admin AccountsView bulk edit scope', () => {
     getBatchTodayStats.mockReset()
     getAllProxies.mockReset()
     getAllGroups.mockReset()
+    batchTestActive.mockReset()
 
     listAccounts.mockResolvedValue({
       items: [],
@@ -102,6 +112,7 @@ describe('admin AccountsView bulk edit scope', () => {
     getBatchTodayStats.mockResolvedValue({ stats: {} })
     getAllProxies.mockResolvedValue([])
     getAllGroups.mockResolvedValue([])
+    batchTestActive.mockResolvedValue({ total: 0, passed: 0, failed: 0, results: [] })
   })
 
   it('opens bulk edit in filtered-results mode from the bulk actions dropdown', async () => {
@@ -149,4 +160,83 @@ describe('admin AccountsView bulk edit scope', () => {
     expect(wrapper.get('[data-test="bulk-edit-modal"]').attributes('data-show')).toBe('true')
     expect(wrapper.get('[data-test="bulk-edit-modal"]').attributes('data-target-mode')).toBe('filtered')
   })
+
+  it('only marks active schedulable accounts as testing for one-click connection test', async () => {
+    listAccounts.mockResolvedValue({
+      items: [
+        { id: 1, name: 'enabled', platform: 'openai', type: 'oauth', status: 'active', schedulable: true },
+        { id: 2, name: 'paused', platform: 'openai', type: 'oauth', status: 'active', schedulable: false },
+        { id: 3, name: 'inactive', platform: 'openai', type: 'oauth', status: 'inactive', schedulable: true },
+        { id: 4, name: 'temp-unschedulable', platform: 'openai', type: 'oauth', status: 'active', schedulable: true, temp_unschedulable_until: new Date(Date.now() + 60_000).toISOString() },
+        { id: 5, name: 'rate-limited', platform: 'openai', type: 'oauth', status: 'active', schedulable: true, rate_limit_reset_at: new Date(Date.now() + 60_000).toISOString() },
+        { id: 6, name: 'overloaded', platform: 'openai', type: 'oauth', status: 'active', schedulable: true, overload_until: new Date(Date.now() + 60_000).toISOString() },
+        { id: 7, name: 'expired', platform: 'openai', type: 'oauth', status: 'active', schedulable: true, auto_pause_on_expired: true, expires_at: Math.floor((Date.now() - 60_000) / 1000) }
+      ],
+      total: 7,
+      page: 1,
+      page_size: 20,
+      pages: 1
+    })
+
+    let resolveBatch!: (value: unknown) => void
+    batchTestActive.mockReturnValue(new Promise(resolve => { resolveBatch = resolve }))
+
+    const wrapper = mount(AccountsView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          TablePageLayout: {
+            template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
+          },
+          DataTable: DataTableStub,
+          Pagination: true,
+          ConfirmDialog: true,
+          AccountTableActions: { template: '<div><slot name="beforeCreate" /><slot name="after" /></div>' },
+          AccountTableFilters: { template: '<div></div>' },
+          AccountBulkActionsBar: AccountBulkActionsBarStub,
+          AccountActionMenu: true,
+          ImportDataModal: true,
+          ReAuthAccountModal: true,
+          AccountTestModal: true,
+          AccountStatsModal: true,
+          ScheduledTestsPanel: true,
+          SyncFromCrsModal: true,
+          TempUnschedStatusModal: true,
+          ErrorPassthroughRulesModal: true,
+          TLSFingerprintProfilesModal: true,
+          CreateAccountModal: true,
+          EditAccountModal: true,
+          BulkEditAccountModal: BulkEditAccountModalStub,
+          PlatformTypeBadge: true,
+          AccountCapacityCell: true,
+          AccountStatusIndicator: true,
+          AccountTodayStatsCell: true,
+          AccountGroupsCell: true,
+          AccountUsageCell: true,
+          Icon: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    const buttons = wrapper.findAll('button')
+    await buttons.find(button => button.text().includes('admin.accounts.moreActions'))!.trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text().includes('admin.accounts.batchTest.action'))!.trigger('click')
+    await flushPromises()
+
+    expect(batchTestActive).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('[data-test="account-1"]').text()).toBe('testing')
+    expect(wrapper.get('[data-test="account-2"]').text()).toBe('empty')
+    expect(wrapper.get('[data-test="account-3"]').text()).toBe('empty')
+    expect(wrapper.get('[data-test="account-4"]').text()).toBe('empty')
+    expect(wrapper.get('[data-test="account-5"]').text()).toBe('empty')
+    expect(wrapper.get('[data-test="account-6"]').text()).toBe('empty')
+    expect(wrapper.get('[data-test="account-7"]').text()).toBe('empty')
+
+    resolveBatch({ total: 1, passed: 1, failed: 0, results: [{ account_id: 1, status: 'pass' }] })
+    await flushPromises()
+  })
+
 })

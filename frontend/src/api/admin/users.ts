@@ -166,6 +166,27 @@ export async function deleteUser(id: number): Promise<{ message: string }> {
   return data
 }
 
+export interface BatchUserActionError {
+  user_id: number
+  message: string
+}
+
+export interface BatchUserActionResponse {
+  total: number
+  success: number
+  failed: number
+  errors?: BatchUserActionError[]
+}
+
+export async function batchAction(input: {
+  user_ids: number[]
+  action: 'delete' | 'disable' | 'add_tags'
+  tag_ids?: number[]
+}): Promise<BatchUserActionResponse> {
+  const { data } = await apiClient.post<BatchUserActionResponse>('/admin/users/batch', input)
+  return data
+}
+
 /**
  * Update user balance
  * @param id - User ID
@@ -400,6 +421,7 @@ export const usersAPI = {
   create,
   update,
   delete: deleteUser,
+  batchAction,
   updateBalance,
   updateConcurrency,
   toggleStatus,
