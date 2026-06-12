@@ -100,8 +100,8 @@ func TestClassifyOpsError_DoesNotTreatEvery403AsAPIKey(t *testing.T) {
 		},
 		{
 			name:  "request body incomplete 400",
-			input: clientInput(400, "Request body is incomplete"),
-			want:  OpsClientErrorSubcategoryParameter,
+			input: clientInput(400, `Request body is incomplete {"diagnostics":{"kind":"incomplete_body","cause":"unexpected EOF"}}`),
+			want:  OpsClientErrorSubcategoryDisconnect,
 		},
 		{
 			name:  "true invalid key 401",

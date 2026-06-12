@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -23,6 +24,20 @@ func TestFilterBatchTestEligibleAccountsSkipsUnschedulableAccounts(t *testing.T)
 	filtered := filterBatchTestEligibleAccounts(accounts)
 
 	require.Equal(t, []int64{1, 5}, accountIDsForBatchTest(filtered))
+}
+
+func TestNewBatchAccountTestContextIgnoresRequestCancellation(t *testing.T) {
+	requestCtx, requestCancel := context.WithCancel(context.Background())
+	testCtx, testCancel := newBatchAccountTestContext(requestCtx)
+	defer testCancel()
+
+	requestCancel()
+
+	select {
+	case <-testCtx.Done():
+		require.Failf(t, "batch account test context was canceled by request context", "err=%v", testCtx.Err())
+	default:
+	}
 }
 
 func accountIDsForBatchTest(accounts []service.Account) []int64 {

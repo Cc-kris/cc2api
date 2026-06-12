@@ -211,7 +211,11 @@ export interface BatchAccountTestResponse {
 }
 
 export async function batchTestActive(): Promise<BatchAccountTestResponse> {
-  const { data } = await apiClient.post<BatchAccountTestResponse>('/admin/accounts/batch-test-active')
+  const { data } = await apiClient.post<BatchAccountTestResponse>(
+    '/admin/accounts/batch-test-active',
+    undefined,
+    { timeout: 0 }
+  )
   return data
 }
 

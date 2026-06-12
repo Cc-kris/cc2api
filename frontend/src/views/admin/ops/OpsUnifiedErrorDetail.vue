@@ -703,7 +703,7 @@ const errorSubcategoryLabels: Record<string, string> = {
   client_model_error: '模型或渠道错误',
   client_path_error: '路径或方法错误',
   client_context_error: '上下文超限',
-  client_disconnect_error: '客户端断开',
+  client_disconnect_error: '客户端断开/上传中断',
   client_insufficient_evidence: '证据不足',
   account_pool_empty: '账号池无可用账号',
   upstream_rate_limit: '上游限流',

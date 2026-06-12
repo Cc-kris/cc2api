@@ -777,6 +777,8 @@ type BatchAccountTestResponse struct {
 	Results []BatchAccountTestItem `json:"results"`
 }
 
+const batchAccountTestMaxConcurrency = 5
+
 func (h *AccountHandler) BatchTestActive(c *gin.Context) {
 	if h.accountTestService == nil {
 		response.Error(c, http.StatusServiceUnavailable, "Account test service not available")
@@ -788,29 +790,21 @@ func (h *AccountHandler) BatchTestActive(c *gin.Context) {
 		return
 	}
 	accounts = filterBatchTestEligibleAccounts(accounts)
-	results := make([]BatchAccountTestItem, 0, len(accounts))
+	results := make([]BatchAccountTestItem, len(accounts))
+	requestCtx := c.Request.Context()
+	semaphore := make(chan struct{}, batchAccountTestMaxConcurrency)
+	var wg sync.WaitGroup
 	for i := range accounts {
-		acc := accounts[i]
-		started := time.Now()
-		testCtx, cancel := context.WithTimeout(c.Request.Context(), 90*time.Second)
-		result, testErr := h.accountTestService.RunTestBackground(testCtx, acc.ID, "")
-		cancel()
-		item := BatchAccountTestItem{AccountID: acc.ID, Status: "pass", LatencyMs: time.Since(started).Milliseconds()}
-		if result != nil && result.LatencyMs > 0 {
-			item.LatencyMs = result.LatencyMs
-		}
-		if testErr != nil || result == nil || result.Status != "success" {
-			item.Status = "error"
-			if result != nil {
-				item.Message = result.ErrorMessage
-			}
-			if item.Message == "" && testErr != nil {
-				item.Message = testErr.Error()
-			}
-			item.Code = extractAccountTestStatusCode(item.Message)
-		}
-		results = append(results, item)
+		i := i
+		semaphore <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-semaphore }()
+			results[i] = h.runBatchAccountTestItem(requestCtx, accounts[i])
+		}()
 	}
+	wg.Wait()
 	out := BatchAccountTestResponse{Total: len(results), Results: results}
 	for _, item := range results {
 		if item.Status == "pass" {
@@ -820,6 +814,32 @@ func (h *AccountHandler) BatchTestActive(c *gin.Context) {
 		}
 	}
 	response.Success(c, out)
+}
+
+func (h *AccountHandler) runBatchAccountTestItem(requestCtx context.Context, acc service.Account) BatchAccountTestItem {
+	started := time.Now()
+	testCtx, cancel := newBatchAccountTestContext(requestCtx)
+	result, testErr := h.accountTestService.RunTestBackground(testCtx, acc.ID, "")
+	cancel()
+	item := BatchAccountTestItem{AccountID: acc.ID, Status: "pass", LatencyMs: time.Since(started).Milliseconds()}
+	if result != nil && result.LatencyMs > 0 {
+		item.LatencyMs = result.LatencyMs
+	}
+	if testErr != nil || result == nil || result.Status != "success" {
+		item.Status = "error"
+		if result != nil {
+			item.Message = result.ErrorMessage
+		}
+		if item.Message == "" && testErr != nil {
+			item.Message = testErr.Error()
+		}
+		item.Code = extractAccountTestStatusCode(item.Message)
+	}
+	return item
+}
+
+func newBatchAccountTestContext(requestCtx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(requestCtx), 90*time.Second)
 }
 
 func filterBatchTestEligibleAccounts(accounts []service.Account) []service.Account {

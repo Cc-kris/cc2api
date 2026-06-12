@@ -147,6 +147,10 @@ func ClassifyOpsError(input OpsErrorClassificationInput) OpsErrorClassification 
 		strings.EqualFold(strings.TrimSpace(input.ErrorPhase), "upstream")
 	clientSide := isOpsClassificationClientSide(input, hasUpstreamEvidence)
 
+	if containsAny(text, "request body is incomplete", "incomplete_body") ||
+		(containsAny(text, "unexpected eof") && strings.EqualFold(strings.TrimSpace(input.ErrorPhase), "request")) {
+		return clientClassification(OpsClientErrorSubcategoryDisconnect, "请求体上传未完成，客户端连接提前中断", OpsClassificationConfidenceHigh)
+	}
 	if containsAny(text, "context canceled", "client canceled", "request canceled", "cancelled", "broken pipe", "connection reset", "client disconnected") {
 		return clientClassification(OpsClientErrorSubcategoryDisconnect, "客户端连接中断或主动取消请求", OpsClassificationConfidenceHigh)
 	}

@@ -182,6 +182,9 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	// Get account
 	account, err := s.accountRepo.GetByID(ctx, accountID)
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return s.sendErrorAndEnd(c, fmt.Sprintf("Account test canceled: %v", ctxErr))
+		}
 		return s.sendErrorAndEnd(c, "Account not found")
 	}
 
