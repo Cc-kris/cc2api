@@ -124,6 +124,7 @@ type CreateUserInput struct {
 	Concurrency   int
 	RPMLimit      int
 	AllowedGroups []int64
+	TagIDs        []int64
 }
 
 type UpdateUserInput struct {
@@ -136,6 +137,7 @@ type UpdateUserInput struct {
 	RPMLimit      *int     // 使用指针区分"未提供"和"设置为0"
 	Status        string
 	AllowedGroups *[]int64 // 使用指针区分"未提供"和"设置为空数组"
+	TagIDs        *[]int64 // 使用指针区分"未提供"和"设置为空数组"
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]*rate，nil 表示删除该分组的专属倍率
 	GroupRates map[int64]*float64
@@ -542,6 +544,14 @@ type adminServiceImpl struct {
 	runtimeBlocker       AccountRuntimeBlocker
 }
 
+type userTagRepository interface {
+	ListUserTags(ctx context.Context) ([]UserTag, error)
+	CreateUserTag(ctx context.Context, name string) (*UserTag, error)
+	DeleteUserTag(ctx context.Context, id int64) error
+	SetUserTags(ctx context.Context, userID int64, tagIDs []int64) error
+	GetUserTagsByUserID(ctx context.Context, userID int64) ([]UserTag, error)
+}
+
 type userGroupRateBatchReader interface {
 	GetByUserIDs(ctx context.Context, userIDs []int64) (map[int64]map[int64]float64, error)
 }
@@ -632,7 +642,70 @@ func (s *adminServiceImpl) ListUsers(ctx context.Context, page, pageSize int, fi
 			s.loadUserGroupRatesOneByOne(ctx, users)
 		}
 	}
+	s.loadUserTagsForList(ctx, users)
 	return users, result.Total, nil
+}
+
+func (s *adminServiceImpl) userTagRepo() (userTagRepository, error) {
+	repo, ok := s.userRepo.(userTagRepository)
+	if !ok || repo == nil {
+		return nil, infraerrors.ServiceUnavailable("USER_TAG_REPO_UNAVAILABLE", "User tag repository not available")
+	}
+	return repo, nil
+}
+
+func (s *adminServiceImpl) listUserTags(ctx context.Context) ([]UserTag, error) {
+	repo, err := s.userTagRepo()
+	if err != nil {
+		return nil, err
+	}
+	return repo.ListUserTags(ctx)
+}
+
+func (s *adminServiceImpl) createUserTag(ctx context.Context, name string) (*UserTag, error) {
+	repo, err := s.userTagRepo()
+	if err != nil {
+		return nil, err
+	}
+	return repo.CreateUserTag(ctx, name)
+}
+
+func (s *adminServiceImpl) deleteUserTag(ctx context.Context, id int64) error {
+	repo, err := s.userTagRepo()
+	if err != nil {
+		return err
+	}
+	return repo.DeleteUserTag(ctx, id)
+}
+
+func (s *adminServiceImpl) setUserTags(ctx context.Context, userID int64, tagIDs []int64) error {
+	repo, err := s.userTagRepo()
+	if err != nil {
+		return err
+	}
+	return repo.SetUserTags(ctx, userID, tagIDs)
+}
+
+func (s *adminServiceImpl) getUserTagsByUserID(ctx context.Context, userID int64) ([]UserTag, error) {
+	repo, err := s.userTagRepo()
+	if err != nil {
+		return nil, err
+	}
+	return repo.GetUserTagsByUserID(ctx, userID)
+}
+
+func (s *adminServiceImpl) loadUserTagsForList(ctx context.Context, users []User) {
+	if len(users) == 0 {
+		return
+	}
+	for i := range users {
+		tags, err := s.getUserTagsByUserID(ctx, users[i].ID)
+		if err != nil {
+			logger.LegacyPrintf("service.admin", "failed to load user tags: user_id=%d err=%v", users[i].ID, err)
+			continue
+		}
+		users[i].Tags = tags
+	}
 }
 
 func (s *adminServiceImpl) loadUserGroupRatesOneByOne(ctx context.Context, users []User) {
@@ -659,6 +732,11 @@ func (s *adminServiceImpl) GetUser(ctx context.Context, id int64) (*User, error)
 		logger.LegacyPrintf("service.admin", "failed to load user last_used_at: user_id=%d err=%v", id, latestErr)
 	} else {
 		user.LastUsedAt = lastUsedAt
+	}
+	if tags, tagErr := s.getUserTagsByUserID(ctx, id); tagErr != nil {
+		logger.LegacyPrintf("service.admin", "failed to load user tags: user_id=%d err=%v", id, tagErr)
+	} else {
+		user.Tags = tags
 	}
 	// 加载用户专属分组倍率
 	if s.userGroupRateRepo != nil {
@@ -690,8 +768,28 @@ func (s *adminServiceImpl) CreateUser(ctx context.Context, input *CreateUserInpu
 	if err := s.userRepo.Create(ctx, user); err != nil {
 		return nil, err
 	}
+	if len(input.TagIDs) > 0 {
+		if err := s.setUserTags(ctx, user.ID, input.TagIDs); err != nil {
+			return nil, err
+		}
+		if tags, err := s.getUserTagsByUserID(ctx, user.ID); err == nil {
+			user.Tags = tags
+		}
+	}
 	s.assignDefaultSubscriptions(ctx, user.ID)
 	return user, nil
+}
+
+func (s *adminServiceImpl) ListUserTags(ctx context.Context) ([]UserTag, error) {
+	return s.listUserTags(ctx)
+}
+
+func (s *adminServiceImpl) CreateUserTag(ctx context.Context, name string) (*UserTag, error) {
+	return s.createUserTag(ctx, name)
+}
+
+func (s *adminServiceImpl) DeleteUserTag(ctx context.Context, id int64) error {
+	return s.deleteUserTag(ctx, id)
 }
 
 func (s *adminServiceImpl) assignDefaultSubscriptions(ctx context.Context, userID int64) {
@@ -770,6 +868,14 @@ func (s *adminServiceImpl) UpdateUser(ctx context.Context, id int64, input *Upda
 
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return nil, err
+	}
+	if input.TagIDs != nil {
+		if err := s.setUserTags(ctx, user.ID, *input.TagIDs); err != nil {
+			return nil, err
+		}
+	}
+	if tags, err := s.getUserTagsByUserID(ctx, user.ID); err == nil {
+		user.Tags = tags
 	}
 
 	// 同步用户专属分组倍率

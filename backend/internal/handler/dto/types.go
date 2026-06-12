@@ -41,10 +41,18 @@ type AdminUser struct {
 	User
 
 	Notes      string     `json:"notes"`
+	Tags       []UserTag  `json:"tags"`
 	LastUsedAt *time.Time `json:"last_used_at"`
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]rateMultiplier
 	GroupRates map[int64]float64 `json:"group_rates,omitempty"`
+}
+
+type UserTag struct {
+	ID        int64     `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type APIKey struct {

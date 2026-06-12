@@ -99,9 +99,17 @@ export interface User {
   updated_at: string
 }
 
+export interface UserTag {
+  id: number
+  name: string
+  created_at: string
+  updated_at: string
+}
+
 export interface AdminUser extends User {
   // 管理员备注（普通用户接口不返回）
   notes: string
+  tags?: UserTag[]
   last_used_at?: string | null
   // 用户专属分组倍率配置 (group_id -> rate_multiplier)
   group_rates?: Record<number, number>
@@ -284,7 +292,7 @@ export interface UpdateSubscriptionRequest {
 export type AnnouncementStatus = 'draft' | 'active' | 'archived'
 export type AnnouncementNotifyMode = 'silent' | 'popup'
 
-export type AnnouncementConditionType = 'subscription' | 'balance'
+export type AnnouncementConditionType = 'subscription' | 'balance' | 'tag'
 
 export type AnnouncementOperator = 'in' | 'gt' | 'gte' | 'lt' | 'lte' | 'eq'
 
@@ -292,6 +300,7 @@ export interface AnnouncementCondition {
   type: AnnouncementConditionType
   operator: AnnouncementOperator
   group_ids?: number[]
+  tag_ids?: number[]
   value?: number
 }
 
@@ -854,6 +863,11 @@ export interface Account {
   rpm_strategy?: string | null
   rpm_sticky_buffer?: number | null
   user_msg_queue_mode?: string | null  // "serialize" | "throttle" | null
+
+  // 管理页临时批量测试状态
+  test_status?: '' | 'testing' | 'pass' | 'error'
+  test_status_code?: number
+  test_message?: string
 
   // TLS指纹伪装（仅 Anthropic OAuth/SetupToken 账号有效）
   enable_tls_fingerprint?: boolean | null

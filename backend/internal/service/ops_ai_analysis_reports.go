@@ -66,6 +66,29 @@ func (s *OpsService) GetLatestAutoAIAnalysisTask(ctx context.Context) (*OpsAIAna
 	return result, nil
 }
 
+func (s *OpsService) ListAIAnalysisTasks(ctx context.Context, limit int) ([]*OpsAIAnalysisTask, error) {
+	if err := s.RequireMonitoringEnabled(ctx); err != nil {
+		return nil, err
+	}
+	if s == nil || s.opsRepo == nil {
+		return nil, infraerrors.ServiceUnavailable("OPS_REPO_UNAVAILABLE", "Ops repository not available")
+	}
+	tasks, err := s.opsRepo.ListAIAnalysisTasks(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*OpsAIAnalysisTask, 0, len(tasks))
+	for _, task := range tasks {
+		if task == nil {
+			continue
+		}
+		sanitized := *task
+		sanitized.ErrorMessage = logredact.RedactAIContext(task.ErrorMessage, 500)
+		out = append(out, &sanitized)
+	}
+	return out, nil
+}
+
 func sanitizeOpsAIAnalysisReport(report *OpsAIAnalysisReport) *OpsAIAnalysisReport {
 	if report == nil {
 		return nil

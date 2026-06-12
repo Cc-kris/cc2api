@@ -131,6 +131,12 @@
                       </span>
                       <span class="flex-1 text-left">{{ t('admin.tlsFingerprintProfiles.title') }}</span>
                     </button>
+                    <button class="account-tools-menu-item" :disabled="batchTesting" @click="handleBatchTestActive">
+                      <span class="account-tools-menu-icon bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300">
+                        <Icon name="bolt" size="sm" />
+                      </span>
+                      <span class="flex-1 text-left">{{ batchTesting ? t('admin.accounts.batchTest.testing') : t('admin.accounts.batchTest.action') }}</span>
+                    </button>
 
                     <div class="my-2 border-t border-gray-100 dark:border-gray-700"></div>
                     <div class="px-2 py-2">
@@ -257,6 +263,18 @@
             <div class="flex items-center gap-1.5">
               <AccountStatusIndicator :account="row" @show-temp-unsched="handleShowTempUnsched" />
             </div>
+          </template>
+          <template #cell-test_status="{ row }">
+            <span v-if="!row.test_status" class="text-sm text-gray-400 dark:text-dark-500">-</span>
+            <span v-else-if="row.test_status === 'testing'" class="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-200">
+              {{ t('admin.accounts.batchTest.statusTesting') }}
+            </span>
+            <span v-else-if="row.test_status === 'pass'" class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200">
+              {{ t('admin.accounts.batchTest.statusPass') }}
+            </span>
+            <span v-else class="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-200" :title="row.test_message || ''">
+              {{ row.test_code ? t('admin.accounts.batchTest.statusErrorWithCode', { code: row.test_code }) : t('admin.accounts.batchTest.statusError') }}
+            </span>
           </template>
           <template #cell-schedulable="{ row }">
             <button @click="handleToggleSchedulable(row)" :disabled="togglingSchedulable === row.id" class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-dark-800" :class="[row.schedulable ? 'bg-primary-500 hover:bg-primary-600' : 'bg-gray-200 hover:bg-gray-300 dark:bg-dark-600 dark:hover:bg-dark-500']" :title="row.schedulable ? t('admin.accounts.schedulableEnabled') : t('admin.accounts.schedulableDisabled')">
@@ -416,6 +434,7 @@ import type { Account, AccountPlatform, AccountType, Proxy as AccountProxy, Admi
 const { t } = useI18n()
 const appStore = useAppStore()
 const authStore = useAuthStore()
+const batchTesting = ref(false)
 
 const proxies = ref<AccountProxy[]>([])
 const groups = ref<AdminGroup[]>([])
@@ -1115,6 +1134,7 @@ const allColumns = computed(() => {
     { key: 'platform_type', label: t('admin.accounts.columns.platformType'), sortable: false },
     { key: 'capacity', label: t('admin.accounts.columns.capacity'), sortable: false },
     { key: 'status', label: t('admin.accounts.columns.status'), sortable: true },
+    { key: 'test_status', label: t('admin.accounts.columns.testStatus'), sortable: false },
     { key: 'schedulable', label: t('admin.accounts.columns.schedulable'), sortable: true },
     { key: 'today_stats', label: t('admin.accounts.columns.todayStats'), sortable: false }
   ]
@@ -1202,6 +1222,36 @@ const toggleSelectAllVisible = (event: Event) => {
   const target = event.target as HTMLInputElement
   toggleVisible(target.checked)
 }
+
+const handleBatchTestActive = async () => {
+  if (batchTesting.value) return
+  showAccountToolsDropdown.value = false
+  batchTesting.value = true
+  const currentActiveIds = accounts.value.filter((a) => a.status === 'active').map((a) => a.id)
+  accounts.value = accounts.value.map((a) => currentActiveIds.includes(a.id) ? { ...a, test_status: 'testing' } : a)
+  try {
+    const result = await adminAPI.accounts.batchTestActive()
+    const byID = new Map(result.results.map((item) => [item.account_id, item]))
+    accounts.value = accounts.value.map((a) => {
+      const item = byID.get(a.id)
+      if (!item) return a
+      return {
+        ...a,
+        test_status: item.status,
+        test_code: item.code,
+        test_message: item.message || '',
+        test_latency_ms: item.latency_ms,
+      }
+    })
+    appStore.showSuccess(t('admin.accounts.batchTest.done', { total: result.total, passed: result.passed, failed: result.failed }))
+  } catch (error: any) {
+    accounts.value = accounts.value.map((a) => currentActiveIds.includes(a.id) ? { ...a, test_status: 'error', test_message: error.response?.data?.detail || error.message || '' } : a)
+    appStore.showError(error.response?.data?.detail || t('admin.accounts.batchTest.failed'))
+  } finally {
+    batchTesting.value = false
+  }
+}
+
 const handleBulkDelete = async () => { if(!confirm(t('common.confirm'))) return; try { await Promise.all(selIds.value.map(id => adminAPI.accounts.delete(id))); clearSelection(); reload() } catch (error) { console.error('Failed to bulk delete accounts:', error) } }
 const handleBulkResetStatus = async () => {
   if (!confirm(t('common.confirm'))) return

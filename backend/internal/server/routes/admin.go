@@ -176,6 +176,7 @@ func registerOpsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		ops.PUT("/ai-analysis/config", h.Admin.Ops.UpdateAIAnalysisConfig)
 		ops.POST("/ai-analysis/test", h.Admin.Ops.TestAIAnalysisConnection)
 		ops.POST("/ai-analysis/tasks", h.Admin.Ops.CreateAIAnalysisTask)
+		ops.GET("/ai-analysis/tasks", h.Admin.Ops.ListAIAnalysisTasks)
 		ops.GET("/ai-analysis/tasks/latest-auto", h.Admin.Ops.GetLatestAutoAIAnalysisTask)
 		ops.GET("/ai-analysis/tasks/:id", h.Admin.Ops.GetAIAnalysisTask)
 		ops.POST("/ai-analysis/tasks/:id/feedback", h.Admin.Ops.UpdateAIAnalysisReportFeedback)
@@ -272,6 +273,9 @@ func registerUserManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	users := admin.Group("/users")
 	{
 		users.GET("", h.Admin.User.List)
+		users.GET("/tags", h.Admin.User.ListTags)
+		users.POST("/tags", h.Admin.User.CreateTag)
+		users.DELETE("/tags/:tagID", h.Admin.User.DeleteTag)
 		users.GET("/:id", h.Admin.User.GetByID)
 		users.POST("/:id/auth-identities", h.Admin.User.BindAuthIdentity)
 		users.POST("", h.Admin.User.Create)
@@ -320,6 +324,7 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	accounts := admin.Group("/accounts")
 	{
 		accounts.GET("", h.Admin.Account.List)
+		accounts.POST("/batch-test-active", h.Admin.Account.BatchTestActive)
 		accounts.GET("/:id", h.Admin.Account.GetByID)
 		accounts.POST("", h.Admin.Account.Create)
 		accounts.POST("/check-mixed-channel", h.Admin.Account.CheckMixedChannel)

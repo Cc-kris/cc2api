@@ -7,6 +7,9 @@ const mockGetAlertRuntimeSettings = vi.fn()
 const mockGetEmailNotificationConfig = vi.fn()
 const mockGetAdvancedSettings = vi.fn()
 const mockGetMetricThresholds = vi.fn()
+const mockGetAIAnalysisConfig = vi.fn()
+const mockTestAIAnalysisConnection = vi.fn()
+const mockRouterPush = vi.fn()
 const mockUpdateAlertRuntimeSettings = vi.fn()
 const mockUpdateEmailNotificationConfig = vi.fn()
 const mockUpdateAdvancedSettings = vi.fn()
@@ -20,11 +23,19 @@ vi.mock('@/api/admin/ops', () => ({
     getEmailNotificationConfig: (...args: any[]) => mockGetEmailNotificationConfig(...args),
     getAdvancedSettings: (...args: any[]) => mockGetAdvancedSettings(...args),
     getMetricThresholds: (...args: any[]) => mockGetMetricThresholds(...args),
+    getAIAnalysisConfig: (...args: any[]) => mockGetAIAnalysisConfig(...args),
+    testAIAnalysisConnection: (...args: any[]) => mockTestAIAnalysisConnection(...args),
     updateAlertRuntimeSettings: (...args: any[]) => mockUpdateAlertRuntimeSettings(...args),
     updateEmailNotificationConfig: (...args: any[]) => mockUpdateEmailNotificationConfig(...args),
     updateAdvancedSettings: (...args: any[]) => mockUpdateAdvancedSettings(...args),
     updateMetricThresholds: (...args: any[]) => mockUpdateMetricThresholds(...args),
   },
+}))
+
+vi.mock('vue-router', () => ({
+  useRouter: () => ({
+    push: mockRouterPush,
+  }),
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -152,6 +163,22 @@ function advancedSettings() {
   }
 }
 
+function aiAnalysisConfig() {
+  return {
+    enabled: true,
+    base_url: 'https://ai.example.com/v1',
+    api_key_masked: 'sk-***test',
+    model: 'gpt-5.5',
+    interface_type: 'responses',
+    timeout_seconds: 60,
+    max_samples: 50,
+    auto_dedup_minutes: 10,
+    global_rate_limit_per_minute: 10,
+    auto_levels: ['P0', 'P1'],
+    manual_enabled: true,
+  }
+}
+
 describe('OpsSettingsDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -164,6 +191,9 @@ describe('OpsSettingsDialog', () => {
       request_error_rate_percent_max: 5,
       upstream_error_rate_percent_max: 5,
     })
+    mockGetAIAnalysisConfig.mockResolvedValue(aiAnalysisConfig())
+    mockTestAIAnalysisConnection.mockResolvedValue({ success: true, message: 'ok' })
+    mockRouterPush.mockResolvedValue(undefined)
     mockUpdateAlertRuntimeSettings.mockResolvedValue(runtimeSettings())
     mockUpdateEmailNotificationConfig.mockImplementation(async (config) => config)
     mockUpdateAdvancedSettings.mockResolvedValue(advancedSettings())
@@ -186,7 +216,9 @@ describe('OpsSettingsDialog', () => {
     await flushPromises()
     const alertEmailInput = wrapper.find('input[type="email"]')
     await alertEmailInput.setValue('Ops@Example.COM')
-    await wrapper.find('.btn-primary').trigger('click')
+    const saveButton = wrapper.findAll('.btn-primary').at(-1)
+    expect(saveButton).toBeTruthy()
+    await saveButton!.trigger('click')
     await flushPromises()
 
     expect(mockUpdateEmailNotificationConfig).toHaveBeenCalledWith(
@@ -197,5 +229,32 @@ describe('OpsSettingsDialog', () => {
         }),
       })
     )
+  })
+
+  it('在运维设置中展示 AI 分析配置入口并跳转现有配置页面', async () => {
+    const wrapper = mount(OpsSettingsDialog, {
+      props: { show: false },
+      global: {
+        stubs: {
+          BaseDialog: BaseDialogStub,
+          Select: SelectStub,
+          Toggle: ToggleStub,
+        },
+      },
+    })
+
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+
+    expect(mockGetAIAnalysisConfig).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('admin.ops.settings.aiAnalysisConfig')
+    expect(wrapper.text()).toContain('https://ai.example.com/v1')
+    expect(wrapper.text()).toContain('responses / gpt-5.5')
+
+    const openButton = wrapper.findAll('button').find((button) => button.text() === 'admin.ops.settings.aiAnalysisOpenConfig')
+    expect(openButton).toBeTruthy()
+    await openButton!.trigger('click')
+
+    expect(mockRouterPush).toHaveBeenCalledWith({ name: 'AdminOpsAIAnalysis' })
   })
 })

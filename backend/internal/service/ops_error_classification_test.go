@@ -20,8 +20,18 @@ func TestClassifyOpsError_ClientSubcategories(t *testing.T) {
 		},
 		{
 			name:    "balance",
-			input:   clientInput(402, "insufficient balance"),
+			input:   clientInput(403, "Insufficient account balance"),
 			wantSub: OpsClientErrorSubcategoryBalance,
+		},
+		{
+			name:    "group disabled",
+			input:   OpsErrorClassificationInput{StatusCode: 403, ErrorOwner: "platform", ErrorSource: "gateway", ErrorPhase: "internal", ErrorMessage: "API Key 所属分组已停用"},
+			wantSub: OpsClientErrorSubcategoryGroup,
+		},
+		{
+			name:    "subscription",
+			input:   clientInput(403, "SUBSCRIPTION_NOT_FOUND no active subscription found for this group"),
+			wantSub: OpsClientErrorSubcategorySubscription,
 		},
 		{
 			name:    "parameter",
@@ -66,6 +76,45 @@ func TestClassifyOpsError_ClientSubcategories(t *testing.T) {
 			}
 			if got.ClientErrorSubcategory != tt.wantSub {
 				t.Fatalf("client subcategory = %q, want %q", got.ClientErrorSubcategory, tt.wantSub)
+			}
+		})
+	}
+}
+
+func TestClassifyOpsError_DoesNotTreatEvery403AsAPIKey(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  OpsErrorClassificationInput
+		want   string
+		reason string
+	}{
+		{
+			name:  "insufficient balance 403",
+			input: clientInput(403, "Insufficient account balance"),
+			want:  OpsClientErrorSubcategoryBalance,
+		},
+		{
+			name:  "group disabled 403",
+			input: OpsErrorClassificationInput{StatusCode: 403, ErrorOwner: "platform", ErrorSource: "gateway", ErrorPhase: "internal", ErrorMessage: "API Key 所属分组已停用", ErrorBody: `{"code":"GROUP_DISABLED"}`},
+			want:  OpsClientErrorSubcategoryGroup,
+		},
+		{
+			name:  "request body incomplete 400",
+			input: clientInput(400, "Request body is incomplete"),
+			want:  OpsClientErrorSubcategoryParameter,
+		},
+		{
+			name:  "true invalid key 401",
+			input: OpsErrorClassificationInput{StatusCode: 401, ErrorOwner: "client", ErrorSource: "client_request", ErrorPhase: "auth", ErrorMessage: "INVALID_API_KEY Invalid API key"},
+			want:  OpsClientErrorSubcategoryAuth,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ClassifyOpsError(tt.input)
+			if got.ErrorCategory != OpsErrorCategoryClient || got.ErrorSubcategory != tt.want {
+				t.Fatalf("classification = %s/%s, want client/%s (reason=%s)", got.ErrorCategory, got.ErrorSubcategory, tt.want, got.ClassificationReason)
 			}
 		})
 	}

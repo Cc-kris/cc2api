@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,17 @@ import (
 type UserWithConcurrency struct {
 	dto.AdminUser
 	CurrentConcurrency int `json:"current_concurrency"`
+}
+
+type userTagAdminService interface {
+	ListUserTags(ctx context.Context) ([]service.UserTag, error)
+	CreateUserTag(ctx context.Context, name string) (*service.UserTag, error)
+	DeleteUserTag(ctx context.Context, id int64) error
+}
+
+func (h *UserHandler) userTagAdminService() (userTagAdminService, bool) {
+	svc, ok := h.adminService.(userTagAdminService)
+	return svc, ok
 }
 
 // UserHandler handles admin user management
@@ -57,6 +69,7 @@ type CreateUserRequest struct {
 	Concurrency   int     `json:"concurrency"`
 	RPMLimit      int     `json:"rpm_limit"`
 	AllowedGroups []int64 `json:"allowed_groups"`
+	TagIDs        []int64 `json:"tag_ids"`
 }
 
 // UpdateUserRequest represents admin update user request
@@ -71,6 +84,7 @@ type UpdateUserRequest struct {
 	RPMLimit      *int     `json:"rpm_limit"`
 	Status        string   `json:"status" binding:"omitempty,oneof=active disabled"`
 	AllowedGroups *[]int64 `json:"allowed_groups"`
+	TagIDs        *[]int64 `json:"tag_ids"`
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]*rate，nil 表示删除该分组的专属倍率
 	GroupRates map[int64]*float64 `json:"group_rates"`
@@ -272,6 +286,61 @@ func parseAttributeFilters(c *gin.Context) map[int64]string {
 	return result
 }
 
+func (h *UserHandler) ListTags(c *gin.Context) {
+	svc, ok := h.userTagAdminService()
+	if !ok {
+		response.Error(c, http.StatusServiceUnavailable, "User tag service not available")
+		return
+	}
+	tags, err := svc.ListUserTags(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, dto.UserTagsFromService(tags))
+}
+
+type CreateUserTagRequest struct {
+	Name string `json:"name" binding:"required"`
+}
+
+func (h *UserHandler) CreateTag(c *gin.Context) {
+	var req CreateUserTagRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	svc, ok := h.userTagAdminService()
+	if !ok {
+		response.Error(c, http.StatusServiceUnavailable, "User tag service not available")
+		return
+	}
+	tag, err := svc.CreateUserTag(c.Request.Context(), req.Name)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, dto.UserTagsFromService([]service.UserTag{*tag})[0])
+}
+
+func (h *UserHandler) DeleteTag(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("tagID"), 10, 64)
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "Invalid tag ID")
+		return
+	}
+	svc, ok := h.userTagAdminService()
+	if !ok {
+		response.Error(c, http.StatusServiceUnavailable, "User tag service not available")
+		return
+	}
+	if err := svc.DeleteUserTag(c.Request.Context(), id); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "tag deleted"})
+}
+
 // GetByID handles getting a user by ID
 // GET /api/v1/admin/users/:id
 func (h *UserHandler) GetByID(c *gin.Context) {
@@ -347,6 +416,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 		Concurrency:   req.Concurrency,
 		RPMLimit:      req.RPMLimit,
 		AllowedGroups: req.AllowedGroups,
+		TagIDs:        req.TagIDs,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -382,6 +452,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 		RPMLimit:      req.RPMLimit,
 		Status:        req.Status,
 		AllowedGroups: req.AllowedGroups,
+		TagIDs:        req.TagIDs,
 		GroupRates:    req.GroupRates,
 	})
 	if err != nil {

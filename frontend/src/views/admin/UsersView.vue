@@ -271,6 +271,14 @@
                 <Icon name="cog" size="sm" class="md:mr-1.5" />
                 <span class="hidden md:inline">{{ t('admin.users.attributes.configButton') }}</span>
               </button>
+              <button
+                @click="showTagManager = true"
+                class="btn btn-secondary px-2 md:px-3"
+                :title="t('admin.users.tags.manageTitle')"
+              >
+                <Icon name="cog" size="sm" class="md:mr-1.5" />
+                <span class="hidden md:inline">{{ t('admin.users.tags.manageButton') }}</span>
+              </button>
             </div>
 
             <!-- Create User Button (full width on mobile, auto width on desktop) -->
@@ -323,6 +331,20 @@
               </span>
               <span v-else class="text-sm text-gray-400">-</span>
             </div>
+          </template>
+
+          <template #cell-tags="{ row }">
+            <div v-if="row.tags && row.tags.length > 0" class="flex max-w-xs flex-wrap gap-1">
+              <span
+                v-for="tag in row.tags"
+                :key="tag.id"
+                class="inline-flex max-w-[8rem] items-center rounded-full bg-primary-50 px-2 py-0.5 text-xs font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-200"
+                :title="tag.name"
+              >
+                <span class="truncate">{{ tag.name }}</span>
+              </span>
+            </div>
+            <span v-else class="text-sm text-gray-400">-</span>
           </template>
 
           <!-- Dynamic attribute columns -->
@@ -775,6 +797,7 @@
     <UserBalanceModal :show="showBalanceModal" :user="balanceUser" :operation="balanceOperation" @close="closeBalanceModal" @success="loadUsers" />
     <UserBalanceHistoryModal :show="showBalanceHistoryModal" :user="balanceHistoryUser" @close="closeBalanceHistoryModal" @deposit="handleDepositFromHistory" @withdraw="handleWithdrawFromHistory" />
     <GroupReplaceModal :show="showGroupReplaceModal" :user="groupReplaceUser" :old-group="groupReplaceOldGroup" :all-groups="allGroups" @close="closeGroupReplaceModal" @success="loadUsers" />
+    <UserTagManagementModal :show="showTagManager" @close="showTagManager = false" @changed="loadUsers" />
     <UserAttributesConfigModal :show="showAttributesModal" @close="handleAttributesModalClose" />
   </AppLayout>
 </template>
@@ -808,6 +831,7 @@ import PlatformCostCell from '@/components/user/PlatformCostCell.vue'
 import UserPlatformQuotaCell from '@/components/user/UserPlatformQuotaCell.vue'
 import UserCreateModal from '@/components/admin/user/UserCreateModal.vue'
 import UserEditModal from '@/components/admin/user/UserEditModal.vue'
+import UserTagManagementModal from '@/components/admin/user/UserTagManagementModal.vue'
 import UserPlatformQuotaModal from '@/components/admin/user/UserPlatformQuotaModal.vue'
 import UserApiKeysModal from '@/components/admin/user/UserApiKeysModal.vue'
 import UserAllowedGroupsModal from '@/components/admin/user/UserAllowedGroupsModal.vue'
@@ -871,6 +895,7 @@ const allColumns = computed<Column[]>(() => [
   { key: 'id', label: t('admin.users.columns.id'), sortable: true },
   { key: 'username', label: t('admin.users.columns.username'), sortable: true },
   { key: 'notes', label: t('admin.users.columns.notes'), sortable: false },
+  { key: 'tags', label: t('admin.users.columns.tags'), sortable: false },
   // Dynamic attribute columns
   ...attributeColumns.value,
   { key: 'role', label: t('admin.users.columns.role'), sortable: true },
@@ -902,7 +927,7 @@ const hiddenColumns = reactive<Set<string>>(new Set())
 
 // Default hidden columns (columns hidden by default on first load)
 const DEFAULT_HIDDEN_COLUMNS = [
-  'notes', 'groups', 'subscriptions', 'usage', 'concurrency',
+  'notes', 'tags', 'groups', 'subscriptions', 'usage', 'concurrency',
   'usage_anthropic', 'usage_openai', 'usage_gemini', 'usage_antigravity',
   'balance_platform_quota'
 ]
@@ -917,10 +942,11 @@ const HIDDEN_COLUMNS_KEY = 'user-hidden-columns'
 // 并在 VERSION_NEW_HIDDEN_COLUMNS 中登记该版本新增的 key。
 // 这样老用户升级后这些新列会被自动隐藏一次，而不会影响他们对其它老列的偏好。
 const COLUMN_SETTINGS_VERSION_KEY = 'user-column-settings-version'
-const COLUMN_SETTINGS_VERSION = 3
+const COLUMN_SETTINGS_VERSION = 4
 const VERSION_NEW_HIDDEN_COLUMNS: Record<number, string[]> = {
   2: ['usage_anthropic', 'usage_openai', 'usage_gemini', 'usage_antigravity'],
-  3: ['balance_platform_quota']
+  3: ['balance_platform_quota'],
+  4: ['tags']
 }
 
 // Load saved column settings
@@ -1105,6 +1131,7 @@ const visibleFilters = reactive<Set<string>>(new Set())
 // Dropdown states
 const showFilterDropdown = ref(false)
 const showColumnDropdown = ref(false)
+const showTagManager = ref(false)
 
 // Dropdown refs for click outside detection
 const filterDropdownRef = ref<HTMLElement | null>(null)
@@ -1160,7 +1187,7 @@ const parseBalanceInput = (value: string): number | null => {
 
 const validateBalanceFilter = (): boolean => {
   balanceFilterError.value = ''
-  if (!visibleFilters.has('balance') || filters.balanceType === 'none') return true
+  if (filters.balanceType === 'none') return true
 
   const minValue = parseBalanceInput(filters.balanceMin)
   const maxValue = parseBalanceInput(filters.balanceMax)
@@ -1612,8 +1639,8 @@ const loadUsers = async () => {
       return
     }
 
-    const isBalanceFilterVisible = visibleFilters.has('balance')
-    const balanceFilterType = isBalanceFilterVisible ? filters.balanceType : 'none'
+    const balanceFilterActive = filters.balanceType !== 'none'
+    const balanceFilterType = balanceFilterActive ? filters.balanceType : 'none'
 
     const response = await adminAPI.users.list(
       pagination.page,
@@ -1624,8 +1651,8 @@ const loadUsers = async () => {
         search: searchQuery.value || undefined,
         group_name: filters.group || undefined,
         balance_filter_type: balanceFilterType,
-        balance_min: isBalanceFilterVisible && showBalanceMinInput.value ? filters.balanceMin.trim() || undefined : undefined,
-        balance_max: isBalanceFilterVisible && showBalanceMaxInput.value ? filters.balanceMax.trim() || undefined : undefined,
+        balance_min: balanceFilterActive && showBalanceMinInput.value ? filters.balanceMin.trim() || undefined : undefined,
+        balance_max: balanceFilterActive && showBalanceMaxInput.value ? filters.balanceMax.trim() || undefined : undefined,
         attributes: Object.keys(attrFilters).length > 0 ? attrFilters : undefined,
         // 始终请求 subscriptions：列隐藏时仍需用于 UserPlatformQuotaModal 的 active-subscription 警示 banner
         include_subscriptions: true,

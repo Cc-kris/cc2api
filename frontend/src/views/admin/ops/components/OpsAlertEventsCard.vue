@@ -44,7 +44,7 @@ const silenceDurationOptions = computed(() => [
 ])
 
 // Filters
-const timeRange = ref('7d')
+const timeRange = ref('24h')
 const timeRangeOptions = computed(() => [
   { value: '5m', label: t('admin.ops.timeRange.5m') },
   { value: '30m', label: t('admin.ops.timeRange.30m') },

@@ -32,6 +32,8 @@ const (
 	OpsClientErrorSubcategoryAuth                 = "client_auth_error"
 	OpsClientErrorSubcategoryRateLimit            = "client_rate_limit_error"
 	OpsClientErrorSubcategoryBalance              = "client_balance_error"
+	OpsClientErrorSubcategoryGroup                = "client_group_error"
+	OpsClientErrorSubcategorySubscription         = "client_subscription_error"
 	OpsClientErrorSubcategoryParameter            = "client_parameter_error"
 	OpsClientErrorSubcategoryModel                = "client_model_error"
 	OpsClientErrorSubcategoryPath                 = "client_path_error"
@@ -44,6 +46,8 @@ var AllOpsClientErrorSubcategories = []string{
 	OpsClientErrorSubcategoryAuth,
 	OpsClientErrorSubcategoryRateLimit,
 	OpsClientErrorSubcategoryBalance,
+	OpsClientErrorSubcategoryGroup,
+	OpsClientErrorSubcategorySubscription,
 	OpsClientErrorSubcategoryParameter,
 	OpsClientErrorSubcategoryModel,
 	OpsClientErrorSubcategoryPath,
@@ -150,6 +154,13 @@ func ClassifyOpsError(input OpsErrorClassificationInput) OpsErrorClassification 
 		return opsClassification(OpsErrorCategoryAccountPool, "account_pool_empty", "账号池没有可用上游账号或账号调度失败", OpsClassificationConfidenceHigh)
 	}
 
+	if !hasUpstreamEvidence && containsAny(text, "group_disabled", "group disabled", "group inactive", "group unavailable", "group not available", "所属分组", "分组已停用", "分组不可用", "分组未启用", "分组已禁用") {
+		return clientClassification(OpsClientErrorSubcategoryGroup, "API Key 绑定的分组已停用或不可用", OpsClassificationConfidenceHigh)
+	}
+	if !hasUpstreamEvidence && containsAny(text, "subscription_not_found", "subscription_invalid", "subscription expired", "no active subscription", "订阅不存在", "订阅无效", "订阅已过期") {
+		return clientClassification(OpsClientErrorSubcategorySubscription, "订阅不存在、已过期或不满足当前分组要求", OpsClassificationConfidenceHigh)
+	}
+
 	if clientSide {
 		return classifyClientSideOpsError(input, text)
 	}
@@ -157,11 +168,11 @@ func ClassifyOpsError(input OpsErrorClassificationInput) OpsErrorClassification 
 	if status == 429 || containsAny(text, "rate limit", "rate_limit", "too many requests", "rpm", "tpm", "concurrency", "限流", "频率限制") {
 		return opsClassification(OpsErrorCategoryRateLimit, "upstream_rate_limit", "上游或平台维度触发限流", OpsClassificationConfidenceHigh)
 	}
-	if status == 401 || status == 403 || containsAny(text, "permission", "unauthorized", "forbidden", "access denied", "invalid api key", "invalid_api_key", "权限", "鉴权") {
-		return opsClassification(OpsErrorCategoryPermission, "upstream_permission_error", "上游账号、模型或订阅权限不足", OpsClassificationConfidenceHigh)
-	}
 	if containsAny(text, "insufficient balance", "insufficient_balance", "balance", "quota", "credit", "usage limit", "subscription", "余额", "额度") {
 		return opsClassification(OpsErrorCategoryBalance, "upstream_balance_error", "上游额度、订阅额度或余额不足", OpsClassificationConfidenceHigh)
+	}
+	if status == 401 || status == 403 || containsAny(text, "permission", "unauthorized", "forbidden", "access denied", "invalid api key", "invalid_api_key", "权限", "鉴权") {
+		return opsClassification(OpsErrorCategoryPermission, "upstream_permission_error", "上游账号、模型或接口权限不足", OpsClassificationConfidenceHigh)
 	}
 	if containsAny(text, "model mapping", "no mapping", "mapped model", "channel config", "config", "cache config", "ai config", "配置", "映射") {
 		return opsClassification(OpsErrorCategoryConfig, "config_model_mapping_error", "模型映射、渠道或系统配置错误", OpsClassificationConfidenceHigh)
@@ -195,13 +206,18 @@ func ClassifyOpsError(input OpsErrorClassificationInput) OpsErrorClassification 
 
 func classifyClientSideOpsError(input OpsErrorClassificationInput, text string) OpsErrorClassification {
 	status := input.StatusCode
-	if status == 401 || status == 403 || containsAny(text, "invalid api key", "invalid_api_key", "api_key_required", "api key required", "api_key_disabled", "api_key_expired", "key disabled", "key missing", "unauthorized", "forbidden", "鉴权", "key 无效", "key 禁用") {
-		return clientClassification(OpsClientErrorSubcategoryAuth, "客户端 API Key 缺失、无效、禁用或鉴权失败", OpsClassificationConfidenceHigh)
-	}
+	phase := strings.ToLower(strings.TrimSpace(input.ErrorPhase))
+
 	if status == 429 || containsAny(text, "rate limit", "rate_limit", "too many requests", "user rate", "key rate", "group rate", "rpm", "tpm", "concurrency", "pending", "queue", "用户限流", "key 限流") {
 		return clientClassification(OpsClientErrorSubcategoryRateLimit, "用户、Key 或分组维度触发限流", OpsClassificationConfidenceHigh)
 	}
-	if input.IsBusinessLimited || containsAny(text, "insufficient balance", "insufficient_balance", "insufficient quota", "quota exhausted", "api_key_quota_exhausted", "balance", "余额不足", "额度不足", "配额耗尽") {
+	if containsAny(text, "group_disabled", "group disabled", "group inactive", "group unavailable", "group not available", "所属分组", "分组已停用", "分组不可用", "分组未启用", "分组已禁用") {
+		return clientClassification(OpsClientErrorSubcategoryGroup, "API Key 绑定的分组已停用或不可用", OpsClassificationConfidenceHigh)
+	}
+	if containsAny(text, "subscription_not_found", "subscription_invalid", "subscription expired", "no active subscription", "订阅不存在", "订阅无效", "订阅已过期") {
+		return clientClassification(OpsClientErrorSubcategorySubscription, "订阅不存在、已过期或不满足当前分组要求", OpsClassificationConfidenceHigh)
+	}
+	if containsAny(text, "insufficient balance", "insufficient_balance", "insufficient quota", "quota exhausted", "api_key_quota_exhausted", "usage_limit_exceeded", "balance", "余额不足", "额度不足", "配额耗尽", "用量限制") {
 		return clientClassification(OpsClientErrorSubcategoryBalance, "用户余额不足、Key 配额耗尽或用户额度不足", OpsClassificationConfidenceHigh)
 	}
 	if containsAny(text, "context length", "context window", "maximum context", "max_tokens", "input tokens", "output tokens", "token limit", "上下文", "超限") {
@@ -215,6 +231,9 @@ func classifyClientSideOpsError(input OpsErrorClassificationInput, text string) 
 	}
 	if status == 400 || status == 422 || containsAny(text, "invalid request", "invalid_request", "validation", "missing required", "bad request", "json", "request body", "parameter", "param", "参数", "请求体") {
 		return clientClassification(OpsClientErrorSubcategoryParameter, "请求参数校验失败或请求体格式错误", OpsClassificationConfidenceHigh)
+	}
+	if status == 401 || phase == "auth" || containsAny(text, "invalid api key", "invalid_api_key", "api_key_required", "api key required", "api_key_disabled", "api_key_expired", "key disabled", "key missing", "unauthorized", "forbidden", "access denied", "鉴权", "认证", "key 无效", "key 禁用") {
+		return clientClassification(OpsClientErrorSubcategoryAuth, "客户端凭证缺失、无效、禁用、过期，或被访问控制拒绝", OpsClassificationConfidenceHigh)
 	}
 
 	return OpsErrorClassification{

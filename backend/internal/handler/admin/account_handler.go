@@ -185,7 +185,10 @@ type CheckMixedChannelRequest struct {
 // AccountWithConcurrency extends Account with real-time concurrency info
 type AccountWithConcurrency struct {
 	*dto.Account
-	CurrentConcurrency int `json:"current_concurrency"`
+	CurrentConcurrency int    `json:"current_concurrency"`
+	TestStatus         string `json:"test_status,omitempty"`
+	TestStatusCode     int    `json:"test_status_code,omitempty"`
+	TestMessage        string `json:"test_message,omitempty"`
 	// 以下字段仅对 Anthropic OAuth/SetupToken 账号有效，且仅在启用相应功能时返回
 	CurrentWindowCost *float64 `json:"current_window_cost,omitempty"` // 当前窗口费用
 	ActiveSessions    *int     `json:"active_sessions,omitempty"`     // 当前活跃会话数
@@ -757,6 +760,94 @@ func (h *AccountHandler) Test(c *gin.Context) {
 			_ = c.Error(err)
 		}
 	}
+}
+
+type BatchAccountTestItem struct {
+	AccountID int64  `json:"account_id"`
+	Status    string `json:"status"`
+	Code      int    `json:"code,omitempty"`
+	Message   string `json:"message,omitempty"`
+	LatencyMs int64  `json:"latency_ms,omitempty"`
+}
+
+type BatchAccountTestResponse struct {
+	Total   int                    `json:"total"`
+	Passed  int                    `json:"passed"`
+	Failed  int                    `json:"failed"`
+	Results []BatchAccountTestItem `json:"results"`
+}
+
+func (h *AccountHandler) BatchTestActive(c *gin.Context) {
+	if h.accountTestService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Account test service not available")
+		return
+	}
+	accounts, _, err := h.adminService.ListAccounts(c.Request.Context(), 1, 10000, "", "", service.StatusActive, "", 0, "", "id", "asc")
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	results := make([]BatchAccountTestItem, 0, len(accounts))
+	for i := range accounts {
+		acc := accounts[i]
+		started := time.Now()
+		testCtx, cancel := context.WithTimeout(c.Request.Context(), 90*time.Second)
+		result, testErr := h.accountTestService.RunTestBackground(testCtx, acc.ID, "")
+		cancel()
+		item := BatchAccountTestItem{AccountID: acc.ID, Status: "pass", LatencyMs: time.Since(started).Milliseconds()}
+		if result != nil && result.LatencyMs > 0 {
+			item.LatencyMs = result.LatencyMs
+		}
+		if testErr != nil || result == nil || result.Status != "success" {
+			item.Status = "error"
+			if result != nil {
+				item.Message = result.ErrorMessage
+			}
+			if item.Message == "" && testErr != nil {
+				item.Message = testErr.Error()
+			}
+			item.Code = extractAccountTestStatusCode(item.Message)
+		}
+		results = append(results, item)
+	}
+	out := BatchAccountTestResponse{Total: len(results), Results: results}
+	for _, item := range results {
+		if item.Status == "pass" {
+			out.Passed++
+		} else {
+			out.Failed++
+		}
+	}
+	response.Success(c, out)
+}
+
+func extractAccountTestStatusCode(message string) int {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return 0
+	}
+	markers := []string{"API returned ", "status: ", "status="}
+	for _, marker := range markers {
+		idx := strings.Index(message, marker)
+		if idx < 0 {
+			continue
+		}
+		rest := strings.TrimSpace(message[idx+len(marker):])
+		digits := strings.Builder{}
+		for _, r := range rest {
+			if r < '0' || r > '9' {
+				break
+			}
+			digits.WriteRune(r)
+		}
+		if digits.Len() == 0 {
+			continue
+		}
+		if code, err := strconv.Atoi(digits.String()); err == nil {
+			return code
+		}
+	}
+	return 0
 }
 
 // RecoverState handles unified recovery of recoverable account runtime state.

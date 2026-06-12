@@ -109,6 +109,29 @@
                 />
               </div>
 
+              <div v-else-if="cond.type === 'tag'" class="flex-1">
+                <label class="input-label">{{ t('admin.announcements.form.selectTags') }}</label>
+                <div v-if="tags.length === 0" class="rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500 dark:border-dark-600 dark:text-dark-400">
+                  {{ t('admin.users.tags.empty') }}
+                </div>
+                <div v-else class="flex max-h-28 flex-wrap gap-2 overflow-y-auto rounded-lg border border-gray-200 p-2 dark:border-dark-700">
+                  <label
+                    v-for="tag in tags"
+                    :key="tag.id"
+                    class="inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors"
+                    :class="(cond.tag_ids || []).includes(tag.id) ? 'border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-700 dark:bg-primary-900/30 dark:text-primary-200' : 'border-gray-200 text-gray-600 hover:border-primary-200 dark:border-dark-600 dark:text-dark-300'"
+                  >
+                    <input
+                      type="checkbox"
+                      class="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      :checked="(cond.tag_ids || []).includes(tag.id)"
+                      @change="(e) => toggleTag(groupIndex, condIndex, tag.id, (e.target as HTMLInputElement).checked)"
+                    />
+                    <span>{{ tag.name }}</span>
+                  </label>
+                </div>
+              </div>
+
               <div v-else class="flex flex-1 flex-col gap-3 sm:flex-row">
                 <div class="w-full sm:w-44">
                   <label class="input-label">{{ t('admin.announcements.form.operator') }}</label>
@@ -169,6 +192,7 @@ import { computed, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type {
   AdminGroup,
+  UserTag,
   AnnouncementTargeting,
   AnnouncementCondition,
   AnnouncementConditionGroup,
@@ -185,6 +209,7 @@ const { t } = useI18n()
 const props = defineProps<{
   modelValue: AnnouncementTargeting
   groups: AdminGroup[]
+  tags: UserTag[]
 }>()
 
 const emit = defineEmits<{
@@ -198,7 +223,8 @@ const mode = computed<Mode>(() => (anyOf.value.length === 0 ? 'all' : 'custom'))
 
 const conditionTypeOptions = computed(() => [
   { value: 'subscription', label: t('admin.announcements.form.conditionSubscription') },
-  { value: 'balance', label: t('admin.announcements.form.conditionBalance') }
+  { value: 'balance', label: t('admin.announcements.form.conditionBalance') },
+  { value: 'tag', label: t('admin.announcements.form.conditionTag') }
 ])
 
 const balanceOperatorOptions = computed(() => [
@@ -232,6 +258,14 @@ function defaultBalanceCondition(): AnnouncementCondition {
     type: 'balance' as AnnouncementConditionType,
     operator: 'gte' as AnnouncementOperator,
     value: 0
+  }
+}
+
+function defaultTagCondition(): AnnouncementCondition {
+  return {
+    type: 'tag' as AnnouncementConditionType,
+    operator: 'in' as AnnouncementOperator,
+    tag_ids: []
   }
 }
 
@@ -283,6 +317,8 @@ function setConditionType(groupIndex: number, condIndex: number, nextType: Annou
 
     if (nextType === 'subscription') {
       group.all_of[condIndex] = defaultSubscriptionCondition()
+    } else if (nextType === 'tag') {
+      group.all_of[condIndex] = defaultTagCondition()
     } else {
       group.all_of[condIndex] = defaultBalanceCondition()
     }
@@ -311,6 +347,18 @@ function setBalanceValue(groupIndex: number, condIndex: number, raw: string) {
     if (!cond) return
 
     cond.value = Number.isFinite(n) ? n : 0
+  })
+}
+
+function toggleTag(groupIndex: number, condIndex: number, tagID: number, checked: boolean) {
+  updateTargeting((draft) => {
+    const cond = draft.any_of[groupIndex]?.all_of?.[condIndex]
+    if (!cond || cond.type !== 'tag') return
+    const current = new Set(cond.tag_ids ?? [])
+    if (checked) current.add(tagID)
+    else current.delete(tagID)
+    cond.operator = 'in' as AnnouncementOperator
+    cond.tag_ids = Array.from(current).sort((a, b) => a - b)
   })
 }
 
@@ -399,6 +447,9 @@ const validationError = computed(() => {
     for (const c of allOf) {
       if (c.type === 'subscription') {
         if (!c.group_ids || c.group_ids.length === 0) return t('admin.announcements.form.selectPackages')
+      }
+      if (c.type === 'tag') {
+        if (!c.tag_ids || c.tag_ids.length === 0) return t('admin.announcements.form.selectTags')
       }
     }
   }

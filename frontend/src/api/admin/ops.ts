@@ -1610,6 +1610,12 @@ export async function createAIAnalysisTask(
   return data
 }
 
+
+export async function listAIAnalysisTasks(limit: number = 20): Promise<OpsAIAnalysisTask[]> {
+  const { data } = await apiClient.get<OpsAIAnalysisTask[]>('/admin/ops/ai-analysis/tasks', { params: { limit } })
+  return data ?? []
+}
+
 export async function getAIAnalysisTaskDetail(id: number): Promise<OpsAIAnalysisTaskDetailResponse> {
   const { data } = await apiClient.get<OpsAIAnalysisTaskDetailResponse>(`/admin/ops/ai-analysis/tasks/${id}`)
   return data
@@ -1803,6 +1809,7 @@ export const opsAPI = {
   deleteAlertRule,
   createAIAnalysisTask,
   getAIAnalysisTaskDetail,
+  listAIAnalysisTasks,
   getLatestAutoAIAnalysisTask,
   updateAIAnalysisReportFeedback,
   getAIAnalysisConfig,

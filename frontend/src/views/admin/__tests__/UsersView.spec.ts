@@ -260,7 +260,7 @@ describe('admin UsersView', () => {
     )
   })
 
-  it('does not send stale balance bounds when the balance filter is hidden', async () => {
+  it('keeps applying persisted balance filter even when the filter control is hidden', async () => {
     localStorage.setItem('user-visible-filters', JSON.stringify([]))
     localStorage.setItem('user-filter-values', JSON.stringify({
       balanceType: 'between',
@@ -302,9 +302,9 @@ describe('admin UsersView', () => {
       1,
       20,
       expect.objectContaining({
-        balance_filter_type: 'none',
-        balance_min: undefined,
-        balance_max: undefined
+        balance_filter_type: 'between',
+        balance_min: '10',
+        balance_max: '100'
       }),
       expect.any(Object)
     )

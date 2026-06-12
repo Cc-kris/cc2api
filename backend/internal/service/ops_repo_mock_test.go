@@ -19,6 +19,7 @@ type opsRepoMock struct {
 	GetAIAnalysisReportFn            func(ctx context.Context, taskID int64) (*OpsAIAnalysisReport, error)
 	UpdateAIAnalysisReportFeedbackFn func(ctx context.Context, input *OpsAIAnalysisFeedbackInput) (*OpsAIAnalysisReport, error)
 	GetLatestAutoAIAnalysisTaskFn    func(ctx context.Context) (*OpsAIAnalysisTask, error)
+	ListAIAnalysisTasksFn            func(ctx context.Context, limit int) ([]*OpsAIAnalysisTask, error)
 	GetErrorLogByIDFn                func(ctx context.Context, id int64) (*OpsErrorLogDetail, error)
 	BatchInsertSystemLogsFn          func(ctx context.Context, inputs []*OpsInsertSystemLogInput) (int64, error)
 	ListSystemLogsFn                 func(ctx context.Context, filter *OpsSystemLogFilter) (*OpsSystemLogList, error)
@@ -124,6 +125,13 @@ func (m *opsRepoMock) GetLatestAutoAIAnalysisTask(ctx context.Context) (*OpsAIAn
 		return m.GetLatestAutoAIAnalysisTaskFn(ctx)
 	}
 	return nil, nil
+}
+
+func (m *opsRepoMock) ListAIAnalysisTasks(ctx context.Context, limit int) ([]*OpsAIAnalysisTask, error) {
+	if m.ListAIAnalysisTasksFn != nil {
+		return m.ListAIAnalysisTasksFn(ctx, limit)
+	}
+	return []*OpsAIAnalysisTask{}, nil
 }
 
 func (m *opsRepoMock) GetErrorLogByID(ctx context.Context, id int64) (*OpsErrorLogDetail, error) {

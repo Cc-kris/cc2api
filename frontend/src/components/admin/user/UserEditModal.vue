@@ -34,6 +34,23 @@
         <textarea v-model="form.notes" rows="3" class="input"></textarea>
       </div>
       <div>
+        <label class="input-label">{{ t('admin.users.tags.fieldLabel') }}</label>
+        <div v-if="availableTags.length === 0" class="rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-500 dark:border-dark-600 dark:text-dark-400">
+          {{ t('admin.users.tags.empty') }}
+        </div>
+        <div v-else class="flex max-h-32 flex-wrap gap-2 overflow-y-auto rounded-lg border border-gray-200 p-2 dark:border-dark-700">
+          <label
+            v-for="tag in availableTags"
+            :key="tag.id"
+            class="inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors"
+            :class="form.tag_ids.includes(tag.id) ? 'border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-700 dark:bg-primary-900/30 dark:text-primary-200' : 'border-gray-200 text-gray-600 hover:border-primary-200 dark:border-dark-600 dark:text-dark-300'"
+          >
+            <input v-model="form.tag_ids" type="checkbox" class="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500" :value="tag.id" />
+            <span>{{ tag.name }}</span>
+          </label>
+        </div>
+      </div>
+      <div>
         <label class="input-label">{{ t('admin.users.columns.concurrency') }}</label>
         <input v-model.number="form.concurrency" type="number" class="input" />
       </div>
@@ -68,7 +85,7 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useClipboard } from '@/composables/useClipboard'
 import { adminAPI } from '@/api/admin'
-import type { AdminUser, UserAttributeValuesMap } from '@/types'
+import type { AdminUser, UserAttributeValuesMap, UserTag } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import UserAttributeForm from '@/components/user/UserAttributeForm.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -78,12 +95,23 @@ const emit = defineEmits(['close', 'success'])
 const { t } = useI18n(); const appStore = useAppStore(); const { copyToClipboard } = useClipboard()
 
 const submitting = ref(false); const passwordCopied = ref(false)
-const form = reactive({ email: '', password: '', username: '', notes: '', concurrency: 1, rpm_limit: 0, customAttributes: {} as UserAttributeValuesMap })
+const availableTags = ref<UserTag[]>([])
+const form = reactive({ email: '', password: '', username: '', notes: '', tag_ids: [] as number[], concurrency: 1, rpm_limit: 0, customAttributes: {} as UserAttributeValuesMap })
 
 watch(() => props.user, (u) => {
   if (u) {
-    Object.assign(form, { email: u.email, password: '', username: u.username || '', notes: u.notes || '', concurrency: u.concurrency, rpm_limit: u.rpm_limit ?? 0, customAttributes: {} })
+    Object.assign(form, { email: u.email, password: '', username: u.username || '', notes: u.notes || '', tag_ids: (u.tags || []).map(tag => tag.id), concurrency: u.concurrency, rpm_limit: u.rpm_limit ?? 0, customAttributes: {} })
     passwordCopied.value = false
+  }
+}, { immediate: true })
+
+watch(() => props.show, async (show) => {
+  if (!show) return
+  try {
+    availableTags.value = await adminAPI.users.listTags()
+  } catch (error) {
+    console.error('Failed to load user tags:', error)
+    availableTags.value = []
   }
 }, { immediate: true })
 
@@ -109,7 +137,7 @@ const handleUpdateUser = async () => {
   }
   submitting.value = true
   try {
-    const data: any = { email: form.email, username: form.username, notes: form.notes, concurrency: form.concurrency, rpm_limit: form.rpm_limit }
+    const data: any = { email: form.email, username: form.username, notes: form.notes, tag_ids: form.tag_ids, concurrency: form.concurrency, rpm_limit: form.rpm_limit }
     if (form.password.trim()) data.password = form.password.trim()
     await adminAPI.users.update(props.user.id, data)
     if (Object.keys(form.customAttributes).length > 0) await adminAPI.userAttributes.updateUserAttributeValues(props.user.id, form.customAttributes)

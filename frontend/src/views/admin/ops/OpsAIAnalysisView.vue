@@ -223,6 +223,77 @@
           </div>
         </div>
       </section>
+      <section class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900">
+        <div class="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.aiAnalysis.history.title') }}</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ops.aiAnalysis.history.description') }}</p>
+          </div>
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="historyLoading"
+            @click="loadHistory"
+          >
+            <Icon name="refresh" size="sm" :class="historyLoading ? 'animate-spin' : ''" />
+            {{ t('common.refresh') }}
+          </button>
+        </div>
+
+        <div v-if="historyLoading" class="rounded-2xl bg-gray-50 px-4 py-6 text-sm text-gray-500 dark:bg-dark-800/70 dark:text-gray-400">
+          {{ t('common.loading') }}
+        </div>
+        <div v-else-if="historyTasks.length === 0" class="rounded-2xl border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500 dark:border-dark-600 dark:text-gray-400">
+          {{ t('admin.ops.aiAnalysis.history.empty') }}
+        </div>
+        <div v-else class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.9fr)]">
+          <div class="max-h-[30rem] overflow-y-auto rounded-2xl border border-gray-200 dark:border-dark-700">
+            <button
+              v-for="task in historyTasks"
+              :key="task.id"
+              type="button"
+              class="flex w-full items-start justify-between gap-3 border-b border-gray-100 px-4 py-3 text-left last:border-b-0 hover:bg-gray-50 dark:border-dark-700 dark:hover:bg-dark-800"
+              :class="selectedHistoryID === task.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''"
+              @click="selectHistory(task.id)"
+            >
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium text-gray-900 dark:text-white">#{{ task.id }}</span>
+                  <span class="rounded-full px-2 py-0.5 text-xs font-medium" :class="historyStatusClass(task.status)">{{ historyStatusLabel(task.status) }}</span>
+                </div>
+                <div class="mt-1 truncate text-sm text-gray-500 dark:text-gray-400">
+                  {{ task.source_type }} · {{ task.trigger_type }} · {{ task.model || '-' }}
+                </div>
+                <div v-if="task.error_message" class="mt-1 truncate text-xs text-red-600 dark:text-red-300">{{ task.error_message }}</div>
+              </div>
+              <div class="shrink-0 text-right text-xs text-gray-500 dark:text-gray-400">
+                <div>{{ formatHistoryTime(task.finished_at || task.created_at) }}</div>
+                <div class="mt-1">{{ task.sample_count }} samples</div>
+              </div>
+            </button>
+          </div>
+
+          <div class="rounded-2xl border border-gray-200 p-4 dark:border-dark-700">
+            <div v-if="historyDetailLoading" class="text-sm text-gray-500 dark:text-gray-400">{{ t('common.loading') }}</div>
+            <div v-else-if="!selectedHistoryDetail" class="text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ops.aiAnalysis.history.selectHint') }}</div>
+            <div v-else class="space-y-4">
+              <div>
+                <div class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.aiAnalysis.history.summary') }}</div>
+                <div class="mt-2 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">{{ selectedHistoryDetail.report?.summary || '-' }}</div>
+              </div>
+              <div>
+                <div class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.aiAnalysis.history.rootCause') }}</div>
+                <div class="mt-2 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">{{ selectedHistoryDetail.report?.root_cause || selectedHistoryDetail.task.error_message || '-' }}</div>
+              </div>
+              <div v-if="selectedHistoryDetail.report?.suggested_actions">
+                <div class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.aiAnalysis.history.actions') }}</div>
+                <div class="mt-2 whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">{{ formatHistoryValue(selectedHistoryDetail.report.suggested_actions) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
     </div>
   </AppLayout>
 </template>
@@ -236,6 +307,7 @@ import {
   opsAPI,
   type OpsAIAnalysisConfig,
   type OpsAIAnalysisConnectionStatus,
+  type OpsAIAnalysisTask,
   type OpsAIAnalysisInterfaceType,
   type OpsAIAnalysisTaskDetailResponse,
   type OpsAIAnalysisTestResponse,
@@ -266,6 +338,11 @@ const originalConfigSignature = ref('')
 const testResult = ref<OpsAIAnalysisTestResponse | null>(null)
 const latestAutoTask = ref<OpsAIAnalysisTaskDetailResponse | null>(null)
 const latestAutoLoading = ref(false)
+const historyTasks = ref<OpsAIAnalysisTask[]>([])
+const historyLoading = ref(false)
+const selectedHistoryID = ref<number | null>(null)
+const selectedHistoryDetail = ref<OpsAIAnalysisTaskDetailResponse | null>(null)
+const historyDetailLoading = ref(false)
 
 const form = reactive<FormState>({
   enabled: false,
@@ -471,6 +548,55 @@ function toggleAutoLevel(level: AutoLevel) {
     return
   }
   form.auto_levels = [...form.auto_levels, level].sort()
+}
+
+
+function historyStatusLabel(status: string): string {
+  const map: Record<string, string> = { completed: '已完成', failed: '失败', running: '运行中', pending: '等待中' }
+  return map[status] || status
+}
+
+function historyStatusClass(status: string): string {
+  if (status === 'completed') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
+  if (status === 'failed') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-200'
+  if (status === 'running') return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200'
+  return 'bg-gray-100 text-gray-700 dark:bg-dark-700 dark:text-gray-200'
+}
+
+function formatHistoryTime(value?: string | null): string {
+  if (!value) return '-'
+  return new Date(value).toLocaleString('zh-CN')
+}
+
+function formatHistoryValue(value: unknown): string {
+  if (Array.isArray(value)) return value.map((item) => String(item)).join('\n')
+  if (typeof value === 'string') return value
+  if (value == null) return '-'
+  return JSON.stringify(value, null, 2)
+}
+
+async function loadHistory() {
+  historyLoading.value = true
+  try {
+    historyTasks.value = await opsAPI.listAIAnalysisTasks(50)
+  } catch (err: unknown) {
+    appStore.showError(extractApiErrorMessage(err, t('admin.ops.aiAnalysis.history.loadFailed')))
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+async function selectHistory(id: number) {
+  selectedHistoryID.value = id
+  historyDetailLoading.value = true
+  try {
+    selectedHistoryDetail.value = await opsAPI.getAIAnalysisTaskDetail(id)
+  } catch (err: unknown) {
+    selectedHistoryDetail.value = null
+    appStore.showError(extractApiErrorMessage(err, t('admin.ops.aiAnalysis.history.loadFailed')))
+  } finally {
+    historyDetailLoading.value = false
+  }
 }
 
 async function loadConfig() {

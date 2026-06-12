@@ -266,12 +266,13 @@ func (s *AnnouncementService) ListForUser(ctx context.Context, userID int64, unr
 
 	visible := make([]Announcement, 0, len(anns))
 	ids := make([]int64, 0, len(anns))
+	userTagIDs := s.userTagIDSet(ctx, user.ID)
 	for i := range anns {
 		a := anns[i]
 		if !a.IsActiveAt(now) {
 			continue
 		}
-		if !a.Targeting.Matches(user.Balance, activeGroupIDs) {
+		if !a.Targeting.Matches(user.Balance, activeGroupIDs, userTagIDs) {
 			continue
 		}
 		visible = append(visible, a)
@@ -343,7 +344,8 @@ func (s *AnnouncementService) MarkRead(ctx context.Context, userID, announcement
 		activeGroupIDs[activeSubs[i].GroupID] = struct{}{}
 	}
 
-	if !a.Targeting.Matches(user.Balance, activeGroupIDs) {
+	userTagIDs := s.userTagIDSet(ctx, user.ID)
+	if !a.Targeting.Matches(user.Balance, activeGroupIDs, userTagIDs) {
 		return ErrAnnouncementNotFound
 	}
 
@@ -407,7 +409,7 @@ func (s *AnnouncementService) ListUserReadStatus(
 			Email:    u.Email,
 			Username: u.Username,
 			Balance:  u.Balance,
-			Eligible: domain.AnnouncementTargeting(ann.Targeting).Matches(u.Balance, activeGroupIDs),
+			Eligible: domain.AnnouncementTargeting(ann.Targeting).Matches(u.Balance, activeGroupIDs, s.userTagIDSet(ctx, u.ID)),
 			ReadAt:   ptr,
 		})
 	}
@@ -493,7 +495,7 @@ func (s *AnnouncementService) listAnnouncementEmailRecipients(ctx context.Contex
 					activeGroupIDs[u.Subscriptions[j].GroupID] = struct{}{}
 				}
 			}
-			if !targeting.Matches(u.Balance, activeGroupIDs) {
+			if !targeting.Matches(u.Balance, activeGroupIDs, s.userTagIDSet(ctx, u.ID)) {
 				continue
 			}
 			email := strings.TrimSpace(u.Email)
@@ -514,6 +516,28 @@ func (s *AnnouncementService) listAnnouncementEmailRecipients(ctx context.Contex
 	}
 
 	return recipients, nil
+}
+
+func (s *AnnouncementService) userTagIDSet(ctx context.Context, userID int64) map[int64]struct{} {
+	out := make(map[int64]struct{})
+	if s == nil || s.userRepo == nil || userID <= 0 {
+		return out
+	}
+	repo, ok := s.userRepo.(interface {
+		GetUserTagsByUserID(context.Context, int64) ([]UserTag, error)
+	})
+	if !ok {
+		return out
+	}
+	tags, err := repo.GetUserTagsByUserID(ctx, userID)
+	if err != nil {
+		slog.Warn("announcement user tags unavailable", "user_id", userID, "error", err)
+		return out
+	}
+	for i := range tags {
+		out[tags[i].ID] = struct{}{}
+	}
+	return out
 }
 
 func (s *AnnouncementService) buildAnnouncementEmailBody(a *Announcement) string {

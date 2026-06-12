@@ -390,6 +390,35 @@ LIMIT 1`)
 	return task, nil
 }
 
+func (r *opsRepository) ListAIAnalysisTasks(ctx context.Context, limit int) ([]*service.OpsAIAnalysisTask, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("nil ops repository")
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	rows, err := r.db.QueryContext(ctx, `
+SELECT id, source_type, source_id, trigger_type, trigger_user_id, time_start, time_end,
+       filters::text, status, sample_count, provider, model, COALESCE(error_message,''),
+       started_at, finished_at, created_at, updated_at
+FROM ops_ai_analysis_tasks
+ORDER BY created_at DESC, id DESC
+LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	tasks := make([]*service.OpsAIAnalysisTask, 0)
+	for rows.Next() {
+		task, err := scanOpsAIAnalysisTask(rows)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, task)
+	}
+	return tasks, rows.Err()
+}
+
 func (r *opsRepository) UpdateAIAnalysisReportFeedback(ctx context.Context, input *service.OpsAIAnalysisFeedbackInput) (*service.OpsAIAnalysisReport, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil ops repository")

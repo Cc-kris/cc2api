@@ -4,7 +4,7 @@
  */
 
 import { apiClient } from '../client'
-import type { AdminUser, UpdateUserRequest, PaginatedResponse, ApiKey } from '@/types'
+import type { AdminUser, UpdateUserRequest, PaginatedResponse, ApiKey, UserTag } from '@/types'
 
 export interface AdminBindAuthIdentityChannelRequest {
   channel: string
@@ -100,6 +100,22 @@ export async function list(
     params,
     signal: options?.signal
   })
+  return data
+}
+
+
+export async function listTags(): Promise<UserTag[]> {
+  const { data } = await apiClient.get<UserTag[]>('/admin/users/tags')
+  return data
+}
+
+export async function createTag(name: string): Promise<UserTag> {
+  const { data } = await apiClient.post<UserTag>('/admin/users/tags', { name })
+  return data
+}
+
+export async function deleteTag(id: number): Promise<{ message: string }> {
+  const { data } = await apiClient.delete<{ message: string }>(`/admin/users/tags/${id}`)
   return data
 }
 
@@ -377,6 +393,9 @@ export async function resetPlatformQuotaWindow(
 
 export const usersAPI = {
   list,
+  listTags,
+  createTag,
+  deleteTag,
   getById,
   create,
   update,

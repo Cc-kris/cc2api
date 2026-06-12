@@ -394,7 +394,7 @@
                 <td v-if="visibleColumns.has('error_category')" class="table-td" @click="openDetail(item.id)">
                   <span class="badge badge-neutral">{{ formatCategory(item.error_category) }}</span>
                 </td>
-                <td v-if="visibleColumns.has('error_subcategory')" class="table-td" @click="openDetail(item.id)">{{ item.error_subcategory || '未细分' }}</td>
+                <td v-if="visibleColumns.has('error_subcategory')" class="table-td" @click="openDetail(item.id)">{{ formatSubcategory(item.error_subcategory) }}</td>
                 <td v-if="visibleColumns.has('severity')" class="table-td" @click="openDetail(item.id)">
                   <span :class="getSeverityBadgeClass(item.severity)">{{ formatSeverity(item.severity) }}</span>
                 </td>
@@ -576,9 +576,11 @@ const severityOptions = [
 ]
 
 const clientErrorSubcategoryOptions = [
-  { value: 'client_auth_error', label: '认证错误' },
+  { value: 'client_auth_error', label: '凭证/访问控制错误' },
   { value: 'client_rate_limit_error', label: '限流错误' },
-  { value: 'client_balance_error', label: '余额错误' },
+  { value: 'client_balance_error', label: '余额或额度错误' },
+  { value: 'client_group_error', label: '分组不可用' },
+  { value: 'client_subscription_error', label: '订阅错误' },
   { value: 'client_parameter_error', label: '参数错误' },
   { value: 'client_model_error', label: '模型错误' },
   { value: 'client_path_error', label: '路径错误' },
@@ -586,6 +588,33 @@ const clientErrorSubcategoryOptions = [
   { value: 'client_disconnect_error', label: '客户端断开' },
   { value: 'client_insufficient_evidence', label: '证据不足' }
 ]
+
+
+const errorSubcategoryLabels: Record<string, string> = {
+  client_auth_error: '凭证/访问控制错误',
+  client_rate_limit_error: '限流错误',
+  client_balance_error: '余额或额度错误',
+  client_group_error: '分组不可用',
+  client_subscription_error: '订阅错误',
+  client_parameter_error: '参数错误',
+  client_model_error: '模型或渠道错误',
+  client_path_error: '路径或方法错误',
+  client_context_error: '上下文超限',
+  client_disconnect_error: '客户端断开',
+  client_insufficient_evidence: '证据不足',
+  account_pool_empty: '账号池无可用账号',
+  upstream_rate_limit: '上游限流',
+  upstream_permission_error: '上游权限错误',
+  upstream_balance_error: '上游余额或额度不足',
+  upstream_timeout: '上游超时',
+  upstream_unavailable: '上游不可用',
+  upstream_error: '上游错误',
+  config_model_mapping_error: '配置或模型映射错误',
+  slow_response: '慢请求',
+  platform_dependency_error: '平台依赖错误',
+  platform_internal_error: '平台内部错误',
+  unknown_insufficient_evidence: '证据不足'
+}
 
 const loading = ref(false)
 const exporting = ref(false)
@@ -1185,6 +1214,11 @@ function formatEntity(entity: OpsUnifiedEntityRef | null | undefined, fallback: 
 
 function formatCategory(value: string): string {
   return errorCategoryOptions.find((item) => item.value === value)?.label || value || '未分类'
+}
+
+function formatSubcategory(value: string | null | undefined): string {
+  if (!value) return '未细分'
+  return errorSubcategoryLabels[value] || value
 }
 
 function formatErrorResult(value: string): string {

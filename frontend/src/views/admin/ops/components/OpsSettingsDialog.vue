@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
-import { opsAPI } from '@/api/admin/ops'
+import { opsAPI, type OpsAIAnalysisConfig } from '@/api/admin/ops'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
 import Toggle from '@/components/common/Toggle.vue'
@@ -10,6 +11,7 @@ import type { OpsAlertRuntimeSettings, EmailNotificationConfig, AlertSeverity, O
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const router = useRouter()
 
 const props = defineProps<{
   show: boolean
@@ -29,6 +31,10 @@ const runtimeSettings = ref<OpsAlertRuntimeSettings | null>(null)
 const emailConfig = ref<EmailNotificationConfig | null>(null)
 // 高级设置
 const advancedSettings = ref<OpsAdvancedSettings | null>(null)
+// AI 分析配置入口
+const aiAnalysisConfig = ref<OpsAIAnalysisConfig | null>(null)
+const aiAnalysisTesting = ref(false)
+
 // 指标阈值配置
 const metricThresholds = ref<OpsMetricThresholds>({
   sla_percent_min: 99.5,
@@ -41,15 +47,17 @@ const metricThresholds = ref<OpsMetricThresholds>({
 async function loadAllSettings() {
   loading.value = true
   try {
-    const [runtime, email, advanced, thresholds] = await Promise.all([
+    const [runtime, email, advanced, thresholds, aiConfig] = await Promise.all([
       opsAPI.getAlertRuntimeSettings(),
       opsAPI.getEmailNotificationConfig(),
       opsAPI.getAdvancedSettings(),
-      opsAPI.getMetricThresholds()
+      opsAPI.getMetricThresholds(),
+      opsAPI.getAIAnalysisConfig()
     ])
     runtimeSettings.value = runtime
     emailConfig.value = email
     advancedSettings.value = advanced
+    aiAnalysisConfig.value = aiConfig
     // 如果后端返回了阈值，使用后端的值；否则保持默认值
     if (thresholds && Object.keys(thresholds).length > 0) {
         metricThresholds.value = {
@@ -194,6 +202,46 @@ const validation = computed(() => {
 })
 
 // 保存所有配置
+
+const aiAnalysisStatusText = computed(() => {
+  if (!aiAnalysisConfig.value) return t('admin.ops.settings.aiAnalysisConfigNotLoaded')
+  if (!aiAnalysisConfig.value.enabled) return t('admin.ops.settings.aiAnalysisConfigDisabled')
+  return t('admin.ops.settings.aiAnalysisConfigEnabled')
+})
+
+const aiAnalysisModelText = computed(() => {
+  if (!aiAnalysisConfig.value) return '--'
+  const parts = [aiAnalysisConfig.value.interface_type, aiAnalysisConfig.value.model].filter(Boolean)
+  return parts.length ? parts.join(' / ') : '--'
+})
+
+const aiAnalysisAutoLevelsText = computed(() => {
+  const levels = aiAnalysisConfig.value?.auto_levels || []
+  return levels.length ? levels.join(', ') : t('admin.ops.settings.aiAnalysisNoAutoLevels')
+})
+
+async function openAIAnalysisConfig() {
+  emit('close')
+  await router.push({ name: 'AdminOpsAIAnalysis' })
+}
+
+async function testAIAnalysisConfig() {
+  if (aiAnalysisTesting.value) return
+  aiAnalysisTesting.value = true
+  try {
+    const result = await opsAPI.testAIAnalysisConnection()
+    if (result.success) {
+      appStore.showSuccess(result.message || t('admin.ops.settings.aiAnalysisTestSuccess'))
+    } else {
+      appStore.showError(result.message || t('admin.ops.settings.aiAnalysisTestFailed'))
+    }
+  } catch (err: any) {
+    appStore.showError(err?.response?.data?.message || err?.response?.data?.detail || t('admin.ops.settings.aiAnalysisTestFailed'))
+  } finally {
+    aiAnalysisTesting.value = false
+  }
+}
+
 async function saveAllSettings() {
   if (!validation.value.valid) {
     appStore.showError(validation.value.errors[0])
@@ -235,7 +283,7 @@ async function saveAllSettings() {
       {{ t('common.loading') }}
     </div>
 
-    <div v-else-if="runtimeSettings && emailConfig && advancedSettings" class="space-y-6">
+    <div v-else-if="runtimeSettings && emailConfig && advancedSettings && aiAnalysisConfig" class="space-y-6">
       <!-- 验证错误 -->
       <div v-if="!validation.valid" class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
         <div class="font-bold">{{ t('admin.ops.settings.validation.title') }}</div>
@@ -257,6 +305,48 @@ async function saveAllSettings() {
             class="input"
           />
           <p class="mt-1 text-xs text-gray-500">{{ t('admin.ops.settings.evaluationIntervalHint') }}</p>
+        </div>
+      </div>
+
+      <!-- AI 分析配置入口 -->
+      <div class="rounded-2xl bg-gray-50 p-4 dark:bg-dark-700/50">
+        <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h4 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.settings.aiAnalysisConfig') }}</h4>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.settings.aiAnalysisConfigHint') }}</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              class="btn btn-secondary whitespace-nowrap"
+              type="button"
+              :disabled="aiAnalysisTesting"
+              @click="testAIAnalysisConfig"
+            >
+              {{ aiAnalysisTesting ? t('admin.ops.settings.aiAnalysisTesting') : t('admin.ops.settings.aiAnalysisTest') }}
+            </button>
+            <button class="btn btn-primary whitespace-nowrap" type="button" @click="openAIAnalysisConfig">
+              {{ t('admin.ops.settings.aiAnalysisOpenConfig') }}
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+          <div class="rounded-xl border border-gray-200 bg-white px-3 py-2 dark:border-dark-600 dark:bg-dark-800/70">
+            <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.settings.aiAnalysisStatus') }}</div>
+            <div class="mt-1 font-medium text-gray-900 dark:text-white">{{ aiAnalysisStatusText }}</div>
+          </div>
+          <div class="rounded-xl border border-gray-200 bg-white px-3 py-2 dark:border-dark-600 dark:bg-dark-800/70">
+            <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.settings.aiAnalysisModel') }}</div>
+            <div class="mt-1 font-mono text-xs text-gray-900 dark:text-white">{{ aiAnalysisModelText }}</div>
+          </div>
+          <div class="rounded-xl border border-gray-200 bg-white px-3 py-2 dark:border-dark-600 dark:bg-dark-800/70">
+            <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.settings.aiAnalysisEndpoint') }}</div>
+            <div class="mt-1 truncate font-mono text-xs text-gray-900 dark:text-white" :title="aiAnalysisConfig.base_url || '--'">{{ aiAnalysisConfig.base_url || '--' }}</div>
+          </div>
+          <div class="rounded-xl border border-gray-200 bg-white px-3 py-2 dark:border-dark-600 dark:bg-dark-800/70">
+            <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.settings.aiAnalysisAutoLevels') }}</div>
+            <div class="mt-1 font-medium text-gray-900 dark:text-white">{{ aiAnalysisAutoLevelsText }}</div>
+          </div>
         </div>
       </div>
 

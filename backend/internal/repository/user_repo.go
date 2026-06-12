@@ -1054,3 +1054,130 @@ func (r *userRepository) DisableTotp(ctx context.Context, userID int64) error {
 	}
 	return nil
 }
+
+func (r *userRepository) ListUserTags(ctx context.Context) ([]service.UserTag, error) {
+	if r == nil || r.sql == nil {
+		return []service.UserTag{}, nil
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+SELECT id, name, created_at, updated_at
+FROM user_tags
+ORDER BY name ASC, id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]service.UserTag, 0)
+	for rows.Next() {
+		var tag service.UserTag
+		if err := rows.Scan(&tag.ID, &tag.Name, &tag.CreatedAt, &tag.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, tag)
+	}
+	return out, rows.Err()
+}
+
+func (r *userRepository) CreateUserTag(ctx context.Context, name string) (*service.UserTag, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, fmt.Errorf("tag name is required")
+	}
+	if len([]rune(name)) > 50 {
+		return nil, fmt.Errorf("tag name must be 50 characters or fewer")
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+INSERT INTO user_tags (name, created_at, updated_at)
+VALUES ($1, NOW(), NOW())
+ON CONFLICT (name) DO UPDATE SET updated_at = user_tags.updated_at
+RETURNING id, name, created_at, updated_at`, name)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return nil, sql.ErrNoRows
+	}
+	var tag service.UserTag
+	if err := rows.Scan(&tag.ID, &tag.Name, &tag.CreatedAt, &tag.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return &tag, rows.Err()
+}
+
+func (r *userRepository) DeleteUserTag(ctx context.Context, id int64) error {
+	if id <= 0 {
+		return fmt.Errorf("invalid tag id")
+	}
+	res, err := r.sql.ExecContext(ctx, `DELETE FROM user_tags WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return service.ErrUserNotFound
+	}
+	return nil
+}
+
+func (r *userRepository) SetUserTags(ctx context.Context, userID int64, tagIDs []int64) error {
+	if userID <= 0 {
+		return fmt.Errorf("invalid user id")
+	}
+	normalized := make([]int64, 0, len(tagIDs))
+	seen := make(map[int64]struct{}, len(tagIDs))
+	for _, id := range tagIDs {
+		if id <= 0 {
+			return fmt.Errorf("invalid tag id")
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		normalized = append(normalized, id)
+	}
+	if len(normalized) == 0 {
+		_, err := r.sql.ExecContext(ctx, `DELETE FROM user_tag_assignments WHERE user_id = $1`, userID)
+		return err
+	}
+	_, err := r.sql.ExecContext(ctx, `
+WITH requested AS (
+  SELECT DISTINCT unnest($2::bigint[]) AS tag_id
+), deleted AS (
+  DELETE FROM user_tag_assignments
+  WHERE user_id = $1 AND tag_id NOT IN (SELECT tag_id FROM requested)
+)
+INSERT INTO user_tag_assignments (user_id, tag_id, created_at)
+SELECT $1, requested.tag_id, NOW()
+FROM requested
+JOIN user_tags t ON t.id = requested.tag_id
+ON CONFLICT (user_id, tag_id) DO NOTHING`, userID, pq.Array(normalized))
+	return err
+}
+
+func (r *userRepository) GetUserTagsByUserID(ctx context.Context, userID int64) ([]service.UserTag, error) {
+	if userID <= 0 {
+		return []service.UserTag{}, nil
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+SELECT t.id, t.name, t.created_at, t.updated_at
+FROM user_tags t
+JOIN user_tag_assignments uta ON uta.tag_id = t.id
+WHERE uta.user_id = $1
+ORDER BY t.name ASC, t.id ASC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]service.UserTag, 0)
+	for rows.Next() {
+		var tag service.UserTag
+		if err := rows.Scan(&tag.ID, &tag.Name, &tag.CreatedAt, &tag.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, tag)
+	}
+	return out, rows.Err()
+}

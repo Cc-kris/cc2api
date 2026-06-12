@@ -194,6 +194,27 @@ export async function testAccount(id: number): Promise<{
   return data
 }
 
+
+export interface BatchAccountTestItem {
+  account_id: number
+  status: 'pass' | 'error'
+  code?: number
+  message?: string
+  latency_ms?: number
+}
+
+export interface BatchAccountTestResponse {
+  total: number
+  passed: number
+  failed: number
+  results: BatchAccountTestItem[]
+}
+
+export async function batchTestActive(): Promise<BatchAccountTestResponse> {
+  const { data } = await apiClient.post<BatchAccountTestResponse>('/admin/accounts/batch-test-active')
+  return data
+}
+
 /**
  * Refresh account credentials
  * @param id - Account ID
@@ -674,6 +695,7 @@ export const accountsAPI = {
   delete: deleteAccount,
   toggleStatus,
   testAccount,
+  batchTestActive,
   refreshCredentials,
   getStats,
   clearError,

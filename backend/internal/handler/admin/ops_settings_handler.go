@@ -232,6 +232,38 @@ func (h *OpsHandler) GetAIAnalysisTask(c *gin.Context) {
 	response.Success(c, result)
 }
 
+// ListAIAnalysisTasks returns recent AI analysis task history.
+// GET /api/v1/admin/ops/ai-analysis/tasks
+func (h *OpsHandler) ListAIAnalysisTasks(c *gin.Context) {
+	if h.opsService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Ops service not available")
+		return
+	}
+	if err := h.opsService.RequireMonitoringEnabled(c.Request.Context()); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if !canOperateOpsAIAnalysis(c) {
+		response.Forbidden(c, "无权限查看 AI 分析任务")
+		return
+	}
+	limit := 20
+	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 || parsed > 100 {
+			response.ErrorFrom(c, infraerrors.BadRequest("OPS_AI_ANALYSIS_INVALID_LIMIT", "invalid limit"))
+			return
+		}
+		limit = parsed
+	}
+	tasks, err := h.opsService.ListAIAnalysisTasks(c.Request.Context(), limit)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, tasks)
+}
+
 // GetLatestAutoAIAnalysisTask returns the most recent auto-triggered AI analysis task.
 // GET /api/v1/admin/ops/ai-analysis/tasks/latest-auto
 func (h *OpsHandler) GetLatestAutoAIAnalysisTask(c *gin.Context) {

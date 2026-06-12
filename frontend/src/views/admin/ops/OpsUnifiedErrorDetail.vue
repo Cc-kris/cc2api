@@ -168,11 +168,11 @@
                 </div>
                 <div class="detail-field">
                   <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.errorSubcategory') }}</div>
-                  <div class="detail-field__value">{{ fallback(detail.classification.error_subcategory, t('admin.ops.unifiedErrorDetail.unclassified')) }}</div>
+                  <div class="detail-field__value">{{ formatSubcategory(detail.classification.error_subcategory) }}</div>
                 </div>
                 <div class="detail-field">
                   <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.clientSubcategory') }}</div>
-                  <div class="detail-field__value">{{ fallback(detail.classification.client_error_subcategory, t('admin.ops.unifiedErrorDetail.unclassified')) }}</div>
+                  <div class="detail-field__value">{{ formatSubcategory(detail.classification.client_error_subcategory) }}</div>
                 </div>
                 <div class="detail-field">
                   <div class="detail-field__label">{{ t('admin.ops.unifiedErrorDetail.fields.confidence') }}</div>
@@ -691,6 +691,38 @@ const manualAIActionDisabledReason = computed(() => {
 })
 
 const manualAIActionDisabled = computed(() => manualAIActionDisabledReason.value !== '')
+
+
+const errorSubcategoryLabels: Record<string, string> = {
+  client_auth_error: '凭证/访问控制错误',
+  client_rate_limit_error: '限流错误',
+  client_balance_error: '余额或额度错误',
+  client_group_error: '分组不可用',
+  client_subscription_error: '订阅错误',
+  client_parameter_error: '参数错误',
+  client_model_error: '模型或渠道错误',
+  client_path_error: '路径或方法错误',
+  client_context_error: '上下文超限',
+  client_disconnect_error: '客户端断开',
+  client_insufficient_evidence: '证据不足',
+  account_pool_empty: '账号池无可用账号',
+  upstream_rate_limit: '上游限流',
+  upstream_permission_error: '上游权限错误',
+  upstream_balance_error: '上游余额或额度不足',
+  upstream_timeout: '上游超时',
+  upstream_unavailable: '上游不可用',
+  upstream_error: '上游错误',
+  config_model_mapping_error: '配置或模型映射错误',
+  slow_response: '慢请求',
+  platform_dependency_error: '平台依赖错误',
+  platform_internal_error: '平台内部错误',
+  unknown_insufficient_evidence: '证据不足'
+}
+
+function formatSubcategory(value: string | null | undefined): string {
+  if (!value) return t('admin.ops.unifiedErrorDetail.unclassified')
+  return errorSubcategoryLabels[value] || value
+}
 
 function fallback(value: string | null | undefined, empty = '—'): string {
   const text = String(value || '').trim()

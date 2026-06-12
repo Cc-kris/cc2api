@@ -68,9 +68,23 @@ func UserFromServiceAdmin(u *service.User) *AdminUser {
 	return &AdminUser{
 		User:       *base,
 		Notes:      u.Notes,
+		Tags:       UserTagsFromService(u.Tags),
 		LastUsedAt: u.LastUsedAt,
 		GroupRates: u.GroupRates,
 	}
+}
+
+func UserTagsFromService(tags []service.UserTag) []UserTag {
+	out := make([]UserTag, 0, len(tags))
+	for i := range tags {
+		out = append(out, UserTag{
+			ID:        tags[i].ID,
+			Name:      tags[i].Name,
+			CreatedAt: tags[i].CreatedAt,
+			UpdatedAt: tags[i].UpdatedAt,
+		})
+	}
+	return out
 }
 
 func APIKeyFromService(k *service.APIKey) *APIKey {

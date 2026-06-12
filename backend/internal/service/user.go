@@ -6,6 +6,13 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type UserTag struct {
+	ID        int64     `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type User struct {
 	ID             int64
 	Email          string
@@ -60,6 +67,7 @@ type User struct {
 
 	APIKeys       []APIKey
 	Subscriptions []UserSubscription
+	Tags          []UserTag
 }
 
 func (u *User) IsAdmin() bool {
