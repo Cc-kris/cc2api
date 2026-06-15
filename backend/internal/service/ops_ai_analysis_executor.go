@@ -122,7 +122,7 @@ func (e *opsAIAnalysisLLMExecutor) callLLM(ctx context.Context, baseURL, apiKey,
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
 	if err != nil {
@@ -233,7 +233,7 @@ func buildOpsAIAnalysisPrompt(task *OpsAIAnalysisTask, ctx *OpsAIAnalysisContext
 	fmt.Fprintf(&sb, "分析时间窗口：%s ~ %s\n", task.TimeStart.Format("2006-01-02 15:04:05"), task.TimeEnd.Format("2006-01-02 15:04:05"))
 	fmt.Fprintf(&sb, "样本总数：%d（下方展示最多 100 条）\n\n", ctx.Total)
 
-	sb.WriteString("错误样本列表（每条包含：时间、分类、状态码、平台、模型、错误摘要、同类计数）：\n")
+	fmt.Fprint(&sb, "错误样本列表（每条包含：时间、分类、状态码、平台、模型、错误摘要、同类计数）：\n")
 	for i, s := range ctx.Samples {
 		if i >= 100 {
 			break
@@ -254,7 +254,7 @@ func buildOpsAIAnalysisPrompt(task *OpsAIAnalysisTask, ctx *OpsAIAnalysisContext
 		)
 	}
 
-	sb.WriteString("\n请用中文严格按 JSON 格式返回分析报告，不要输出其他内容。")
+	fmt.Fprint(&sb, "\n请用中文严格按 JSON 格式返回分析报告，不要输出其他内容。")
 	return sb.String()
 }
 

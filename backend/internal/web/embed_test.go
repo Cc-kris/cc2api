@@ -505,6 +505,7 @@ func TestFrontendServer_Middleware(t *testing.T) {
 
 		publicPaths := []string{
 			"/login",
+			"/register?aff=VNV7XKPA6UGU",
 			"/legal/terms",
 			"/auth/oidc/callback",
 			"/payment/result",
@@ -652,7 +653,7 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 		router := gin.New()
 		router.Use(middleware)
 
-		spaPaths := []string{"/login", "/legal/terms", "/auth/wechat/callback", "/payment/result"}
+		spaPaths := []string{"/login", "/register?aff=VNV7XKPA6UGU", "/legal/terms", "/auth/wechat/callback", "/payment/result"}
 
 		for _, path := range spaPaths {
 			t.Run(path, func(t *testing.T) {

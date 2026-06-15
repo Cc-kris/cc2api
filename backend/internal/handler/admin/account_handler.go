@@ -869,7 +869,7 @@ func extractAccountTestStatusCode(message string) int {
 			if r < '0' || r > '9' {
 				break
 			}
-			digits.WriteRune(r)
+			_, _ = digits.WriteRune(r)
 		}
 		if digits.Len() == 0 {
 			continue

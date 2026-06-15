@@ -346,6 +346,7 @@ func isPublicFrontendRoute(path string) bool {
 
 	switch normalized {
 	case frontendLoginPath,
+		"/register",
 		"/setup",
 		"/email-verify",
 		"/auth/callback",

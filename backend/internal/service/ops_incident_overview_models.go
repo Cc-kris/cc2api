@@ -56,9 +56,9 @@ type OpsIncidentOverview struct {
 	AffectedAccounts []*OpsIncidentAffectedAccount `json:"affected_accounts"`
 	SystemMetrics    *OpsSystemMetricsSnapshot     `json:"system_metrics,omitempty"`
 
-	LatestAIAnalysis       *OpsIncidentLatestAIAnalysis `json:"latest_ai_analysis"`
-	QuickFilters          []*OpsIncidentQuickFilter    `json:"quick_filters"`
-	RecommendedActions    []string                     `json:"recommended_actions"`
-	ErrorCategoryCounts   map[string]int64             `json:"error_category_counts,omitempty"`
-	UpdatedAt             time.Time                    `json:"updated_at"`
+	LatestAIAnalysis    *OpsIncidentLatestAIAnalysis `json:"latest_ai_analysis"`
+	QuickFilters        []*OpsIncidentQuickFilter    `json:"quick_filters"`
+	RecommendedActions  []string                     `json:"recommended_actions"`
+	ErrorCategoryCounts map[string]int64             `json:"error_category_counts,omitempty"`
+	UpdatedAt           time.Time                    `json:"updated_at"`
 }
