@@ -89,6 +89,48 @@ func (s *OpsService) ListAIAnalysisTasks(ctx context.Context, limit int) ([]*Ops
 	return out, nil
 }
 
+func (s *OpsService) ListAIAnalysisReportHistory(ctx context.Context, limit int) ([]*OpsAIAnalysisReportHistoryItem, error) {
+	if err := s.RequireMonitoringEnabled(ctx); err != nil {
+		return nil, err
+	}
+	if s == nil || s.opsRepo == nil {
+		return nil, infraerrors.ServiceUnavailable("OPS_REPO_UNAVAILABLE", "Ops repository not available")
+	}
+	items, err := s.opsRepo.ListAIAnalysisReportHistory(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*OpsAIAnalysisReportHistoryItem, 0, len(items))
+	for _, item := range items {
+		if item == nil || item.Task == nil || item.Report == nil {
+			continue
+		}
+		sanitizedTask := *item.Task
+		sanitizedTask.ErrorMessage = logredact.RedactAIContext(item.Task.ErrorMessage, 500)
+		out = append(out, &OpsAIAnalysisReportHistoryItem{
+			Task:   &sanitizedTask,
+			Report: sanitizeOpsAIAnalysisReport(item.Report),
+		})
+	}
+	return out, nil
+}
+
+func (s *OpsService) GetLatestAIAnalysisReportSummary(ctx context.Context) (*OpsIncidentLatestAIAnalysis, error) {
+	items, err := s.ListAIAnalysisReportHistory(ctx, 1)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 || items[0] == nil || items[0].Task == nil || items[0].Report == nil {
+		return nil, nil
+	}
+	return &OpsIncidentLatestAIAnalysis{
+		ID:        items[0].Task.ID,
+		Status:    items[0].Task.Status,
+		Summary:   items[0].Report.Summary,
+		CreatedAt: items[0].Report.CreatedAt,
+	}, nil
+}
+
 func sanitizeOpsAIAnalysisReport(report *OpsAIAnalysisReport) *OpsAIAnalysisReport {
 	if report == nil {
 		return nil

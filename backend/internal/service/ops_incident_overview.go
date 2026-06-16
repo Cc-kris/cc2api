@@ -68,8 +68,9 @@ func (s *OpsService) GetIncidentOverview(ctx context.Context, filter *OpsDashboa
 	status := opsIncidentStatus(topAlert, score, finalFailures, finalRate)
 	quickFilters := buildOpsIncidentQuickFilters(filter, overview, impact)
 
-	// Query error category counts for final_failed errors
+	// Query optional side panels for final_failed errors and latest generated AI analysis.
 	errorCategoryCounts, _ := s.getErrorCategoryCounts(ctx, filter)
+	latestAIAnalysis, _ := s.GetLatestAIAnalysisReportSummary(ctx)
 
 	return &OpsIncidentOverview{
 		Status:                status,
@@ -86,7 +87,7 @@ func (s *OpsService) GetIncidentOverview(ctx context.Context, filter *OpsDashboa
 		AffectedModels:        impact.AffectedModels,
 		AffectedAccounts:      impact.AffectedAccounts,
 		SystemMetrics:         overview.SystemMetrics,
-		LatestAIAnalysis:      nil,
+		LatestAIAnalysis:      latestAIAnalysis,
 		QuickFilters:          quickFilters,
 		RecommendedActions:    buildOpsIncidentRecommendedActions(status, topAlert, overview),
 		ErrorCategoryCounts:   errorCategoryCounts,

@@ -109,3 +109,46 @@ func TestOpsServiceGetIncidentOverview_NormalEmptyWindow(t *testing.T) {
 	require.Empty(t, got.QuickFilters)
 	require.Contains(t, got.Summary, "当前系统运行正常")
 }
+
+func TestOpsServiceGetIncidentOverview_LoadsLatestAIAnalysisReport(t *testing.T) {
+	start := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	end := start.Add(time.Minute)
+	reportCreatedAt := start.Add(-2 * time.Minute)
+	repo := &opsRepoMock{
+		GetDashboardOverviewFn: func(ctx context.Context, filter *OpsDashboardFilter) (*OpsDashboardOverview, error) {
+			return &OpsDashboardOverview{
+				StartTime:         filter.StartTime,
+				EndTime:           filter.EndTime,
+				SuccessCount:      1200,
+				RequestCountTotal: 1200,
+				RequestCountSLA:   1200,
+			}, nil
+		},
+		GetIncidentImpactFn: func(ctx context.Context, filter *OpsDashboardFilter) (*OpsIncidentImpact, error) {
+			return &OpsIncidentImpact{}, nil
+		},
+		ListAIAnalysisReportHistoryFn: func(ctx context.Context, limit int) ([]*OpsAIAnalysisReportHistoryItem, error) {
+			require.Equal(t, 1, limit)
+			return []*OpsAIAnalysisReportHistoryItem{
+				{
+					Task: &OpsAIAnalysisTask{ID: 11, Status: OpsAIAnalysisStatusCompleted, CreatedAt: reportCreatedAt},
+					Report: &OpsAIAnalysisReport{
+						TaskID:    11,
+						Summary:   "最近一次手动 AI 分析报告",
+						CreatedAt: reportCreatedAt,
+						UpdatedAt: reportCreatedAt,
+					},
+				},
+			}, nil
+		},
+	}
+
+	svc := NewOpsService(repo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	got, err := svc.GetIncidentOverview(context.Background(), &OpsDashboardFilter{StartTime: start, EndTime: end})
+	require.NoError(t, err)
+	require.NotNil(t, got.LatestAIAnalysis)
+	require.Equal(t, int64(11), got.LatestAIAnalysis.ID)
+	require.Equal(t, OpsAIAnalysisStatusCompleted, got.LatestAIAnalysis.Status)
+	require.Equal(t, "最近一次手动 AI 分析报告", got.LatestAIAnalysis.Summary)
+	require.Equal(t, reportCreatedAt, got.LatestAIAnalysis.CreatedAt)
+}

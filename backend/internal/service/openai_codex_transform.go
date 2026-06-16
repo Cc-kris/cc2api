@@ -786,10 +786,10 @@ func shouldInjectCodexImageGenerationTool(reqBody map[string]any, requestedModel
 	if len(reqBody) == 0 || hasOpenAIImageGenerationTool(reqBody) {
 		return false
 	}
-	if isOpenAIImageGenerationModel(requestedModel) || isOpenAIImageGenerationModel(firstNonEmptyString(reqBody["model"])) {
-		return true
+	if isCodexSparkModel(requestedModel) || isCodexSparkModel(firstNonEmptyString(reqBody["model"])) {
+		return false
 	}
-	return openAIAnyToolChoiceSelectsImageGeneration(reqBody["tool_choice"])
+	return true
 }
 
 func applyCodexImageGenerationBridgeInstructions(reqBody map[string]any) bool {

@@ -419,6 +419,41 @@ LIMIT $1`, limit)
 	return tasks, rows.Err()
 }
 
+func (r *opsRepository) ListAIAnalysisReportHistory(ctx context.Context, limit int) ([]*service.OpsAIAnalysisReportHistoryItem, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("nil ops repository")
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	rows, err := r.db.QueryContext(ctx, `
+SELECT
+  t.id, t.source_type, t.source_id, t.trigger_type, t.trigger_user_id, t.time_start, t.time_end,
+  t.filters::text, t.status, t.sample_count, t.provider, t.model, COALESCE(t.error_message,''),
+  t.started_at, t.finished_at, t.created_at, t.updated_at,
+  r.task_id, r.summary, COALESCE(r.root_cause,''), r.impact_scope::text, r.evidence::text,
+  r.suggested_actions::text, r.error_breakdown::text, r.confidence, r.feedback_status,
+  COALESCE(r.feedback_note,''), r.feedback_user_id, r.feedback_at, r.created_at, r.updated_at
+FROM ops_ai_analysis_reports r
+JOIN ops_ai_analysis_tasks t ON t.id = r.task_id
+ORDER BY r.created_at DESC, r.task_id DESC
+LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	items := make([]*service.OpsAIAnalysisReportHistoryItem, 0)
+	for rows.Next() {
+		task, report, err := scanOpsAIAnalysisTaskAndReport(rows)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, &service.OpsAIAnalysisReportHistoryItem{Task: task, Report: report})
+	}
+	return items, rows.Err()
+}
+
 func (r *opsRepository) UpdateAIAnalysisReportFeedback(ctx context.Context, input *service.OpsAIAnalysisFeedbackInput) (*service.OpsAIAnalysisReport, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("nil ops repository")
@@ -447,6 +482,51 @@ RETURNING task_id, summary, COALESCE(root_cause,''), impact_scope::text, evidenc
 
 type opsAIAnalysisReportScanner interface {
 	Scan(dest ...any) error
+}
+
+func scanOpsAIAnalysisTaskAndReport(row opsAIAnalysisReportScanner) (*service.OpsAIAnalysisTask, *service.OpsAIAnalysisReport, error) {
+	var task service.OpsAIAnalysisTask
+	var report service.OpsAIAnalysisReport
+	if err := row.Scan(
+		&task.ID,
+		&task.SourceType,
+		&task.SourceID,
+		&task.TriggerType,
+		&task.TriggerUserID,
+		&task.TimeStart,
+		&task.TimeEnd,
+		&task.FiltersJSON,
+		&task.Status,
+		&task.SampleCount,
+		&task.Provider,
+		&task.Model,
+		&task.ErrorMessage,
+		&task.StartedAt,
+		&task.FinishedAt,
+		&task.CreatedAt,
+		&task.UpdatedAt,
+		&report.TaskID,
+		&report.Summary,
+		&report.RootCause,
+		&report.ImpactScopeJSON,
+		&report.EvidenceJSON,
+		&report.ActionsJSON,
+		&report.BreakdownJSON,
+		&report.Confidence,
+		&report.FeedbackStatus,
+		&report.FeedbackNote,
+		&report.FeedbackUserID,
+		&report.FeedbackAt,
+		&report.CreatedAt,
+		&report.UpdatedAt,
+	); err != nil {
+		return nil, nil, err
+	}
+	report.ImpactScope = decodeJSONValue(report.ImpactScopeJSON, map[string]any{})
+	report.Evidence = decodeJSONValue(report.EvidenceJSON, []any{})
+	report.SuggestedActions = decodeJSONValue(report.ActionsJSON, []any{})
+	report.ErrorBreakdown = decodeJSONValue(report.BreakdownJSON, map[string]any{})
+	return &task, &report, nil
 }
 
 func scanOpsAIAnalysisReport(row opsAIAnalysisReportScanner) (*service.OpsAIAnalysisReport, error) {

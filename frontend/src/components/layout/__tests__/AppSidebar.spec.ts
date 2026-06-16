@@ -33,10 +33,9 @@ describe('AppSidebar header styles', () => {
 
 
 describe('AppSidebar cache management navigation', () => {
-  it('keeps system settings as a group with general settings and cache management children', () => {
+  it('keeps system settings as a single top-level entry for platform owners', () => {
     expect(componentSource).toContain("path: '/admin/settings'")
-    expect(componentSource).toContain("label: t('nav.generalSettings')")
-    expect(componentSource).toContain("path: '/admin/settings/cache'")
-    expect(componentSource).toContain("label: t('nav.cacheManagement')")
+    expect(componentSource).toContain("label: t('nav.settings')")
+    expect(componentSource).not.toContain("label: t('nav.generalSettings')")
   })
 })

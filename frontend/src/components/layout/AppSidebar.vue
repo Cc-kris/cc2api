@@ -780,10 +780,6 @@ const adminNavItems = computed((): NavItem[] => {
         path: '/admin/settings',
         label: t('nav.settings'),
         icon: CogIcon,
-        children: [
-          { path: '/admin/settings', label: t('nav.generalSettings'), icon: CogIcon },
-          { path: '/admin/settings/cache', label: t('nav.cacheManagement'), icon: ChartIcon },
-        ],
       }
     : (canAccessCacheManagement(viewerRole.value) || canAccessCacheStats(viewerRole.value))
       ? { path: cacheNavTarget, label: cacheNavLabel, icon: CogIcon }

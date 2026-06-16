@@ -2548,7 +2548,7 @@ export default {
         webSearchEmulationHint: '⚠️ 开启后该渠道下所有 Anthropic 分组的账号将自动拦截 web_search 请求，请谨慎操作',
         webSearchEmulationGlobalDisabled: '请先在系统设置 → 网关 → Web Search 模拟中启用全局开关',
         codexImageGenerationBridge: 'Codex 图片生成桥接',
-        codexImageGenerationBridgeHint: '开启后，仅在 Codex /responses 明确请求图片生成时注入 image_generation 工具；普通文本请求不会注入。',
+        codexImageGenerationBridgeHint: '开启后，符合条件的 Codex /responses 请求会自动携带 image_generation 工具，便于生图分组统一路由。',
         bedrockCCCompat: 'Bedrock CC 兼容',
         bedrockCCCompatHint: '⚠️ 开启后，该渠道下 Bedrock 账号的请求将进行 Claude Code 兼容处理（thinking 类型转换、tool_use ID 清理）',
         basicSettings: '基础设置',
@@ -3560,11 +3560,11 @@ export default {
         codexCLIOnlyDesc: '仅对 OpenAI OAuth 生效。开启后仅允许 Codex 官方客户端家族访问；关闭后完全绕过并保持原逻辑。',
         codexImageGenerationBridge: 'Codex 图片生成桥接',
         codexImageGenerationBridgeDesc:
-          '账号级策略优先于渠道和全局配置。仅控制 Codex 走 /responses 文本端点且明确请求图片生成时是否注入 image_generation 工具；不影响独立图片生成接口。',
+          '账号级策略优先于渠道和全局配置。控制符合条件的 Codex /responses 请求是否自动携带 image_generation 工具；不影响独立图片生成接口。',
         codexImageGenerationBridgeInherit: '跟随渠道',
         codexImageGenerationBridgeInheritDesc: '不写入账号覆盖，继续使用渠道或全局策略。',
         codexImageGenerationBridgeEnabled: '强制开启',
-        codexImageGenerationBridgeEnabledDesc: '允许 Codex /responses 的显式图片请求获得图片工具注入。',
+        codexImageGenerationBridgeEnabledDesc: '允许符合条件的 Codex /responses 请求获得图片工具注入。',
         codexImageGenerationBridgeDisabled: '强制关闭',
         codexImageGenerationBridgeDisabledDesc: '阻断 Codex /responses 的图片工具注入。',
         codexImageGenerationBridgeBadgeInherit: '渠道策略',
@@ -5762,6 +5762,9 @@ export default {
       },
     settings: {
         title: '运维监控设置',
+        cacheManagementEntry: {
+          open: '进入缓存设置',
+        },
         loadFailed: '加载设置失败',
         saveSuccess: '运维监控设置保存成功',
         saveFailed: '保存设置失败',

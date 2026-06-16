@@ -684,7 +684,7 @@ func TestEnsureOpenAIResponsesImageGenerationTool_PreservesExistingImageTool(t *
 	require.Equal(t, "webp", tool["output_format"])
 }
 
-func TestShouldInjectCodexImageGenerationTool_RequiresExplicitImageSignal(t *testing.T) {
+func TestShouldInjectCodexImageGenerationTool_ForcesCodexRequestsExceptSpark(t *testing.T) {
 	tests := []struct {
 		name           string
 		requestedModel string
@@ -698,7 +698,7 @@ func TestShouldInjectCodexImageGenerationTool_RequiresExplicitImageSignal(t *tes
 				"model": "gpt-5.4",
 				"input": "write code",
 			},
-			want: false,
+			want: true,
 		},
 		{
 			name:           "explicit tool choice",
@@ -718,6 +718,15 @@ func TestShouldInjectCodexImageGenerationTool_RequiresExplicitImageSignal(t *tes
 				"input": "draw a cat",
 			},
 			want: true,
+		},
+		{
+			name:           "spark request still skips",
+			requestedModel: "gpt-5.3-codex-spark",
+			reqBody: map[string]any{
+				"model": "gpt-5.3-codex-spark",
+				"input": "draw a cat",
+			},
+			want: false,
 		},
 		{
 			name:           "existing image tool does not need injection",

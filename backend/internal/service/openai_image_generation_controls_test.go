@@ -101,7 +101,7 @@ func TestOpenAIGatewayServiceForward_DisabledGroupAllowsTextOnlyResponses(t *tes
 	require.NotNil(t, upstream.lastReq)
 }
 
-func TestOpenAIGatewayServiceForward_CodexImageBridgeDoesNotInjectForTextOnlyRequests(t *testing.T) {
+func TestOpenAIGatewayServiceForward_CodexImageBridgeInjectsForTextOnlyRequests(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
@@ -112,7 +112,7 @@ func TestOpenAIGatewayServiceForward_CodexImageBridgeDoesNotInjectForTextOnlyReq
 	}{
 		{name: "disabled group skips injection", allowImages: false, bridgeEnabled: true, wantInjected: false},
 		{name: "enabled group skips injection by default", allowImages: true, bridgeEnabled: false, wantInjected: false},
-		{name: "enabled group still skips text-only request when bridge enabled", allowImages: true, bridgeEnabled: true, wantInjected: false},
+		{name: "enabled group injects text-only request when bridge enabled", allowImages: true, bridgeEnabled: true, wantInjected: true},
 	}
 
 	for _, tt := range tests {
@@ -256,7 +256,7 @@ func TestOpenAIGatewayServiceForward_ExplicitImageToolNotDuplicatedWithBridgeEna
 	require.Contains(t, instructions, "image_generation")
 }
 
-func TestOpenAIGatewayServiceForward_ChannelBridgeOverrideDoesNotInjectForTextOnlyRequest(t *testing.T) {
+func TestOpenAIGatewayServiceForward_ChannelBridgeOverrideInjectsForTextOnlyRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	upstream := &httpUpstreamRecorder{
@@ -283,9 +283,10 @@ func TestOpenAIGatewayServiceForward_ChannelBridgeOverrideDoesNotInjectForTextOn
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, upstream.lastReq)
-	require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="image_generation")`).Exists())
+	require.True(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="image_generation")`).Exists())
+	require.Equal(t, "png", gjson.GetBytes(upstream.lastBody, `tools.#(type=="image_generation").output_format`).String())
 	instructions := gjson.GetBytes(upstream.lastBody, "instructions").String()
-	require.NotContains(t, instructions, "image_generation")
+	require.Contains(t, instructions, "image_generation")
 }
 
 func TestOpenAIGatewayService_CodexImageGenerationBridgeOverridePrecedence(t *testing.T) {

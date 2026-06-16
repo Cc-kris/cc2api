@@ -44,6 +44,24 @@
           </nav>
         </div>
 
+        <div class="rounded-2xl border border-primary-100 bg-primary-50/60 p-4 dark:border-primary-900/40 dark:bg-primary-900/10">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.cacheManagement.title') }}</div>
+              <p class="mt-1 text-xs text-gray-600 dark:text-gray-300">
+                {{ t('admin.cacheManagement.description') }}
+              </p>
+            </div>
+            <router-link
+              to="/admin/settings/cache"
+              class="inline-flex items-center justify-center gap-2 rounded-xl bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700"
+            >
+              {{ t('admin.settings.cacheManagementEntry.open') }}
+              <span aria-hidden="true">→</span>
+            </router-link>
+          </div>
+        </div>
+
         <!-- Tab: Security — Admin API Key -->
         <div v-show="activeTab === 'security'" class="space-y-6">
           <!-- Admin API Key Settings -->

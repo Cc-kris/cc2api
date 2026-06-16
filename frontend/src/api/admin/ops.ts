@@ -356,6 +356,11 @@ export interface OpsAIAnalysisTaskDetailResponse {
   report?: OpsAIAnalysisReport | null
 }
 
+export interface OpsAIAnalysisReportHistoryItem {
+  task: OpsAIAnalysisTask
+  report: OpsAIAnalysisReport
+}
+
 export type OpsAIAnalysisFeedbackStatus = 'none' | 'useful' | 'not_useful' | 'wrong_category'
 
 export interface OpsAIAnalysisFeedbackRequest {
@@ -1616,6 +1621,11 @@ export async function listAIAnalysisTasks(limit: number = 20): Promise<OpsAIAnal
   return data ?? []
 }
 
+export async function listAIAnalysisReportHistory(limit: number = 20): Promise<OpsAIAnalysisReportHistoryItem[]> {
+  const { data } = await apiClient.get<OpsAIAnalysisReportHistoryItem[]>('/admin/ops/ai-analysis/reports', { params: { limit } })
+  return data ?? []
+}
+
 export async function getAIAnalysisTaskDetail(id: number): Promise<OpsAIAnalysisTaskDetailResponse> {
   const { data } = await apiClient.get<OpsAIAnalysisTaskDetailResponse>(`/admin/ops/ai-analysis/tasks/${id}`)
   return data
@@ -1810,6 +1820,7 @@ export const opsAPI = {
   createAIAnalysisTask,
   getAIAnalysisTaskDetail,
   listAIAnalysisTasks,
+  listAIAnalysisReportHistory,
   getLatestAutoAIAnalysisTask,
   updateAIAnalysisReportFeedback,
   getAIAnalysisConfig,

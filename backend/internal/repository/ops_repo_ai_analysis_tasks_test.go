@@ -212,6 +212,35 @@ func TestGetAIAnalysisTaskAndReport(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestListAIAnalysisReportHistory(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	repo := &opsRepository{db: db}
+	start := time.Date(2026, 6, 8, 10, 0, 0, 0, time.UTC)
+	finishedAt := start.Add(2 * time.Minute)
+	mock.ExpectQuery(`(?s)FROM ops_ai_analysis_reports r\s+JOIN ops_ai_analysis_tasks t ON t\.id = r\.task_id\s+ORDER BY r\.created_at DESC, r\.task_id DESC\s+LIMIT \$1`).
+		WithArgs(50).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "source_type", "source_id", "trigger_type", "trigger_user_id", "time_start", "time_end",
+			"filters", "status", "sample_count", "provider", "model", "error_message", "started_at", "finished_at", "created_at", "updated_at",
+			"task_id", "summary", "root_cause", "impact_scope", "evidence", "suggested_actions", "error_breakdown", "confidence", "feedback_status", "feedback_note", "feedback_user_id", "feedback_at", "report_created_at", "report_updated_at",
+		}).AddRow(
+			int64(77), service.OpsAIAnalysisSourceUnifiedErrors, nil, service.OpsAIAnalysisTriggerManual, int64(7), start, start.Add(30*time.Minute),
+			`{"platform":"openai"}`, service.OpsAIAnalysisStatusCompleted, 5, "responses", "gpt-5.5", "", start.Add(time.Minute), finishedAt, start, finishedAt,
+			int64(77), "上游错误", "账号限流", `{"affected_users":2}`, `[{"text":"e1"}]`, `["切换账号"]`, `{"upstream":1}`, "high", "none", "", nil, nil, start, finishedAt,
+		))
+
+	items, err := repo.ListAIAnalysisReportHistory(context.Background(), 50)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Equal(t, int64(77), items[0].Task.ID)
+	require.Equal(t, "上游错误", items[0].Report.Summary)
+	require.NotEmpty(t, items[0].Report.ImpactScope)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func aiReportRows() *sqlmock.Rows {
 	return sqlmock.NewRows([]string{"task_id", "summary", "root_cause", "impact_scope", "evidence", "suggested_actions", "error_breakdown", "confidence", "feedback_status", "feedback_note", "feedback_user_id", "feedback_at", "created_at", "updated_at"})
 }

@@ -2280,7 +2280,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if codexImageGenerationBridgeEnabled && shouldInjectCodexImageGenerationTool(reqBody, reqModel) && ensureOpenAIResponsesImageGenerationTool(reqBody) {
 		bodyModified = true
 		disablePatch()
-		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Injected /responses image_generation tool for Codex client")
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Injected /responses image_generation tool for Codex bridge")
 	}
 
 	if normalizeOpenAIResponsesImageGenerationTools(reqBody) {

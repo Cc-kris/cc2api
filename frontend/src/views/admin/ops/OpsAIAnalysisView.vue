@@ -249,26 +249,26 @@
         <div v-else class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.9fr)]">
           <div class="max-h-[30rem] overflow-y-auto rounded-2xl border border-gray-200 dark:border-dark-700">
             <button
-              v-for="task in historyTasks"
-              :key="task.id"
+              v-for="item in historyTasks"
+              :key="item.task.id"
               type="button"
               class="flex w-full items-start justify-between gap-3 border-b border-gray-100 px-4 py-3 text-left last:border-b-0 hover:bg-gray-50 dark:border-dark-700 dark:hover:bg-dark-800"
-              :class="selectedHistoryID === task.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''"
-              @click="selectHistory(task.id)"
+              :class="selectedHistoryID === item.task.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''"
+              @click="selectHistory(item.task.id)"
             >
               <div class="min-w-0">
                 <div class="flex items-center gap-2">
-                  <span class="font-medium text-gray-900 dark:text-white">#{{ task.id }}</span>
-                  <span class="rounded-full px-2 py-0.5 text-xs font-medium" :class="historyStatusClass(task.status)">{{ historyStatusLabel(task.status) }}</span>
+                  <span class="font-medium text-gray-900 dark:text-white">#{{ item.task.id }}</span>
+                  <span class="rounded-full px-2 py-0.5 text-xs font-medium" :class="historyStatusClass(item.task.status)">{{ historyStatusLabel(item.task.status) }}</span>
                 </div>
                 <div class="mt-1 truncate text-sm text-gray-500 dark:text-gray-400">
-                  {{ task.source_type }} · {{ task.trigger_type }} · {{ task.model || '-' }}
+                  {{ item.task.source_type }} · {{ item.task.trigger_type }} · {{ item.task.model || '-' }}
                 </div>
-                <div v-if="task.error_message" class="mt-1 truncate text-xs text-red-600 dark:text-red-300">{{ task.error_message }}</div>
+                <div class="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">{{ item.report.summary || '-' }}</div>
               </div>
               <div class="shrink-0 text-right text-xs text-gray-500 dark:text-gray-400">
-                <div>{{ formatHistoryTime(task.finished_at || task.created_at) }}</div>
-                <div class="mt-1">{{ task.sample_count }} samples</div>
+                <div>{{ formatHistoryTime(item.report.created_at || item.task.finished_at || item.task.created_at) }}</div>
+                <div class="mt-1">{{ item.task.sample_count }} samples</div>
               </div>
             </button>
           </div>
@@ -307,8 +307,8 @@ import {
   opsAPI,
   type OpsAIAnalysisConfig,
   type OpsAIAnalysisConnectionStatus,
-  type OpsAIAnalysisTask,
   type OpsAIAnalysisInterfaceType,
+  type OpsAIAnalysisReportHistoryItem,
   type OpsAIAnalysisTaskDetailResponse,
   type OpsAIAnalysisTestResponse,
   type UpdateOpsAIAnalysisConfigRequest,
@@ -338,7 +338,7 @@ const originalConfigSignature = ref('')
 const testResult = ref<OpsAIAnalysisTestResponse | null>(null)
 const latestAutoTask = ref<OpsAIAnalysisTaskDetailResponse | null>(null)
 const latestAutoLoading = ref(false)
-const historyTasks = ref<OpsAIAnalysisTask[]>([])
+const historyTasks = ref<OpsAIAnalysisReportHistoryItem[]>([])
 const historyLoading = ref(false)
 const selectedHistoryID = ref<number | null>(null)
 const selectedHistoryDetail = ref<OpsAIAnalysisTaskDetailResponse | null>(null)
@@ -578,7 +578,7 @@ function formatHistoryValue(value: unknown): string {
 async function loadHistory() {
   historyLoading.value = true
   try {
-    historyTasks.value = await opsAPI.listAIAnalysisTasks(50)
+    historyTasks.value = await opsAPI.listAIAnalysisReportHistory(50)
   } catch (err: unknown) {
     appStore.showError(extractApiErrorMessage(err, t('admin.ops.aiAnalysis.history.loadFailed')))
   } finally {
@@ -685,5 +685,6 @@ function resolvedStatusMessage(result: OpsAIAnalysisTestResponse): string {
 onMounted(() => {
   void loadConfig()
   void loadLatestAutoTask()
+  void loadHistory()
 })
 </script>

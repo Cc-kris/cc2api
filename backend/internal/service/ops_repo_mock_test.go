@@ -20,6 +20,7 @@ type opsRepoMock struct {
 	UpdateAIAnalysisReportFeedbackFn func(ctx context.Context, input *OpsAIAnalysisFeedbackInput) (*OpsAIAnalysisReport, error)
 	GetLatestAutoAIAnalysisTaskFn    func(ctx context.Context) (*OpsAIAnalysisTask, error)
 	ListAIAnalysisTasksFn            func(ctx context.Context, limit int) ([]*OpsAIAnalysisTask, error)
+	ListAIAnalysisReportHistoryFn    func(ctx context.Context, limit int) ([]*OpsAIAnalysisReportHistoryItem, error)
 	GetErrorLogByIDFn                func(ctx context.Context, id int64) (*OpsErrorLogDetail, error)
 	BatchInsertSystemLogsFn          func(ctx context.Context, inputs []*OpsInsertSystemLogInput) (int64, error)
 	ListSystemLogsFn                 func(ctx context.Context, filter *OpsSystemLogFilter) (*OpsSystemLogList, error)
@@ -132,6 +133,13 @@ func (m *opsRepoMock) ListAIAnalysisTasks(ctx context.Context, limit int) ([]*Op
 		return m.ListAIAnalysisTasksFn(ctx, limit)
 	}
 	return []*OpsAIAnalysisTask{}, nil
+}
+
+func (m *opsRepoMock) ListAIAnalysisReportHistory(ctx context.Context, limit int) ([]*OpsAIAnalysisReportHistoryItem, error) {
+	if m.ListAIAnalysisReportHistoryFn != nil {
+		return m.ListAIAnalysisReportHistoryFn(ctx, limit)
+	}
+	return []*OpsAIAnalysisReportHistoryItem{}, nil
 }
 
 func (m *opsRepoMock) GetErrorLogByID(ctx context.Context, id int64) (*OpsErrorLogDetail, error) {

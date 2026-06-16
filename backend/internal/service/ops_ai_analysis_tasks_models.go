@@ -161,3 +161,8 @@ type OpsAIAnalysisTaskDetailResponse struct {
 	Task   *OpsAIAnalysisTask   `json:"task"`
 	Report *OpsAIAnalysisReport `json:"report,omitempty"`
 }
+
+type OpsAIAnalysisReportHistoryItem struct {
+	Task   *OpsAIAnalysisTask   `json:"task"`
+	Report *OpsAIAnalysisReport `json:"report"`
+}
