@@ -5555,6 +5555,12 @@ export default {
           P2: 'P2',
           observe: '观察'
         },
+        metrics: {
+          compound_rule: '复合错误规则',
+          health_score: '健康分',
+          final_failure_rate: '事故失败率',
+          final_failures: '事故失败数'
+        },
         categories: {
           client: '客户端',
           platform: '平台',
@@ -5606,9 +5612,12 @@ export default {
           name: '规则名称',
           status: '规则状态',
           window: '时间窗口',
+          metric: '规则指标',
           categories: '错误分类',
           triggerLevel: '触发等级',
+          metricType: '规则指标',
           minFinalFailures: '最小最终失败数',
+          healthScoreThreshold: '健康分阈值',
           minFailureRate: '最小失败率',
           minSampleCount: '最小样本量',
           impactScope: '影响范围',
@@ -5646,6 +5655,7 @@ export default {
           nameDuplicate: '规则名称已存在',
           categoriesRequired: '请选择错误分类',
           minFinalFailuresRange: '最小最终失败数需为 1～100000 的整数',
+          healthScoreThresholdRange: '健康分阈值需为 1～100',
           minFailureRateRange: '请输入 0～100 的百分比',
           minSampleCountRange: '请输入大于 0 的整数',
           minFinalFailuresRequiredForRate: '百分比规则必须配置最小失败数和最小样本量',

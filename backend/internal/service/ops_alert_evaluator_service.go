@@ -617,6 +617,19 @@ func (s *OpsAlertEvaluatorService) computeRuleMetric(
 	switch strings.TrimSpace(rule.MetricType) {
 	case "compound_rule":
 		return s.computeCompoundRuleMetric(ctx, rule, overview, start, end, platform, groupID)
+	case "health_score":
+		result := computeDashboardHealthScoreResult(time.Now().UTC(), overview)
+		if result == nil {
+			return 0, false
+		}
+		return float64(result.Score), true
+	case "final_failure_rate":
+		if overview.RequestCountSLA <= 0 && overview.RequestCountTotal <= 0 {
+			return 0, false
+		}
+		return finalFailureRate(overview) * 100, true
+	case "final_failures":
+		return float64(finalFailureCount(overview)), true
 	case "success_rate":
 		if overview.RequestCountSLA <= 0 {
 			return 0, false

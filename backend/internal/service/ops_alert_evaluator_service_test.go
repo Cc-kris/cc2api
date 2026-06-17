@@ -18,6 +18,42 @@ type stubOpsRepo struct {
 	err      error
 }
 
+func TestComputeRuleMetricMetricDrivenAlerts(t *testing.T) {
+	t.Parallel()
+
+	ttftP99 := 5000
+	svc := &OpsAlertEvaluatorService{
+		opsRepo: &stubOpsRepo{overview: &OpsDashboardOverview{
+			RequestCountSLA:   100,
+			RequestCountTotal: 100,
+			ErrorCountSLA:     25,
+			ErrorCountTotal:   25,
+			ErrorRate:         0.25,
+			TTFT:              OpsPercentiles{P99: &ttftP99},
+		}},
+	}
+	start := time.Now().UTC().Add(-time.Minute)
+	end := time.Now().UTC()
+
+	tests := []struct {
+		name       string
+		metricType string
+		wantOK     bool
+		wantValue  float64
+	}{
+		{name: "health score", metricType: "health_score", wantOK: true, wantValue: 30},
+		{name: "final failure rate", metricType: "final_failure_rate", wantOK: true, wantValue: 25},
+		{name: "final failures", metricType: "final_failures", wantOK: true, wantValue: 25},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			value, ok := svc.computeRuleMetric(context.Background(), &OpsAlertRule{MetricType: tt.metricType}, nil, start, end, "openai", nil)
+			require.Equal(t, tt.wantOK, ok)
+			require.InDelta(t, tt.wantValue, value, 0.001)
+		})
+	}
+}
+
 func (s *stubOpsRepo) GetDashboardOverview(ctx context.Context, filter *OpsDashboardFilter) (*OpsDashboardOverview, error) {
 	if s.err != nil {
 		return nil, s.err

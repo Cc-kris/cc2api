@@ -335,6 +335,87 @@ func TestOpsAlertRuleValidationV2CompoundRule(t *testing.T) {
 	require.True(t, validated.NotifyEmail)
 }
 
+func TestOpsAlertRuleValidationV2MetricDrivenRules(t *testing.T) {
+	tests := []struct {
+		name       string
+		raw        map[string]json.RawMessage
+		wantMetric string
+		wantOp     string
+		wantValue  float64
+	}{
+		{
+			name: "health score",
+			raw: map[string]json.RawMessage{
+				"name":                  json.RawMessage(`"健康分过低"`),
+				"rule_version":          json.RawMessage(`"v2"`),
+				"metric_type":           json.RawMessage(`"health_score"`),
+				"operator":              json.RawMessage(`"<"`),
+				"threshold":             json.RawMessage(`70`),
+				"trigger_level":         json.RawMessage(`"P1"`),
+				"notification_channels": json.RawMessage(`["in_app","email"]`),
+				"silence_minutes":       json.RawMessage(`10`),
+			},
+			wantMetric: "health_score",
+			wantOp:     "<",
+			wantValue:  70,
+		},
+		{
+			name: "final failure rate",
+			raw: map[string]json.RawMessage{
+				"name":                  json.RawMessage(`"事故失败率过高"`),
+				"rule_version":          json.RawMessage(`"v2"`),
+				"metric_type":           json.RawMessage(`"final_failure_rate"`),
+				"trigger_level":         json.RawMessage(`"P0"`),
+				"min_final_failures":    json.RawMessage(`5`),
+				"min_failure_rate":      json.RawMessage(`20`),
+				"min_sample_count":      json.RawMessage(`50`),
+				"notification_channels": json.RawMessage(`["in_app","email"]`),
+			},
+			wantMetric: "final_failure_rate",
+			wantOp:     ">=",
+			wantValue:  20,
+		},
+		{
+			name: "final failures",
+			raw: map[string]json.RawMessage{
+				"name":               json.RawMessage(`"事故失败数过高"`),
+				"rule_version":       json.RawMessage(`"v2"`),
+				"metric_type":        json.RawMessage(`"final_failures"`),
+				"trigger_level":      json.RawMessage(`"P1"`),
+				"min_final_failures": json.RawMessage(`5`),
+			},
+			wantMetric: "final_failures",
+			wantOp:     ">=",
+			wantValue:  5,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			validated, err := validateOpsAlertRulePayload(tt.raw)
+			require.NoError(t, err)
+			require.Equal(t, "v2", validated.RuleVersion)
+			require.Equal(t, tt.wantMetric, validated.MetricType)
+			require.Equal(t, tt.wantOp, validated.Operator)
+			require.InDelta(t, tt.wantValue, validated.Threshold, 0.001)
+			require.Empty(t, validated.ErrorCategories)
+		})
+	}
+}
+
+func TestOpsAlertRuleValidationV2RejectsInvalidMetricDrivenRules(t *testing.T) {
+	raw := map[string]json.RawMessage{
+		"name":          json.RawMessage(`"健康分过低"`),
+		"rule_version":  json.RawMessage(`"v2"`),
+		"metric_type":   json.RawMessage(`"health_score"`),
+		"operator":      json.RawMessage(`">="`),
+		"threshold":     json.RawMessage(`70`),
+		"trigger_level": json.RawMessage(`"P1"`),
+	}
+	_, err := validateOpsAlertRulePayload(raw)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "健康分规则")
+}
+
 func TestOpsAlertRuleValidationV2RejectsInvalidRules(t *testing.T) {
 	base := map[string]json.RawMessage{
 		"name":                         json.RawMessage(`"上游账号集中失败"`),

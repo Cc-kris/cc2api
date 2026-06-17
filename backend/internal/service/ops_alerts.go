@@ -90,6 +90,15 @@ func (s *OpsService) ensureAlertRuleEditable(ctx context.Context, ruleID int64) 
 	return nil
 }
 
+func isLegacyAlertMetricType(metricType string) bool {
+	switch strings.TrimSpace(metricType) {
+	case "", "success_rate", "error_rate", "upstream_error_rate", "p95_latency_ms", "p99_latency_ms", "cpu_usage_percent", "memory_usage_percent", "concurrency_queue_depth", "group_available_accounts", "group_available_ratio", "group_rate_limit_ratio", "account_rate_limited_count", "account_error_count", "account_error_ratio", "overload_account_count":
+		return true
+	default:
+		return false
+	}
+}
+
 func isReadOnlyLegacyAlertRule(rule *OpsAlertRule) bool {
 	if rule == nil {
 		return false
@@ -132,7 +141,8 @@ func (s *OpsService) validateAlertRuleForSave(ctx context.Context, rule *OpsAler
 	}
 
 	if strings.TrimSpace(rule.RuleVersion) == "" {
-		if len(rule.ErrorCategories) == 0 && strings.TrimSpace(rule.MetricType) != "" && strings.TrimSpace(rule.MetricType) != "compound_rule" {
+		metricType := strings.TrimSpace(rule.MetricType)
+		if isLegacyAlertMetricType(metricType) {
 			rule.RuleVersion = "v1"
 		} else {
 			rule.RuleVersion = "v2"
@@ -186,31 +196,13 @@ func validateLegacyAlertRuleForSave(rule *OpsAlertRule) error {
 }
 
 func validateCompoundAlertRuleForSave(rule *OpsAlertRule) error {
-	if strings.TrimSpace(rule.MetricType) == "" {
-		rule.MetricType = "compound_rule"
+	metricType := strings.TrimSpace(rule.MetricType)
+	if metricType == "" {
+		metricType = "compound_rule"
 	}
-	if strings.TrimSpace(rule.Operator) == "" {
-		rule.Operator = ">="
-	}
-	if rule.Threshold <= 0 {
-		rule.Threshold = float64(rule.MinFinalFailures)
-	}
-	if len(rule.ErrorCategories) == 0 {
-		return infraerrors.BadRequest("OPS_ALERT_RULE_CATEGORIES_REQUIRED", "请选择错误分类")
-	}
-	if len(rule.ErrorCategories) > 20 {
-		return infraerrors.BadRequest("OPS_ALERT_RULE_CATEGORIES_TOO_MANY", "错误分类最多选择 20 项")
-	}
-	seenCategories := map[string]struct{}{}
-	for _, category := range rule.ErrorCategories {
-		category = strings.TrimSpace(category)
-		if !isValidOpsAlertErrorCategory(category) {
-			return infraerrors.BadRequest("OPS_ALERT_RULE_CATEGORY_INVALID", fmt.Sprintf("错误分类不支持：%s", category))
-		}
-		if _, ok := seenCategories[category]; ok {
-			return infraerrors.BadRequest("OPS_ALERT_RULE_CATEGORY_DUPLICATED", "错误分类不能重复")
-		}
-		seenCategories[category] = struct{}{}
+	rule.MetricType = metricType
+	if !isValidOpsAlertRuleMetricType(metricType) {
+		return infraerrors.BadRequest("OPS_ALERT_RULE_METRIC_TYPE_INVALID", "不支持的告警指标")
 	}
 
 	rule.TriggerLevel = normalizeAlertTriggerLevel(rule.TriggerLevel)
@@ -218,6 +210,33 @@ func validateCompoundAlertRuleForSave(rule *OpsAlertRule) error {
 		return infraerrors.BadRequest("OPS_ALERT_RULE_TRIGGER_LEVEL_INVALID", "trigger_level must be one of: P0, P1, P2, observe")
 	}
 	rule.Severity = alertSeverityFromTriggerLevel(rule.TriggerLevel)
+
+	if err := normalizeOpsAlertRuleMetricThresholds(rule); err != nil {
+		return err
+	}
+
+	if metricType == "compound_rule" {
+		if len(rule.ErrorCategories) == 0 {
+			return infraerrors.BadRequest("OPS_ALERT_RULE_CATEGORIES_REQUIRED", "请选择错误分类")
+		}
+		if len(rule.ErrorCategories) > 20 {
+			return infraerrors.BadRequest("OPS_ALERT_RULE_CATEGORIES_TOO_MANY", "错误分类最多选择 20 项")
+		}
+		seenCategories := map[string]struct{}{}
+		for _, category := range rule.ErrorCategories {
+			category = strings.TrimSpace(category)
+			if !isValidOpsAlertErrorCategory(category) {
+				return infraerrors.BadRequest("OPS_ALERT_RULE_CATEGORY_INVALID", fmt.Sprintf("错误分类不支持：%s", category))
+			}
+			if _, ok := seenCategories[category]; ok {
+				return infraerrors.BadRequest("OPS_ALERT_RULE_CATEGORY_DUPLICATED", "错误分类不能重复")
+			}
+			seenCategories[category] = struct{}{}
+		}
+	} else {
+		rule.ErrorCategories = []string{}
+	}
+
 	if rule.MinFinalFailures < 1 || rule.MinFinalFailures > 100000 {
 		return infraerrors.BadRequest("OPS_ALERT_RULE_MIN_FINAL_FAILURES_INVALID", "最小最终失败数需为 1～100000 的整数")
 	}
@@ -227,7 +246,7 @@ func validateCompoundAlertRuleForSave(rule *OpsAlertRule) error {
 	if rule.MinSampleCount < 1 || rule.MinSampleCount > 1000000 {
 		return infraerrors.BadRequest("OPS_ALERT_RULE_MIN_SAMPLE_INVALID", "请输入大于 0 的整数")
 	}
-	if rule.MinFailureRate > 0 && rule.MinFinalFailures > rule.MinSampleCount {
+	if (metricType == "compound_rule" || metricType == "final_failure_rate") && rule.MinFailureRate > 0 && rule.MinFinalFailures > rule.MinSampleCount {
 		return infraerrors.BadRequest("OPS_ALERT_RULE_MIN_FAILURES_GT_SAMPLE", "最小最终失败数不能大于最小样本量")
 	}
 	for key, value := range rule.ImpactScope {
@@ -262,6 +281,75 @@ func validateCompoundAlertRuleForSave(rule *OpsAlertRule) error {
 		return infraerrors.BadRequest("OPS_ALERT_RULE_NOTIFICATION_NONE_EXCLUSIVE", "notification_channels 选择 none 时不能同时选择其他方式")
 	}
 	rule.NotifyEmail = stringSliceContains(rule.NotificationChannels, "email")
+	return nil
+}
+
+func isValidOpsAlertRuleMetricType(metricType string) bool {
+	switch strings.TrimSpace(metricType) {
+	case "compound_rule", "health_score", "final_failure_rate", "final_failures":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeOpsAlertRuleMetricThresholds(rule *OpsAlertRule) error {
+	if rule == nil {
+		return infraerrors.BadRequest("INVALID_RULE", "invalid rule")
+	}
+	metricType := strings.TrimSpace(rule.MetricType)
+	if strings.TrimSpace(rule.Operator) == "" {
+		switch metricType {
+		case "health_score":
+			rule.Operator = "<"
+		default:
+			rule.Operator = ">="
+		}
+	}
+	if rule.MinFinalFailures <= 0 {
+		rule.MinFinalFailures = 1
+	}
+	if rule.MinSampleCount <= 0 {
+		rule.MinSampleCount = 1
+	}
+	switch metricType {
+	case "compound_rule":
+		if rule.Threshold <= 0 {
+			rule.Threshold = float64(rule.MinFinalFailures)
+		}
+		if rule.Operator != ">=" {
+			return infraerrors.BadRequest("OPS_ALERT_RULE_OPERATOR_INVALID", "复合规则仅支持 >=")
+		}
+	case "health_score":
+		if rule.Operator != "<" && rule.Operator != "<=" {
+			return infraerrors.BadRequest("OPS_ALERT_RULE_OPERATOR_INVALID", "健康分规则仅支持 < 或 <=")
+		}
+		if math.IsNaN(rule.Threshold) || math.IsInf(rule.Threshold, 0) || rule.Threshold <= 0 || rule.Threshold > 100 {
+			return infraerrors.BadRequest("OPS_ALERT_RULE_HEALTH_SCORE_THRESHOLD_INVALID", "健康分阈值需为 1～100")
+		}
+	case "final_failure_rate":
+		if rule.Operator != ">" && rule.Operator != ">=" {
+			return infraerrors.BadRequest("OPS_ALERT_RULE_OPERATOR_INVALID", "事故失败率规则仅支持 > 或 >=")
+		}
+		if rule.Threshold <= 0 && rule.MinFailureRate > 0 {
+			rule.Threshold = rule.MinFailureRate
+		}
+		if math.IsNaN(rule.Threshold) || math.IsInf(rule.Threshold, 0) || rule.Threshold <= 0 || rule.Threshold > 100 || math.Round(rule.Threshold*100) != rule.Threshold*100 {
+			return infraerrors.BadRequest("OPS_ALERT_RULE_MIN_FAILURE_RATE_INVALID", "请输入 0～100 的百分比")
+		}
+		rule.MinFailureRate = rule.Threshold
+	case "final_failures":
+		if rule.Operator != ">" && rule.Operator != ">=" {
+			return infraerrors.BadRequest("OPS_ALERT_RULE_OPERATOR_INVALID", "事故失败数规则仅支持 > 或 >=")
+		}
+		if rule.Threshold <= 0 {
+			rule.Threshold = float64(rule.MinFinalFailures)
+		}
+		if math.IsNaN(rule.Threshold) || math.IsInf(rule.Threshold, 0) || rule.Threshold < 1 || rule.Threshold > 100000 || math.Trunc(rule.Threshold) != rule.Threshold {
+			return infraerrors.BadRequest("OPS_ALERT_RULE_MIN_FINAL_FAILURES_INVALID", "最小最终失败数需为 1～100000 的整数")
+		}
+		rule.MinFinalFailures = int(rule.Threshold)
+	}
 	return nil
 }
 

@@ -892,6 +892,9 @@ export type OpsPhase = string
 export type AlertSeverity = 'critical' | 'warning' | 'info'
 export type ThresholdMode = 'count' | 'percentage' | 'both'
 export type MetricType =
+  | 'health_score'
+  | 'final_failure_rate'
+  | 'final_failures'
   | 'success_rate'
   | 'error_rate'
   | 'upstream_error_rate'

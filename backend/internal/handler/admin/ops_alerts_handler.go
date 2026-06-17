@@ -17,6 +17,10 @@ import (
 )
 
 var validOpsAlertMetricTypes = []string{
+	"compound_rule",
+	"health_score",
+	"final_failure_rate",
+	"final_failures",
 	"success_rate",
 	"error_rate",
 	"upstream_error_rate",
@@ -171,12 +175,94 @@ func isOpsAlertRuleV2Payload(raw map[string]json.RawMessage) bool {
 		"auto_ai_analysis",
 		"notification_channels",
 		"silence_minutes",
+		"rule_version",
 	} {
 		if _, ok := raw[field]; ok {
 			return true
 		}
 	}
 	return false
+}
+
+func parseOpsAlertOptionalString(raw map[string]json.RawMessage, field string, fallback string) (string, error) {
+	if v, ok := raw[field]; ok {
+		var value string
+		if err := json.Unmarshal(v, &value); err != nil {
+			return "", fmt.Errorf("%s must be a string", field)
+		}
+		return strings.TrimSpace(value), nil
+	}
+	return fallback, nil
+}
+
+func parseOpsAlertOptionalFloat(raw map[string]json.RawMessage, field string, fallback float64) (float64, error) {
+	if v, ok := raw[field]; ok {
+		var value float64
+		if err := json.Unmarshal(v, &value); err != nil {
+			return 0, fmt.Errorf("%s must be a number", field)
+		}
+		return value, nil
+	}
+	return fallback, nil
+}
+
+func opsAlertV2DefaultThreshold(metricType string, triggerLevel string, minFinalFailures int, minFailureRate float64) float64 {
+	switch metricType {
+	case "health_score":
+		switch triggerLevel {
+		case "P0":
+			return 50
+		case "P1":
+			return 70
+		default:
+			return 90
+		}
+	case "final_failure_rate":
+		return minFailureRate
+	case "final_failures", "compound_rule":
+		return float64(minFinalFailures)
+	default:
+		return 0
+	}
+}
+
+func validateOpsAlertV2MetricThreshold(metricType string, operator string, threshold float64) error {
+	if math.IsNaN(threshold) || math.IsInf(threshold, 0) {
+		return fmt.Errorf("threshold must be a finite number")
+	}
+	switch metricType {
+	case "compound_rule":
+		if operator != ">=" {
+			return fmt.Errorf("复合规则仅支持 >=")
+		}
+		if threshold < 1 || threshold > 100000 || math.Trunc(threshold) != threshold {
+			return fmt.Errorf("最小最终失败数需为 1～100000 的整数")
+		}
+	case "health_score":
+		if operator != "<" && operator != "<=" {
+			return fmt.Errorf("健康分规则仅支持 < 或 <=")
+		}
+		if threshold <= 0 || threshold > 100 {
+			return fmt.Errorf("健康分阈值需为 1～100")
+		}
+	case "final_failure_rate":
+		if operator != ">" && operator != ">=" {
+			return fmt.Errorf("事故失败率规则仅支持 > 或 >=")
+		}
+		if threshold <= 0 || threshold > 100 || math.Round(threshold*100) != threshold*100 {
+			return fmt.Errorf("请输入 0～100 的百分比")
+		}
+	case "final_failures":
+		if operator != ">" && operator != ">=" {
+			return fmt.Errorf("事故失败数规则仅支持 > 或 >=")
+		}
+		if threshold < 1 || threshold > 100000 || math.Trunc(threshold) != threshold {
+			return fmt.Errorf("最小最终失败数需为 1～100000 的整数")
+		}
+	default:
+		return fmt.Errorf("metric_type must be one of: %s", strings.Join(validOpsAlertMetricTypes, ", "))
+	}
+	return nil
 }
 
 func validateOpsAlertRuleV2Payload(raw map[string]json.RawMessage) (*opsAlertRuleValidatedInput, error) {
@@ -193,6 +279,19 @@ func validateOpsAlertRuleV2Payload(raw map[string]json.RawMessage) (*opsAlertRul
 		if err := json.Unmarshal(v, &enabled); err != nil {
 			return nil, fmt.Errorf("enabled must be a boolean")
 		}
+	}
+
+	metricType, err := parseOpsAlertOptionalString(raw, "metric_type", "compound_rule")
+	if err != nil {
+		return nil, err
+	}
+	if metricType == "" {
+		metricType = "compound_rule"
+	}
+	switch metricType {
+	case "compound_rule", "health_score", "final_failure_rate", "final_failures":
+	default:
+		return nil, fmt.Errorf("metric_type must be one of: compound_rule, health_score, final_failure_rate, final_failures")
 	}
 
 	windowMinutes := 1
@@ -213,9 +312,12 @@ func validateOpsAlertRuleV2Payload(raw map[string]json.RawMessage) (*opsAlertRul
 		}
 	}
 
-	errorCategories, err := parseOpsAlertStringList(raw, "error_categories", true, "请选择错误分类")
+	errorCategories, err := parseOpsAlertStringList(raw, "error_categories", metricType == "compound_rule", "请选择错误分类")
 	if err != nil {
 		return nil, err
+	}
+	if metricType != "compound_rule" {
+		errorCategories = []string{}
 	}
 	if len(errorCategories) > 20 {
 		return nil, fmt.Errorf("错误分类最多选择 20 项")
@@ -235,34 +337,68 @@ func validateOpsAlertRuleV2Payload(raw map[string]json.RawMessage) (*opsAlertRul
 		return nil, fmt.Errorf("trigger_level must be one of: %s", strings.Join(validOpsAlertTriggerLevels, ", "))
 	}
 
-	minFinalFailures, err := parseOpsAlertRequiredInt(raw, "min_final_failures", "min_final_failures is required")
-	if err != nil {
-		return nil, err
+	minFinalFailures := 1
+	if v, ok := raw["min_final_failures"]; ok {
+		if err := json.Unmarshal(v, &minFinalFailures); err != nil {
+			return nil, fmt.Errorf("min_final_failures must be an integer")
+		}
 	}
 	if minFinalFailures < 1 || minFinalFailures > 100000 {
 		return nil, fmt.Errorf("最小最终失败数需为 1～100000 的整数")
 	}
 
-	minFailureRate, err := parseOpsAlertRequiredFloat(raw, "min_failure_rate", "min_failure_rate is required")
-	if err != nil {
-		return nil, err
+	minFailureRate := 0.0
+	if v, ok := raw["min_failure_rate"]; ok {
+		if err := json.Unmarshal(v, &minFailureRate); err != nil {
+			return nil, fmt.Errorf("min_failure_rate must be a number")
+		}
 	}
 	if minFailureRate < 0 || minFailureRate > 100 || math.Round(minFailureRate*100) != minFailureRate*100 {
 		return nil, fmt.Errorf("请输入 0～100 的百分比")
 	}
 
-	minSampleCount, err := parseOpsAlertRequiredInt(raw, "min_sample_count", "min_sample_count is required")
-	if err != nil {
-		return nil, err
+	minSampleCount := 1
+	if v, ok := raw["min_sample_count"]; ok {
+		if err := json.Unmarshal(v, &minSampleCount); err != nil {
+			return nil, fmt.Errorf("min_sample_count must be an integer")
+		}
 	}
 	if minSampleCount < 1 || minSampleCount > 1000000 {
 		return nil, fmt.Errorf("请输入大于 0 的整数")
 	}
-	if minFailureRate > 0 && minFinalFailures > minSampleCount {
+	if (metricType == "compound_rule" || metricType == "final_failure_rate") && minFailureRate > 0 && minFinalFailures > minSampleCount {
 		return nil, fmt.Errorf("最小最终失败数不能大于最小样本量")
 	}
-	if minFailureRate > 0 && (minFinalFailures <= 0 || minSampleCount <= 0) {
+	if metricType == "final_failure_rate" && minFailureRate <= 0 {
+		return nil, fmt.Errorf("请输入 0～100 的百分比")
+	}
+	if metricType == "final_failure_rate" && (minFinalFailures <= 0 || minSampleCount <= 0) {
 		return nil, fmt.Errorf("百分比规则必须配置最小失败数和最小样本量")
+	}
+
+	operatorDefault := ">="
+	if metricType == "health_score" {
+		operatorDefault = "<"
+	}
+	operator, err := parseOpsAlertOptionalString(raw, "operator", operatorDefault)
+	if err != nil {
+		return nil, err
+	}
+	if operator == "" {
+		operator = operatorDefault
+	}
+	threshold, err := parseOpsAlertOptionalFloat(raw, "threshold", opsAlertV2DefaultThreshold(metricType, triggerLevel, minFinalFailures, minFailureRate))
+	if err != nil {
+		return nil, err
+	}
+	if err := validateOpsAlertV2MetricThreshold(metricType, operator, threshold); err != nil {
+		return nil, err
+	}
+	if metricType == "final_failure_rate" {
+		minFailureRate = threshold
+	}
+	if metricType == "final_failures" {
+		minFinalFailures = int(threshold)
 	}
 
 	impactScope, err := parseOpsAlertImpactScope(raw["impact_scope"])
@@ -340,9 +476,9 @@ func validateOpsAlertRuleV2Payload(raw map[string]json.RawMessage) (*opsAlertRul
 
 	return &opsAlertRuleValidatedInput{
 		Name:                       name,
-		MetricType:                 "compound_rule",
-		Operator:                   ">=",
-		Threshold:                  float64(minFinalFailures),
+		MetricType:                 metricType,
+		Operator:                   operator,
+		Threshold:                  threshold,
 		Severity:                   opsAlertSeverityFromTriggerLevel(triggerLevel),
 		WindowMinutes:              windowMinutes,
 		SustainedMinutes:           1,

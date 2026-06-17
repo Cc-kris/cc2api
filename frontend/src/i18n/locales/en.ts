@@ -5383,6 +5383,12 @@ export default {
           P2: 'P2',
           observe: 'Observe'
         },
+        metrics: {
+          compound_rule: 'Compound error rule',
+          health_score: 'Health score',
+          final_failure_rate: 'Incident failure rate',
+          final_failures: 'Incident failures'
+        },
         categories: {
           client: 'Client',
           platform: 'Platform',
@@ -5434,9 +5440,12 @@ export default {
           name: 'Rule name',
           status: 'Status',
           window: 'Window',
+          metric: 'Metric',
           categories: 'Error categories',
           triggerLevel: 'Trigger level',
+          metricType: 'Metric',
           minFinalFailures: 'Min final failures',
+          healthScoreThreshold: 'Health score threshold',
           minFailureRate: 'Min failure rate',
           minSampleCount: 'Min sample count',
           impactScope: 'Impact scope',
@@ -5474,6 +5483,7 @@ export default {
           nameDuplicate: 'Rule name already exists',
           categoriesRequired: 'Please select at least one error category',
           minFinalFailuresRange: 'Min final failures must be an integer between 1 and 100000',
+          healthScoreThresholdRange: 'Health score threshold must be between 1 and 100',
           minFailureRateRange: 'Please enter a percentage between 0 and 100',
           minSampleCountRange: 'Please enter an integer greater than 0',
           minFinalFailuresRequiredForRate: 'Percentage-based rules require both min final failures and min sample count',

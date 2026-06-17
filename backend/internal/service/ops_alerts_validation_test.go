@@ -76,6 +76,89 @@ func TestOpsServiceCreateAlertRuleNormalizesCompoundRule(t *testing.T) {
 	require.Equal(t, "compound_rule", saved.MetricType)
 }
 
+func TestOpsServiceCreateMetricDrivenAlertRules(t *testing.T) {
+	tests := []struct {
+		name       string
+		rule       *OpsAlertRule
+		wantMetric string
+		wantOp     string
+		wantValue  float64
+	}{
+		{
+			name: "health score",
+			rule: &OpsAlertRule{
+				Name:                 "健康分过低",
+				Enabled:              true,
+				RuleVersion:          "v2",
+				MetricType:           "health_score",
+				Operator:             "<",
+				Threshold:            70,
+				TriggerLevel:         "P1",
+				MinFinalFailures:     1,
+				MinSampleCount:       1,
+				NotificationChannels: []string{"in_app", "email"},
+				WindowMinutes:        1,
+			},
+			wantMetric: "health_score",
+			wantOp:     "<",
+			wantValue:  70,
+		},
+		{
+			name: "final failure rate",
+			rule: &OpsAlertRule{
+				Name:                 "事故失败率过高",
+				Enabled:              true,
+				RuleVersion:          "v2",
+				MetricType:           "final_failure_rate",
+				TriggerLevel:         "P0",
+				MinFinalFailures:     5,
+				MinFailureRate:       20,
+				MinSampleCount:       50,
+				NotificationChannels: []string{"in_app", "email"},
+				WindowMinutes:        1,
+			},
+			wantMetric: "final_failure_rate",
+			wantOp:     ">=",
+			wantValue:  20,
+		},
+		{
+			name: "final failures",
+			rule: &OpsAlertRule{
+				Name:                 "事故失败数过高",
+				Enabled:              true,
+				RuleVersion:          "v2",
+				MetricType:           "final_failures",
+				TriggerLevel:         "P1",
+				MinFinalFailures:     5,
+				MinSampleCount:       1,
+				NotificationChannels: []string{"in_app"},
+				WindowMinutes:        1,
+			},
+			wantMetric: "final_failures",
+			wantOp:     ">=",
+			wantValue:  5,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var saved *OpsAlertRule
+			repo := &opsRepoMock{
+				CreateAlertRuleFn: func(ctx context.Context, input *OpsAlertRule) (*OpsAlertRule, error) {
+					saved = input
+					return input, nil
+				},
+			}
+			svc := NewOpsService(repo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			_, err := svc.CreateAlertRule(context.Background(), tt.rule)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantMetric, saved.MetricType)
+			require.Equal(t, tt.wantOp, saved.Operator)
+			require.InDelta(t, tt.wantValue, saved.Threshold, 0.001)
+			require.Empty(t, saved.ErrorCategories)
+		})
+	}
+}
+
 func TestOpsServiceUpdateAlertRuleRejectsMigratedLegacyRule(t *testing.T) {
 	tests := []struct {
 		name           string

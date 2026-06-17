@@ -31,6 +31,7 @@ type AlertTriggerLevel = 'P0' | 'P1' | 'P2' | 'observe'
 type ImpactScopeKey = 'affected_users' | 'affected_api_keys' | 'affected_groups' | 'affected_models' | 'affected_upstream_accounts'
 type RecoveredPolicy = 'record_only' | 'observe_only' | 'alert'
 type NotificationChannel = 'in_app' | 'email' | 'none'
+type AlertRuleMetricType = 'compound_rule' | 'health_score' | 'final_failure_rate' | 'final_failures'
 type SortKey = 'updated_at' | 'name' | 'trigger_level' | 'min_final_failures' | 'min_failure_rate' | 'min_sample_count'
 
 const DEFAULT_RULE_BY_LEVEL: Record<AlertTriggerLevel, {
@@ -75,6 +76,23 @@ const severityRank: Record<string, number> = {
   P1: 1,
   P2: 2,
   observe: 3
+}
+
+const alertMetricTypes: AlertRuleMetricType[] = ['compound_rule', 'health_score', 'final_failure_rate', 'final_failures']
+
+function normalizeAlertMetricType(value?: string | null): AlertRuleMetricType {
+  const raw = String(value || '').trim()
+  return alertMetricTypes.includes(raw as AlertRuleMetricType) ? (raw as AlertRuleMetricType) : 'compound_rule'
+}
+
+function defaultHealthScoreThreshold(level: AlertTriggerLevel): number {
+  if (level === 'P0') return 50
+  if (level === 'P1') return 70
+  return 90
+}
+
+function metricOperator(metricType: AlertRuleMetricType) {
+  return metricType === 'health_score' ? '<' : '>='
 }
 
 const loading = ref(false)
@@ -159,20 +177,22 @@ function getLevelDefaults(level: AlertTriggerLevel) {
 
 function normalizeDraft(source?: AlertRule | null): AlertRule {
   const level = normalizeTriggerLevel(source?.trigger_level || source?.severity)
+  const metricType = normalizeAlertMetricType(source?.metric_type)
   const defaults = getLevelDefaults(level)
   const notificationChannels = normalizeNotificationChannels(source?.notification_channels, source?.notify_email, defaults.notification_channels)
   const minFinalFailures = parsePositiveInt(source?.min_final_failures) ?? defaults.min_final_failures
   const minSampleCount = parsePositiveInt(source?.min_sample_count) ?? defaults.min_sample_count
   const minRecovered = parsePositiveInt(source?.min_recovered_fluctuations) ?? 10
+  const defaultThreshold = metricType === 'health_score' ? defaultHealthScoreThreshold(level) : minFinalFailures
 
   return {
     ...(source ? JSON.parse(JSON.stringify(source)) : {}),
     name: source?.name ?? '',
     description: source?.description ?? '',
     enabled: source?.enabled ?? true,
-    metric_type: 'compound_rule',
-    operator: '>=',
-    threshold: typeof source?.threshold === 'number' && Number.isFinite(source.threshold) && source.threshold > 0 ? source.threshold : minFinalFailures,
+    metric_type: metricType,
+    operator: metricOperator(metricType),
+    threshold: typeof source?.threshold === 'number' && Number.isFinite(source.threshold) && source.threshold > 0 ? source.threshold : defaultThreshold,
     window_minutes: 1,
     sustained_minutes: parsePositiveInt(source?.sustained_minutes) ?? 1,
     severity: level === 'observe' ? 'P3' : (level as OpsSeverity),
@@ -182,7 +202,7 @@ function normalizeDraft(source?: AlertRule | null): AlertRule {
     rule_version: 'v2',
     error_categories: Array.isArray(source?.error_categories) && source!.error_categories!.length > 0
       ? Array.from(new Set(source!.error_categories!.map((item) => String(item).trim()).filter(Boolean)))
-      : [...ALL_ERROR_CATEGORIES],
+      : (metricType === 'compound_rule' ? [...ALL_ERROR_CATEGORIES] : []),
     trigger_level: level,
     min_final_failures: minFinalFailures,
     min_failure_rate: typeof source?.min_failure_rate === 'number' && Number.isFinite(source.min_failure_rate)
@@ -205,28 +225,38 @@ function normalizeDraft(source?: AlertRule | null): AlertRule {
 
 function buildPayload(rule: AlertRule): AlertRule {
   const level = normalizeTriggerLevel(rule.trigger_level)
-  const notificationChannels = normalizeNotificationChannels(rule.notification_channels, rule.notify_email, getLevelDefaults(level).notification_channels)
+  const metricType = normalizeAlertMetricType(rule.metric_type)
+  const defaults = getLevelDefaults(level)
+  const notificationChannels = normalizeNotificationChannels(rule.notification_channels, rule.notify_email, defaults.notification_channels)
   const impactScope = sanitizeImpactScope(rule.impact_scope)
+  const minFinalFailures = parsePositiveInt(rule.min_final_failures) ?? defaults.min_final_failures
+  const minFailureRate = typeof rule.min_failure_rate === 'number' && Number.isFinite(rule.min_failure_rate) ? rule.min_failure_rate : defaults.min_failure_rate
+  const minSampleCount = parsePositiveInt(rule.min_sample_count) ?? defaults.min_sample_count
+  const threshold = metricType === 'health_score'
+    ? (typeof rule.threshold === 'number' && Number.isFinite(rule.threshold) ? rule.threshold : defaultHealthScoreThreshold(level))
+    : metricType === 'final_failure_rate'
+      ? minFailureRate
+      : minFinalFailures
   const minRecovered = level && rule.recovered_fluctuation_policy !== 'record_only'
     ? (parsePositiveInt(rule.min_recovered_fluctuations) ?? 0)
     : 0
 
   return {
     ...rule,
-    metric_type: 'compound_rule',
-    operator: '>=',
-    threshold: parsePositiveInt(rule.min_final_failures) ?? getLevelDefaults(level).min_final_failures,
+    metric_type: metricType,
+    operator: metricOperator(metricType),
+    threshold,
     window_minutes: 1,
     sustained_minutes: 1,
     severity: level === 'observe' ? 'P3' : (level as OpsSeverity),
     cooldown_minutes: parseNonNegativeInt(rule.silence_minutes) ?? 10,
     notify_email: notificationChannels.includes('email'),
     rule_version: 'v2',
-    error_categories: Array.from(new Set((rule.error_categories || []).map((item) => String(item).trim()).filter(Boolean))),
+    error_categories: metricType === 'compound_rule' ? Array.from(new Set((rule.error_categories || []).map((item) => String(item).trim()).filter(Boolean))) : [],
     trigger_level: level,
-    min_final_failures: parsePositiveInt(rule.min_final_failures) ?? getLevelDefaults(level).min_final_failures,
-    min_failure_rate: typeof rule.min_failure_rate === 'number' && Number.isFinite(rule.min_failure_rate) ? rule.min_failure_rate : getLevelDefaults(level).min_failure_rate,
-    min_sample_count: parsePositiveInt(rule.min_sample_count) ?? getLevelDefaults(level).min_sample_count,
+    min_final_failures: minFinalFailures,
+    min_failure_rate: minFailureRate,
+    min_sample_count: minSampleCount,
     impact_scope: impactScope,
     recovered_fluctuation_policy: (rule.recovered_fluctuation_policy as RecoveredPolicy) || 'record_only',
     min_recovered_fluctuations: minRecovered,
@@ -286,6 +316,11 @@ const severityOptions = computed<SelectOption[]>(() => [
   { value: 'observe', label: t('admin.ops.alertRules.triggerLevels.observe') }
 ])
 
+const metricTypeOptions = computed<SelectOption[]>(() => alertMetricTypes.map((value) => ({
+  value,
+  label: t(`admin.ops.alertRules.metrics.${value}`)
+})))
+
 const filterSeverityOptions = computed<SelectOption[]>(() => [
   { value: '', label: t('admin.ops.alertRules.filters.allSeverities') },
   ...severityOptions.value
@@ -337,8 +372,13 @@ function formatPercent(value?: number | null): string {
 }
 
 function formatCategories(rule: AlertRule): string[] {
+  if (normalizeAlertMetricType(rule.metric_type) !== 'compound_rule') return []
   const categories = Array.isArray(rule.error_categories) ? rule.error_categories : []
   return categories.map((category) => t(`admin.ops.alertRules.categories.${category}`))
+}
+
+function formatMetricType(rule: AlertRule): string {
+  return t(`admin.ops.alertRules.metrics.${normalizeAlertMetricType(rule.metric_type)}`)
 }
 
 function getNotificationChannels(rule: AlertRule): NotificationChannel[] {
@@ -355,6 +395,20 @@ function formatImpactScopeSummary(rule: AlertRule): string {
 }
 
 function formatRuleCondition(rule: AlertRule): string {
+  const metricType = normalizeAlertMetricType(rule.metric_type)
+  if (metricType === 'health_score') {
+    return `${t('admin.ops.alertRules.metrics.health_score')} < ${rule.threshold || 0}`
+  }
+  if (metricType === 'final_failures') {
+    return `${t('admin.ops.alertRules.metrics.final_failures')} ≥ ${rule.min_final_failures || rule.threshold || 0}`
+  }
+  if (metricType === 'final_failure_rate') {
+    return [
+      `${t('admin.ops.alertRules.metrics.final_failure_rate')} ≥ ${formatPercent(rule.min_failure_rate || rule.threshold)}`,
+      `${t('admin.ops.alertRules.table.minFinalFailures')} ≥ ${rule.min_final_failures || 0}`,
+      `${t('admin.ops.alertRules.table.minSampleCount')} ≥ ${rule.min_sample_count || 0}`
+    ].join(' · ')
+  }
   return [
     `${t('admin.ops.alertRules.table.minFinalFailures')} ≥ ${rule.min_final_failures || 0}`,
     `${t('admin.ops.alertRules.table.minFailureRate')} ≥ ${formatPercent(rule.min_failure_rate)}`,
@@ -402,6 +456,7 @@ const filteredRules = computed(() => {
       rule.description,
       rule.trigger_level,
       rule.severity,
+      formatMetricType(rule),
       ...(rule.error_categories || [])
     ]
       .filter(Boolean)
@@ -434,6 +489,7 @@ function applyLevelDefaults(level: AlertTriggerLevel) {
   draft.value.min_final_failures = defaults.min_final_failures
   draft.value.min_failure_rate = defaults.min_failure_rate
   draft.value.min_sample_count = defaults.min_sample_count
+  draft.value.threshold = normalizeAlertMetricType(draft.value.metric_type) === 'health_score' ? defaultHealthScoreThreshold(level) : defaults.min_final_failures
   draft.value.auto_ai_analysis = defaults.auto_ai_analysis
   draft.value.notification_channels = [...defaults.notification_channels]
   draft.value.notify_email = defaults.notification_channels.includes('email')
@@ -444,6 +500,19 @@ watch(
   (next, prev) => {
     if (!draft.value || syncingDraft.value || !next || !prev || next === prev) return
     applyLevelDefaults(normalizeTriggerLevel(next))
+  }
+)
+
+watch(
+  () => draft.value?.metric_type,
+  (next, prev) => {
+    if (!draft.value || syncingDraft.value || !next || next === prev) return
+    const metricType = normalizeAlertMetricType(next)
+    draft.value.operator = metricOperator(metricType)
+    draft.value.error_categories = metricType === 'compound_rule' ? [...ALL_ERROR_CATEGORIES] : []
+    draft.value.threshold = metricType === 'health_score'
+      ? defaultHealthScoreThreshold(normalizeTriggerLevel(draft.value.trigger_level))
+      : (parsePositiveInt(draft.value.min_final_failures) ?? getLevelDefaults(normalizeTriggerLevel(draft.value.trigger_level)).min_final_failures)
   }
 )
 
@@ -531,30 +600,36 @@ const editorValidation = computed(() => {
     if (duplicated) errors.push(t('admin.ops.alertRules.validation.nameDuplicate'))
   }
 
-  if (!Array.isArray(rule.error_categories) || rule.error_categories.length === 0) {
+  const metricType = normalizeAlertMetricType(rule.metric_type)
+  if (metricType === 'compound_rule' && (!Array.isArray(rule.error_categories) || rule.error_categories.length === 0)) {
     errors.push(t('admin.ops.alertRules.validation.categoriesRequired'))
   }
 
   const minFinalFailures = parsePositiveInt(rule.min_final_failures)
-  if (minFinalFailures == null || minFinalFailures < 1 || minFinalFailures > 100000) {
-    errors.push(t('admin.ops.alertRules.validation.minFinalFailuresRange'))
-  }
-
   const minFailureRate = typeof rule.min_failure_rate === 'number' && Number.isFinite(rule.min_failure_rate) ? rule.min_failure_rate : null
-  if (minFailureRate == null || minFailureRate < 0 || minFailureRate > 100 || !hasAtMostTwoDecimals(minFailureRate)) {
-    errors.push(t('admin.ops.alertRules.validation.minFailureRateRange'))
-  }
-
   const minSampleCount = parsePositiveInt(rule.min_sample_count)
-  if (minSampleCount == null || minSampleCount < 1 || minSampleCount > 1000000) {
-    errors.push(t('admin.ops.alertRules.validation.minSampleCountRange'))
-  }
 
-  if (minFailureRate != null && minFailureRate > 0) {
-    if (minFinalFailures == null) errors.push(t('admin.ops.alertRules.validation.minFinalFailuresRequiredForRate'))
-    if (minSampleCount == null) errors.push(t('admin.ops.alertRules.validation.minSampleCountRequiredForRate'))
-    if (minFinalFailures != null && minSampleCount != null && minFinalFailures > minSampleCount) {
-      errors.push(t('admin.ops.alertRules.validation.minFinalFailuresGtSample'))
+  if (metricType === 'health_score') {
+    const threshold = typeof rule.threshold === 'number' && Number.isFinite(rule.threshold) ? rule.threshold : null
+    if (threshold == null || threshold <= 0 || threshold > 100) {
+      errors.push(t('admin.ops.alertRules.validation.healthScoreThresholdRange'))
+    }
+  } else {
+    if (minFinalFailures == null || minFinalFailures < 1 || minFinalFailures > 100000) {
+      errors.push(t('admin.ops.alertRules.validation.minFinalFailuresRange'))
+    }
+    if ((metricType === 'compound_rule' || metricType === 'final_failure_rate') && (minFailureRate == null || minFailureRate < 0 || minFailureRate > 100 || !hasAtMostTwoDecimals(minFailureRate))) {
+      errors.push(t('admin.ops.alertRules.validation.minFailureRateRange'))
+    }
+    if ((metricType === 'compound_rule' || metricType === 'final_failure_rate') && (minSampleCount == null || minSampleCount < 1 || minSampleCount > 1000000)) {
+      errors.push(t('admin.ops.alertRules.validation.minSampleCountRange'))
+    }
+    if ((metricType === 'compound_rule' || metricType === 'final_failure_rate') && minFailureRate != null && minFailureRate > 0) {
+      if (minFinalFailures == null) errors.push(t('admin.ops.alertRules.validation.minFinalFailuresRequiredForRate'))
+      if (minSampleCount == null) errors.push(t('admin.ops.alertRules.validation.minSampleCountRequiredForRate'))
+      if (minFinalFailures != null && minSampleCount != null && minFinalFailures > minSampleCount) {
+        errors.push(t('admin.ops.alertRules.validation.minFinalFailuresGtSample'))
+      }
     }
   }
 
@@ -723,6 +798,9 @@ function cancelDelete() {
                 {{ t('admin.ops.alertRules.table.window') }}
               </th>
               <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                {{ t('admin.ops.alertRules.table.metric') }}
+              </th>
+              <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                 {{ t('admin.ops.alertRules.table.categories') }}
               </th>
               <th class="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -799,6 +877,9 @@ function cancelDelete() {
                 </span>
               </td>
               <td class="whitespace-nowrap px-4 py-3 text-xs text-gray-700 dark:text-gray-200">1m</td>
+              <td class="whitespace-nowrap px-4 py-3 text-xs text-gray-700 dark:text-gray-200">
+                {{ formatMetricType(row) }}
+              </td>
               <td class="px-4 py-3 text-xs text-gray-700 dark:text-gray-200">
                 <div v-if="formatCategories(row).length > 0" class="flex max-w-[220px] flex-wrap gap-1">
                   <span
@@ -900,7 +981,12 @@ function cancelDelete() {
             <Select v-model="draft.trigger_level" :options="severityOptions" :disabled="isReadOnlyLegacy" />
           </div>
 
-          <div class="md:col-span-2">
+          <div>
+            <label class="input-label">{{ t('admin.ops.alertRules.form.metricType') }}</label>
+            <Select v-model="draft.metric_type" :options="metricTypeOptions" :disabled="isReadOnlyLegacy" />
+          </div>
+
+          <div v-if="normalizeAlertMetricType(draft.metric_type) === 'compound_rule'" class="md:col-span-2">
             <label class="input-label">{{ t('admin.ops.alertRules.form.errorCategories') }}</label>
             <div class="rounded-2xl border border-gray-200 p-3 dark:border-dark-700">
               <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
@@ -922,19 +1008,24 @@ function cancelDelete() {
             </div>
           </div>
 
-          <div>
+          <div v-if="normalizeAlertMetricType(draft.metric_type) === 'health_score'">
+            <label class="input-label">{{ t('admin.ops.alertRules.form.healthScoreThreshold') }}</label>
+            <input v-model.number="draft.threshold" class="input" type="number" min="1" max="100" step="1" :disabled="isReadOnlyLegacy" />
+          </div>
+
+          <div v-if="normalizeAlertMetricType(draft.metric_type) !== 'health_score'">
             <label class="input-label">{{ t('admin.ops.alertRules.form.minFinalFailures') }}</label>
             <input v-model.number="draft.min_final_failures" class="input" type="number" min="1" max="100000" step="1" :disabled="isReadOnlyLegacy" />
           </div>
 
-          <div>
+          <div v-if="normalizeAlertMetricType(draft.metric_type) !== 'health_score'">
             <label class="input-label">{{ t('admin.ops.alertRules.form.minFailureRate') }}</label>
-            <input v-model.number="draft.min_failure_rate" class="input" type="number" min="0" max="100" step="0.01" :disabled="isReadOnlyLegacy" />
+            <input v-model.number="draft.min_failure_rate" class="input" type="number" min="0" max="100" step="0.01" :disabled="isReadOnlyLegacy || normalizeAlertMetricType(draft.metric_type) === 'final_failures'" />
           </div>
 
-          <div>
+          <div v-if="normalizeAlertMetricType(draft.metric_type) !== 'health_score'">
             <label class="input-label">{{ t('admin.ops.alertRules.form.minSampleCount') }}</label>
-            <input v-model.number="draft.min_sample_count" class="input" type="number" min="1" max="1000000" step="1" :disabled="isReadOnlyLegacy" />
+            <input v-model.number="draft.min_sample_count" class="input" type="number" min="1" max="1000000" step="1" :disabled="isReadOnlyLegacy || normalizeAlertMetricType(draft.metric_type) === 'final_failures'" />
           </div>
 
           <div>
