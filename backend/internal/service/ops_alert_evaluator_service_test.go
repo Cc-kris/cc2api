@@ -191,6 +191,20 @@ func TestComputeRuleMetricNewIndicators(t *testing.T) {
 			wantValue:  0,
 			wantOK:     false,
 		},
+		{
+			name:       "p95_latency_ms reads dashboard duration p95",
+			metricType: "p95_latency_ms",
+			groupID:    nil,
+			wantValue:  2500,
+			wantOK:     true,
+		},
+		{
+			name:       "p99_latency_ms reads dashboard duration p99",
+			metricType: "p99_latency_ms",
+			groupID:    nil,
+			wantValue:  5000,
+			wantOK:     true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -200,6 +214,16 @@ func TestComputeRuleMetricNewIndicators(t *testing.T) {
 
 			rule := &OpsAlertRule{
 				MetricType: tt.metricType,
+			}
+			if tt.metricType == "p95_latency_ms" || tt.metricType == "p99_latency_ms" {
+				p95 := 2500
+				p99 := 5000
+				svc.opsRepo = &stubOpsRepo{overview: &OpsDashboardOverview{
+					Duration: OpsPercentiles{
+						P95: &p95,
+						P99: &p99,
+					},
+				}}
 			}
 			gotValue, gotOK := svc.computeRuleMetric(ctx, rule, nil, start, end, platform, tt.groupID)
 			require.Equal(t, tt.wantOK, gotOK)

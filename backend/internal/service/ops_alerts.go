@@ -99,6 +99,15 @@ func isReadOnlyLegacyAlertRule(rule *OpsAlertRule) bool {
 	return version == "v1" && (state == "migrated" || state == "readonly_legacy")
 }
 
+func isMigratedLegacyAlertRule(rule *OpsAlertRule) bool {
+	if rule == nil {
+		return false
+	}
+	version := strings.ToLower(strings.TrimSpace(rule.RuleVersion))
+	state := strings.ToLower(strings.TrimSpace(rule.MigrationState))
+	return version == "v1" && state == "migrated"
+}
+
 func (s *OpsService) validateAlertRuleForSave(ctx context.Context, rule *OpsAlertRule, currentID int64) error {
 	if rule == nil {
 		return infraerrors.BadRequest("INVALID_RULE", "invalid rule")

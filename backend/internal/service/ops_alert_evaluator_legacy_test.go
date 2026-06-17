@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestOpsAlertEvaluatorSkipsMigratedLegacyPercentRules(t *testing.T) {
+func TestOpsAlertEvaluatorSkipsOnlyMigratedLegacyPercentRules(t *testing.T) {
 	var createdRuleIDs []int64
 	repo := &opsRepoMock{
 		ListAlertRulesFn: func(ctx context.Context) ([]*OpsAlertRule, error) {
@@ -38,21 +38,23 @@ func TestOpsAlertEvaluatorSkipsMigratedLegacyPercentRules(t *testing.T) {
 				},
 				{
 					ID:             3,
-					Name:           "只读旧错误率规则",
+					Name:           "只读旧延迟规则",
 					Enabled:        true,
 					RuleVersion:    "v1",
 					MigrationState: "readonly_legacy",
-					MetricType:     "error_rate",
-					Operator:       ">=",
-					Threshold:      1,
+					MetricType:     "p99_latency_ms",
+					Operator:       ">",
+					Threshold:      3000,
 					WindowMinutes:  1,
 				},
 			}, nil
 		},
 		GetDashboardOverviewFn: func(ctx context.Context, filter *OpsDashboardFilter) (*OpsDashboardOverview, error) {
+			p99 := 5000
 			return &OpsDashboardOverview{
 				RequestCountSLA: 100,
 				ErrorRate:       0.5,
+				Duration:        OpsPercentiles{P99: &p99},
 			}, nil
 		},
 		CreateAlertEventFn: func(ctx context.Context, event *OpsAlertEvent) (*OpsAlertEvent, error) {
@@ -65,7 +67,7 @@ func TestOpsAlertEvaluatorSkipsMigratedLegacyPercentRules(t *testing.T) {
 
 	svc.evaluateOnce(time.Minute)
 
-	require.Equal(t, []int64{2}, createdRuleIDs)
+	require.Equal(t, []int64{2, 3}, createdRuleIDs)
 }
 
 func TestOpsAlertEvaluatorMergesRepeatedEventKeyWithinSilenceWindow(t *testing.T) {

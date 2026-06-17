@@ -213,7 +213,7 @@ func (s *OpsAlertEvaluatorService) evaluateOnce(interval time.Duration) {
 		if rule == nil || rule.ID <= 0 {
 			continue
 		}
-		if isReadOnlyLegacyAlertRule(rule) {
+		if isMigratedLegacyAlertRule(rule) {
 			s.resetRuleState(rule.ID, now)
 			continue
 		}
@@ -632,6 +632,16 @@ func (s *OpsAlertEvaluatorService) computeRuleMetric(
 			return 0, false
 		}
 		return overview.UpstreamErrorRate * 100, true
+	case "p95_latency_ms":
+		if overview.Duration.P95 == nil {
+			return 0, false
+		}
+		return float64(*overview.Duration.P95), true
+	case "p99_latency_ms":
+		if overview.Duration.P99 == nil {
+			return 0, false
+		}
+		return float64(*overview.Duration.P99), true
 	default:
 		return 0, false
 	}
