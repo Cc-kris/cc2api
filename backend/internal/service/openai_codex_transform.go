@@ -705,6 +705,13 @@ func normalizeOpenAIResponsesImageGenerationToolsInBody(body []byte, mappedImage
 	return updated, true, nil
 }
 
+func applyOpenAIResponsesImageGenerationBridge(reqBody map[string]any, requestedModel string) bool {
+	if !shouldInjectCodexImageGenerationTool(reqBody, requestedModel) {
+		return false
+	}
+	return ensureOpenAIResponsesImageGenerationTool(reqBody)
+}
+
 // NormalizeOpenAIWSImageGenerationChannelMapping applies a channel-level image
 // model mapping to the image_generation tool while preserving the top-level
 // Responses model. WebSocket/Codex requests backed by ChatGPT accounts require

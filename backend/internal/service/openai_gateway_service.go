@@ -2277,7 +2277,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		markPatchSet("instructions", "You are a helpful coding assistant.")
 	}
 
-	if codexImageGenerationBridgeEnabled && shouldInjectCodexImageGenerationTool(reqBody, reqModel) && ensureOpenAIResponsesImageGenerationTool(reqBody) {
+	if codexImageGenerationBridgeEnabled && applyOpenAIResponsesImageGenerationBridge(reqBody, reqModel) {
 		bodyModified = true
 		disablePatch()
 		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Injected /responses image_generation tool for Codex bridge")
@@ -3047,6 +3047,13 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		reqStream = gjson.GetBytes(body, "stream").Bool()
 	}
 
+	if bridgedBody, bridged, bridgeErr := s.applyCodexImageGenerationBridgeToPassthroughBody(ctx, c, account, body, reqModel); bridgeErr != nil {
+		return nil, bridgeErr
+	} else if bridged {
+		body = bridgedBody
+		reqStream = gjson.GetBytes(body, "stream").Bool()
+	}
+
 	sanitizedBody, sanitized, err := sanitizeEmptyBase64InputImagesInOpenAIBody(body)
 	if err != nil {
 		return nil, err
@@ -3250,6 +3257,85 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		forwardResult.BillingModel = imageBillingModel
 	}
 	return forwardResult, nil
+}
+
+func (s *OpenAIGatewayService) applyCodexImageGenerationBridgeToPassthroughBody(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	body []byte,
+	reqModel string,
+) ([]byte, bool, error) {
+	if s == nil || account == nil || len(body) == 0 || !gjson.ValidBytes(body) {
+		return body, false, nil
+	}
+	isCodexCLI := false
+	if c != nil {
+		isCodexCLI = openai.IsCodexOfficialClientByHeaders(c.GetHeader("User-Agent"), c.GetHeader("originator"))
+	}
+	if !isCodexCLI && s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
+		isCodexCLI = true
+	}
+	if !isCodexCLI {
+		return body, false, nil
+	}
+
+	apiKey := getAPIKeyFromContext(c)
+	if !GroupAllowsImageGeneration(apiKeyGroup(apiKey)) {
+		return body, false, nil
+	}
+	if !s.isCodexImageGenerationBridgeEnabled(ctx, account, apiKey) {
+		return body, false, nil
+	}
+
+	reqBody := map[string]any{}
+	if err := json.Unmarshal(body, &reqBody); err != nil {
+		return body, false, err
+	}
+	modified := false
+	if applyOpenAIResponsesImageGenerationBridge(reqBody, reqModel) {
+		modified = true
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Injected /responses image_generation tool for Codex bridge")
+	}
+	if normalizeOpenAIResponsesImageGenerationTools(reqBody) {
+		modified = true
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Normalized /responses image_generation tool payload")
+	}
+	if applyCodexImageGenerationBridgeInstructions(reqBody) {
+		modified = true
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Added Codex image_generation bridge instructions")
+	}
+
+	upstreamModel := strings.TrimSpace(firstNonEmptyString(reqBody["model"]))
+	if normalizeOpenAIResponsesImageGenerationToolsForModel(reqBody, upstreamModel) {
+		modified = true
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Normalized /responses image_generation tool model")
+	}
+	if normalizeOpenAIResponsesImageOnlyModel(reqBody) {
+		modified = true
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Normalized /responses image-only model request inbound_model=%s image_model=%s upstream_model=%s", reqModel, upstreamModel, firstNonEmptyString(reqBody["model"]))
+	}
+	if err := validateOpenAIResponsesImageModel(reqBody, firstNonEmptyString(reqBody["model"])); err != nil {
+		setOpsUpstreamError(c, http.StatusBadRequest, err.Error(), "")
+		if c != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": gin.H{
+					"type":    "invalid_request_error",
+					"message": err.Error(),
+					"param":   "model",
+				},
+			})
+		}
+		return body, false, err
+	}
+	if !modified {
+		return body, false, nil
+	}
+	updated, err := json.Marshal(reqBody)
+	if err != nil {
+		return body, false, err
+	}
+	return updated, true, nil
 }
 
 func logOpenAIPassthroughInstructionsRejected(
