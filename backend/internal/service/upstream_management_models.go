@@ -2,33 +2,41 @@ package service
 
 import "time"
 
+type UpstreamModelRate struct {
+	ID             int64   `json:"id"`
+	Model          string  `json:"model"`
+	RateMultiplier float64 `json:"rate_multiplier"`
+}
+
 type Upstream struct {
-	ID                  int64      `json:"id"`
-	BaseURL             string     `json:"base_url"`
-	NormalizedBaseURL   string     `json:"normalized_base_url"`
-	Name                string     `json:"name"`
-	RateMultiplier      float64    `json:"rate_multiplier"`
-	InitialBalance      float64    `json:"initial_balance"`
-	ConsumedBalance     float64    `json:"consumed_balance"`
-	CurrentBalance      float64    `json:"current_balance"`
-	AccountCount        int64      `json:"account_count"`
-	BalanceAlertEnabled bool       `json:"balance_alert_enabled"`
-	AlertBalance        *float64   `json:"alert_balance,omitempty"`
-	AlertEmailSentAt    *time.Time `json:"alert_email_sent_at,omitempty"`
-	AlertLastBalance    *float64   `json:"alert_last_balance,omitempty"`
-	Notes               string     `json:"notes"`
-	CreatedAt           time.Time  `json:"created_at"`
-	UpdatedAt           time.Time  `json:"updated_at"`
+	ID                  int64               `json:"id"`
+	BaseURL             string              `json:"base_url"`
+	NormalizedBaseURL   string              `json:"normalized_base_url"`
+	Name                string              `json:"name"`
+	RateMultiplier      float64             `json:"rate_multiplier"`
+	ModelRates          []UpstreamModelRate `json:"model_rates"`
+	InitialBalance      float64             `json:"initial_balance"`
+	ConsumedBalance     float64             `json:"consumed_balance"`
+	CurrentBalance      float64             `json:"current_balance"`
+	AccountCount        int64               `json:"account_count"`
+	BalanceAlertEnabled bool                `json:"balance_alert_enabled"`
+	AlertBalance        *float64            `json:"alert_balance,omitempty"`
+	AlertEmailSentAt    *time.Time          `json:"alert_email_sent_at,omitempty"`
+	AlertLastBalance    *float64            `json:"alert_last_balance,omitempty"`
+	Notes               string              `json:"notes"`
+	CreatedAt           time.Time           `json:"created_at"`
+	UpdatedAt           time.Time           `json:"updated_at"`
 }
 
 type UpstreamInput struct {
-	BaseURL             string   `json:"base_url"`
-	Name                string   `json:"name"`
-	RateMultiplier      float64  `json:"rate_multiplier"`
-	InitialBalance      float64  `json:"initial_balance"`
-	BalanceAlertEnabled bool     `json:"balance_alert_enabled"`
-	AlertBalance        *float64 `json:"alert_balance"`
-	Notes               string   `json:"notes"`
+	BaseURL             string              `json:"base_url"`
+	Name                string              `json:"name"`
+	RateMultiplier      float64             `json:"rate_multiplier"`
+	ModelRates          []UpstreamModelRate `json:"model_rates"`
+	InitialBalance      float64             `json:"initial_balance"`
+	BalanceAlertEnabled bool                `json:"balance_alert_enabled"`
+	AlertBalance        *float64            `json:"alert_balance"`
+	Notes               string              `json:"notes"`
 }
 
 type UpstreamStatsSummary struct {

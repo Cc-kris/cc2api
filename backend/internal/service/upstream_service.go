@@ -158,10 +158,35 @@ func normalizeUpstreamInput(input *UpstreamInput) (*UpstreamInput, error) {
 	if input.AlertBalance != nil && *input.AlertBalance < 0 {
 		return nil, errors.New("alert_balance must be >= 0")
 	}
+	modelRates := make([]UpstreamModelRate, 0, len(input.ModelRates))
+	seenModels := make(map[string]struct{}, len(input.ModelRates))
+	for _, row := range input.ModelRates {
+		model := strings.TrimSpace(row.Model)
+		if model == "" {
+			continue
+		}
+		if len(model) > 120 {
+			return nil, errors.New("model must not exceed 120 characters")
+		}
+		key := strings.ToLower(model)
+		if _, ok := seenModels[key]; ok {
+			return nil, errors.New("duplicate model rate")
+		}
+		seenModels[key] = struct{}{}
+		modelRate := row.RateMultiplier
+		if modelRate == 0 {
+			modelRate = 1
+		}
+		if modelRate < 0 || modelRate > 1000000 {
+			return nil, errors.New("model rate_multiplier must be between 0 and 1000000")
+		}
+		modelRates = append(modelRates, UpstreamModelRate{ID: row.ID, Model: model, RateMultiplier: modelRate})
+	}
 	return &UpstreamInput{
 		BaseURL:             baseURL,
 		Name:                name,
 		RateMultiplier:      rate,
+		ModelRates:          modelRates,
 		InitialBalance:      input.InitialBalance,
 		BalanceAlertEnabled: input.BalanceAlertEnabled,
 		AlertBalance:        input.AlertBalance,
