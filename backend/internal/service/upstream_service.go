@@ -158,35 +158,37 @@ func normalizeUpstreamInput(input *UpstreamInput) (*UpstreamInput, error) {
 	if input.AlertBalance != nil && *input.AlertBalance < 0 {
 		return nil, errors.New("alert_balance must be >= 0")
 	}
-	modelRates := make([]UpstreamModelRate, 0, len(input.ModelRates))
-	seenModels := make(map[string]struct{}, len(input.ModelRates))
-	for _, row := range input.ModelRates {
-		model := strings.TrimSpace(row.Model)
-		if model == "" {
+	platformRates := make([]UpstreamPlatformRate, 0, len(input.PlatformRates))
+	seenPlatforms := make(map[string]struct{}, len(input.PlatformRates))
+	for _, row := range input.PlatformRates {
+		platform := strings.ToLower(strings.TrimSpace(row.Platform))
+		if platform == "" {
 			continue
 		}
-		if len(model) > 120 {
-			return nil, errors.New("model must not exceed 120 characters")
+		if len(platform) > 50 {
+			return nil, errors.New("platform must not exceed 50 characters")
 		}
-		key := strings.ToLower(model)
-		if _, ok := seenModels[key]; ok {
-			return nil, errors.New("duplicate model rate")
+		if _, ok := seenPlatforms[platform]; ok {
+			return nil, errors.New("duplicate platform rate")
 		}
-		seenModels[key] = struct{}{}
-		modelRate := row.RateMultiplier
-		if modelRate == 0 {
-			modelRate = 1
+		seenPlatforms[platform] = struct{}{}
+		platformRate := row.RateMultiplier
+		if platformRate == 0 {
+			platformRate = 1
 		}
-		if modelRate < 0 || modelRate > 1000000 {
-			return nil, errors.New("model rate_multiplier must be between 0 and 1000000")
+		if platformRate < 0 || platformRate > 1000000 {
+			return nil, errors.New("platform rate_multiplier must be between 0 and 1000000")
 		}
-		modelRates = append(modelRates, UpstreamModelRate{ID: row.ID, Model: model, RateMultiplier: modelRate})
+		if row.ImageUnitPrice < 0 || row.ImageUnitPrice > 1000000 {
+			return nil, errors.New("image_unit_price must be between 0 and 1000000")
+		}
+		platformRates = append(platformRates, UpstreamPlatformRate{ID: row.ID, Platform: platform, RateMultiplier: platformRate, ImageUnitPrice: row.ImageUnitPrice})
 	}
 	return &UpstreamInput{
 		BaseURL:             baseURL,
 		Name:                name,
 		RateMultiplier:      rate,
-		ModelRates:          modelRates,
+		PlatformRates:       platformRates,
 		InitialBalance:      input.InitialBalance,
 		BalanceAlertEnabled: input.BalanceAlertEnabled,
 		AlertBalance:        input.AlertBalance,

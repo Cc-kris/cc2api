@@ -27,7 +27,7 @@
               <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">名称</th>
               <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Base URL</th>
               <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">默认倍率</th>
-              <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">模型倍率</th>
+              <th class="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">平台计费</th>
               <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">余额</th>
               <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">已消耗</th>
               <th class="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">账号数</th>
@@ -41,8 +41,10 @@
               <td class="max-w-md truncate px-4 py-3 text-sm text-gray-600 dark:text-gray-300" :title="item.base_url">{{ item.base_url }}</td>
               <td class="px-4 py-3 text-right text-sm">{{ item.rate_multiplier }}</td>
               <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-                <div v-if="item.model_rates?.length" class="flex max-w-xs flex-wrap gap-1">
-                  <span v-for="rate in item.model_rates" :key="`${item.id}-${rate.model}`" class="rounded bg-gray-100 px-2 py-0.5 text-xs dark:bg-dark-700">{{ rate.model }} × {{ rate.rate_multiplier }}</span>
+                <div v-if="item.platform_rates?.length" class="flex max-w-sm flex-wrap gap-1">
+                  <span v-for="rate in item.platform_rates" :key="`${item.id}-${rate.platform}`" class="rounded bg-gray-100 px-2 py-0.5 text-xs dark:bg-dark-700">
+                    {{ rate.platform }} × {{ rate.rate_multiplier }}<span v-if="rate.image_unit_price > 0">；图片 {{ money(rate.image_unit_price) }}/次</span>
+                  </span>
                 </div>
                 <span v-else class="text-gray-400">使用默认倍率</span>
               </td>
@@ -58,14 +60,15 @@
       </div>
 
       <div v-if="editing" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-        <form class="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-dark-800" @submit.prevent="save">
+        <form class="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-dark-800" @submit.prevent="save">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ editing.id ? '编辑上游' : '新建上游' }}</h2>
+          <p class="mt-1 text-xs text-gray-500"><span class="text-red-500">*</span> 为必填项。</p>
           <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <label class="block text-sm">名称<input v-model="editing.name" class="input mt-1 w-full" required /></label>
-            <label class="block text-sm">默认倍率<input v-model.number="editing.rate_multiplier" type="number" min="0" step="0.0001" class="input mt-1 w-full" required /></label>
-            <label class="block text-sm md:col-span-2">Base URL<input v-model="editing.base_url" class="input mt-1 w-full" required /></label>
-            <label class="block text-sm">余额<input v-model.number="editing.initial_balance" type="number" min="0" step="0.0001" class="input mt-1 w-full" /></label>
-            <label class="block text-sm">告警余额<input v-model.number="editing.alert_balance" type="number" min="0" step="0.0001" class="input mt-1 w-full" /></label>
+            <label class="block text-sm">名称 <span class="text-red-500">*</span><input v-model="editing.name" class="input mt-1 w-full" required /></label>
+            <label class="block text-sm">默认倍率 <span class="text-red-500">*</span><input v-model.number="editing.rate_multiplier" type="number" min="0" step="0.0001" class="input mt-1 w-full" required /></label>
+            <label class="block text-sm md:col-span-2">Base URL <span class="text-red-500">*</span><input v-model="editing.base_url" class="input mt-1 w-full" required /></label>
+            <label class="block text-sm">余额 <span class="text-red-500">*</span><input v-model.number="editing.initial_balance" type="number" min="0" step="0.0001" class="input mt-1 w-full" required /></label>
+            <label class="block text-sm">告警余额 <span v-if="editing.balance_alert_enabled" class="text-red-500">*</span><input v-model.number="editing.alert_balance" type="number" min="0" step="0.0001" class="input mt-1 w-full" :required="editing.balance_alert_enabled" /></label>
             <label class="flex items-center gap-2 text-sm"><input v-model="editing.balance_alert_enabled" type="checkbox" />开启余额不足通知</label>
             <label class="block text-sm md:col-span-2">备注<textarea v-model="editing.notes" class="input mt-1 w-full" rows="3"></textarea></label>
           </div>
@@ -73,18 +76,22 @@
           <div class="mt-5 rounded-lg border border-gray-200 p-4 dark:border-dark-700">
             <div class="flex items-center justify-between gap-3">
               <div>
-                <div class="font-medium text-gray-900 dark:text-white">按模型设置倍率</div>
-                <p class="mt-1 text-xs text-gray-500">命中模型时使用这里的倍率；未命中时使用上面的默认倍率。</p>
+                <div class="font-medium text-gray-900 dark:text-white">按平台设置计费</div>
+                <p class="mt-1 text-xs text-gray-500">Token 请求按平台倍率计算；图片按次金额填写后，图片请求按固定金额/次计算。</p>
               </div>
-              <button type="button" class="btn btn-secondary" @click="addModelRate">添加模型倍率</button>
+              <button type="button" class="btn btn-secondary" @click="addPlatformRate">添加平台计费</button>
             </div>
+            <datalist id="upstream-platform-options">
+              <option v-for="platform in platformOptions" :key="platform" :value="platform" />
+            </datalist>
             <div class="mt-3 space-y-2">
-              <div v-for="(rate, index) in editing.model_rates" :key="index" class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_160px_auto]">
-                <input v-model="rate.model" class="input w-full" placeholder="模型，例如 claude-sonnet-4-5" />
-                <input v-model.number="rate.rate_multiplier" type="number" min="0" step="0.0001" class="input w-full" placeholder="倍率" />
-                <button type="button" class="btn btn-secondary text-red-600" @click="removeModelRate(index)">删除</button>
+              <div v-for="(rate, index) in editing.platform_rates" :key="index" class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_160px_180px_auto]">
+                <label class="text-xs text-gray-500">平台 <span class="text-red-500">*</span><input v-model="rate.platform" list="upstream-platform-options" class="input mt-1 w-full" placeholder="例如 anthropic / openai" required /></label>
+                <label class="text-xs text-gray-500">Token 倍率 <span class="text-red-500">*</span><input v-model.number="rate.rate_multiplier" type="number" min="0" step="0.0001" class="input mt-1 w-full" placeholder="倍率" required /></label>
+                <label class="text-xs text-gray-500">图片按次金额<input v-model.number="rate.image_unit_price" type="number" min="0" step="0.0001" class="input mt-1 w-full" placeholder="例如 0.08" /></label>
+                <div class="flex items-end"><button type="button" class="btn btn-secondary text-red-600" @click="removePlatformRate(index)">删除</button></div>
               </div>
-              <div v-if="editing.model_rates.length === 0" class="rounded bg-gray-50 p-3 text-sm text-gray-500 dark:bg-dark-700/50">暂无模型专属倍率。</div>
+              <div v-if="editing.platform_rates.length === 0" class="rounded bg-gray-50 p-3 text-sm text-gray-500 dark:bg-dark-700/50">暂无平台专属计费，全部使用默认倍率。</div>
             </div>
           </div>
 
@@ -108,6 +115,7 @@ const loading = ref(false)
 const saving = ref(false)
 const syncing = ref(false)
 const editing = ref<(UpstreamInput & { id?: number }) | null>(null)
+const platformOptions = ['anthropic', 'openai', 'gemini', 'azure-openai', 'bedrock', 'vertex', 'xai', 'deepseek', 'openrouter', 'siliconflow']
 
 const totalCurrentBalance = computed(() => items.value.reduce((sum, item) => sum + Number(item.current_balance || 0), 0))
 const totalConsumedBalance = computed(() => items.value.reduce((sum, item) => sum + Number(item.consumed_balance || 0), 0))
@@ -115,14 +123,51 @@ const totalAccounts = computed(() => items.value.reduce((sum, item) => sum + Num
 
 function money(value: number) { return Number(value || 0).toFixed(4) }
 function balanceClass(item: Upstream) { return item.balance_alert_enabled && item.alert_balance != null && item.current_balance <= item.alert_balance ? 'text-red-600' : 'text-gray-900 dark:text-white' }
-function toInput(item?: Upstream): UpstreamInput & { id?: number } { return item ? { id: item.id, base_url: item.base_url, name: item.name, rate_multiplier: item.rate_multiplier, model_rates: (item.model_rates || []).map(rate => ({ id: rate.id, model: rate.model, rate_multiplier: rate.rate_multiplier })), initial_balance: item.initial_balance, balance_alert_enabled: item.balance_alert_enabled, alert_balance: item.alert_balance ?? null, notes: item.notes || '' } : { base_url: '', name: '', rate_multiplier: 1, model_rates: [], initial_balance: 0, balance_alert_enabled: false, alert_balance: null, notes: '' } }
+function errorMessage(e: unknown, fallback: string) { return e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message || fallback) : fallback }
+function toInput(item?: Upstream): UpstreamInput & { id?: number } { return item ? { id: item.id, base_url: item.base_url, name: item.name, rate_multiplier: item.rate_multiplier, platform_rates: (item.platform_rates || []).map(rate => ({ id: rate.id, platform: rate.platform, rate_multiplier: rate.rate_multiplier, image_unit_price: rate.image_unit_price || 0 })), initial_balance: item.initial_balance, balance_alert_enabled: item.balance_alert_enabled, alert_balance: item.alert_balance ?? null, notes: item.notes || '' } : { base_url: '', name: '', rate_multiplier: 1, platform_rates: [], initial_balance: 0, balance_alert_enabled: false, alert_balance: null, notes: '' } }
 function openCreate() { editing.value = toInput() }
 function openEdit(item: Upstream) { editing.value = toInput(item) }
-function addModelRate() { editing.value?.model_rates.push({ model: '', rate_multiplier: 1 }) }
-function removeModelRate(index: number) { editing.value?.model_rates.splice(index, 1) }
+function addPlatformRate() {
+  if (!editing.value) return
+  const used = new Set(editing.value.platform_rates.map(rate => rate.platform.trim().toLowerCase()).filter(Boolean))
+  const platform = platformOptions.find(value => !used.has(value)) || ''
+  editing.value.platform_rates.push({ platform, rate_multiplier: 1, image_unit_price: 0 })
+}
+function removePlatformRate(index: number) { editing.value?.platform_rates.splice(index, 1) }
 async function load() { loading.value = true; try { items.value = await adminAPI.upstreams.list() } finally { loading.value = false } }
-async function save() { if (!editing.value) return; saving.value = true; try { const { id, ...payload } = editing.value; payload.model_rates = payload.model_rates.filter(rate => rate.model.trim()); if (id) await adminAPI.upstreams.update(id, payload); else await adminAPI.upstreams.create(payload); editing.value = null; await load(); appStore.showSuccess('保存成功') } catch (e: unknown) { appStore.showError(e instanceof Error ? e.message : '保存失败') } finally { saving.value = false } }
-async function syncAccounts() { syncing.value = true; try { const res = await adminAPI.upstreams.syncFromAccounts(); await load(); appStore.showSuccess(`已添加 ${res.created} 个上游`) } catch (e: unknown) { appStore.showError(e instanceof Error ? e.message : '同步失败') } finally { syncing.value = false } }
-async function remove(item: Upstream) { if (!window.confirm(`确认删除上游 ${item.name}？`)) return; await adminAPI.upstreams.deleteUpstream(item.id); await load() }
+async function save() {
+  if (!editing.value) return
+  if (editing.value.balance_alert_enabled && (editing.value.alert_balance == null || Number.isNaN(Number(editing.value.alert_balance)))) {
+    appStore.showError('开启余额不足通知时，告警余额必填')
+    return
+  }
+  saving.value = true
+  try {
+    const { id, ...payload } = editing.value
+    payload.platform_rates = payload.platform_rates
+      .map(rate => ({ ...rate, platform: rate.platform.trim().toLowerCase(), image_unit_price: Number(rate.image_unit_price || 0) }))
+      .filter(rate => rate.platform)
+    if (id) await adminAPI.upstreams.update(id, payload)
+    else await adminAPI.upstreams.create(payload)
+    editing.value = null
+    await load()
+    appStore.showSuccess('保存成功')
+  } catch (e: unknown) {
+    appStore.showError(errorMessage(e, '保存失败'))
+  } finally {
+    saving.value = false
+  }
+}
+async function syncAccounts() { syncing.value = true; try { const res = await adminAPI.upstreams.syncFromAccounts(); await load(); appStore.showSuccess(`已添加 ${res.created} 个上游`) } catch (e: unknown) { appStore.showError(errorMessage(e, '同步失败')) } finally { syncing.value = false } }
+async function remove(item: Upstream) {
+  if (!window.confirm(`确认删除上游 ${item.name}？`)) return
+  try {
+    await adminAPI.upstreams.deleteUpstream(item.id)
+    await load()
+    appStore.showSuccess('删除成功')
+  } catch (e: unknown) {
+    appStore.showError(errorMessage(e, '删除失败'))
+  }
+}
 onMounted(load)
 </script>

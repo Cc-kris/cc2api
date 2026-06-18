@@ -32,7 +32,23 @@ const endDate = ref(today)
 const granularity = ref<'hour' | 'day' | 'month'>('day')
 const stats = ref<FinanceStatsResponse | null>(null)
 const summary = computed<FinanceStatsSummary>(() => stats.value?.summary || { user_recharge_total: 0, upstream_recharge_total: 0, user_consumed_amount: 0, upstream_consumed_amount: 0, consumed_profit: 0, consumed_profit_rate: 0 })
-const chartOptions: ChartOptions<'line'> = { responsive: true, maintainAspectRatio: false, animation: false, resizeDelay: 200 }
+const chartOptions: ChartOptions<'line'> = {
+  responsive: true,
+  maintainAspectRatio: false,
+  animation: false,
+  resizeDelay: 200,
+  interaction: { mode: 'index', intersect: false },
+  plugins: {
+    tooltip: {
+      mode: 'index',
+      intersect: false,
+      callbacks: {
+        label: context => `${context.dataset.label || ''}: ${money(Number(context.parsed.y || 0))}`
+      }
+    }
+  },
+  scales: { y: { beginAtZero: true } }
+}
 const lineData = computed(() => {
   const trend = Array.isArray(stats.value?.trend) ? stats.value.trend : []
   if (!trend.length) return null
@@ -53,7 +69,9 @@ function safeNumber(v: unknown) {
 function money(v: number) { return safeNumber(v).toFixed(4) }
 function formatBucket(v: string) {
   const d = new Date(v)
-  return Number.isNaN(d.getTime()) ? String(v || '') : d.toLocaleString()
+  if (Number.isNaN(d.getTime())) return String(v || '')
+  if (granularity.value === 'month') return d.toLocaleDateString([], { year: 'numeric', month: '2-digit' })
+  return d.toLocaleDateString()
 }
 const Stat = defineComponent({ props: { title: String, value: [String, Number] }, setup: p => () => h('div', { class: 'card p-4' }, [h('div', { class: 'text-sm text-gray-500' }, p.title), h('div', { class: 'mt-2 text-xl font-semibold text-gray-900 dark:text-white' }, String(p.value ?? ''))]) })
 onMounted(load)

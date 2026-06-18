@@ -16,7 +16,7 @@ type upstreamRepository struct{ db *sql.DB }
 func NewUpstreamRepository(db *sql.DB) service.UpstreamRepository { return &upstreamRepository{db: db} }
 
 func (r *upstreamRepository) ListUpstreams(ctx context.Context) ([]*service.Upstream, error) {
-	rows, err := r.db.QueryContext(ctx, upstreamListSQL+" ORDER BY u.id")
+	rows, err := r.db.QueryContext(ctx, upstreamListSQL+" WHERE u.deleted_at IS NULL ORDER BY u.id")
 	if err != nil {
 		return nil, err
 	}
@@ -25,7 +25,7 @@ func (r *upstreamRepository) ListUpstreams(ctx context.Context) ([]*service.Upst
 	if err != nil {
 		return nil, err
 	}
-	if err := r.attachModelRates(ctx, items); err != nil {
+	if err := r.attachPlatformRates(ctx, items); err != nil {
 		return nil, err
 	}
 	return items, nil
@@ -44,7 +44,7 @@ func (r *upstreamRepository) GetUpstream(ctx context.Context, id int64) (*servic
 	if len(items) == 0 {
 		return nil, fmt.Errorf("upstream not found")
 	}
-	if err := r.attachModelRates(ctx, items); err != nil {
+	if err := r.attachPlatformRates(ctx, items); err != nil {
 		return nil, err
 	}
 	return items[0], nil
@@ -65,7 +65,7 @@ RETURNING id`, input.BaseURL, service.NormalizeUpstreamBaseURLForRepo(input.Base
 	if err != nil {
 		return nil, err
 	}
-	if err := replaceUpstreamModelRates(ctx, tx, id, input.ModelRates); err != nil {
+	if err := replaceUpstreamPlatformRates(ctx, tx, id, input.PlatformRates); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -93,7 +93,7 @@ WHERE id=$1 AND deleted_at IS NULL`, id, input.BaseURL, service.NormalizeUpstrea
 	if n, _ := res.RowsAffected(); n == 0 {
 		return nil, fmt.Errorf("upstream not found")
 	}
-	if err := replaceUpstreamModelRates(ctx, tx, id, input.ModelRates); err != nil {
+	if err := replaceUpstreamPlatformRates(ctx, tx, id, input.PlatformRates); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -169,12 +169,12 @@ WITH user_recharge AS (
   SELECT COALESCE(SUM(initial_balance),0)::float8 AS amount FROM upstreams WHERE deleted_at IS NULL
 ), consumed AS (
   SELECT COALESCE(SUM(ul.actual_cost),0)::float8 AS user_cost,
-         COALESCE(SUM(ul.actual_cost * COALESCE(umr.rate_multiplier, up.rate_multiplier, 1)),0)::float8 AS upstream_cost
+         COALESCE(SUM(`+upstreamCostExpr("up")+`),0)::float8 AS upstream_cost
   FROM usage_logs ul
   JOIN users u ON u.id=ul.user_id AND u.role <> $1 AND u.deleted_at IS NULL
   LEFT JOIN accounts a ON a.id=ul.account_id AND a.deleted_at IS NULL
   LEFT JOIN upstreams up ON up.normalized_base_url = normalized_account_base_url(a.credentials, a.extra, a.platform, a.type) AND up.deleted_at IS NULL
-  LEFT JOIN upstream_model_rates umr ON umr.upstream_id=up.id AND lower(umr.model)=lower(COALESCE(NULLIF(TRIM(ul.upstream_model), ''), NULLIF(TRIM(ul.requested_model), ''), NULLIF(TRIM(ul.model), '')))
+  LEFT JOIN upstream_platform_rates upr ON upr.upstream_id=up.id AND lower(upr.platform)=lower(a.platform)
 )
 SELECT user_recharge.amount, upstream_recharge.amount, consumed.user_cost, consumed.upstream_cost
 FROM user_recharge, upstream_recharge, consumed`, service.RoleAdmin, service.StatusUsed, service.RedeemTypeBalance, service.AdjustmentTypeAdminBalance).Scan(&summary.UserRechargeTotal, &summary.UpstreamRechargeTotal, &summary.UserConsumedAmount, &summary.UpstreamConsumedAmount)
@@ -215,7 +215,7 @@ func (r *upstreamRepository) ResetBalanceAlert(ctx context.Context, id int64) er
 	return err
 }
 
-const upstreamListSQL = `
+var upstreamListSQL = `
 SELECT u.id, u.base_url, u.normalized_base_url, u.name, u.rate_multiplier::float8, u.initial_balance::float8,
        COALESCE(consumed.amount,0)::float8 AS consumed_balance,
        (u.initial_balance - COALESCE(consumed.amount,0))::float8 AS current_balance,
@@ -228,11 +228,11 @@ LEFT JOIN LATERAL (
   WHERE a.deleted_at IS NULL AND normalized_account_base_url(a.credentials, a.extra, a.platform, a.type) = u.normalized_base_url
 ) accounts ON TRUE
 LEFT JOIN LATERAL (
-  SELECT COALESCE(SUM(ul.actual_cost * COALESCE(umr.rate_multiplier, u.rate_multiplier, 1)),0)::float8 AS amount
+  SELECT COALESCE(SUM(` + upstreamCostExpr("u") + `),0)::float8 AS amount
   FROM usage_logs ul
   JOIN users usr ON usr.id=ul.user_id AND usr.role <> 'admin' AND usr.deleted_at IS NULL
   JOIN accounts a ON a.id=ul.account_id AND a.deleted_at IS NULL
-  LEFT JOIN upstream_model_rates umr ON umr.upstream_id=u.id AND lower(umr.model)=lower(COALESCE(NULLIF(TRIM(ul.upstream_model), ''), NULLIF(TRIM(ul.requested_model), ''), NULLIF(TRIM(ul.model), '')))
+  LEFT JOIN upstream_platform_rates upr ON upr.upstream_id=u.id AND lower(upr.platform)=lower(a.platform)
   WHERE normalized_account_base_url(a.credentials, a.extra, a.platform, a.type) = u.normalized_base_url
 ) consumed ON TRUE`
 
@@ -268,22 +268,22 @@ func scanUpstreams(rows *sql.Rows) ([]*service.Upstream, error) {
 	return items, nil
 }
 
-func replaceUpstreamModelRates(ctx context.Context, tx *sql.Tx, upstreamID int64, rates []service.UpstreamModelRate) error {
-	if _, err := tx.ExecContext(ctx, `DELETE FROM upstream_model_rates WHERE upstream_id=$1`, upstreamID); err != nil {
+func replaceUpstreamPlatformRates(ctx context.Context, tx *sql.Tx, upstreamID int64, rates []service.UpstreamPlatformRate) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM upstream_platform_rates WHERE upstream_id=$1`, upstreamID); err != nil {
 		return err
 	}
 	for _, rate := range rates {
-		if strings.TrimSpace(rate.Model) == "" {
+		if strings.TrimSpace(rate.Platform) == "" {
 			continue
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO upstream_model_rates (upstream_id, model, rate_multiplier, created_at, updated_at) VALUES ($1,$2,$3,NOW(),NOW())`, upstreamID, strings.TrimSpace(rate.Model), rate.RateMultiplier); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO upstream_platform_rates (upstream_id, platform, rate_multiplier, image_unit_price, created_at, updated_at) VALUES ($1,$2,$3,$4,NOW(),NOW())`, upstreamID, strings.ToLower(strings.TrimSpace(rate.Platform)), rate.RateMultiplier, rate.ImageUnitPrice); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (r *upstreamRepository) attachModelRates(ctx context.Context, items []*service.Upstream) error {
+func (r *upstreamRepository) attachPlatformRates(ctx context.Context, items []*service.Upstream) error {
 	if len(items) == 0 {
 		return nil
 	}
@@ -294,22 +294,22 @@ func (r *upstreamRepository) attachModelRates(ctx context.Context, items []*serv
 		byID[item.ID] = item
 	}
 	rows, err := r.db.QueryContext(ctx, `
-SELECT upstream_id, id, model, rate_multiplier::float8
-FROM upstream_model_rates
+SELECT upstream_id, id, platform, rate_multiplier::float8, image_unit_price::float8
+FROM upstream_platform_rates
 WHERE upstream_id = ANY($1::bigint[])
-ORDER BY lower(model)`, pqInt64Array(ids))
+ORDER BY lower(platform)`, pqInt64Array(ids))
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var upstreamID int64
-		var rate service.UpstreamModelRate
-		if err := rows.Scan(&upstreamID, &rate.ID, &rate.Model, &rate.RateMultiplier); err != nil {
+		var rate service.UpstreamPlatformRate
+		if err := rows.Scan(&upstreamID, &rate.ID, &rate.Platform, &rate.RateMultiplier, &rate.ImageUnitPrice); err != nil {
 			return err
 		}
 		if item := byID[upstreamID]; item != nil {
-			item.ModelRates = append(item.ModelRates, rate)
+			item.PlatformRates = append(item.PlatformRates, rate)
 		}
 	}
 	return rows.Err()
@@ -354,7 +354,7 @@ GROUP BY token_totals.input_tokens, token_totals.output_tokens, token_totals.cac
 func (r *upstreamRepository) upstreamCostBars(ctx context.Context, start, end time.Time) ([]service.UpstreamCostPoint, error) {
 	rows, err := r.db.QueryContext(ctx, `
 SELECT u.id, u.name,
-       COALESCE(SUM(CASE WHEN usr.id IS NOT NULL THEN ul.actual_cost * COALESCE(umr.rate_multiplier, u.rate_multiplier, 1) ELSE 0 END),0)::float8,
+       COALESCE(SUM(CASE WHEN usr.id IS NOT NULL THEN `+upstreamCostExpr("u")+` ELSE 0 END),0)::float8,
        COALESCE(SUM(CASE WHEN usr.id IS NOT NULL THEN ul.input_tokens ELSE 0 END),0)::bigint,
        COALESCE(SUM(CASE WHEN usr.id IS NOT NULL THEN ul.output_tokens ELSE 0 END),0)::bigint,
        COALESCE(SUM(CASE WHEN usr.id IS NOT NULL THEN ul.cache_creation_tokens + ul.cache_creation_5m_tokens + ul.cache_creation_1h_tokens ELSE 0 END),0)::bigint,
@@ -363,7 +363,7 @@ FROM upstreams u
 LEFT JOIN accounts a ON a.deleted_at IS NULL AND normalized_account_base_url(a.credentials, a.extra, a.platform, a.type) = u.normalized_base_url
 LEFT JOIN usage_logs ul ON ul.account_id=a.id AND ul.created_at >= $1 AND ul.created_at < $2
 LEFT JOIN users usr ON usr.id=ul.user_id AND usr.role <> $3 AND usr.deleted_at IS NULL
-LEFT JOIN upstream_model_rates umr ON umr.upstream_id=u.id AND lower(umr.model)=lower(COALESCE(NULLIF(TRIM(ul.upstream_model), ''), NULLIF(TRIM(ul.requested_model), ''), NULLIF(TRIM(ul.model), '')))
+LEFT JOIN upstream_platform_rates upr ON upr.upstream_id=u.id AND lower(upr.platform)=lower(a.platform)
 WHERE u.deleted_at IS NULL
 GROUP BY u.id, u.name
 ORDER BY 3 DESC, u.id`, start, end, service.RoleAdmin)
@@ -389,17 +389,17 @@ ORDER BY 3 DESC, u.id`, start, end, service.RoleAdmin)
 func (r *upstreamRepository) upstreamTokenTrend(ctx context.Context, start, end time.Time, granularity string) ([]service.UpstreamCostPoint, error) {
 	bucket := bucketExpr(granularity, "ul.created_at")
 	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
-SELECT %s AS bucket, COALESCE(SUM(ul.actual_cost * COALESCE(umr.rate_multiplier, u.rate_multiplier, 1)),0)::float8,
+SELECT %s AS bucket, u.id, u.name, COALESCE(SUM(`+upstreamCostExpr("u")+`),0)::float8,
        COALESCE(SUM(ul.input_tokens),0)::bigint, COALESCE(SUM(ul.output_tokens),0)::bigint,
        COALESCE(SUM(ul.cache_creation_tokens + ul.cache_creation_5m_tokens + ul.cache_creation_1h_tokens),0)::bigint,
        COALESCE(SUM(ul.cache_read_tokens),0)::bigint
 FROM usage_logs ul
 JOIN users usr ON usr.id=ul.user_id AND usr.role <> $3 AND usr.deleted_at IS NULL
-LEFT JOIN accounts a ON a.id=ul.account_id AND a.deleted_at IS NULL
-LEFT JOIN upstreams u ON u.normalized_base_url = normalized_account_base_url(a.credentials, a.extra, a.platform, a.type) AND u.deleted_at IS NULL
-LEFT JOIN upstream_model_rates umr ON umr.upstream_id=u.id AND lower(umr.model)=lower(COALESCE(NULLIF(TRIM(ul.upstream_model), ''), NULLIF(TRIM(ul.requested_model), ''), NULLIF(TRIM(ul.model), '')))
+JOIN accounts a ON a.id=ul.account_id AND a.deleted_at IS NULL
+JOIN upstreams u ON u.normalized_base_url = normalized_account_base_url(a.credentials, a.extra, a.platform, a.type) AND u.deleted_at IS NULL
+LEFT JOIN upstream_platform_rates upr ON upr.upstream_id=u.id AND lower(upr.platform)=lower(a.platform)
 WHERE ul.created_at >= $1 AND ul.created_at < $2
-GROUP BY 1 ORDER BY 1`, bucket), start, end, service.RoleAdmin)
+GROUP BY 1, u.id, u.name ORDER BY 1, u.id`, bucket), start, end, service.RoleAdmin)
 	if err != nil {
 		return nil, err
 	}
@@ -408,9 +408,11 @@ GROUP BY 1 ORDER BY 1`, bucket), start, end, service.RoleAdmin)
 	for rows.Next() {
 		var p service.UpstreamCostPoint
 		var t time.Time
-		if err := rows.Scan(&t, &p.ConsumedBalance, &p.InputTokens, &p.OutputTokens, &p.CacheWriteTokens, &p.CacheReadTokens); err != nil {
+		var id int64
+		if err := rows.Scan(&t, &id, &p.UpstreamName, &p.ConsumedBalance, &p.InputTokens, &p.OutputTokens, &p.CacheWriteTokens, &p.CacheReadTokens); err != nil {
 			return nil, err
 		}
+		p.UpstreamID = &id
 		p.Bucket = t.Format(time.RFC3339)
 		p.TotalTokens = p.InputTokens + p.OutputTokens + p.CacheWriteTokens + p.CacheReadTokens
 		p.ConsumedBalance = service.RoundMoneyForRepo(p.ConsumedBalance)
@@ -424,12 +426,12 @@ func (r *upstreamRepository) financeTrend(ctx context.Context, start, end time.T
 	bucketRedeem := bucketExpr(granularity, "rc.used_at")
 	query := fmt.Sprintf(`
 WITH usage_points AS (
-  SELECT %s AS bucket, COALESCE(SUM(ul.actual_cost),0)::float8 AS user_cost, COALESCE(SUM(ul.actual_cost * COALESCE(umr.rate_multiplier, up.rate_multiplier, 1)),0)::float8 AS upstream_cost
+  SELECT %s AS bucket, COALESCE(SUM(ul.actual_cost),0)::float8 AS user_cost, COALESCE(SUM(`+upstreamCostExpr("up")+`),0)::float8 AS upstream_cost
   FROM usage_logs ul
   JOIN users u ON u.id=ul.user_id AND u.role <> $3 AND u.deleted_at IS NULL
   LEFT JOIN accounts a ON a.id=ul.account_id AND a.deleted_at IS NULL
   LEFT JOIN upstreams up ON up.normalized_base_url = normalized_account_base_url(a.credentials, a.extra, a.platform, a.type) AND up.deleted_at IS NULL
-  LEFT JOIN upstream_model_rates umr ON umr.upstream_id=up.id AND lower(umr.model)=lower(COALESCE(NULLIF(TRIM(ul.upstream_model), ''), NULLIF(TRIM(ul.requested_model), ''), NULLIF(TRIM(ul.model), '')))
+  LEFT JOIN upstream_platform_rates upr ON upr.upstream_id=up.id AND lower(upr.platform)=lower(a.platform)
   WHERE ul.created_at >= $1 AND ul.created_at < $2
   GROUP BY 1
 ), recharge_points AS (
@@ -469,4 +471,12 @@ func bucketExpr(granularity, column string) string {
 	default:
 		return "date_trunc('day', " + column + ")"
 	}
+}
+
+func upstreamCostExpr(upstreamAlias string) string {
+	imageCountExpr := "GREATEST(COALESCE(ul.image_count, 0), CASE WHEN COALESCE(ul.billing_mode, '') = 'image' OR COALESCE(ul.image_output_tokens, 0) > 0 OR COALESCE(ul.image_output_cost, 0) > 0 THEN 1 ELSE 0 END)"
+	return fmt.Sprintf(`CASE
+    WHEN COALESCE(upr.image_unit_price, 0) > 0 AND %s > 0 THEN %s * COALESCE(upr.image_unit_price, 0)
+    ELSE ul.actual_cost * COALESCE(upr.rate_multiplier, %s.rate_multiplier, 1)
+  END`, imageCountExpr, imageCountExpr, upstreamAlias)
 }

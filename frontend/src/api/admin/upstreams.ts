@@ -1,9 +1,10 @@
 import apiClient from '../client'
 
-export interface UpstreamModelRate {
+export interface UpstreamPlatformRate {
   id?: number
-  model: string
+  platform: string
   rate_multiplier: number
+  image_unit_price: number
 }
 
 export interface Upstream {
@@ -12,7 +13,7 @@ export interface Upstream {
   normalized_base_url: string
   name: string
   rate_multiplier: number
-  model_rates: UpstreamModelRate[]
+  platform_rates: UpstreamPlatformRate[]
   initial_balance: number
   consumed_balance: number
   current_balance: number
@@ -30,7 +31,7 @@ export interface UpstreamInput {
   base_url: string
   name: string
   rate_multiplier: number
-  model_rates: UpstreamModelRate[]
+  platform_rates: UpstreamPlatformRate[]
   initial_balance: number
   balance_alert_enabled: boolean
   alert_balance?: number | null
