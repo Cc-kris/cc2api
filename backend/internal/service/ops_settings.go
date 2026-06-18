@@ -208,6 +208,20 @@ func validateOpsEmailNotificationConfig(cfg *OpsEmailNotificationConfig) error {
 	return nil
 }
 
+func (s *OpsService) GetAccountQuotaNotifyEmails(ctx context.Context) []string {
+	if s == nil || s.settingRepo == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	raw, err := s.settingRepo.GetValue(ctx, SettingKeyAccountQuotaNotifyEmails)
+	if err != nil || strings.TrimSpace(raw) == "" || raw == "[]" {
+		return nil
+	}
+	return filterVerifiedEmails(ParseNotifyEmails(raw))
+}
+
 // =========================
 // Alert runtime settings
 // =========================

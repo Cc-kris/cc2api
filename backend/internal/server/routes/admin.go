@@ -100,6 +100,9 @@ func RegisterAdminRoutes(
 
 		// 缓存管理
 		registerCacheManagementRoutes(admin, h)
+
+		// 上游维护与财务统计
+		registerUpstreamRoutes(admin, h)
 	}
 }
 
@@ -247,6 +250,19 @@ func registerOpsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		ops.GET("/dashboard/error-distribution", h.Admin.Ops.GetDashboardErrorDistribution)
 		ops.GET("/dashboard/openai-token-stats", h.Admin.Ops.GetDashboardOpenAITokenStats)
 	}
+}
+
+func registerUpstreamRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	upstreams := admin.Group("/upstreams")
+	{
+		upstreams.GET("", h.Admin.Upstream.List)
+		upstreams.POST("", h.Admin.Upstream.Create)
+		upstreams.PUT("/:id", h.Admin.Upstream.Update)
+		upstreams.DELETE("/:id", h.Admin.Upstream.Delete)
+		upstreams.POST("/sync-from-accounts", h.Admin.Upstream.SyncFromAccounts)
+		upstreams.GET("/stats", h.Admin.Upstream.Stats)
+	}
+	admin.GET("/finance/stats", h.Admin.Upstream.FinanceStats)
 }
 
 func registerDashboardRoutes(admin *gin.RouterGroup, h *handler.Handlers) {

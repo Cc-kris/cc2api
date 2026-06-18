@@ -20,7 +20,8 @@ func TestUsageLogRepository_GetDashboardRevenueOverview(t *testing.T) {
 SELECT COUNT(*)::bigint AS non_admin_user_count,
        COALESCE(SUM(GREATEST(balance, 0)), 0)::float8 AS unused_amount
 FROM users
-WHERE role <> $1`)).
+WHERE role <> $1
+  AND deleted_at IS NULL`)).
 		WithArgs(service.RoleAdmin).
 		WillReturnRows(sqlmock.NewRows([]string{"non_admin_user_count", "unused_amount"}).AddRow(int64(4), 80.25))
 
@@ -30,6 +31,7 @@ SELECT COALESCE(SUM(rc.value), 0)::float8 AS total_credit_amount,
 FROM redeem_codes rc
 JOIN users u ON u.id = rc.used_by
 WHERE u.role <> $1
+  AND u.deleted_at IS NULL
   AND rc.status = $2
   AND rc.value > 0
   AND rc.type IN ($3, $4)
@@ -41,7 +43,8 @@ WHERE u.role <> $1
 SELECT COALESCE(SUM(ul.actual_cost), 0)::float8 AS used_amount
 FROM usage_logs ul
 JOIN users u ON u.id = ul.user_id
-WHERE u.role <> $1`)).
+WHERE u.role <> $1
+  AND u.deleted_at IS NULL`)).
 		WithArgs(service.RoleAdmin).
 		WillReturnRows(sqlmock.NewRows([]string{"used_amount"}).AddRow(45.25))
 
@@ -63,13 +66,13 @@ func TestUsageLogRepository_GetDashboardRevenueOverview_ZeroUsage(t *testing.T) 
 	t.Cleanup(func() { _ = db.Close() })
 
 	repo := newUsageLogRepositoryWithSQL(nil, db)
-	mock.ExpectQuery("FROM users").
+	mock.ExpectQuery(`FROM users[\s\S]*deleted_at IS NULL`).
 		WithArgs(service.RoleAdmin).
 		WillReturnRows(sqlmock.NewRows([]string{"non_admin_user_count", "unused_amount"}).AddRow(int64(1), 200.00))
-	mock.ExpectQuery("FROM redeem_codes rc").
+	mock.ExpectQuery(`FROM redeem_codes rc[\s\S]*u.deleted_at IS NULL`).
 		WithArgs(service.RoleAdmin, service.StatusUsed, service.RedeemTypeBalance, service.AdjustmentTypeAdminBalance).
 		WillReturnRows(sqlmock.NewRows([]string{"total_credit_amount", "credited_user_count"}).AddRow(50.00, int64(1)))
-	mock.ExpectQuery("FROM usage_logs ul").
+	mock.ExpectQuery(`FROM usage_logs ul[\s\S]*u.deleted_at IS NULL`).
 		WithArgs(service.RoleAdmin).
 		WillReturnRows(sqlmock.NewRows([]string{"used_amount"}).AddRow(0.00))
 
@@ -85,7 +88,7 @@ func TestUsageLogRepository_GetDashboardRepurchaseDistribution(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 
 	repo := newUsageLogRepositoryWithSQL(nil, db)
-	mock.ExpectQuery("WITH non_admin_users").
+	mock.ExpectQuery(`WITH non_admin_users[\s\S]*deleted_at IS NULL`).
 		WithArgs(service.RoleAdmin, service.StatusUsed, service.RedeemTypeBalance, service.AdjustmentTypeAdminBalance).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"total_users",
@@ -114,7 +117,7 @@ func TestUsageLogRepository_GetDashboardRepurchaseDistribution_ZeroUsers(t *test
 	t.Cleanup(func() { _ = db.Close() })
 
 	repo := newUsageLogRepositoryWithSQL(nil, db)
-	mock.ExpectQuery("WITH non_admin_users").
+	mock.ExpectQuery(`WITH non_admin_users[\s\S]*deleted_at IS NULL`).
 		WithArgs(service.RoleAdmin, service.StatusUsed, service.RedeemTypeBalance, service.AdjustmentTypeAdminBalance).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"total_users",

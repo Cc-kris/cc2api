@@ -41,6 +41,7 @@ func ProvideAdminHandlers(
 	affiliateHandler *admin.AffiliateHandler,
 	cacheConfigHandler *admin.CacheConfigHandler,
 	cacheStatsHandler *admin.CacheStatsHandler,
+	upstreamHandler *admin.UpstreamHandler,
 ) *AdminHandlers {
 	return &AdminHandlers{
 		Dashboard:              dashboardHandler,
@@ -75,6 +76,7 @@ func ProvideAdminHandlers(
 		Affiliate:              affiliateHandler,
 		CacheConfig:            cacheConfigHandler,
 		CacheStats:             cacheStatsHandler,
+		Upstream:               upstreamHandler,
 	}
 }
 
@@ -190,6 +192,7 @@ var ProviderSet = wire.NewSet(
 	admin.NewAffiliateHandler,
 	admin.NewCacheConfigHandler,
 	admin.NewCacheStatsHandler,
+	admin.NewUpstreamHandler,
 
 	// AdminHandlers and Handlers constructors
 	ProvideAdminHandlers,

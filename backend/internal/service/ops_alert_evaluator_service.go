@@ -952,7 +952,11 @@ func (s *OpsAlertEvaluatorService) maybeSendAlertEmail(ctx context.Context, runt
 		return false
 	}
 
-	if len(emailCfg.Alert.Recipients) == 0 {
+	recipients := normalizedOpsAlertRecipients(emailCfg.Alert.Recipients)
+	if len(recipients) == 0 {
+		recipients = s.opsService.GetAccountQuotaNotifyEmails(ctx)
+	}
+	if len(recipients) == 0 {
 		return false
 	}
 	if !shouldSendOpsAlertEmailByMinSeverity(strings.TrimSpace(emailCfg.Alert.MinSeverity), strings.TrimSpace(rule.Severity)) {
@@ -972,7 +976,7 @@ func (s *OpsAlertEvaluatorService) maybeSendAlertEmail(ctx context.Context, runt
 	body := buildOpsAlertEmailBody(rule, event)
 
 	anySent := false
-	for _, to := range emailCfg.Alert.Recipients {
+	for _, to := range recipients {
 		addr := strings.TrimSpace(to)
 		if addr == "" {
 			continue
@@ -1009,6 +1013,24 @@ func (s *OpsAlertEvaluatorService) maybeSendAlertEmail(ctx context.Context, runt
 		_ = s.opsRepo.UpdateAlertEventEmailSent(context.Background(), event.ID, true)
 	}
 	return anySent
+}
+
+func normalizedOpsAlertRecipients(raw []string) []string {
+	seen := make(map[string]struct{}, len(raw))
+	recipients := make([]string, 0, len(raw))
+	for _, item := range raw {
+		addr := strings.TrimSpace(item)
+		if addr == "" {
+			continue
+		}
+		key := strings.ToLower(addr)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		recipients = append(recipients, addr)
+	}
+	return recipients
 }
 
 func opsAlertEmailVariables(rule *OpsAlertRule, event *OpsAlertEvent) map[string]string {

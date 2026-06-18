@@ -542,6 +542,28 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/upstreams',
+    redirect: '/admin/upstreams/manage'
+  },
+  {
+    path: '/admin/upstreams/manage',
+    name: 'AdminUpstreamManagement',
+    component: () => import('@/views/admin/upstreams/UpstreamManagementView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Upstream Management', titleKey: 'nav.upstreamManagement' }
+  },
+  {
+    path: '/admin/upstreams/stats',
+    name: 'AdminUpstreamStats',
+    component: () => import('@/views/admin/upstreams/UpstreamStatsView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Upstream Usage Stats', titleKey: 'nav.upstreamStats' }
+  },
+  {
+    path: '/admin/finance',
+    name: 'AdminFinanceStats',
+    component: () => import('@/views/admin/FinanceStatsView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Finance Stats', titleKey: 'nav.financeStats' }
+  },
+  {
     path: '/admin/announcements',
     name: 'AdminAnnouncements',
     component: () => import('@/views/admin/AnnouncementsView.vue'),

@@ -1538,13 +1538,15 @@ func (r *usageLogRepository) GetDashboardRevenueOverview(ctx context.Context) (*
 SELECT COUNT(*)::bigint AS non_admin_user_count,
        COALESCE(SUM(GREATEST(balance, 0)), 0)::float8 AS unused_amount
 FROM users
-WHERE role <> $1`
+WHERE role <> $1
+  AND deleted_at IS NULL`
 	const creditTotalsQuery = `
 SELECT COALESCE(SUM(rc.value), 0)::float8 AS total_credit_amount,
        COUNT(DISTINCT rc.used_by)::bigint AS credited_user_count
 FROM redeem_codes rc
 JOIN users u ON u.id = rc.used_by
 WHERE u.role <> $1
+  AND u.deleted_at IS NULL
   AND rc.status = $2
   AND rc.value > 0
   AND rc.type IN ($3, $4)
@@ -1553,7 +1555,8 @@ WHERE u.role <> $1
 SELECT COALESCE(SUM(ul.actual_cost), 0)::float8 AS used_amount
 FROM usage_logs ul
 JOIN users u ON u.id = ul.user_id
-WHERE u.role <> $1`
+WHERE u.role <> $1
+  AND u.deleted_at IS NULL`
 
 	var nonAdminUserCount int64
 	var unusedAmount float64
@@ -1594,12 +1597,14 @@ WITH non_admin_users AS (
     SELECT id
     FROM users
     WHERE role <> $1
+      AND deleted_at IS NULL
 ),
 credit_counts AS (
     SELECT rc.used_by AS user_id, COUNT(*)::bigint AS credit_count
     FROM redeem_codes rc
     JOIN users u ON u.id = rc.used_by
     WHERE u.role <> $1
+      AND u.deleted_at IS NULL
       AND rc.status = $2
       AND rc.value > 0
       AND rc.type IN ($3, $4)
