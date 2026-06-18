@@ -245,6 +245,10 @@ type Announcement struct {
 	CreatedBy   *int64
 	UpdatedBy   *int64
 	EmailSentAt *time.Time
+	EmailStatus string
+	EmailTotal  int
+	EmailSent   int
+	EmailFailed int
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }

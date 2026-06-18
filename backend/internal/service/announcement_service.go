@@ -137,9 +137,7 @@ func (s *AnnouncementService) Create(ctx context.Context, input *CreateAnnouncem
 		return nil, fmt.Errorf("create announcement: %w", err)
 	}
 	if input.SendEmail {
-		if err := s.sendAnnouncementEmailNotifications(ctx, a); err != nil {
-			return nil, err
-		}
+		s.queueAnnouncementEmailNotifications(ctx, a)
 		refreshed, err := s.announcementRepo.GetByID(ctx, a.ID)
 		if err == nil {
 			a = refreshed
@@ -217,9 +215,7 @@ func (s *AnnouncementService) Update(ctx context.Context, id int64, input *Updat
 		return nil, fmt.Errorf("update announcement: %w", err)
 	}
 	if input.SendEmail {
-		if err := s.sendAnnouncementEmailNotifications(ctx, a); err != nil {
-			return nil, err
-		}
+		s.queueAnnouncementEmailNotifications(ctx, a)
 		refreshed, err := s.announcementRepo.GetByID(ctx, a.ID)
 		if err == nil {
 			a = refreshed
@@ -428,27 +424,28 @@ func (s *AnnouncementService) sendAnnouncementEmailNotifications(ctx context.Con
 		return fmt.Errorf("announcement repository is not configured")
 	}
 
-	marked, err := s.announcementRepo.MarkEmailSentIfUnset(ctx, a.ID, time.Now())
-	if err != nil {
-		return fmt.Errorf("mark announcement email sent: %w", err)
-	}
-	if !marked {
-		return nil
-	}
-
 	recipients, err := s.listAnnouncementEmailRecipients(ctx, a.Targeting)
 	if err != nil {
+		_ = s.announcementRepo.UpdateEmailProgress(ctx, a.ID, AnnouncementEmailStatusFailed, 0, 0, 0, nil)
 		return err
+	}
+	total := len(recipients)
+	if err := s.announcementRepo.UpdateEmailProgress(ctx, a.ID, AnnouncementEmailStatusSending, total, 0, 0, nil); err != nil {
+		return fmt.Errorf("update announcement email progress: %w", err)
 	}
 	if len(recipients) == 0 {
 		slog.Info("announcement email skipped: no matching recipients", "announcement_id", a.ID)
+		now := time.Now()
+		_ = s.announcementRepo.UpdateEmailProgress(ctx, a.ID, AnnouncementEmailStatusSent, 0, 0, 0, &now)
 		return nil
 	}
 	if s.emailService == nil {
+		_ = s.announcementRepo.UpdateEmailProgress(ctx, a.ID, AnnouncementEmailStatusFailed, total, 0, total, nil)
 		return fmt.Errorf("announcement email service is not configured")
 	}
 	smtpConfig, err := s.emailService.GetSMTPConfig(ctx)
 	if err != nil {
+		_ = s.announcementRepo.UpdateEmailProgress(ctx, a.ID, AnnouncementEmailStatusFailed, total, 0, total, nil)
 		return fmt.Errorf("get announcement email smtp config: %w", err)
 	}
 
@@ -457,14 +454,59 @@ func (s *AnnouncementService) sendAnnouncementEmailNotifications(ctx context.Con
 		subject = "Announcement"
 	}
 	body := s.buildAnnouncementEmailBody(a)
+	sent := 0
+	failed := 0
 	for _, to := range recipients {
 		if err := s.emailService.SendEmailWithConfig(smtpConfig, to, subject, body); err != nil {
 			slog.Error("failed to send announcement email", "announcement_id", a.ID, "to", to, "error", err)
+			failed++
+			_ = s.announcementRepo.UpdateEmailProgress(ctx, a.ID, AnnouncementEmailStatusSending, total, sent, failed, nil)
 			continue
 		}
+		sent++
 		slog.Info("announcement email sent", "announcement_id", a.ID, "to", to)
+		_ = s.announcementRepo.UpdateEmailProgress(ctx, a.ID, AnnouncementEmailStatusSending, total, sent, failed, nil)
+	}
+	status := AnnouncementEmailStatusSent
+	if failed > 0 {
+		if sent > 0 {
+			status = AnnouncementEmailStatusPartialFailed
+		} else {
+			status = AnnouncementEmailStatusFailed
+		}
+	}
+	now := time.Now()
+	if err := s.announcementRepo.UpdateEmailProgress(ctx, a.ID, status, total, sent, failed, &now); err != nil {
+		return fmt.Errorf("finalize announcement email progress: %w", err)
 	}
 	return nil
+}
+
+func (s *AnnouncementService) queueAnnouncementEmailNotifications(ctx context.Context, a *Announcement) {
+	if s == nil || a == nil || a.ID <= 0 || s.announcementRepo == nil {
+		return
+	}
+	queued, err := s.announcementRepo.QueueEmailIfNotStarted(ctx, a.ID)
+	if err != nil {
+		slog.Error("failed to queue announcement email", "announcement_id", a.ID, "error", err)
+		return
+	}
+	if !queued {
+		return
+	}
+	a.EmailStatus = AnnouncementEmailStatusQueued
+	go func(id int64) {
+		bgCtx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+		item, err := s.announcementRepo.GetByID(bgCtx, id)
+		if err != nil {
+			slog.Error("failed to load queued announcement email", "announcement_id", id, "error", err)
+			return
+		}
+		if err := s.sendAnnouncementEmailNotifications(bgCtx, item); err != nil {
+			slog.Error("failed to send queued announcement email", "announcement_id", id, "error", err)
+		}
+	}(a.ID)
 }
 
 func (s *AnnouncementService) listAnnouncementEmailRecipients(ctx context.Context, targeting AnnouncementTargeting) ([]string, error) {

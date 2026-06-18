@@ -4567,6 +4567,7 @@ export default {
         status: '状态',
         notifyMode: '通知方式',
         targeting: '展示条件',
+        emailStatus: '邮件发送',
         timeRange: '有效期',
         createdAt: '创建时间',
         actions: '操作'
@@ -4580,6 +4581,15 @@ export default {
         silent: '静默',
         popup: '弹窗'
       },
+      emailStatusLabels: {
+        notRequested: '未发送',
+        queued: '排队中',
+        sending: '发送中',
+        sent: '已完成',
+        partialFailed: '部分失败',
+        failed: '发送失败'
+      },
+      emailFailedCount: '失败 {count}',
       form: {
         title: '标题',
         content: '内容（支持 Markdown）',
@@ -4604,7 +4614,7 @@ export default {
         balanceValue: '余额阈值',
         selectPackages: '选择套餐',
         sendEmail: '发送邮件通知',
-        sendEmailHint: '保存后会立即向符合当前展示条件的用户逐一发送邮件；每个公告只会发送一次。',
+        sendEmailHint: '保存后会立即创建公告，邮件在后台继续发送；每个公告只会发送一次。',
         emailAlreadySentHint: '该公告已经发送过邮件，后续修改不会再次发送。'
       },
       operators: {

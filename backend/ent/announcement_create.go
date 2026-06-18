@@ -148,6 +148,62 @@ func (_c *AnnouncementCreate) SetNillableEmailSentAt(v *time.Time) *Announcement
 	return _c
 }
 
+// SetEmailStatus sets the "email_status" field.
+func (_c *AnnouncementCreate) SetEmailStatus(v string) *AnnouncementCreate {
+	_c.mutation.SetEmailStatus(v)
+	return _c
+}
+
+// SetNillableEmailStatus sets the "email_status" field if the given value is not nil.
+func (_c *AnnouncementCreate) SetNillableEmailStatus(v *string) *AnnouncementCreate {
+	if v != nil {
+		_c.SetEmailStatus(*v)
+	}
+	return _c
+}
+
+// SetEmailTotal sets the "email_total" field.
+func (_c *AnnouncementCreate) SetEmailTotal(v int) *AnnouncementCreate {
+	_c.mutation.SetEmailTotal(v)
+	return _c
+}
+
+// SetNillableEmailTotal sets the "email_total" field if the given value is not nil.
+func (_c *AnnouncementCreate) SetNillableEmailTotal(v *int) *AnnouncementCreate {
+	if v != nil {
+		_c.SetEmailTotal(*v)
+	}
+	return _c
+}
+
+// SetEmailSent sets the "email_sent" field.
+func (_c *AnnouncementCreate) SetEmailSent(v int) *AnnouncementCreate {
+	_c.mutation.SetEmailSent(v)
+	return _c
+}
+
+// SetNillableEmailSent sets the "email_sent" field if the given value is not nil.
+func (_c *AnnouncementCreate) SetNillableEmailSent(v *int) *AnnouncementCreate {
+	if v != nil {
+		_c.SetEmailSent(*v)
+	}
+	return _c
+}
+
+// SetEmailFailed sets the "email_failed" field.
+func (_c *AnnouncementCreate) SetEmailFailed(v int) *AnnouncementCreate {
+	_c.mutation.SetEmailFailed(v)
+	return _c
+}
+
+// SetNillableEmailFailed sets the "email_failed" field if the given value is not nil.
+func (_c *AnnouncementCreate) SetNillableEmailFailed(v *int) *AnnouncementCreate {
+	if v != nil {
+		_c.SetEmailFailed(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *AnnouncementCreate) SetCreatedAt(v time.Time) *AnnouncementCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -234,6 +290,22 @@ func (_c *AnnouncementCreate) defaults() {
 		v := announcement.DefaultNotifyMode
 		_c.mutation.SetNotifyMode(v)
 	}
+	if _, ok := _c.mutation.EmailStatus(); !ok {
+		v := announcement.DefaultEmailStatus
+		_c.mutation.SetEmailStatus(v)
+	}
+	if _, ok := _c.mutation.EmailTotal(); !ok {
+		v := announcement.DefaultEmailTotal
+		_c.mutation.SetEmailTotal(v)
+	}
+	if _, ok := _c.mutation.EmailSent(); !ok {
+		v := announcement.DefaultEmailSent
+		_c.mutation.SetEmailSent(v)
+	}
+	if _, ok := _c.mutation.EmailFailed(); !ok {
+		v := announcement.DefaultEmailFailed
+		_c.mutation.SetEmailFailed(v)
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		v := announcement.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
@@ -277,6 +349,23 @@ func (_c *AnnouncementCreate) check() error {
 		if err := announcement.NotifyModeValidator(v); err != nil {
 			return &ValidationError{Name: "notify_mode", err: fmt.Errorf(`ent: validator failed for field "Announcement.notify_mode": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.EmailStatus(); !ok {
+		return &ValidationError{Name: "email_status", err: errors.New(`ent: missing required field "Announcement.email_status"`)}
+	}
+	if v, ok := _c.mutation.EmailStatus(); ok {
+		if err := announcement.EmailStatusValidator(v); err != nil {
+			return &ValidationError{Name: "email_status", err: fmt.Errorf(`ent: validator failed for field "Announcement.email_status": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.EmailTotal(); !ok {
+		return &ValidationError{Name: "email_total", err: errors.New(`ent: missing required field "Announcement.email_total"`)}
+	}
+	if _, ok := _c.mutation.EmailSent(); !ok {
+		return &ValidationError{Name: "email_sent", err: errors.New(`ent: missing required field "Announcement.email_sent"`)}
+	}
+	if _, ok := _c.mutation.EmailFailed(); !ok {
+		return &ValidationError{Name: "email_failed", err: errors.New(`ent: missing required field "Announcement.email_failed"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Announcement.created_at"`)}
@@ -350,6 +439,22 @@ func (_c *AnnouncementCreate) createSpec() (*Announcement, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.EmailSentAt(); ok {
 		_spec.SetField(announcement.FieldEmailSentAt, field.TypeTime, value)
 		_node.EmailSentAt = &value
+	}
+	if value, ok := _c.mutation.EmailStatus(); ok {
+		_spec.SetField(announcement.FieldEmailStatus, field.TypeString, value)
+		_node.EmailStatus = value
+	}
+	if value, ok := _c.mutation.EmailTotal(); ok {
+		_spec.SetField(announcement.FieldEmailTotal, field.TypeInt, value)
+		_node.EmailTotal = value
+	}
+	if value, ok := _c.mutation.EmailSent(); ok {
+		_spec.SetField(announcement.FieldEmailSent, field.TypeInt, value)
+		_node.EmailSent = value
+	}
+	if value, ok := _c.mutation.EmailFailed(); ok {
+		_spec.SetField(announcement.FieldEmailFailed, field.TypeInt, value)
+		_node.EmailFailed = value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(announcement.FieldCreatedAt, field.TypeTime, value)
@@ -592,6 +697,72 @@ func (u *AnnouncementUpsert) UpdateEmailSentAt() *AnnouncementUpsert {
 // ClearEmailSentAt clears the value of the "email_sent_at" field.
 func (u *AnnouncementUpsert) ClearEmailSentAt() *AnnouncementUpsert {
 	u.SetNull(announcement.FieldEmailSentAt)
+	return u
+}
+
+// SetEmailStatus sets the "email_status" field.
+func (u *AnnouncementUpsert) SetEmailStatus(v string) *AnnouncementUpsert {
+	u.Set(announcement.FieldEmailStatus, v)
+	return u
+}
+
+// UpdateEmailStatus sets the "email_status" field to the value that was provided on create.
+func (u *AnnouncementUpsert) UpdateEmailStatus() *AnnouncementUpsert {
+	u.SetExcluded(announcement.FieldEmailStatus)
+	return u
+}
+
+// SetEmailTotal sets the "email_total" field.
+func (u *AnnouncementUpsert) SetEmailTotal(v int) *AnnouncementUpsert {
+	u.Set(announcement.FieldEmailTotal, v)
+	return u
+}
+
+// UpdateEmailTotal sets the "email_total" field to the value that was provided on create.
+func (u *AnnouncementUpsert) UpdateEmailTotal() *AnnouncementUpsert {
+	u.SetExcluded(announcement.FieldEmailTotal)
+	return u
+}
+
+// AddEmailTotal adds v to the "email_total" field.
+func (u *AnnouncementUpsert) AddEmailTotal(v int) *AnnouncementUpsert {
+	u.Add(announcement.FieldEmailTotal, v)
+	return u
+}
+
+// SetEmailSent sets the "email_sent" field.
+func (u *AnnouncementUpsert) SetEmailSent(v int) *AnnouncementUpsert {
+	u.Set(announcement.FieldEmailSent, v)
+	return u
+}
+
+// UpdateEmailSent sets the "email_sent" field to the value that was provided on create.
+func (u *AnnouncementUpsert) UpdateEmailSent() *AnnouncementUpsert {
+	u.SetExcluded(announcement.FieldEmailSent)
+	return u
+}
+
+// AddEmailSent adds v to the "email_sent" field.
+func (u *AnnouncementUpsert) AddEmailSent(v int) *AnnouncementUpsert {
+	u.Add(announcement.FieldEmailSent, v)
+	return u
+}
+
+// SetEmailFailed sets the "email_failed" field.
+func (u *AnnouncementUpsert) SetEmailFailed(v int) *AnnouncementUpsert {
+	u.Set(announcement.FieldEmailFailed, v)
+	return u
+}
+
+// UpdateEmailFailed sets the "email_failed" field to the value that was provided on create.
+func (u *AnnouncementUpsert) UpdateEmailFailed() *AnnouncementUpsert {
+	u.SetExcluded(announcement.FieldEmailFailed)
+	return u
+}
+
+// AddEmailFailed adds v to the "email_failed" field.
+func (u *AnnouncementUpsert) AddEmailFailed(v int) *AnnouncementUpsert {
+	u.Add(announcement.FieldEmailFailed, v)
 	return u
 }
 
@@ -845,6 +1016,83 @@ func (u *AnnouncementUpsertOne) UpdateEmailSentAt() *AnnouncementUpsertOne {
 func (u *AnnouncementUpsertOne) ClearEmailSentAt() *AnnouncementUpsertOne {
 	return u.Update(func(s *AnnouncementUpsert) {
 		s.ClearEmailSentAt()
+	})
+}
+
+// SetEmailStatus sets the "email_status" field.
+func (u *AnnouncementUpsertOne) SetEmailStatus(v string) *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetEmailStatus(v)
+	})
+}
+
+// UpdateEmailStatus sets the "email_status" field to the value that was provided on create.
+func (u *AnnouncementUpsertOne) UpdateEmailStatus() *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateEmailStatus()
+	})
+}
+
+// SetEmailTotal sets the "email_total" field.
+func (u *AnnouncementUpsertOne) SetEmailTotal(v int) *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetEmailTotal(v)
+	})
+}
+
+// AddEmailTotal adds v to the "email_total" field.
+func (u *AnnouncementUpsertOne) AddEmailTotal(v int) *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.AddEmailTotal(v)
+	})
+}
+
+// UpdateEmailTotal sets the "email_total" field to the value that was provided on create.
+func (u *AnnouncementUpsertOne) UpdateEmailTotal() *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateEmailTotal()
+	})
+}
+
+// SetEmailSent sets the "email_sent" field.
+func (u *AnnouncementUpsertOne) SetEmailSent(v int) *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetEmailSent(v)
+	})
+}
+
+// AddEmailSent adds v to the "email_sent" field.
+func (u *AnnouncementUpsertOne) AddEmailSent(v int) *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.AddEmailSent(v)
+	})
+}
+
+// UpdateEmailSent sets the "email_sent" field to the value that was provided on create.
+func (u *AnnouncementUpsertOne) UpdateEmailSent() *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateEmailSent()
+	})
+}
+
+// SetEmailFailed sets the "email_failed" field.
+func (u *AnnouncementUpsertOne) SetEmailFailed(v int) *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetEmailFailed(v)
+	})
+}
+
+// AddEmailFailed adds v to the "email_failed" field.
+func (u *AnnouncementUpsertOne) AddEmailFailed(v int) *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.AddEmailFailed(v)
+	})
+}
+
+// UpdateEmailFailed sets the "email_failed" field to the value that was provided on create.
+func (u *AnnouncementUpsertOne) UpdateEmailFailed() *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateEmailFailed()
 	})
 }
 
@@ -1266,6 +1514,83 @@ func (u *AnnouncementUpsertBulk) UpdateEmailSentAt() *AnnouncementUpsertBulk {
 func (u *AnnouncementUpsertBulk) ClearEmailSentAt() *AnnouncementUpsertBulk {
 	return u.Update(func(s *AnnouncementUpsert) {
 		s.ClearEmailSentAt()
+	})
+}
+
+// SetEmailStatus sets the "email_status" field.
+func (u *AnnouncementUpsertBulk) SetEmailStatus(v string) *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetEmailStatus(v)
+	})
+}
+
+// UpdateEmailStatus sets the "email_status" field to the value that was provided on create.
+func (u *AnnouncementUpsertBulk) UpdateEmailStatus() *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateEmailStatus()
+	})
+}
+
+// SetEmailTotal sets the "email_total" field.
+func (u *AnnouncementUpsertBulk) SetEmailTotal(v int) *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetEmailTotal(v)
+	})
+}
+
+// AddEmailTotal adds v to the "email_total" field.
+func (u *AnnouncementUpsertBulk) AddEmailTotal(v int) *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.AddEmailTotal(v)
+	})
+}
+
+// UpdateEmailTotal sets the "email_total" field to the value that was provided on create.
+func (u *AnnouncementUpsertBulk) UpdateEmailTotal() *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateEmailTotal()
+	})
+}
+
+// SetEmailSent sets the "email_sent" field.
+func (u *AnnouncementUpsertBulk) SetEmailSent(v int) *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetEmailSent(v)
+	})
+}
+
+// AddEmailSent adds v to the "email_sent" field.
+func (u *AnnouncementUpsertBulk) AddEmailSent(v int) *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.AddEmailSent(v)
+	})
+}
+
+// UpdateEmailSent sets the "email_sent" field to the value that was provided on create.
+func (u *AnnouncementUpsertBulk) UpdateEmailSent() *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateEmailSent()
+	})
+}
+
+// SetEmailFailed sets the "email_failed" field.
+func (u *AnnouncementUpsertBulk) SetEmailFailed(v int) *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetEmailFailed(v)
+	})
+}
+
+// AddEmailFailed adds v to the "email_failed" field.
+func (u *AnnouncementUpsertBulk) AddEmailFailed(v int) *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.AddEmailFailed(v)
+	})
+}
+
+// UpdateEmailFailed sets the "email_failed" field to the value that was provided on create.
+func (u *AnnouncementUpsertBulk) UpdateEmailFailed() *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateEmailFailed()
 	})
 }
 

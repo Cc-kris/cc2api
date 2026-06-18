@@ -21,6 +21,15 @@ const (
 )
 
 const (
+	AnnouncementEmailStatusNotRequested  = "not_requested"
+	AnnouncementEmailStatusQueued        = "queued"
+	AnnouncementEmailStatusSending       = "sending"
+	AnnouncementEmailStatusSent          = "sent"
+	AnnouncementEmailStatusPartialFailed = "partial_failed"
+	AnnouncementEmailStatusFailed        = "failed"
+)
+
+const (
 	AnnouncementConditionTypeSubscription = domain.AnnouncementConditionTypeSubscription
 	AnnouncementConditionTypeBalance      = domain.AnnouncementConditionTypeBalance
 )
@@ -72,6 +81,8 @@ type AnnouncementRepository interface {
 	GetByID(ctx context.Context, id int64) (*Announcement, error)
 	Update(ctx context.Context, a *Announcement) error
 	MarkEmailSentIfUnset(ctx context.Context, id int64, sentAt time.Time) (bool, error)
+	QueueEmailIfNotStarted(ctx context.Context, id int64) (bool, error)
+	UpdateEmailProgress(ctx context.Context, id int64, status string, total, sent, failed int, sentAt *time.Time) error
 	Delete(ctx context.Context, id int64) error
 
 	List(ctx context.Context, params pagination.PaginationParams, filters AnnouncementListFilters) ([]Announcement, *pagination.PaginationResult, error)

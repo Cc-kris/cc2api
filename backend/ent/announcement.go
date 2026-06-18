@@ -39,6 +39,14 @@ type Announcement struct {
 	UpdatedBy *int64 `json:"updated_by,omitempty"`
 	// 公告邮件通知发送时间（为空表示未发送）
 	EmailSentAt *time.Time `json:"email_sent_at,omitempty"`
+	// 公告邮件发送状态: not_requested, queued, sending, sent, partial_failed, failed
+	EmailStatus string `json:"email_status,omitempty"`
+	// 公告邮件目标收件人总数
+	EmailTotal int `json:"email_total,omitempty"`
+	// 公告邮件已发送数量
+	EmailSent int `json:"email_sent,omitempty"`
+	// 公告邮件发送失败数量
+	EmailFailed int `json:"email_failed,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
@@ -74,9 +82,9 @@ func (*Announcement) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case announcement.FieldTargeting:
 			values[i] = new([]byte)
-		case announcement.FieldID, announcement.FieldCreatedBy, announcement.FieldUpdatedBy:
+		case announcement.FieldID, announcement.FieldCreatedBy, announcement.FieldUpdatedBy, announcement.FieldEmailTotal, announcement.FieldEmailSent, announcement.FieldEmailFailed:
 			values[i] = new(sql.NullInt64)
-		case announcement.FieldTitle, announcement.FieldContent, announcement.FieldStatus, announcement.FieldNotifyMode:
+		case announcement.FieldTitle, announcement.FieldContent, announcement.FieldStatus, announcement.FieldNotifyMode, announcement.FieldEmailStatus:
 			values[i] = new(sql.NullString)
 		case announcement.FieldStartsAt, announcement.FieldEndsAt, announcement.FieldEmailSentAt, announcement.FieldCreatedAt, announcement.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -167,6 +175,30 @@ func (_m *Announcement) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.EmailSentAt = new(time.Time)
 				*_m.EmailSentAt = value.Time
+			}
+		case announcement.FieldEmailStatus:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field email_status", values[i])
+			} else if value.Valid {
+				_m.EmailStatus = value.String
+			}
+		case announcement.FieldEmailTotal:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field email_total", values[i])
+			} else if value.Valid {
+				_m.EmailTotal = int(value.Int64)
+			}
+		case announcement.FieldEmailSent:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field email_sent", values[i])
+			} else if value.Valid {
+				_m.EmailSent = int(value.Int64)
+			}
+		case announcement.FieldEmailFailed:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field email_failed", values[i])
+			} else if value.Valid {
+				_m.EmailFailed = int(value.Int64)
 			}
 		case announcement.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
@@ -260,6 +292,18 @@ func (_m *Announcement) String() string {
 		builder.WriteString("email_sent_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("email_status=")
+	builder.WriteString(_m.EmailStatus)
+	builder.WriteString(", ")
+	builder.WriteString("email_total=")
+	builder.WriteString(fmt.Sprintf("%v", _m.EmailTotal))
+	builder.WriteString(", ")
+	builder.WriteString("email_sent=")
+	builder.WriteString(fmt.Sprintf("%v", _m.EmailSent))
+	builder.WriteString(", ")
+	builder.WriteString("email_failed=")
+	builder.WriteString(fmt.Sprintf("%v", _m.EmailFailed))
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

@@ -220,6 +220,83 @@ func (_u *AnnouncementUpdate) ClearEmailSentAt() *AnnouncementUpdate {
 	return _u
 }
 
+// SetEmailStatus sets the "email_status" field.
+func (_u *AnnouncementUpdate) SetEmailStatus(v string) *AnnouncementUpdate {
+	_u.mutation.SetEmailStatus(v)
+	return _u
+}
+
+// SetNillableEmailStatus sets the "email_status" field if the given value is not nil.
+func (_u *AnnouncementUpdate) SetNillableEmailStatus(v *string) *AnnouncementUpdate {
+	if v != nil {
+		_u.SetEmailStatus(*v)
+	}
+	return _u
+}
+
+// SetEmailTotal sets the "email_total" field.
+func (_u *AnnouncementUpdate) SetEmailTotal(v int) *AnnouncementUpdate {
+	_u.mutation.ResetEmailTotal()
+	_u.mutation.SetEmailTotal(v)
+	return _u
+}
+
+// SetNillableEmailTotal sets the "email_total" field if the given value is not nil.
+func (_u *AnnouncementUpdate) SetNillableEmailTotal(v *int) *AnnouncementUpdate {
+	if v != nil {
+		_u.SetEmailTotal(*v)
+	}
+	return _u
+}
+
+// AddEmailTotal adds value to the "email_total" field.
+func (_u *AnnouncementUpdate) AddEmailTotal(v int) *AnnouncementUpdate {
+	_u.mutation.AddEmailTotal(v)
+	return _u
+}
+
+// SetEmailSent sets the "email_sent" field.
+func (_u *AnnouncementUpdate) SetEmailSent(v int) *AnnouncementUpdate {
+	_u.mutation.ResetEmailSent()
+	_u.mutation.SetEmailSent(v)
+	return _u
+}
+
+// SetNillableEmailSent sets the "email_sent" field if the given value is not nil.
+func (_u *AnnouncementUpdate) SetNillableEmailSent(v *int) *AnnouncementUpdate {
+	if v != nil {
+		_u.SetEmailSent(*v)
+	}
+	return _u
+}
+
+// AddEmailSent adds value to the "email_sent" field.
+func (_u *AnnouncementUpdate) AddEmailSent(v int) *AnnouncementUpdate {
+	_u.mutation.AddEmailSent(v)
+	return _u
+}
+
+// SetEmailFailed sets the "email_failed" field.
+func (_u *AnnouncementUpdate) SetEmailFailed(v int) *AnnouncementUpdate {
+	_u.mutation.ResetEmailFailed()
+	_u.mutation.SetEmailFailed(v)
+	return _u
+}
+
+// SetNillableEmailFailed sets the "email_failed" field if the given value is not nil.
+func (_u *AnnouncementUpdate) SetNillableEmailFailed(v *int) *AnnouncementUpdate {
+	if v != nil {
+		_u.SetEmailFailed(*v)
+	}
+	return _u
+}
+
+// AddEmailFailed adds value to the "email_failed" field.
+func (_u *AnnouncementUpdate) AddEmailFailed(v int) *AnnouncementUpdate {
+	_u.mutation.AddEmailFailed(v)
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *AnnouncementUpdate) SetUpdatedAt(v time.Time) *AnnouncementUpdate {
 	_u.mutation.SetUpdatedAt(v)
@@ -325,6 +402,11 @@ func (_u *AnnouncementUpdate) check() error {
 			return &ValidationError{Name: "notify_mode", err: fmt.Errorf(`ent: validator failed for field "Announcement.notify_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.EmailStatus(); ok {
+		if err := announcement.EmailStatusValidator(v); err != nil {
+			return &ValidationError{Name: "email_status", err: fmt.Errorf(`ent: validator failed for field "Announcement.email_status": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -393,6 +475,27 @@ func (_u *AnnouncementUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if _u.mutation.EmailSentAtCleared() {
 		_spec.ClearField(announcement.FieldEmailSentAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.EmailStatus(); ok {
+		_spec.SetField(announcement.FieldEmailStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.EmailTotal(); ok {
+		_spec.SetField(announcement.FieldEmailTotal, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedEmailTotal(); ok {
+		_spec.AddField(announcement.FieldEmailTotal, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.EmailSent(); ok {
+		_spec.SetField(announcement.FieldEmailSent, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedEmailSent(); ok {
+		_spec.AddField(announcement.FieldEmailSent, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.EmailFailed(); ok {
+		_spec.SetField(announcement.FieldEmailFailed, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedEmailFailed(); ok {
+		_spec.AddField(announcement.FieldEmailFailed, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(announcement.FieldUpdatedAt, field.TypeTime, value)
@@ -652,6 +755,83 @@ func (_u *AnnouncementUpdateOne) ClearEmailSentAt() *AnnouncementUpdateOne {
 	return _u
 }
 
+// SetEmailStatus sets the "email_status" field.
+func (_u *AnnouncementUpdateOne) SetEmailStatus(v string) *AnnouncementUpdateOne {
+	_u.mutation.SetEmailStatus(v)
+	return _u
+}
+
+// SetNillableEmailStatus sets the "email_status" field if the given value is not nil.
+func (_u *AnnouncementUpdateOne) SetNillableEmailStatus(v *string) *AnnouncementUpdateOne {
+	if v != nil {
+		_u.SetEmailStatus(*v)
+	}
+	return _u
+}
+
+// SetEmailTotal sets the "email_total" field.
+func (_u *AnnouncementUpdateOne) SetEmailTotal(v int) *AnnouncementUpdateOne {
+	_u.mutation.ResetEmailTotal()
+	_u.mutation.SetEmailTotal(v)
+	return _u
+}
+
+// SetNillableEmailTotal sets the "email_total" field if the given value is not nil.
+func (_u *AnnouncementUpdateOne) SetNillableEmailTotal(v *int) *AnnouncementUpdateOne {
+	if v != nil {
+		_u.SetEmailTotal(*v)
+	}
+	return _u
+}
+
+// AddEmailTotal adds value to the "email_total" field.
+func (_u *AnnouncementUpdateOne) AddEmailTotal(v int) *AnnouncementUpdateOne {
+	_u.mutation.AddEmailTotal(v)
+	return _u
+}
+
+// SetEmailSent sets the "email_sent" field.
+func (_u *AnnouncementUpdateOne) SetEmailSent(v int) *AnnouncementUpdateOne {
+	_u.mutation.ResetEmailSent()
+	_u.mutation.SetEmailSent(v)
+	return _u
+}
+
+// SetNillableEmailSent sets the "email_sent" field if the given value is not nil.
+func (_u *AnnouncementUpdateOne) SetNillableEmailSent(v *int) *AnnouncementUpdateOne {
+	if v != nil {
+		_u.SetEmailSent(*v)
+	}
+	return _u
+}
+
+// AddEmailSent adds value to the "email_sent" field.
+func (_u *AnnouncementUpdateOne) AddEmailSent(v int) *AnnouncementUpdateOne {
+	_u.mutation.AddEmailSent(v)
+	return _u
+}
+
+// SetEmailFailed sets the "email_failed" field.
+func (_u *AnnouncementUpdateOne) SetEmailFailed(v int) *AnnouncementUpdateOne {
+	_u.mutation.ResetEmailFailed()
+	_u.mutation.SetEmailFailed(v)
+	return _u
+}
+
+// SetNillableEmailFailed sets the "email_failed" field if the given value is not nil.
+func (_u *AnnouncementUpdateOne) SetNillableEmailFailed(v *int) *AnnouncementUpdateOne {
+	if v != nil {
+		_u.SetEmailFailed(*v)
+	}
+	return _u
+}
+
+// AddEmailFailed adds value to the "email_failed" field.
+func (_u *AnnouncementUpdateOne) AddEmailFailed(v int) *AnnouncementUpdateOne {
+	_u.mutation.AddEmailFailed(v)
+	return _u
+}
+
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *AnnouncementUpdateOne) SetUpdatedAt(v time.Time) *AnnouncementUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
@@ -770,6 +950,11 @@ func (_u *AnnouncementUpdateOne) check() error {
 			return &ValidationError{Name: "notify_mode", err: fmt.Errorf(`ent: validator failed for field "Announcement.notify_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.EmailStatus(); ok {
+		if err := announcement.EmailStatusValidator(v); err != nil {
+			return &ValidationError{Name: "email_status", err: fmt.Errorf(`ent: validator failed for field "Announcement.email_status": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -855,6 +1040,27 @@ func (_u *AnnouncementUpdateOne) sqlSave(ctx context.Context) (_node *Announceme
 	}
 	if _u.mutation.EmailSentAtCleared() {
 		_spec.ClearField(announcement.FieldEmailSentAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.EmailStatus(); ok {
+		_spec.SetField(announcement.FieldEmailStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.EmailTotal(); ok {
+		_spec.SetField(announcement.FieldEmailTotal, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedEmailTotal(); ok {
+		_spec.AddField(announcement.FieldEmailTotal, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.EmailSent(); ok {
+		_spec.SetField(announcement.FieldEmailSent, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedEmailSent(); ok {
+		_spec.AddField(announcement.FieldEmailSent, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.EmailFailed(); ok {
+		_spec.SetField(announcement.FieldEmailFailed, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedEmailFailed(); ok {
+		_spec.AddField(announcement.FieldEmailFailed, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(announcement.FieldUpdatedAt, field.TypeTime, value)

@@ -72,6 +72,19 @@ func (Announcement) Fields() []ent.Field {
 			Nillable().
 			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}).
 			Comment("公告邮件通知发送时间（为空表示未发送）"),
+		field.String("email_status").
+			MaxLen(20).
+			Default("not_requested").
+			Comment("公告邮件发送状态: not_requested, queued, sending, sent, partial_failed, failed"),
+		field.Int("email_total").
+			Default(0).
+			Comment("公告邮件目标收件人总数"),
+		field.Int("email_sent").
+			Default(0).
+			Comment("公告邮件已发送数量"),
+		field.Int("email_failed").
+			Default(0).
+			Comment("公告邮件发送失败数量"),
 		field.Time("created_at").
 			Immutable().
 			Default(time.Now).
@@ -96,5 +109,6 @@ func (Announcement) Indexes() []ent.Index {
 		index.Fields("starts_at"),
 		index.Fields("ends_at"),
 		index.Fields("email_sent_at"),
+		index.Fields("email_status"),
 	}
 }

@@ -21,6 +21,10 @@ type Announcement struct {
 	CreatedBy   *int64     `json:"created_by,omitempty"`
 	UpdatedBy   *int64     `json:"updated_by,omitempty"`
 	EmailSentAt *time.Time `json:"email_sent_at,omitempty"`
+	EmailStatus string     `json:"email_status"`
+	EmailTotal  int        `json:"email_total"`
+	EmailSent   int        `json:"email_sent"`
+	EmailFailed int        `json:"email_failed"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -57,6 +61,10 @@ func AnnouncementFromService(a *service.Announcement) *Announcement {
 		CreatedBy:   a.CreatedBy,
 		UpdatedBy:   a.UpdatedBy,
 		EmailSentAt: a.EmailSentAt,
+		EmailStatus: a.EmailStatus,
+		EmailTotal:  a.EmailTotal,
+		EmailSent:   a.EmailSent,
+		EmailFailed: a.EmailFailed,
 		CreatedAt:   a.CreatedAt,
 		UpdatedAt:   a.UpdatedAt,
 	}

@@ -5189,30 +5189,37 @@ func (m *AccountGroupMutation) ResetEdge(name string) error {
 // AnnouncementMutation represents an operation that mutates the Announcement nodes in the graph.
 type AnnouncementMutation struct {
 	config
-	op            Op
-	typ           string
-	id            *int64
-	title         *string
-	content       *string
-	status        *string
-	notify_mode   *string
-	targeting     *domain.AnnouncementTargeting
-	starts_at     *time.Time
-	ends_at       *time.Time
-	created_by    *int64
-	addcreated_by *int64
-	updated_by    *int64
-	addupdated_by *int64
-	email_sent_at *time.Time
-	created_at    *time.Time
-	updated_at    *time.Time
-	clearedFields map[string]struct{}
-	reads         map[int64]struct{}
-	removedreads  map[int64]struct{}
-	clearedreads  bool
-	done          bool
-	oldValue      func(context.Context) (*Announcement, error)
-	predicates    []predicate.Announcement
+	op              Op
+	typ             string
+	id              *int64
+	title           *string
+	content         *string
+	status          *string
+	notify_mode     *string
+	targeting       *domain.AnnouncementTargeting
+	starts_at       *time.Time
+	ends_at         *time.Time
+	created_by      *int64
+	addcreated_by   *int64
+	updated_by      *int64
+	addupdated_by   *int64
+	email_sent_at   *time.Time
+	email_status    *string
+	email_total     *int
+	addemail_total  *int
+	email_sent      *int
+	addemail_sent   *int
+	email_failed    *int
+	addemail_failed *int
+	created_at      *time.Time
+	updated_at      *time.Time
+	clearedFields   map[string]struct{}
+	reads           map[int64]struct{}
+	removedreads    map[int64]struct{}
+	clearedreads    bool
+	done            bool
+	oldValue        func(context.Context) (*Announcement, error)
+	predicates      []predicate.Announcement
 }
 
 var _ ent.Mutation = (*AnnouncementMutation)(nil)
@@ -5793,6 +5800,210 @@ func (m *AnnouncementMutation) ResetEmailSentAt() {
 	delete(m.clearedFields, announcement.FieldEmailSentAt)
 }
 
+// SetEmailStatus sets the "email_status" field.
+func (m *AnnouncementMutation) SetEmailStatus(s string) {
+	m.email_status = &s
+}
+
+// EmailStatus returns the value of the "email_status" field in the mutation.
+func (m *AnnouncementMutation) EmailStatus() (r string, exists bool) {
+	v := m.email_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEmailStatus returns the old "email_status" field's value of the Announcement entity.
+// If the Announcement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementMutation) OldEmailStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEmailStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEmailStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEmailStatus: %w", err)
+	}
+	return oldValue.EmailStatus, nil
+}
+
+// ResetEmailStatus resets all changes to the "email_status" field.
+func (m *AnnouncementMutation) ResetEmailStatus() {
+	m.email_status = nil
+}
+
+// SetEmailTotal sets the "email_total" field.
+func (m *AnnouncementMutation) SetEmailTotal(i int) {
+	m.email_total = &i
+	m.addemail_total = nil
+}
+
+// EmailTotal returns the value of the "email_total" field in the mutation.
+func (m *AnnouncementMutation) EmailTotal() (r int, exists bool) {
+	v := m.email_total
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEmailTotal returns the old "email_total" field's value of the Announcement entity.
+// If the Announcement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementMutation) OldEmailTotal(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEmailTotal is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEmailTotal requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEmailTotal: %w", err)
+	}
+	return oldValue.EmailTotal, nil
+}
+
+// AddEmailTotal adds i to the "email_total" field.
+func (m *AnnouncementMutation) AddEmailTotal(i int) {
+	if m.addemail_total != nil {
+		*m.addemail_total += i
+	} else {
+		m.addemail_total = &i
+	}
+}
+
+// AddedEmailTotal returns the value that was added to the "email_total" field in this mutation.
+func (m *AnnouncementMutation) AddedEmailTotal() (r int, exists bool) {
+	v := m.addemail_total
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetEmailTotal resets all changes to the "email_total" field.
+func (m *AnnouncementMutation) ResetEmailTotal() {
+	m.email_total = nil
+	m.addemail_total = nil
+}
+
+// SetEmailSent sets the "email_sent" field.
+func (m *AnnouncementMutation) SetEmailSent(i int) {
+	m.email_sent = &i
+	m.addemail_sent = nil
+}
+
+// EmailSent returns the value of the "email_sent" field in the mutation.
+func (m *AnnouncementMutation) EmailSent() (r int, exists bool) {
+	v := m.email_sent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEmailSent returns the old "email_sent" field's value of the Announcement entity.
+// If the Announcement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementMutation) OldEmailSent(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEmailSent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEmailSent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEmailSent: %w", err)
+	}
+	return oldValue.EmailSent, nil
+}
+
+// AddEmailSent adds i to the "email_sent" field.
+func (m *AnnouncementMutation) AddEmailSent(i int) {
+	if m.addemail_sent != nil {
+		*m.addemail_sent += i
+	} else {
+		m.addemail_sent = &i
+	}
+}
+
+// AddedEmailSent returns the value that was added to the "email_sent" field in this mutation.
+func (m *AnnouncementMutation) AddedEmailSent() (r int, exists bool) {
+	v := m.addemail_sent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetEmailSent resets all changes to the "email_sent" field.
+func (m *AnnouncementMutation) ResetEmailSent() {
+	m.email_sent = nil
+	m.addemail_sent = nil
+}
+
+// SetEmailFailed sets the "email_failed" field.
+func (m *AnnouncementMutation) SetEmailFailed(i int) {
+	m.email_failed = &i
+	m.addemail_failed = nil
+}
+
+// EmailFailed returns the value of the "email_failed" field in the mutation.
+func (m *AnnouncementMutation) EmailFailed() (r int, exists bool) {
+	v := m.email_failed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEmailFailed returns the old "email_failed" field's value of the Announcement entity.
+// If the Announcement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementMutation) OldEmailFailed(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEmailFailed is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEmailFailed requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEmailFailed: %w", err)
+	}
+	return oldValue.EmailFailed, nil
+}
+
+// AddEmailFailed adds i to the "email_failed" field.
+func (m *AnnouncementMutation) AddEmailFailed(i int) {
+	if m.addemail_failed != nil {
+		*m.addemail_failed += i
+	} else {
+		m.addemail_failed = &i
+	}
+}
+
+// AddedEmailFailed returns the value that was added to the "email_failed" field in this mutation.
+func (m *AnnouncementMutation) AddedEmailFailed() (r int, exists bool) {
+	v := m.addemail_failed
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetEmailFailed resets all changes to the "email_failed" field.
+func (m *AnnouncementMutation) ResetEmailFailed() {
+	m.email_failed = nil
+	m.addemail_failed = nil
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *AnnouncementMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -5953,7 +6164,7 @@ func (m *AnnouncementMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AnnouncementMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 16)
 	if m.title != nil {
 		fields = append(fields, announcement.FieldTitle)
 	}
@@ -5983,6 +6194,18 @@ func (m *AnnouncementMutation) Fields() []string {
 	}
 	if m.email_sent_at != nil {
 		fields = append(fields, announcement.FieldEmailSentAt)
+	}
+	if m.email_status != nil {
+		fields = append(fields, announcement.FieldEmailStatus)
+	}
+	if m.email_total != nil {
+		fields = append(fields, announcement.FieldEmailTotal)
+	}
+	if m.email_sent != nil {
+		fields = append(fields, announcement.FieldEmailSent)
+	}
+	if m.email_failed != nil {
+		fields = append(fields, announcement.FieldEmailFailed)
 	}
 	if m.created_at != nil {
 		fields = append(fields, announcement.FieldCreatedAt)
@@ -6018,6 +6241,14 @@ func (m *AnnouncementMutation) Field(name string) (ent.Value, bool) {
 		return m.UpdatedBy()
 	case announcement.FieldEmailSentAt:
 		return m.EmailSentAt()
+	case announcement.FieldEmailStatus:
+		return m.EmailStatus()
+	case announcement.FieldEmailTotal:
+		return m.EmailTotal()
+	case announcement.FieldEmailSent:
+		return m.EmailSent()
+	case announcement.FieldEmailFailed:
+		return m.EmailFailed()
 	case announcement.FieldCreatedAt:
 		return m.CreatedAt()
 	case announcement.FieldUpdatedAt:
@@ -6051,6 +6282,14 @@ func (m *AnnouncementMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldUpdatedBy(ctx)
 	case announcement.FieldEmailSentAt:
 		return m.OldEmailSentAt(ctx)
+	case announcement.FieldEmailStatus:
+		return m.OldEmailStatus(ctx)
+	case announcement.FieldEmailTotal:
+		return m.OldEmailTotal(ctx)
+	case announcement.FieldEmailSent:
+		return m.OldEmailSent(ctx)
+	case announcement.FieldEmailFailed:
+		return m.OldEmailFailed(ctx)
 	case announcement.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
 	case announcement.FieldUpdatedAt:
@@ -6134,6 +6373,34 @@ func (m *AnnouncementMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetEmailSentAt(v)
 		return nil
+	case announcement.FieldEmailStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEmailStatus(v)
+		return nil
+	case announcement.FieldEmailTotal:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEmailTotal(v)
+		return nil
+	case announcement.FieldEmailSent:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEmailSent(v)
+		return nil
+	case announcement.FieldEmailFailed:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEmailFailed(v)
+		return nil
 	case announcement.FieldCreatedAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -6162,6 +6429,15 @@ func (m *AnnouncementMutation) AddedFields() []string {
 	if m.addupdated_by != nil {
 		fields = append(fields, announcement.FieldUpdatedBy)
 	}
+	if m.addemail_total != nil {
+		fields = append(fields, announcement.FieldEmailTotal)
+	}
+	if m.addemail_sent != nil {
+		fields = append(fields, announcement.FieldEmailSent)
+	}
+	if m.addemail_failed != nil {
+		fields = append(fields, announcement.FieldEmailFailed)
+	}
 	return fields
 }
 
@@ -6174,6 +6450,12 @@ func (m *AnnouncementMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedCreatedBy()
 	case announcement.FieldUpdatedBy:
 		return m.AddedUpdatedBy()
+	case announcement.FieldEmailTotal:
+		return m.AddedEmailTotal()
+	case announcement.FieldEmailSent:
+		return m.AddedEmailSent()
+	case announcement.FieldEmailFailed:
+		return m.AddedEmailFailed()
 	}
 	return nil, false
 }
@@ -6196,6 +6478,27 @@ func (m *AnnouncementMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddUpdatedBy(v)
+		return nil
+	case announcement.FieldEmailTotal:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddEmailTotal(v)
+		return nil
+	case announcement.FieldEmailSent:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddEmailSent(v)
+		return nil
+	case announcement.FieldEmailFailed:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddEmailFailed(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Announcement numeric field %s", name)
@@ -6292,6 +6595,18 @@ func (m *AnnouncementMutation) ResetField(name string) error {
 		return nil
 	case announcement.FieldEmailSentAt:
 		m.ResetEmailSentAt()
+		return nil
+	case announcement.FieldEmailStatus:
+		m.ResetEmailStatus()
+		return nil
+	case announcement.FieldEmailTotal:
+		m.ResetEmailTotal()
+		return nil
+	case announcement.FieldEmailSent:
+		m.ResetEmailSent()
+		return nil
+	case announcement.FieldEmailFailed:
+		m.ResetEmailFailed()
 		return nil
 	case announcement.FieldCreatedAt:
 		m.ResetCreatedAt()

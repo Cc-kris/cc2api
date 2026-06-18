@@ -34,6 +34,14 @@ const (
 	FieldUpdatedBy = "updated_by"
 	// FieldEmailSentAt holds the string denoting the email_sent_at field in the database.
 	FieldEmailSentAt = "email_sent_at"
+	// FieldEmailStatus holds the string denoting the email_status field in the database.
+	FieldEmailStatus = "email_status"
+	// FieldEmailTotal holds the string denoting the email_total field in the database.
+	FieldEmailTotal = "email_total"
+	// FieldEmailSent holds the string denoting the email_sent field in the database.
+	FieldEmailSent = "email_sent"
+	// FieldEmailFailed holds the string denoting the email_failed field in the database.
+	FieldEmailFailed = "email_failed"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
@@ -64,6 +72,10 @@ var Columns = []string{
 	FieldCreatedBy,
 	FieldUpdatedBy,
 	FieldEmailSentAt,
+	FieldEmailStatus,
+	FieldEmailTotal,
+	FieldEmailSent,
+	FieldEmailFailed,
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
@@ -91,6 +103,16 @@ var (
 	DefaultNotifyMode string
 	// NotifyModeValidator is a validator for the "notify_mode" field. It is called by the builders before save.
 	NotifyModeValidator func(string) error
+	// DefaultEmailStatus holds the default value on creation for the "email_status" field.
+	DefaultEmailStatus string
+	// EmailStatusValidator is a validator for the "email_status" field. It is called by the builders before save.
+	EmailStatusValidator func(string) error
+	// DefaultEmailTotal holds the default value on creation for the "email_total" field.
+	DefaultEmailTotal int
+	// DefaultEmailSent holds the default value on creation for the "email_sent" field.
+	DefaultEmailSent int
+	// DefaultEmailFailed holds the default value on creation for the "email_failed" field.
+	DefaultEmailFailed int
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 	// DefaultUpdatedAt holds the default value on creation for the "updated_at" field.
@@ -150,6 +172,26 @@ func ByUpdatedBy(opts ...sql.OrderTermOption) OrderOption {
 // ByEmailSentAt orders the results by the email_sent_at field.
 func ByEmailSentAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEmailSentAt, opts...).ToFunc()
+}
+
+// ByEmailStatus orders the results by the email_status field.
+func ByEmailStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEmailStatus, opts...).ToFunc()
+}
+
+// ByEmailTotal orders the results by the email_total field.
+func ByEmailTotal(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEmailTotal, opts...).ToFunc()
+}
+
+// ByEmailSent orders the results by the email_sent field.
+func ByEmailSent(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEmailSent, opts...).ToFunc()
+}
+
+// ByEmailFailed orders the results by the email_failed field.
+func ByEmailFailed(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldEmailFailed, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

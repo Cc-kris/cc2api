@@ -100,6 +100,26 @@ func EmailSentAt(v time.Time) predicate.Announcement {
 	return predicate.Announcement(sql.FieldEQ(FieldEmailSentAt, v))
 }
 
+// EmailStatus applies equality check predicate on the "email_status" field. It's identical to EmailStatusEQ.
+func EmailStatus(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldEmailStatus, v))
+}
+
+// EmailTotal applies equality check predicate on the "email_total" field. It's identical to EmailTotalEQ.
+func EmailTotal(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldEmailTotal, v))
+}
+
+// EmailSent applies equality check predicate on the "email_sent" field. It's identical to EmailSentEQ.
+func EmailSent(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldEmailSent, v))
+}
+
+// EmailFailed applies equality check predicate on the "email_failed" field. It's identical to EmailFailedEQ.
+func EmailFailed(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldEmailFailed, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.Announcement {
 	return predicate.Announcement(sql.FieldEQ(FieldCreatedAt, v))
@@ -628,6 +648,191 @@ func EmailSentAtIsNil() predicate.Announcement {
 // EmailSentAtNotNil applies the NotNil predicate on the "email_sent_at" field.
 func EmailSentAtNotNil() predicate.Announcement {
 	return predicate.Announcement(sql.FieldNotNull(FieldEmailSentAt))
+}
+
+// EmailStatusEQ applies the EQ predicate on the "email_status" field.
+func EmailStatusEQ(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldEmailStatus, v))
+}
+
+// EmailStatusNEQ applies the NEQ predicate on the "email_status" field.
+func EmailStatusNEQ(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldNEQ(FieldEmailStatus, v))
+}
+
+// EmailStatusIn applies the In predicate on the "email_status" field.
+func EmailStatusIn(vs ...string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldIn(FieldEmailStatus, vs...))
+}
+
+// EmailStatusNotIn applies the NotIn predicate on the "email_status" field.
+func EmailStatusNotIn(vs ...string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldNotIn(FieldEmailStatus, vs...))
+}
+
+// EmailStatusGT applies the GT predicate on the "email_status" field.
+func EmailStatusGT(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldGT(FieldEmailStatus, v))
+}
+
+// EmailStatusGTE applies the GTE predicate on the "email_status" field.
+func EmailStatusGTE(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldGTE(FieldEmailStatus, v))
+}
+
+// EmailStatusLT applies the LT predicate on the "email_status" field.
+func EmailStatusLT(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldLT(FieldEmailStatus, v))
+}
+
+// EmailStatusLTE applies the LTE predicate on the "email_status" field.
+func EmailStatusLTE(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldLTE(FieldEmailStatus, v))
+}
+
+// EmailStatusContains applies the Contains predicate on the "email_status" field.
+func EmailStatusContains(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldContains(FieldEmailStatus, v))
+}
+
+// EmailStatusHasPrefix applies the HasPrefix predicate on the "email_status" field.
+func EmailStatusHasPrefix(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldHasPrefix(FieldEmailStatus, v))
+}
+
+// EmailStatusHasSuffix applies the HasSuffix predicate on the "email_status" field.
+func EmailStatusHasSuffix(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldHasSuffix(FieldEmailStatus, v))
+}
+
+// EmailStatusEqualFold applies the EqualFold predicate on the "email_status" field.
+func EmailStatusEqualFold(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEqualFold(FieldEmailStatus, v))
+}
+
+// EmailStatusContainsFold applies the ContainsFold predicate on the "email_status" field.
+func EmailStatusContainsFold(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldContainsFold(FieldEmailStatus, v))
+}
+
+// EmailTotalEQ applies the EQ predicate on the "email_total" field.
+func EmailTotalEQ(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldEmailTotal, v))
+}
+
+// EmailTotalNEQ applies the NEQ predicate on the "email_total" field.
+func EmailTotalNEQ(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldNEQ(FieldEmailTotal, v))
+}
+
+// EmailTotalIn applies the In predicate on the "email_total" field.
+func EmailTotalIn(vs ...int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldIn(FieldEmailTotal, vs...))
+}
+
+// EmailTotalNotIn applies the NotIn predicate on the "email_total" field.
+func EmailTotalNotIn(vs ...int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldNotIn(FieldEmailTotal, vs...))
+}
+
+// EmailTotalGT applies the GT predicate on the "email_total" field.
+func EmailTotalGT(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldGT(FieldEmailTotal, v))
+}
+
+// EmailTotalGTE applies the GTE predicate on the "email_total" field.
+func EmailTotalGTE(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldGTE(FieldEmailTotal, v))
+}
+
+// EmailTotalLT applies the LT predicate on the "email_total" field.
+func EmailTotalLT(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldLT(FieldEmailTotal, v))
+}
+
+// EmailTotalLTE applies the LTE predicate on the "email_total" field.
+func EmailTotalLTE(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldLTE(FieldEmailTotal, v))
+}
+
+// EmailSentEQ applies the EQ predicate on the "email_sent" field.
+func EmailSentEQ(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldEmailSent, v))
+}
+
+// EmailSentNEQ applies the NEQ predicate on the "email_sent" field.
+func EmailSentNEQ(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldNEQ(FieldEmailSent, v))
+}
+
+// EmailSentIn applies the In predicate on the "email_sent" field.
+func EmailSentIn(vs ...int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldIn(FieldEmailSent, vs...))
+}
+
+// EmailSentNotIn applies the NotIn predicate on the "email_sent" field.
+func EmailSentNotIn(vs ...int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldNotIn(FieldEmailSent, vs...))
+}
+
+// EmailSentGT applies the GT predicate on the "email_sent" field.
+func EmailSentGT(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldGT(FieldEmailSent, v))
+}
+
+// EmailSentGTE applies the GTE predicate on the "email_sent" field.
+func EmailSentGTE(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldGTE(FieldEmailSent, v))
+}
+
+// EmailSentLT applies the LT predicate on the "email_sent" field.
+func EmailSentLT(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldLT(FieldEmailSent, v))
+}
+
+// EmailSentLTE applies the LTE predicate on the "email_sent" field.
+func EmailSentLTE(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldLTE(FieldEmailSent, v))
+}
+
+// EmailFailedEQ applies the EQ predicate on the "email_failed" field.
+func EmailFailedEQ(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldEmailFailed, v))
+}
+
+// EmailFailedNEQ applies the NEQ predicate on the "email_failed" field.
+func EmailFailedNEQ(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldNEQ(FieldEmailFailed, v))
+}
+
+// EmailFailedIn applies the In predicate on the "email_failed" field.
+func EmailFailedIn(vs ...int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldIn(FieldEmailFailed, vs...))
+}
+
+// EmailFailedNotIn applies the NotIn predicate on the "email_failed" field.
+func EmailFailedNotIn(vs ...int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldNotIn(FieldEmailFailed, vs...))
+}
+
+// EmailFailedGT applies the GT predicate on the "email_failed" field.
+func EmailFailedGT(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldGT(FieldEmailFailed, v))
+}
+
+// EmailFailedGTE applies the GTE predicate on the "email_failed" field.
+func EmailFailedGTE(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldGTE(FieldEmailFailed, v))
+}
+
+// EmailFailedLT applies the LT predicate on the "email_failed" field.
+func EmailFailedLT(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldLT(FieldEmailFailed, v))
+}
+
+// EmailFailedLTE applies the LTE predicate on the "email_failed" field.
+func EmailFailedLTE(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldLTE(FieldEmailFailed, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

@@ -39,6 +39,28 @@ func (s *announcementRepoStub) MarkEmailSentIfUnset(_ context.Context, _ int64, 
 	return true, nil
 }
 
+func (s *announcementRepoStub) QueueEmailIfNotStarted(_ context.Context, _ int64) (bool, error) {
+	if s.item == nil || s.item.EmailSentAt != nil || s.item.EmailStatus == AnnouncementEmailStatusQueued || s.item.EmailStatus == AnnouncementEmailStatusSending {
+		return false, nil
+	}
+	s.item.EmailStatus = AnnouncementEmailStatusQueued
+	return true, nil
+}
+
+func (s *announcementRepoStub) UpdateEmailProgress(_ context.Context, _ int64, status string, total, sent, failed int, sentAt *time.Time) error {
+	if s.item == nil {
+		return ErrAnnouncementNotFound
+	}
+	s.item.EmailStatus = status
+	s.item.EmailTotal = total
+	s.item.EmailSent = sent
+	s.item.EmailFailed = failed
+	if sentAt != nil {
+		s.item.EmailSentAt = sentAt
+	}
+	return nil
+}
+
 func (*announcementRepoStub) Delete(context.Context, int64) error {
 	return nil
 }

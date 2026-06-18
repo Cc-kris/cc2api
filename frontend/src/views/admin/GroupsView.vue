@@ -2855,6 +2855,7 @@ import { VueDraggable } from "vue-draggable-plus";
 import { createStableObjectKeyResolver } from "@/utils/stableObjectKey";
 import { useKeyedDebouncedSearch } from "@/composables/useKeyedDebouncedSearch";
 import { getPersistedPageSize } from "@/composables/usePersistedPageSize";
+import { extractApiErrorMessage } from "@/utils/apiError";
 import {
   createDefaultMessagesDispatchFormState,
   messagesDispatchConfigToFormState,
@@ -3769,7 +3770,11 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.image_price_2k = group.image_price_2k;
   editForm.image_price_4k = group.image_price_4k;
   editForm.claude_code_only = group.claude_code_only || false;
-  editForm.fallback_group_id = group.fallback_group_id;
+  const fallbackGroupID = group.fallback_group_id ?? null;
+  editForm.fallback_group_id =
+    fallbackGroupID && fallbackGroupOptionsForEdit.value.some((option) => option.value === fallbackGroupID)
+      ? fallbackGroupID
+      : null;
   editForm.fallback_group_id_on_invalid_request =
     group.fallback_group_id_on_invalid_request;
   const messagesDispatchFormState = messagesDispatchConfigToFormState(
@@ -3835,7 +3840,10 @@ const handleUpdateGroup = async () => {
         editForm.monthly_limit_usd as number | string | null,
       ),
       fallback_group_id:
-        editForm.fallback_group_id === null ? 0 : editForm.fallback_group_id,
+        editForm.fallback_group_id === null ||
+        !fallbackGroupOptionsForEdit.value.some((option) => option.value === editForm.fallback_group_id)
+          ? 0
+          : editForm.fallback_group_id,
       fallback_group_id_on_invalid_request:
         editForm.fallback_group_id_on_invalid_request === null
           ? 0
@@ -3871,9 +3879,7 @@ const handleUpdateGroup = async () => {
     closeEditModal();
     loadGroups();
   } catch (error: any) {
-    appStore.showError(
-      error.response?.data?.detail || t("admin.groups.failedToUpdate"),
-    );
+    appStore.showError(extractApiErrorMessage(error, t("admin.groups.failedToUpdate")));
     console.error("Error updating group:", error);
   } finally {
     submitting.value = false;

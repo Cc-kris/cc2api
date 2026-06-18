@@ -258,6 +258,10 @@ var (
 		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
 		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
 		{Name: "email_sent_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "email_status", Type: field.TypeString, Size: 20, Default: "not_requested"},
+		{Name: "email_total", Type: field.TypeInt, Default: 0},
+		{Name: "email_sent", Type: field.TypeInt, Default: 0},
+		{Name: "email_failed", Type: field.TypeInt, Default: 0},
 		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
 		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
 	}
@@ -275,7 +279,7 @@ var (
 			{
 				Name:    "announcement_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{AnnouncementsColumns[11]},
+				Columns: []*schema.Column{AnnouncementsColumns[15]},
 			},
 			{
 				Name:    "announcement_starts_at",
@@ -291,6 +295,11 @@ var (
 				Name:    "announcement_email_sent_at",
 				Unique:  false,
 				Columns: []*schema.Column{AnnouncementsColumns[10]},
+			},
+			{
+				Name:    "announcement_email_status",
+				Unique:  false,
+				Columns: []*schema.Column{AnnouncementsColumns[11]},
 			},
 		},
 	}

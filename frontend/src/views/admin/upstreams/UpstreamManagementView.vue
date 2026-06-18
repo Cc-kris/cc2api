@@ -106,6 +106,7 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import { adminAPI } from '@/api/admin'
 import type { Upstream, UpstreamBillingMode, UpstreamInput } from '@/api/admin/upstreams'
 import { useAppStore } from '@/stores/app'
+import { extractApiErrorMessage } from '@/utils/apiError'
 
 const appStore = useAppStore()
 const items = ref<Upstream[]>([])
@@ -123,7 +124,7 @@ const totalAccounts = computed(() => items.value.reduce((sum, item) => sum + Num
 
 function money(value: number) { return Number(value || 0).toFixed(4) }
 function balanceClass(item: Upstream) { return item.balance_alert_enabled && item.alert_balance != null && item.current_balance <= item.alert_balance ? 'text-red-600' : 'text-gray-900 dark:text-white' }
-function errorMessage(e: unknown, fallback: string) { return e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message || fallback) : fallback }
+function errorMessage(e: unknown, fallback: string) { return extractApiErrorMessage(e, fallback) }
 function normalizeBillingMode(value: unknown): UpstreamBillingMode { return value === 'image_per_use' ? 'image_per_use' : 'token' }
 function toInput(item?: Upstream): UpstreamInput & { id?: number } { return item ? { id: item.id, base_url: item.base_url, name: item.name, rate_multiplier: 1, platform_rates: (item.platform_rates || []).map(rate => ({ id: rate.id, platform: rate.platform, billing_mode: normalizeBillingMode(rate.billing_mode), rate_multiplier: rate.rate_multiplier || 1, image_unit_price: rate.image_unit_price || 0 })), initial_balance: item.initial_balance, balance_alert_enabled: item.balance_alert_enabled, alert_balance: item.alert_balance ?? null, notes: item.notes || '' } : { base_url: '', name: '', rate_multiplier: 1, platform_rates: [], initial_balance: 0, balance_alert_enabled: false, alert_balance: null, notes: '' } }
 function openCreate() { editing.value = toInput() }
@@ -151,12 +152,19 @@ async function save() {
     appStore.showError('开启余额不足通知时，告警余额必填')
     return
   }
+  const normalizedRows = editing.value.platform_rates
+    .map(rate => ({ ...rate, platform: rate.platform.trim().toLowerCase(), billing_mode: normalizeBillingMode(rate.billing_mode), rate_multiplier: rate.billing_mode === 'image_per_use' ? 1 : Number(rate.rate_multiplier || 1), image_unit_price: rate.billing_mode === 'image_per_use' ? Number(rate.image_unit_price || 0) : 0 }))
+    .filter(rate => rate.platform)
+  for (const row of normalizedRows) {
+    if (row.billing_mode === 'image_per_use' && row.image_unit_price <= 0) {
+      appStore.showError('图片按次金额必须大于 0；如果不使用图片按次，请删除该平台计费行后再保存')
+      return
+    }
+  }
   saving.value = true
   try {
     const { id, ...payload } = editing.value
-    payload.platform_rates = payload.platform_rates
-      .map(rate => ({ ...rate, platform: rate.platform.trim().toLowerCase(), billing_mode: normalizeBillingMode(rate.billing_mode), rate_multiplier: rate.billing_mode === 'image_per_use' ? 1 : Number(rate.rate_multiplier || 1), image_unit_price: rate.billing_mode === 'image_per_use' ? Number(rate.image_unit_price || 0) : 0 }))
-      .filter(rate => rate.platform)
+    payload.platform_rates = normalizedRows
     if (id) await adminAPI.upstreams.update(id, payload)
     else await adminAPI.upstreams.create(payload)
     editing.value = null

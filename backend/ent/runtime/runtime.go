@@ -298,12 +298,30 @@ func init() {
 	announcement.DefaultNotifyMode = announcementDescNotifyMode.Default.(string)
 	// announcement.NotifyModeValidator is a validator for the "notify_mode" field. It is called by the builders before save.
 	announcement.NotifyModeValidator = announcementDescNotifyMode.Validators[0].(func(string) error)
+	// announcementDescEmailStatus is the schema descriptor for email_status field.
+	announcementDescEmailStatus := announcementFields[10].Descriptor()
+	// announcement.DefaultEmailStatus holds the default value on creation for the email_status field.
+	announcement.DefaultEmailStatus = announcementDescEmailStatus.Default.(string)
+	// announcement.EmailStatusValidator is a validator for the "email_status" field. It is called by the builders before save.
+	announcement.EmailStatusValidator = announcementDescEmailStatus.Validators[0].(func(string) error)
+	// announcementDescEmailTotal is the schema descriptor for email_total field.
+	announcementDescEmailTotal := announcementFields[11].Descriptor()
+	// announcement.DefaultEmailTotal holds the default value on creation for the email_total field.
+	announcement.DefaultEmailTotal = announcementDescEmailTotal.Default.(int)
+	// announcementDescEmailSent is the schema descriptor for email_sent field.
+	announcementDescEmailSent := announcementFields[12].Descriptor()
+	// announcement.DefaultEmailSent holds the default value on creation for the email_sent field.
+	announcement.DefaultEmailSent = announcementDescEmailSent.Default.(int)
+	// announcementDescEmailFailed is the schema descriptor for email_failed field.
+	announcementDescEmailFailed := announcementFields[13].Descriptor()
+	// announcement.DefaultEmailFailed holds the default value on creation for the email_failed field.
+	announcement.DefaultEmailFailed = announcementDescEmailFailed.Default.(int)
 	// announcementDescCreatedAt is the schema descriptor for created_at field.
-	announcementDescCreatedAt := announcementFields[10].Descriptor()
+	announcementDescCreatedAt := announcementFields[14].Descriptor()
 	// announcement.DefaultCreatedAt holds the default value on creation for the created_at field.
 	announcement.DefaultCreatedAt = announcementDescCreatedAt.Default.(func() time.Time)
 	// announcementDescUpdatedAt is the schema descriptor for updated_at field.
-	announcementDescUpdatedAt := announcementFields[11].Descriptor()
+	announcementDescUpdatedAt := announcementFields[15].Descriptor()
 	// announcement.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	announcement.DefaultUpdatedAt = announcementDescUpdatedAt.Default.(func() time.Time)
 	// announcement.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

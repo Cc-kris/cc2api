@@ -28,7 +28,11 @@ func (r *announcementRepository) Create(ctx context.Context, a *service.Announce
 		SetContent(a.Content).
 		SetStatus(a.Status).
 		SetNotifyMode(a.NotifyMode).
-		SetTargeting(a.Targeting)
+		SetTargeting(a.Targeting).
+		SetEmailStatus(normalizeAnnouncementEmailStatus(a.EmailStatus)).
+		SetEmailTotal(maxInt(a.EmailTotal, 0)).
+		SetEmailSent(maxInt(a.EmailSent, 0)).
+		SetEmailFailed(maxInt(a.EmailFailed, 0))
 
 	if a.StartsAt != nil {
 		builder.SetStartsAt(*a.StartsAt)
@@ -72,7 +76,11 @@ func (r *announcementRepository) Update(ctx context.Context, a *service.Announce
 		SetContent(a.Content).
 		SetStatus(a.Status).
 		SetNotifyMode(a.NotifyMode).
-		SetTargeting(a.Targeting)
+		SetTargeting(a.Targeting).
+		SetEmailStatus(normalizeAnnouncementEmailStatus(a.EmailStatus)).
+		SetEmailTotal(maxInt(a.EmailTotal, 0)).
+		SetEmailSent(maxInt(a.EmailSent, 0)).
+		SetEmailFailed(maxInt(a.EmailFailed, 0))
 
 	if a.StartsAt != nil {
 		builder.SetStartsAt(*a.StartsAt)
@@ -114,11 +122,48 @@ func (r *announcementRepository) MarkEmailSentIfUnset(ctx context.Context, id in
 	affected, err := client.Announcement.Update().
 		Where(announcement.IDEQ(id), announcement.EmailSentAtIsNil()).
 		SetEmailSentAt(sentAt).
+		SetEmailStatus("sent").
 		Save(ctx)
 	if err != nil {
 		return false, translatePersistenceError(err, service.ErrAnnouncementNotFound, nil)
 	}
 	return affected > 0, nil
+}
+
+func (r *announcementRepository) QueueEmailIfNotStarted(ctx context.Context, id int64) (bool, error) {
+	client := clientFromContext(ctx, r.client)
+	affected, err := client.Announcement.Update().
+		Where(
+			announcement.IDEQ(id),
+			announcement.EmailSentAtIsNil(),
+			announcement.Or(
+				announcement.EmailStatusEQ(""),
+				announcement.EmailStatusEQ("not_requested"),
+			),
+		).
+		SetEmailStatus("queued").
+		SetEmailTotal(0).
+		SetEmailSent(0).
+		SetEmailFailed(0).
+		Save(ctx)
+	if err != nil {
+		return false, translatePersistenceError(err, service.ErrAnnouncementNotFound, nil)
+	}
+	return affected > 0, nil
+}
+
+func (r *announcementRepository) UpdateEmailProgress(ctx context.Context, id int64, status string, total, sent, failed int, sentAt *time.Time) error {
+	client := clientFromContext(ctx, r.client)
+	builder := client.Announcement.UpdateOneID(id).
+		SetEmailStatus(normalizeAnnouncementEmailStatus(status)).
+		SetEmailTotal(maxInt(total, 0)).
+		SetEmailSent(maxInt(sent, 0)).
+		SetEmailFailed(maxInt(failed, 0))
+	if sentAt != nil {
+		builder.SetEmailSentAt(*sentAt)
+	}
+	_, err := builder.Save(ctx)
+	return translatePersistenceError(err, service.ErrAnnouncementNotFound, nil)
 }
 
 func (r *announcementRepository) Delete(ctx context.Context, id int64) error {
@@ -259,6 +304,10 @@ func announcementEntityToService(m *dbent.Announcement) *service.Announcement {
 		CreatedBy:   m.CreatedBy,
 		UpdatedBy:   m.UpdatedBy,
 		EmailSentAt: m.EmailSentAt,
+		EmailStatus: m.EmailStatus,
+		EmailTotal:  m.EmailTotal,
+		EmailSent:   m.EmailSent,
+		EmailFailed: m.EmailFailed,
 		CreatedAt:   m.CreatedAt,
 		UpdatedAt:   m.UpdatedAt,
 	}
@@ -272,4 +321,19 @@ func announcementEntitiesToService(models []*dbent.Announcement) []service.Annou
 		}
 	}
 	return out
+}
+
+func normalizeAnnouncementEmailStatus(status string) string {
+	status = strings.TrimSpace(status)
+	if status == "" {
+		return "not_requested"
+	}
+	return status
+}
+
+func maxInt(v, min int) int {
+	if v < min {
+		return min
+	}
+	return v
 }

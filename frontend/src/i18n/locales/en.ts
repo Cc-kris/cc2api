@@ -4411,6 +4411,7 @@ export default {
         status: 'Status',
         notifyMode: 'Notify Mode',
         targeting: 'Targeting',
+        emailStatus: 'Email Sending',
         timeRange: 'Schedule',
         createdAt: 'Created At',
         actions: 'Actions'
@@ -4424,6 +4425,15 @@ export default {
         silent: 'Silent',
         popup: 'Popup'
       },
+      emailStatusLabels: {
+        notRequested: 'Not sent',
+        queued: 'Queued',
+        sending: 'Sending',
+        sent: 'Completed',
+        partialFailed: 'Partial failed',
+        failed: 'Failed'
+      },
+      emailFailedCount: '{count} failed',
       form: {
         title: 'Title',
         content: 'Content (Markdown supported)',
@@ -4448,7 +4458,7 @@ export default {
         balanceValue: 'Balance threshold',
         selectPackages: 'Select packages',
         sendEmail: 'Send email notification',
-        sendEmailHint: 'After saving, an email will be sent immediately to users matching the targeting rules. Each announcement is sent only once.',
+        sendEmailHint: 'After saving, the announcement is created immediately and email continues in the background. Each announcement is sent only once.',
         emailAlreadySentHint: 'This announcement has already sent email; later edits will not send it again.'
       },
       operators: {

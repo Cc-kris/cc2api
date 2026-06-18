@@ -89,6 +89,31 @@
             </span>
           </template>
 
+          <template #cell-email_status="{ row }">
+            <div class="space-y-1 text-xs">
+              <span
+                :class="[
+                  'badge',
+                  row.email_status === 'sent'
+                    ? 'badge-success'
+                    : row.email_status === 'queued' || row.email_status === 'sending'
+                      ? 'badge-warning'
+                      : row.email_status === 'failed' || row.email_status === 'partial_failed'
+                        ? 'badge-danger'
+                        : 'badge-gray'
+                ]"
+              >
+                {{ emailStatusLabel(row) }}
+              </span>
+              <div v-if="row.email_status && row.email_status !== 'not_requested'" class="text-gray-500 dark:text-dark-400">
+                {{ Number(row.email_sent || 0) }}/{{ Number(row.email_total || 0) }}
+                <span v-if="Number(row.email_failed || 0) > 0" class="text-red-600">
+                  · {{ t('admin.announcements.emailFailedCount', { count: Number(row.email_failed || 0) }) }}
+                </span>
+              </div>
+            </div>
+          </template>
+
           <template #cell-targeting="{ row }">
             <span class="text-sm text-gray-600 dark:text-gray-300">
               {{ targetingSummary(row.targeting) }}
@@ -330,6 +355,7 @@ const columns = computed<Column[]>(() => [
   { key: 'status', label: t('admin.announcements.columns.status'), sortable: true },
   { key: 'notify_mode', label: t('admin.announcements.columns.notifyMode'), sortable: true },
   { key: 'targeting', label: t('admin.announcements.columns.targeting') },
+  { key: 'email_status', label: t('admin.announcements.columns.emailStatus') },
   { key: 'timeRange', label: t('admin.announcements.columns.timeRange') },
   { key: 'created_at', label: t('admin.announcements.columns.createdAt'), sortable: true },
   { key: 'actions', label: t('admin.announcements.columns.actions') }
@@ -346,6 +372,16 @@ const targetingSummary = (targeting: AnnouncementTargeting) => {
   const anyOf = targeting?.any_of ?? []
   if (!anyOf || anyOf.length === 0) return t('admin.announcements.targetingSummaryAll')
   return t('admin.announcements.targetingSummaryCustom', { groups: anyOf.length })
+}
+
+const emailStatusLabel = (row: Announcement) => {
+  const status = row.email_status || 'not_requested'
+  if (status === 'queued') return t('admin.announcements.emailStatusLabels.queued')
+  if (status === 'sending') return t('admin.announcements.emailStatusLabels.sending')
+  if (status === 'sent') return t('admin.announcements.emailStatusLabels.sent')
+  if (status === 'partial_failed') return t('admin.announcements.emailStatusLabels.partialFailed')
+  if (status === 'failed') return t('admin.announcements.emailStatusLabels.failed')
+  return t('admin.announcements.emailStatusLabels.notRequested')
 }
 
 // ===== CRUD / list =====

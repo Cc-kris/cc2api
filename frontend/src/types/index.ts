@@ -324,6 +324,10 @@ export interface Announcement {
   created_by?: number
   updated_by?: number
   email_sent_at?: string
+  email_status?: 'not_requested' | 'queued' | 'sending' | 'sent' | 'partial_failed' | 'failed' | string
+  email_total?: number
+  email_sent?: number
+  email_failed?: number
   created_at: string
   updated_at: string
 }
