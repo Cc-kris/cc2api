@@ -84,17 +84,17 @@ func (r *upstreamRepository) UpdateUpstream(ctx context.Context, id int64, input
 	res, err := tx.ExecContext(ctx, `
 UPDATE upstreams
 SET base_url=$2, normalized_base_url=$3, name=$4, rate_multiplier=$5, initial_balance=$6,
-    balance_alert_enabled=$7, alert_balance=$8, notes=$9, updated_at=NOW(),
-    alert_email_sent_at = CASE WHEN COALESCE(alert_balance, -1) <> COALESCE($8, -1) OR balance_alert_enabled <> $7 THEN NULL ELSE alert_email_sent_at END
+    balance_alert_enabled=$7, alert_balance=$8::numeric, notes=$9, updated_at=NOW(),
+    alert_email_sent_at = CASE WHEN COALESCE(alert_balance, -1::numeric) <> COALESCE($8::numeric, -1::numeric) OR balance_alert_enabled <> $7 THEN NULL ELSE alert_email_sent_at END
 WHERE id=$1 AND deleted_at IS NULL`, id, input.BaseURL, service.NormalizeUpstreamBaseURLForRepo(input.BaseURL), input.Name, input.RateMultiplier, input.InitialBalance, input.BalanceAlertEnabled, input.AlertBalance, input.Notes)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("update upstream fields: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return nil, fmt.Errorf("upstream not found")
 	}
 	if err := replaceUpstreamPlatformRates(ctx, tx, id, input.PlatformRates); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("replace upstream platform rates: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
