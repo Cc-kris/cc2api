@@ -657,30 +657,6 @@ func parseOpsAlertRequiredString(raw map[string]json.RawMessage, field string, m
 	return strings.TrimSpace(out), nil
 }
 
-func parseOpsAlertRequiredInt(raw map[string]json.RawMessage, field string, message string) (int, error) {
-	v, ok := raw[field]
-	if !ok {
-		return 0, fmt.Errorf("%s", message)
-	}
-	var out int
-	if err := json.Unmarshal(v, &out); err != nil {
-		return 0, fmt.Errorf("%s must be an integer", field)
-	}
-	return out, nil
-}
-
-func parseOpsAlertRequiredFloat(raw map[string]json.RawMessage, field string, message string) (float64, error) {
-	v, ok := raw[field]
-	if !ok {
-		return 0, fmt.Errorf("%s", message)
-	}
-	var out float64
-	if err := json.Unmarshal(v, &out); err != nil || math.IsNaN(out) || math.IsInf(out, 0) {
-		return 0, fmt.Errorf("%s must be a finite number", field)
-	}
-	return out, nil
-}
-
 func parseOpsAlertStringList(raw map[string]json.RawMessage, field string, required bool, requiredMessage string) ([]string, error) {
 	v, ok := raw[field]
 	if !ok {

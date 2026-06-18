@@ -20,7 +20,7 @@ func (r *upstreamRepository) ListUpstreams(ctx context.Context) ([]*service.Upst
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	items, err := scanUpstreams(rows)
 	if err != nil {
 		return nil, err
@@ -36,7 +36,7 @@ func (r *upstreamRepository) GetUpstream(ctx context.Context, id int64) (*servic
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	items, err := scanUpstreams(rows)
 	if err != nil {
 		return nil, err
@@ -55,7 +55,7 @@ func (r *upstreamRepository) CreateUpstream(ctx context.Context, input *service.
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	var id int64
 	err = tx.QueryRowContext(ctx, `
@@ -79,7 +79,7 @@ func (r *upstreamRepository) UpdateUpstream(ctx context.Context, id int64, input
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	res, err := tx.ExecContext(ctx, `
 UPDATE upstreams
@@ -132,7 +132,7 @@ SELECT COUNT(*)::bigint FROM inserted`)
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var count int64
 	if rows.Next() {
 		if err := rows.Scan(&count); err != nil {
@@ -197,7 +197,7 @@ func (r *upstreamRepository) ListBalanceAlertCandidates(ctx context.Context) ([]
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	items, err := scanUpstreams(rows)
 	if err != nil {
 		return nil, err
@@ -301,7 +301,7 @@ ORDER BY lower(platform)`, pqInt64Array(ids))
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var upstreamID int64
 		var rate service.UpstreamPlatformRate
@@ -370,7 +370,7 @@ ORDER BY 3 DESC, u.id`, start, end, service.RoleAdmin)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []service.UpstreamCostPoint
 	for rows.Next() {
 		var p service.UpstreamCostPoint
@@ -403,7 +403,7 @@ GROUP BY 1, u.id, u.name ORDER BY 1, u.id`, bucket), start, end, service.RoleAdm
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []service.UpstreamCostPoint
 	for rows.Next() {
 		var p service.UpstreamCostPoint
@@ -446,7 +446,7 @@ FROM buckets b LEFT JOIN usage_points up ON up.bucket=b.bucket LEFT JOIN recharg
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []service.FinanceTrendPoint
 	for rows.Next() {
 		var p service.FinanceTrendPoint
