@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -32,6 +33,7 @@ func (h *UpstreamHandler) Create(c *gin.Context) {
 	}
 	item, err := h.service.Create(c.Request.Context(), &req)
 	if err != nil {
+		logger.LegacyPrintf("handler.admin.upstream", "[UpstreamManagement] create failed: base_url=%q name=%q platform_rates=%d err=%v", req.BaseURL, req.Name, len(req.PlatformRates), err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -51,6 +53,7 @@ func (h *UpstreamHandler) Update(c *gin.Context) {
 	}
 	item, err := h.service.Update(c.Request.Context(), id, &req)
 	if err != nil {
+		logger.LegacyPrintf("handler.admin.upstream", "[UpstreamManagement] update failed: id=%d base_url=%q name=%q platform_rates=%d err=%v", id, req.BaseURL, req.Name, len(req.PlatformRates), err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}

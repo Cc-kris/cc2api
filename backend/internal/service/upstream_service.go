@@ -153,7 +153,7 @@ func normalizeUpstreamInput(input *UpstreamInput) (*UpstreamInput, error) {
 		return nil, errors.New("alert_balance must be >= 0")
 	}
 	platformRates := make([]UpstreamPlatformRate, 0, len(input.PlatformRates))
-	seenPlatforms := make(map[string]struct{}, len(input.PlatformRates))
+	platformRateIndex := make(map[string]int, len(input.PlatformRates))
 	for _, row := range input.PlatformRates {
 		platform := strings.ToLower(strings.TrimSpace(row.Platform))
 		if platform == "" {
@@ -162,10 +162,6 @@ func normalizeUpstreamInput(input *UpstreamInput) (*UpstreamInput, error) {
 		if len(platform) > 50 {
 			return nil, errors.New("platform must not exceed 50 characters")
 		}
-		if _, ok := seenPlatforms[platform]; ok {
-			return nil, errors.New("duplicate platform rate")
-		}
-		seenPlatforms[platform] = struct{}{}
 		billingMode := strings.ToLower(strings.TrimSpace(row.BillingMode))
 		if billingMode == "" {
 			billingMode = "token"
@@ -180,16 +176,22 @@ func normalizeUpstreamInput(input *UpstreamInput) (*UpstreamInput, error) {
 				platformRate = 1
 			}
 			if platformRate < 0 || platformRate > 1000000 {
-				return nil, errors.New("platform rate_multiplier must be between 0 and 1000000")
+				return nil, fmt.Errorf("platform %s rate_multiplier must be between 0 and 1000000", platform)
 			}
 			imageUnitPrice = 0
 		} else {
 			platformRate = 1
 			if imageUnitPrice <= 0 || imageUnitPrice > 1000000 {
-				return nil, errors.New("image_unit_price must be between 0 and 1000000")
+				return nil, fmt.Errorf("platform %s image_unit_price must be between 0 and 1000000", platform)
 			}
 		}
-		platformRates = append(platformRates, UpstreamPlatformRate{ID: row.ID, Platform: platform, BillingMode: billingMode, RateMultiplier: platformRate, ImageUnitPrice: imageUnitPrice})
+		normalizedRate := UpstreamPlatformRate{ID: row.ID, Platform: platform, BillingMode: billingMode, RateMultiplier: platformRate, ImageUnitPrice: imageUnitPrice}
+		if existingIndex, ok := platformRateIndex[platform]; ok {
+			platformRates[existingIndex] = normalizedRate
+			continue
+		}
+		platformRateIndex[platform] = len(platformRates)
+		platformRates = append(platformRates, normalizedRate)
 	}
 	return &UpstreamInput{
 		BaseURL:             baseURL,

@@ -152,11 +152,18 @@ async function save() {
     appStore.showError('开启余额不足通知时，告警余额必填')
     return
   }
-  const normalizedRows = editing.value.platform_rates
+  const normalizedRateMap = new Map<string, UpstreamInput['platform_rates'][number]>()
+  editing.value.platform_rates
     .map(rate => ({ ...rate, platform: rate.platform.trim().toLowerCase(), billing_mode: normalizeBillingMode(rate.billing_mode), rate_multiplier: rate.billing_mode === 'image_per_use' ? 1 : Number(rate.rate_multiplier || 1), image_unit_price: rate.billing_mode === 'image_per_use' ? Number(rate.image_unit_price || 0) : 0 }))
     .filter(rate => rate.platform)
+    .forEach(rate => normalizedRateMap.set(rate.platform, rate))
+  const normalizedRows = Array.from(normalizedRateMap.values())
   for (const row of normalizedRows) {
-    if (row.billing_mode === 'image_per_use' && row.image_unit_price <= 0) {
+    if (row.billing_mode === 'token' && (Number.isNaN(row.rate_multiplier) || row.rate_multiplier < 0 || row.rate_multiplier > 1000000)) {
+      appStore.showError(`平台 ${row.platform} 的 Token 倍率必须在 0 到 1000000 之间`)
+      return
+    }
+    if (row.billing_mode === 'image_per_use' && (Number.isNaN(row.image_unit_price) || row.image_unit_price <= 0 || row.image_unit_price > 1000000)) {
       appStore.showError('图片按次金额必须大于 0；如果不使用图片按次，请删除该平台计费行后再保存')
       return
     }
