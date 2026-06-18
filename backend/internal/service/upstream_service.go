@@ -145,13 +145,7 @@ func normalizeUpstreamInput(input *UpstreamInput) (*UpstreamInput, error) {
 	if len(name) > 120 {
 		return nil, errors.New("name must not exceed 120 characters")
 	}
-	rate := input.RateMultiplier
-	if rate == 0 {
-		rate = 1
-	}
-	if rate < 0 || rate > 1000000 {
-		return nil, errors.New("rate_multiplier must be between 0 and 1000000")
-	}
+	rate := 1.0
 	if input.InitialBalance < 0 {
 		return nil, errors.New("initial_balance must be >= 0")
 	}
@@ -172,17 +166,30 @@ func normalizeUpstreamInput(input *UpstreamInput) (*UpstreamInput, error) {
 			return nil, errors.New("duplicate platform rate")
 		}
 		seenPlatforms[platform] = struct{}{}
+		billingMode := strings.ToLower(strings.TrimSpace(row.BillingMode))
+		if billingMode == "" {
+			billingMode = "token"
+		}
+		if billingMode != "token" && billingMode != "image_per_use" {
+			return nil, errors.New("billing_mode must be token or image_per_use")
+		}
 		platformRate := row.RateMultiplier
-		if platformRate == 0 {
+		imageUnitPrice := row.ImageUnitPrice
+		if billingMode == "token" {
+			if platformRate == 0 {
+				platformRate = 1
+			}
+			if platformRate < 0 || platformRate > 1000000 {
+				return nil, errors.New("platform rate_multiplier must be between 0 and 1000000")
+			}
+			imageUnitPrice = 0
+		} else {
 			platformRate = 1
+			if imageUnitPrice <= 0 || imageUnitPrice > 1000000 {
+				return nil, errors.New("image_unit_price must be between 0 and 1000000")
+			}
 		}
-		if platformRate < 0 || platformRate > 1000000 {
-			return nil, errors.New("platform rate_multiplier must be between 0 and 1000000")
-		}
-		if row.ImageUnitPrice < 0 || row.ImageUnitPrice > 1000000 {
-			return nil, errors.New("image_unit_price must be between 0 and 1000000")
-		}
-		platformRates = append(platformRates, UpstreamPlatformRate{ID: row.ID, Platform: platform, RateMultiplier: platformRate, ImageUnitPrice: row.ImageUnitPrice})
+		platformRates = append(platformRates, UpstreamPlatformRate{ID: row.ID, Platform: platform, BillingMode: billingMode, RateMultiplier: platformRate, ImageUnitPrice: imageUnitPrice})
 	}
 	return &UpstreamInput{
 		BaseURL:             baseURL,

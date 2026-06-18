@@ -276,7 +276,7 @@ func replaceUpstreamPlatformRates(ctx context.Context, tx *sql.Tx, upstreamID in
 		if strings.TrimSpace(rate.Platform) == "" {
 			continue
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO upstream_platform_rates (upstream_id, platform, rate_multiplier, image_unit_price, created_at, updated_at) VALUES ($1,$2,$3,$4,NOW(),NOW())`, upstreamID, strings.ToLower(strings.TrimSpace(rate.Platform)), rate.RateMultiplier, rate.ImageUnitPrice); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO upstream_platform_rates (upstream_id, platform, billing_mode, rate_multiplier, image_unit_price, created_at, updated_at) VALUES ($1,$2,$3,$4,$5,NOW(),NOW())`, upstreamID, strings.ToLower(strings.TrimSpace(rate.Platform)), rate.BillingMode, rate.RateMultiplier, rate.ImageUnitPrice); err != nil {
 			return err
 		}
 	}
@@ -294,7 +294,7 @@ func (r *upstreamRepository) attachPlatformRates(ctx context.Context, items []*s
 		byID[item.ID] = item
 	}
 	rows, err := r.db.QueryContext(ctx, `
-SELECT upstream_id, id, platform, rate_multiplier::float8, image_unit_price::float8
+SELECT upstream_id, id, platform, COALESCE(NULLIF(billing_mode, ''), 'token'), rate_multiplier::float8, image_unit_price::float8
 FROM upstream_platform_rates
 WHERE upstream_id = ANY($1::bigint[])
 ORDER BY lower(platform)`, pqInt64Array(ids))
@@ -305,7 +305,7 @@ ORDER BY lower(platform)`, pqInt64Array(ids))
 	for rows.Next() {
 		var upstreamID int64
 		var rate service.UpstreamPlatformRate
-		if err := rows.Scan(&upstreamID, &rate.ID, &rate.Platform, &rate.RateMultiplier, &rate.ImageUnitPrice); err != nil {
+		if err := rows.Scan(&upstreamID, &rate.ID, &rate.Platform, &rate.BillingMode, &rate.RateMultiplier, &rate.ImageUnitPrice); err != nil {
 			return err
 		}
 		if item := byID[upstreamID]; item != nil {
@@ -474,9 +474,10 @@ func bucketExpr(granularity, column string) string {
 }
 
 func upstreamCostExpr(upstreamAlias string) string {
+	_ = upstreamAlias
 	imageCountExpr := "GREATEST(COALESCE(ul.image_count, 0), CASE WHEN COALESCE(ul.billing_mode, '') = 'image' OR COALESCE(ul.image_output_tokens, 0) > 0 OR COALESCE(ul.image_output_cost, 0) > 0 THEN 1 ELSE 0 END)"
 	return fmt.Sprintf(`CASE
-    WHEN COALESCE(upr.image_unit_price, 0) > 0 AND %s > 0 THEN %s * COALESCE(upr.image_unit_price, 0)
-    ELSE ul.actual_cost * COALESCE(upr.rate_multiplier, %s.rate_multiplier, 1)
-  END`, imageCountExpr, imageCountExpr, upstreamAlias)
+    WHEN COALESCE(upr.billing_mode, 'token') = 'image_per_use' AND %s > 0 THEN %s * COALESCE(upr.image_unit_price, 0)
+    ELSE ul.actual_cost * COALESCE(CASE WHEN COALESCE(upr.billing_mode, 'token') = 'token' THEN upr.rate_multiplier END, 1)
+  END`, imageCountExpr, imageCountExpr)
 }

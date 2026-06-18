@@ -5,6 +5,7 @@ import "time"
 type UpstreamPlatformRate struct {
 	ID             int64   `json:"id"`
 	Platform       string  `json:"platform"`
+	BillingMode    string  `json:"billing_mode"`
 	RateMultiplier float64 `json:"rate_multiplier"`
 	ImageUnitPrice float64 `json:"image_unit_price"`
 }

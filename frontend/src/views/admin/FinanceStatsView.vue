@@ -14,7 +14,7 @@
         </div>
       </div>
       <div class="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6"><Stat title="用户充值总金额" :value="money(summary.user_recharge_total)" /><Stat title="上游充值总金额" :value="money(summary.upstream_recharge_total)" /><Stat title="用户消耗金额" :value="money(summary.user_consumed_amount)" /><Stat title="上游消耗金额" :value="money(summary.upstream_consumed_amount)" /><Stat title="已消耗利润" :value="money(summary.consumed_profit)" /><Stat title="利润率" :value="`${money(summary.consumed_profit_rate)}%`" /></div>
-      <div class="card p-4"><h2 class="mb-4 font-semibold">利润 / 上游成本 / 用户充值曲线图</h2><div v-if="lineData" class="relative h-80"><Line :data="lineData" :options="chartOptions" /></div><div v-else class="flex h-64 items-center justify-center text-sm text-gray-500">暂无数据</div></div>
+      <div class="card p-4"><h2 class="mb-4 font-semibold">上游成本 / 用户消耗金额 / 已消耗利润曲线图</h2><div v-if="lineData" class="relative h-80"><Line :data="lineData" :options="chartOptions" /></div><div v-else class="flex h-64 items-center justify-center text-sm text-gray-500">暂无数据</div></div>
     </div>
   </AppLayout>
 </template>
@@ -55,9 +55,9 @@ const lineData = computed(() => {
   return {
     labels: trend.map(p => formatBucket(p.bucket)),
     datasets: [
-      { label: '已消耗利润', borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,.12)', data: trend.map(p => safeNumber(p.profit)), tension: .3 },
       { label: '上游成本', borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,.12)', data: trend.map(p => safeNumber(p.upstream_cost)), tension: .3 },
-      { label: '用户充值', borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.12)', data: trend.map(p => safeNumber(p.user_recharge)), tension: .3 },
+      { label: '用户消耗金额', borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.12)', data: trend.map(p => safeNumber(p.user_consumed_amount)), tension: .3 },
+      { label: '已消耗利润', borderColor: '#16a34a', backgroundColor: 'rgba(22,163,74,.12)', data: trend.map(p => safeNumber(p.profit)), tension: .3 },
     ]
   }
 })

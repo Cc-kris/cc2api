@@ -5,8 +5,9 @@ import UpstreamManagementView from './UpstreamManagementView.vue'
 import UpstreamStatsView from './UpstreamStatsView.vue'
 import FinanceStatsView from '../FinanceStatsView.vue'
 
-const { list, deleteUpstream, getStats, getFinanceStats, showSuccess, showError } = vi.hoisted(() => ({
+const { list, accountList, deleteUpstream, getStats, getFinanceStats, showSuccess, showError } = vi.hoisted(() => ({
   list: vi.fn(),
+  accountList: vi.fn(),
   deleteUpstream: vi.fn(),
   getStats: vi.fn(),
   getFinanceStats: vi.fn(),
@@ -16,6 +17,9 @@ const { list, deleteUpstream, getStats, getFinanceStats, showSuccess, showError 
 
 vi.mock('@/api/admin', () => ({
   adminAPI: {
+    accounts: {
+      list: accountList
+    },
     upstreams: {
       list,
       create: vi.fn(),
@@ -59,6 +63,8 @@ const mountOptions = {
 describe('admin upstream pages', () => {
   beforeEach(() => {
     list.mockReset()
+    accountList.mockReset()
+    accountList.mockResolvedValue({ data: [] })
     deleteUpstream.mockReset()
     getStats.mockReset()
     getFinanceStats.mockReset()
@@ -76,7 +82,7 @@ describe('admin upstream pages', () => {
           normalized_base_url: 'https://api.anthropic.com',
           name: 'Anthropic',
           rate_multiplier: 1,
-          platform_rates: [{ id: 10, platform: 'anthropic', rate_multiplier: 0.8, image_unit_price: 0.08 }],
+          platform_rates: [{ id: 10, platform: 'anthropic', billing_mode: 'image_per_use', rate_multiplier: 1, image_unit_price: 0.08 }],
           initial_balance: 100,
           consumed_balance: 12,
           current_balance: 88,
@@ -95,14 +101,17 @@ describe('admin upstream pages', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('平台计费')
-    expect(wrapper.text()).toContain('anthropic × 0.8')
-    expect(wrapper.text()).toContain('图片 0.0800/次')
+    expect(wrapper.text()).toContain('anthropic · 图片 0.0800/次')
+    expect(wrapper.text()).not.toContain('默认倍率')
 
     await wrapper.get('button.btn-primary').trigger('click')
     expect(wrapper.text()).toContain('* 为必填项。')
     expect(wrapper.text()).toContain('Base URL *')
     expect(wrapper.text()).toContain('余额 *')
     expect(wrapper.text()).toContain('按平台设置计费')
+    await wrapper.findAll('button').find(button => button.text() === '添加平台计费')?.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('计费方式 *')
 
     await wrapper.findAll('button').find(button => button.text() === '删除')?.trigger('click')
     await flushPromises()
@@ -171,7 +180,7 @@ describe('admin upstream pages', () => {
 
     const chartData = JSON.parse(wrapper.get('[data-testid="line-chart"]').text())
     const chartOptions = JSON.parse(wrapper.get('[data-testid="line-chart"]').attributes('data-options') || '{}')
-    expect(chartData.datasets.map((dataset: { label: string }) => dataset.label)).toEqual(['已消耗利润', '上游成本', '用户充值'])
+    expect(chartData.datasets.map((dataset: { label: string }) => dataset.label)).toEqual(['上游成本', '用户消耗金额', '已消耗利润'])
     expect(chartData.labels[0]).not.toContain(':')
     expect(chartOptions.interaction.mode).toBe('index')
     expect(chartOptions.plugins.tooltip.mode).toBe('index')

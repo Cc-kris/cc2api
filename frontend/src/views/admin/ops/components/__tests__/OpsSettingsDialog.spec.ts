@@ -8,6 +8,9 @@ const mockGetEmailNotificationConfig = vi.fn()
 const mockGetAdvancedSettings = vi.fn()
 const mockGetMetricThresholds = vi.fn()
 const mockGetAIAnalysisConfig = vi.fn()
+const mockListAlertRules = vi.fn()
+const mockCreateAlertRule = vi.fn()
+const mockUpdateAlertRule = vi.fn()
 const mockTestAIAnalysisConnection = vi.fn()
 const mockRouterPush = vi.fn()
 const mockUpdateAlertRuntimeSettings = vi.fn()
@@ -24,6 +27,9 @@ vi.mock('@/api/admin/ops', () => ({
     getAdvancedSettings: (...args: any[]) => mockGetAdvancedSettings(...args),
     getMetricThresholds: (...args: any[]) => mockGetMetricThresholds(...args),
     getAIAnalysisConfig: (...args: any[]) => mockGetAIAnalysisConfig(...args),
+    listAlertRules: (...args: any[]) => mockListAlertRules(...args),
+    createAlertRule: (...args: any[]) => mockCreateAlertRule(...args),
+    updateAlertRule: (...args: any[]) => mockUpdateAlertRule(...args),
     testAIAnalysisConnection: (...args: any[]) => mockTestAIAnalysisConnection(...args),
     updateAlertRuntimeSettings: (...args: any[]) => mockUpdateAlertRuntimeSettings(...args),
     updateEmailNotificationConfig: (...args: any[]) => mockUpdateEmailNotificationConfig(...args),
@@ -54,7 +60,6 @@ vi.mock('vue-i18n', async (importOriginal) => {
     }),
   }
 })
-
 const BaseDialogStub = defineComponent({
   name: 'BaseDialog',
   props: {
@@ -192,6 +197,28 @@ describe('OpsSettingsDialog', () => {
       upstream_error_rate_percent_max: 5,
     })
     mockGetAIAnalysisConfig.mockResolvedValue(aiAnalysisConfig())
+    mockListAlertRules.mockResolvedValue([
+      {
+        id: 99,
+        name: '健康分过低告警',
+        enabled: true,
+        metric_type: 'health_score',
+        operator: '<',
+        threshold: 60,
+        window_minutes: 1,
+        sustained_minutes: 1,
+        severity: 'P1',
+        cooldown_minutes: 15,
+        notify_email: true,
+        rule_version: 'v2',
+        trigger_level: 'P1',
+        notification_channels: ['in_app', 'email'],
+        silence_minutes: 15,
+        auto_ai_analysis: true,
+      },
+    ])
+    mockCreateAlertRule.mockImplementation(async (rule) => ({ ...rule, id: 100 }))
+    mockUpdateAlertRule.mockImplementation(async (_id, rule) => ({ ...rule, id: _id }))
     mockTestAIAnalysisConnection.mockResolvedValue({ success: true, message: 'ok' })
     mockRouterPush.mockResolvedValue(undefined)
     mockUpdateAlertRuntimeSettings.mockResolvedValue(runtimeSettings())
@@ -257,4 +284,50 @@ describe('OpsSettingsDialog', () => {
 
     expect(mockRouterPush).toHaveBeenCalledWith({ name: 'AdminOpsAIAnalysis' })
   })
+
+  it('在运维设置中保存新版健康分告警规则字段', async () => {
+    const wrapper = mount(OpsSettingsDialog, {
+      props: { show: false },
+      global: {
+        stubs: {
+          BaseDialog: BaseDialogStub,
+          Select: SelectStub,
+          Toggle: ToggleStub,
+        },
+      },
+    })
+
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+
+    expect(mockListAlertRules).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('新版运维告警规则')
+    expect(wrapper.text()).toContain('健康分过低告警')
+
+    const thresholdInput = wrapper.findAll('input[type="number"]').find((input) => input.attributes('max') === '100' && input.attributes('step') === '1')
+    expect(thresholdInput).toBeTruthy()
+    await thresholdInput!.setValue('55')
+
+    const alertEmailInput = wrapper.find('input[type="email"]')
+    await alertEmailInput.setValue('ops@example.com')
+
+    const saveButton = wrapper.findAll('.btn-primary').at(-1)
+    await saveButton!.trigger('click')
+    await flushPromises()
+
+    expect(mockUpdateAlertRule).toHaveBeenCalledWith(
+      99,
+      expect.objectContaining({
+        rule_version: 'v2',
+        metric_type: 'health_score',
+        operator: '<',
+        threshold: 55,
+        trigger_level: 'P1',
+        notification_channels: ['in_app', 'email'],
+        silence_minutes: 15,
+        notify_email: true,
+      })
+    )
+  })
+
 })

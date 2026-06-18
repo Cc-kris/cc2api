@@ -1,8 +1,11 @@
 import apiClient from '../client'
 
+export type UpstreamBillingMode = 'token' | 'image_per_use'
+
 export interface UpstreamPlatformRate {
   id?: number
   platform: string
+  billing_mode: UpstreamBillingMode
   rate_multiplier: number
   image_unit_price: number
 }
