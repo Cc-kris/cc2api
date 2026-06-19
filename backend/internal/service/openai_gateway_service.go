@@ -483,9 +483,17 @@ func (s *OpenAIGatewayService) ResolveChannelMappingAndRestrict(ctx context.Cont
 	return s.channelService.ResolveChannelMappingAndRestrict(ctx, groupID, model)
 }
 
+// IsCodexImageGenerationBridgeEnabled reports whether the Codex image bridge is enabled
+// after applying account, channel, and global overrides.
+func (s *OpenAIGatewayService) IsCodexImageGenerationBridgeEnabled(ctx context.Context, account *Account, apiKey *APIKey) bool {
+	return s.isCodexImageGenerationBridgeEnabled(ctx, account, apiKey)
+}
+
 func (s *OpenAIGatewayService) isCodexImageGenerationBridgeEnabled(ctx context.Context, account *Account, apiKey *APIKey) bool {
-	if override := account.CodexImageGenerationBridgeOverride(); override != nil {
-		return *override
+	if account != nil {
+		if override := account.CodexImageGenerationBridgeOverride(); override != nil {
+			return *override
+		}
 	}
 	if s != nil && s.channelService != nil && apiKey != nil && apiKey.GroupID != nil {
 		ch, err := s.channelService.GetChannelForGroup(ctx, *apiKey.GroupID)
@@ -2555,7 +2563,8 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	imageBillingModel := ""
 	imageSizeTier := ""
 	imageInputSize := ""
-	if IsImageGenerationIntentMap(openAIResponsesEndpoint, reqModel, reqBody) {
+	isExplicitResponsesImageIntent := OpenAIResponsesBodyHasExplicitImageGenerationIntent(body, reqModel)
+	if isExplicitResponsesImageIntent {
 		var imageCfgErr error
 		imageCfg, imageCfgErr := resolveOpenAIResponsesImageBillingConfigDetailed(reqBody, billingModel)
 		if imageCfgErr != nil {
@@ -2595,6 +2604,20 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				return nil, fmt.Errorf("serialize request body: %w", marshalErr)
 			}
 		}
+	}
+	if isExplicitResponsesImageIntent && codexImageGenerationBridgeEnabled && account.Type == AccountTypeAPIKey {
+		return s.ForwardResponsesImageBridgeToImages(
+			ctx,
+			c,
+			account,
+			body,
+			reqModel,
+			reqStream,
+			imageBillingModel,
+			imageSizeTier,
+			imageInputSize,
+			startTime,
+		)
 	}
 
 	// Get access token
@@ -3142,7 +3165,8 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	imageBillingModel := ""
 	imageSizeTier := ""
 	imageInputSize := ""
-	if IsImageGenerationIntent(openAIResponsesEndpoint, reqModel, body) {
+	isExplicitResponsesImageIntent := OpenAIResponsesBodyHasExplicitImageGenerationIntent(body, reqModel)
+	if isExplicitResponsesImageIntent {
 		var imageCfgErr error
 		imageCfg, imageCfgErr := resolveOpenAIResponsesImageBillingConfigDetailedFromBody(body, reqModel)
 		if imageCfgErr != nil {
@@ -3159,6 +3183,20 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		imageBillingModel = imageCfg.Model
 		imageSizeTier = imageCfg.SizeTier
 		imageInputSize = imageCfg.InputSize
+	}
+	if isExplicitResponsesImageIntent && s.isCodexImageGenerationBridgeEnabled(ctx, account, apiKey) && account.Type == AccountTypeAPIKey {
+		return s.ForwardResponsesImageBridgeToImages(
+			ctx,
+			c,
+			account,
+			body,
+			reqModel,
+			reqStream,
+			imageBillingModel,
+			imageSizeTier,
+			imageInputSize,
+			startTime,
+		)
 	}
 
 	logger.LegacyPrintf("service.openai_gateway",

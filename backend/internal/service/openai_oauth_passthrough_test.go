@@ -1187,11 +1187,8 @@ func TestOpenAIGatewayService_APIKeyPassthrough_CodexImageBridgeNormalizesImageM
 	originalBody := []byte(`{"model":"gpt-image-2","stream":true,"input":"write code"}`)
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
-		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid-image-bridge"}},
-		Body: io.NopCloser(strings.NewReader(
-			"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_text\",\"model\":\"gpt-5.4-mini\",\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"text\"}]}],\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n" +
-				"data: [DONE]\n\n",
-		)),
+		Header:     http.Header{"Content-Type": []string{"application/json"}, "x-request-id": []string{"rid-image-bridge"}},
+		Body:       io.NopCloser(strings.NewReader(`{"data":[{"b64_json":"Y2F0LWltYWdl","revised_prompt":"write code"}],"usage":{"input_tokens":1,"output_tokens":1}}`)),
 	}
 	upstream := &httpUpstreamRecorder{resp: resp}
 
@@ -1225,13 +1222,12 @@ func TestOpenAIGatewayService_APIKeyPassthrough_CodexImageBridgeNormalizesImageM
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, upstream.lastReq)
-	require.Equal(t, "https://api.openai.com/v1/responses", upstream.lastReq.URL.String())
-	require.Equal(t, openAIImagesResponsesMainModel, gjson.GetBytes(upstream.lastBody, "model").String())
-	require.Equal(t, "image_generation", gjson.GetBytes(upstream.lastBody, "tools.0.type").String())
-	require.Equal(t, "gpt-image-2", gjson.GetBytes(upstream.lastBody, "tools.0.model").String())
-	require.Equal(t, "png", gjson.GetBytes(upstream.lastBody, "tools.0.output_format").String())
-	require.Equal(t, "image_generation", gjson.GetBytes(upstream.lastBody, "tool_choice.type").String())
-	require.Contains(t, gjson.GetBytes(upstream.lastBody, "instructions").String(), "image_generation")
+	require.Equal(t, "https://api.openai.com/v1/images/generations", upstream.lastReq.URL.String())
+	require.Equal(t, "gpt-image-2", gjson.GetBytes(upstream.lastBody, "model").String())
+	require.Equal(t, "write code", gjson.GetBytes(upstream.lastBody, "prompt").String())
+	require.Equal(t, float64(1), gjson.GetBytes(upstream.lastBody, "n").Float())
+	require.Equal(t, "b64_json", gjson.GetBytes(upstream.lastBody, "response_format").String())
+	require.Equal(t, 1, result.ImageCount)
 }
 
 func TestOpenAIGatewayService_OAuthPassthrough_WarnOnTimeoutHeadersForStream(t *testing.T) {

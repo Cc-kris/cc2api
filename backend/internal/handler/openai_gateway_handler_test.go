@@ -911,7 +911,7 @@ func TestOpenAIResponsesWebSocket_PassthroughUsageLogInfersReasoningFromInitialR
 
 func TestOpenAIResponsesWebSocket_ChannelImageMappingPreservesTopLevelTextModel(t *testing.T) {
 	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
-		firstPayload: `{"type":"response.create","model":"gpt-5.5","stream":true,"tools":[{"type":"image_generation","format":"png"}],"tool_choice":{"type":"image_generation"}}`,
+		firstPayload: `{"type":"response.create","model":"gpt-5.5","stream":true,"tools":[{"type":"image_generation","format":"png"}]}`,
 		userAgent:    testStringPtr("Codex Desktop test"),
 		channelMapping: map[string]string{
 			"gpt-5.5": "gpt-image-2",

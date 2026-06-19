@@ -1298,6 +1298,13 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 
 	// 解析渠道级模型映射
 	channelMappingWS, _ := h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, reqModel)
+	if service.OpenAIResponsesBodyHasExplicitImageGenerationIntent(firstMessage, reqModel) && h.gatewayService.IsCodexImageGenerationBridgeEnabled(ctx, nil, apiKey) {
+		if h.tryDirectOpenAIWebSocketImageBridgeToHTTPImages(c, wsConn, reqLog, apiKey, subject, firstMessage, channelMappingWS) {
+			return
+		}
+		closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "image generation bridge failed")
+		return
+	}
 
 	var currentUserRelease func()
 	var currentAccountRelease func()
@@ -1673,6 +1680,200 @@ func (h *OpenAIGatewayHandler) tryFallbackOpenAIWebSocketIngressToHTTP(
 		})
 	}
 	closeOpenAIClientWS(wsConn, coderws.StatusNormalClosure, "fallback to http completed")
+	return true
+}
+
+func (h *OpenAIGatewayHandler) tryDirectOpenAIWebSocketImageBridgeToHTTPImages(
+	c *gin.Context,
+	wsConn *coderws.Conn,
+	reqLog *zap.Logger,
+	apiKey *service.APIKey,
+	subject middleware2.AuthSubject,
+	body []byte,
+	channelMapping service.ChannelMappingResult,
+) bool {
+	if h == nil || h.gatewayService == nil || c == nil || wsConn == nil || apiKey == nil {
+		return false
+	}
+	body = bytes.TrimSpace(body)
+	if len(body) == 0 || !gjson.ValidBytes(body) {
+		return false
+	}
+	if strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String()) != "" {
+		return false
+	}
+	if !service.GroupAllowsImageGeneration(apiKey.Group) {
+		return false
+	}
+	reqModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
+	reqStream := gjson.GetBytes(body, "stream").Bool()
+	imageCfg, imageCfgErr := service.ResolveOpenAIResponsesImageBillingConfigDetailedForBridge(body, reqModel)
+	if imageCfgErr != nil {
+		if reqLog != nil {
+			reqLog.Warn("openai.websocket_image_bridge_config_failed", zap.Error(imageCfgErr))
+		}
+		return false
+	}
+	parsed, _, parseErr := service.BuildOpenAIImagesRequestFromResponsesBody(body, imageCfg.Model, false)
+	if parseErr != nil {
+		if reqLog != nil {
+			reqLog.Warn("openai.websocket_image_bridge_parse_failed", zap.Error(parseErr))
+		}
+		return false
+	}
+
+	imageReleaseFunc, acquired := h.acquireImageGenerationSlot(c, false)
+	if !acquired {
+		return true
+	}
+	if imageReleaseFunc != nil {
+		defer imageReleaseFunc()
+	}
+	userReleaseFunc, acquired := h.acquireResponsesUserSlot(c, subject.UserID, subject.Concurrency, reqStream, nil, reqLog)
+	if !acquired {
+		return true
+	}
+	if userReleaseFunc != nil {
+		defer userReleaseFunc()
+	}
+	subscription, _ := middleware2.GetSubscriptionFromContext(c)
+	if err := h.billingCacheService.CheckBillingEligibility(c.Request.Context(), apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
+		if reqLog != nil {
+			reqLog.Info("openai.websocket_image_bridge_billing_eligibility_check_failed", zap.Error(err))
+		}
+		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "billing check failed")
+		return true
+	}
+
+	sessionHash := h.gatewayService.GenerateExplicitSessionHash(c, body)
+	failedAccountIDs := make(map[int64]struct{})
+	var lastFailoverErr *service.UpstreamFailoverError
+	for switchCount := 0; switchCount <= h.maxAccountSwitches; switchCount++ {
+		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithSchedulerForImages(
+			c.Request.Context(),
+			apiKey.GroupID,
+			sessionHash,
+			parsed.Model,
+			failedAccountIDs,
+			parsed.RequiredCapability,
+		)
+		if err != nil || selection == nil || selection.Account == nil {
+			if reqLog != nil {
+				reqLog.Warn("openai.websocket_image_bridge_account_select_failed",
+					zap.Error(err),
+					zap.Int("excluded_account_count", len(failedAccountIDs)),
+				)
+			}
+			if lastFailoverErr != nil {
+				service.SetOpsUpstreamError(c, lastFailoverErr.StatusCode, strings.TrimSpace(service.ExtractUpstreamErrorMessageForBridge(lastFailoverErr.ResponseBody)), string(lastFailoverErr.ResponseBody))
+			}
+			closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "no available compatible image account")
+			return true
+		}
+		account := selection.Account
+		if !h.gatewayService.IsCodexImageGenerationBridgeEnabled(c.Request.Context(), account, apiKey) {
+			failedAccountIDs[account.ID] = struct{}{}
+			if reqLog != nil {
+				reqLog.Warn("openai.websocket_image_bridge_account_disabled", zap.Int64("account_id", account.ID))
+			}
+			continue
+		}
+		setOpsSelectedAccount(c, account.ID, account.Platform)
+		accountReleaseFunc, acquired := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, reqStream, nil, reqLog)
+		if !acquired {
+			return true
+		}
+		fallbackRecorder := newOpenAIHTTPFallbackRecorder()
+		fallbackCtx, _ := gin.CreateTestContext(fallbackRecorder)
+		fallbackCtx.Request = c.Request.Clone(c.Request.Context())
+		fallbackCtx.Request.Body = nil
+		for key, value := range c.Keys {
+			if key == service.OpenAIParsedRequestBodyKey {
+				continue
+			}
+			fallbackCtx.Set(key, value)
+		}
+		setOpenAIClientTransportHTTP(fallbackCtx)
+		setOpsSelectedAccount(fallbackCtx, account.ID, account.Platform)
+		result, forwardErr := func() (*service.OpenAIForwardResult, error) {
+			defer func() {
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+			}()
+			return h.gatewayService.ForwardResponsesImageBridgeToImages(
+				fallbackCtx.Request.Context(),
+				fallbackCtx,
+				account,
+				body,
+				reqModel,
+				reqStream,
+				imageCfg.Model,
+				imageCfg.SizeTier,
+				imageCfg.InputSize,
+				time.Now(),
+			)
+		}()
+		if forwardErr != nil {
+			var failoverErr *service.UpstreamFailoverError
+			if errors.As(forwardErr, &failoverErr) {
+				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+				failedAccountIDs[account.ID] = struct{}{}
+				lastFailoverErr = failoverErr
+				if reqLog != nil {
+					reqLog.Warn("openai.websocket_image_bridge_failover_switching",
+						zap.Int64("account_id", account.ID),
+						zap.String("schedule_layer", scheduleDecision.Layer),
+						zap.Int("upstream_status", failoverErr.StatusCode),
+						zap.Int("switch_count", switchCount+1),
+						zap.Int("max_switches", h.maxAccountSwitches),
+					)
+				}
+				continue
+			}
+			if reqLog != nil {
+				reqLog.Warn("openai.websocket_image_bridge_forward_failed", zap.Int64("account_id", account.ID), zap.Error(forwardErr))
+			}
+			closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "image generation bridge failed")
+			return true
+		}
+		if result == nil {
+			return false
+		}
+		if !writeOpenAIHTTPFallbackBodyToWS(c.Request.Context(), wsConn, fallbackRecorder) {
+			return false
+		}
+		h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, result.FirstTokenMs)
+		inboundEndpoint := GetInboundEndpoint(c)
+		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
+		h.submitOpenAIUsageRecordTask(result, func(taskCtx context.Context) {
+			if err := h.gatewayService.RecordUsage(taskCtx, &service.OpenAIRecordUsageInput{
+				Result:             result,
+				APIKey:             apiKey,
+				User:               apiKey.User,
+				Account:            account,
+				Subscription:       subscription,
+				InboundEndpoint:    inboundEndpoint,
+				UpstreamEndpoint:   upstreamEndpoint,
+				UserAgent:          strings.TrimSpace(c.GetHeader("User-Agent")),
+				IPAddress:          ip.GetClientIP(c),
+				RequestPayloadHash: service.HashUsageRequestPayload(body),
+				APIKeyService:      h.apiKeyService,
+				ChannelUsageFields: channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+			}); err != nil && reqLog != nil {
+				reqLog.Error("openai.websocket_image_bridge_record_usage_failed", zap.Int64("account_id", account.ID), zap.Error(err))
+			}
+		})
+		if reqLog != nil {
+			reqLog.Info("openai.websocket_image_bridge_succeeded",
+				zap.Int64("account_id", account.ID),
+				zap.String("request_id", result.RequestID),
+			)
+		}
+		closeOpenAIClientWS(wsConn, coderws.StatusNormalClosure, "image generation completed")
+		return true
+	}
+	closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "no available compatible image account")
 	return true
 }
 

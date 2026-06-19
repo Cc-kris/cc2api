@@ -316,6 +316,14 @@ func resolveOpenAIResponsesImageBillingConfigDetailedFromBody(body []byte, fallb
 	return resolveOpenAIResponsesImageBillingConfigDetailed(reqBody, fallbackModel)
 }
 
+func ResolveOpenAIResponsesImageBillingConfigDetailedForBridge(body []byte, fallbackModel string) (OpenAIResponsesImageBillingConfig, error) {
+	return resolveOpenAIResponsesImageBillingConfigDetailedFromBody(body, fallbackModel)
+}
+
+func ExtractUpstreamErrorMessageForBridge(body []byte) string {
+	return extractUpstreamErrorMessage(body)
+}
+
 func isOpenAIImageBillingModelAlias(model string) bool {
 	normalized := strings.ToLower(strings.TrimSpace(model))
 	if normalized == "" {

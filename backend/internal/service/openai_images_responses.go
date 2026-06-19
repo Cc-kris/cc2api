@@ -582,8 +582,19 @@ func openAIImagesUpstreamErrorFromGJSON(errorObj gjson.Result, upstreamRequestID
 }
 
 func buildOpenAIImagesFallbackRequestFromResponsesBody(body []byte, fallbackModel string, forceStream bool) (*OpenAIImagesRequest, []byte, error) {
+	return buildOpenAIImagesRequestFromResponsesBody(body, fallbackModel, forceStream, false)
+}
+
+func BuildOpenAIImagesRequestFromResponsesBody(body []byte, fallbackModel string, forceStream bool) (*OpenAIImagesRequest, []byte, error) {
+	return buildOpenAIImagesRequestFromResponsesBody(body, fallbackModel, forceStream, true)
+}
+
+func buildOpenAIImagesRequestFromResponsesBody(body []byte, fallbackModel string, forceStream bool, requireExplicitIntent bool) (*OpenAIImagesRequest, []byte, error) {
 	if len(body) == 0 || !gjson.ValidBytes(body) {
 		return nil, nil, fmt.Errorf("responses image fallback requires a valid JSON body")
+	}
+	if requireExplicitIntent && !OpenAIResponsesBodyHasExplicitImageGenerationIntent(body, fallbackModel) {
+		return nil, nil, fmt.Errorf("responses image bridge requires explicit image generation intent")
 	}
 
 	prompt := extractOpenAIResponsesImagePrompt(body)
@@ -674,6 +685,135 @@ func buildOpenAIImagesFallbackRequestFromResponsesBody(body []byte, fallbackMode
 	return req, payloadBytes, nil
 }
 
+func OpenAIResponsesBodyHasExplicitImageGenerationIntent(body []byte, requestedModel string) bool {
+	if strings.TrimSpace(requestedModel) != "" && isOpenAIImageGenerationModel(requestedModel) {
+		return true
+	}
+	if len(body) == 0 || !gjson.ValidBytes(body) {
+		return false
+	}
+	if model := strings.TrimSpace(gjson.GetBytes(body, "model").String()); isOpenAIImageGenerationModel(model) {
+		return true
+	}
+	return openAIJSONToolChoiceSelectsImageGeneration(gjson.GetBytes(body, "tool_choice"))
+}
+
+func (s *OpenAIGatewayService) ForwardResponsesImageBridgeToImages(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	body []byte,
+	reqModel string,
+	reqStream bool,
+	imageBillingModel string,
+	imageSizeTier string,
+	imageInputSize string,
+	startTime time.Time,
+) (*OpenAIForwardResult, error) {
+	if account == nil || account.Type != AccountTypeAPIKey {
+		return nil, fmt.Errorf("responses image bridge requires an OpenAI API key account")
+	}
+	parsed, imageBody, err := BuildOpenAIImagesRequestFromResponsesBody(body, imageBillingModel, false)
+	if err != nil {
+		return nil, err
+	}
+	upstreamModel := account.GetMappedModel(parsed.Model)
+	if upstreamModel == "" {
+		upstreamModel = parsed.Model
+	}
+	if err := validateOpenAIImagesModel(upstreamModel); err != nil {
+		return nil, err
+	}
+	if upstreamModel != parsed.Model {
+		imageBody, _, err = rewriteOpenAIImagesModel(imageBody, parsed.ContentType, upstreamModel)
+		if err != nil {
+			return nil, err
+		}
+	}
+	logger.LegacyPrintf(
+		"service.openai_gateway",
+		"[OpenAI] Responses image bridge direct to /images/generations: account=%d name=%s image_model=%s upstream_model=%s",
+		account.ID,
+		account.Name,
+		parsed.Model,
+		upstreamModel,
+	)
+
+	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+	defer releaseUpstreamCtx()
+	token, _, err := s.GetAccessToken(upstreamCtx, account)
+	if err != nil {
+		return nil, err
+	}
+	upstreamReq, err := s.buildOpenAIImagesRequest(upstreamCtx, c, account, imageBody, parsed.ContentType, token, parsed.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+	proxyURL := ""
+	if account.ProxyID != nil && account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+	upstreamStart := time.Now()
+	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
+	if err != nil {
+		safeErr := sanitizeUpstreamErrorMessage(err.Error())
+		setOpsUpstreamError(c, 0, safeErr, "")
+		return nil, fmt.Errorf("images bridge upstream request failed: %s", safeErr)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	respBody, readErr := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
+	if readErr != nil {
+		return nil, readErr
+	}
+	if resp.StatusCode >= 400 {
+		upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody)))
+		setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, truncateString(string(respBody), 2048))
+		return nil, &UpstreamFailoverError{
+			StatusCode:   resp.StatusCode,
+			ResponseBody: respBody,
+		}
+	}
+
+	results := make([]openAIResponsesImageResult, 0, parsed.N)
+	for _, item := range gjson.GetBytes(respBody, "data").Array() {
+		result := strings.TrimSpace(item.Get("b64_json").String())
+		if result == "" {
+			continue
+		}
+		results = append(results, openAIResponsesImageResult{
+			Result:        result,
+			RevisedPrompt: strings.TrimSpace(item.Get("revised_prompt").String()),
+			OutputFormat:  firstNonEmptyString(gjson.GetBytes(imageBody, "output_format").String(), "png"),
+			Size:          parsed.Size,
+			Model:         upstreamModel,
+		})
+	}
+	if len(results) == 0 {
+		return nil, fmt.Errorf("images bridge returned no images")
+	}
+	usage, _ := extractOpenAIUsageFromJSONBytes(respBody)
+	if err := s.writeResponsesImageFallbackResult(c, reqModel, reqStream, results, usage); err != nil {
+		return nil, err
+	}
+	firstTokenMs := int(time.Since(startTime).Milliseconds())
+	return &OpenAIForwardResult{
+		RequestID:        resp.Header.Get("x-request-id"),
+		Usage:            usage,
+		Model:            reqModel,
+		UpstreamModel:    upstreamModel,
+		Stream:           reqStream,
+		ResponseHeaders:  resp.Header.Clone(),
+		Duration:         time.Since(startTime),
+		FirstTokenMs:     &firstTokenMs,
+		ImageCount:       len(results),
+		ImageSize:        imageSizeTier,
+		ImageInputSize:   imageInputSize,
+		ImageOutputSizes: openAIResponsesImageResultSizes(results),
+		BillingModel:     firstNonEmptyString(imageBillingModel, parsed.Model),
+	}, nil
+}
+
 func extractOpenAIResponsesImagePrompt(body []byte) string {
 	if prompt := strings.TrimSpace(gjson.GetBytes(body, "prompt").String()); prompt != "" {
 		return prompt
@@ -682,30 +822,59 @@ func extractOpenAIResponsesImagePrompt(body []byte) string {
 	if input.Type == gjson.String {
 		return strings.TrimSpace(input.String())
 	}
-	parts := make([]string, 0, 4)
+	lastUserText := ""
+	lastAnyText := ""
 	input.ForEach(func(_, item gjson.Result) bool {
 		if item.Type == gjson.String {
 			if text := strings.TrimSpace(item.String()); text != "" {
-				parts = append(parts, text)
+				lastAnyText = text
 			}
 			return true
 		}
-		content := item.Get("content")
-		if content.Type == gjson.String {
-			if text := strings.TrimSpace(content.String()); text != "" {
-				parts = append(parts, text)
-			}
+		text := extractOpenAIResponsesImagePromptTextFromItem(item)
+		if text == "" {
 			return true
 		}
-		content.ForEach(func(_, part gjson.Result) bool {
-			if text := strings.TrimSpace(part.Get("text").String()); text != "" {
-				parts = append(parts, text)
-			}
-			return true
-		})
+		lastAnyText = text
+		if strings.TrimSpace(item.Get("role").String()) == "user" {
+			lastUserText = text
+		}
 		return true
 	})
-	return strings.TrimSpace(strings.Join(parts, "\n"))
+	if lastUserText != "" {
+		return lastUserText
+	}
+	return lastAnyText
+}
+
+func extractOpenAIResponsesImagePromptTextFromItem(item gjson.Result) string {
+	content := item.Get("content")
+	if content.Type == gjson.String {
+		return strings.TrimSpace(content.String())
+	}
+	parts := make([]string, 0, 4)
+	content.ForEach(func(_, part gjson.Result) bool {
+		partType := strings.TrimSpace(part.Get("type").String())
+		if partType != "" && partType != "text" && partType != "input_text" && partType != "output_text" {
+			return true
+		}
+		if text := strings.TrimSpace(part.Get("text").String()); text != "" {
+			parts = append(parts, text)
+			return true
+		}
+		if text := strings.TrimSpace(part.Get("input_text").String()); text != "" {
+			parts = append(parts, text)
+			return true
+		}
+		return true
+	})
+	if len(parts) > 0 {
+		return strings.TrimSpace(strings.Join(parts, "\n"))
+	}
+	if text := strings.TrimSpace(item.Get("text").String()); text != "" {
+		return text
+	}
+	return strings.TrimSpace(item.Get("input_text").String())
 }
 
 func openAIResponsesImageFallbackShouldRun(c *gin.Context, account *Account, body []byte, reqModel string) bool {
@@ -715,7 +884,7 @@ func openAIResponsesImageFallbackShouldRun(c *gin.Context, account *Account, bod
 	if account == nil || account.Type != AccountTypeAPIKey {
 		return false
 	}
-	return IsImageGenerationIntent(openAIResponsesEndpoint, reqModel, body)
+	return OpenAIResponsesBodyHasExplicitImageGenerationIntent(body, reqModel)
 }
 
 func (s *OpenAIGatewayService) tryFallbackResponsesImageGenerationToImagesAPI(
