@@ -37,7 +37,7 @@ type openAIResponsesImageResult struct {
 
 const (
 	responsesImageBridgeIdempotencyRoute             = "/v1/responses:image_bridge"
-	responsesImageBridgeIdempotencyTTL               = 10 * time.Minute
+	responsesImageBridgeIdempotencyTTL               = 5 * time.Minute
 	responsesImageBridgeIdempotencyProcessingTimeout = 3 * time.Minute
 )
 
@@ -920,34 +920,44 @@ func writeResponsesImageBridgeDuplicateResponse(c *gin.Context, model string, st
 	if len(retryAfter) > 0 && retryAfter[0] > 0 {
 		c.Header("Retry-After", strconv.Itoa(retryAfter[0]))
 	}
-	errorObj := map[string]any{
-		"type":    "conflict",
-		"code":    "IMAGE_BRIDGE_DUPLICATE_REQUEST",
-		"message": message,
+	responseID := "resp_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	response := map[string]any{
+		"id":     responseID,
+		"object": "response",
+		"model":  model,
+		"status": "completed",
+		"output": []any{},
+		"metadata": map[string]any{
+			"duplicate_suppressed": true,
+			"reason":               message,
+		},
 	}
 	if !stream {
-		c.JSON(http.StatusConflict, gin.H{"error": errorObj})
+		c.JSON(http.StatusOK, response)
 		return
 	}
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
-	responseID := "resp_" + strings.ReplaceAll(uuid.NewString(), "-", "")
-	payload := map[string]any{
-		"type": "response.failed",
+	createdPayload := map[string]any{
+		"type": "response.created",
 		"response": map[string]any{
 			"id":     responseID,
 			"object": "response",
 			"model":  model,
-			"status": "failed",
+			"status": "in_progress",
 			"output": []any{},
-			"error":  errorObj,
 		},
-		"error": errorObj,
 	}
-	raw, _ := json.Marshal(payload)
-	_, _ = fmt.Fprintf(c.Writer, "event: response.failed\ndata: %s\n\n", raw)
+	completedPayload := map[string]any{
+		"type":     "response.completed",
+		"response": response,
+	}
+	createdRaw, _ := json.Marshal(createdPayload)
+	completedRaw, _ := json.Marshal(completedPayload)
+	_, _ = fmt.Fprintf(c.Writer, "event: response.created\ndata: %s\n\n", createdRaw)
+	_, _ = fmt.Fprintf(c.Writer, "event: response.completed\ndata: %s\n\n", completedRaw)
 	_, _ = fmt.Fprint(c.Writer, "data: [DONE]\n\n")
 	if flusher, ok := c.Writer.(http.Flusher); ok {
 		flusher.Flush()
@@ -988,6 +998,16 @@ func (s *OpenAIGatewayService) ForwardResponsesImageBridgeToImages(
 	}
 	idempotencyClaim, err := s.acquireResponsesImageBridgeIdempotency(ctx, c, account, imageBody, reqModel, reqStream, upstreamModel)
 	if err != nil {
+		if errors.Is(err, ErrResponsesImageBridgeDuplicate) {
+			return &OpenAIForwardResult{
+				Model:               reqModel,
+				UpstreamModel:       upstreamModel,
+				Stream:              reqStream,
+				Duration:            time.Since(startTime),
+				BillingModel:        firstNonEmptyString(imageBillingModel, parsed.Model),
+				DuplicateSuppressed: true,
+			}, nil
+		}
 		return nil, err
 	}
 	logger.LegacyPrintf(

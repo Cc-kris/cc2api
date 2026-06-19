@@ -500,6 +500,13 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		} else {
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, nil)
 		}
+		if result != nil && result.DuplicateSuppressed {
+			reqLog.Info("openai.image_bridge_duplicate_suppressed",
+				zap.Int64("account_id", account.ID),
+				zap.Int("switch_count", switchCount),
+			)
+			return
+		}
 		h.persistLocalResponseCache(c, localCacheLookup, localCacheCfg, localCacheCapture, body, nil, reqLog)
 
 		// 捕获请求信息（用于异步记录，避免在 goroutine 中访问 gin.Context）
@@ -1844,6 +1851,12 @@ func (h *OpenAIGatewayHandler) tryDirectOpenAIWebSocketImageBridgeToHTTPImages(
 			return false
 		}
 		h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, result.FirstTokenMs)
+		if result.DuplicateSuppressed {
+			if reqLog != nil {
+				reqLog.Info("openai.websocket_image_bridge_duplicate_suppressed", zap.Int64("account_id", account.ID))
+			}
+			return true
+		}
 		inboundEndpoint := GetInboundEndpoint(c)
 		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
 		h.submitOpenAIUsageRecordTask(result, func(taskCtx context.Context) {

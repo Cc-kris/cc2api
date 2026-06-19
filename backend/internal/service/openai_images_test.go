@@ -1447,11 +1447,13 @@ func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyBlocksSameTurnRetry
 
 	c2, rec2 := newResponsesImageBridgeIdempotencyContext(t, body, "client-b", "turn-1")
 	result, err = svc.ForwardResponsesImageBridgeToImages(context.Background(), c2, account, body, "gpt-image-2", true, "gpt-image-2", "2K", "", time.Now())
-	require.Nil(t, result)
-	require.ErrorIs(t, err, ErrResponsesImageBridgeDuplicate)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.DuplicateSuppressed)
 	require.Len(t, upstream.requests, 1)
-	require.Contains(t, rec2.Body.String(), "IMAGE_BRIDGE_DUPLICATE_REQUEST")
-	require.Contains(t, rec2.Body.String(), "response.failed")
+	require.Contains(t, rec2.Body.String(), "duplicate_suppressed")
+	require.Contains(t, rec2.Body.String(), "response.completed")
+	require.NotContains(t, rec2.Body.String(), "response.failed")
 }
 
 func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyAllowsDifferentTurns(t *testing.T) {
