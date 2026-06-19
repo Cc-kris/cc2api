@@ -1658,6 +1658,36 @@ func TestOpenAIGatewayServiceResponsesImageBridge_SameClientRequestDifferentPayl
 	require.NotContains(t, rec2.Body.String(), "response.completed")
 }
 
+func TestOpenAIGatewayServiceResponsesImageBridge_NoClientRequestIDDoesNotUseTurnIDForIdempotency(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body1 := []byte(`{"model":"gpt-image-2","stream":true,"input":"draw a cat"}`)
+	body2 := []byte(`{"model":"gpt-image-2","stream":true,"input":"draw a dog"}`)
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"Y2F0"}]}`),
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"ZG9n"}]}`),
+	}}
+	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream, idempotencyRepo: newInMemoryIdempotencyRepo()}
+	account := &Account{ID: 103, Name: "image", Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1, Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://api.openai.com"}}
+
+	c1, rec1 := newResponsesImageBridgeIdempotencyContext(t, body1, "", "turn-1")
+	result, err := svc.ForwardResponsesImageBridgeToImages(context.Background(), c1, account, body1, "gpt-image-2", true, "gpt-image-2", "2K", "", time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.False(t, result.DuplicateSuppressed)
+	require.Equal(t, http.StatusOK, rec1.Code)
+	require.Contains(t, rec1.Body.String(), "Y2F0")
+
+	c2, rec2 := newResponsesImageBridgeIdempotencyContext(t, body2, "", "turn-1")
+	result, err = svc.ForwardResponsesImageBridgeToImages(context.Background(), c2, account, body2, "gpt-image-2", true, "gpt-image-2", "2K", "", time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.False(t, result.DuplicateSuppressed)
+	require.Len(t, upstream.requests, 2)
+	require.Equal(t, http.StatusOK, rec2.Code)
+	require.Contains(t, rec2.Body.String(), "ZG9n")
+	require.NotContains(t, rec2.Body.String(), "image_generation_idempotency_conflict")
+}
+
 func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyAllowsDifferentTurns(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := []byte(`{"model":"gpt-image-2","stream":false,"input":"draw a cat"}`)

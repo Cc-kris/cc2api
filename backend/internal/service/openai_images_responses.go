@@ -988,17 +988,14 @@ func buildResponsesImageBridgeIdempotencyIdentity(
 	}
 	clientRequestID := strings.TrimSpace(c.GetHeader("X-Client-Request-ID"))
 	turnID := extractCodexTurnID(c.GetHeader("X-Codex-Turn-Metadata"))
-	if clientRequestID == "" && turnID == "" {
+	if clientRequestID == "" {
 		return "", "", nil, false
 	}
 
 	actorScope := responsesImageBridgeActorScope(c, account)
 	sum := sha256.Sum256(imageBody)
 	bodyHash := hex.EncodeToString(sum[:])
-	requestIdentity := "turn:" + turnID
-	if clientRequestID != "" {
-		requestIdentity = "client:" + clientRequestID
-	}
+	requestIdentity := "client:" + clientRequestID
 	rawKey := strings.Join([]string{
 		"openai_responses_image_bridge",
 		requestIdentity,
