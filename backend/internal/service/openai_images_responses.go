@@ -50,17 +50,51 @@ type responsesImageBridgeIdempotencyClaim struct {
 	enabled   bool
 }
 
-func (c *responsesImageBridgeIdempotencyClaim) markSucceeded(ctx context.Context, imageCount int) {
+type responsesImageBridgeReplayPayload struct {
+	Kind        string `json:"kind"`
+	Version     int    `json:"version"`
+	StatusCode  int    `json:"status_code"`
+	ContentType string `json:"content_type"`
+	Stream      bool   `json:"stream"`
+	Body        string `json:"body"`
+	ImageCount  int    `json:"image_count"`
+	CreatedAt   int64  `json:"created_at"`
+}
+
+const (
+	responsesImageBridgeReplayKind    = "responses_image_bridge_replay"
+	responsesImageBridgeReplayVersion = 1
+)
+
+func (c *responsesImageBridgeIdempotencyClaim) markSucceeded(replay responsesImageBridgeReplayPayload) {
 	if c == nil || !c.enabled || c.repo == nil || c.recordID == 0 {
 		return
 	}
-	body := fmt.Sprintf(`{"status":"completed","image_count":%d}`, imageCount)
-	if err := c.repo.MarkSucceeded(ctx, c.recordID, http.StatusOK, body, c.expiresAt); err != nil {
+	if replay.Kind == "" {
+		replay.Kind = responsesImageBridgeReplayKind
+	}
+	if replay.Version == 0 {
+		replay.Version = responsesImageBridgeReplayVersion
+	}
+	if replay.StatusCode == 0 {
+		replay.StatusCode = http.StatusOK
+	}
+	if replay.CreatedAt == 0 {
+		replay.CreatedAt = time.Now().Unix()
+	}
+	body, err := json.Marshal(replay)
+	if err != nil {
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Responses image bridge replay marshal failed: %v", err)
+		body = []byte(fmt.Sprintf(`{"status":"completed","image_count":%d}`, replay.ImageCount))
+	}
+	persistCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := c.repo.MarkSucceeded(persistCtx, c.recordID, replay.StatusCode, string(body), c.expiresAt); err != nil {
 		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Responses image bridge idempotency mark succeeded failed: %v", err)
 	}
 }
 
-func (c *responsesImageBridgeIdempotencyClaim) markFailedRetryable(ctx context.Context, reason string) {
+func (c *responsesImageBridgeIdempotencyClaim) markFailedRetryable(reason string) {
 	if c == nil || !c.enabled || c.repo == nil || c.recordID == 0 {
 		return
 	}
@@ -70,7 +104,9 @@ func (c *responsesImageBridgeIdempotencyClaim) markFailedRetryable(ctx context.C
 	}
 	now := time.Now()
 	lockedUntil := now.Add(15 * time.Second)
-	if err := c.repo.MarkFailedRetryable(ctx, c.recordID, reason, lockedUntil, c.expiresAt); err != nil {
+	persistCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := c.repo.MarkFailedRetryable(persistCtx, c.recordID, reason, lockedUntil, c.expiresAt); err != nil {
 		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Responses image bridge idempotency mark failed failed: %v", err)
 	}
 }
@@ -898,7 +934,7 @@ func (s *OpenAIGatewayService) acquireResponsesImageBridgeIdempotency(
 		return claim, nil
 	}
 	if existing.RequestFingerprint != fingerprint {
-		writeResponsesImageBridgeDuplicateResponse(c, reqModel, true, "duplicate image request key was reused with different payload")
+		writeResponsesImageBridgeDuplicateResponse(c, reqModel, reqStream, "duplicate image request key was reused with different payload")
 		return nil, ErrResponsesImageBridgeDuplicate
 	}
 
@@ -926,7 +962,10 @@ func (s *OpenAIGatewayService) acquireResponsesImageBridgeIdempotency(
 	}
 	switch existing.Status {
 	case IdempotencyStatusSucceeded:
-		writeResponsesImageBridgeDuplicateResponse(c, reqModel, reqStream, "duplicate image generation request already completed; upstream request was not repeated")
+		if writeResponsesImageBridgeReplayResponse(c, existing.ResponseBody) {
+			return nil, ErrResponsesImageBridgeDuplicate
+		}
+		writeResponsesImageBridgeDuplicateResponse(c, reqModel, reqStream, "completed image generation replay is unavailable; upstream request was not repeated")
 	case IdempotencyStatusProcessing:
 		writeResponsesImageBridgeDuplicateResponse(c, reqModel, reqStream, "duplicate image generation request is still processing; upstream request was not repeated", retryAfter)
 	case IdempotencyStatusFailedRetryable:
@@ -956,14 +995,13 @@ func buildResponsesImageBridgeIdempotencyIdentity(
 	actorScope := responsesImageBridgeActorScope(c, account)
 	sum := sha256.Sum256(imageBody)
 	bodyHash := hex.EncodeToString(sum[:])
-	requestIdentity := "client:" + clientRequestID
-	if turnID != "" {
-		requestIdentity = "turn:" + turnID
+	requestIdentity := "turn:" + turnID
+	if clientRequestID != "" {
+		requestIdentity = "client:" + clientRequestID
 	}
 	rawKey := strings.Join([]string{
 		"openai_responses_image_bridge",
 		requestIdentity,
-		"body:" + bodyHash,
 	}, "|")
 	payload := map[string]any{
 		"body_hash":      bodyHash,
@@ -1008,6 +1046,37 @@ func extractCodexTurnID(raw string) string {
 	return raw
 }
 
+func writeResponsesImageBridgeReplayResponse(c *gin.Context, rawReplay *string) bool {
+	if c == nil || c.Writer == nil || c.Writer.Written() || rawReplay == nil || strings.TrimSpace(*rawReplay) == "" {
+		return false
+	}
+	var replay responsesImageBridgeReplayPayload
+	if err := json.Unmarshal([]byte(*rawReplay), &replay); err != nil {
+		return false
+	}
+	if replay.Kind != responsesImageBridgeReplayKind || replay.Version != responsesImageBridgeReplayVersion || strings.TrimSpace(replay.Body) == "" {
+		return false
+	}
+	statusCode := replay.StatusCode
+	if statusCode == 0 {
+		statusCode = http.StatusOK
+	}
+	contentType := strings.TrimSpace(replay.ContentType)
+	if contentType == "" {
+		contentType = "application/json"
+	}
+	if replay.Stream {
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Header("X-Accel-Buffering", "no")
+	}
+	c.Data(statusCode, contentType, []byte(replay.Body))
+	if flusher, ok := c.Writer.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	return true
+}
+
 func writeResponsesImageBridgeDuplicateResponse(c *gin.Context, model string, stream bool, message string, retryAfter ...int) {
 	if c == nil || c.Writer == nil || c.Writer.Written() {
 		return
@@ -1020,25 +1089,38 @@ func writeResponsesImageBridgeDuplicateResponse(c *gin.Context, model string, st
 		c.Header("Retry-After", strconv.Itoa(retryAfter[0]))
 	}
 	responseID := "resp_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	errorCode := "image_generation_duplicate"
+	statusCode := http.StatusConflict
+	if strings.Contains(strings.ToLower(message), "processing") {
+		errorCode = "image_generation_in_progress"
+	}
+	if strings.Contains(strings.ToLower(message), "different payload") {
+		errorCode = "image_generation_idempotency_conflict"
+	}
 	response := map[string]any{
 		"id":     responseID,
 		"object": "response",
 		"model":  model,
-		"status": "completed",
+		"status": "failed",
 		"output": []any{},
+		"error": map[string]any{
+			"code":    errorCode,
+			"message": message,
+		},
 		"metadata": map[string]any{
 			"duplicate_suppressed": true,
 			"reason":               message,
 		},
 	}
 	if !stream {
-		c.JSON(http.StatusOK, response)
+		c.JSON(statusCode, response)
 		return
 	}
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 	c.Header("X-Accel-Buffering", "no")
+	c.Status(statusCode)
 	createdPayload := map[string]any{
 		"type": "response.created",
 		"response": map[string]any{
@@ -1049,14 +1131,14 @@ func writeResponsesImageBridgeDuplicateResponse(c *gin.Context, model string, st
 			"output": []any{},
 		},
 	}
-	completedPayload := map[string]any{
-		"type":     "response.completed",
+	failedPayload := map[string]any{
+		"type":     "response.failed",
 		"response": response,
 	}
 	createdRaw, _ := json.Marshal(createdPayload)
-	completedRaw, _ := json.Marshal(completedPayload)
+	failedRaw, _ := json.Marshal(failedPayload)
 	_, _ = fmt.Fprintf(c.Writer, "event: response.created\ndata: %s\n\n", createdRaw)
-	_, _ = fmt.Fprintf(c.Writer, "event: response.completed\ndata: %s\n\n", completedRaw)
+	_, _ = fmt.Fprintf(c.Writer, "event: response.failed\ndata: %s\n\n", failedRaw)
 	_, _ = fmt.Fprint(c.Writer, "data: [DONE]\n\n")
 	if flusher, ok := c.Writer.(http.Flusher); ok {
 		flusher.Flush()
@@ -1138,19 +1220,19 @@ func (s *OpenAIGatewayService) ForwardResponsesImageBridgeToImages(
 	if err != nil {
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
 		setOpsUpstreamError(c, 0, safeErr, "")
-		idempotencyClaim.markFailedRetryable(ctx, "IMAGE_BRIDGE_UPSTREAM_REQUEST_FAILED")
+		idempotencyClaim.markFailedRetryable("IMAGE_BRIDGE_UPSTREAM_REQUEST_FAILED")
 		return nil, fmt.Errorf("images bridge upstream request failed: %s", safeErr)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	respBody, readErr := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if readErr != nil {
-		idempotencyClaim.markFailedRetryable(ctx, "IMAGE_BRIDGE_UPSTREAM_READ_FAILED")
+		idempotencyClaim.markFailedRetryable("IMAGE_BRIDGE_UPSTREAM_READ_FAILED")
 		return nil, readErr
 	}
 	if resp.StatusCode >= 400 {
 		upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody)))
 		setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, truncateString(string(respBody), 2048))
-		idempotencyClaim.markFailedRetryable(ctx, fmt.Sprintf("IMAGE_BRIDGE_UPSTREAM_%d", resp.StatusCode))
+		idempotencyClaim.markFailedRetryable(fmt.Sprintf("IMAGE_BRIDGE_UPSTREAM_%d", resp.StatusCode))
 		return nil, &UpstreamFailoverError{
 			StatusCode:   resp.StatusCode,
 			ResponseBody: respBody,
@@ -1172,12 +1254,23 @@ func (s *OpenAIGatewayService) ForwardResponsesImageBridgeToImages(
 		})
 	}
 	if len(results) == 0 {
-		idempotencyClaim.markFailedRetryable(ctx, "IMAGE_BRIDGE_EMPTY_RESULT")
+		idempotencyClaim.markFailedRetryable("IMAGE_BRIDGE_EMPTY_RESULT")
 		return nil, fmt.Errorf("images bridge returned no images")
 	}
 	usage, _ := extractOpenAIUsageFromJSONBytes(respBody)
-	idempotencyClaim.markSucceeded(ctx, len(results))
-	if err := s.writeResponsesImageFallbackResult(c, reqModel, reqStream, results, usage); err != nil {
+	statusCode, contentType, responseBody, err := buildResponsesImageFallbackResponse(reqModel, reqStream, results, usage)
+	if err != nil {
+		idempotencyClaim.markFailedRetryable("IMAGE_BRIDGE_RESPONSE_BUILD_FAILED")
+		return nil, err
+	}
+	idempotencyClaim.markSucceeded(responsesImageBridgeReplayPayload{
+		StatusCode:  statusCode,
+		ContentType: contentType,
+		Stream:      reqStream,
+		Body:        string(responseBody),
+		ImageCount:  len(results),
+	})
+	if err := writeResponsesImageFallbackResponse(c, reqStream, statusCode, contentType, responseBody); err != nil {
 		return nil, err
 	}
 	firstTokenMs := int(time.Since(startTime).Milliseconds())
@@ -1392,10 +1485,7 @@ func (s *OpenAIGatewayService) tryFallbackResponsesImageGenerationToImagesAPI(
 	}, true, nil
 }
 
-func (s *OpenAIGatewayService) writeResponsesImageFallbackResult(c *gin.Context, model string, stream bool, results []openAIResponsesImageResult, usage OpenAIUsage) error {
-	if c == nil {
-		return nil
-	}
+func buildResponsesImageFallbackResponse(model string, stream bool, results []openAIResponsesImageResult, usage OpenAIUsage) (int, string, []byte, error) {
 	responseID := "resp_" + strings.ReplaceAll(uuid.NewString(), "-", "")
 	output := make([]map[string]any, 0, len(results))
 	for i, img := range results {
@@ -1423,32 +1513,26 @@ func (s *OpenAIGatewayService) writeResponsesImageFallbackResult(c *gin.Context,
 		"usage":  usage,
 	}
 	if !stream {
-		c.JSON(http.StatusOK, response)
-		return nil
+		raw, err := json.Marshal(response)
+		if err != nil {
+			return 0, "", nil, err
+		}
+		return http.StatusOK, "application/json; charset=utf-8", raw, nil
 	}
 
-	c.Header("Content-Type", "text/event-stream")
-	c.Header("Cache-Control", "no-cache")
-	c.Header("Connection", "keep-alive")
-	c.Header("X-Accel-Buffering", "no")
-	flusher, _ := c.Writer.(http.Flusher)
+	var buf bytes.Buffer
 	writeEvent := func(eventType string, payload any) error {
 		raw, err := json.Marshal(payload)
 		if err != nil {
 			return err
 		}
 		if eventType != "" {
-			if _, err := fmt.Fprintf(c.Writer, "event: %s\n", eventType); err != nil {
+			if _, err := fmt.Fprintf(&buf, "event: %s\n", eventType); err != nil {
 				return err
 			}
 		}
-		if _, err := fmt.Fprintf(c.Writer, "data: %s\n\n", raw); err != nil {
-			return err
-		}
-		if flusher != nil {
-			flusher.Flush()
-		}
-		return nil
+		_, err = fmt.Fprintf(&buf, "data: %s\n\n", raw)
+		return err
 	}
 	created := map[string]any{
 		"type": "response.created",
@@ -1461,7 +1545,7 @@ func (s *OpenAIGatewayService) writeResponsesImageFallbackResult(c *gin.Context,
 		},
 	}
 	if err := writeEvent("response.created", created); err != nil {
-		return err
+		return 0, "", nil, err
 	}
 	for i, item := range output {
 		payload := map[string]any{
@@ -1470,7 +1554,7 @@ func (s *OpenAIGatewayService) writeResponsesImageFallbackResult(c *gin.Context,
 			"item":         item,
 		}
 		if err := writeEvent("response.output_item.done", payload); err != nil {
-			return err
+			return 0, "", nil, err
 		}
 	}
 	completed := map[string]any{
@@ -1478,15 +1562,39 @@ func (s *OpenAIGatewayService) writeResponsesImageFallbackResult(c *gin.Context,
 		"response": response,
 	}
 	if err := writeEvent("response.completed", completed); err != nil {
-		return err
+		return 0, "", nil, err
 	}
-	if _, err := fmt.Fprint(c.Writer, "data: [DONE]\n\n"); err != nil {
-		return err
+	if _, err := fmt.Fprint(&buf, "data: [DONE]\n\n"); err != nil {
+		return 0, "", nil, err
 	}
-	if flusher != nil {
+	return http.StatusOK, "text/event-stream", buf.Bytes(), nil
+}
+
+func writeResponsesImageFallbackResponse(c *gin.Context, stream bool, statusCode int, contentType string, body []byte) error {
+	if c == nil {
+		return nil
+	}
+	if strings.TrimSpace(contentType) == "" {
+		contentType = "application/json; charset=utf-8"
+	}
+	if stream {
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Header("X-Accel-Buffering", "no")
+	}
+	c.Data(statusCode, contentType, body)
+	if flusher, ok := c.Writer.(http.Flusher); ok {
 		flusher.Flush()
 	}
 	return nil
+}
+
+func (s *OpenAIGatewayService) writeResponsesImageFallbackResult(c *gin.Context, model string, stream bool, results []openAIResponsesImageResult, usage OpenAIUsage) error {
+	statusCode, contentType, body, err := buildResponsesImageFallbackResponse(model, stream, results, usage)
+	if err != nil {
+		return err
+	}
+	return writeResponsesImageFallbackResponse(c, stream, statusCode, contentType, body)
 }
 
 func buildOpenAIImagesAPIResponse(

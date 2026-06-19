@@ -34,6 +34,19 @@ func (w *failingOpenAIImageWriter) Write(p []byte) (int, error) {
 	return w.ResponseWriter.Write(p)
 }
 
+type contextCheckingIdempotencyRepo struct {
+	*inMemoryIdempotencyRepo
+	lastMarkSucceededErr error
+}
+
+func (r *contextCheckingIdempotencyRepo) MarkSucceeded(ctx context.Context, id int64, responseStatus int, responseBody string, expiresAt time.Time) error {
+	r.lastMarkSucceededErr = ctx.Err()
+	if r.lastMarkSucceededErr != nil {
+		return r.lastMarkSucceededErr
+	}
+	return r.inMemoryIdempotencyRepo.MarkSucceeded(ctx, id, responseStatus, responseBody, expiresAt)
+}
+
 func TestOpenAIGatewayServiceParseOpenAIImagesRequest_JSON(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := []byte(`{"model":"gpt-image-2","prompt":"draw a cat","size":"1024x1024","quality":"high","stream":true}`)
@@ -1427,12 +1440,12 @@ func TestOpenAIGatewayServiceForwardImages_OAuthStreamingDrainsAfterClientDiscon
 	require.Equal(t, 4, result.Usage.ImageOutputTokens)
 }
 
-func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyBlocksSameTurnRetry(t *testing.T) {
+func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyAllowsSameTurnDifferentClientRequests(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := []byte(`{"model":"gpt-image-2","stream":true,"input":"draw a cat","n":3}`)
 	upstream := &httpUpstreamRecorder{responses: []*http.Response{
 		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"aW1nMQ=="},{"b64_json":"aW1nMg=="},{"b64_json":"aW1nMw=="}],"usage":{"input_tokens":1,"output_tokens":3}}`),
-		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"c2hvdWxkLW5vdC1iZS1jYWxsZWQ="}]}`),
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"aW1nNA=="},{"b64_json":"aW1nNQ=="},{"b64_json":"aW1nNg=="}],"usage":{"input_tokens":1,"output_tokens":3}}`),
 	}}
 	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream, idempotencyRepo: newInMemoryIdempotencyRepo()}
 	account := &Account{ID: 103, Name: "image", Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1, Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://api.openai.com"}}
@@ -1450,11 +1463,199 @@ func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyBlocksSameTurnRetry
 	result, err = svc.ForwardResponsesImageBridgeToImages(context.Background(), c2, account, body, "gpt-image-2", true, "gpt-image-2", "2K", "", time.Now())
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.True(t, result.DuplicateSuppressed)
-	require.Len(t, upstream.requests, 1)
-	require.Contains(t, rec2.Body.String(), "duplicate_suppressed")
+	require.False(t, result.DuplicateSuppressed)
+	require.Equal(t, 3, result.ImageCount)
+	require.Len(t, upstream.requests, 2)
 	require.Contains(t, rec2.Body.String(), "response.completed")
 	require.NotContains(t, rec2.Body.String(), "response.failed")
+}
+
+func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyReplaysSameClientRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-image-2","stream":true,"input":"draw a cat","n":2}`)
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"aW1nMQ=="},{"b64_json":"aW1nMg=="}],"usage":{"input_tokens":1,"output_tokens":2}}`),
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"c2hvdWxkLW5vdC1iZS1jYWxsZWQ="}]}`),
+	}}
+	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream, idempotencyRepo: newInMemoryIdempotencyRepo()}
+	account := &Account{ID: 103, Name: "image", Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1, Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://api.openai.com"}}
+
+	c1, rec1 := newResponsesImageBridgeIdempotencyContext(t, body, "client-retry", "turn-1")
+	result, err := svc.ForwardResponsesImageBridgeToImages(context.Background(), c1, account, body, "gpt-image-2", true, "gpt-image-2", "2K", "", time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 2, result.ImageCount)
+	require.Equal(t, http.StatusOK, rec1.Code)
+	require.Contains(t, rec1.Body.String(), "aW1nMQ==")
+	require.Contains(t, rec1.Body.String(), "aW1nMg==")
+
+	c2, rec2 := newResponsesImageBridgeIdempotencyContext(t, body, "client-retry", "turn-1")
+	result, err = svc.ForwardResponsesImageBridgeToImages(context.Background(), c2, account, body, "gpt-image-2", true, "gpt-image-2", "2K", "", time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.DuplicateSuppressed)
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, http.StatusOK, rec2.Code)
+	require.Contains(t, rec2.Body.String(), "response.output_item.done")
+	require.Contains(t, rec2.Body.String(), "aW1nMQ==")
+	require.Contains(t, rec2.Body.String(), "aW1nMg==")
+	require.NotContains(t, rec2.Body.String(), "duplicate_suppressed")
+	require.NotContains(t, rec2.Body.String(), "response.failed")
+}
+
+func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyProcessingReturnsFailedEvent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-image-2","stream":true,"input":"draw a cat"}`)
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"c2hvdWxkLW5vdC1iZS1jYWxsZWQ="}]}`),
+	}}
+	repo := newInMemoryIdempotencyRepo()
+	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream, idempotencyRepo: repo}
+	account := &Account{ID: 103, Name: "image", Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1, Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://api.openai.com"}}
+
+	c, rec := newResponsesImageBridgeIdempotencyContext(t, body, "client-processing", "turn-1")
+	parsed, imageBody, err := BuildOpenAIImagesRequestFromResponsesBody(body, "gpt-image-2", false)
+	require.NoError(t, err)
+	scope, rawKey, payload, ok := buildResponsesImageBridgeIdempotencyIdentity(c, account, imageBody, "gpt-image-2", parsed.Model)
+	require.True(t, ok)
+	fingerprint, err := BuildIdempotencyFingerprint(http.MethodPost, responsesImageBridgeIdempotencyRoute, scope, payload)
+	require.NoError(t, err)
+	lockedUntil := time.Now().Add(time.Minute)
+	expiresAt := time.Now().Add(responsesImageBridgeIdempotencyTTL)
+	owner, err := repo.CreateProcessing(context.Background(), &IdempotencyRecord{
+		Scope:              scope,
+		IdempotencyKeyHash: HashIdempotencyKey(rawKey),
+		RequestFingerprint: fingerprint,
+		Status:             IdempotencyStatusProcessing,
+		LockedUntil:        &lockedUntil,
+		ExpiresAt:          expiresAt,
+	})
+	require.NoError(t, err)
+	require.True(t, owner)
+
+	result, err := svc.ForwardResponsesImageBridgeToImages(context.Background(), c, account, body, "gpt-image-2", true, "gpt-image-2", "2K", "", time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.DuplicateSuppressed)
+	require.Len(t, upstream.requests, 0)
+	require.Equal(t, http.StatusConflict, rec.Code)
+	require.NotEmpty(t, rec.Header().Get("Retry-After"))
+	require.Contains(t, rec.Body.String(), "response.failed")
+	require.Contains(t, rec.Body.String(), "image_generation_in_progress")
+	require.NotContains(t, rec.Body.String(), "response.completed")
+}
+
+func TestOpenAIGatewayServiceResponsesImageBridge_SavesReplayWithCanceledRequestContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-image-2","stream":false,"input":"draw a cat"}`)
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"aW1nLWFmdGVyLWNhbmNlbA=="}],"usage":{"input_tokens":1,"output_tokens":1}}`),
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"c2hvdWxkLW5vdC1iZS1jYWxsZWQ="}]}`),
+	}}
+	repo := &contextCheckingIdempotencyRepo{inMemoryIdempotencyRepo: newInMemoryIdempotencyRepo()}
+	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream, idempotencyRepo: repo}
+	account := &Account{ID: 103, Name: "image", Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1, Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://api.openai.com"}}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	c1, rec1 := newResponsesImageBridgeIdempotencyContext(t, body, "client-canceled", "turn-1")
+	result, err := svc.ForwardResponsesImageBridgeToImages(ctx, c1, account, body, "gpt-image-2", false, "gpt-image-2", "2K", "", time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, http.StatusOK, rec1.Code)
+	require.NoError(t, repo.lastMarkSucceededErr)
+
+	c2, rec2 := newResponsesImageBridgeIdempotencyContext(t, body, "client-canceled", "turn-1")
+	result, err = svc.ForwardResponsesImageBridgeToImages(context.Background(), c2, account, body, "gpt-image-2", false, "gpt-image-2", "2K", "", time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.DuplicateSuppressed)
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, http.StatusOK, rec2.Code)
+	require.Equal(t, "aW1nLWFmdGVyLWNhbmNlbA==", gjson.Get(rec2.Body.String(), "output.0.result").String())
+}
+
+func TestOpenAIGatewayServiceResponsesImageBridge_UpstreamErrorMarksRetryableAndSuppressesBackoff(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-image-2","stream":false,"input":"draw a cat"}`)
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		newOpenAIImagesJSONResponse(http.StatusInternalServerError, `{"error":{"message":"temporary upstream failure"}}`),
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"c2hvdWxkLW5vdC1iZS1jYWxsZWQ="}]}`),
+	}}
+	repo := newInMemoryIdempotencyRepo()
+	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream, idempotencyRepo: repo}
+	account := &Account{ID: 103, Name: "image", Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1, Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://api.openai.com"}}
+
+	c1, _ := newResponsesImageBridgeIdempotencyContext(t, body, "client-upstream-error", "turn-1")
+	result, err := svc.ForwardResponsesImageBridgeToImages(context.Background(), c1, account, body, "gpt-image-2", false, "gpt-image-2", "2K", "", time.Now())
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Len(t, upstream.requests, 1)
+
+	c2, rec2 := newResponsesImageBridgeIdempotencyContext(t, body, "client-upstream-error", "turn-1")
+	result, err = svc.ForwardResponsesImageBridgeToImages(context.Background(), c2, account, body, "gpt-image-2", false, "gpt-image-2", "2K", "", time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.DuplicateSuppressed)
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, http.StatusConflict, rec2.Code)
+	require.Contains(t, rec2.Body.String(), "retry backoff")
+	require.Contains(t, rec2.Body.String(), "duplicate_suppressed")
+}
+
+func TestOpenAIGatewayServiceResponsesImageBridge_EmptyImageResultMarksRetryable(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-image-2","stream":false,"input":"draw a cat"}`)
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[]}`),
+	}}
+	repo := newInMemoryIdempotencyRepo()
+	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream, idempotencyRepo: repo}
+	account := &Account{ID: 103, Name: "image", Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1, Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://api.openai.com"}}
+
+	c1, _ := newResponsesImageBridgeIdempotencyContext(t, body, "client-empty", "turn-1")
+	result, err := svc.ForwardResponsesImageBridgeToImages(context.Background(), c1, account, body, "gpt-image-2", false, "gpt-image-2", "2K", "", time.Now())
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Len(t, upstream.requests, 1)
+
+	c2, rec2 := newResponsesImageBridgeIdempotencyContext(t, body, "client-empty", "turn-1")
+	result, err = svc.ForwardResponsesImageBridgeToImages(context.Background(), c2, account, body, "gpt-image-2", false, "gpt-image-2", "2K", "", time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.DuplicateSuppressed)
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, http.StatusConflict, rec2.Code)
+	require.Contains(t, rec2.Body.String(), "retry backoff")
+}
+
+func TestOpenAIGatewayServiceResponsesImageBridge_SameClientRequestDifferentPayloadConflicts(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body1 := []byte(`{"model":"gpt-image-2","stream":false,"input":"draw a cat"}`)
+	body2 := []byte(`{"model":"gpt-image-2","stream":false,"input":"draw a dog"}`)
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"Y2F0"}]}`),
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"ZG9n"}]}`),
+	}}
+	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream, idempotencyRepo: newInMemoryIdempotencyRepo()}
+	account := &Account{ID: 103, Name: "image", Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1, Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://api.openai.com"}}
+
+	c1, rec1 := newResponsesImageBridgeIdempotencyContext(t, body1, "client-conflict", "turn-1")
+	result, err := svc.ForwardResponsesImageBridgeToImages(context.Background(), c1, account, body1, "gpt-image-2", false, "gpt-image-2", "2K", "", time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, http.StatusOK, rec1.Code)
+	require.Len(t, upstream.requests, 1)
+
+	c2, rec2 := newResponsesImageBridgeIdempotencyContext(t, body2, "client-conflict", "turn-1")
+	result, err = svc.ForwardResponsesImageBridgeToImages(context.Background(), c2, account, body2, "gpt-image-2", false, "gpt-image-2", "2K", "", time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.DuplicateSuppressed)
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, http.StatusConflict, rec2.Code)
+	require.Contains(t, rec2.Body.String(), "image_generation_idempotency_conflict")
+	require.NotContains(t, rec2.Body.String(), "response.completed")
 }
 
 func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyAllowsDifferentTurns(t *testing.T) {
