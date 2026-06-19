@@ -999,6 +999,7 @@ func buildResponsesImageBridgeIdempotencyIdentity(
 	rawKey := strings.Join([]string{
 		"openai_responses_image_bridge",
 		requestIdentity,
+		"body:" + bodyHash,
 	}, "|")
 	payload := map[string]any{
 		"body_hash":      bodyHash,

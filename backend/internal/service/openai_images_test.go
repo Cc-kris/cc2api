@@ -1629,7 +1629,7 @@ func TestOpenAIGatewayServiceResponsesImageBridge_EmptyImageResultMarksRetryable
 	require.Contains(t, rec2.Body.String(), "retry backoff")
 }
 
-func TestOpenAIGatewayServiceResponsesImageBridge_SameClientRequestDifferentPayloadConflicts(t *testing.T) {
+func TestOpenAIGatewayServiceResponsesImageBridge_SameClientRequestDifferentPayloadStartsNewGeneration(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body1 := []byte(`{"model":"gpt-image-2","stream":false,"input":"draw a cat"}`)
 	body2 := []byte(`{"model":"gpt-image-2","stream":false,"input":"draw a dog"}`)
@@ -1651,11 +1651,11 @@ func TestOpenAIGatewayServiceResponsesImageBridge_SameClientRequestDifferentPayl
 	result, err = svc.ForwardResponsesImageBridgeToImages(context.Background(), c2, account, body2, "gpt-image-2", false, "gpt-image-2", "2K", "", time.Now())
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.True(t, result.DuplicateSuppressed)
-	require.Len(t, upstream.requests, 1)
-	require.Equal(t, http.StatusConflict, rec2.Code)
-	require.Contains(t, rec2.Body.String(), "image_generation_idempotency_conflict")
-	require.NotContains(t, rec2.Body.String(), "response.completed")
+	require.False(t, result.DuplicateSuppressed)
+	require.Len(t, upstream.requests, 2)
+	require.Equal(t, http.StatusOK, rec2.Code)
+	require.Equal(t, "ZG9n", gjson.Get(rec2.Body.String(), "output.0.result").String())
+	require.NotContains(t, rec2.Body.String(), "image_generation_idempotency_conflict")
 }
 
 func TestOpenAIGatewayServiceResponsesImageBridge_NoClientRequestIDDoesNotUseTurnIDForIdempotency(t *testing.T) {
