@@ -37,8 +37,10 @@ type openAIResponsesImageResult struct {
 
 const (
 	responsesImageBridgeIdempotencyRoute             = "/v1/responses:image_bridge"
-	responsesImageBridgeIdempotencyTTL               = 5 * time.Minute
-	responsesImageBridgeIdempotencyProcessingTimeout = 3 * time.Minute
+	responsesImageBridgeIdempotencyTTL               = 15 * time.Minute
+	responsesImageBridgeIdempotencyProcessingTimeout = 10 * time.Minute
+	responsesImageBridgeDuplicateWaitTimeout         = 2 * time.Minute
+	responsesImageBridgeDuplicatePollInterval        = 500 * time.Millisecond
 )
 
 var ErrResponsesImageBridgeDuplicate = errors.New("responses image bridge duplicate request")
@@ -967,6 +969,9 @@ func (s *OpenAIGatewayService) acquireResponsesImageBridgeIdempotency(
 		}
 		writeResponsesImageBridgeDuplicateResponse(c, reqModel, reqStream, "completed image generation replay is unavailable; upstream request was not repeated")
 	case IdempotencyStatusProcessing:
+		if s.waitAndReplayResponsesImageBridgeDuplicate(ctx, c, scope, keyHash, reqModel, reqStream, now) {
+			return nil, ErrResponsesImageBridgeDuplicate
+		}
 		writeResponsesImageBridgeDuplicateResponse(c, reqModel, reqStream, "duplicate image generation request is still processing; upstream request was not repeated", retryAfter)
 	case IdempotencyStatusFailedRetryable:
 		writeResponsesImageBridgeDuplicateResponse(c, reqModel, reqStream, "duplicate image generation request is in retry backoff; upstream request was not repeated", retryAfter)
@@ -974,6 +979,57 @@ func (s *OpenAIGatewayService) acquireResponsesImageBridgeIdempotency(
 		writeResponsesImageBridgeDuplicateResponse(c, reqModel, reqStream, "duplicate image generation request was not repeated")
 	}
 	return nil, ErrResponsesImageBridgeDuplicate
+}
+
+func (s *OpenAIGatewayService) waitAndReplayResponsesImageBridgeDuplicate(
+	ctx context.Context,
+	c *gin.Context,
+	scope string,
+	keyHash string,
+	reqModel string,
+	reqStream bool,
+	start time.Time,
+) bool {
+	if s == nil || s.idempotencyRepo == nil || c == nil || c.Request == nil {
+		return false
+	}
+	waitCtx := ctx
+	if waitCtx == nil {
+		waitCtx = context.Background()
+	}
+	waitCtx, cancel := context.WithTimeout(waitCtx, responsesImageBridgeDuplicateWaitTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(responsesImageBridgeDuplicatePollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-waitCtx.Done():
+			return false
+		case <-ticker.C:
+			existing, err := s.idempotencyRepo.GetByScopeAndKeyHash(waitCtx, scope, keyHash)
+			if err != nil || existing == nil {
+				return false
+			}
+			switch existing.Status {
+			case IdempotencyStatusSucceeded:
+				if writeResponsesImageBridgeReplayResponse(c, existing.ResponseBody) {
+					logger.LegacyPrintf(
+						"service.openai_gateway",
+						"[OpenAI] Responses image bridge waited and replayed duplicate: scope=%s key_hash=%s wait_ms=%d",
+						scope,
+						truncateString(keyHash, 16),
+						time.Since(start).Milliseconds(),
+					)
+					return true
+				}
+				return false
+			case IdempotencyStatusFailedRetryable:
+				writeResponsesImageBridgeDuplicateResponse(c, reqModel, reqStream, "duplicate image generation request is in retry backoff; upstream request was not repeated")
+				return true
+			}
+		}
+	}
 }
 
 func buildResponsesImageBridgeIdempotencyIdentity(
@@ -986,27 +1042,15 @@ func buildResponsesImageBridgeIdempotencyIdentity(
 	if c == nil || c.Request == nil || account == nil {
 		return "", "", nil, false
 	}
-	clientRequestID := strings.TrimSpace(c.GetHeader("X-Client-Request-ID"))
-	turnID := extractCodexTurnID(c.GetHeader("X-Codex-Turn-Metadata"))
-	if clientRequestID == "" {
-		return "", "", nil, false
-	}
-
 	actorScope := responsesImageBridgeActorScope(c, account)
 	sum := sha256.Sum256(imageBody)
 	bodyHash := hex.EncodeToString(sum[:])
-	requestIdentity := "client:" + clientRequestID
 	rawKey := strings.Join([]string{
 		"openai_responses_image_bridge",
-		requestIdentity,
 		"body:" + bodyHash,
 	}, "|")
 	payload := map[string]any{
-		"body_hash":      bodyHash,
-		"client_request": clientRequestID,
-		"turn_id":        turnID,
-		"request_model":  strings.TrimSpace(reqModel),
-		"upstream_model": strings.TrimSpace(upstreamModel),
+		"body_hash": bodyHash,
 	}
 	return "openai_responses_image_bridge:" + actorScope, rawKey, payload, true
 }
@@ -1175,6 +1219,8 @@ func (s *OpenAIGatewayService) ForwardResponsesImageBridgeToImages(
 			return nil, err
 		}
 	}
+	imageBodyHashBytes := sha256.Sum256(imageBody)
+	imageBodyHash := hex.EncodeToString(imageBodyHashBytes[:])
 	idempotencyClaim, err := s.acquireResponsesImageBridgeIdempotency(ctx, c, account, imageBody, reqModel, reqStream, upstreamModel)
 	if err != nil {
 		if errors.Is(err, ErrResponsesImageBridgeDuplicate) {
@@ -1191,11 +1237,12 @@ func (s *OpenAIGatewayService) ForwardResponsesImageBridgeToImages(
 	}
 	logger.LegacyPrintf(
 		"service.openai_gateway",
-		"[OpenAI] Responses image bridge direct to /images/generations: account=%d name=%s image_model=%s upstream_model=%s",
+		"[OpenAI] Responses image bridge direct to /images/generations: account=%d name=%s image_model=%s upstream_model=%s body_hash=%s",
 		account.ID,
 		account.Name,
 		parsed.Model,
 		upstreamModel,
+		truncateString(imageBodyHash, 16),
 	)
 
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)

@@ -1440,7 +1440,7 @@ func TestOpenAIGatewayServiceForwardImages_OAuthStreamingDrainsAfterClientDiscon
 	require.Equal(t, 4, result.Usage.ImageOutputTokens)
 }
 
-func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyAllowsSameTurnDifferentClientRequests(t *testing.T) {
+func TestOpenAIGatewayServiceResponsesImageBridge_DifferentClientRequestsReplaySameImagePayload(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := []byte(`{"model":"gpt-image-2","stream":true,"input":"draw a cat","n":3}`)
 	upstream := &httpUpstreamRecorder{responses: []*http.Response{
@@ -1463,9 +1463,12 @@ func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyAllowsSameTurnDiffe
 	result, err = svc.ForwardResponsesImageBridgeToImages(context.Background(), c2, account, body, "gpt-image-2", true, "gpt-image-2", "2K", "", time.Now())
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.False(t, result.DuplicateSuppressed)
-	require.Equal(t, 3, result.ImageCount)
-	require.Len(t, upstream.requests, 2)
+	require.True(t, result.DuplicateSuppressed)
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, http.StatusOK, rec2.Code)
+	require.Contains(t, rec2.Body.String(), "aW1nMQ==")
+	require.Contains(t, rec2.Body.String(), "aW1nMg==")
+	require.Contains(t, rec2.Body.String(), "aW1nMw==")
 	require.Contains(t, rec2.Body.String(), "response.completed")
 	require.NotContains(t, rec2.Body.String(), "response.failed")
 }
@@ -1533,7 +1536,9 @@ func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyProcessingReturnsFa
 	require.NoError(t, err)
 	require.True(t, owner)
 
-	result, err := svc.ForwardResponsesImageBridgeToImages(context.Background(), c, account, body, "gpt-image-2", true, "gpt-image-2", "2K", "", time.Now())
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	result, err := svc.ForwardResponsesImageBridgeToImages(ctx, c, account, body, "gpt-image-2", true, "gpt-image-2", "2K", "", time.Now())
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.True(t, result.DuplicateSuppressed)
@@ -1543,6 +1548,51 @@ func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyProcessingReturnsFa
 	require.Contains(t, rec.Body.String(), "response.failed")
 	require.Contains(t, rec.Body.String(), "image_generation_in_progress")
 	require.NotContains(t, rec.Body.String(), "response.completed")
+}
+
+func TestOpenAIGatewayServiceResponsesImageBridge_ProcessingWaitsAndReplaysCompletedResult(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-image-2","stream":false,"input":"draw a cat"}`)
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"c2hvdWxkLW5vdC1iZS1jYWxsZWQ="}]}`),
+	}}
+	repo := newInMemoryIdempotencyRepo()
+	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream, idempotencyRepo: repo}
+	account := &Account{ID: 103, Name: "image", Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1, Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://api.openai.com"}}
+
+	c, rec := newResponsesImageBridgeIdempotencyContext(t, body, "client-processing-replay", "turn-1")
+	parsed, imageBody, err := BuildOpenAIImagesRequestFromResponsesBody(body, "gpt-image-2", false)
+	require.NoError(t, err)
+	scope, rawKey, payload, ok := buildResponsesImageBridgeIdempotencyIdentity(c, account, imageBody, "gpt-image-2", parsed.Model)
+	require.True(t, ok)
+	fingerprint, err := BuildIdempotencyFingerprint(http.MethodPost, responsesImageBridgeIdempotencyRoute, scope, payload)
+	require.NoError(t, err)
+	lockedUntil := time.Now().Add(time.Minute)
+	expiresAt := time.Now().Add(responsesImageBridgeIdempotencyTTL)
+	owner, err := repo.CreateProcessing(context.Background(), &IdempotencyRecord{
+		Scope:              scope,
+		IdempotencyKeyHash: HashIdempotencyKey(rawKey),
+		RequestFingerprint: fingerprint,
+		Status:             IdempotencyStatusProcessing,
+		LockedUntil:        &lockedUntil,
+		ExpiresAt:          expiresAt,
+	})
+	require.NoError(t, err)
+	require.True(t, owner)
+
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		replayBody := `{"output":[{"result":"cmVwbGF5ZWQ="}]}`
+		require.NoError(t, repo.MarkSucceeded(context.Background(), 1, http.StatusOK, fmt.Sprintf(`{"kind":"%s","version":%d,"status_code":200,"content_type":"application/json","stream":false,"body":%q,"image_count":1}`, responsesImageBridgeReplayKind, responsesImageBridgeReplayVersion, replayBody), time.Now().Add(responsesImageBridgeIdempotencyTTL)))
+	}()
+
+	result, err := svc.ForwardResponsesImageBridgeToImages(context.Background(), c, account, body, "gpt-image-2", false, "gpt-image-2", "2K", "", time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.DuplicateSuppressed)
+	require.Len(t, upstream.requests, 0)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "cmVwbGF5ZWQ=", gjson.Get(rec.Body.String(), "output.0.result").String())
 }
 
 func TestOpenAIGatewayServiceResponsesImageBridge_SavesReplayWithCanceledRequestContext(t *testing.T) {
@@ -1658,7 +1708,7 @@ func TestOpenAIGatewayServiceResponsesImageBridge_SameClientRequestDifferentPayl
 	require.NotContains(t, rec2.Body.String(), "image_generation_idempotency_conflict")
 }
 
-func TestOpenAIGatewayServiceResponsesImageBridge_NoClientRequestIDDoesNotUseTurnIDForIdempotency(t *testing.T) {
+func TestOpenAIGatewayServiceResponsesImageBridge_NoClientRequestIDDifferentPayloadStartsNewGeneration(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body1 := []byte(`{"model":"gpt-image-2","stream":true,"input":"draw a cat"}`)
 	body2 := []byte(`{"model":"gpt-image-2","stream":true,"input":"draw a dog"}`)
@@ -1688,7 +1738,7 @@ func TestOpenAIGatewayServiceResponsesImageBridge_NoClientRequestIDDoesNotUseTur
 	require.NotContains(t, rec2.Body.String(), "image_generation_idempotency_conflict")
 }
 
-func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyAllowsDifferentTurns(t *testing.T) {
+func TestOpenAIGatewayServiceResponsesImageBridge_DifferentTurnsReplaySameImagePayload(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := []byte(`{"model":"gpt-image-2","stream":false,"input":"draw a cat"}`)
 	upstream := &httpUpstreamRecorder{responses: []*http.Response{
@@ -1703,11 +1753,14 @@ func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyAllowsDifferentTurn
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	c2, _ := newResponsesImageBridgeIdempotencyContext(t, body, "client-b", "turn-2")
+	c2, rec2 := newResponsesImageBridgeIdempotencyContext(t, body, "client-b", "turn-2")
 	result, err = svc.ForwardResponsesImageBridgeToImages(context.Background(), c2, account, body, "gpt-image-2", false, "gpt-image-2", "2K", "", time.Now())
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Len(t, upstream.requests, 2)
+	require.True(t, result.DuplicateSuppressed)
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, http.StatusOK, rec2.Code)
+	require.Equal(t, "aW1nMQ==", gjson.Get(rec2.Body.String(), "output.0.result").String())
 }
 
 func TestBuildOpenAIImagesRequestFromResponsesBody_UsesEditsWhenInputImagePresent(t *testing.T) {
