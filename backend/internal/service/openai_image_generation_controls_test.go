@@ -200,6 +200,52 @@ func TestOpenAIGatewayServiceForward_CodexImageBridgeInjectsForImageModel(t *tes
 	require.Contains(t, instructions, "image_generation")
 }
 
+func TestOpenAIGatewayServiceForward_PassthroughImageGenerationFallsBackToImagesAPI(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstream := &httpUpstreamRecorder{
+		responses: []*http.Response{
+			{
+				StatusCode: http.StatusServiceUnavailable,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"Service temporarily unavailable","type":"api_error"}}`)),
+			},
+			{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}, "x-request-id": []string{"img_fallback_1"}},
+				Body:       io.NopCloser(strings.NewReader(`{"created":1781849614,"data":[{"b64_json":"ZmFsbGJhY2staW1hZ2U=","revised_prompt":"draw a fallback cat"}]}`)),
+			},
+		},
+	}
+	svc := newOpenAIImageGenerationControlTestService(upstream)
+	svc.cfg.Gateway.CodexImageGenerationBridgeEnabled = true
+	c, recorder := newOpenAIImageGenerationControlTestContext(true, "codex_cli_rs/0.98.0")
+	account := newOpenAIImageGenerationControlTestAccount()
+	account.Extra = map[string]any{
+		"openai_passthrough":              true,
+		"codex_image_generation_bridge":   true,
+		"openai_responses_supported":      true,
+		"openai_apikey_responses_ws_mode": "passthrough",
+	}
+	account.Credentials["base_url"] = "https://example-upstream.test"
+	body := []byte(`{"model":"gpt-image-2","input":"draw a cat","stream":true}`)
+
+	result, err := svc.Forward(context.Background(), c, account, body)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 2, len(upstream.requests))
+	require.Contains(t, upstream.requests[0].URL.Path, "/v1/responses")
+	require.Contains(t, upstream.requests[1].URL.Path, "/v1/images/generations")
+	require.Equal(t, "gpt-image-2", gjson.GetBytes(upstream.bodies[1], "model").String())
+	require.Equal(t, "draw a cat", gjson.GetBytes(upstream.bodies[1], "prompt").String())
+	require.Contains(t, recorder.Body.String(), "ZmFsbGJhY2staW1hZ2U=")
+	require.Contains(t, recorder.Body.String(), "response.completed")
+	require.NotContains(t, recorder.Body.String(), "Service temporarily unavailable")
+	require.Equal(t, 1, result.ImageCount)
+	require.Equal(t, "gpt-image-2", result.BillingModel)
+}
+
 func TestOpenAIGatewayServiceForward_ExplicitImageToolWorksWithBridgeDisabled(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

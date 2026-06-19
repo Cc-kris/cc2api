@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
@@ -577,6 +579,361 @@ func openAIImagesUpstreamErrorFromGJSON(errorObj gjson.Result, upstreamRequestID
 		Param:             param,
 		UpstreamRequestID: strings.TrimSpace(upstreamRequestID),
 	}
+}
+
+func buildOpenAIImagesFallbackRequestFromResponsesBody(body []byte, fallbackModel string, forceStream bool) (*OpenAIImagesRequest, []byte, error) {
+	if len(body) == 0 || !gjson.ValidBytes(body) {
+		return nil, nil, fmt.Errorf("responses image fallback requires a valid JSON body")
+	}
+
+	prompt := extractOpenAIResponsesImagePrompt(body)
+	if prompt == "" {
+		return nil, nil, fmt.Errorf("responses image fallback requires prompt text")
+	}
+
+	tool := gjson.GetBytes(body, `tools.#(type=="image_generation")`)
+	imageModel := strings.TrimSpace(tool.Get("model").String())
+	if imageModel == "" || !isOpenAIImageGenerationModel(imageModel) {
+		imageModel = strings.TrimSpace(fallbackModel)
+	}
+	if imageModel == "" || !isOpenAIImageGenerationModel(imageModel) {
+		imageModel = "gpt-image-2"
+	}
+
+	req := &OpenAIImagesRequest{
+		Endpoint:       openAIImagesGenerationsEndpoint,
+		ContentType:    "application/json",
+		Model:          imageModel,
+		ExplicitModel:  true,
+		Prompt:         prompt,
+		Stream:         forceStream,
+		N:              1,
+		ResponseFormat: "b64_json",
+		Body:           body,
+	}
+	if n := tool.Get("n"); n.Exists() && n.Type == gjson.Number && n.Int() > 0 {
+		req.N = int(n.Int())
+	}
+	copyString := func(field string, dst *string) {
+		if value := strings.TrimSpace(tool.Get(field).String()); value != "" {
+			*dst = value
+		}
+	}
+	copyString("size", &req.Size)
+	copyString("quality", &req.Quality)
+	copyString("background", &req.Background)
+	copyString("output_format", &req.OutputFormat)
+	copyString("moderation", &req.Moderation)
+	copyString("style", &req.Style)
+	if outputCompression := tool.Get("output_compression"); outputCompression.Exists() && outputCompression.Type == gjson.Number {
+		v := int(outputCompression.Int())
+		req.OutputCompression = &v
+	}
+	if partialImages := tool.Get("partial_images"); partialImages.Exists() && partialImages.Type == gjson.Number {
+		v := int(partialImages.Int())
+		req.PartialImages = &v
+	}
+	req.SizeTier = normalizeOpenAIImageSizeTier(req.Size)
+	req.RequiredCapability = classifyOpenAIImagesCapability(req)
+
+	payload := map[string]any{
+		"model":           req.Model,
+		"prompt":          req.Prompt,
+		"n":               req.N,
+		"response_format": req.ResponseFormat,
+	}
+	if req.Size != "" {
+		payload["size"] = req.Size
+	}
+	if req.Quality != "" {
+		payload["quality"] = req.Quality
+	}
+	if req.Background != "" {
+		payload["background"] = req.Background
+	}
+	if req.OutputFormat != "" {
+		payload["output_format"] = req.OutputFormat
+	}
+	if req.Moderation != "" {
+		payload["moderation"] = req.Moderation
+	}
+	if req.Style != "" {
+		payload["style"] = req.Style
+	}
+	if req.OutputCompression != nil {
+		payload["output_compression"] = *req.OutputCompression
+	}
+	if req.PartialImages != nil {
+		payload["partial_images"] = *req.PartialImages
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, nil, err
+	}
+	req.Body = payloadBytes
+	return req, payloadBytes, nil
+}
+
+func extractOpenAIResponsesImagePrompt(body []byte) string {
+	if prompt := strings.TrimSpace(gjson.GetBytes(body, "prompt").String()); prompt != "" {
+		return prompt
+	}
+	input := gjson.GetBytes(body, "input")
+	if input.Type == gjson.String {
+		return strings.TrimSpace(input.String())
+	}
+	parts := make([]string, 0, 4)
+	input.ForEach(func(_, item gjson.Result) bool {
+		if item.Type == gjson.String {
+			if text := strings.TrimSpace(item.String()); text != "" {
+				parts = append(parts, text)
+			}
+			return true
+		}
+		content := item.Get("content")
+		if content.Type == gjson.String {
+			if text := strings.TrimSpace(content.String()); text != "" {
+				parts = append(parts, text)
+			}
+			return true
+		}
+		content.ForEach(func(_, part gjson.Result) bool {
+			if text := strings.TrimSpace(part.Get("text").String()); text != "" {
+				parts = append(parts, text)
+			}
+			return true
+		})
+		return true
+	})
+	return strings.TrimSpace(strings.Join(parts, "\n"))
+}
+
+func openAIResponsesImageFallbackShouldRun(c *gin.Context, account *Account, body []byte, reqModel string) bool {
+	if c == nil || c.Writer == nil || c.Writer.Written() {
+		return false
+	}
+	if account == nil || account.Type != AccountTypeAPIKey {
+		return false
+	}
+	return IsImageGenerationIntent(openAIResponsesEndpoint, reqModel, body)
+}
+
+func (s *OpenAIGatewayService) tryFallbackResponsesImageGenerationToImagesAPI(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	body []byte,
+	reqModel string,
+	reqStream bool,
+	imageBillingModel string,
+	imageSizeTier string,
+	imageInputSize string,
+	startTime time.Time,
+	reason string,
+) (*OpenAIForwardResult, bool, error) {
+	if !openAIResponsesImageFallbackShouldRun(c, account, body, reqModel) {
+		return nil, false, nil
+	}
+
+	parsed, fallbackBody, err := buildOpenAIImagesFallbackRequestFromResponsesBody(body, imageBillingModel, false)
+	if err != nil {
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Responses image_generation fallback skipped: account=%d reason=%s err=%v", account.ID, reason, err)
+		return nil, false, nil
+	}
+	upstreamModel := account.GetMappedModel(parsed.Model)
+	if upstreamModel == "" {
+		upstreamModel = parsed.Model
+	}
+	if err := validateOpenAIImagesModel(upstreamModel); err != nil {
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Responses image_generation fallback skipped: account=%d reason=%s mapped_model=%s err=%v", account.ID, reason, upstreamModel, err)
+		return nil, false, nil
+	}
+	if upstreamModel != parsed.Model {
+		fallbackBody, _, err = rewriteOpenAIImagesModel(fallbackBody, parsed.ContentType, upstreamModel)
+		if err != nil {
+			return nil, true, err
+		}
+	}
+	logger.LegacyPrintf(
+		"service.openai_gateway",
+		"[OpenAI] Responses image_generation fallback to /images/generations: account=%d name=%s reason=%s image_model=%s upstream_model=%s",
+		account.ID,
+		account.Name,
+		reason,
+		parsed.Model,
+		upstreamModel,
+	)
+
+	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+	defer releaseUpstreamCtx()
+	token, _, err := s.GetAccessToken(upstreamCtx, account)
+	if err != nil {
+		return nil, true, err
+	}
+	upstreamReq, err := s.buildOpenAIImagesRequest(upstreamCtx, c, account, fallbackBody, parsed.ContentType, token, parsed.Endpoint)
+	if err != nil {
+		return nil, true, err
+	}
+	proxyURL := ""
+	if account.ProxyID != nil && account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	}
+	upstreamStart := time.Now()
+	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
+	if err != nil {
+		safeErr := sanitizeUpstreamErrorMessage(err.Error())
+		setOpsUpstreamError(c, 0, safeErr, "")
+		return nil, true, fmt.Errorf("images fallback upstream request failed: %s", safeErr)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	respBody, readErr := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
+	if readErr != nil {
+		return nil, true, readErr
+	}
+	if resp.StatusCode >= 400 {
+		upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody)))
+		setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, truncateString(string(respBody), 2048))
+		return nil, true, &UpstreamFailoverError{
+			StatusCode:   resp.StatusCode,
+			ResponseBody: respBody,
+		}
+	}
+
+	results := make([]openAIResponsesImageResult, 0, parsed.N)
+	for _, item := range gjson.GetBytes(respBody, "data").Array() {
+		result := strings.TrimSpace(item.Get("b64_json").String())
+		if result == "" {
+			continue
+		}
+		results = append(results, openAIResponsesImageResult{
+			Result:        result,
+			RevisedPrompt: strings.TrimSpace(item.Get("revised_prompt").String()),
+			OutputFormat:  firstNonEmptyString(gjson.GetBytes(fallbackBody, "output_format").String(), "png"),
+			Size:          parsed.Size,
+			Model:         upstreamModel,
+		})
+	}
+	if len(results) == 0 {
+		return nil, true, fmt.Errorf("images fallback returned no images")
+	}
+	usage, _ := extractOpenAIUsageFromJSONBytes(respBody)
+	if err := s.writeResponsesImageFallbackResult(c, reqModel, reqStream, results, usage); err != nil {
+		return nil, true, err
+	}
+	firstTokenMs := int(time.Since(startTime).Milliseconds())
+	return &OpenAIForwardResult{
+		RequestID:        resp.Header.Get("x-request-id"),
+		Usage:            usage,
+		Model:            reqModel,
+		UpstreamModel:    upstreamModel,
+		Stream:           reqStream,
+		ResponseHeaders:  resp.Header.Clone(),
+		Duration:         time.Since(startTime),
+		FirstTokenMs:     &firstTokenMs,
+		ImageCount:       len(results),
+		ImageSize:        imageSizeTier,
+		ImageInputSize:   imageInputSize,
+		ImageOutputSizes: openAIResponsesImageResultSizes(results),
+		BillingModel:     firstNonEmptyString(imageBillingModel, parsed.Model),
+	}, true, nil
+}
+
+func (s *OpenAIGatewayService) writeResponsesImageFallbackResult(c *gin.Context, model string, stream bool, results []openAIResponsesImageResult, usage OpenAIUsage) error {
+	if c == nil {
+		return nil
+	}
+	responseID := "resp_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	output := make([]map[string]any, 0, len(results))
+	for i, img := range results {
+		item := map[string]any{
+			"id":            fmt.Sprintf("ig_%s_%d", responseID, i),
+			"type":          "image_generation_call",
+			"status":        "completed",
+			"result":        img.Result,
+			"output_format": firstNonEmptyString(img.OutputFormat, "png"),
+		}
+		if img.RevisedPrompt != "" {
+			item["revised_prompt"] = img.RevisedPrompt
+		}
+		if img.Size != "" {
+			item["size"] = img.Size
+		}
+		output = append(output, item)
+	}
+	response := map[string]any{
+		"id":     responseID,
+		"object": "response",
+		"model":  model,
+		"status": "completed",
+		"output": output,
+		"usage":  usage,
+	}
+	if !stream {
+		c.JSON(http.StatusOK, response)
+		return nil
+	}
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	flusher, _ := c.Writer.(http.Flusher)
+	writeEvent := func(eventType string, payload any) error {
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		if eventType != "" {
+			if _, err := fmt.Fprintf(c.Writer, "event: %s\n", eventType); err != nil {
+				return err
+			}
+		}
+		if _, err := fmt.Fprintf(c.Writer, "data: %s\n\n", raw); err != nil {
+			return err
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+		return nil
+	}
+	created := map[string]any{
+		"type": "response.created",
+		"response": map[string]any{
+			"id":     responseID,
+			"object": "response",
+			"model":  model,
+			"status": "in_progress",
+			"output": []any{},
+		},
+	}
+	if err := writeEvent("response.created", created); err != nil {
+		return err
+	}
+	for i, item := range output {
+		payload := map[string]any{
+			"type":         "response.output_item.done",
+			"output_index": i,
+			"item":         item,
+		}
+		if err := writeEvent("response.output_item.done", payload); err != nil {
+			return err
+		}
+	}
+	completed := map[string]any{
+		"type":     "response.completed",
+		"response": response,
+	}
+	if err := writeEvent("response.completed", completed); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprint(c.Writer, "data: [DONE]\n\n"); err != nil {
+		return err
+	}
+	if flusher != nil {
+		flusher.Flush()
+	}
+	return nil
 }
 
 func buildOpenAIImagesAPIResponse(

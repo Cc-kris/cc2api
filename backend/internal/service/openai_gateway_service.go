@@ -2892,6 +2892,24 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Skip non-WSv2 invalid_encrypted_content retry because encrypted reasoning items are missing (account: %s)", account.Name)
 			}
 			if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
+				if fallbackResult, handled, fallbackErr := s.tryFallbackResponsesImageGenerationToImagesAPI(
+					ctx,
+					c,
+					account,
+					body,
+					originalModel,
+					reqStream,
+					imageBillingModel,
+					imageSizeTier,
+					imageInputSize,
+					startTime,
+					fmt.Sprintf("responses_status_%d", resp.StatusCode),
+				); handled {
+					if fallbackErr == nil {
+						return fallbackResult, nil
+					}
+					return nil, fallbackErr
+				}
 				upstreamDetail := ""
 				if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
 					maxBytes := s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes
@@ -2934,6 +2952,24 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if reqStream {
 			streamResult, err := s.handleStreamingResponse(ctx, resp, c, account, startTime, originalModel, upstreamModel)
 			if err != nil {
+				if fallbackResult, handled, fallbackErr := s.tryFallbackResponsesImageGenerationToImagesAPI(
+					ctx,
+					c,
+					account,
+					body,
+					originalModel,
+					reqStream,
+					imageBillingModel,
+					imageSizeTier,
+					imageInputSize,
+					startTime,
+					"responses_stream_failed",
+				); handled {
+					if fallbackErr == nil {
+						return fallbackResult, nil
+					}
+					return nil, fallbackErr
+				}
 				if s.shouldRetryOpenAIHTTPStreamFailover(account.ID, err) {
 					logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying HTTP stream once after upstream disconnect before client output (account: %s)", account.Name)
 					continue
@@ -3196,6 +3232,24 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
+		if fallbackResult, handled, fallbackErr := s.tryFallbackResponsesImageGenerationToImagesAPI(
+			ctx,
+			c,
+			account,
+			body,
+			reqModel,
+			reqStream,
+			imageBillingModel,
+			imageSizeTier,
+			imageInputSize,
+			startTime,
+			fmt.Sprintf("responses_status_%d", resp.StatusCode),
+		); handled {
+			if fallbackErr == nil {
+				return fallbackResult, nil
+			}
+			return nil, fallbackErr
+		}
 		// 透传模式默认保持原样代理；但 429/529 属于网关必须兜底的
 		// 上游容量类错误，应先触发多账号 failover 以维持基础 SLA。
 		if shouldFailoverOpenAIPassthroughResponse(resp.StatusCode) {
@@ -3213,6 +3267,24 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	if reqStream {
 		result, err := s.handleStreamingResponsePassthrough(ctx, resp, c, account, startTime, reqModel, upstreamPassthroughModel)
 		if err != nil {
+			if fallbackResult, handled, fallbackErr := s.tryFallbackResponsesImageGenerationToImagesAPI(
+				ctx,
+				c,
+				account,
+				body,
+				reqModel,
+				reqStream,
+				imageBillingModel,
+				imageSizeTier,
+				imageInputSize,
+				startTime,
+				"responses_stream_failed",
+			); handled {
+				if fallbackErr == nil {
+					return fallbackResult, nil
+				}
+				return nil, fallbackErr
+			}
 			return nil, err
 		}
 		usage = result.usage
