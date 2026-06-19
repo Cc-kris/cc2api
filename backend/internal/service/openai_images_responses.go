@@ -4,11 +4,15 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -29,6 +33,46 @@ type openAIResponsesImageResult struct {
 	Background    string
 	Quality       string
 	Model         string
+}
+
+const (
+	responsesImageBridgeIdempotencyRoute             = "/v1/responses:image_bridge"
+	responsesImageBridgeIdempotencyTTL               = 10 * time.Minute
+	responsesImageBridgeIdempotencyProcessingTimeout = 3 * time.Minute
+)
+
+var ErrResponsesImageBridgeDuplicate = errors.New("responses image bridge duplicate request")
+
+type responsesImageBridgeIdempotencyClaim struct {
+	repo      IdempotencyRepository
+	recordID  int64
+	expiresAt time.Time
+	enabled   bool
+}
+
+func (c *responsesImageBridgeIdempotencyClaim) markSucceeded(ctx context.Context, imageCount int) {
+	if c == nil || !c.enabled || c.repo == nil || c.recordID == 0 {
+		return
+	}
+	body := fmt.Sprintf(`{"status":"completed","image_count":%d}`, imageCount)
+	if err := c.repo.MarkSucceeded(ctx, c.recordID, http.StatusOK, body, c.expiresAt); err != nil {
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Responses image bridge idempotency mark succeeded failed: %v", err)
+	}
+}
+
+func (c *responsesImageBridgeIdempotencyClaim) markFailedRetryable(ctx context.Context, reason string) {
+	if c == nil || !c.enabled || c.repo == nil || c.recordID == 0 {
+		return
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "IMAGE_BRIDGE_FAILED"
+	}
+	now := time.Now()
+	lockedUntil := now.Add(15 * time.Second)
+	if err := c.repo.MarkFailedRetryable(ctx, c.recordID, reason, lockedUntil, c.expiresAt); err != nil {
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Responses image bridge idempotency mark failed failed: %v", err)
+	}
 }
 
 type OpenAIImagesUpstreamError struct {
@@ -698,6 +742,218 @@ func OpenAIResponsesBodyHasExplicitImageGenerationIntent(body []byte, requestedM
 	return openAIJSONToolChoiceSelectsImageGeneration(gjson.GetBytes(body, "tool_choice"))
 }
 
+func (s *OpenAIGatewayService) acquireResponsesImageBridgeIdempotency(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	imageBody []byte,
+	reqModel string,
+	reqStream bool,
+	upstreamModel string,
+) (*responsesImageBridgeIdempotencyClaim, error) {
+	claim := &responsesImageBridgeIdempotencyClaim{}
+	if s == nil || s.idempotencyRepo == nil || c == nil || c.Request == nil || account == nil {
+		return claim, nil
+	}
+	scope, rawKey, fingerprintPayload, ok := buildResponsesImageBridgeIdempotencyIdentity(c, account, imageBody, reqModel, upstreamModel)
+	if !ok {
+		return claim, nil
+	}
+	fingerprint, err := BuildIdempotencyFingerprint(http.MethodPost, responsesImageBridgeIdempotencyRoute, scope, fingerprintPayload)
+	if err != nil {
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Responses image bridge idempotency fingerprint failed: %v", err)
+		return claim, nil
+	}
+
+	now := time.Now()
+	lockedUntil := now.Add(responsesImageBridgeIdempotencyProcessingTimeout)
+	expiresAt := now.Add(responsesImageBridgeIdempotencyTTL)
+	keyHash := HashIdempotencyKey(rawKey)
+	record := &IdempotencyRecord{
+		Scope:              scope,
+		IdempotencyKeyHash: keyHash,
+		RequestFingerprint: fingerprint,
+		Status:             IdempotencyStatusProcessing,
+		LockedUntil:        &lockedUntil,
+		ExpiresAt:          expiresAt,
+	}
+
+	owner, err := s.idempotencyRepo.CreateProcessing(ctx, record)
+	if err != nil {
+		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Responses image bridge idempotency create failed: %v", err)
+		return claim, nil
+	}
+	if owner {
+		claim.repo = s.idempotencyRepo
+		claim.recordID = record.ID
+		claim.expiresAt = expiresAt
+		claim.enabled = true
+		return claim, nil
+	}
+
+	existing, err := s.idempotencyRepo.GetByScopeAndKeyHash(ctx, scope, keyHash)
+	if err != nil || existing == nil {
+		if err != nil {
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Responses image bridge idempotency lookup failed: %v", err)
+		}
+		return claim, nil
+	}
+	if existing.RequestFingerprint != fingerprint {
+		writeResponsesImageBridgeDuplicateResponse(c, reqModel, true, "duplicate image request key was reused with different payload")
+		return nil, ErrResponsesImageBridgeDuplicate
+	}
+
+	if !existing.ExpiresAt.After(now) || (existing.LockedUntil != nil && !existing.LockedUntil.After(now)) {
+		taken, reclaimErr := s.idempotencyRepo.TryReclaim(ctx, existing.ID, existing.Status, now, lockedUntil, expiresAt)
+		if reclaimErr != nil {
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Responses image bridge idempotency reclaim failed: %v", reclaimErr)
+			return claim, nil
+		}
+		if taken {
+			claim.repo = s.idempotencyRepo
+			claim.recordID = existing.ID
+			claim.expiresAt = expiresAt
+			claim.enabled = true
+			return claim, nil
+		}
+	}
+
+	retryAfter := 0
+	if existing.LockedUntil != nil && existing.LockedUntil.After(now) {
+		retryAfter = int(time.Until(*existing.LockedUntil).Seconds())
+		if retryAfter <= 0 {
+			retryAfter = 1
+		}
+	}
+	switch existing.Status {
+	case IdempotencyStatusSucceeded:
+		writeResponsesImageBridgeDuplicateResponse(c, reqModel, reqStream, "duplicate image generation request already completed; upstream request was not repeated")
+	case IdempotencyStatusProcessing:
+		writeResponsesImageBridgeDuplicateResponse(c, reqModel, reqStream, "duplicate image generation request is still processing; upstream request was not repeated", retryAfter)
+	case IdempotencyStatusFailedRetryable:
+		writeResponsesImageBridgeDuplicateResponse(c, reqModel, reqStream, "duplicate image generation request is in retry backoff; upstream request was not repeated", retryAfter)
+	default:
+		writeResponsesImageBridgeDuplicateResponse(c, reqModel, reqStream, "duplicate image generation request was not repeated")
+	}
+	return nil, ErrResponsesImageBridgeDuplicate
+}
+
+func buildResponsesImageBridgeIdempotencyIdentity(
+	c *gin.Context,
+	account *Account,
+	imageBody []byte,
+	reqModel string,
+	upstreamModel string,
+) (string, string, map[string]any, bool) {
+	if c == nil || c.Request == nil || account == nil {
+		return "", "", nil, false
+	}
+	clientRequestID := strings.TrimSpace(c.GetHeader("X-Client-Request-ID"))
+	turnID := extractCodexTurnID(c.GetHeader("X-Codex-Turn-Metadata"))
+	if clientRequestID == "" && turnID == "" {
+		return "", "", nil, false
+	}
+
+	actorScope := responsesImageBridgeActorScope(c, account)
+	sum := sha256.Sum256(imageBody)
+	bodyHash := hex.EncodeToString(sum[:])
+	requestIdentity := "client:" + clientRequestID
+	if turnID != "" {
+		requestIdentity = "turn:" + turnID
+	}
+	rawKey := strings.Join([]string{
+		"openai_responses_image_bridge",
+		requestIdentity,
+		"body:" + bodyHash,
+	}, "|")
+	payload := map[string]any{
+		"body_hash":      bodyHash,
+		"client_request": clientRequestID,
+		"turn_id":        turnID,
+		"request_model":  strings.TrimSpace(reqModel),
+		"upstream_model": strings.TrimSpace(upstreamModel),
+	}
+	return "openai_responses_image_bridge:" + actorScope, rawKey, payload, true
+}
+
+func responsesImageBridgeActorScope(c *gin.Context, account *Account) string {
+	if c != nil {
+		if v, ok := c.Get("api_key"); ok {
+			if apiKey, ok := v.(*APIKey); ok && apiKey != nil && apiKey.ID > 0 {
+				userID := apiKey.UserID
+				if userID == 0 && apiKey.User != nil {
+					userID = apiKey.User.ID
+				}
+				return fmt.Sprintf("user:%d:api_key:%d", userID, apiKey.ID)
+			}
+		}
+	}
+	if account != nil {
+		return fmt.Sprintf("account:%d", account.ID)
+	}
+	return "anonymous"
+}
+
+func extractCodexTurnID(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if gjson.Valid(raw) {
+		for _, path := range []string{"turn_id", "turnId", "id", "turn.id"} {
+			if v := strings.TrimSpace(gjson.Get(raw, path).String()); v != "" {
+				return v
+			}
+		}
+	}
+	return raw
+}
+
+func writeResponsesImageBridgeDuplicateResponse(c *gin.Context, model string, stream bool, message string, retryAfter ...int) {
+	if c == nil || c.Writer == nil || c.Writer.Written() {
+		return
+	}
+	message = strings.TrimSpace(message)
+	if message == "" {
+		message = "duplicate image generation request was not repeated"
+	}
+	if len(retryAfter) > 0 && retryAfter[0] > 0 {
+		c.Header("Retry-After", strconv.Itoa(retryAfter[0]))
+	}
+	errorObj := map[string]any{
+		"type":    "conflict",
+		"code":    "IMAGE_BRIDGE_DUPLICATE_REQUEST",
+		"message": message,
+	}
+	if !stream {
+		c.JSON(http.StatusConflict, gin.H{"error": errorObj})
+		return
+	}
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	responseID := "resp_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	payload := map[string]any{
+		"type": "response.failed",
+		"response": map[string]any{
+			"id":     responseID,
+			"object": "response",
+			"model":  model,
+			"status": "failed",
+			"output": []any{},
+			"error":  errorObj,
+		},
+		"error": errorObj,
+	}
+	raw, _ := json.Marshal(payload)
+	_, _ = fmt.Fprintf(c.Writer, "event: response.failed\ndata: %s\n\n", raw)
+	_, _ = fmt.Fprint(c.Writer, "data: [DONE]\n\n")
+	if flusher, ok := c.Writer.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
 func (s *OpenAIGatewayService) ForwardResponsesImageBridgeToImages(
 	ctx context.Context,
 	c *gin.Context,
@@ -730,6 +986,10 @@ func (s *OpenAIGatewayService) ForwardResponsesImageBridgeToImages(
 			return nil, err
 		}
 	}
+	idempotencyClaim, err := s.acquireResponsesImageBridgeIdempotency(ctx, c, account, imageBody, reqModel, reqStream, upstreamModel)
+	if err != nil {
+		return nil, err
+	}
 	logger.LegacyPrintf(
 		"service.openai_gateway",
 		"[OpenAI] Responses image bridge direct to /images/generations: account=%d name=%s image_model=%s upstream_model=%s",
@@ -759,16 +1019,19 @@ func (s *OpenAIGatewayService) ForwardResponsesImageBridgeToImages(
 	if err != nil {
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
 		setOpsUpstreamError(c, 0, safeErr, "")
+		idempotencyClaim.markFailedRetryable(ctx, "IMAGE_BRIDGE_UPSTREAM_REQUEST_FAILED")
 		return nil, fmt.Errorf("images bridge upstream request failed: %s", safeErr)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	respBody, readErr := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if readErr != nil {
+		idempotencyClaim.markFailedRetryable(ctx, "IMAGE_BRIDGE_UPSTREAM_READ_FAILED")
 		return nil, readErr
 	}
 	if resp.StatusCode >= 400 {
 		upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody)))
 		setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, truncateString(string(respBody), 2048))
+		idempotencyClaim.markFailedRetryable(ctx, fmt.Sprintf("IMAGE_BRIDGE_UPSTREAM_%d", resp.StatusCode))
 		return nil, &UpstreamFailoverError{
 			StatusCode:   resp.StatusCode,
 			ResponseBody: respBody,
@@ -790,9 +1053,11 @@ func (s *OpenAIGatewayService) ForwardResponsesImageBridgeToImages(
 		})
 	}
 	if len(results) == 0 {
+		idempotencyClaim.markFailedRetryable(ctx, "IMAGE_BRIDGE_EMPTY_RESULT")
 		return nil, fmt.Errorf("images bridge returned no images")
 	}
 	usage, _ := extractOpenAIUsageFromJSONBytes(respBody)
+	idempotencyClaim.markSucceeded(ctx, len(results))
 	if err := s.writeResponsesImageFallbackResult(c, reqModel, reqStream, results, usage); err != nil {
 		return nil, err
 	}

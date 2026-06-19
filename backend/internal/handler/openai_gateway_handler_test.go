@@ -1393,6 +1393,7 @@ func newOpenAIWSSilentRetryHandlerTestServer(t *testing.T, accounts []service.Ac
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 	cache := &concurrencyCacheMock{
 		acquireUserSlotFn: func(ctx context.Context, userID int64, maxConcurrency int, requestID string) (bool, error) {
@@ -1615,6 +1616,7 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		nil,
 		nil,
 		nil, // userPlatformQuotaRepo
+		nil, // idempotencyRepo
 	)
 
 	cache := &concurrencyCacheMock{

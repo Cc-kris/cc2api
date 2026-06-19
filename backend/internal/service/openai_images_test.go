@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"net/textproto"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
@@ -1423,4 +1425,73 @@ func TestOpenAIGatewayServiceForwardImages_OAuthStreamingDrainsAfterClientDiscon
 	require.Equal(t, 5, result.Usage.InputTokens)
 	require.Equal(t, 9, result.Usage.OutputTokens)
 	require.Equal(t, 4, result.Usage.ImageOutputTokens)
+}
+
+func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyBlocksSameTurnRetry(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-image-2","stream":true,"input":"draw a cat","n":3}`)
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"aW1nMQ=="},{"b64_json":"aW1nMg=="},{"b64_json":"aW1nMw=="}],"usage":{"input_tokens":1,"output_tokens":3}}`),
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"c2hvdWxkLW5vdC1iZS1jYWxsZWQ="}]}`),
+	}}
+	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream, idempotencyRepo: newInMemoryIdempotencyRepo()}
+	account := &Account{ID: 103, Name: "image", Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1, Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://api.openai.com"}}
+
+	c1, rec1 := newResponsesImageBridgeIdempotencyContext(t, body, "client-a", "turn-1")
+	result, err := svc.ForwardResponsesImageBridgeToImages(context.Background(), c1, account, body, "gpt-image-2", true, "gpt-image-2", "2K", "", time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 3, result.ImageCount)
+	require.Equal(t, http.StatusOK, rec1.Code)
+	require.Len(t, upstream.requests, 1)
+
+	c2, rec2 := newResponsesImageBridgeIdempotencyContext(t, body, "client-b", "turn-1")
+	result, err = svc.ForwardResponsesImageBridgeToImages(context.Background(), c2, account, body, "gpt-image-2", true, "gpt-image-2", "2K", "", time.Now())
+	require.Nil(t, result)
+	require.ErrorIs(t, err, ErrResponsesImageBridgeDuplicate)
+	require.Len(t, upstream.requests, 1)
+	require.Contains(t, rec2.Body.String(), "IMAGE_BRIDGE_DUPLICATE_REQUEST")
+	require.Contains(t, rec2.Body.String(), "response.failed")
+}
+
+func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyAllowsDifferentTurns(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-image-2","stream":false,"input":"draw a cat"}`)
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"aW1nMQ=="}]}`),
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"aW1nMg=="}]}`),
+	}}
+	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream, idempotencyRepo: newInMemoryIdempotencyRepo()}
+	account := &Account{ID: 103, Name: "image", Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1, Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://api.openai.com"}}
+
+	c1, _ := newResponsesImageBridgeIdempotencyContext(t, body, "client-a", "turn-1")
+	result, err := svc.ForwardResponsesImageBridgeToImages(context.Background(), c1, account, body, "gpt-image-2", false, "gpt-image-2", "2K", "", time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	c2, _ := newResponsesImageBridgeIdempotencyContext(t, body, "client-b", "turn-2")
+	result, err = svc.ForwardResponsesImageBridgeToImages(context.Background(), c2, account, body, "gpt-image-2", false, "gpt-image-2", "2K", "", time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, upstream.requests, 2)
+}
+
+func newOpenAIImagesJSONResponse(status int, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+}
+
+func newResponsesImageBridgeIdempotencyContext(t *testing.T, body []byte, clientRequestID string, turnID string) (*gin.Context, *httptest.ResponseRecorder) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Header.Set("X-Client-Request-ID", clientRequestID)
+	c.Request.Header.Set("X-Codex-Turn-Metadata", fmt.Sprintf(`{"turn_id":%q,"session_id":"session-1"}`, turnID))
+	c.Set("api_key", &APIKey{ID: 38, UserID: 1})
+	return c, rec
 }

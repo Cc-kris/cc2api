@@ -167,7 +167,7 @@ func newLocalResponseCacheTestHandler(store *localResponseCacheTestStore) *OpenA
 			nil, nil, nil, nil, nil, nil,
 			store,
 			nil,
-			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		),
 	}
 }
