@@ -666,6 +666,13 @@ func buildOpenAIImagesRequestFromResponsesBody(body []byte, fallbackModel string
 		ResponseFormat: "b64_json",
 		Body:           body,
 	}
+	inputImageURLs, maskImageURL := extractOpenAIResponsesInputImageURLs(body)
+	if len(inputImageURLs) > 0 {
+		req.Endpoint = openAIImagesEditsEndpoint
+		req.InputImageURLs = inputImageURLs
+		req.MaskImageURL = maskImageURL
+		req.HasMask = maskImageURL != ""
+	}
 	if n := tool.Get("n"); n.Exists() && n.Type == gjson.Number && n.Int() > 0 {
 		req.N = int(n.Int())
 	}
@@ -697,6 +704,16 @@ func buildOpenAIImagesRequestFromResponsesBody(body []byte, fallbackModel string
 		"n":               req.N,
 		"response_format": req.ResponseFormat,
 	}
+	if len(req.InputImageURLs) > 0 {
+		images := make([]map[string]string, 0, len(req.InputImageURLs))
+		for _, imageURL := range req.InputImageURLs {
+			images = append(images, map[string]string{"image_url": imageURL})
+		}
+		payload["images"] = images
+		if req.MaskImageURL != "" {
+			payload["mask"] = map[string]string{"image_url": req.MaskImageURL}
+		}
+	}
 	if req.Size != "" {
 		payload["size"] = req.Size
 	}
@@ -727,6 +744,82 @@ func buildOpenAIImagesRequestFromResponsesBody(body []byte, fallbackModel string
 	}
 	req.Body = payloadBytes
 	return req, payloadBytes, nil
+}
+
+func extractOpenAIResponsesInputImageURLs(body []byte) ([]string, string) {
+	if len(body) == 0 || !gjson.ValidBytes(body) {
+		return nil, ""
+	}
+	seen := make(map[string]struct{})
+	images := make([]string, 0)
+	var mask string
+	addImage := func(raw string) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return
+		}
+		if _, ok := seen[raw]; ok {
+			return
+		}
+		seen[raw] = struct{}{}
+		images = append(images, raw)
+	}
+	extractImageURL := func(item gjson.Result) string {
+		if imageURL := strings.TrimSpace(item.Get("image_url").String()); imageURL != "" {
+			return imageURL
+		}
+		imageURL := item.Get("image_url")
+		if imageURL.IsObject() {
+			if url := strings.TrimSpace(imageURL.Get("url").String()); url != "" {
+				return url
+			}
+		}
+		if url := strings.TrimSpace(item.Get("url").String()); url != "" {
+			return url
+		}
+		if data := strings.TrimSpace(item.Get("data").String()); data != "" {
+			return data
+		}
+		if b64 := strings.TrimSpace(item.Get("b64_json").String()); b64 != "" {
+			return "data:image/png;base64," + normalizeOpenAIImageBase64(b64)
+		}
+		return ""
+	}
+	var walk func(gjson.Result)
+	walk = func(node gjson.Result) {
+		if node.IsArray() {
+			for _, item := range node.Array() {
+				walk(item)
+			}
+			return
+		}
+		if !node.IsObject() {
+			return
+		}
+		itemType := strings.TrimSpace(node.Get("type").String())
+		switch itemType {
+		case "input_image", "image_url":
+			addImage(extractImageURL(node))
+		case "input_image_mask":
+			if mask == "" {
+				mask = strings.TrimSpace(extractImageURL(node))
+			}
+		}
+		if mask == "" {
+			mask = strings.TrimSpace(node.Get("input_image_mask.image_url").String())
+		}
+		if content := node.Get("content"); content.Exists() {
+			walk(content)
+		}
+		if input := node.Get("input"); input.Exists() {
+			walk(input)
+		}
+		if output := node.Get("output"); output.Exists() {
+			walk(output)
+		}
+	}
+	walk(gjson.GetBytes(body, "input"))
+	return images, mask
 }
 
 func OpenAIResponsesBodyHasExplicitImageGenerationIntent(body []byte, requestedModel string) bool {

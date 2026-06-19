@@ -1444,6 +1444,7 @@ func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyBlocksSameTurnRetry
 	require.Equal(t, 3, result.ImageCount)
 	require.Equal(t, http.StatusOK, rec1.Code)
 	require.Len(t, upstream.requests, 1)
+	require.Equal(t, "/v1/images/generations", upstream.requests[0].URL.Path)
 
 	c2, rec2 := newResponsesImageBridgeIdempotencyContext(t, body, "client-b", "turn-1")
 	result, err = svc.ForwardResponsesImageBridgeToImages(context.Background(), c2, account, body, "gpt-image-2", true, "gpt-image-2", "2K", "", time.Now())
@@ -1476,6 +1477,69 @@ func TestOpenAIGatewayServiceResponsesImageBridge_IdempotencyAllowsDifferentTurn
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Len(t, upstream.requests, 2)
+}
+
+func TestBuildOpenAIImagesRequestFromResponsesBody_UsesEditsWhenInputImagePresent(t *testing.T) {
+	body := []byte(`{
+		"model":"gpt-5.5",
+		"stream":true,
+		"input":[
+			{
+				"role":"user",
+				"content":[
+					{"type":"input_text","text":"make the cat wear sunglasses"},
+					{"type":"input_image","image_url":"data:image/png;base64,aW1hZ2U="}
+				]
+			}
+		],
+		"tools":[{"type":"image_generation","model":"gpt-image-2","size":"1536x1024"}],
+		"tool_choice":{"type":"image_generation"}
+	}`)
+
+	parsed, imageBody, err := BuildOpenAIImagesRequestFromResponsesBody(body, "gpt-image-2", false)
+	require.NoError(t, err)
+	require.NotNil(t, parsed)
+	require.Equal(t, openAIImagesEditsEndpoint, parsed.Endpoint)
+	require.Equal(t, []string{"data:image/png;base64,aW1hZ2U="}, parsed.InputImageURLs)
+	require.Equal(t, OpenAIImagesCapabilityNative, parsed.RequiredCapability)
+	require.Equal(t, "data:image/png;base64,aW1hZ2U=", gjson.GetBytes(imageBody, "images.0.image_url").String())
+	require.Equal(t, "make the cat wear sunglasses", gjson.GetBytes(imageBody, "prompt").String())
+}
+
+func TestOpenAIGatewayServiceResponsesImageBridge_InputImageForwardsToEditsEndpoint(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{
+		"model":"gpt-5.5",
+		"stream":true,
+		"input":[
+			{
+				"role":"user",
+				"content":[
+					{"type":"input_text","text":"make the background black"},
+					{"type":"input_image","image_url":"data:image/png;base64,c291cmNl"}
+				]
+			}
+		],
+		"tools":[{"type":"image_generation","model":"gpt-image-2","size":"1536x1024"}],
+		"tool_choice":{"type":"image_generation"}
+	}`)
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		newOpenAIImagesJSONResponse(http.StatusOK, `{"data":[{"b64_json":"ZWRpdGVk"}],"usage":{"input_tokens":2,"output_tokens":1}}`),
+	}}
+	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream, idempotencyRepo: newInMemoryIdempotencyRepo()}
+	account := &Account{ID: 103, Name: "image", Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1, Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://api.openai.com"}}
+
+	c, rec := newResponsesImageBridgeIdempotencyContext(t, body, "client-edit", "turn-edit-1")
+	result, err := svc.ForwardResponsesImageBridgeToImages(context.Background(), c, account, body, "gpt-5.5", true, "gpt-image-2", "2K", "2K", time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, result.ImageCount)
+	require.Equal(t, "2K", result.ImageInputSize)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, "/v1/images/edits", upstream.requests[0].URL.Path)
+	require.Equal(t, "data:image/png;base64,c291cmNl", gjson.GetBytes(upstream.bodies[0], "images.0.image_url").String())
+	require.Equal(t, "make the background black", gjson.GetBytes(upstream.bodies[0], "prompt").String())
 }
 
 func newOpenAIImagesJSONResponse(status int, body string) *http.Response {
