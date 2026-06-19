@@ -783,6 +783,10 @@ func extractOpenAIResponsesInputImageURLs(body []byte) ([]string, string) {
 		if b64 := strings.TrimSpace(item.Get("b64_json").String()); b64 != "" {
 			return "data:image/png;base64," + normalizeOpenAIImageBase64(b64)
 		}
+		if b64 := strings.TrimSpace(item.Get("result").String()); b64 != "" {
+			outputFormat := strings.TrimSpace(item.Get("output_format").String())
+			return "data:" + openAIImageOutputMIMEType(outputFormat) + ";base64," + normalizeOpenAIImageBase64(b64)
+		}
 		return ""
 	}
 	var walk func(gjson.Result)
@@ -799,6 +803,8 @@ func extractOpenAIResponsesInputImageURLs(body []byte) ([]string, string) {
 		itemType := strings.TrimSpace(node.Get("type").String())
 		switch itemType {
 		case "input_image", "image_url":
+			addImage(extractImageURL(node))
+		case "image_generation_call":
 			addImage(extractImageURL(node))
 		case "input_image_mask":
 			if mask == "" {
