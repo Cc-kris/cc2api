@@ -1303,13 +1303,34 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		return
 	}
 
-	// 解析渠道级模型映射
+	// 解析渠道级模型映射。WS 生图不再桥接到 HTTP Images API：
+	// 只要首帧或后续 turn 会进入生图路径，就直接给客户端明确错误，避免重复生成与混合成功/失败事件。
 	channelMappingWS, _ := h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, reqModel)
-	if service.OpenAIResponsesBodyHasExplicitImageGenerationIntent(firstMessage, reqModel) && h.gatewayService.IsCodexImageGenerationBridgeEnabled(ctx, nil, apiKey) {
-		if h.tryDirectOpenAIWebSocketImageBridgeToHTTPImages(c, wsConn, reqLog, apiKey, subject, firstMessage, channelMappingWS) {
-			return
+	resolveWSChannelMapping := func(model string) service.ChannelMappingResult {
+		if strings.TrimSpace(model) == "" || strings.TrimSpace(model) == strings.TrimSpace(reqModel) {
+			return channelMappingWS
 		}
-		closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "image generation bridge failed")
+		resolvedMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, model)
+		return resolvedMapping
+	}
+	isWSImageGenerationIntent := func(payload []byte, model string) (bool, service.ChannelMappingResult) {
+		mapping := resolveWSChannelMapping(model)
+		if service.IsImageGenerationIntent("/v1/responses", model, payload) {
+			return true, mapping
+		}
+		if mapping.Mapped && service.IsImageGenerationIntent("/v1/responses", mapping.MappedModel, payload) {
+			return true, mapping
+		}
+		return false, mapping
+	}
+	if wsImageGenerationIntent, intentMapping := isWSImageGenerationIntent(firstMessage, reqModel); wsImageGenerationIntent {
+		reqLog.Info("openai.websocket_image_generation_unsupported",
+			zap.Int("turn", 1),
+			zap.String("mapped_model", intentMapping.MappedModel),
+			zap.Bool("channel_mapped", intentMapping.Mapped),
+		)
+		writeOpenAIWSImageGenerationUnsupported(ctx, wsConn, reqModel)
+		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, openAIWSImageGenerationUnsupportedMessage)
 		return
 	}
 
@@ -1353,11 +1374,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		openAIWSIngressFallbackSessionSeed(subject.UserID, apiKey.ID, apiKey.GroupID),
 	)
 	applyWSChannelMapping := func(payload []byte, model string) ([]byte, error) {
-		mapping := channelMappingWS
-		if strings.TrimSpace(model) != strings.TrimSpace(reqModel) {
-			resolvedMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, model)
-			mapping = resolvedMapping
-		}
+		mapping := resolveWSChannelMapping(model)
 		if !mapping.Mapped {
 			return payload, nil
 		}
@@ -1469,6 +1486,15 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				}
 				if model == "" {
 					model = reqModel
+				}
+				if imageIntent, intentMapping := isWSImageGenerationIntent(payload, model); imageIntent {
+					reqLog.Info("openai.websocket_image_generation_unsupported",
+						zap.Int("turn", turn),
+						zap.String("mapped_model", intentMapping.MappedModel),
+						zap.Bool("channel_mapped", intentMapping.Mapped),
+					)
+					writeOpenAIWSImageGenerationUnsupported(ctx, wsConn, model)
+					return nil, service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, openAIWSImageGenerationUnsupportedMessage, nil)
 				}
 				mappedPayload, mapErr := applyWSChannelMapping(payload, model)
 				if mapErr != nil {
@@ -2297,6 +2323,44 @@ func closeOpenAIClientWS(conn *coderws.Conn, status coderws.StatusCode, reason s
 	}
 	_ = conn.Close(status, reason)
 	_ = conn.CloseNow()
+}
+
+const openAIWSImageGenerationUnsupportedMessage = "生图不支持ws的方式"
+
+func writeOpenAIWSImageGenerationUnsupported(ctx context.Context, conn *coderws.Conn, model string) {
+	if conn == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	model = strings.TrimSpace(model)
+	payload, err := json.Marshal(gin.H{
+		"event_id": "evt_image_generation_ws_unsupported",
+		"type":     "response.failed",
+		"response": gin.H{
+			"object": "response",
+			"status": "failed",
+			"model":  model,
+			"output": []any{},
+			"error": gin.H{
+				"type":    "invalid_request_error",
+				"code":    "image_generation_ws_unsupported",
+				"message": openAIWSImageGenerationUnsupportedMessage,
+			},
+		},
+		"error": gin.H{
+			"type":    "invalid_request_error",
+			"code":    "image_generation_ws_unsupported",
+			"message": openAIWSImageGenerationUnsupportedMessage,
+		},
+	})
+	if err != nil {
+		payload = []byte(`{"event_id":"evt_image_generation_ws_unsupported","type":"response.failed","response":{"object":"response","status":"failed","output":[],"error":{"type":"invalid_request_error","code":"image_generation_ws_unsupported","message":"生图不支持ws的方式"}},"error":{"type":"invalid_request_error","code":"image_generation_ws_unsupported","message":"生图不支持ws的方式"}}`)
+	}
+	writeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	_ = conn.Write(writeCtx, coderws.MessageText, payload)
 }
 
 func writeContentModerationWSError(ctx context.Context, conn *coderws.Conn, decision *service.ContentModerationDecision) {

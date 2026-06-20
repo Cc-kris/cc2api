@@ -909,25 +909,31 @@ func TestOpenAIResponsesWebSocket_PassthroughUsageLogInfersReasoningFromInitialR
 		"usage log reasoning effort 必须使用渠道映射前首帧模型后缀推导")
 }
 
-func TestOpenAIResponsesWebSocket_ChannelImageMappingPreservesTopLevelTextModel(t *testing.T) {
-	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+func TestOpenAIResponsesWebSocket_RejectsExplicitImageGenerationTool(t *testing.T) {
+	event, closeErr := runOpenAIResponsesWebSocketUnsupportedImageCase(t, openAIResponsesWSUnsupportedImageCase{
 		firstPayload: `{"type":"response.create","model":"gpt-5.5","stream":true,"tools":[{"type":"image_generation","format":"png"}]}`,
 		userAgent:    testStringPtr("Codex Desktop test"),
-		channelMapping: map[string]string{
-			"gpt-5.5": "gpt-image-2",
-		},
 	})
 
-	require.Equal(t, "gpt-5.5", gjson.GetBytes(got.upstreamFirstPayload, "model").String(),
-		"WebSocket 生图不应把顶层 Responses 模型替换成 image-only 模型")
-	require.Equal(t, "gpt-image-2", gjson.GetBytes(got.upstreamFirstPayload, `tools.#(type=="image_generation").model`).String(),
-		"渠道图片模型映射应写入 image_generation 工具")
-	require.Equal(t, "png", gjson.GetBytes(got.upstreamFirstPayload, `tools.#(type=="image_generation").output_format`).String())
-	require.False(t, gjson.GetBytes(got.upstreamFirstPayload, `tools.#(type=="image_generation").format`).Exists())
+	assertOpenAIWSImageUnsupportedEvent(t, event, "gpt-5.5")
+	require.NotNil(t, closeErr)
+	require.Equal(t, coderws.StatusPolicyViolation, closeErr.Code)
+	require.Equal(t, openAIWSImageGenerationUnsupportedMessage, closeErr.Reason)
 }
 
-func TestOpenAIResponsesWebSocket_ChannelImageMappingInjectsToolWithoutIntent(t *testing.T) {
-	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+func TestOpenAIResponsesWebSocket_RejectsImageOnlyModel(t *testing.T) {
+	event, closeErr := runOpenAIResponsesWebSocketUnsupportedImageCase(t, openAIResponsesWSUnsupportedImageCase{
+		firstPayload: `{"type":"response.create","model":"gpt-image-2","stream":true,"input":"draw a candy on white background"}`,
+		userAgent:    testStringPtr("Codex Desktop test"),
+	})
+
+	assertOpenAIWSImageUnsupportedEvent(t, event, "gpt-image-2")
+	require.NotNil(t, closeErr)
+	require.Equal(t, coderws.StatusPolicyViolation, closeErr.Code)
+}
+
+func TestOpenAIResponsesWebSocket_RejectsChannelMappedImageModelWithoutExplicitTool(t *testing.T) {
+	event, closeErr := runOpenAIResponsesWebSocketUnsupportedImageCase(t, openAIResponsesWSUnsupportedImageCase{
 		firstPayload: `{"type":"response.create","model":"gpt-5.5","stream":true,"input":"draw a candy on white background"}`,
 		userAgent:    testStringPtr("Codex Desktop test"),
 		channelMapping: map[string]string{
@@ -935,26 +941,23 @@ func TestOpenAIResponsesWebSocket_ChannelImageMappingInjectsToolWithoutIntent(t 
 		},
 	})
 
-	require.Equal(t, "gpt-5.5", gjson.GetBytes(got.upstreamFirstPayload, "model").String(),
-		"缺少显式 image_generation tool 时也不应把顶层 Responses 模型替换成 image-only 模型")
-	require.Equal(t, "gpt-image-2", gjson.GetBytes(got.upstreamFirstPayload, `tools.#(type=="image_generation").model`).String(),
-		"图片专用渠道应注入 image_generation 工具并写入渠道图片模型")
+	assertOpenAIWSImageUnsupportedEvent(t, event, "gpt-5.5")
+	require.NotNil(t, closeErr)
+	require.Equal(t, coderws.StatusPolicyViolation, closeErr.Code)
 }
 
-func TestOpenAIResponsesWebSocket_ChannelImageMappingAppliesToFollowupTurn(t *testing.T) {
-	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
-		firstPayload: `{"type":"response.create","model":"gpt-5.5","stream":true,"input":"first turn"}`,
-		nextPayload:  `{"type":"response.create","model":"gpt-5.5","stream":true,"input":"draw another candy","previous_response_id":"resp_usage_e2e"}`,
+func TestOpenAIResponsesWebSocket_RejectsImageGenerationOnFollowupTurn(t *testing.T) {
+	got := runOpenAIResponsesWebSocketFollowupUnsupportedImageCase(t, openAIResponsesWSUsageLogCase{
+		firstPayload: `{"type":"response.create","model":"gpt-5.4","stream":true,"input":"first text turn"}`,
+		nextPayload:  `{"type":"response.create","model":"gpt-5.4","stream":true,"previous_response_id":"resp_usage_e2e","tools":[{"type":"image_generation"}],"input":"draw another candy"}`,
 		userAgent:    testStringPtr("Codex Desktop test"),
-		channelMapping: map[string]string{
-			"gpt-5.5": "gpt-image-2",
-		},
 	})
 
-	require.Equal(t, "gpt-5.5", gjson.GetBytes(got.upstreamSecondPayload, "model").String(),
-		"后续 WS turn 也不应把顶层 Responses 模型替换成 image-only 模型")
-	require.Equal(t, "gpt-image-2", gjson.GetBytes(got.upstreamSecondPayload, `tools.#(type=="image_generation").model`).String(),
-		"后续 WS turn 也应保留渠道图片模型到 image_generation 工具")
+	assertOpenAIWSImageUnsupportedEvent(t, got.event, "gpt-5.4")
+	require.NotNil(t, got.closeErr)
+	require.Equal(t, coderws.StatusPolicyViolation, got.closeErr.Code)
+	require.Equal(t, openAIWSImageGenerationUnsupportedMessage, got.closeErr.Reason)
+	require.Equal(t, int32(1), got.upstreamHits, "第二轮 WS 生图拒绝后不得再次访问上游")
 }
 
 func TestOpenAIResponsesWebSocket_PassthroughUsageLogLeavesUserAgentNilWhenMissing(t *testing.T) {
@@ -1125,6 +1128,18 @@ type openAIResponsesWSUsageLogResult struct {
 	log                   *service.UsageLog
 	upstreamFirstPayload  []byte
 	upstreamSecondPayload []byte
+}
+
+type openAIResponsesWSUnsupportedImageCase struct {
+	firstPayload   string
+	userAgent      *string
+	channelMapping map[string]string
+}
+
+type openAIResponsesWSFollowupUnsupportedImageResult struct {
+	event        []byte
+	closeErr     *coderws.CloseError
+	upstreamHits int32
 }
 
 type openAIWSUsageHandlerAccountRepoStub struct {
@@ -1473,6 +1488,310 @@ func (s *openAIWSUsageHandlerChannelRepoStub) GetGroupPlatforms(ctx context.Cont
 		}
 	}
 	return out, nil
+}
+
+func runOpenAIResponsesWebSocketFollowupUnsupportedImageCase(t *testing.T, tc openAIResponsesWSUsageLogCase) openAIResponsesWSFollowupUnsupportedImageResult {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	var upstreamHits int32
+	upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&upstreamHits, 1)
+		conn, err := coderws.Accept(w, r, &coderws.AcceptOptions{CompressionMode: coderws.CompressionContextTakeover})
+		if err != nil {
+			return
+		}
+		defer func() { _ = conn.CloseNow() }()
+
+		readCtx, cancelRead := context.WithTimeout(r.Context(), 3*time.Second)
+		_, _, readErr := conn.Read(readCtx)
+		cancelRead()
+		if readErr != nil {
+			return
+		}
+		writeCtx, cancelWrite := context.WithTimeout(r.Context(), 3*time.Second)
+		_ = conn.Write(writeCtx, coderws.MessageText, []byte(
+			`{"type":"response.completed","response":{"id":"resp_usage_e2e","model":"gpt-5.4","usage":{"input_tokens":2,"output_tokens":1}}}`,
+		))
+		cancelWrite()
+		readCtx, cancelRead = context.WithTimeout(r.Context(), 600*time.Millisecond)
+		_, _, _ = conn.Read(readCtx)
+		cancelRead()
+	}))
+	defer upstreamServer.Close()
+
+	groupID := int64(4201)
+	account := service.Account{
+		ID:          9901,
+		Name:        "openai-ws-followup-image-unsupported-e2e",
+		Platform:    service.PlatformOpenAI,
+		Type:        service.AccountTypeAPIKey,
+		Status:      service.StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"api_key":  "sk-test",
+			"base_url": upstreamServer.URL,
+		},
+		Extra: map[string]any{
+			"openai_apikey_responses_websockets_v2_enabled": true,
+			"openai_apikey_responses_websockets_v2_mode":    service.OpenAIWSIngressModePassthrough,
+		},
+	}
+
+	cfg := &config.Config{}
+	cfg.RunMode = config.RunModeSimple
+	cfg.Default.RateMultiplier = 1
+	cfg.Security.URLAllowlist.Enabled = false
+	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
+	cfg.Gateway.OpenAIWS.Enabled = true
+	cfg.Gateway.OpenAIWS.APIKeyEnabled = true
+	cfg.Gateway.OpenAIWS.ResponsesWebsocketsV2 = true
+	cfg.Gateway.OpenAIWS.ModeRouterV2Enabled = true
+	cfg.Gateway.OpenAIWS.DialTimeoutSeconds = 3
+	cfg.Gateway.OpenAIWS.ReadTimeoutSeconds = 3
+	cfg.Gateway.OpenAIWS.WriteTimeoutSeconds = 3
+
+	billingCacheSvc := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
+	gatewaySvc := service.NewOpenAIGatewayService(
+		&openAIWSUsageHandlerAccountRepoStub{account: account},
+		&openAIWSUsageHandlerUsageLogRepoStub{created: make(chan *service.UsageLog, 2)},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		cfg,
+		nil,
+		nil,
+		service.NewBillingService(cfg, nil),
+		nil,
+		billingCacheSvc,
+		nil,
+		&service.DeferredService{},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	cache := &concurrencyCacheMock{
+		acquireUserSlotFn: func(ctx context.Context, userID int64, maxConcurrency int, requestID string) (bool, error) {
+			return true, nil
+		},
+		acquireAccountSlotFn: func(ctx context.Context, accountID int64, maxConcurrency int, requestID string) (bool, error) {
+			return true, nil
+		},
+	}
+	h := &OpenAIGatewayHandler{
+		gatewayService:      gatewaySvc,
+		billingCacheService: billingCacheSvc,
+		apiKeyService:       &service.APIKeyService{},
+		concurrencyHelper:   NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second),
+	}
+
+	apiKey := &service.APIKey{ID: 1801, GroupID: &groupID, User: &service.User{ID: 1701, Status: service.StatusActive}}
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyAPIKey), apiKey)
+		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: apiKey.User.ID, Concurrency: 1})
+		c.Next()
+	})
+	router.GET("/openai/v1/responses", h.ResponsesWebSocket)
+	handlerServer := httptest.NewServer(router)
+	defer handlerServer.Close()
+
+	headers := http.Header{}
+	if tc.userAgent != nil {
+		headers.Set("User-Agent", *tc.userAgent)
+	}
+	dialCtx, cancelDial := context.WithTimeout(context.Background(), 3*time.Second)
+	clientConn, _, err := coderws.Dial(
+		dialCtx,
+		"ws"+strings.TrimPrefix(handlerServer.URL, "http")+"/openai/v1/responses",
+		&coderws.DialOptions{HTTPHeader: headers, CompressionMode: coderws.CompressionContextTakeover},
+	)
+	cancelDial()
+	require.NoError(t, err)
+	defer func() { _ = clientConn.CloseNow() }()
+
+	writeOpenAIWSTestPayload(t, clientConn, tc.firstPayload)
+	_, firstEvent, err := readOpenAIWSTestMessage(t, clientConn)
+	require.NoError(t, err)
+	require.Equal(t, "response.completed", gjson.GetBytes(firstEvent, "type").String())
+
+	writeOpenAIWSTestPayload(t, clientConn, tc.nextPayload)
+	_, event, err := readOpenAIWSTestMessage(t, clientConn)
+	require.NoError(t, err)
+
+	_, _, err = readOpenAIWSTestMessage(t, clientConn)
+	require.Error(t, err)
+	var closeErr coderws.CloseError
+	require.ErrorAs(t, err, &closeErr)
+
+	require.Eventually(t, func() bool { return atomic.LoadInt32(&upstreamHits) == 1 }, time.Second, 10*time.Millisecond)
+	return openAIResponsesWSFollowupUnsupportedImageResult{
+		event:        event,
+		closeErr:     &closeErr,
+		upstreamHits: atomic.LoadInt32(&upstreamHits),
+	}
+}
+
+func runOpenAIResponsesWebSocketUnsupportedImageCase(t *testing.T, tc openAIResponsesWSUnsupportedImageCase) ([]byte, *coderws.CloseError) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	var upstreamHits int32
+	upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&upstreamHits, 1)
+		http.Error(w, "ws image generation should not reach upstream", http.StatusInternalServerError)
+	}))
+	defer upstreamServer.Close()
+
+	groupID := int64(4201)
+	account := service.Account{
+		ID:          9901,
+		Name:        "openai-ws-image-unsupported-e2e",
+		Platform:    service.PlatformOpenAI,
+		Type:        service.AccountTypeAPIKey,
+		Status:      service.StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"api_key":  "sk-test",
+			"base_url": upstreamServer.URL,
+		},
+		Extra: map[string]any{
+			"openai_apikey_responses_websockets_v2_enabled": true,
+			"openai_apikey_responses_websockets_v2_mode":    service.OpenAIWSIngressModePassthrough,
+		},
+	}
+
+	cfg := &config.Config{}
+	cfg.RunMode = config.RunModeSimple
+	cfg.Default.RateMultiplier = 1
+	cfg.Security.URLAllowlist.Enabled = false
+	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
+	cfg.Gateway.OpenAIWS.Enabled = true
+	cfg.Gateway.OpenAIWS.APIKeyEnabled = true
+	cfg.Gateway.OpenAIWS.ResponsesWebsocketsV2 = true
+	cfg.Gateway.OpenAIWS.ModeRouterV2Enabled = true
+	cfg.Gateway.OpenAIWS.DialTimeoutSeconds = 3
+	cfg.Gateway.OpenAIWS.ReadTimeoutSeconds = 3
+	cfg.Gateway.OpenAIWS.WriteTimeoutSeconds = 3
+
+	var channelSvc *service.ChannelService
+	if len(tc.channelMapping) > 0 {
+		channelSvc = service.NewChannelService(&openAIWSUsageHandlerChannelRepoStub{
+			channels: []service.Channel{{
+				ID:           7701,
+				Name:         "openai-ws-image-unsupported-channel",
+				Status:       service.StatusActive,
+				GroupIDs:     []int64{groupID},
+				ModelMapping: map[string]map[string]string{service.PlatformOpenAI: tc.channelMapping},
+			}},
+			groupPlatforms: map[int64]string{groupID: service.PlatformOpenAI},
+		}, nil, nil, nil)
+	}
+
+	billingCacheSvc := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
+	gatewaySvc := service.NewOpenAIGatewayService(
+		&openAIWSUsageHandlerAccountRepoStub{account: account},
+		&openAIWSUsageHandlerUsageLogRepoStub{created: make(chan *service.UsageLog, 1)},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		cfg,
+		nil,
+		nil,
+		service.NewBillingService(cfg, nil),
+		nil,
+		billingCacheSvc,
+		nil,
+		&service.DeferredService{},
+		nil,
+		nil,
+		channelSvc,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+
+	cache := &concurrencyCacheMock{
+		acquireUserSlotFn: func(ctx context.Context, userID int64, maxConcurrency int, requestID string) (bool, error) {
+			return true, nil
+		},
+		acquireAccountSlotFn: func(ctx context.Context, accountID int64, maxConcurrency int, requestID string) (bool, error) {
+			return true, nil
+		},
+	}
+	h := &OpenAIGatewayHandler{
+		gatewayService:      gatewaySvc,
+		billingCacheService: billingCacheSvc,
+		apiKeyService:       &service.APIKeyService{},
+		concurrencyHelper:   NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second),
+	}
+
+	apiKey := &service.APIKey{
+		ID:      1801,
+		GroupID: &groupID,
+		User:    &service.User{ID: 1701, Status: service.StatusActive},
+	}
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyAPIKey), apiKey)
+		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: apiKey.User.ID, Concurrency: 1})
+		c.Next()
+	})
+	router.GET("/openai/v1/responses", h.ResponsesWebSocket)
+	handlerServer := httptest.NewServer(router)
+	defer handlerServer.Close()
+
+	headers := http.Header{}
+	if tc.userAgent != nil {
+		headers.Set("User-Agent", *tc.userAgent)
+	}
+	dialCtx, cancelDial := context.WithTimeout(context.Background(), 3*time.Second)
+	clientConn, _, err := coderws.Dial(
+		dialCtx,
+		"ws"+strings.TrimPrefix(handlerServer.URL, "http")+"/openai/v1/responses",
+		&coderws.DialOptions{HTTPHeader: headers, CompressionMode: coderws.CompressionContextTakeover},
+	)
+	cancelDial()
+	require.NoError(t, err)
+	defer func() {
+		_ = clientConn.CloseNow()
+	}()
+
+	writeOpenAIWSTestPayload(t, clientConn, tc.firstPayload)
+
+	msgType, event, err := readOpenAIWSTestMessage(t, clientConn)
+	require.NoError(t, err)
+	require.Equal(t, coderws.MessageText, msgType)
+
+	_, _, err = readOpenAIWSTestMessage(t, clientConn)
+	require.Error(t, err)
+	var closeErr coderws.CloseError
+	require.ErrorAs(t, err, &closeErr)
+	require.Equal(t, int32(0), atomic.LoadInt32(&upstreamHits), "WS 生图拒绝路径不得访问上游账号")
+	return event, &closeErr
+}
+
+func assertOpenAIWSImageUnsupportedEvent(t *testing.T, event []byte, model string) {
+	t.Helper()
+	require.True(t, gjson.ValidBytes(event), "unsupported event must be valid JSON")
+	require.Equal(t, "response.failed", gjson.GetBytes(event, "type").String())
+	require.Equal(t, "failed", gjson.GetBytes(event, "response.status").String())
+	require.Equal(t, strings.TrimSpace(model), gjson.GetBytes(event, "response.model").String())
+	require.Equal(t, "image_generation_ws_unsupported", gjson.GetBytes(event, "response.error.code").String())
+	require.Equal(t, openAIWSImageGenerationUnsupportedMessage, gjson.GetBytes(event, "response.error.message").String())
+	require.Equal(t, "image_generation_ws_unsupported", gjson.GetBytes(event, "error.code").String())
+	require.Equal(t, openAIWSImageGenerationUnsupportedMessage, gjson.GetBytes(event, "error.message").String())
 }
 
 func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSUsageLogCase) openAIResponsesWSUsageLogResult {
