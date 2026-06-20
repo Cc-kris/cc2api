@@ -11,7 +11,6 @@ import (
 	"net/textproto"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
@@ -31,19 +30,6 @@ func (w *failingOpenAIImageWriter) Write(p []byte) (int, error) {
 	}
 	w.writes++
 	return w.ResponseWriter.Write(p)
-}
-
-type contextCheckingIdempotencyRepo struct {
-	*inMemoryIdempotencyRepo
-	lastMarkSucceededErr error
-}
-
-func (r *contextCheckingIdempotencyRepo) MarkSucceeded(ctx context.Context, id int64, responseStatus int, responseBody string, expiresAt time.Time) error {
-	r.lastMarkSucceededErr = ctx.Err()
-	if r.lastMarkSucceededErr != nil {
-		return r.lastMarkSucceededErr
-	}
-	return r.inMemoryIdempotencyRepo.MarkSucceeded(ctx, id, responseStatus, responseBody, expiresAt)
 }
 
 func TestOpenAIGatewayServiceParseOpenAIImagesRequest_JSON(t *testing.T) {
