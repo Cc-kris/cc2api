@@ -2213,7 +2213,6 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if apiKey != nil {
 		imageGenerationAllowed = GroupAllowsImageGeneration(apiKey.Group)
 	}
-	codexImageGenerationBridgeEnabled := isCodexCLI && imageGenerationAllowed && s.isCodexImageGenerationBridgeEnabled(ctx, account, apiKey)
 	if IsImageGenerationPermissionIntentMap(openAIResponsesEndpoint, reqModel, reqBody) && !imageGenerationAllowed {
 		setOpsUpstreamError(c, http.StatusForbidden, ImageGenerationPermissionMessage(), "")
 		c.JSON(http.StatusForbidden, gin.H{
@@ -2224,7 +2223,6 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		})
 		return nil, errors.New("image generation disabled for group")
 	}
-
 	// Track if body needs re-serialization
 	bodyModified := false
 	// 单字段补丁快速路径：只要整个变更集最终可归约为同一路径的 set/delete，就避免全量 Marshal。
@@ -2289,23 +2287,11 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		markPatchSet("instructions", "You are a helpful coding assistant.")
 	}
 
-	if codexImageGenerationBridgeEnabled && applyOpenAIResponsesImageGenerationBridge(reqBody, reqModel) {
-		bodyModified = true
-		disablePatch()
-		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Injected /responses image_generation tool for Codex bridge")
-	}
-
 	if normalizeOpenAIResponsesImageGenerationTools(reqBody) {
 		bodyModified = true
 		disablePatch()
 		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Normalized /responses image_generation tool payload")
 	}
-	if codexImageGenerationBridgeEnabled && applyCodexImageGenerationBridgeInstructions(reqBody) {
-		bodyModified = true
-		disablePatch()
-		logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Added Codex image_generation bridge instructions")
-	}
-
 	// 对所有请求执行模型映射（包含 Codex CLI）。
 	billingModel := account.GetMappedModel(reqModel)
 	if billingModel != reqModel {
@@ -2567,8 +2553,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	imageBillingModel := ""
 	imageSizeTier := ""
 	imageInputSize := ""
-	isExplicitResponsesImageIntent := OpenAIResponsesBodyHasExplicitImageGenerationIntent(body, reqModel)
-	if isExplicitResponsesImageIntent {
+	if IsImageGenerationIntentMap(openAIResponsesEndpoint, reqModel, reqBody) {
 		var imageCfgErr error
 		imageCfg, imageCfgErr := resolveOpenAIResponsesImageBillingConfigDetailed(reqBody, billingModel)
 		if imageCfgErr != nil {
@@ -2586,7 +2571,6 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		imageSizeTier = imageCfg.SizeTier
 		imageInputSize = imageCfg.InputSize
 	}
-
 	// Re-serialize body only if modified
 	if bodyModified {
 		serializedByPatch := false
@@ -2609,21 +2593,6 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			}
 		}
 	}
-	if isExplicitResponsesImageIntent && codexImageGenerationBridgeEnabled && account.Type == AccountTypeAPIKey {
-		return s.ForwardResponsesImageBridgeToImages(
-			ctx,
-			c,
-			account,
-			body,
-			reqModel,
-			reqStream,
-			imageBillingModel,
-			imageSizeTier,
-			imageInputSize,
-			startTime,
-		)
-	}
-
 	// Get access token
 	token, _, err := s.GetAccessToken(ctx, account)
 	if err != nil {
@@ -2919,24 +2888,6 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Skip non-WSv2 invalid_encrypted_content retry because encrypted reasoning items are missing (account: %s)", account.Name)
 			}
 			if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
-				if fallbackResult, handled, fallbackErr := s.tryFallbackResponsesImageGenerationToImagesAPI(
-					ctx,
-					c,
-					account,
-					body,
-					originalModel,
-					reqStream,
-					imageBillingModel,
-					imageSizeTier,
-					imageInputSize,
-					startTime,
-					fmt.Sprintf("responses_status_%d", resp.StatusCode),
-				); handled {
-					if fallbackErr == nil {
-						return fallbackResult, nil
-					}
-					return nil, fallbackErr
-				}
 				upstreamDetail := ""
 				if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
 					maxBytes := s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes
@@ -2979,24 +2930,6 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if reqStream {
 			streamResult, err := s.handleStreamingResponse(ctx, resp, c, account, startTime, originalModel, upstreamModel)
 			if err != nil {
-				if fallbackResult, handled, fallbackErr := s.tryFallbackResponsesImageGenerationToImagesAPI(
-					ctx,
-					c,
-					account,
-					body,
-					originalModel,
-					reqStream,
-					imageBillingModel,
-					imageSizeTier,
-					imageInputSize,
-					startTime,
-					"responses_stream_failed",
-				); handled {
-					if fallbackErr == nil {
-						return fallbackResult, nil
-					}
-					return nil, fallbackErr
-				}
 				if s.shouldRetryOpenAIHTTPStreamFailover(account.ID, err) {
 					logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying HTTP stream once after upstream disconnect before client output (account: %s)", account.Name)
 					continue
@@ -3110,13 +3043,6 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		reqStream = gjson.GetBytes(body, "stream").Bool()
 	}
 
-	if bridgedBody, bridged, bridgeErr := s.applyCodexImageGenerationBridgeToPassthroughBody(ctx, c, account, body, reqModel); bridgeErr != nil {
-		return nil, bridgeErr
-	} else if bridged {
-		body = bridgedBody
-		reqStream = gjson.GetBytes(body, "stream").Bool()
-	}
-
 	sanitizedBody, sanitized, err := sanitizeEmptyBase64InputImagesInOpenAIBody(body)
 	if err != nil {
 		return nil, err
@@ -3166,12 +3092,11 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			logger.LegacyPrintf("service.openai_gateway", "[OpenAI 自动透传] Removed /responses image_generation tool declaration for disabled group")
 		}
 	}
+
 	imageBillingModel := ""
 	imageSizeTier := ""
 	imageInputSize := ""
-	isExplicitResponsesImageIntent := OpenAIResponsesBodyHasExplicitImageGenerationIntent(body, reqModel)
-	if isExplicitResponsesImageIntent {
-		var imageCfgErr error
+	if IsImageGenerationIntent(openAIResponsesEndpoint, reqModel, body) {
 		imageCfg, imageCfgErr := resolveOpenAIResponsesImageBillingConfigDetailedFromBody(body, reqModel)
 		if imageCfgErr != nil {
 			setOpsUpstreamError(c, http.StatusBadRequest, imageCfgErr.Error(), "")
@@ -3188,21 +3113,6 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		imageSizeTier = imageCfg.SizeTier
 		imageInputSize = imageCfg.InputSize
 	}
-	if isExplicitResponsesImageIntent && s.isCodexImageGenerationBridgeEnabled(ctx, account, apiKey) && account.Type == AccountTypeAPIKey {
-		return s.ForwardResponsesImageBridgeToImages(
-			ctx,
-			c,
-			account,
-			body,
-			reqModel,
-			reqStream,
-			imageBillingModel,
-			imageSizeTier,
-			imageInputSize,
-			startTime,
-		)
-	}
-
 	logger.LegacyPrintf("service.openai_gateway",
 		"[OpenAI 自动透传] 命中自动透传分支: account=%d name=%s type=%s model=%s stream=%v",
 		account.ID,
@@ -3274,24 +3184,6 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		if fallbackResult, handled, fallbackErr := s.tryFallbackResponsesImageGenerationToImagesAPI(
-			ctx,
-			c,
-			account,
-			body,
-			reqModel,
-			reqStream,
-			imageBillingModel,
-			imageSizeTier,
-			imageInputSize,
-			startTime,
-			fmt.Sprintf("responses_status_%d", resp.StatusCode),
-		); handled {
-			if fallbackErr == nil {
-				return fallbackResult, nil
-			}
-			return nil, fallbackErr
-		}
 		// 透传模式默认保持原样代理；但 429/529 属于网关必须兜底的
 		// 上游容量类错误，应先触发多账号 failover 以维持基础 SLA。
 		if shouldFailoverOpenAIPassthroughResponse(resp.StatusCode) {
@@ -3309,24 +3201,6 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	if reqStream {
 		result, err := s.handleStreamingResponsePassthrough(ctx, resp, c, account, startTime, reqModel, upstreamPassthroughModel)
 		if err != nil {
-			if fallbackResult, handled, fallbackErr := s.tryFallbackResponsesImageGenerationToImagesAPI(
-				ctx,
-				c,
-				account,
-				body,
-				reqModel,
-				reqStream,
-				imageBillingModel,
-				imageSizeTier,
-				imageInputSize,
-				startTime,
-				"responses_stream_failed",
-			); handled {
-				if fallbackErr == nil {
-					return fallbackResult, nil
-				}
-				return nil, fallbackErr
-			}
 			return nil, err
 		}
 		usage = result.usage
@@ -3371,85 +3245,6 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		forwardResult.BillingModel = imageBillingModel
 	}
 	return forwardResult, nil
-}
-
-func (s *OpenAIGatewayService) applyCodexImageGenerationBridgeToPassthroughBody(
-	ctx context.Context,
-	c *gin.Context,
-	account *Account,
-	body []byte,
-	reqModel string,
-) ([]byte, bool, error) {
-	if s == nil || account == nil || len(body) == 0 || !gjson.ValidBytes(body) {
-		return body, false, nil
-	}
-	isCodexCLI := false
-	if c != nil {
-		isCodexCLI = openai.IsCodexOfficialClientByHeaders(c.GetHeader("User-Agent"), c.GetHeader("originator"))
-	}
-	if !isCodexCLI && s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
-		isCodexCLI = true
-	}
-	if !isCodexCLI {
-		return body, false, nil
-	}
-
-	apiKey := getAPIKeyFromContext(c)
-	if !GroupAllowsImageGeneration(apiKeyGroup(apiKey)) {
-		return body, false, nil
-	}
-	if !s.isCodexImageGenerationBridgeEnabled(ctx, account, apiKey) {
-		return body, false, nil
-	}
-
-	reqBody := map[string]any{}
-	if err := json.Unmarshal(body, &reqBody); err != nil {
-		return body, false, err
-	}
-	modified := false
-	if applyOpenAIResponsesImageGenerationBridge(reqBody, reqModel) {
-		modified = true
-		logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Injected /responses image_generation tool for Codex bridge")
-	}
-	if normalizeOpenAIResponsesImageGenerationTools(reqBody) {
-		modified = true
-		logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Normalized /responses image_generation tool payload")
-	}
-	if applyCodexImageGenerationBridgeInstructions(reqBody) {
-		modified = true
-		logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Added Codex image_generation bridge instructions")
-	}
-
-	upstreamModel := strings.TrimSpace(firstNonEmptyString(reqBody["model"]))
-	if normalizeOpenAIResponsesImageGenerationToolsForModel(reqBody, upstreamModel) {
-		modified = true
-		logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Normalized /responses image_generation tool model")
-	}
-	if normalizeOpenAIResponsesImageOnlyModel(reqBody) {
-		modified = true
-		logger.LegacyPrintf("service.openai_gateway", "[OpenAI passthrough] Normalized /responses image-only model request inbound_model=%s image_model=%s upstream_model=%s", reqModel, upstreamModel, firstNonEmptyString(reqBody["model"]))
-	}
-	if err := validateOpenAIResponsesImageModel(reqBody, firstNonEmptyString(reqBody["model"])); err != nil {
-		setOpsUpstreamError(c, http.StatusBadRequest, err.Error(), "")
-		if c != nil {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": gin.H{
-					"type":    "invalid_request_error",
-					"message": err.Error(),
-					"param":   "model",
-				},
-			})
-		}
-		return body, false, err
-	}
-	if !modified {
-		return body, false, nil
-	}
-	updated, err := json.Marshal(reqBody)
-	if err != nil {
-		return body, false, err
-	}
-	return updated, true, nil
 }
 
 func logOpenAIPassthroughInstructionsRejected(
