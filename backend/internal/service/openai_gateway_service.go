@@ -5594,20 +5594,30 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if result.BillingModel != "" {
 		billingModel = strings.TrimSpace(result.BillingModel)
 	}
-	if input.BillingModelSource == BillingModelSourceChannelMapped && input.ChannelMappedModel != "" && input.ChannelMappedModel != input.OriginalModel {
+	skipChannelMappedBilling := s.shouldBillOpenAINonImageResultAsRequestedText(ctx, result, apiKey, input)
+	if input.BillingModelSource == BillingModelSourceChannelMapped && input.ChannelMappedModel != "" && input.ChannelMappedModel != input.OriginalModel && !skipChannelMappedBilling {
 		billingModel = input.ChannelMappedModel
 	}
 	if input.BillingModelSource == BillingModelSourceRequested && input.OriginalModel != "" {
 		billingModel = input.OriginalModel
 	}
-	billingModels := usageBillingModelCandidates(
-		billingModel,
-		result.BillingModel,
-		input.ChannelMappedModel,
-		input.OriginalModel,
-		result.UpstreamModel,
-		result.Model,
-	)
+	var billingModels []string
+	if skipChannelMappedBilling {
+		billingModels = usageBillingModelCandidates(
+			input.OriginalModel,
+			result.UpstreamModel,
+			result.Model,
+		)
+	} else {
+		billingModels = usageBillingModelCandidates(
+			billingModel,
+			result.BillingModel,
+			input.ChannelMappedModel,
+			input.OriginalModel,
+			result.UpstreamModel,
+			result.Model,
+		)
+	}
 	serviceTier := ""
 	if result.ServiceTier != nil {
 		serviceTier = strings.TrimSpace(*result.ServiceTier)
@@ -5760,6 +5770,28 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.openai_gateway")
 
 	return nil
+}
+
+func (s *OpenAIGatewayService) shouldBillOpenAINonImageResultAsRequestedText(ctx context.Context, result *OpenAIForwardResult, apiKey *APIKey, input *OpenAIRecordUsageInput) bool {
+	if s == nil || s.resolver == nil || result == nil || input == nil || apiKey == nil || apiKey.Group == nil {
+		return false
+	}
+	if result.ImageCount > 0 {
+		return false
+	}
+	if input.BillingModelSource != BillingModelSourceChannelMapped {
+		return false
+	}
+	if strings.TrimSpace(input.OriginalModel) == "" {
+		return false
+	}
+	mappedModel := strings.TrimSpace(input.ChannelMappedModel)
+	if mappedModel == "" || mappedModel == input.OriginalModel {
+		return false
+	}
+	gid := apiKey.Group.ID
+	resolved := s.resolver.Resolve(ctx, PricingInput{Model: mappedModel, GroupID: &gid})
+	return resolved != nil && resolved.Source == PricingSourceChannel && resolved.Mode == BillingModeImage
 }
 
 func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(

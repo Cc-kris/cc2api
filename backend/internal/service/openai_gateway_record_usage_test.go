@@ -1140,6 +1140,66 @@ func TestOpenAIGatewayServiceRecordUsage_ChannelMappedOverridesBillingModelWhenM
 	require.True(t, usageRepo.lastLog.ActualCost > 0, "cost must not be zero")
 }
 
+func TestOpenAIGatewayServiceRecordUsage_ChannelImageMappedWithoutImageBillsRequestedTextModel(t *testing.T) {
+	groupID := int64(130)
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	svc := newOpenAIRecordUsageServiceForTest(usageRepo, &openAIRecordUsageUserRepoStub{}, &openAIRecordUsageSubRepoStub{}, nil)
+	svc.resolver = newOpenAIImageChannelPricingResolverForTest(t, groupID, "gpt-image-2", 0.058)
+
+	usage := OpenAIUsage{
+		InputTokens:              3000,
+		OutputTokens:             500,
+		CacheCreationInputTokens: 100,
+		CacheReadInputTokens:     200,
+	}
+	expectedCost, err := svc.billingService.CalculateCost("gpt-5.5", UsageTokens{
+		InputTokens:         2800,
+		OutputTokens:        500,
+		CacheCreationTokens: 100,
+		CacheReadTokens:     200,
+	}, 0.2)
+	require.NoError(t, err)
+
+	err = svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID: "resp_image_mapped_text",
+			Model:     "gpt-image-2",
+			Usage:     usage,
+			Duration:  time.Second,
+		},
+		APIKey: &APIKey{
+			ID:      10130,
+			GroupID: i64p(groupID),
+			Group: &Group{
+				ID:             groupID,
+				RateMultiplier: 0.2,
+			},
+		},
+		User:    &User{ID: 20130},
+		Account: &Account{ID: 30130},
+		ChannelUsageFields: ChannelUsageFields{
+			ChannelID:          2,
+			OriginalModel:      "gpt-5.5",
+			ChannelMappedModel: "gpt-image-2",
+			BillingModelSource: BillingModelSourceChannelMapped,
+			ModelMappingChain:  "gpt-5.5→gpt-image-2",
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, usageRepo.lastLog)
+	require.Zero(t, usageRepo.lastLog.ImageCount)
+	require.NotNil(t, usageRepo.lastLog.BillingMode)
+	require.Equal(t, string(BillingModeToken), *usageRepo.lastLog.BillingMode)
+	require.InDelta(t, expectedCost.TotalCost, usageRepo.lastLog.TotalCost, 1e-12)
+	require.InDelta(t, expectedCost.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+	require.InDelta(t, 0.2, usageRepo.lastLog.RateMultiplier, 1e-12)
+	require.Equal(t, "gpt-5.5", usageRepo.lastLog.RequestedModel)
+	require.Equal(t, "gpt-image-2", usageRepo.lastLog.Model)
+	require.NotNil(t, usageRepo.lastLog.ModelMappingChain)
+	require.Equal(t, "gpt-5.5→gpt-image-2", *usageRepo.lastLog.ModelMappingChain)
+}
+
 func TestOpenAIGatewayServiceRecordUsage_BillsCompactOpenAIModelAlias(t *testing.T) {
 	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
 	userRepo := &openAIRecordUsageUserRepoStub{}
