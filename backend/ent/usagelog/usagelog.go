@@ -92,6 +92,10 @@ const (
 	FieldImageSizeSource = "image_size_source"
 	// FieldImageSizeBreakdown holds the string denoting the image_size_breakdown field in the database.
 	FieldImageSizeBreakdown = "image_size_breakdown"
+	// FieldVideoDurationSeconds holds the string denoting the video_duration_seconds field in the database.
+	FieldVideoDurationSeconds = "video_duration_seconds"
+	// FieldVideoTaskID holds the string denoting the video_task_id field in the database.
+	FieldVideoTaskID = "video_task_id"
 	// FieldCacheTTLOverridden holds the string denoting the cache_ttl_overridden field in the database.
 	FieldCacheTTLOverridden = "cache_ttl_overridden"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -187,6 +191,8 @@ var Columns = []string{
 	FieldImageOutputSize,
 	FieldImageSizeSource,
 	FieldImageSizeBreakdown,
+	FieldVideoDurationSeconds,
+	FieldVideoTaskID,
 	FieldCacheTTLOverridden,
 	FieldCreatedAt,
 }
@@ -260,6 +266,8 @@ var (
 	ImageOutputSizeValidator func(string) error
 	// ImageSizeSourceValidator is a validator for the "image_size_source" field. It is called by the builders before save.
 	ImageSizeSourceValidator func(string) error
+	// VideoTaskIDValidator is a validator for the "video_task_id" field. It is called by the builders before save.
+	VideoTaskIDValidator func(string) error
 	// DefaultCacheTTLOverridden holds the default value on creation for the "cache_ttl_overridden" field.
 	DefaultCacheTTLOverridden bool
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
@@ -462,6 +470,16 @@ func ByImageOutputSize(opts ...sql.OrderTermOption) OrderOption {
 // ByImageSizeSource orders the results by the image_size_source field.
 func ByImageSizeSource(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldImageSizeSource, opts...).ToFunc()
+}
+
+// ByVideoDurationSeconds orders the results by the video_duration_seconds field.
+func ByVideoDurationSeconds(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldVideoDurationSeconds, opts...).ToFunc()
+}
+
+// ByVideoTaskID orders the results by the video_task_id field.
+func ByVideoTaskID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldVideoTaskID, opts...).ToFunc()
 }
 
 // ByCacheTTLOverridden orders the results by the cache_ttl_overridden field.

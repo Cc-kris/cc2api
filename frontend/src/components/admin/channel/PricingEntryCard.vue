@@ -189,11 +189,13 @@
           </div>
         </div>
 
-        <!-- Image mode -->
-        <div v-else-if="entry.billing_mode === 'image'">
+        <!-- Image / per-second mode -->
+        <div v-else-if="entry.billing_mode === 'image' || entry.billing_mode === 'per_second'">
           <!-- Default image price (per-request, same as per_request mode) -->
           <label class="mt-3 block text-xs font-medium text-gray-500 dark:text-gray-400">
-            {{ t('admin.channels.form.defaultImagePrice', '默认图片价格（未命中层级时使用）') }}
+            {{ entry.billing_mode === 'per_second'
+              ? t('admin.channels.form.defaultPerSecondPrice', '默认每秒价格')
+              : t('admin.channels.form.defaultImagePrice', '默认图片价格（未命中层级时使用）') }}
             <span class="ml-1 font-normal text-gray-400">$</span>
           </label>
           <div class="mt-1 w-48">
@@ -202,7 +204,7 @@
           </div>
 
           <!-- Image tiers -->
-          <div class="mt-3 flex items-center justify-between">
+          <div v-if="entry.billing_mode === 'image'" class="mt-3 flex items-center justify-between">
             <label class="text-xs font-medium text-gray-500 dark:text-gray-400">
               {{ t('admin.channels.form.imageTiers', '图片计费层级（按次）') }}
             </label>
@@ -210,7 +212,7 @@
               + {{ t('admin.channels.form.addTier', '添加层级') }}
             </button>
           </div>
-          <div v-if="entry.intervals && entry.intervals.length > 0" class="mt-2 space-y-2">
+          <div v-if="entry.billing_mode === 'image' && entry.intervals && entry.intervals.length > 0" class="mt-2 space-y-2">
             <IntervalRow
               v-for="(iv, idx) in entry.intervals"
               :key="idx"
@@ -256,7 +258,8 @@ const collapsed = ref(props.entry.models.length > 0)
 const billingModeOptions = computed(() => [
   { value: 'token', label: 'Token' },
   { value: 'per_request', label: t('admin.channels.billingMode.perRequest', '按次') },
-  { value: 'image', label: t('admin.channels.billingMode.image', '图片（按次）') }
+  { value: 'image', label: t('admin.channels.billingMode.image', '图片（按次）') },
+  { value: 'per_second', label: t('admin.channels.billingMode.perSecond', '视频（按秒）') }
 ])
 
 const billingModeLabel = computed(() => {

@@ -2249,6 +2249,7 @@ export default {
         openai: 'OpenAI',
         gemini: 'Gemini',
         antigravity: 'Antigravity',
+        seedace: 'Seedace',
       },
       saving: '保存中...',
       noGroups: '暂无分组',
@@ -2444,15 +2445,18 @@ export default {
         billingModeToken: '按 Token',
         billingModePerRequest: '按次',
         billingModeImage: '按图片',
+        billingModePerSecond: '按秒',
         inputPrice: '输入',
         outputPrice: '输出',
         cacheWritePrice: '缓存写入',
         cacheReadPrice: '缓存读取',
         imageOutputPrice: '图片输出',
         perRequestPrice: '每次请求',
+        perSecondPrice: '每秒',
         intervals: '阶梯定价',
         unitPerMillion: '/ 1M token',
-        unitPerRequest: '/ 次'
+        unitPerRequest: '/ 次',
+        unitPerSecond: '/ 秒'
       }
     },
 
@@ -2495,7 +2499,8 @@ export default {
       billingMode: {
         token: 'Token',
         perRequest: '按次',
-        image: '图片（按次）'
+        image: '图片（按次）',
+        perSecond: '视频（按秒）'
       },
       form: {
         name: '名称',
@@ -2527,7 +2532,8 @@ export default {
         noTiersYet: '暂无层级，点击添加配置按次计费价格',
         noPricingRules: '暂无定价规则，点击"添加"创建',
         perRequestPrice: '单次价格',
-        perRequestPriceRequired: '按次/图片计费模式必须设置默认价格或至少一个计费层级',
+        perSecondPrice: '每秒价格',
+        perRequestPriceRequired: '按次/图片/按秒计费模式必须设置默认价格或至少一个计费层级',
         tierLabel: '层级',
         resolution: '分辨率',
         modelMapping: '模型映射',
@@ -2547,6 +2553,7 @@ export default {
         restrictModelsHint: '开启后，仅允许模型定价列表中的模型。不在列表中的模型请求将被拒绝。',
         defaultPerRequestPrice: '默认单次价格（未命中层级时使用）',
         defaultImagePrice: '默认图片价格（未命中层级时使用）',
+        defaultPerSecondPrice: '默认每秒价格',
         platformConfig: '平台配置',
         webSearchEmulation: 'Web Search 模拟',
         webSearchEmulationHint: '⚠️ 开启后该渠道下所有 Anthropic 分组的账号将自动拦截 web_search 请求，请谨慎操作',
@@ -3293,6 +3300,7 @@ export default {
         anthropic: 'Anthropic',
         gemini: 'Gemini',
         antigravity: 'Antigravity',
+        seedace: 'Seedace',
       },
       types: {
         oauth: 'OAuth',
@@ -4737,6 +4745,7 @@ export default {
       billingModeToken: '按量',
       billingModePerRequest: '按次',
       billingModeImage: '按次(图片)',
+      billingModePerSecond: '按秒(视频)',
       allBillingModes: '全部计费模式',
       ipAddress: 'IP',
       clickToViewBalance: '点击查看充值记录',

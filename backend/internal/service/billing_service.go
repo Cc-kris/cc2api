@@ -141,7 +141,7 @@ type CostBreakdown struct {
 	CacheReadCost     float64
 	TotalCost         float64
 	ActualCost        float64 // 应用倍率后的实际费用
-	BillingMode       string  // 计费模式（"token"/"per_request"/"image"），由 CalculateCostUnified 填充
+	BillingMode       string  // 计费模式（"token"/"per_request"/"image"/"per_second"），由 CalculateCostUnified 填充
 }
 
 // ErrModelPricingUnavailable indicates that none of the configured pricing
@@ -470,7 +470,7 @@ func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, 
 	var breakdown *CostBreakdown
 	var err error
 	switch resolved.Mode {
-	case BillingModePerRequest, BillingModeImage:
+	case BillingModePerRequest, BillingModeImage, BillingModePerSecond:
 		breakdown, err = s.calculatePerRequestCost(resolved, input)
 	default: // BillingModeToken
 		breakdown, err = s.calculateTokenCost(resolved, input)

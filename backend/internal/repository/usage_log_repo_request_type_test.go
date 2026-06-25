@@ -80,6 +80,8 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // image_output_size
 			sqlmock.AnyArg(), // image_size_source
 			sqlmock.AnyArg(), // image_size_breakdown
+			sqlmock.AnyArg(), // video_duration_seconds
+			sqlmock.AnyArg(), // video_task_id
 			sqlmock.AnyArg(), // service_tier
 			sqlmock.AnyArg(), // reasoning_effort
 			sqlmock.AnyArg(), // inbound_endpoint
@@ -163,6 +165,8 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // image_output_size
 			sqlmock.AnyArg(), // image_size_source
 			sqlmock.AnyArg(), // image_size_breakdown
+			sqlmock.AnyArg(), // video_duration_seconds
+			sqlmock.AnyArg(), // video_task_id
 			serviceTier,
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
@@ -630,6 +634,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{Valid: true, String: "3840x2160"},
 			sql.NullString{Valid: true, String: "output"},
 			sql.NullString{Valid: true, String: `{"4K":2}`},
+			sql.NullInt64{Valid: true, Int64: 8},
+			sql.NullString{Valid: true, String: "task-image-metadata"},
 			sql.NullString{},
 			sql.NullString{},
 			sql.NullString{},
@@ -653,6 +659,10 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 		require.NotNil(t, log.ImageSizeSource)
 		require.Equal(t, "output", *log.ImageSizeSource)
 		require.Equal(t, map[string]int{"4K": 2}, log.ImageSizeBreakdown)
+		require.NotNil(t, log.VideoDurationSeconds)
+		require.Equal(t, 8, *log.VideoDurationSeconds)
+		require.NotNil(t, log.VideoTaskID)
+		require.Equal(t, "task-image-metadata", *log.VideoTaskID)
 	})
 
 	t.Run("request_type_ws_v2_overrides_legacy", func(t *testing.T) {
@@ -698,6 +708,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{}, // image_output_size
 			sql.NullString{}, // image_size_source
 			sql.NullString{}, // image_size_breakdown
+			sql.NullInt64{},  // video_duration_seconds
+			sql.NullString{}, // video_task_id
 			sql.NullString{Valid: true, String: "priority"},
 			sql.NullString{},
 			sql.NullString{},
@@ -750,6 +762,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{}, // image_output_size
 			sql.NullString{}, // image_size_source
 			sql.NullString{}, // image_size_breakdown
+			sql.NullInt64{},  // video_duration_seconds
+			sql.NullString{}, // video_task_id
 			sql.NullString{Valid: true, String: "flex"},
 			sql.NullString{},
 			sql.NullString{},
@@ -802,6 +816,8 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{}, // image_output_size
 			sql.NullString{}, // image_size_source
 			sql.NullString{}, // image_size_breakdown
+			sql.NullInt64{},  // video_duration_seconds
+			sql.NullString{}, // video_task_id
 			sql.NullString{Valid: true, String: "priority"},
 			sql.NullString{},
 			sql.NullString{},

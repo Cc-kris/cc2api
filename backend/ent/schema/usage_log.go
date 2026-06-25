@@ -56,7 +56,7 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int64("channel_id").Optional().Nillable().Comment("渠道 ID"),
 		field.String("model_mapping_chain").MaxLen(500).Optional().Nillable().Comment("模型映射链"),
 		field.String("billing_tier").MaxLen(50).Optional().Nillable().Comment("计费层级标签"),
-		field.String("billing_mode").MaxLen(20).Optional().Nillable().Comment("计费模式：token/per_request/image"),
+		field.String("billing_mode").MaxLen(20).Optional().Nillable().Comment("计费模式：token/per_request/image/per_second"),
 		field.Int64("group_id").
 			Optional().
 			Nillable(),
@@ -149,6 +149,16 @@ func (UsageLog) Fields() []ent.Field {
 		field.JSON("image_size_breakdown", map[string]int{}).
 			Optional().
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
+		// 视频生成字段（Seedace 等视频平台使用）
+		field.Int("video_duration_seconds").
+			Optional().
+			Nillable().
+			Comment("视频计费秒数"),
+		field.String("video_task_id").
+			MaxLen(128).
+			Optional().
+			Nillable().
+			Comment("上游视频任务 ID"),
 		// Cache TTL Override 标记（管理员强制替换了缓存 TTL 计费）
 		field.Bool("cache_ttl_overridden").
 			Default(false),

@@ -811,6 +811,53 @@ func (_u *UsageLogUpdate) ClearImageSizeBreakdown() *UsageLogUpdate {
 	return _u
 }
 
+// SetVideoDurationSeconds sets the "video_duration_seconds" field.
+func (_u *UsageLogUpdate) SetVideoDurationSeconds(v int) *UsageLogUpdate {
+	_u.mutation.ResetVideoDurationSeconds()
+	_u.mutation.SetVideoDurationSeconds(v)
+	return _u
+}
+
+// SetNillableVideoDurationSeconds sets the "video_duration_seconds" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableVideoDurationSeconds(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetVideoDurationSeconds(*v)
+	}
+	return _u
+}
+
+// AddVideoDurationSeconds adds value to the "video_duration_seconds" field.
+func (_u *UsageLogUpdate) AddVideoDurationSeconds(v int) *UsageLogUpdate {
+	_u.mutation.AddVideoDurationSeconds(v)
+	return _u
+}
+
+// ClearVideoDurationSeconds clears the value of the "video_duration_seconds" field.
+func (_u *UsageLogUpdate) ClearVideoDurationSeconds() *UsageLogUpdate {
+	_u.mutation.ClearVideoDurationSeconds()
+	return _u
+}
+
+// SetVideoTaskID sets the "video_task_id" field.
+func (_u *UsageLogUpdate) SetVideoTaskID(v string) *UsageLogUpdate {
+	_u.mutation.SetVideoTaskID(v)
+	return _u
+}
+
+// SetNillableVideoTaskID sets the "video_task_id" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableVideoTaskID(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetVideoTaskID(*v)
+	}
+	return _u
+}
+
+// ClearVideoTaskID clears the value of the "video_task_id" field.
+func (_u *UsageLogUpdate) ClearVideoTaskID() *UsageLogUpdate {
+	_u.mutation.ClearVideoTaskID()
+	return _u
+}
+
 // SetCacheTTLOverridden sets the "cache_ttl_overridden" field.
 func (_u *UsageLogUpdate) SetCacheTTLOverridden(v bool) *UsageLogUpdate {
 	_u.mutation.SetCacheTTLOverridden(v)
@@ -977,6 +1024,11 @@ func (_u *UsageLogUpdate) check() error {
 	if v, ok := _u.mutation.ImageSizeSource(); ok {
 		if err := usagelog.ImageSizeSourceValidator(v); err != nil {
 			return &ValidationError{Name: "image_size_source", err: fmt.Errorf(`ent: validator failed for field "UsageLog.image_size_source": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.VideoTaskID(); ok {
+		if err := usagelog.VideoTaskIDValidator(v); err != nil {
+			return &ValidationError{Name: "video_task_id", err: fmt.Errorf(`ent: validator failed for field "UsageLog.video_task_id": %w`, err)}
 		}
 	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
@@ -1209,6 +1261,21 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.ImageSizeBreakdownCleared() {
 		_spec.ClearField(usagelog.FieldImageSizeBreakdown, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.VideoDurationSeconds(); ok {
+		_spec.SetField(usagelog.FieldVideoDurationSeconds, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedVideoDurationSeconds(); ok {
+		_spec.AddField(usagelog.FieldVideoDurationSeconds, field.TypeInt, value)
+	}
+	if _u.mutation.VideoDurationSecondsCleared() {
+		_spec.ClearField(usagelog.FieldVideoDurationSeconds, field.TypeInt)
+	}
+	if value, ok := _u.mutation.VideoTaskID(); ok {
+		_spec.SetField(usagelog.FieldVideoTaskID, field.TypeString, value)
+	}
+	if _u.mutation.VideoTaskIDCleared() {
+		_spec.ClearField(usagelog.FieldVideoTaskID, field.TypeString)
 	}
 	if value, ok := _u.mutation.CacheTTLOverridden(); ok {
 		_spec.SetField(usagelog.FieldCacheTTLOverridden, field.TypeBool, value)
@@ -2157,6 +2224,53 @@ func (_u *UsageLogUpdateOne) ClearImageSizeBreakdown() *UsageLogUpdateOne {
 	return _u
 }
 
+// SetVideoDurationSeconds sets the "video_duration_seconds" field.
+func (_u *UsageLogUpdateOne) SetVideoDurationSeconds(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetVideoDurationSeconds()
+	_u.mutation.SetVideoDurationSeconds(v)
+	return _u
+}
+
+// SetNillableVideoDurationSeconds sets the "video_duration_seconds" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableVideoDurationSeconds(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetVideoDurationSeconds(*v)
+	}
+	return _u
+}
+
+// AddVideoDurationSeconds adds value to the "video_duration_seconds" field.
+func (_u *UsageLogUpdateOne) AddVideoDurationSeconds(v int) *UsageLogUpdateOne {
+	_u.mutation.AddVideoDurationSeconds(v)
+	return _u
+}
+
+// ClearVideoDurationSeconds clears the value of the "video_duration_seconds" field.
+func (_u *UsageLogUpdateOne) ClearVideoDurationSeconds() *UsageLogUpdateOne {
+	_u.mutation.ClearVideoDurationSeconds()
+	return _u
+}
+
+// SetVideoTaskID sets the "video_task_id" field.
+func (_u *UsageLogUpdateOne) SetVideoTaskID(v string) *UsageLogUpdateOne {
+	_u.mutation.SetVideoTaskID(v)
+	return _u
+}
+
+// SetNillableVideoTaskID sets the "video_task_id" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableVideoTaskID(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetVideoTaskID(*v)
+	}
+	return _u
+}
+
+// ClearVideoTaskID clears the value of the "video_task_id" field.
+func (_u *UsageLogUpdateOne) ClearVideoTaskID() *UsageLogUpdateOne {
+	_u.mutation.ClearVideoTaskID()
+	return _u
+}
+
 // SetCacheTTLOverridden sets the "cache_ttl_overridden" field.
 func (_u *UsageLogUpdateOne) SetCacheTTLOverridden(v bool) *UsageLogUpdateOne {
 	_u.mutation.SetCacheTTLOverridden(v)
@@ -2336,6 +2450,11 @@ func (_u *UsageLogUpdateOne) check() error {
 	if v, ok := _u.mutation.ImageSizeSource(); ok {
 		if err := usagelog.ImageSizeSourceValidator(v); err != nil {
 			return &ValidationError{Name: "image_size_source", err: fmt.Errorf(`ent: validator failed for field "UsageLog.image_size_source": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.VideoTaskID(); ok {
+		if err := usagelog.VideoTaskIDValidator(v); err != nil {
+			return &ValidationError{Name: "video_task_id", err: fmt.Errorf(`ent: validator failed for field "UsageLog.video_task_id": %w`, err)}
 		}
 	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
@@ -2585,6 +2704,21 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if _u.mutation.ImageSizeBreakdownCleared() {
 		_spec.ClearField(usagelog.FieldImageSizeBreakdown, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.VideoDurationSeconds(); ok {
+		_spec.SetField(usagelog.FieldVideoDurationSeconds, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedVideoDurationSeconds(); ok {
+		_spec.AddField(usagelog.FieldVideoDurationSeconds, field.TypeInt, value)
+	}
+	if _u.mutation.VideoDurationSecondsCleared() {
+		_spec.ClearField(usagelog.FieldVideoDurationSeconds, field.TypeInt)
+	}
+	if value, ok := _u.mutation.VideoTaskID(); ok {
+		_spec.SetField(usagelog.FieldVideoTaskID, field.TypeString, value)
+	}
+	if _u.mutation.VideoTaskIDCleared() {
+		_spec.ClearField(usagelog.FieldVideoTaskID, field.TypeString)
 	}
 	if value, ok := _u.mutation.CacheTTLOverridden(); ok {
 		_spec.SetField(usagelog.FieldCacheTTLOverridden, field.TypeBool, value)

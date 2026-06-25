@@ -120,6 +120,30 @@ func RegisterGatewayRoutes(
 			}
 			h.OpenAIGateway.Images(c)
 		})
+		gateway.POST("/video/generations", func(c *gin.Context) {
+			if getGroupPlatform(c) != service.PlatformSeedace {
+				c.JSON(http.StatusNotFound, gin.H{
+					"error": gin.H{
+						"type":    "not_found_error",
+						"message": "Video API is not supported for this platform",
+					},
+				})
+				return
+			}
+			h.SeedaceVideo.Create(c)
+		})
+		gateway.GET("/video/generations/:task_id", func(c *gin.Context) {
+			if getGroupPlatform(c) != service.PlatformSeedace {
+				c.JSON(http.StatusNotFound, gin.H{
+					"error": gin.H{
+						"type":    "not_found_error",
+						"message": "Video API is not supported for this platform",
+					},
+				})
+				return
+			}
+			h.SeedaceVideo.Poll(c)
+		})
 	}
 
 	// Gemini 原生 API 兼容层（Gemini SDK/CLI 直连）

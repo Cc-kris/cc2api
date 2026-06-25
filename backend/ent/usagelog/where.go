@@ -245,6 +245,16 @@ func ImageSizeSource(v string) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldImageSizeSource, v))
 }
 
+// VideoDurationSeconds applies equality check predicate on the "video_duration_seconds" field. It's identical to VideoDurationSecondsEQ.
+func VideoDurationSeconds(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldVideoDurationSeconds, v))
+}
+
+// VideoTaskID applies equality check predicate on the "video_task_id" field. It's identical to VideoTaskIDEQ.
+func VideoTaskID(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldVideoTaskID, v))
+}
+
 // CacheTTLOverridden applies equality check predicate on the "cache_ttl_overridden" field. It's identical to CacheTTLOverriddenEQ.
 func CacheTTLOverridden(v bool) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldCacheTTLOverridden, v))
@@ -2148,6 +2158,131 @@ func ImageSizeBreakdownIsNil() predicate.UsageLog {
 // ImageSizeBreakdownNotNil applies the NotNil predicate on the "image_size_breakdown" field.
 func ImageSizeBreakdownNotNil() predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldNotNull(FieldImageSizeBreakdown))
+}
+
+// VideoDurationSecondsEQ applies the EQ predicate on the "video_duration_seconds" field.
+func VideoDurationSecondsEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldVideoDurationSeconds, v))
+}
+
+// VideoDurationSecondsNEQ applies the NEQ predicate on the "video_duration_seconds" field.
+func VideoDurationSecondsNEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldVideoDurationSeconds, v))
+}
+
+// VideoDurationSecondsIn applies the In predicate on the "video_duration_seconds" field.
+func VideoDurationSecondsIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldVideoDurationSeconds, vs...))
+}
+
+// VideoDurationSecondsNotIn applies the NotIn predicate on the "video_duration_seconds" field.
+func VideoDurationSecondsNotIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldVideoDurationSeconds, vs...))
+}
+
+// VideoDurationSecondsGT applies the GT predicate on the "video_duration_seconds" field.
+func VideoDurationSecondsGT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldVideoDurationSeconds, v))
+}
+
+// VideoDurationSecondsGTE applies the GTE predicate on the "video_duration_seconds" field.
+func VideoDurationSecondsGTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldVideoDurationSeconds, v))
+}
+
+// VideoDurationSecondsLT applies the LT predicate on the "video_duration_seconds" field.
+func VideoDurationSecondsLT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldVideoDurationSeconds, v))
+}
+
+// VideoDurationSecondsLTE applies the LTE predicate on the "video_duration_seconds" field.
+func VideoDurationSecondsLTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldVideoDurationSeconds, v))
+}
+
+// VideoDurationSecondsIsNil applies the IsNil predicate on the "video_duration_seconds" field.
+func VideoDurationSecondsIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldVideoDurationSeconds))
+}
+
+// VideoDurationSecondsNotNil applies the NotNil predicate on the "video_duration_seconds" field.
+func VideoDurationSecondsNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldVideoDurationSeconds))
+}
+
+// VideoTaskIDEQ applies the EQ predicate on the "video_task_id" field.
+func VideoTaskIDEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldVideoTaskID, v))
+}
+
+// VideoTaskIDNEQ applies the NEQ predicate on the "video_task_id" field.
+func VideoTaskIDNEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldVideoTaskID, v))
+}
+
+// VideoTaskIDIn applies the In predicate on the "video_task_id" field.
+func VideoTaskIDIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldVideoTaskID, vs...))
+}
+
+// VideoTaskIDNotIn applies the NotIn predicate on the "video_task_id" field.
+func VideoTaskIDNotIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldVideoTaskID, vs...))
+}
+
+// VideoTaskIDGT applies the GT predicate on the "video_task_id" field.
+func VideoTaskIDGT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldVideoTaskID, v))
+}
+
+// VideoTaskIDGTE applies the GTE predicate on the "video_task_id" field.
+func VideoTaskIDGTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldVideoTaskID, v))
+}
+
+// VideoTaskIDLT applies the LT predicate on the "video_task_id" field.
+func VideoTaskIDLT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldVideoTaskID, v))
+}
+
+// VideoTaskIDLTE applies the LTE predicate on the "video_task_id" field.
+func VideoTaskIDLTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldVideoTaskID, v))
+}
+
+// VideoTaskIDContains applies the Contains predicate on the "video_task_id" field.
+func VideoTaskIDContains(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContains(FieldVideoTaskID, v))
+}
+
+// VideoTaskIDHasPrefix applies the HasPrefix predicate on the "video_task_id" field.
+func VideoTaskIDHasPrefix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasPrefix(FieldVideoTaskID, v))
+}
+
+// VideoTaskIDHasSuffix applies the HasSuffix predicate on the "video_task_id" field.
+func VideoTaskIDHasSuffix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasSuffix(FieldVideoTaskID, v))
+}
+
+// VideoTaskIDIsNil applies the IsNil predicate on the "video_task_id" field.
+func VideoTaskIDIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldVideoTaskID))
+}
+
+// VideoTaskIDNotNil applies the NotNil predicate on the "video_task_id" field.
+func VideoTaskIDNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldVideoTaskID))
+}
+
+// VideoTaskIDEqualFold applies the EqualFold predicate on the "video_task_id" field.
+func VideoTaskIDEqualFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEqualFold(FieldVideoTaskID, v))
+}
+
+// VideoTaskIDContainsFold applies the ContainsFold predicate on the "video_task_id" field.
+func VideoTaskIDContainsFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContainsFold(FieldVideoTaskID, v))
 }
 
 // CacheTTLOverriddenEQ applies the EQ predicate on the "cache_ttl_overridden" field.

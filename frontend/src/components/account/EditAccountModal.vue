@@ -41,6 +41,8 @@
                   ? 'https://generativelanguage.googleapis.com'
                   : account.platform === 'antigravity'
                     ? 'https://cloudcode-pa.googleapis.com'
+                    : account.platform === 'seedace'
+                      ? 'https://ai.silkroadai.io/v1'
                     : 'https://api.anthropic.com'
             "
           />
@@ -63,10 +65,36 @@
                   ? 'AIza...'
                   : account.platform === 'antigravity'
                     ? 'sk-...'
+                    : account.platform === 'seedace'
+                      ? 'sk-...'
                     : 'sk-ant-...'
             "
           />
           <p class="input-hint">{{ t('admin.accounts.leaveEmptyToKeep') }}</p>
+        </div>
+
+        <div v-if="account.platform === 'seedace'" class="rounded-lg bg-gray-50 p-4 dark:bg-dark-700/50">
+          <div class="flex items-center justify-between">
+            <div>
+              <label class="input-label mb-0">URL 替换转发</label>
+              <p class="input-hint">启用后客户访问本站视频接口，系统替换为上游 Base URL 和 API Key 后转发。</p>
+            </div>
+            <button
+              type="button"
+              @click="seedaceUrlRelayEnabled = !seedaceUrlRelayEnabled"
+              :class="[
+                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                seedaceUrlRelayEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+              ]"
+            >
+              <span
+                :class="[
+                  'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                  seedaceUrlRelayEnabled ? 'translate-x-6' : 'translate-x-1'
+                ]"
+              />
+            </button>
+          </div>
         </div>
 
         <!-- Model Restriction Section (不适用于 Antigravity) -->
@@ -2439,6 +2467,7 @@ const codexCLIOnlyEnabled = ref(false)
 type CodexImageGenerationBridgeMode = 'inherit' | 'enabled' | 'disabled'
 const codexImageGenerationBridgeMode = ref<CodexImageGenerationBridgeMode>('inherit')
 const anthropicPassthroughEnabled = ref(false)
+const seedaceUrlRelayEnabled = ref(true)
 const webSearchEmulationMode = ref('default')
 const webSearchGlobalEnabled = ref(false)
 const {
@@ -2614,6 +2643,7 @@ const tempUnschedPresets = computed(() => [
 const defaultBaseUrl = computed(() => {
   if (props.account?.platform === 'openai') return 'https://api.openai.com'
   if (props.account?.platform === 'gemini') return 'https://generativelanguage.googleapis.com'
+  if (props.account?.platform === 'seedace') return 'https://ai.silkroadai.io/v1'
   return 'https://api.anthropic.com'
 })
 
@@ -2736,6 +2766,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   codexCLIOnlyEnabled.value = false
   codexImageGenerationBridgeMode.value = 'inherit'
   anthropicPassthroughEnabled.value = false
+  seedaceUrlRelayEnabled.value = extra?.url_relay_enabled !== false
   webSearchEmulationMode.value = 'default'
   if (newAccount.platform === 'openai' && (newAccount.type === 'oauth' || newAccount.type === 'apikey')) {
     openaiPassthroughEnabled.value = extra?.openai_passthrough === true || extra?.openai_oauth_passthrough === true
@@ -2860,6 +2891,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
         ? 'https://api.openai.com'
         : newAccount.platform === 'gemini'
           ? 'https://generativelanguage.googleapis.com'
+          : newAccount.platform === 'seedace'
+            ? 'https://ai.silkroadai.io/v1'
           : 'https://api.anthropic.com'
     editBaseUrl.value = (credentials.base_url as string) || platformDefaultUrl
 
@@ -2926,6 +2959,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
         ? 'https://api.openai.com'
         : newAccount.platform === 'gemini'
           ? 'https://generativelanguage.googleapis.com'
+          : newAccount.platform === 'seedace'
+            ? 'https://ai.silkroadai.io/v1'
           : 'https://api.anthropic.com'
     editBaseUrl.value = platformDefaultUrl
 
@@ -3872,6 +3907,13 @@ const handleSubmit = async () => {
       } else {
         newExtra.web_search_emulation = webSearchEmulationMode.value
       }
+      updatePayload.extra = newExtra
+    }
+
+    if (props.account.platform === 'seedace' && props.account.type === 'apikey') {
+      const currentExtra = (updatePayload.extra as Record<string, unknown>) || (props.account.extra as Record<string, unknown>) || {}
+      const newExtra: Record<string, unknown> = { ...currentExtra }
+      newExtra.url_relay_enabled = seedaceUrlRelayEnabled.value
       updatePayload.extra = newExtra
     }
 

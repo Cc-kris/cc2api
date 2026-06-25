@@ -70,7 +70,7 @@
       <!-- Platform Selection - Segmented Control Style -->
       <div>
         <label class="input-label">{{ t('admin.accounts.platform') }}</label>
-        <div class="mt-2 flex rounded-lg bg-gray-100 p-1 dark:bg-dark-700" data-tour="account-form-platform">
+        <div class="mt-2 flex flex-wrap rounded-lg bg-gray-100 p-1 dark:bg-dark-700" data-tour="account-form-platform">
           <button
             type="button"
             @click="form.platform = 'anthropic'"
@@ -146,6 +146,19 @@
           >
             <Icon name="cloud" size="sm" />
             Antigravity
+          </button>
+          <button
+            type="button"
+            @click="form.platform = 'seedace'"
+            :class="[
+              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
+              form.platform === 'seedace'
+                ? 'bg-white text-cyan-600 shadow-sm dark:bg-dark-600 dark:text-cyan-400'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <Icon name="play" size="sm" />
+            Seedace
           </button>
         </div>
       </div>
@@ -1021,6 +1034,8 @@
                 ? 'https://api.openai.com'
                 : form.platform === 'gemini'
                   ? 'https://generativelanguage.googleapis.com'
+                  : form.platform === 'seedace'
+                    ? 'https://ai.silkroadai.io/v1'
                   : 'https://api.anthropic.com'
             "
           />
@@ -1038,6 +1053,8 @@
                 ? 'sk-proj-...'
                 : form.platform === 'gemini'
                   ? 'AIza...'
+                  : form.platform === 'seedace'
+                    ? 'sk-...'
                   : 'sk-ant-...'
             "
           />
@@ -1052,6 +1069,30 @@
             <option value="aistudio_paid">{{ t('admin.accounts.gemini.tier.aiStudio.paid') }}</option>
           </select>
           <p class="input-hint">{{ t('admin.accounts.gemini.tier.aiStudioHint') }}</p>
+        </div>
+
+        <div v-if="form.platform === 'seedace'" class="rounded-lg bg-gray-50 p-4 dark:bg-dark-700/50">
+          <div class="flex items-center justify-between">
+            <div>
+              <label class="input-label mb-0">URL 替换转发</label>
+              <p class="input-hint">启用后客户访问本站视频接口，系统替换为上游 Base URL 和 API Key 后转发。</p>
+            </div>
+            <button
+              type="button"
+              @click="seedaceUrlRelayEnabled = !seedaceUrlRelayEnabled"
+              :class="[
+                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                seedaceUrlRelayEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+              ]"
+            >
+              <span
+                :class="[
+                  'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                  seedaceUrlRelayEnabled ? 'translate-x-6' : 'translate-x-1'
+                ]"
+              />
+            </button>
+          </div>
         </div>
 
         <!-- Model Restriction Section (Antigravity 已在上层条件排除) -->
@@ -3311,6 +3352,7 @@ const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF
 const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const codexCLIOnlyEnabled = ref(false)
 const anthropicPassthroughEnabled = ref(false)
+const seedaceUrlRelayEnabled = ref(true)
 const webSearchEmulationMode = ref('default')
 const webSearchGlobalEnabled = ref(false)
 const {
@@ -3604,6 +3646,10 @@ watch(
 watch(
   [accountCategory, addMethod, antigravityAccountType, () => form.platform],
   ([category, method, agType]) => {
+    if (form.platform === 'seedace') {
+      form.type = 'apikey'
+      return
+    }
     // Antigravity upstream 类型（实际创建为 apikey）
     if (form.platform === 'antigravity' && agType === 'upstream') {
       form.type = 'apikey'
@@ -3635,6 +3681,8 @@ watch(
         ? 'https://api.openai.com'
         : newPlatform === 'gemini'
           ? 'https://generativelanguage.googleapis.com'
+          : newPlatform === 'seedace'
+            ? 'https://ai.silkroadai.io/v1'
           : 'https://api.anthropic.com'
     // Clear model-related settings
     allowedModels.value = []
@@ -3648,6 +3696,13 @@ watch(
       antigravityWhitelistModels.value = []
       accountCategory.value = 'oauth-based'
       antigravityAccountType.value = 'oauth'
+    } else if (newPlatform === 'seedace') {
+      accountCategory.value = 'apikey'
+      addMethod.value = 'oauth'
+      allowOverages.value = false
+      antigravityWhitelistModels.value = []
+      antigravityModelMappings.value = []
+      antigravityModelRestrictionMode.value = 'mapping'
     } else {
       allowOverages.value = false
       antigravityWhitelistModels.value = []
@@ -4080,6 +4135,7 @@ const resetForm = () => {
   openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   codexCLIOnlyEnabled.value = false
   anthropicPassthroughEnabled.value = false
+  seedaceUrlRelayEnabled.value = true
   webSearchEmulationMode.value = 'default'
   // Reset quota control state
   windowCostEnabled.value = false
@@ -4189,6 +4245,15 @@ const buildAnthropicExtra = (base?: Record<string, unknown>): Record<string, unk
     extra.web_search_emulation = webSearchEmulationMode.value
   }
 
+  return Object.keys(extra).length > 0 ? extra : undefined
+}
+
+const buildSeedaceExtra = (base?: Record<string, unknown>): Record<string, unknown> | undefined => {
+  if (form.platform !== 'seedace' || accountCategory.value !== 'apikey') {
+    return base
+  }
+  const extra: Record<string, unknown> = { ...(base || {}) }
+  extra.url_relay_enabled = seedaceUrlRelayEnabled.value
   return Object.keys(extra).length > 0 ? extra : undefined
 }
 
@@ -4431,6 +4496,8 @@ const handleSubmit = async () => {
       ? 'https://api.openai.com'
       : form.platform === 'gemini'
         ? 'https://generativelanguage.googleapis.com'
+        : form.platform === 'seedace'
+          ? 'https://ai.silkroadai.io/v1'
         : 'https://api.anthropic.com'
 
   // Build credentials with optional model mapping
@@ -4474,7 +4541,7 @@ const handleSubmit = async () => {
   }
 
   form.credentials = credentials
-  const extra = buildAnthropicExtra(buildOpenAIExtra())
+  const extra = buildSeedaceExtra(buildAnthropicExtra(buildOpenAIExtra()))
 
   await doCreateAccount({
     ...form,

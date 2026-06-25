@@ -574,6 +574,7 @@ var ProviderSet = wire.NewSet(
 	ProvideSemanticCacheAsyncWriter,
 	ProvideGatewayService,
 	ProvideOpenAIGatewayService,
+	NewSeedaceVideoService,
 	wire.Bind(new(AccountRuntimeBlocker), new(*OpenAIGatewayService)),
 	NewOAuthService,
 	NewOpenAIOAuthService,

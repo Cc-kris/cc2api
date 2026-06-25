@@ -29,7 +29,7 @@ import (
 	gocache "github.com/patrickmn/go-cache"
 )
 
-const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, image_output_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, service_tier, reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, created_at"
+const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, image_output_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, video_duration_seconds, video_task_id, service_tier, reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, created_at"
 
 // usageLogInsertArgTypes must stay in the same order as:
 //  1. prepareUsageLogInsert().args
@@ -78,6 +78,8 @@ var usageLogInsertArgTypes = [...]string{
 	"text",        // image_output_size
 	"text",        // image_size_source
 	"jsonb",       // image_size_breakdown
+	"integer",     // video_duration_seconds
+	"text",        // video_task_id
 	"text",        // service_tier
 	"text",        // reasoning_effort
 	"text",        // inbound_endpoint
@@ -395,6 +397,8 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
 			image_output_size,
 			image_size_source,
 			image_size_breakdown,
+			video_duration_seconds,
+			video_task_id,
 			service_tier,
 			reasoning_effort,
 			inbound_endpoint,
@@ -412,7 +416,7 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
 			$10, $11, $12, $13,
 			$14, $15, $16, $17,
 			$18, $19, $20, $21, $22, $23,
-			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50
+			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52
 		)
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 		RETURNING id, created_at
@@ -837,6 +841,8 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 			image_output_size,
 			image_size_source,
 			image_size_breakdown,
+			video_duration_seconds,
+			video_task_id,
 			service_tier,
 			reasoning_effort,
 			inbound_endpoint,
@@ -850,7 +856,7 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 			created_at
 		) AS (VALUES `)
 
-	args := make([]any, 0, len(keys)*50)
+	args := make([]any, 0, len(keys)*(len(usageLogInsertArgTypes)+1))
 	argPos := 1
 	for idx, key := range keys {
 		if idx > 0 {
@@ -918,6 +924,8 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				image_output_size,
 				image_size_source,
 				image_size_breakdown,
+				video_duration_seconds,
+				video_task_id,
 				service_tier,
 				reasoning_effort,
 				inbound_endpoint,
@@ -970,6 +978,8 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				image_output_size,
 				image_size_source,
 				image_size_breakdown,
+				video_duration_seconds,
+				video_task_id,
 				service_tier,
 				reasoning_effort,
 				inbound_endpoint,
@@ -1062,6 +1072,8 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			image_output_size,
 			image_size_source,
 			image_size_breakdown,
+			video_duration_seconds,
+			video_task_id,
 			service_tier,
 			reasoning_effort,
 			inbound_endpoint,
@@ -1075,7 +1087,7 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			created_at
 		) AS (VALUES `)
 
-	args := make([]any, 0, len(preparedList)*50)
+	args := make([]any, 0, len(preparedList)*len(usageLogInsertArgTypes))
 	argPos := 1
 	for idx, prepared := range preparedList {
 		if idx > 0 {
@@ -1140,6 +1152,8 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			image_output_size,
 			image_size_source,
 			image_size_breakdown,
+			video_duration_seconds,
+			video_task_id,
 			service_tier,
 			reasoning_effort,
 			inbound_endpoint,
@@ -1192,6 +1206,8 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			image_output_size,
 			image_size_source,
 			image_size_breakdown,
+			video_duration_seconds,
+			video_task_id,
 			service_tier,
 			reasoning_effort,
 			inbound_endpoint,
@@ -1252,6 +1268,8 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared 
 			image_output_size,
 			image_size_source,
 			image_size_breakdown,
+			video_duration_seconds,
+			video_task_id,
 			service_tier,
 			reasoning_effort,
 			inbound_endpoint,
@@ -1269,7 +1287,7 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared 
 			$10, $11, $12, $13,
 			$14, $15, $16, $17,
 			$18, $19, $20, $21, $22, $23,
-			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50
+			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52
 		)
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 	`, prepared.args...)
@@ -1300,6 +1318,8 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 	imageOutputSize := nullString(log.ImageOutputSize)
 	imageSizeSource := nullString(log.ImageSizeSource)
 	imageSizeBreakdown := nullStringIntMapJSON(log.ImageSizeBreakdown)
+	videoDurationSeconds := nullInt(log.VideoDurationSeconds)
+	videoTaskID := nullString(log.VideoTaskID)
 	serviceTier := nullString(log.ServiceTier)
 	reasoningEffort := nullString(log.ReasoningEffort)
 	inboundEndpoint := nullString(log.InboundEndpoint)
@@ -1364,6 +1384,8 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 			imageOutputSize,
 			imageSizeSource,
 			imageSizeBreakdown,
+			videoDurationSeconds,
+			videoTaskID,
 			serviceTier,
 			reasoningEffort,
 			inboundEndpoint,
@@ -1410,6 +1432,38 @@ func (r *usageLogRepository) GetByID(ctx context.Context, id int64) (log *servic
 	defer func() {
 		// 保持主错误优先；仅在无错误时回传 Close 失败。
 		// 同时清空返回值，避免误用不完整结果。
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = closeErr
+			log = nil
+		}
+	}()
+	if !rows.Next() {
+		if err = rows.Err(); err != nil {
+			return nil, err
+		}
+		return nil, service.ErrUsageLogNotFound
+	}
+	log, err = scanUsageLog(rows)
+	if err != nil {
+		return nil, err
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return log, nil
+}
+
+func (r *usageLogRepository) GetSeedaceVideoByTaskID(ctx context.Context, apiKeyID int64, taskID string) (log *service.UsageLog, err error) {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return nil, service.ErrUsageLogNotFound
+	}
+	query := "SELECT " + usageLogSelectColumns + " FROM usage_logs WHERE api_key_id = $1 AND video_task_id = $2 AND billing_mode = $3 ORDER BY id DESC LIMIT 1"
+	rows, err := r.sql.QueryContext(ctx, query, apiKeyID, taskID, string(service.BillingModePerSecond))
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
 		if closeErr := rows.Close(); closeErr != nil && err == nil {
 			err = closeErr
 			log = nil
@@ -4360,6 +4414,8 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		imageOutputSize       sql.NullString
 		imageSizeSource       sql.NullString
 		imageSizeBreakdown    sql.NullString
+		videoDurationSeconds  sql.NullInt64
+		videoTaskID           sql.NullString
 		serviceTier           sql.NullString
 		reasoningEffort       sql.NullString
 		inboundEndpoint       sql.NullString
@@ -4414,6 +4470,8 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		&imageOutputSize,
 		&imageSizeSource,
 		&imageSizeBreakdown,
+		&videoDurationSeconds,
+		&videoTaskID,
 		&serviceTier,
 		&reasoningEffort,
 		&inboundEndpoint,
@@ -4455,6 +4513,8 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		BillingType:           int8(billingType),
 		RequestType:           service.RequestTypeFromInt16(requestTypeRaw),
 		ImageCount:            imageCount,
+		VideoDurationSeconds:  nullIntPtr(videoDurationSeconds),
+		VideoTaskID:           nullStringPtr(videoTaskID),
 		CacheTTLOverridden:    cacheTTLOverridden,
 		CreatedAt:             createdAt,
 	}
@@ -4653,6 +4713,14 @@ func nullInt(v *int) sql.NullInt64 {
 	return sql.NullInt64{Int64: int64(*v), Valid: true}
 }
 
+func nullIntPtr(v sql.NullInt64) *int {
+	if !v.Valid {
+		return nil
+	}
+	out := int(v.Int64)
+	return &out
+}
+
 func nullFloat64Ptr(v sql.NullFloat64) *float64 {
 	if !v.Valid {
 		return nil
@@ -4666,6 +4734,14 @@ func nullString(v *string) sql.NullString {
 		return sql.NullString{}
 	}
 	return sql.NullString{String: *v, Valid: true}
+}
+
+func nullStringPtr(v sql.NullString) *string {
+	if !v.Valid {
+		return nil
+	}
+	out := v.String
+	return &out
 }
 
 func nullStringIntMapJSON(v map[string]int) any {

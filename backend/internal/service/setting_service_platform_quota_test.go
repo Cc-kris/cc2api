@@ -70,8 +70,8 @@ func TestGetDefaultPlatformQuotas_ReturnsFourPlatforms(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// 必须包含全部 4 个 platform key（补齐契约）
-	for _, platform := range []string{"anthropic", "openai", "gemini", "antigravity"} {
+	// 必须包含全部 platform key（补齐契约）
+	for _, platform := range []string{"anthropic", "openai", "gemini", "antigravity", "seedace"} {
 		if _, ok := got[platform]; !ok {
 			t.Errorf("missing platform key: %q", platform)
 		}

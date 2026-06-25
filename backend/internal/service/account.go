@@ -965,6 +965,10 @@ func (a *Account) IsOpenAI() bool {
 	return a.Platform == PlatformOpenAI
 }
 
+func (a *Account) IsSeedace() bool {
+	return a.Platform == PlatformSeedace
+}
+
 func (a *Account) IsAnthropic() bool {
 	return a.Platform == PlatformAnthropic
 }
@@ -975,6 +979,43 @@ func (a *Account) IsOpenAIOAuth() bool {
 
 func (a *Account) IsOpenAIApiKey() bool {
 	return a.IsOpenAI() && a.Type == AccountTypeAPIKey
+}
+
+func (a *Account) IsSeedaceAPIKey() bool {
+	return a.IsSeedace() && a.Type == AccountTypeAPIKey
+}
+
+func (a *Account) GetSeedaceBaseURL() string {
+	if !a.IsSeedaceAPIKey() {
+		return ""
+	}
+	baseURL := strings.TrimSpace(a.GetCredential("base_url"))
+	if baseURL == "" {
+		return "https://ai.silkroadai.io/v1"
+	}
+	return strings.TrimRight(baseURL, "/")
+}
+
+func (a *Account) GetSeedaceAPIKey() string {
+	if !a.IsSeedaceAPIKey() {
+		return ""
+	}
+	return strings.TrimSpace(a.GetCredential("api_key"))
+}
+
+func (a *Account) IsSeedaceURLRelayEnabled() bool {
+	if !a.IsSeedaceAPIKey() || a.Extra == nil {
+		return false
+	}
+	if v, ok := a.Extra["url_relay_enabled"]; ok {
+		switch value := v.(type) {
+		case bool:
+			return value
+		case string:
+			return strings.EqualFold(strings.TrimSpace(value), "true")
+		}
+	}
+	return false
 }
 
 func (a *Account) GetOpenAIBaseURL() string {
