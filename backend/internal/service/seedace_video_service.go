@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -446,8 +447,9 @@ func (s *SeedaceVideoService) billingDeps() *billingDeps {
 }
 
 type seedaceVideoRequest struct {
-	Model    string `json:"model"`
-	Duration int    `json:"duration"`
+	Model    string          `json:"model"`
+	Duration int             `json:"duration"`
+	Seconds  json.RawMessage `json:"seconds"`
 }
 
 func parseSeedaceVideoRequest(body []byte) (seedaceVideoRequest, error) {
@@ -459,13 +461,22 @@ func parseSeedaceVideoRequest(body []byte) (seedaceVideoRequest, error) {
 	if req.Duration < 0 {
 		return req, errors.New("duration must be >= 0")
 	}
+	if len(req.Seconds) > 0 {
+		seconds, ok, err := parseSeedaceVideoSeconds(req.Seconds)
+		if err != nil {
+			return req, err
+		}
+		if ok {
+			req.Duration = seconds
+		}
+	}
 	return req, nil
 }
 
 func normalizeSeedaceVideoMeter(req seedaceVideoRequest) (string, int) {
 	model := strings.TrimSpace(req.Model)
 	if model == "" {
-		model = "seedance-2.0"
+		model = "seedance-2.0-720"
 	}
 	durationSeconds := req.Duration
 	if durationSeconds <= 0 {
@@ -475,6 +486,37 @@ func normalizeSeedaceVideoMeter(req seedaceVideoRequest) (string, int) {
 		durationSeconds = minSeedaceVideoDurationSeconds
 	}
 	return model, durationSeconds
+}
+
+func parseSeedaceVideoSeconds(raw json.RawMessage) (int, bool, error) {
+	if string(bytes.TrimSpace(raw)) == "null" {
+		return 0, false, nil
+	}
+
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		text = strings.TrimSpace(text)
+		if text == "" {
+			return 0, false, nil
+		}
+		seconds, convErr := strconv.Atoi(text)
+		if convErr != nil {
+			return 0, false, fmt.Errorf("seconds must be an integer string: %w", convErr)
+		}
+		if seconds < 0 {
+			return 0, false, errors.New("seconds must be >= 0")
+		}
+		return seconds, true, nil
+	}
+
+	var seconds int
+	if err := json.Unmarshal(raw, &seconds); err != nil {
+		return 0, false, fmt.Errorf("seconds must be an integer string or number: %w", err)
+	}
+	if seconds < 0 {
+		return 0, false, errors.New("seconds must be >= 0")
+	}
+	return seconds, true, nil
 }
 
 func joinSeedaceURL(baseURL, path string) (string, error) {

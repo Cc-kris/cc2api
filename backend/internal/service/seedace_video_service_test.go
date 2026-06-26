@@ -242,6 +242,52 @@ func TestSeedaceVideoServiceCreateReturnsUpstreamResultWhenBillingFails(t *testi
 	require.Equal(t, 0.0, usageRepo.lastLog.ActualCost)
 }
 
+func TestParseSeedaceVideoRequestUsesOfficialSecondsField(t *testing.T) {
+	req, err := parseSeedaceVideoRequest([]byte(`{"model":"seedance-2.0-720","seconds":"10"}`))
+
+	require.NoError(t, err)
+	model, durationSeconds := normalizeSeedaceVideoMeter(req)
+	require.Equal(t, "seedance-2.0-720", model)
+	require.Equal(t, 10, durationSeconds)
+}
+
+func TestParseSeedaceVideoRequestAcceptsNumericSeconds(t *testing.T) {
+	req, err := parseSeedaceVideoRequest([]byte(`{"model":"seedance-2.0-720","seconds":10}`))
+
+	require.NoError(t, err)
+	_, durationSeconds := normalizeSeedaceVideoMeter(req)
+	require.Equal(t, 10, durationSeconds)
+}
+
+func TestParseSeedaceVideoRequestSecondsOverridesDuration(t *testing.T) {
+	req, err := parseSeedaceVideoRequest([]byte(`{"model":"seedance-2.0-720","duration":4,"seconds":"10"}`))
+
+	require.NoError(t, err)
+	_, durationSeconds := normalizeSeedaceVideoMeter(req)
+	require.Equal(t, 10, durationSeconds)
+}
+
+func TestParseSeedaceVideoRequestEmptySecondsDoesNotOverrideDuration(t *testing.T) {
+	for _, body := range []string{
+		`{"model":"seedance-2.0-720","duration":10,"seconds":""}`,
+		`{"model":"seedance-2.0-720","duration":10,"seconds":null}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			req, err := parseSeedaceVideoRequest([]byte(body))
+
+			require.NoError(t, err)
+			_, durationSeconds := normalizeSeedaceVideoMeter(req)
+			require.Equal(t, 10, durationSeconds)
+		})
+	}
+}
+
+func TestParseSeedaceVideoRequestRejectsInvalidSeconds(t *testing.T) {
+	_, err := parseSeedaceVideoRequest([]byte(`{"model":"seedance-2.0-720","seconds":"bad"}`))
+
+	require.ErrorContains(t, err, "seconds must be an integer string")
+}
+
 func seedaceAccountForTest(id int64, baseURL, apiKey string) Account {
 	return Account{
 		ID:       id,
