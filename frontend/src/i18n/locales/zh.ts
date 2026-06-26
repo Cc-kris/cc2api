@@ -350,6 +350,7 @@ export default {
     dashboard: '仪表盘',
     announcements: '公告',
     apiKeys: 'API 密钥',
+    seedanceVideoGuide: 'seedace视频调用说明',
     usage: '使用记录',
     redeem: '兑换',
     affiliate: '邀请返利',

@@ -218,6 +218,17 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/seedance-video-guide',
+    name: 'SeedanceVideoGuide',
+    component: () => import('@/views/user/SeedanceVideoGuideView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Seedance Video Guide',
+      titleKey: 'nav.seedanceVideoGuide'
+    }
+  },
+  {
     path: '/redeem',
     name: 'Redeem',
     component: () => import('@/views/user/RedeemView.vue'),

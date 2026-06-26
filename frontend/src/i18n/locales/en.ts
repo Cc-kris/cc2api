@@ -352,6 +352,7 @@ export default {
     dashboard: 'Dashboard',
     announcements: 'Announcements',
     apiKeys: 'API Keys',
+    seedanceVideoGuide: 'Seedance Video Guide',
     usage: 'Usage',
     redeem: 'Redeem',
     affiliate: 'Affiliate Rebates',
