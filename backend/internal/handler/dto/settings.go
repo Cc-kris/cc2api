@@ -14,6 +14,7 @@ type CustomMenuItem struct {
 	IconSVG    string `json:"icon_svg"`
 	URL        string `json:"url"`
 	PageSlug   string `json:"page_slug,omitempty"`
+	ContentMD  string `json:"content_md,omitempty"`
 	Visibility string `json:"visibility"` // "user" or "admin"
 	SortOrder  int    `json:"sort_order"`
 }
@@ -467,6 +468,7 @@ func ParseUserVisibleMenuItems(raw string) []CustomMenuItem {
 	filtered := make([]CustomMenuItem, 0, len(items))
 	for _, item := range items {
 		if item.Visibility != "admin" {
+			item.ContentMD = ""
 			filtered = append(filtered, item)
 		}
 	}

@@ -280,21 +280,6 @@ const KeyIcon = {
     )
 }
 
-const VideoIcon = {
-  render: () =>
-    h(
-      'svg',
-      { fill: 'none', viewBox: '0 0 24 24', stroke: 'currentColor', 'stroke-width': '1.5' },
-      [
-        h('path', {
-          'stroke-linecap': 'round',
-          'stroke-linejoin': 'round',
-          d: 'M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 6.75h9A2.25 2.25 0 0115.75 9v6A2.25 2.25 0 0113.5 17.25h-9A2.25 2.25 0 012.25 15V9A2.25 2.25 0 014.5 6.75z'
-        })
-      ]
-    )
-}
-
 const ChartIcon = {
   render: () =>
     h(
@@ -684,7 +669,6 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
   }
   items.push(
     { path: '/keys', label: t('nav.apiKeys'), icon: KeyIcon },
-    { path: '/seedance-video-guide', label: t('nav.seedanceVideoGuide'), icon: VideoIcon },
     { path: '/usage', label: t('nav.usage'), icon: ChartIcon, hideInSimpleMode: true },
     { path: '/available-channels', label: t('nav.availableChannels'), icon: ChannelIcon, hideInSimpleMode: true, featureFlag: flagAvailableChannels },
     { path: '/monitor', label: t('nav.channelStatus'), icon: SignalIcon, featureFlag: flagChannelMonitor },

@@ -1273,6 +1273,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		maxMenuItemURLLen     = 2048
 		maxMenuItemIconSVGLen = 10 * 1024 // 10KB
 		maxMenuItemIDLen      = 32
+		maxMenuItemContentLen = 1024 * 1024
 	)
 
 	customMenuJSON := previousSettings.CustomMenuItems
@@ -1319,6 +1320,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			if len(item.IconSVG) > maxMenuItemIconSVGLen {
 				response.BadRequest(c, "Custom menu item icon SVG is too large (max 10KB)")
+				return
+			}
+			if len(item.ContentMD) > maxMenuItemContentLen {
+				response.BadRequest(c, "Custom menu item markdown content is too large (max 1MB)")
 				return
 			}
 			// Auto-generate ID if missing

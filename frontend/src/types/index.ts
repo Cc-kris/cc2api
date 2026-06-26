@@ -177,6 +177,7 @@ export interface CustomMenuItem {
   icon_svg: string
   url: string
   page_slug?: string
+  content_md?: string
   visibility: 'user' | 'admin'
   sort_order: number
 }

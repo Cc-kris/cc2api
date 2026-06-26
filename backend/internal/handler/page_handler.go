@@ -46,6 +46,11 @@ func (h *PageHandler) GetPageContent(c *gin.Context) {
 		return
 	}
 
+	if content, ok := h.findSlugMarkdownContent(c, slug); ok {
+		c.Data(http.StatusOK, "text/markdown; charset=utf-8", []byte(content))
+		return
+	}
+
 	filePath := filepath.Join(h.pagesDir, slug+".md")
 	cleaned := filepath.Clean(filePath)
 	if !strings.HasPrefix(cleaned, filepath.Clean(h.pagesDir)) {
@@ -70,6 +75,45 @@ func (h *PageHandler) GetPageContent(c *gin.Context) {
 	}
 
 	c.Data(http.StatusOK, "text/markdown; charset=utf-8", content)
+}
+
+// findSlugMarkdownContent returns inline markdown configured on a custom menu item.
+func (h *PageHandler) findSlugMarkdownContent(c *gin.Context, slug string) (string, bool) {
+	if h.settingService == nil {
+		return "", false
+	}
+
+	raw := h.settingService.GetCustomMenuItemsRaw(c.Request.Context())
+	if raw == "" || raw == "[]" {
+		return "", false
+	}
+
+	var items []struct {
+		URL        string `json:"url"`
+		PageSlug   string `json:"page_slug"`
+		ContentMD  string `json:"content_md"`
+		Visibility string `json:"visibility"`
+	}
+	if err := json.Unmarshal([]byte(raw), &items); err != nil {
+		return "", false
+	}
+
+	for _, item := range items {
+		itemSlug := item.PageSlug
+		if itemSlug == "" && strings.HasPrefix(item.URL, "md:") {
+			itemSlug = strings.TrimPrefix(item.URL, "md:")
+		}
+		if itemSlug == slug && strings.TrimSpace(item.ContentMD) != "" {
+			if item.Visibility == "admin" {
+				role, _ := middleware2.GetUserRoleFromContext(c)
+				if role != "admin" {
+					return "", false
+				}
+			}
+			return item.ContentMD, true
+		}
+	}
+	return "", false
 }
 
 // ListPages returns available page slugs.

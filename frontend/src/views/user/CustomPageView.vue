@@ -245,7 +245,8 @@ async function fetchAndRenderMarkdown(slug: string) {
       ADD_ATTR: ['allowfullscreen', 'frameborder', 'src'],
     })
 
-    // Inject IDs into headings and build TOC
+    // Inject IDs into headings and build TOC. Top-level pages can use h1 for
+    // title while h2/h3/h4 drive the left-side document menu.
     const toc: TocItem[] = []
     let headingIndex = 0
     const withIds = sanitized.replace(
@@ -254,7 +255,9 @@ async function fetchAndRenderMarkdown(slug: string) {
         const level = parseInt(tag[1])
         const text = content.replace(/<[^>]+>/g, '').trim()
         const id = generateHeadingId(text, headingIndex++)
-        toc.push({ id, text, level })
+        if (level > 1) {
+          toc.push({ id, text, level: level - 1 })
+        }
         return `<${tag} id="${id}">${content}</${tag}>`
       }
     )
@@ -316,9 +319,16 @@ function injectCopyButtons() {
     if (pre.querySelector('.copy-btn')) return
     const btn = document.createElement('button')
     btn.className = 'copy-btn'
+    btn.type = 'button'
     btn.textContent = '复制'
     btn.addEventListener('click', async () => {
-      const code = pre.querySelector('code')?.textContent ?? pre.textContent ?? ''
+      const codeEl = pre.querySelector('code')
+      let code = codeEl?.textContent ?? ''
+      if (!codeEl) {
+        const clone = pre.cloneNode(true) as HTMLElement
+        clone.querySelector('.copy-btn')?.remove()
+        code = clone.textContent ?? ''
+      }
       try {
         await navigator.clipboard.writeText(code)
         btn.textContent = '已复制 ✓'
@@ -491,14 +501,17 @@ onUnmounted(() => {
   padding: 4px 10px;
   font-size: 12px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.15);
-  color: #e2e8f0;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(15, 23, 42, 0.86);
+  color: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.5);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.2s, background 0.2s;
+  opacity: 1;
+  transition: background 0.2s, border-color 0.2s;
   font-family: inherit;
+  z-index: 1;
 }
-.copy-btn:hover { background: rgba(255, 255, 255, 0.25); }
-pre:hover .copy-btn { opacity: 1; }
+.copy-btn:hover {
+  background: rgba(30, 41, 59, 0.95);
+  border-color: rgba(226, 232, 240, 0.7);
+}
 </style>

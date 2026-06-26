@@ -4908,6 +4908,29 @@
                         t('admin.settings.customMenu.urlPlaceholder')
                       "
                     />
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.customMenu.urlHint") }}
+                    </p>
+                  </div>
+
+                  <!-- Markdown Content (full width) -->
+                  <div v-if="item.url.trim().startsWith('md:')" class="sm:col-span-2">
+                    <label
+                      class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400"
+                    >
+                      {{ t("admin.settings.customMenu.markdownContent") }}
+                    </label>
+                    <textarea
+                      v-model="item.content_md"
+                      rows="14"
+                      class="input font-mono text-sm"
+                      :placeholder="
+                        t('admin.settings.customMenu.markdownContentPlaceholder')
+                      "
+                    ></textarea>
+                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.customMenu.markdownContentHint") }}
+                    </p>
                   </div>
 
                   <!-- SVG Icon (full width) -->
@@ -7129,6 +7152,8 @@ const form = reactive<SettingsForm>({
     label: string;
     icon_svg: string;
     url: string;
+    page_slug?: string;
+    content_md?: string;
     visibility: "user" | "admin";
     sort_order: number;
   }>,
@@ -7769,6 +7794,8 @@ function addMenuItem() {
     label: "",
     icon_svg: "",
     url: "",
+    page_slug: "",
+    content_md: "",
     visibility: "user",
     sort_order: form.custom_menu_items.length,
   });

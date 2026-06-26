@@ -1,10 +1,126 @@
 package handler
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
+
+	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/gin-gonic/gin"
 )
+
+type pageSettingRepoStub struct {
+	values map[string]string
+}
+
+func (s *pageSettingRepoStub) Get(_ context.Context, key string) (*service.Setting, error) {
+	if value, ok := s.values[key]; ok {
+		return &service.Setting{Key: key, Value: value}, nil
+	}
+	return nil, service.ErrSettingNotFound
+}
+
+func (s *pageSettingRepoStub) GetValue(_ context.Context, key string) (string, error) {
+	if value, ok := s.values[key]; ok {
+		return value, nil
+	}
+	return "", service.ErrSettingNotFound
+}
+
+func (s *pageSettingRepoStub) Set(_ context.Context, key, value string) error {
+	s.values[key] = value
+	return nil
+}
+
+func (s *pageSettingRepoStub) GetMultiple(_ context.Context, keys []string) (map[string]string, error) {
+	out := make(map[string]string, len(keys))
+	for _, key := range keys {
+		if value, ok := s.values[key]; ok {
+			out[key] = value
+		}
+	}
+	return out, nil
+}
+
+func (s *pageSettingRepoStub) SetMultiple(_ context.Context, values map[string]string) error {
+	for key, value := range values {
+		s.values[key] = value
+	}
+	return nil
+}
+
+func (s *pageSettingRepoStub) GetAll(_ context.Context) (map[string]string, error) {
+	out := make(map[string]string, len(s.values))
+	for key, value := range s.values {
+		out[key] = value
+	}
+	return out, nil
+}
+
+func (s *pageSettingRepoStub) Delete(_ context.Context, key string) error {
+	delete(s.values, key)
+	return nil
+}
+
+func TestGetPageContentUsesInlineCustomMenuMarkdown(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	const markdown = "# Seedance 视频调用说明\n\n## Seedance\n\n```bash\ncurl https://cc-ai.xyz/v1/video/generations\n```"
+	repo := &pageSettingRepoStub{values: map[string]string{
+		service.SettingKeyCustomMenuItems: `[{"id":"seedance_video_guide","label":"seedace视频调用说明","url":"md:seedance-video-guide","content_md":` + strconv.Quote(markdown) + `,"visibility":"user","sort_order":1}]`,
+	}}
+	handler := NewPageHandler(t.TempDir(), service.NewSettingService(repo, &config.Config{}))
+
+	router := gin.New()
+	router.GET("/pages/:slug", func(c *gin.Context) {
+		c.Set("user_role", "user")
+		handler.GetPageContent(c)
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/pages/seedance-video-guide", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Body.String(); got != markdown {
+		t.Fatalf("body = %q, want %q", got, markdown)
+	}
+}
+
+func TestGetPageContentBlocksAdminInlineMarkdownForUser(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	const markdown = "# Admin Only"
+	repo := &pageSettingRepoStub{values: map[string]string{
+		service.SettingKeyCustomMenuItems: `[{"id":"admin_guide","label":"Admin","url":"md:admin-guide","content_md":` + strconv.Quote(markdown) + `,"visibility":"admin","sort_order":1}]`,
+	}}
+	handler := NewPageHandler(t.TempDir(), service.NewSettingService(repo, &config.Config{}))
+
+	router := gin.New()
+	router.GET("/pages/:slug", func(c *gin.Context) {
+		c.Set("user_role", "user")
+		handler.GetPageContent(c)
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/pages/admin-guide", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), markdown) {
+		t.Fatalf("admin markdown leaked in response: %s", rec.Body.String())
+	}
+}
 
 func TestCleanPageImageRelativePath(t *testing.T) {
 	tests := []struct {
