@@ -248,7 +248,7 @@ func (s *SeedaceVideoService) forward(ctx context.Context, account *Account, met
 		}
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
