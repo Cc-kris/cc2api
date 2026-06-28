@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Seedace 视频调用说明 - CCAI</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f8fb;
+        --panel: #ffffff;
+        --panel-soft: #f9fbff;
+        --text: #111827;
+        --muted: #64748b;
+        --line: #e2e8f0;
+        --strong: #0f172a;
+        --accent: #0ea5e9;
+        --accent-strong: #0369a1;
+        --accent-soft: #e0f2fe;
+        --success: #059669;
+        --code: #0f172a;
+        --code-line: #263244;
+        --shadow: 0 18px 50px rgba(15, 23, 42, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        line-height: 1.65;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(circle at 18% 12%, rgba(14, 165, 233, 0.12), transparent 30%),
+          radial-gradient(circle at 82% 8%, rgba(16, 185, 129, 0.08), transparent 28%);
+      }
+
+      .page {
+        position: relative;
+        display: grid;
+        grid-template-columns: 232px minmax(0, 1fr);
+        gap: 28px;
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 28px;
+      }
+
+      .side {
+        position: sticky;
+        top: 24px;
+        align-self: start;
+        min-height: calc(100vh - 56px);
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(12px);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .brand-mark {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border-radius: 10px;
+        background: var(--strong);
+        color: #fff;
+        font-weight: 800;
+      }
+
+      .brand-title {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: 0;
+      }
+
+      .brand-subtitle {
+        margin: 2px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .toc {
+        display: grid;
+        gap: 8px;
+        margin-top: 18px;
+      }
+
+      .toc a {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border: 1px solid transparent;
+        border-radius: 10px;
+        color: var(--muted);
+        font-size: 14px;
+        font-weight: 700;
+        text-decoration: none;
+      }
+
+      .toc a:hover,
+      .toc a.active {
+        border-color: rgba(14, 165, 233, 0.2);
+        background: var(--accent-soft);
+        color: var(--accent-strong);
+      }
+
+      .content {
+        min-width: 0;
+      }
+
+      .hero,
+      .section {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.94);
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        padding: 34px;
+      }
+
+      .hero h1 {
+        margin: 0;
+        color: var(--strong);
+        font-size: clamp(30px, 4vw, 48px);
+        line-height: 1.08;
+        letter-spacing: 0;
+      }
+
+      .hero p {
+        max-width: 760px;
+        margin: 14px 0 0;
+        color: var(--muted);
+        font-size: 16px;
+      }
+
+      .meta {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 24px;
+      }
+
+      .meta-card {
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel-soft);
+      }
+
+      .meta-label {
+        margin: 0 0 6px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .meta-value {
+        margin: 0;
+        color: var(--strong);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        overflow-wrap: anywhere;
+      }
+
+      .section {
+        margin-top: 24px;
+        padding: 28px;
+        scroll-margin-top: 24px;
+      }
+
+      .section h2 {
+        margin: 0;
+        color: var(--strong);
+        font-size: 28px;
+        line-height: 1.2;
+      }
+
+      .section h3 {
+        margin: 28px 0 12px;
+        color: var(--strong);
+        font-size: 18px;
+      }
+
+      .section p {
+        margin: 10px 0;
+        color: var(--muted);
+      }
+
+      .notice {
+        margin: 18px 0;
+        padding: 14px 16px;
+        border: 1px solid rgba(14, 165, 233, 0.2);
+        border-radius: 12px;
+        background: var(--accent-soft);
+        color: #075985;
+        font-size: 14px;
+      }
+
+      .table-wrap {
+        overflow: auto;
+        margin-top: 14px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+      }
+
+      table {
+        width: 100%;
+        min-width: 720px;
+        border-collapse: collapse;
+        background: var(--panel);
+        font-size: 14px;
+      }
+
+      th,
+      td {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: #f8fafc;
+        color: #334155;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      code {
+        padding: 2px 5px;
+        border-radius: 5px;
+        background: #eef2f7;
+        color: #0f172a;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.92em;
+      }
+
+      .code-block {
+        position: relative;
+        margin: 14px 0 0;
+        overflow: hidden;
+        border: 1px solid var(--code-line);
+        border-radius: 12px;
+        background: var(--code);
+      }
+
+      .code-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--code-line);
+        color: #cbd5e1;
+        font-size: 12px;
+      }
+
+      .copy {
+        border: 1px solid rgba(148, 163, 184, 0.45);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.06);
+        color: #f8fafc;
+        cursor: pointer;
+        font-size: 12px;
+        padding: 5px 10px;
+      }
+
+      .copy:hover {
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      pre {
+        margin: 0;
+        padding: 16px;
+        overflow-x: auto;
+        color: #e2e8f0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .qa {
+        display: grid;
+        gap: 10px;
+      }
+
+      .qa-row {
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fff;
+      }
+
+      .qa-row strong {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--strong);
+      }
+
+      @media (max-width: 900px) {
+        .page {
+          grid-template-columns: 1fr;
+          padding: 16px;
+        }
+
+        .side {
+          position: relative;
+          top: 0;
+          min-height: 0;
+        }
+
+        .toc {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .meta {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .hero,
+        .section {
+          padding: 20px;
+        }
+
+        .toc {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <aside class="side" aria-label="页面目录">
+        <div class="brand">
+          <div class="brand-mark">C</div>
+          <div>
+            <p class="brand-title">CCAI</p>
+            <p class="brand-subtitle">Seedace 视频调用说明</p>
+          </div>
+        </div>
+        <nav class="toc">
+          <a class="active" href="#domestic">国内seedace <span>01</span></a>
+          <a href="#international">国际seedace <span>02</span></a>
+        </nav>
+      </aside>
+
+      <div class="content">
+        <section class="hero">
+          <h1>Seedace 视频调用说明</h1>
+          <p>
+            CCAI 提供 Seedance 2.0 视频生成接口，接口固定使用
+            <code>/v1/video/generations</code>。视频生成是异步任务：先提交拿
+            <code>task_id</code>，再轮询任务状态，完成后读取视频链接。
+          </p>
+          <div class="meta">
+            <div class="meta-card">
+              <p class="meta-label">Base URL</p>
+              <p class="meta-value">https://cc-ai.xyz/v1</p>
+            </div>
+            <div class="meta-card">
+              <p class="meta-label">认证方式</p>
+              <p class="meta-value">Authorization: Bearer 你的key</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="domestic" class="section">
+          <h2>国内seedace</h2>
+          <p>
+            Seedance 2.0 全能视频生成，支持文生、图生、多图组合、首帧、首尾帧、参考视频、参考音频。
+            走 <code>/v1/video/generations</code>，不要使用聊天接口。
+          </p>
+          <div class="notice">
+            需先在「API 密钥」页创建一把「国内seedace」档的 key。该 key 专用于
+            <code>seedance-2.0-720</code> / <code>seedance-2.0-1080</code> 模型。
+          </div>
+
+          <h3>模型与价格(按视频秒数)</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>模型</th>
+                  <th>分辨率</th>
+                  <th>原价 ¥/秒</th>
+                  <th>10 秒 / 15 秒原价</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>seedance-2.0-720</code></td>
+                  <td>720P</td>
+                  <td>¥1.00</td>
+                  <td>¥10.00 / ¥15.00</td>
+                </tr>
+                <tr>
+                  <td><code>seedance-2.0-1080</code></td>
+                  <td>1080P</td>
+                  <td>¥1.20</td>
+                  <td>¥12.00 / ¥18.00</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>提交任务(文生视频)</h3>
+          <div class="code-block">
+            <div class="code-head"><span>bash</span><button class="copy">复制</button></div>
+            <pre><code>curl https://cc-ai.xyz/v1/video/generations \
+  -H "Authorization: Bearer 你的key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "seedance-2.0-720",
+    "prompt": "霓虹雨夜街头的电影感跟拍镜头，缓慢推进，35mm 颗粒",
+    "aspect_ratio": "16:9",
+    "seconds": "10"
+  }'</code></pre>
+          </div>
+
+          <h3>轮询直到完成</h3>
+          <div class="code-block">
+            <div class="code-head"><span>bash</span><button class="copy">复制</button></div>
+            <pre><code>curl https://cc-ai.xyz/v1/video/generations/task_xxx \
+  -H "Authorization: Bearer 你的key"</code></pre>
+          </div>
+          <p>
+            务必轮询到 <code>status</code> 变 <code>completed</code> / <code>SUCCESS</code>
+            再取视频。生成中时 <code>video_url</code> 为空或不可用。
+          </p>
+
+          <h3>参数总表</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>参数</th><th>必填</th><th>说明</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>model</code></td><td>必填</td><td><code>seedance-2.0-720</code> / <code>seedance-2.0-1080</code></td></tr>
+                <tr><td><code>prompt</code></td><td>必填</td><td>画面提示词；多素材时用 <code>@Image1</code> / <code>@Video1</code> / <code>@Audio1</code> 指代</td></tr>
+                <tr><td><code>aspect_ratio</code></td><td>否</td><td><code>16:9</code> / <code>9:16</code> / <code>1:1</code> / <code>4:3</code> / <code>3:4</code> / <code>21:9</code></td></tr>
+                <tr><td><code>seconds</code></td><td>否</td><td>时长字符串，当前支持 <code>"10"</code> / <code>"15"</code>，默认 10</td></tr>
+                <tr><td><code>image_url</code></td><td>否</td><td>单张参考图 URL 或 base64 dataURL</td></tr>
+                <tr><td><code>reference_image_urls</code></td><td>否</td><td>多张参考图数组，最多 9 张</td></tr>
+                <tr><td><code>reference_videos</code></td><td>否</td><td>参考视频数组，最多 3 个，总时长建议不超过 15 秒</td></tr>
+                <tr><td><code>audio_url</code></td><td>否</td><td>参考音频；使用音频时需同时带至少一张参考图</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>玩法示例</h3>
+          <div class="code-block">
+            <div class="code-head"><span>bash</span><button class="copy">复制</button></div>
+            <pre><code>curl https://cc-ai.xyz/v1/video/generations \
+  -H "Authorization: Bearer 你的key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "seedance-2.0-720",
+    "prompt": "@Image1 角色随 @Audio1 的节奏起舞，运镜参考 @Video1",
+    "seconds": "15",
+    "reference_image_urls": ["https://你的图床/role.jpg"],
+    "reference_videos": ["https://你的视频/camera.mp4"],
+    "audio_url": "https://你的音频/track.mp3"
+  }'</code></pre>
+          </div>
+
+          <h3>Python 完整示例</h3>
+          <div class="code-block">
+            <div class="code-head"><span>python</span><button class="copy">复制</button></div>
+            <pre><code>import time
+import requests
+
+BASE = "https://cc-ai.xyz/v1/video/generations"
+H = {"Authorization": "Bearer 你的key", "Content-Type": "application/json"}
+
+task = requests.post(BASE, headers=H, json={
+    "model": "seedance-2.0-720",
+    "prompt": "一只橘猫在窗台上伸懒腰，慢镜头，暖色调",
+    "aspect_ratio": "16:9",
+    "seconds": "10",
+}).json()
+
+tid = task.get("task_id") or task.get("id")
+
+for _ in range(120):
+    result = requests.get(f"{BASE}/{tid}", headers=H).json()
+    status = str(result.get("data", {}).get("status") or result.get("status") or "").lower()
+    if status in ("completed", "success", "failed", "failure"):
+        print(status, result)
+        break
+    time.sleep(8)</code></pre>
+          </div>
+        </section>
+
+        <section id="international" class="section">
+          <h2>国际seedace</h2>
+          <p>
+            即梦 Seedance 2.0 官方满血源，质量优先，与上方国内 Seedace 是两套独立源与价格。
+            支持文生、图生、首尾帧、参考视频、参考音频，按视频秒数计费。
+          </p>
+          <div class="notice">
+            需先在「API 密钥」页创建一把「国际seedace」档的 key。该 key 专用于下列
+            <code>dreamina-seedance-2-0-*</code> 模型。
+          </div>
+
+          <h3>模型与价格(按视频秒数)</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>模型(文生 / 图生·首尾帧·音频用 -ref)</th>
+                  <th>分辨率</th>
+                  <th>文生原价 ¥/秒</th>
+                  <th>带图(-ref)原价 ¥/秒</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td><code>dreamina-seedance-2-0-480p[-ref]</code></td><td>480P</td><td>¥0.52</td><td>¥0.33</td></tr>
+                <tr><td><code>dreamina-seedance-2-0-720p[-ref]</code></td><td>720P</td><td>¥1.12</td><td>¥0.68</td></tr>
+                <tr><td><code>dreamina-seedance-2-0-1080p[-ref]</code></td><td>1080P</td><td>¥2.78</td><td>¥1.69</td></tr>
+                <tr><td><code>dreamina-seedance-2-0-fast-480p[-ref]</code></td><td>480P 快</td><td>¥0.42</td><td>¥0.24</td></tr>
+                <tr><td><code>dreamina-seedance-2-0-fast-720p[-ref]</code></td><td>720P 快</td><td>¥0.91</td><td>¥0.53</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>纯文字用不带 <code>-ref</code> 的；带图 / 首尾帧 / 音频用带 <code>-ref</code> 的。<code>duration</code> 控制秒数，默认 4。</p>
+
+          <h3>文生视频</h3>
+          <div class="code-block">
+            <div class="code-head"><span>bash</span><button class="copy">复制</button></div>
+            <pre><code>curl https://cc-ai.xyz/v1/video/generations \
+  -H "Authorization: Bearer sk-你的国际seedaceKEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dreamina-seedance-2-0-720p",
+    "prompt": "一只橘猫在窗台伸懒腰，暖色调",
+    "duration": 5
+  }'</code></pre>
+          </div>
+
+          <h3>图生 / 参考生(-ref + image)</h3>
+          <div class="code-block">
+            <div class="code-head"><span>bash</span><button class="copy">复制</button></div>
+            <pre><code>curl https://cc-ai.xyz/v1/video/generations \
+  -H "Authorization: Bearer sk-你的国际seedaceKEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dreamina-seedance-2-0-720p-ref",
+    "prompt": "镜头缓缓推进，画面动起来",
+    "duration": 5,
+    "image": "https://你的图床/photo.jpg"
+  }'</code></pre>
+          </div>
+
+          <h3>首尾帧过渡</h3>
+          <div class="code-block">
+            <div class="code-head"><span>bash</span><button class="copy">复制</button></div>
+            <pre><code>curl https://cc-ai.xyz/v1/video/generations \
+  -H "Authorization: Bearer sk-你的国际seedaceKEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dreamina-seedance-2-0-720p-ref",
+    "prompt": "从第一张平滑过渡到第二张",
+    "duration": 5,
+    "first_frame": "https://你的图床/first.jpg",
+    "last_frame": "https://你的图床/last.jpg"
+  }'</code></pre>
+          </div>
+
+          <h3>参考音频</h3>
+          <div class="code-block">
+            <div class="code-head"><span>bash</span><button class="copy">复制</button></div>
+            <pre><code>curl https://cc-ai.xyz/v1/video/generations \
+  -H "Authorization: Bearer sk-你的国际seedaceKEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dreamina-seedance-2-0-720p-ref",
+    "prompt": "这个人随节奏唱歌",
+    "duration": 5,
+    "image": "https://你的图床/singer.jpg",
+    "audio_url": "https://你的音频/song.mp3"
+  }'</code></pre>
+          </div>
+
+          <h3>参考视频</h3>
+          <div class="code-block">
+            <div class="code-head"><span>bash</span><button class="copy">复制</button></div>
+            <pre><code>curl https://cc-ai.xyz/v1/video/generations \
+  -H "Authorization: Bearer sk-你的国际seedaceKEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dreamina-seedance-2-0-720p-ref",
+    "prompt": "运镜参考 @Video1，把场景换成雪天",
+    "duration": 5,
+    "reference_videos": ["https://你的视频/camera.mp4"]
+  }'</code></pre>
+          </div>
+
+          <h3>轮询取片</h3>
+          <div class="code-block">
+            <div class="code-head"><span>bash</span><button class="copy">复制</button></div>
+            <pre><code>curl https://cc-ai.xyz/v1/video/generations/task_xxx \
+  -H "Authorization: Bearer sk-你的国际seedaceKEY"</code></pre>
+          </div>
+
+          <h3>参数总表</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>参数</th><th>适用</th><th>说明</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>model</code></td><td>必填</td><td>上表模型名，决定分辨率和计费档</td></tr>
+                <tr><td><code>prompt</code></td><td>必填</td><td>画面描述</td></tr>
+                <tr><td><code>duration</code></td><td>否</td><td>秒数，默认 4；同义字段 <code>seconds</code></td></tr>
+                <tr><td><code>aspect_ratio</code></td><td>否</td><td><code>16:9</code> / <code>9:16</code> / <code>1:1</code> / <code>4:3</code> / <code>3:4</code> / <code>21:9</code></td></tr>
+                <tr><td><code>image</code> / <code>images</code></td><td>-ref</td><td>参考图，单张或多张，最多 9 张；也兼容 <code>image_url</code> / <code>reference_image_urls</code></td></tr>
+                <tr><td><code>first_frame</code> / <code>last_frame</code></td><td>-ref</td><td>首帧 / 尾帧图</td></tr>
+                <tr><td><code>reference_videos</code></td><td>-ref</td><td>参考视频数组，最多 3 个，单段建议不超过 15 秒</td></tr>
+                <tr><td><code>audio_url</code></td><td>-ref</td><td>参考音频，需配至少 1 张图</td></tr>
+                <tr><td><code>generate_audio</code></td><td>全部</td><td>是否生成 AI 声音，默认 true；传 false 得静音视频</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Python 完整示例</h3>
+          <div class="code-block">
+            <div class="code-head"><span>python</span><button class="copy">复制</button></div>
+            <pre><code>import time
+import requests
+
+BASE = "https://cc-ai.xyz/v1"
+KEY = "你的国际seedace key"
+H = {"Authorization": f"Bearer {KEY}", "Content-Type": "application/json"}
+
+task = requests.post(f"{BASE}/video/generations", headers=H, json={
+    "model": "dreamina-seedance-2-0-720p-ref",
+    "prompt": "镜头缓缓推进，画面动起来",
+    "duration": 5,
+    "image": "https://你的图床/photo.jpg",
+}).json()
+
+tid = task.get("task_id") or task.get("id")
+
+for _ in range(120):
+    result = requests.get(f"{BASE}/video/generations/{tid}", headers=H).json()
+    status = str(result.get("data", {}).get("status") or result.get("status") or "").upper()
+    if status in ("SUCCESS", "FAILURE", "FAILED"):
+        print(status, result)
+        break
+    time.sleep(8)</code></pre>
+          </div>
+
+          <h3>常见问题</h3>
+          <div class="qa">
+            <div class="qa-row"><strong>无可用渠道 / 模型不存在</strong>key 不是「国际seedace」档，或模型名拼写错误。</div>
+            <div class="qa-row"><strong>视频没有声音</strong>本节模型默认带声音；若传了 <code>generate_audio:false</code> 会静音。</div>
+            <div class="qa-row"><strong>参考图报错</strong>图太小会被上游拒，建议使用不低于 512px 的图片。</div>
+            <div class="qa-row"><strong>视频链接过段时间失效</strong>生成结果链接可能有有效期，拿到后及时转存。</div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      document.querySelectorAll(".copy").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const block = button.closest(".code-block");
+          const code = block ? block.querySelector("code") : null;
+          if (!code) return;
+          try {
+            await navigator.clipboard.writeText(code.textContent || "");
+            button.textContent = "已复制";
+            setTimeout(() => (button.textContent = "复制"), 1600);
+          } catch {
+            button.textContent = "复制失败";
+            setTimeout(() => (button.textContent = "复制"), 1600);
+          }
+        });
+      });
+
+      const links = Array.from(document.querySelectorAll(".toc a"));
+      const sections = links
+        .map((link) => document.querySelector(link.getAttribute("href")))
+        .filter(Boolean);
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            links.forEach((link) => link.classList.remove("active"));
+            const active = links.find((link) => link.getAttribute("href") === "#" + entry.target.id);
+            if (active) active.classList.add("active");
+          });
+        },
+        { rootMargin: "-20% 0px -70% 0px", threshold: 0.01 }
+      );
+      sections.forEach((section) => observer.observe(section));
+    </script>
+  </body>
+</html>
