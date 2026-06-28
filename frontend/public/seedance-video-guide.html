@@ -308,10 +308,18 @@
         margin: 0;
         padding: 16px;
         overflow-x: auto;
-        color: #e2e8f0;
+        color: #ffffff;
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         font-size: 13px;
         line-height: 1.6;
+      }
+
+      pre code {
+        padding: 0;
+        border-radius: 0;
+        background: transparent;
+        color: #ffffff;
+        font-size: inherit;
       }
 
       .qa {
@@ -719,18 +727,31 @@ for _ in range(120):
       const sections = links
         .map((link) => document.querySelector(link.getAttribute("href")))
         .filter(Boolean);
+
+      function setActiveToc(targetId) {
+        links.forEach((link) => {
+          link.classList.toggle("active", link.getAttribute("href") === "#" + targetId);
+        });
+      }
+
+      links.forEach((link) => {
+        link.addEventListener("click", () => {
+          const targetId = (link.getAttribute("href") || "").replace(/^#/, "");
+          if (targetId) setActiveToc(targetId);
+        });
+      });
+
       const observer = new IntersectionObserver(
         (entries) => {
           entries.forEach((entry) => {
             if (!entry.isIntersecting) return;
-            links.forEach((link) => link.classList.remove("active"));
-            const active = links.find((link) => link.getAttribute("href") === "#" + entry.target.id);
-            if (active) active.classList.add("active");
+            setActiveToc(entry.target.id);
           });
         },
-        { rootMargin: "-20% 0px -70% 0px", threshold: 0.01 }
+        { rootMargin: "-35% 0px -50% 0px", threshold: 0 }
       );
       sections.forEach((section) => observer.observe(section));
+      if (sections[0]) setActiveToc(sections[0].id);
     </script>
   </body>
 </html>

@@ -39,3 +39,11 @@ describe('AppSidebar cache management navigation', () => {
     expect(componentSource).not.toContain("label: t('nav.generalSettings')")
   })
 })
+
+describe('AppSidebar custom menu navigation', () => {
+  it('uses site-relative custom menu URLs directly instead of iframe wrapper routes', () => {
+    expect(componentSource).toContain('function resolveCustomMenuPath')
+    expect(componentSource).toContain("url.startsWith('/') && !url.startsWith('//')")
+    expect(componentSource.match(/path: resolveCustomMenuPath/g)?.length).toBe(3)
+  })
+})

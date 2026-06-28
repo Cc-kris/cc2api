@@ -210,6 +210,14 @@ interface NavItem {
   featureFlag?: () => boolean | undefined
 }
 
+function resolveCustomMenuPath(item: { id: string; url?: string }): string {
+  const url = (item.url || '').trim()
+  if (url.startsWith('/') && !url.startsWith('//')) {
+    return url
+  }
+  return `/custom/${item.id}`
+}
+
 // applyFeatureFlags 递归过滤掉 featureFlag() === false 的节点（含子节点）。
 // 使用 `!== false` 宽容语义：undefined（设置未加载）或 true 都视为显示。
 function applyFeatureFlags(items: NavItem[]): NavItem[] {
@@ -679,7 +687,7 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
     { path: '/affiliate', label: t('nav.affiliate'), icon: UsersIcon, hideInSimpleMode: true, featureFlag: flagAffiliate },
     { path: '/profile', label: t('nav.profile'), icon: UserIcon },
     ...customMenuItemsForUser.value.map((item): NavItem => ({
-      path: `/custom/${item.id}`,
+      path: resolveCustomMenuPath(item),
       label: item.label,
       icon: null,
       iconSvg: item.icon_svg,
@@ -805,7 +813,7 @@ const adminNavItems = computed((): NavItem[] => {
     }
     if (isPlatformOwnerRole(viewerRole.value)) {
       for (const cm of customMenuItemsForAdmin.value) {
-        filtered.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
+        filtered.push({ path: resolveCustomMenuPath(cm), label: cm.label, icon: null, iconSvg: cm.icon_svg })
       }
     }
     return filtered
@@ -816,7 +824,7 @@ const adminNavItems = computed((): NavItem[] => {
   }
   if (isPlatformOwnerRole(viewerRole.value)) {
     for (const cm of customMenuItemsForAdmin.value) {
-      visible.push({ path: `/custom/${cm.id}`, label: cm.label, icon: null, iconSvg: cm.icon_svg })
+      visible.push({ path: resolveCustomMenuPath(cm), label: cm.label, icon: null, iconSvg: cm.icon_svg })
     }
   }
   return visible
