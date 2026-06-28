@@ -6697,7 +6697,7 @@ export default {
         namePlaceholder: 'e.g. Help Center',
         url: 'Page URL',
         urlPlaceholder: 'https://example.com/page, https://cc-ai.xyz/seedance-video-guide.html, or md:api-key-guide',
-        urlHint: 'Use a full http(s) URL for a custom page. Same-site static HTML links open directly. Use md:slug to render the Markdown content below as an internal page.',
+        urlHint: 'Use a full http(s) URL for a custom page. Same-site static HTML guide pages stay inside the system shell. Use md:slug to render the Markdown content below as an internal page.',
         markdownContent: 'Markdown page content',
         markdownContentPlaceholder: 'Enter Markdown content here. Wrap code examples in ``` fences.',
         markdownContentHint: 'This content is shown on the /custom/:id page. Code blocks automatically get copy buttons.',

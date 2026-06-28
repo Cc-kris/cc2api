@@ -83,6 +83,7 @@ func SecurityHeaders(cfg config.CSPConfig, getFrameSrcOrigins func() []string) g
 
 	return func(c *gin.Context) {
 		finalPolicy := policy
+		allowSameOriginEmbed := isSameOriginEmbeddablePath(c)
 		if getFrameSrcOrigins != nil {
 			for _, origin := range getFrameSrcOrigins() {
 				if origin != "" {
@@ -90,9 +91,16 @@ func SecurityHeaders(cfg config.CSPConfig, getFrameSrcOrigins func() []string) g
 				}
 			}
 		}
+		if allowSameOriginEmbed {
+			finalPolicy = allowSameOriginFrameAncestors(finalPolicy)
+		}
 
 		c.Header("X-Content-Type-Options", "nosniff")
-		c.Header("X-Frame-Options", "DENY")
+		if allowSameOriginEmbed {
+			c.Header("X-Frame-Options", "SAMEORIGIN")
+		} else {
+			c.Header("X-Frame-Options", "DENY")
+		}
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
 		if isAPIRoutePath(c) {
 			c.Next()
@@ -115,6 +123,13 @@ func SecurityHeaders(cfg config.CSPConfig, getFrameSrcOrigins func() []string) g
 	}
 }
 
+func isSameOriginEmbeddablePath(c *gin.Context) bool {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return false
+	}
+	return c.Request.URL.Path == "/seedance-video-guide.html"
+}
+
 func isAPIRoutePath(c *gin.Context) bool {
 	if c == nil || c.Request == nil || c.Request.URL == nil {
 		return false
@@ -125,6 +140,22 @@ func isAPIRoutePath(c *gin.Context) bool {
 		strings.HasPrefix(path, "/antigravity/") ||
 		strings.HasPrefix(path, "/responses") ||
 		strings.HasPrefix(path, "/images")
+}
+
+func allowSameOriginFrameAncestors(policy string) string {
+	directives := strings.Split(policy, ";")
+	for i, rawDirective := range directives {
+		fields := strings.Fields(strings.TrimSpace(rawDirective))
+		if len(fields) == 0 || fields[0] != "frame-ancestors" {
+			continue
+		}
+		directives[i] = " frame-ancestors 'self'"
+		return strings.Join(directives, ";")
+	}
+	if strings.TrimSpace(policy) == "" {
+		return "frame-ancestors 'self'"
+	}
+	return policy + "; frame-ancestors 'self'"
 }
 
 // enhanceCSPPolicy 确保 CSP 策略包含 nonce 支持和支付 SDK 必需域名。

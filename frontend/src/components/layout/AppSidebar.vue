@@ -69,11 +69,9 @@
               </div>
             </template>
             <!-- Normal item (no children) -->
-            <component
-              :is="item.nativeLink ? 'a' : 'router-link'"
+            <router-link
               v-else
-              :to="item.nativeLink ? undefined : item.path"
-              :href="item.nativeLink ? item.path : undefined"
+              :to="item.path"
               class="sidebar-link mb-1"
               :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
               :title="sidebarCollapsed ? item.label : undefined"
@@ -91,7 +89,7 @@
               <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
               <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
               <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
-            </component>
+            </router-link>
           </template>
         </div>
 
@@ -103,12 +101,10 @@
             </span>
           </div>
 
-          <component
-            :is="item.nativeLink ? 'a' : 'router-link'"
+          <router-link
             v-for="item in personalNavItems"
             :key="item.path"
-            :to="item.nativeLink ? undefined : item.path"
-            :href="item.nativeLink ? item.path : undefined"
+            :to="item.path"
             class="sidebar-link mb-1"
             :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
             :title="sidebarCollapsed ? item.label : undefined"
@@ -118,19 +114,17 @@
             <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
             <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
             <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
-          </component>
+          </router-link>
         </div>
       </template>
 
       <!-- Regular User View -->
       <template v-else-if="!appStore.backendModeEnabled">
         <div class="sidebar-section">
-          <component
-            :is="item.nativeLink ? 'a' : 'router-link'"
+          <router-link
             v-for="item in userNavItems"
             :key="item.path"
-            :to="item.nativeLink ? undefined : item.path"
-            :href="item.nativeLink ? item.path : undefined"
+            :to="item.path"
             class="sidebar-link mb-1"
             :class="{ 'sidebar-link-active': isActive(item.path), 'sidebar-link-collapsed': sidebarCollapsed }"
             :title="sidebarCollapsed ? item.label : undefined"
@@ -140,7 +134,7 @@
             <span v-if="item.iconSvg" class="h-5 w-5 flex-shrink-0 sidebar-svg-icon" v-html="sanitizeSvg(item.iconSvg)"></span>
             <component v-else :is="item.icon" class="h-5 w-5 flex-shrink-0" />
             <span class="sidebar-label" :class="{ 'sidebar-label-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">{{ item.label }}</span>
-          </component>
+          </router-link>
         </div>
       </template>
     </nav>
@@ -200,7 +194,6 @@ interface NavItem {
   label: string
   icon: unknown
   iconSvg?: string
-  nativeLink?: boolean
   hideInSimpleMode?: boolean
   children?: NavItem[]
   /**
@@ -217,31 +210,8 @@ interface NavItem {
   featureFlag?: () => boolean | undefined
 }
 
-function resolveCustomMenuPath(item: { id: string; url?: string }): string {
-  const url = (item.url || '').trim()
-  if (isNativeCustomMenuURL(url)) {
-    return url
-  }
+function resolveCustomMenuPath(item: { id: string }): string {
   return `/custom/${item.id}`
-}
-
-function isNativeCustomMenuLink(item: { url?: string }): boolean {
-  return isNativeCustomMenuURL((item.url || '').trim())
-}
-
-function isNativeCustomMenuURL(url: string): boolean {
-  if (url.startsWith('/') && !url.startsWith('//')) {
-    return true
-  }
-  if (typeof window === 'undefined') {
-    return false
-  }
-  try {
-    const parsed = new URL(url)
-    return parsed.origin === window.location.origin && parsed.pathname.endsWith('.html')
-  } catch {
-    return false
-  }
 }
 
 // applyFeatureFlags 递归过滤掉 featureFlag() === false 的节点（含子节点）。
@@ -717,7 +687,6 @@ function buildSelfNavItems(withDashboard: boolean): NavItem[] {
       label: item.label,
       icon: null,
       iconSvg: item.icon_svg,
-      nativeLink: isNativeCustomMenuLink(item),
     })),
   )
   return items
@@ -840,7 +809,7 @@ const adminNavItems = computed((): NavItem[] => {
     }
     if (isPlatformOwnerRole(viewerRole.value)) {
       for (const cm of customMenuItemsForAdmin.value) {
-        filtered.push({ path: resolveCustomMenuPath(cm), label: cm.label, icon: null, iconSvg: cm.icon_svg, nativeLink: isNativeCustomMenuLink(cm) })
+        filtered.push({ path: resolveCustomMenuPath(cm), label: cm.label, icon: null, iconSvg: cm.icon_svg })
       }
     }
     return filtered
@@ -851,7 +820,7 @@ const adminNavItems = computed((): NavItem[] => {
   }
   if (isPlatformOwnerRole(viewerRole.value)) {
     for (const cm of customMenuItemsForAdmin.value) {
-      visible.push({ path: resolveCustomMenuPath(cm), label: cm.label, icon: null, iconSvg: cm.icon_svg, nativeLink: isNativeCustomMenuLink(cm) })
+      visible.push({ path: resolveCustomMenuPath(cm), label: cm.label, icon: null, iconSvg: cm.icon_svg })
     }
   }
   return visible
