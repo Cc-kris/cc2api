@@ -41,10 +41,11 @@ describe('AppSidebar cache management navigation', () => {
 })
 
 describe('AppSidebar custom menu navigation', () => {
-  it('uses site-relative custom menu URLs directly instead of iframe wrapper routes', () => {
+  it('opens local static HTML custom menus directly instead of iframe wrapper routes', () => {
     expect(componentSource).toContain('function resolveCustomMenuPath')
     expect(componentSource).toContain('function isNativeCustomMenuLink')
-    expect(componentSource).toContain("url.startsWith('/') && !url.startsWith('//')")
+    expect(componentSource).toContain('function isNativeCustomMenuURL')
+    expect(componentSource).toContain("parsed.origin === window.location.origin && parsed.pathname.endsWith('.html')")
     expect(componentSource.match(/path: resolveCustomMenuPath/g)?.length).toBe(3)
     expect(componentSource.match(/nativeLink: isNativeCustomMenuLink/g)?.length).toBe(3)
     expect(componentSource).toContain(":is=\"item.nativeLink ? 'a' : 'router-link'\"")

@@ -219,15 +219,29 @@ interface NavItem {
 
 function resolveCustomMenuPath(item: { id: string; url?: string }): string {
   const url = (item.url || '').trim()
-  if (url.startsWith('/') && !url.startsWith('//')) {
+  if (isNativeCustomMenuURL(url)) {
     return url
   }
   return `/custom/${item.id}`
 }
 
 function isNativeCustomMenuLink(item: { url?: string }): boolean {
-  const url = (item.url || '').trim()
-  return url.startsWith('/') && !url.startsWith('//')
+  return isNativeCustomMenuURL((item.url || '').trim())
+}
+
+function isNativeCustomMenuURL(url: string): boolean {
+  if (url.startsWith('/') && !url.startsWith('//')) {
+    return true
+  }
+  if (typeof window === 'undefined') {
+    return false
+  }
+  try {
+    const parsed = new URL(url)
+    return parsed.origin === window.location.origin && parsed.pathname.endsWith('.html')
+  } catch {
+    return false
+  }
 }
 
 // applyFeatureFlags 递归过滤掉 featureFlag() === false 的节点（含子节点）。
