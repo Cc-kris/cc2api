@@ -352,6 +352,7 @@ export default {
     dashboard: 'Dashboard',
     announcements: 'Announcements',
     apiKeys: 'API Keys',
+    videoGeneration: 'Video Generation',
     usage: 'Usage',
     redeem: 'Redeem',
     affiliate: 'Affiliate Rebates',
@@ -846,6 +847,11 @@ export default {
   },
 
   // Usage
+
+  videoGeneration: {
+    title: 'Video Generation',
+    description: 'Create and download videos with a Seedance API key',
+  },
   usage: {
     title: 'Usage Records',
     description: 'View and analyze your API usage history',

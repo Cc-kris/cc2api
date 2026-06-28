@@ -55,6 +55,7 @@ type Handlers struct {
 	Gateway          *GatewayHandler
 	OpenAIGateway    *OpenAIGatewayHandler
 	SeedaceVideo     *SeedaceVideoHandler
+	UserVideo        *UserVideoGenerationHandler
 	Setting          *SettingHandler
 	Totp             *TotpHandler
 	Payment          *PaymentHandler

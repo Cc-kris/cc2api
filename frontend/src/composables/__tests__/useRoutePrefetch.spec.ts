@@ -32,6 +32,7 @@ const createMockRouter = (): Router => {
     { path: '/admin/redeem', components: { default: mockImportFn } },
     { path: '/dashboard', components: { default: mockImportFn } },
     { path: '/keys', components: { default: mockImportFn } },
+    { path: '/video-generation', components: { default: mockImportFn } },
     { path: '/usage', components: { default: mockImportFn } },
     { path: '/redeem', components: { default: mockImportFn } },
     { path: '/profile', components: { default: mockImportFn } }
@@ -97,6 +98,14 @@ describe('useRoutePrefetch', () => {
     it('普通用户 dashboard 应该返回正确的预加载配置', () => {
       const { _getPrefetchConfig } = useRoutePrefetch(mockRouter)
       const route = createMockRoute('/dashboard')
+      const config = _getPrefetchConfig(route)
+
+      expect(config).toHaveLength(3)
+    })
+
+    it('视频生成页应该预加载密钥和用量页面', () => {
+      const { _getPrefetchConfig } = useRoutePrefetch(mockRouter)
+      const route = createMockRoute('/video-generation')
       const config = _getPrefetchConfig(route)
 
       expect(config).toHaveLength(2)
@@ -195,7 +204,9 @@ describe('useRoutePrefetch', () => {
 
     it('用户预加载映射表应该包含正确的路由', () => {
       expect(_userPrefetchMap).toHaveProperty('/dashboard')
-      expect(_userPrefetchMap['/dashboard']).toHaveLength(2)
+      expect(_userPrefetchMap).toHaveProperty('/video-generation')
+      expect(_userPrefetchMap['/dashboard']).toHaveLength(3)
+      expect(_userPrefetchMap['/video-generation']).toEqual(['/keys', '/usage'])
     })
   })
 

@@ -561,6 +561,20 @@ func extractSeedaceTaskID(body []byte) string {
 	return firstStringByKeys(payload, "task_id", "id")
 }
 
+// ExtractSeedaceVideoURL extracts a completed video URL from Seedace poll responses.
+func ExtractSeedaceVideoURL(body []byte) string {
+	var payload any
+	if len(body) == 0 || json.Unmarshal(body, &payload) != nil {
+		return ""
+	}
+	videoURL := firstStringByKeys(payload, "video_url", "result_url", "download_url", "url")
+	parsed, err := url.Parse(videoURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return ""
+	}
+	return videoURL
+}
+
 func firstStringByKeys(value any, keys ...string) string {
 	switch v := value.(type) {
 	case map[string]any:

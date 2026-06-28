@@ -350,6 +350,7 @@ export default {
     dashboard: '仪表盘',
     announcements: '公告',
     apiKeys: 'API 密钥',
+    videoGeneration: '视频生成',
     usage: '使用记录',
     redeem: '兑换',
     affiliate: '邀请返利',
@@ -850,6 +851,11 @@ export default {
   },
 
   // Usage
+
+  videoGeneration: {
+    title: '视频生成',
+    description: '使用 Seedance API Key 创建并下载视频',
+  },
   usage: {
     title: '使用记录',
     description: '查看和分析您的 API 使用历史',
