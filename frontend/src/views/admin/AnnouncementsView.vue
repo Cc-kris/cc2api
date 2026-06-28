@@ -201,7 +201,8 @@
 
         <div>
           <label class="input-label">{{ t('admin.announcements.form.content') }}</label>
-          <textarea v-model="form.content" rows="6" class="input" required></textarea>
+          <AnnouncementRichTextEditor v-model="form.content" />
+          <p class="input-hint">{{ t('admin.announcements.form.contentRichHint') }}</p>
         </div>
 
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -308,6 +309,8 @@ import Icon from '@/components/icons/Icon.vue'
 
 import AnnouncementTargetingEditor from '@/components/admin/announcements/AnnouncementTargetingEditor.vue'
 import AnnouncementReadStatusDialog from '@/components/admin/announcements/AnnouncementReadStatusDialog.vue'
+import AnnouncementRichTextEditor from '@/components/admin/announcements/AnnouncementRichTextEditor.vue'
+import { announcementEditorInitialHtml, normalizeAnnouncementEditorHtml, wrapRichAnnouncementContent } from '@/utils/announcementContent'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -497,7 +500,7 @@ async function loadTargetOptions() {
 
 function resetForm() {
   form.title = ''
-  form.content = ''
+  form.content = '<p><br></p>'
   form.status = 'draft'
   form.notify_mode = 'silent'
   form.starts_at_str = ''
@@ -508,7 +511,7 @@ function resetForm() {
 
 function fillFormFromAnnouncement(a: Announcement) {
   form.title = a.title
-  form.content = a.content
+  form.content = announcementEditorInitialHtml(a.content)
   form.status = a.status
   form.notify_mode = a.notify_mode || 'silent'
 
@@ -543,7 +546,7 @@ function buildCreatePayload() {
 
   return {
     title: form.title,
-    content: form.content,
+    content: wrapRichAnnouncementContent(normalizeAnnouncementEditorHtml(form.content)),
     status: form.status as any,
     notify_mode: form.notify_mode as any,
     targeting: form.targeting,
@@ -557,7 +560,8 @@ function buildUpdatePayload(original: Announcement) {
   const payload: any = {}
 
   if (form.title !== original.title) payload.title = form.title
-  if (form.content !== original.content) payload.content = form.content
+  const nextContent = wrapRichAnnouncementContent(normalizeAnnouncementEditorHtml(form.content))
+  if (nextContent !== original.content) payload.content = nextContent
   if (form.status !== original.status) payload.status = form.status
   if (form.notify_mode !== (original.notify_mode || 'silent')) payload.notify_mode = form.notify_mode
 
@@ -599,6 +603,12 @@ async function handleSave() {
       appStore.showError(t('admin.announcements.failedToCreate'))
       return
     }
+  }
+
+  const contentHtml = normalizeAnnouncementEditorHtml(form.content)
+  if (!contentHtml || contentHtml === '<p><br></p>') {
+    appStore.showError(t('admin.announcements.form.contentRequired'))
+    return
   }
 
   saving.value = true

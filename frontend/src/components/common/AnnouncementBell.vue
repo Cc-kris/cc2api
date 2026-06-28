@@ -267,7 +267,7 @@
                 <div class="pl-6">
                   <div
                     class="markdown-body prose prose-sm max-w-none dark:prose-invert"
-                    v-html="renderMarkdown(selectedAnnouncement.content)"
+                    v-html="renderAnnouncementContent(selectedAnnouncement.content)"
                   ></div>
                 </div>
               </div>
@@ -315,23 +315,16 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { storeToRefs } from 'pinia'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
 import { useAppStore } from '@/stores/app'
 import { useAnnouncementStore } from '@/stores/announcements'
 import { formatRelativeTime, formatRelativeWithDateTime } from '@/utils/format'
 import type { UserAnnouncement } from '@/types'
 import Icon from '@/components/icons/Icon.vue'
+import { renderAnnouncementContent } from '@/utils/announcementContent'
 
 const { t } = useI18n()
 const appStore = useAppStore()
 const announcementStore = useAnnouncementStore()
-
-// Configure marked
-marked.setOptions({
-  breaks: true,
-  gfm: true,
-})
 
 // Use store state (storeToRefs for reactivity)
 const { announcements, loading } = storeToRefs(announcementStore)
@@ -343,11 +336,6 @@ const detailModalOpen = ref(false)
 const selectedAnnouncement = ref<UserAnnouncement | null>(null)
 
 // Methods
-function renderMarkdown(content: string): string {
-  if (!content) return ''
-  const html = marked.parse(content) as string
-  return DOMPurify.sanitize(html)
-}
 
 function openModal() {
   isModalOpen.value = true
@@ -577,6 +565,10 @@ watch(
 }
 
 .markdown-body img {
+  @apply my-5 max-w-full rounded-xl border border-gray-200 shadow-md dark:border-dark-600;
+}
+
+.markdown-body video {
   @apply my-5 max-w-full rounded-xl border border-gray-200 shadow-md dark:border-dark-600;
 }
 

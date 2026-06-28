@@ -4606,7 +4606,9 @@ export default {
       emailFailedCount: '失败 {count}',
       form: {
         title: '标题',
-        content: '内容（支持 Markdown）',
+        content: '公告内容',
+        contentRequired: '请输入公告内容',
+        contentRichHint: '支持文字、图片、视频、表格等富文本内容。历史 Markdown 公告会自动兼容展示。',
         status: '状态',
         notifyMode: '通知方式',
         notifyModeHint: '弹窗模式会自动弹出通知给用户',

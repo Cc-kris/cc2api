@@ -4450,7 +4450,9 @@ export default {
       emailFailedCount: '{count} failed',
       form: {
         title: 'Title',
-        content: 'Content (Markdown supported)',
+        content: 'Content',
+        contentRequired: 'Please enter announcement content',
+        contentRichHint: 'Supports rich text such as text, images, videos, and tables. Historical Markdown announcements remain compatible.',
         status: 'Status',
         notifyMode: 'Notify Mode',
         notifyModeHint: 'Popup mode will show a popup notification to users',

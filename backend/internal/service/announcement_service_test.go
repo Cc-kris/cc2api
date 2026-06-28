@@ -162,3 +162,37 @@ func TestAnnouncementEmailBodyEscapesContentAndLinksHome(t *testing.T) {
 	require.Contains(t, body, `href="/"`)
 	require.False(t, strings.Contains(body, `<script>alert("x")</script>`))
 }
+
+func TestAnnouncementEmailBodySupportsRichHTMLMediaAndTables(t *testing.T) {
+	svc := NewAnnouncementService(&announcementRepoStub{}, nil, nil, nil, nil, nil)
+
+	body := svc.buildAnnouncementEmailBody(&Announcement{
+		Title: "富文本公告",
+		Content: announcementRichHTMLMarker + `
+<p><strong>正文</strong></p>
+<table><tbody><tr><td>A</td><td>B</td></tr></tbody></table>
+<img src="https://example.com/a.png" onerror="alert(1)">
+<video src="https://example.com/a.mp4" poster="https://example.com/poster.png" controls></video>
+<script>alert(1)</script>`,
+	})
+
+	require.Contains(t, body, "<strong>正文</strong>")
+	require.Contains(t, body, "<table>")
+	require.Contains(t, body, `src="https://example.com/a.png"`)
+	require.Contains(t, body, `href="https://example.com/a.mp4"`)
+	require.Contains(t, body, "查看视频")
+	require.NotContains(t, body, "<script>")
+	require.NotContains(t, body, "onerror")
+}
+
+func TestAnnouncementEmailBodyKeepsHistoricalMarkdownEscaped(t *testing.T) {
+	svc := NewAnnouncementService(&announcementRepoStub{}, nil, nil, nil, nil, nil)
+
+	body := svc.buildAnnouncementEmailBody(&Announcement{
+		Title:   "旧公告",
+		Content: "## 标题\n<script>alert(1)</script>",
+	})
+
+	require.Contains(t, body, "## 标题<br>&lt;script&gt;alert(1)&lt;/script&gt;")
+	require.NotContains(t, body, "<script>alert(1)</script>")
+}

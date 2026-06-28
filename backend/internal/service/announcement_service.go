@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
-	"html"
+	stdhtml "html"
 	"log/slog"
 	"sort"
 	"strings"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	nethtml "golang.org/x/net/html"
 )
 
 type AnnouncementService struct {
@@ -589,11 +590,214 @@ func (s *AnnouncementService) buildAnnouncementEmailBody(a *Announcement) string
 			homeURL = value
 		}
 	}
-	title := html.EscapeString(a.Title)
-	content := html.EscapeString(a.Content)
-	content = strings.ReplaceAll(content, "\r\n", "\n")
-	content = strings.ReplaceAll(content, "\n", "<br>")
-	return fmt.Sprintf(announcementEmailTemplate, title, content, html.EscapeString(homeURL))
+	title := stdhtml.EscapeString(a.Title)
+	content := announcementEmailContentHTML(a.Content)
+	return fmt.Sprintf(announcementEmailTemplate, title, content, stdhtml.EscapeString(homeURL))
+}
+
+const announcementRichHTMLMarker = "<!-- sub2api:announcement-content html -->"
+
+func announcementEmailContentHTML(content string) string {
+	trimmed := strings.TrimSpace(content)
+	if strings.HasPrefix(trimmed, announcementRichHTMLMarker) {
+		return sanitizeAnnouncementEmailHTML(strings.TrimSpace(strings.TrimPrefix(trimmed, announcementRichHTMLMarker)))
+	}
+	escaped := stdhtml.EscapeString(content)
+	escaped = strings.ReplaceAll(escaped, "\r\n", "\n")
+	escaped = strings.ReplaceAll(escaped, "\n", "<br>")
+	return escaped
+}
+
+func sanitizeAnnouncementEmailHTML(input string) string {
+	root, err := nethtml.Parse(strings.NewReader("<div>" + input + "</div>"))
+	if err != nil {
+		return stdhtml.EscapeString(input)
+	}
+	var out strings.Builder
+	forEachHTMLNode(root, func(n *nethtml.Node) {
+		if n.Type == nethtml.ElementNode && n.Data == "body" {
+			for child := n.FirstChild; child != nil; child = child.NextSibling {
+				renderAnnouncementEmailNode(&out, child)
+			}
+		}
+	})
+	return out.String()
+}
+
+func renderAnnouncementEmailNode(out *strings.Builder, n *nethtml.Node) {
+	if n == nil {
+		return
+	}
+	switch n.Type {
+	case nethtml.TextNode:
+		out.WriteString(stdhtml.EscapeString(n.Data))
+	case nethtml.ElementNode:
+		renderAnnouncementEmailElement(out, n)
+	default:
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
+			renderAnnouncementEmailNode(out, child)
+		}
+	}
+}
+
+func renderAnnouncementEmailElement(out *strings.Builder, n *nethtml.Node) {
+	tag := strings.ToLower(n.Data)
+	if tag == "script" || tag == "style" || tag == "iframe" || tag == "object" || tag == "embed" {
+		return
+	}
+	if tag == "video" {
+		renderAnnouncementEmailVideo(out, n)
+		return
+	}
+	if !isAnnouncementEmailAllowedTag(tag) {
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
+			renderAnnouncementEmailNode(out, child)
+		}
+		return
+	}
+	out.WriteByte('<')
+	out.WriteString(tag)
+	for _, attr := range announcementEmailAllowedAttrs(tag, n.Attr) {
+		out.WriteByte(' ')
+		out.WriteString(attr.Key)
+		out.WriteString(`="`)
+		out.WriteString(stdhtml.EscapeString(attr.Val))
+		out.WriteByte('"')
+	}
+	out.WriteByte('>')
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		renderAnnouncementEmailNode(out, child)
+	}
+	out.WriteString("</")
+	out.WriteString(tag)
+	out.WriteByte('>')
+}
+
+func renderAnnouncementEmailVideo(out *strings.Builder, n *nethtml.Node) {
+	src := firstAnnouncementVideoSource(n)
+	poster := htmlAttr(n.Attr, "poster")
+	out.WriteString(`<div class="video-fallback">`)
+	if isSafeAnnouncementMediaURL(poster) {
+		out.WriteString(`<a href="` + stdhtml.EscapeString(srcOrHome(src)) + `"><img src="` + stdhtml.EscapeString(poster) + `" alt="视频预览" style="max-width:100%;border-radius:10px;border:1px solid #e5e7eb;"></a>`)
+	}
+	if isSafeAnnouncementMediaURL(src) || isSafeAnnouncementLinkURL(src) {
+		out.WriteString(`<p><a class="button" href="` + stdhtml.EscapeString(src) + `">查看视频</a></p>`)
+	} else {
+		out.WriteString(`<p>该公告包含视频，请登录系统查看。</p>`)
+	}
+	out.WriteString(`</div>`)
+}
+
+func firstAnnouncementVideoSource(n *nethtml.Node) string {
+	if src := htmlAttr(n.Attr, "src"); src != "" {
+		return src
+	}
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		if child.Type == nethtml.ElementNode && strings.EqualFold(child.Data, "source") {
+			if src := htmlAttr(child.Attr, "src"); src != "" {
+				return src
+			}
+		}
+	}
+	return ""
+}
+
+func srcOrHome(src string) string {
+	if isSafeAnnouncementMediaURL(src) || isSafeAnnouncementLinkURL(src) {
+		return src
+	}
+	return "/"
+}
+
+func htmlAttr(attrs []nethtml.Attribute, key string) string {
+	for _, attr := range attrs {
+		if strings.EqualFold(attr.Key, key) {
+			return strings.TrimSpace(attr.Val)
+		}
+	}
+	return ""
+}
+
+func isAnnouncementEmailAllowedTag(tag string) bool {
+	switch tag {
+	case "p", "br", "div", "span", "strong", "b", "em", "i", "u", "s", "blockquote", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "table", "thead", "tbody", "tr", "th", "td", "a", "img", "hr", "pre", "code":
+		return true
+	default:
+		return false
+	}
+}
+
+func announcementEmailAllowedAttrs(tag string, attrs []nethtml.Attribute) []nethtml.Attribute {
+	out := make([]nethtml.Attribute, 0, len(attrs))
+	for _, attr := range attrs {
+		key := strings.ToLower(strings.TrimSpace(attr.Key))
+		val := strings.TrimSpace(attr.Val)
+		if strings.HasPrefix(key, "on") || val == "" {
+			continue
+		}
+		switch key {
+		case "href":
+			if tag == "a" && isSafeAnnouncementLinkURL(val) {
+				out = append(out, nethtml.Attribute{Key: "href", Val: val}, nethtml.Attribute{Key: "target", Val: "_blank"}, nethtml.Attribute{Key: "rel", Val: "noopener noreferrer"})
+			}
+		case "src":
+			if tag == "img" && isSafeAnnouncementMediaURL(val) {
+				out = append(out, nethtml.Attribute{Key: "src", Val: val})
+			}
+		case "alt", "title", "width", "height", "colspan", "rowspan":
+			out = append(out, nethtml.Attribute{Key: key, Val: val})
+		case "style":
+			if sanitized := sanitizeAnnouncementEmailStyle(val); sanitized != "" {
+				out = append(out, nethtml.Attribute{Key: key, Val: sanitized})
+			}
+		}
+	}
+	if tag == "img" {
+		out = append(out, nethtml.Attribute{Key: "style", Val: "max-width:100%;height:auto;border-radius:10px;border:1px solid #e5e7eb;"})
+	}
+	return out
+}
+
+func sanitizeAnnouncementEmailStyle(style string) string {
+	parts := strings.Split(style, ";")
+	allowed := make([]string, 0, len(parts))
+	for _, part := range parts {
+		kv := strings.SplitN(part, ":", 2)
+		if len(kv) != 2 {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(kv[0]))
+		value := strings.TrimSpace(kv[1])
+		lowerValue := strings.ToLower(value)
+		if strings.Contains(lowerValue, "javascript:") || strings.Contains(lowerValue, "expression(") {
+			continue
+		}
+		switch key {
+		case "text-align", "color", "background-color", "font-size", "font-weight", "font-style", "text-decoration":
+			allowed = append(allowed, key+":"+value)
+		}
+	}
+	return strings.Join(allowed, ";")
+}
+
+func isSafeAnnouncementLinkURL(value string) bool {
+	lower := strings.ToLower(strings.TrimSpace(value))
+	return strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") || strings.HasPrefix(lower, "mailto:")
+}
+
+func isSafeAnnouncementMediaURL(value string) bool {
+	lower := strings.ToLower(strings.TrimSpace(value))
+	return strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") || strings.HasPrefix(lower, "data:image/")
+}
+
+func forEachHTMLNode(n *nethtml.Node, visit func(*nethtml.Node)) {
+	if n == nil {
+		return
+	}
+	visit(n)
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		forEachHTMLNode(child, visit)
+	}
 }
 
 const announcementEmailTemplate = `<!doctype html>
@@ -605,6 +809,10 @@ const announcementEmailTemplate = `<!doctype html>
     .card { max-width: 640px; margin: 0 auto; background: #ffffff; border-radius: 14px; padding: 28px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); }
     h1 { margin: 0 0 18px; font-size: 22px; color: #111827; }
     .content { color: #374151; font-size: 15px; margin-bottom: 24px; }
+    .content img { max-width: 100%%; height: auto; }
+    .content table { width: 100%%; border-collapse: collapse; margin: 16px 0; }
+    .content th, .content td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; }
+    .content th { background: #f9fafb; }
     .button { display: inline-block; padding: 11px 18px; border-radius: 10px; background: #2563eb; color: #ffffff !important; text-decoration: none; font-weight: 600; }
   </style>
 </head>
