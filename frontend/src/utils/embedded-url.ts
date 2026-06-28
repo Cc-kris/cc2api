@@ -21,8 +21,15 @@ export function buildEmbeddedUrl(
   lang?: string,
 ): string {
   if (!baseUrl) return baseUrl
+  const trimmedBaseUrl = baseUrl.trim()
+  const isHTTPUrl = /^https?:\/\//i.test(trimmedBaseUrl)
+  const isSiteRelativeUrl = trimmedBaseUrl.startsWith('/') && !trimmedBaseUrl.startsWith('//')
+  if (!isHTTPUrl && !isSiteRelativeUrl) return baseUrl
   try {
-    const url = new URL(baseUrl)
+    const url = new URL(
+      trimmedBaseUrl,
+      typeof window !== 'undefined' ? window.location.origin : undefined,
+    )
     if (userId) {
       url.searchParams.set(EMBEDDED_USER_ID_QUERY_KEY, String(userId))
     }

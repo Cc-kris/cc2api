@@ -28,6 +28,8 @@ var semverPattern = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 // menuItemIDPattern validates custom menu item IDs: alphanumeric, hyphens, underscores only.
 var menuItemIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
+var customMenuRelativeURLPattern = regexp.MustCompile(`^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*(?:\?[A-Za-z0-9._~!$&'()*+,;=:@%/?-]*)?$`)
+
 // generateMenuItemID generates a short random hex ID for a custom menu item.
 func generateMenuItemID() (string, error) {
 	b := make([]byte, 8)
@@ -35,6 +37,16 @@ func generateMenuItemID() (string, error) {
 		return "", fmt.Errorf("generate menu item ID: %w", err)
 	}
 	return hex.EncodeToString(b), nil
+}
+
+func isValidCustomMenuRelativeURL(raw string) bool {
+	if raw == "" || strings.HasPrefix(raw, "//") || strings.Contains(raw, "\\") || strings.ContainsRune(raw, 0) {
+		return false
+	}
+	if strings.Contains(raw, "/../") || strings.HasSuffix(raw, "/..") {
+		return false
+	}
+	return customMenuRelativeURLPattern.MatchString(raw)
 }
 
 func scopesContainOpenID(scopes string) bool {
@@ -1309,8 +1321,8 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 					response.BadRequest(c, "Custom menu item URL is too long (max 2048 characters)")
 					return
 				}
-				if err := config.ValidateAbsoluteHTTPURL(urlTrimmed); err != nil {
-					response.BadRequest(c, "Custom menu item URL must be an absolute http(s) URL or md:<slug>")
+				if err := config.ValidateAbsoluteHTTPURL(urlTrimmed); err != nil && !isValidCustomMenuRelativeURL(urlTrimmed) {
+					response.BadRequest(c, "Custom menu item URL must be an absolute http(s) URL, a site-relative path, or md:<slug>")
 					return
 				}
 			}
