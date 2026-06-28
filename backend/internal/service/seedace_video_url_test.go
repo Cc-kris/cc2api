@@ -10,6 +10,8 @@ func TestExtractSeedaceVideoURL(t *testing.T) {
 	}{
 		{name: "nested video_url", body: `{"data":{"video_url":"https://cdn.example.com/video.mp4"}}`, want: "https://cdn.example.com/video.mp4"},
 		{name: "nested result_url", body: `{"result":{"result_url":"http://cdn.example.com/video.mp4"}}`, want: "http://cdn.example.com/video.mp4"},
+		{name: "nested download array", body: `{"output":[{"download_url":"https://cdn.example.com/array.mp4"}]}`, want: "https://cdn.example.com/array.mp4"},
+		{name: "nested media_url", body: `{"data":{"media_url":"https://cdn.example.com/media.mp4"}}`, want: "https://cdn.example.com/media.mp4"},
 		{name: "reject javascript", body: `{"video_url":"javascript:alert(1)"}`, want: ""},
 		{name: "reject relative", body: `{"video_url":"/video.mp4"}`, want: ""},
 	}

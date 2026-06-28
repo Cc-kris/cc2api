@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest'
 import {
   buildSeedaceVideoPayload,
   coerceSeedaceResolution,
+  createSeedaceSessionSummary,
+  extractSeedaceVideoUrl,
   getSeedaceResolutionOptions,
+  isSeedaceVideoCompleted,
+  normalizeSeedaceTaskStatus,
   resolveSeedaceUpstreamModel,
   validateSeedaceVideoForm,
   type SeedaceVideoFormState,
@@ -56,6 +60,24 @@ describe('seedaceVideo model mapping', () => {
     expect(getSeedaceResolutionOptions('domestic-seedance-2.0')).toEqual(['720p', '1080p'])
     expect(getSeedaceResolutionOptions('international-seedance-2.0-fast')).toEqual(['480p', '720p'])
     expect(coerceSeedaceResolution('international-seedance-2.0-fast', '1080p')).toBe('720p')
+  })
+})
+
+describe('seedaceVideo task response helpers', () => {
+  it('treats documented completed and SUCCESS statuses as completed even before extracting a URL', () => {
+    expect(isSeedaceVideoCompleted({ status: 'completed' })).toBe(true)
+    expect(isSeedaceVideoCompleted({ data: { status: 'SUCCESS' } })).toBe(true)
+    expect(normalizeSeedaceTaskStatus({ data: { status: 'in_progress' } })).toBe('running')
+  })
+
+  it('extracts video URLs from nested fallback fields and arrays', () => {
+    expect(extractSeedaceVideoUrl({ data: { data: { result_url: 'https://cdn.example.com/a.mp4' } } })).toBe('https://cdn.example.com/a.mp4')
+    expect(extractSeedaceVideoUrl({ output: [{ download_url: 'https://cdn.example.com/b.mp4' }] })).toBe('https://cdn.example.com/b.mp4')
+  })
+
+  it('builds a single 10-character session summary from the latest input', () => {
+    expect(createSeedaceSessionSummary('  生成一个雨夜城市霓虹灯慢镜头  ')).toBe('生成一个雨夜城市霓虹')
+    expect(createSeedaceSessionSummary('!!!')).toBe('未命名会话')
   })
 })
 

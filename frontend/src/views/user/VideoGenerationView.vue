@@ -90,11 +90,36 @@
         </aside>
 
         <main class="flex min-h-0 flex-col rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-800">
-          <div class="border-b border-gray-200 px-5 py-4 dark:border-dark-700">
-            <div class="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-dark-50">
-              <Icon name="chat" size="md" /> 视频生成对话
+          <div class="relative border-b border-gray-200 px-5 py-4 dark:border-dark-700">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-dark-50">
+                  <Icon name="chat" size="md" /> 视频生成对话
+                </div>
+                <p class="mt-1 text-xs text-gray-500 dark:text-dark-300">提交后自动轮询生成结果，生成完成后只提供下载按钮。</p>
+              </div>
+              <div class="relative">
+                <button type="button" class="btn btn-secondary btn-sm" @click.stop="showHistoryDropdown = !showHistoryDropdown">
+                  <Icon name="clock" size="sm" /> 历史记录
+                </button>
+                <div v-if="showHistoryDropdown" class="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-gray-200 bg-white p-2 shadow-lg dark:border-dark-700 dark:bg-dark-800">
+                  <div v-if="sessionHistoryRecords.length === 0" class="px-3 py-6 text-center text-sm text-gray-400 dark:text-dark-300">暂无生成记录</div>
+                  <button
+                    v-for="record in sessionHistoryRecords"
+                    :key="record.id"
+                    type="button"
+                    class="w-full rounded-lg px-3 py-2 text-left transition hover:bg-gray-50 dark:hover:bg-dark-700"
+                    @click="openHistoryRecord"
+                  >
+                    <div class="flex items-center justify-between gap-3">
+                      <span class="truncate text-sm font-medium text-gray-900 dark:text-dark-50">{{ record.summary }}</span>
+                      <span class="shrink-0 text-xs text-gray-400 dark:text-dark-300">{{ record.generationCount }} 次</span>
+                    </div>
+                    <div class="mt-1 text-xs text-gray-500 dark:text-dark-300">最后生成 {{ formatHistoryTime(record.updatedAt) }}</div>
+                  </button>
+                </div>
+              </div>
             </div>
-            <p class="mt-1 text-xs text-gray-500 dark:text-dark-300">提交后自动轮询生成结果，生成完成后只提供下载按钮。</p>
           </div>
 
           <div ref="messagesRef" class="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
@@ -158,8 +183,9 @@ import {
   SEEDACE_VIDEO_MODEL_OPTIONS,
   buildSeedaceVideoPayload,
   coerceSeedaceResolution,
+  createSeedaceSessionSummary,
   extractSeedaceTaskId,
-  extractSeedaceVideoUrl,
+  isSeedaceVideoCompleted,
   getSeedaceResolutionOptions,
   hasSeedaceImageReference,
   isAllowedSeedaceAudioFile,
@@ -178,6 +204,13 @@ interface ChatMessage {
   status?: 'generating' | 'completed' | 'failed'
   taskId?: string
   error?: string
+}
+
+interface SessionHistoryRecord {
+  id: string
+  summary: string
+  generationCount: number
+  updatedAt: number
 }
 
 const AssetList = defineComponent({
@@ -208,6 +241,11 @@ const generating = ref(false)
 const downloadingTaskId = ref('')
 const messagesRef = ref<HTMLElement | null>(null)
 const abortController = ref<AbortController | null>(null)
+const showHistoryDropdown = ref(false)
+const sessionId = crypto.randomUUID()
+const sessionSummary = ref('')
+const sessionGenerationCount = ref(0)
+const sessionUpdatedAt = ref(0)
 
 const imageInputRef = ref<HTMLInputElement | null>(null)
 const videoInputRef = ref<HTMLInputElement | null>(null)
@@ -253,6 +291,17 @@ const generateAudioValue = computed({
   set: (value: string | number | boolean | null) => {
     form.generateAudio = value !== 'no'
   },
+})
+const sessionHistoryRecords = computed<SessionHistoryRecord[]>(() => {
+  if (sessionGenerationCount.value === 0) return []
+  return [
+    {
+      id: sessionId,
+      summary: sessionSummary.value || '未命名会话',
+      generationCount: sessionGenerationCount.value,
+      updatedAt: sessionUpdatedAt.value,
+    },
+  ]
 })
 
 watch(
@@ -300,6 +349,7 @@ async function submitVideoGeneration() {
   }
 
   const userContent = prompt.value.trim()
+  updateSessionHistory(userContent)
   const assistantMessage: ChatMessage = {
     id: crypto.randomUUID(),
     role: 'assistant',
@@ -341,7 +391,7 @@ async function pollUntilCompleted(apiKey: string, taskId: string, message: ChatM
       message.error = '上游返回生成失败'
       return
     }
-    if (status === 'success' && extractSeedaceVideoUrl(result)) {
+    if (isSeedaceVideoCompleted(result)) {
       message.status = 'completed'
       message.content = '已生成视频'
       return
@@ -350,6 +400,22 @@ async function pollUntilCompleted(apiKey: string, taskId: string, message: ChatM
   message.status = 'failed'
   message.content = '生成失败'
   message.error = '轮询超时，请稍后重试'
+}
+
+function updateSessionHistory(userContent: string) {
+  sessionSummary.value = createSeedaceSessionSummary(userContent)
+  sessionGenerationCount.value += 1
+  sessionUpdatedAt.value = Date.now()
+}
+
+function openHistoryRecord() {
+  showHistoryDropdown.value = false
+  void scrollMessagesToBottom()
+}
+
+function formatHistoryTime(timestamp: number) {
+  if (!timestamp) return '-'
+  return new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
 async function handleDownload(taskId: string) {

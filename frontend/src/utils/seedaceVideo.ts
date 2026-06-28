@@ -223,7 +223,16 @@ export function extractSeedaceTaskId(payload: unknown): string {
 }
 
 export function extractSeedaceVideoUrl(payload: unknown): string {
-  return firstStringByKeys(payload, ['video_url', 'result_url', 'url', 'download_url'])
+  return firstStringByKeys(payload, ['video_url', 'result_url', 'download_url', 'media_url', 'file_url', 'output_url', 'url', 'urls'])
+}
+
+export function isSeedaceVideoCompleted(payload: unknown): boolean {
+  return normalizeSeedaceTaskStatus(payload) === 'success' || extractSeedaceVideoUrl(payload) !== ''
+}
+
+export function createSeedaceSessionSummary(input: string): string {
+  const summary = Array.from(input.replace(/[\s\p{P}\p{S}]+/gu, '')).slice(0, 10).join('')
+  return summary || '未命名会话'
 }
 
 export function normalizeSeedaceTaskStatus(payload: unknown): 'pending' | 'running' | 'success' | 'failed' | 'unknown' {

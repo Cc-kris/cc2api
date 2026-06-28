@@ -567,7 +567,7 @@ func ExtractSeedaceVideoURL(body []byte) string {
 	if len(body) == 0 || json.Unmarshal(body, &payload) != nil {
 		return ""
 	}
-	videoURL := firstStringByKeys(payload, "video_url", "result_url", "download_url", "url")
+	videoURL := firstStringByKeys(payload, "video_url", "result_url", "download_url", "media_url", "file_url", "output_url", "url", "urls")
 	parsed, err := url.Parse(videoURL)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 		return ""
