@@ -64,15 +64,32 @@ describe('seedaceVideo model mapping', () => {
 })
 
 describe('seedaceVideo task response helpers', () => {
-  it('treats documented completed and SUCCESS statuses as completed even before extracting a URL', () => {
-    expect(isSeedaceVideoCompleted({ status: 'completed' })).toBe(true)
-    expect(isSeedaceVideoCompleted({ data: { status: 'SUCCESS' } })).toBe(true)
+  it('requires both completed status and a real URL before marking video completed', () => {
+    expect(isSeedaceVideoCompleted({ status: 'completed' })).toBe(false)
+    expect(isSeedaceVideoCompleted({ data: { status: 'SUCCESS', data: { video_url: 'https://images.silkroadai.io/video.mp4' } } })).toBe(true)
     expect(normalizeSeedaceTaskStatus({ data: { status: 'in_progress' } })).toBe('running')
+  })
+
+  it('recognizes upstream FAILURE as failed and ignores non-URL result fields', () => {
+    const failedPayload = { data: { status: 'FAILURE', result_url: 'task failed', data: { status: 'failed' } } }
+    expect(normalizeSeedaceTaskStatus(failedPayload)).toBe('failed')
+    expect(extractSeedaceVideoUrl(failedPayload)).toBe('')
+    expect(isSeedaceVideoCompleted(failedPayload)).toBe(false)
   })
 
   it('extracts video URLs from nested fallback fields and arrays', () => {
     expect(extractSeedaceVideoUrl({ data: { data: { result_url: 'https://cdn.example.com/a.mp4' } } })).toBe('https://cdn.example.com/a.mp4')
     expect(extractSeedaceVideoUrl({ output: [{ download_url: 'https://cdn.example.com/b.mp4' }] })).toBe('https://cdn.example.com/b.mp4')
+  })
+
+  it('prefers direct video URL over upstream result URL in completed overseas responses', () => {
+    expect(extractSeedaceVideoUrl({
+      data: {
+        status: 'SUCCESS',
+        result_url: 'https://ai.silkroadai.io/result-page',
+        data: { video_url: 'https://images.silkroadai.io/video.mp4', url: 'https://images.silkroadai.io/fallback.mp4' },
+      },
+    })).toBe('https://images.silkroadai.io/video.mp4')
   })
 
   it('builds a single 10-character session summary from the latest input', () => {

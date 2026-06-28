@@ -391,6 +391,9 @@ async function pollUntilCompleted(apiKey: string, taskId: string, message: ChatM
       message.error = '上游返回生成失败'
       return
     }
+    if (status === 'success' && !isSeedaceVideoCompleted(result)) {
+      continue
+    }
     if (isSeedaceVideoCompleted(result)) {
       message.status = 'completed'
       message.content = '已生成视频'
@@ -399,7 +402,7 @@ async function pollUntilCompleted(apiKey: string, taskId: string, message: ChatM
   }
   message.status = 'failed'
   message.content = '生成失败'
-  message.error = '轮询超时，请稍后重试'
+  message.error = '轮询超时，未获取到视频链接，请稍后重试'
 }
 
 function updateSessionHistory(userContent: string) {

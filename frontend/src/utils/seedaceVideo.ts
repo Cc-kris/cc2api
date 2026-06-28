@@ -223,11 +223,18 @@ export function extractSeedaceTaskId(payload: unknown): string {
 }
 
 export function extractSeedaceVideoUrl(payload: unknown): string {
-  return firstStringByKeys(payload, ['video_url', 'result_url', 'download_url', 'media_url', 'file_url', 'output_url', 'url', 'urls'])
+  const candidate = firstStringByKeys(payload, ['video_url', 'download_url', 'media_url', 'file_url', 'output_url', 'url', 'urls', 'result_url'])
+  if (!candidate) return ''
+  try {
+    const parsed = new URL(candidate)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? candidate : ''
+  } catch {
+    return ''
+  }
 }
 
 export function isSeedaceVideoCompleted(payload: unknown): boolean {
-  return normalizeSeedaceTaskStatus(payload) === 'success' || extractSeedaceVideoUrl(payload) !== ''
+  return normalizeSeedaceTaskStatus(payload) === 'success' && extractSeedaceVideoUrl(payload) !== ''
 }
 
 export function createSeedaceSessionSummary(input: string): string {
@@ -238,28 +245,34 @@ export function createSeedaceSessionSummary(input: string): string {
 export function normalizeSeedaceTaskStatus(payload: unknown): 'pending' | 'running' | 'success' | 'failed' | 'unknown' {
   const status = firstStringByKeys(payload, ['status', 'state']).toLowerCase()
   if (['success', 'succeeded', 'completed', 'complete', 'done'].includes(status)) return 'success'
-  if (['failed', 'fail', 'error', 'cancelled', 'canceled'].includes(status)) return 'failed'
+  if (['failure', 'failed', 'fail', 'error', 'cancelled', 'canceled'].includes(status)) return 'failed'
   if (['running', 'processing', 'generating', 'in_progress'].includes(status)) return 'running'
   if (['pending', 'queued', 'created'].includes(status)) return 'pending'
   return 'unknown'
 }
 
 function firstStringByKeys(value: unknown, keys: string[]): string {
+  for (const key of keys) {
+    const found = firstStringByKey(value, key)
+    if (found) return found
+  }
+  return ''
+}
+
+function firstStringByKey(value: unknown, key: string): string {
   if (!value || typeof value !== 'object') return ''
   if (Array.isArray(value)) {
     for (const item of value) {
-      const found = firstStringByKeys(item, keys)
+      const found = firstStringByKey(item, key)
       if (found) return found
     }
     return ''
   }
   const record = value as Record<string, unknown>
-  for (const key of keys) {
-    const raw = record[key]
-    if (typeof raw === 'string' && raw.trim()) return raw.trim()
-  }
+  const raw = record[key]
+  if (typeof raw === 'string' && raw.trim()) return raw.trim()
   for (const child of Object.values(record)) {
-    const found = firstStringByKeys(child, keys)
+    const found = firstStringByKey(child, key)
     if (found) return found
   }
   return ''

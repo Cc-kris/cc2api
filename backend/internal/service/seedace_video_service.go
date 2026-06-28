@@ -567,7 +567,7 @@ func ExtractSeedaceVideoURL(body []byte) string {
 	if len(body) == 0 || json.Unmarshal(body, &payload) != nil {
 		return ""
 	}
-	videoURL := firstStringByKeys(payload, "video_url", "result_url", "download_url", "media_url", "file_url", "output_url", "url", "urls")
+	videoURL := firstStringByKeys(payload, "video_url", "download_url", "media_url", "file_url", "output_url", "url", "urls", "result_url")
 	parsed, err := url.Parse(videoURL)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
 		return ""
@@ -576,21 +576,28 @@ func ExtractSeedaceVideoURL(body []byte) string {
 }
 
 func firstStringByKeys(value any, keys ...string) string {
+	for _, key := range keys {
+		if found := firstStringByKey(value, key); found != "" {
+			return found
+		}
+	}
+	return ""
+}
+
+func firstStringByKey(value any, key string) string {
 	switch v := value.(type) {
 	case map[string]any:
-		for _, key := range keys {
-			if raw, ok := v[key].(string); ok && strings.TrimSpace(raw) != "" {
-				return strings.TrimSpace(raw)
-			}
+		if raw, ok := v[key].(string); ok && strings.TrimSpace(raw) != "" {
+			return strings.TrimSpace(raw)
 		}
 		for _, child := range v {
-			if found := firstStringByKeys(child, keys...); found != "" {
+			if found := firstStringByKey(child, key); found != "" {
 				return found
 			}
 		}
 	case []any:
 		for _, child := range v {
-			if found := firstStringByKeys(child, keys...); found != "" {
+			if found := firstStringByKey(child, key); found != "" {
 				return found
 			}
 		}
