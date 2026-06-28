@@ -2087,7 +2087,28 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 
 	// Handle Antigravity accounts: return Claude + Gemini models
 	if account.Platform == service.PlatformAntigravity {
-		// 直接复用 antigravity.DefaultModels()，与 /v1/models 端点保持同步
+		models, err := h.fetchUpstreamModels(c.Request.Context(), account)
+		if err == nil && len(models) > 0 {
+			response.Success(c, models)
+			return
+		}
+		if err != nil {
+			slog.Warn("account_available_models_upstream_fetch_failed", "account_id", accountID, "error", err)
+		}
+
+		mapping := account.GetModelMapping()
+		if len(mapping) > 0 {
+			modelIDs := make([]string, 0, len(mapping))
+			for requestedModel := range mapping {
+				modelIDs = append(modelIDs, requestedModel)
+			}
+			if len(modelIDs) > 0 {
+				response.Success(c, modelInfosFromIDs(modelIDs))
+				return
+			}
+		}
+
+		// Fallback to the built-in catalog so the test dialog remains usable when the upstream model endpoint is unavailable.
 		response.Success(c, antigravity.DefaultModels())
 		return
 	}

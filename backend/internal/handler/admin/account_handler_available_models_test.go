@@ -31,10 +31,13 @@ func (s *availableModelsAdminService) GetAccount(_ context.Context, id int64) (*
 	return s.stubAdminService.GetAccount(context.Background(), id)
 }
 
-func setupAvailableModelsRouter(adminSvc service.AdminService) *gin.Engine {
+func setupAvailableModelsRouter(adminSvc service.AdminService, opts ...func(*AccountHandler)) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	handler := NewAccountHandler(adminSvc, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	for _, opt := range opts {
+		opt(handler)
+	}
 	router.GET("/api/v1/admin/accounts/:id/models", handler.GetAvailableModels)
 	return router
 }
@@ -141,6 +144,52 @@ func TestAccountHandlerGetAvailableModels_OpenAIOAuthPassthroughFallsBackToDefau
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.NotEmpty(t, resp.Data)
 	require.NotEqual(t, "gpt-5", resp.Data[0].ID)
+}
+
+func TestAccountHandlerGetAvailableModels_AntigravityAPIKeyUsesUpstreamList(t *testing.T) {
+	svc := &availableModelsAdminService{
+		stubAdminService: newStubAdminService(),
+		account: service.Account{
+			ID:       52,
+			Name:     "antigravity-key",
+			Platform: service.PlatformAntigravity,
+			Type:     service.AccountTypeAPIKey,
+			Status:   service.StatusActive,
+			Credentials: map[string]any{
+				"api_key":  "ag-test",
+				"base_url": "https://antigravity.example",
+			},
+		},
+	}
+	upstream := &upstreamModelsHTTPStub{response: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body: io.NopCloser(strings.NewReader(`{"models":[
+			{"name":"models/gemini-3.5-flash-low"},
+			{"name":"models/gemini-3.1-pro-low"},
+			{"name":"models/gemini-3.5-flash-low"}
+		]}`)),
+	}}
+	router := setupAvailableModelsRouter(svc, func(handler *AccountHandler) {
+		handler.httpUpstream = upstream
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/accounts/52/models", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, "https://antigravity.example/antigravity/v1beta/models", upstream.requests[0].URL.String())
+	require.Equal(t, "ag-test", upstream.requests[0].Header.Get("x-goog-api-key"))
+
+	var resp struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, []string{"gemini-3.1-pro-low", "gemini-3.5-flash-low"}, []string{resp.Data[0].ID, resp.Data[1].ID})
 }
 
 type upstreamModelsHTTPStub struct {
