@@ -47,7 +47,7 @@ func TestDownloadFormBearerTokenKeepsExistingAuthorizationHeader(t *testing.T) {
 func TestRegisterUserRoutesIncludesPostVideoDownloadEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	handlers := &handler.Handlers{UserVideo: handler.NewUserVideoGenerationHandler(nil, nil)}
+	handlers := &handler.Handlers{UserVideo: handler.NewUserVideoGenerationHandler(nil, nil, nil)}
 	v1 := router.Group("/api/v1")
 	RegisterUserRoutes(v1, handlers, func(c *gin.Context) { c.Next() }, nil)
 
@@ -57,4 +57,29 @@ func TestRegisterUserRoutesIncludesPostVideoDownloadEndpoint(t *testing.T) {
 	router.ServeHTTP(rec, req)
 
 	require.NotEqual(t, http.StatusNotFound, rec.Code)
+}
+
+func TestRegisterUserRoutesIncludesVideoHistoryEndpoints(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	handlers := &handler.Handlers{UserVideo: handler.NewUserVideoGenerationHandler(nil, nil, nil)}
+	v1 := router.Group("/api/v1")
+	RegisterUserRoutes(v1, handlers, func(c *gin.Context) { c.Next() }, nil)
+
+	for _, tc := range []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodGet, path: "/api/v1/user/video-generations/history"},
+		{method: http.MethodPut, path: "/api/v1/user/video-generations/history/session-1", body: `{"summary":"摘要","generationCount":1,"messages":[{"id":"m1","role":"user","content":"生成视频"}]}`},
+	} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+		if tc.body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		router.ServeHTTP(rec, req)
+		require.NotEqual(t, http.StatusNotFound, rec.Code)
+	}
 }

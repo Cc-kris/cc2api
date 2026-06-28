@@ -31,17 +31,77 @@ type userVideoHTTPDoer interface {
 
 // UserVideoGenerationHandler handles authenticated user video-generation helpers.
 type UserVideoGenerationHandler struct {
-	apiKeyService userVideoAPIKeyGetter
-	seedaceVideo  userVideoSeedacePoller
-	httpClient    userVideoHTTPDoer
+	apiKeyService  userVideoAPIKeyGetter
+	seedaceVideo   userVideoSeedacePoller
+	historyService *service.SeedaceVideoHistoryService
+	httpClient     userVideoHTTPDoer
 }
 
-func NewUserVideoGenerationHandler(apiKeyService *service.APIKeyService, seedaceVideoService *service.SeedaceVideoService) *UserVideoGenerationHandler {
+func NewUserVideoGenerationHandler(apiKeyService *service.APIKeyService, seedaceVideoService *service.SeedaceVideoService, historyService *service.SeedaceVideoHistoryService) *UserVideoGenerationHandler {
 	return &UserVideoGenerationHandler{
-		apiKeyService: apiKeyService,
-		seedaceVideo:  seedaceVideoService,
-		httpClient:    &http.Client{Timeout: 10 * time.Minute},
+		apiKeyService:  apiKeyService,
+		seedaceVideo:   seedaceVideoService,
+		historyService: historyService,
+		httpClient:     &http.Client{Timeout: 10 * time.Minute},
 	}
+}
+
+type upsertSeedaceVideoHistoryRequest struct {
+	Summary         string                               `json:"summary"`
+	GenerationCount int                                  `json:"generationCount"`
+	Messages        []service.SeedaceVideoHistoryMessage `json:"messages"`
+}
+
+func (h *UserVideoGenerationHandler) ListHistory(c *gin.Context) {
+	if h == nil || h.historyService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Video history service is unavailable")
+		return
+	}
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	records, err := h.historyService.List(c.Request.Context(), subject.UserID, 20)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"items": records})
+}
+
+func (h *UserVideoGenerationHandler) UpsertHistory(c *gin.Context) {
+	if h == nil || h.historyService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Video history service is unavailable")
+		return
+	}
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	sessionID := strings.TrimSpace(c.Param("session_id"))
+	if sessionID == "" {
+		response.BadRequest(c, "Invalid session ID")
+		return
+	}
+	var req upsertSeedaceVideoHistoryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request")
+		return
+	}
+	record, err := h.historyService.Upsert(c.Request.Context(), service.UpsertSeedaceVideoHistoryInput{
+		UserID:          subject.UserID,
+		SessionID:       sessionID,
+		Summary:         req.Summary,
+		GenerationCount: req.GenerationCount,
+		Messages:        req.Messages,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, record)
 }
 
 // Download streams the generated video through the origin so the UI never exposes the upstream URL.

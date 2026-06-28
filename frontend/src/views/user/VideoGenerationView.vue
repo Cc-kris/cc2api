@@ -174,6 +174,7 @@ import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import keysAPI from '@/api/keys'
 import { createSeedaceVideoTask, downloadSeedaceVideo, pollSeedaceVideoTask } from '@/api/seedaceVideo'
+import { listSeedaceVideoHistory, saveSeedaceVideoHistory, type SeedaceVideoHistoryMessage, type SeedaceVideoHistoryRecord } from '@/api/seedaceVideoHistory'
 import type { ApiKey, SelectOption } from '@/types'
 import {
   SEEDACE_VIDEO_ASPECT_RATIO_OPTIONS,
@@ -195,21 +196,10 @@ import {
 } from '@/utils/seedaceVideo'
 import { extractApiErrorMessage } from '@/utils/apiError'
 
-interface ChatMessage {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  status?: 'generating' | 'completed' | 'failed'
-  taskId?: string
-  error?: string
-}
+type ChatMessage = SeedaceVideoHistoryMessage
 
-interface SessionHistoryRecord {
-  id: string
-  summary: string
-  generationCount: number
+interface SessionHistoryRecord extends Omit<SeedaceVideoHistoryRecord, 'updatedAt'> {
   updatedAt: number
-  messages: ChatMessage[]
 }
 
 const AssetList = defineComponent({
@@ -311,6 +301,19 @@ watch(
   },
 )
 
+async function loadInitialData() {
+  await Promise.all([loadAPIKeys(), loadHistoryRecords()])
+}
+
+async function loadHistoryRecords() {
+  try {
+    const records = await listSeedaceVideoHistory()
+    sessionHistoryRecords.value = records.map((record) => ({ ...record, updatedAt: Date.parse(record.updatedAt) || Date.now() }))
+  } catch (err: unknown) {
+    submitError.value = extractApiErrorMessage(err, '视频生成历史加载失败')
+  }
+}
+
 async function loadAPIKeys() {
   loadingKeys.value = true
   try {
@@ -399,11 +402,10 @@ function updateSessionHistory(userContent: string) {
   sessionSummary.value = createSeedaceSessionSummary(userContent)
   sessionGenerationCount.value += 1
   sessionUpdatedAt.value = Date.now()
-  upsertCurrentSessionHistoryRecord()
 }
 
 function upsertCurrentSessionHistoryRecord() {
-  if (sessionGenerationCount.value === 0) return
+  if (sessionGenerationCount.value === 0 || messages.value.length === 0) return
   const record: SessionHistoryRecord = {
     id: sessionId.value,
     summary: sessionSummary.value || '未命名会话',
@@ -414,6 +416,18 @@ function upsertCurrentSessionHistoryRecord() {
   const index = sessionHistoryRecords.value.findIndex((item) => item.id === record.id)
   if (index >= 0) sessionHistoryRecords.value[index] = record
   else sessionHistoryRecords.value.unshift(record)
+  void persistCurrentSessionHistoryRecord(record)
+}
+
+async function persistCurrentSessionHistoryRecord(record: SessionHistoryRecord) {
+  try {
+    const saved = await saveSeedaceVideoHistory({ ...record, updatedAt: new Date(record.updatedAt || Date.now()).toISOString() })
+    const savedRecord: SessionHistoryRecord = { ...saved, updatedAt: Date.parse(saved.updatedAt) || record.updatedAt || Date.now() }
+    const index = sessionHistoryRecords.value.findIndex((item) => item.id === savedRecord.id)
+    if (index >= 0) sessionHistoryRecords.value[index] = savedRecord
+  } catch (err: unknown) {
+    submitError.value = extractApiErrorMessage(err, '视频生成历史保存失败')
+  }
 }
 
 function startNewSession() {
@@ -592,7 +606,7 @@ async function scrollMessagesToBottom() {
   if (messagesRef.value) messagesRef.value.scrollTop = messagesRef.value.scrollHeight
 }
 
-onMounted(loadAPIKeys)
+onMounted(loadInitialData)
 onBeforeUnmount(() => abortController.value?.abort())
 </script>
 

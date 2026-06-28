@@ -43,6 +43,8 @@ func RegisterUserRoutes(
 			user.POST("/auth-identities/bind/start", h.User.StartIdentityBinding)
 			user.GET("/api-keys/:id/usage/daily", h.Usage.GetMyAPIKeyDailyUsage)
 			user.GET("/platform-quotas", h.User.GetMyPlatformQuotas)
+			user.GET("/video-generations/history", h.UserVideo.ListHistory)
+			user.PUT("/video-generations/history/:session_id", h.UserVideo.UpsertHistory)
 			user.GET("/video-generations/:task_id/download", h.UserVideo.Download)
 
 			// 通知邮箱管理
