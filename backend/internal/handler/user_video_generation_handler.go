@@ -61,7 +61,11 @@ func (h *UserVideoGenerationHandler) Download(c *gin.Context) {
 		response.BadRequest(c, "Invalid task ID")
 		return
 	}
-	apiKeyID, err := strconv.ParseInt(strings.TrimSpace(c.Query("api_key_id")), 10, 64)
+	apiKeyIDValue := strings.TrimSpace(c.Query("api_key_id"))
+	if apiKeyIDValue == "" {
+		apiKeyIDValue = strings.TrimSpace(c.PostForm("api_key_id"))
+	}
+	apiKeyID, err := strconv.ParseInt(apiKeyIDValue, 10, 64)
 	if err != nil || apiKeyID <= 0 {
 		response.BadRequest(c, "Invalid API key ID")
 		return

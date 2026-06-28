@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"strings"
+
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -15,6 +17,14 @@ func RegisterUserRoutes(
 	jwtAuth middleware.JWTAuthMiddleware,
 	settingService *service.SettingService,
 ) {
+	formDownload := v1.Group("/user")
+	formDownload.Use(downloadFormBearerToken())
+	formDownload.Use(gin.HandlerFunc(jwtAuth))
+	formDownload.Use(middleware.BackendModeUserGuard(settingService))
+	{
+		formDownload.POST("/video-generations/:task_id/download", h.UserVideo.Download)
+	}
+
 	authenticated := v1.Group("")
 	authenticated.Use(gin.HandlerFunc(jwtAuth))
 	authenticated.Use(middleware.BackendModeUserGuard(settingService))
@@ -121,5 +131,16 @@ func RegisterUserRoutes(
 			monitors.GET("", h.ChannelMonitor.List)
 			monitors.GET("/:id/status", h.ChannelMonitor.GetStatus)
 		}
+	}
+}
+
+func downloadFormBearerToken() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.GetHeader("Authorization") == "" {
+			if token := strings.TrimSpace(c.PostForm("auth_token")); token != "" {
+				c.Request.Header.Set("Authorization", "Bearer "+token)
+			}
+		}
+		c.Next()
 	}
 }

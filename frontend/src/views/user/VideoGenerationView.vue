@@ -1,11 +1,6 @@
 <template>
   <AppLayout>
     <div class="mx-auto flex h-[calc(100vh-7rem)] max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
-      <div class="flex flex-col gap-1">
-        <h1 class="text-2xl font-semibold text-gray-900 dark:text-dark-50">视频生成</h1>
-        <p class="text-sm text-gray-500 dark:text-dark-300">选择 Seedance API Key 和模型参数，在右侧输入内容后提交生成视频。</p>
-      </div>
-
       <div class="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[380px_minmax(0,1fr)]">
         <aside class="min-h-0 overflow-y-auto rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-800">
           <div class="space-y-5">
@@ -98,18 +93,21 @@
                 </div>
                 <p class="mt-1 text-xs text-gray-500 dark:text-dark-300">提交后自动轮询生成结果，生成完成后只提供下载按钮。</p>
               </div>
-              <div class="relative">
+              <div class="relative flex items-center gap-2">
+                <button type="button" class="btn btn-secondary btn-sm" @click="startNewSession">
+                  <Icon name="plus" size="sm" /> 新对话
+                </button>
                 <button type="button" class="btn btn-secondary btn-sm" @click.stop="showHistoryDropdown = !showHistoryDropdown">
                   <Icon name="clock" size="sm" /> 历史记录
                 </button>
-                <div v-if="showHistoryDropdown" class="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-gray-200 bg-white p-2 shadow-lg dark:border-dark-700 dark:bg-dark-800">
+                <div v-if="showHistoryDropdown" class="absolute right-0 top-full z-20 mt-2 w-72 rounded-xl border border-gray-200 bg-white p-2 shadow-lg dark:border-dark-700 dark:bg-dark-800">
                   <div v-if="sessionHistoryRecords.length === 0" class="px-3 py-6 text-center text-sm text-gray-400 dark:text-dark-300">暂无生成记录</div>
                   <button
                     v-for="record in sessionHistoryRecords"
                     :key="record.id"
                     type="button"
                     class="w-full rounded-lg px-3 py-2 text-left transition hover:bg-gray-50 dark:hover:bg-dark-700"
-                    @click="openHistoryRecord"
+                    @click="openHistoryRecord(record)"
                   >
                     <div class="flex items-center justify-between gap-3">
                       <span class="truncate text-sm font-medium text-gray-900 dark:text-dark-50">{{ record.summary }}</span>
@@ -211,6 +209,7 @@ interface SessionHistoryRecord {
   summary: string
   generationCount: number
   updatedAt: number
+  messages: ChatMessage[]
 }
 
 const AssetList = defineComponent({
@@ -242,10 +241,11 @@ const downloadingTaskId = ref('')
 const messagesRef = ref<HTMLElement | null>(null)
 const abortController = ref<AbortController | null>(null)
 const showHistoryDropdown = ref(false)
-const sessionId = crypto.randomUUID()
+const sessionId = ref<string>(crypto.randomUUID())
 const sessionSummary = ref('')
 const sessionGenerationCount = ref(0)
 const sessionUpdatedAt = ref(0)
+const sessionHistoryRecords = ref<SessionHistoryRecord[]>([])
 
 const imageInputRef = ref<HTMLInputElement | null>(null)
 const videoInputRef = ref<HTMLInputElement | null>(null)
@@ -292,18 +292,6 @@ const generateAudioValue = computed({
     form.generateAudio = value !== 'no'
   },
 })
-const sessionHistoryRecords = computed<SessionHistoryRecord[]>(() => {
-  if (sessionGenerationCount.value === 0) return []
-  return [
-    {
-      id: sessionId,
-      summary: sessionSummary.value || '未命名会话',
-      generationCount: sessionGenerationCount.value,
-      updatedAt: sessionUpdatedAt.value,
-    },
-  ]
-})
-
 watch(
   () => form.modelOption,
   () => {
@@ -357,6 +345,7 @@ async function submitVideoGeneration() {
     status: 'generating',
   }
   messages.value.push({ id: crypto.randomUUID(), role: 'user', content: userContent }, assistantMessage)
+  upsertCurrentSessionHistoryRecord()
   prompt.value = ''
   generating.value = true
   abortController.value?.abort()
@@ -376,6 +365,7 @@ async function submitVideoGeneration() {
     assistantMessage.error = extractApiErrorMessage(err, err instanceof Error ? err.message : '视频生成失败')
   } finally {
     generating.value = false
+    upsertCurrentSessionHistoryRecord()
     await scrollMessagesToBottom()
   }
 }
@@ -409,11 +399,53 @@ function updateSessionHistory(userContent: string) {
   sessionSummary.value = createSeedaceSessionSummary(userContent)
   sessionGenerationCount.value += 1
   sessionUpdatedAt.value = Date.now()
+  upsertCurrentSessionHistoryRecord()
 }
 
-function openHistoryRecord() {
+function upsertCurrentSessionHistoryRecord() {
+  if (sessionGenerationCount.value === 0) return
+  const record: SessionHistoryRecord = {
+    id: sessionId.value,
+    summary: sessionSummary.value || '未命名会话',
+    generationCount: sessionGenerationCount.value,
+    updatedAt: sessionUpdatedAt.value,
+    messages: cloneMessages(messages.value),
+  }
+  const index = sessionHistoryRecords.value.findIndex((item) => item.id === record.id)
+  if (index >= 0) sessionHistoryRecords.value[index] = record
+  else sessionHistoryRecords.value.unshift(record)
+}
+
+function startNewSession() {
+  upsertCurrentSessionHistoryRecord()
+  abortController.value?.abort()
+  abortController.value = null
+  messages.value = []
+  prompt.value = ''
+  submitError.value = ''
+  generating.value = false
+  downloadingTaskId.value = ''
+  showHistoryDropdown.value = false
+  sessionId.value = crypto.randomUUID()
+  sessionSummary.value = ''
+  sessionGenerationCount.value = 0
+  sessionUpdatedAt.value = 0
+  void scrollMessagesToBottom()
+}
+
+function openHistoryRecord(record: SessionHistoryRecord) {
+  upsertCurrentSessionHistoryRecord()
+  sessionId.value = record.id
+  sessionSummary.value = record.summary
+  sessionGenerationCount.value = record.generationCount
+  sessionUpdatedAt.value = record.updatedAt
+  messages.value = cloneMessages(record.messages)
   showHistoryDropdown.value = false
   void scrollMessagesToBottom()
+}
+
+function cloneMessages(source: ChatMessage[]): ChatMessage[] {
+  return source.map((message) => ({ ...message }))
 }
 
 function formatHistoryTime(timestamp: number) {
@@ -421,7 +453,7 @@ function formatHistoryTime(timestamp: number) {
   return new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
-async function handleDownload(taskId: string) {
+function handleDownload(taskId: string) {
   if (!form.apiKeyId) {
     submitError.value = '请选择 API Key'
     return
@@ -429,11 +461,13 @@ async function handleDownload(taskId: string) {
   downloadingTaskId.value = taskId
   submitError.value = ''
   try {
-    await downloadSeedaceVideo(taskId, form.apiKeyId)
+    downloadSeedaceVideo(taskId, form.apiKeyId)
   } catch (err: unknown) {
     submitError.value = extractApiErrorMessage(err, err instanceof Error ? err.message : '视频下载失败')
   } finally {
-    downloadingTaskId.value = ''
+    setTimeout(() => {
+      if (downloadingTaskId.value === taskId) downloadingTaskId.value = ''
+    }, 300)
   }
 }
 

@@ -38,30 +38,40 @@ export async function pollSeedaceVideoTask(
   })
 }
 
-export async function downloadSeedaceVideo(taskId: string, apiKeyId: number): Promise<void> {
+export function downloadSeedaceVideo(taskId: string, apiKeyId: number): void {
   const token = localStorage.getItem('auth_token')
-  const response = await fetch(
-    `/api/v1/user/video-generations/${encodeURIComponent(taskId)}/download?api_key_id=${encodeURIComponent(String(apiKeyId))}`,
-    {
-      method: 'GET',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      credentials: 'include',
-    },
-  )
-  if (!response.ok) {
-    const payload = await readJSON(response)
-    throw new SeedaceVideoAPIError(response.status, extractErrorMessage(payload) || '视频下载失败', payload)
-  }
+  if (!token) throw new SeedaceVideoAPIError(401, '请先登录后再下载视频', {})
 
-  const blob = await response.blob()
-  const objectURL = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = objectURL
-  link.download = `seedance-video-${taskId}.mp4`
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  setTimeout(() => URL.revokeObjectURL(objectURL), 1000)
+  const iframeName = `seedace-video-download-${crypto.randomUUID()}`
+  const iframe = document.createElement('iframe')
+  iframe.name = iframeName
+  iframe.className = 'hidden'
+  iframe.setAttribute('aria-hidden', 'true')
+
+  const form = document.createElement('form')
+  form.method = 'POST'
+  form.action = `/api/v1/user/video-generations/${encodeURIComponent(taskId)}/download`
+  form.target = iframeName
+  form.className = 'hidden'
+
+  appendHiddenInput(form, 'api_key_id', String(apiKeyId))
+  appendHiddenInput(form, 'auth_token', token)
+
+  document.body.appendChild(iframe)
+  document.body.appendChild(form)
+  form.submit()
+  document.body.removeChild(form)
+  setTimeout(() => {
+    iframe.remove()
+  }, 60_000)
+}
+
+function appendHiddenInput(form: HTMLFormElement, name: string, value: string) {
+  const input = document.createElement('input')
+  input.type = 'hidden'
+  input.name = name
+  input.value = value
+  form.appendChild(input)
 }
 
 async function requestSeedaceVideo(
