@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
@@ -193,6 +195,55 @@ func TestSeedaceVideoServicePollFailsWhenStickyAccountUnavailable(t *testing.T) 
 	require.Nil(t, result)
 	require.ErrorContains(t, err, "upstream account is no longer available")
 	require.Empty(t, upstream.calls)
+}
+
+func TestSeedaceVideoServiceCreateRecordsUsageWhenBillingSucceeds(t *testing.T) {
+	account := seedaceAccountForTest(303, "https://seedace.example/v1", "seedace-key")
+	usageRepo := &seedaceUsageLogRepoStub{}
+	upstream := &seedaceUpstreamStub{}
+	groupID := int64(7)
+	group := &Group{ID: groupID, Platform: PlatformSeedace, RateMultiplier: 1}
+	perSecondPrice := 0.028
+	apiKey := &APIKey{ID: 22, User: &User{ID: 33}, GroupID: &groupID, Group: group}
+	svc := &SeedaceVideoService{
+		accountRepo:      &seedaceAccountRepoStub{list: []Account{account}},
+		usageLogRepo:     usageRepo,
+		usageBillingRepo: &seedaceBillingRepoStub{},
+		channelService: NewChannelService(&seedaceChannelRepoStub{
+			groupPlatforms: map[int64]string{groupID: PlatformSeedace},
+			channels: []Channel{{
+				ID:       9,
+				Status:   StatusActive,
+				GroupIDs: []int64{groupID},
+				ModelPricing: []ChannelModelPricing{{
+					Platform:        PlatformSeedace,
+					Models:          []string{"seedance-2.0"},
+					BillingMode:     BillingModePerSecond,
+					PerRequestPrice: &perSecondPrice,
+				}},
+			}},
+		}, nil, nil, nil),
+		billingCacheService: NewBillingCacheService(nil, nil, nil, nil, nil, nil, &config.Config{}, nil),
+		deferredService:     NewDeferredService(nil, nil, time.Second),
+		httpUpstream:        upstream,
+	}
+
+	result, err := svc.Create(context.Background(), SeedaceVideoCreateInput{
+		APIKey: apiKey,
+		Body:   []byte(`{"model":"seedance-2.0","duration":4}`),
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, result.StatusCode)
+	require.Equal(t, 1, usageRepo.bestEffortCalls)
+	require.NotNil(t, usageRepo.lastLog)
+	require.Equal(t, account.ID, usageRepo.lastLog.AccountID)
+	require.Equal(t, apiKey.ID, usageRepo.lastLog.APIKeyID)
+	require.Equal(t, "seedance-2.0", usageRepo.lastLog.Model)
+	require.Equal(t, 0.112, usageRepo.lastLog.TotalCost)
+	require.Equal(t, 0.112, usageRepo.lastLog.ActualCost)
+	require.NotNil(t, usageRepo.lastLog.VideoTaskID)
+	require.Equal(t, "task-create", *usageRepo.lastLog.VideoTaskID)
 }
 
 func TestSeedaceVideoServiceCreateReturnsUpstreamResultWhenBillingFails(t *testing.T) {

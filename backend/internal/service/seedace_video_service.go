@@ -358,6 +358,7 @@ func (s *SeedaceVideoService) recordCreateUsage(ctx context.Context, account *Ac
 	if err != nil {
 		return err
 	}
+	writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.seedace_video")
 	return nil
 }
 
