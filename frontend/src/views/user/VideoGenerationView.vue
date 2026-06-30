@@ -89,7 +89,7 @@
             <div class="flex items-start justify-between gap-3">
               <div>
                 <div class="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-dark-50">
-                  <Icon name="chat" size="md" /> 视频生成对话
+                  <VideoGenerationLogo class="h-9 w-9" /> 视频生成对话
                 </div>
                 <p class="mt-1 text-xs text-gray-500 dark:text-dark-300">提交后自动轮询生成结果，生成完成后只提供下载按钮。</p>
               </div>
@@ -201,6 +201,33 @@ type ChatMessage = SeedaceVideoHistoryMessage
 interface SessionHistoryRecord extends Omit<SeedaceVideoHistoryRecord, 'updatedAt'> {
   updatedAt: number
 }
+
+
+const VideoGenerationLogo = defineComponent({
+  name: 'VideoGenerationLogo',
+  setup(_, { attrs }) {
+    return () => h('svg', {
+      ...attrs,
+      viewBox: '0 0 64 64',
+      fill: 'none',
+      xmlns: 'http://www.w3.org/2000/svg',
+      'aria-hidden': 'true'
+    }, [
+      h('rect', { x: '8', y: '16', width: '38', height: '30', rx: '10', fill: '#7C3AED' }),
+      h('rect', { x: '12', y: '20', width: '30', height: '22', rx: '7', fill: '#A78BFA' }),
+      h('circle', { cx: '22', cy: '31', r: '5', fill: '#FFFFFF' }),
+      h('circle', { cx: '22', cy: '31', r: '2.2', fill: '#1F2937' }),
+      h('circle', { cx: '34', cy: '31', r: '5', fill: '#FFFFFF' }),
+      h('circle', { cx: '34', cy: '31', r: '2.2', fill: '#1F2937' }),
+      h('path', { d: 'M23 39c3.2 2.4 7.8 2.4 11 0', stroke: '#FFFFFF', 'stroke-width': '3', 'stroke-linecap': 'round' }),
+      h('path', { d: 'M46 25l10-6c1.8-1.1 4 .2 4 2.3v19.4c0 2.1-2.2 3.4-4 2.3l-10-6V25z', fill: '#F59E0B' }),
+      h('circle', { cx: '18', cy: '13', r: '5', fill: '#22C55E' }),
+      h('circle', { cx: '36', cy: '11', r: '4', fill: '#38BDF8' }),
+      h('path', { d: 'M18 16v4M36 15v5', stroke: '#4C1D95', 'stroke-width': '3', 'stroke-linecap': 'round' }),
+      h('path', { d: 'M11 48h33', stroke: '#F97316', 'stroke-width': '4', 'stroke-linecap': 'round' })
+    ])
+  }
+})
 
 const AssetList = defineComponent({
   name: 'SeedaceAssetList',

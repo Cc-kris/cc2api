@@ -47,3 +47,50 @@ func accountIDsForBatchTest(accounts []service.Account) []int64 {
 	}
 	return ids
 }
+
+func TestSelectBatchAccountTestModelUsesTextMappingModel(t *testing.T) {
+	account := service.Account{
+		ID:       10,
+		Platform: service.PlatformOpenAI,
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{
+				"gpt-image-2": "gpt-image-2",
+				"gpt-5.4":     "gpt-5.4-upstream",
+			},
+		},
+	}
+
+	require.Equal(t, "gpt-5.4", selectBatchAccountTestModel(account))
+}
+
+func TestSelectBatchAccountTestModelSkipsSpecialMediaAccounts(t *testing.T) {
+	cases := []struct {
+		name    string
+		account service.Account
+	}{
+		{
+			name: "image only mapping",
+			account: service.Account{
+				Platform: service.PlatformOpenAI,
+				Credentials: map[string]any{"model_mapping": map[string]any{
+					"gpt-image-2": "gpt-image-2",
+				}},
+			},
+		},
+		{
+			name: "seedace account",
+			account: service.Account{
+				Platform: service.PlatformSeedace,
+				Credentials: map[string]any{"model_mapping": map[string]any{
+					"seedance-2.0-720": "seedance-2.0-720",
+				}},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Empty(t, selectBatchAccountTestModel(tc.account))
+		})
+	}
+}

@@ -3,9 +3,8 @@ import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { opsAPI } from '@/api/admin/ops'
-import type { EmailNotificationConfig, AlertSeverity } from '../types'
+import type { EmailNotificationConfig } from '../types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
-import Select from '@/components/common/Select.vue'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -20,13 +19,6 @@ const alertRecipientInput = ref('')
 const reportRecipientInput = ref('')
 const alertRecipientError = ref('')
 const reportRecipientError = ref('')
-
-const severityOptions: Array<{ value: AlertSeverity | ''; label: string }> = [
-  { value: '', label: t('admin.ops.email.minSeverityAll') },
-  { value: 'critical', label: t('common.critical') },
-  { value: 'warning', label: t('common.warning') },
-  { value: 'info', label: t('common.info') }
-]
 
 async function loadConfig() {
   loading.value = true
@@ -102,14 +94,13 @@ const editorValidation = computed(() => {
   const invalidReportRecipients = draft.value.report.recipients.filter((e) => !isValidEmailAddress(e))
   if (invalidReportRecipients.length > 0) errors.push(t('admin.ops.email.validation.invalidRecipients'))
 
-  if (!isNonNegativeNumber(draft.value.alert.rate_limit_per_hour)) {
-    errors.push(t('admin.ops.email.validation.rateLimitRange'))
+  const healthScoreThreshold = draft.value.alert.health_score_threshold
+  if (!(typeof healthScoreThreshold === 'number' && Number.isFinite(healthScoreThreshold) && healthScoreThreshold >= 1 && healthScoreThreshold <= 100)) {
+    errors.push(t('admin.ops.email.validation.healthScoreThresholdRange'))
   }
-  if (
-    !isNonNegativeNumber(draft.value.alert.batching_window_seconds) ||
-    draft.value.alert.batching_window_seconds > 86400
-  ) {
-    errors.push(t('admin.ops.email.validation.batchWindowRange'))
+  const healthScoreInterval = draft.value.alert.health_score_interval_minutes
+  if (!(typeof healthScoreInterval === 'number' && Number.isFinite(healthScoreInterval) && healthScoreInterval >= 1 && healthScoreInterval <= 1440)) {
+    errors.push(t('admin.ops.email.validation.healthScoreIntervalRange'))
   }
 
   const dailyErr = validateCronField(
@@ -222,14 +213,12 @@ onMounted(() => {
             <span class="ml-1 font-medium text-gray-900 dark:text-white">{{ config.alert.recipients.length }}</span>
           </div>
           <div class="text-xs text-gray-600 dark:text-gray-300">
-            {{ t('admin.ops.email.minSeverity') }}:
-            <span class="ml-1 font-medium text-gray-900 dark:text-white">{{
-              config.alert.min_severity || t('admin.ops.email.minSeverityAll')
-            }}</span>
+            {{ t('admin.ops.email.healthScoreThreshold') }}:
+            <span class="ml-1 font-medium text-gray-900 dark:text-white">{{ config.alert.health_score_threshold }}</span>
           </div>
           <div class="text-xs text-gray-600 dark:text-gray-300">
-            {{ t('admin.ops.email.rateLimitPerHour') }}:
-            <span class="ml-1 font-medium text-gray-900 dark:text-white">{{ config.alert.rate_limit_per_hour }}</span>
+            {{ t('admin.ops.email.healthScoreIntervalMinutes') }}:
+            <span class="ml-1 font-medium text-gray-900 dark:text-white">{{ config.alert.health_score_interval_minutes }}</span>
           </div>
         </div>
       </div>
@@ -275,8 +264,13 @@ onMounted(() => {
           </div>
 
           <div>
-            <div class="mb-1 text-xs font-medium text-gray-600 dark:text-gray-300">{{ t('admin.ops.email.minSeverity') }}</div>
-            <Select v-model="draft.alert.min_severity" :options="severityOptions" />
+            <div class="mb-1 text-xs font-medium text-gray-600 dark:text-gray-300">{{ t('admin.ops.email.healthScoreThreshold') }}</div>
+            <input v-model.number="draft.alert.health_score_threshold" type="number" min="1" max="100" step="1" class="input" />
+          </div>
+
+          <div>
+            <div class="mb-1 text-xs font-medium text-gray-600 dark:text-gray-300">{{ t('admin.ops.email.healthScoreIntervalMinutes') }}</div>
+            <input v-model.number="draft.alert.health_score_interval_minutes" type="number" min="1" max="1440" step="1" class="input" />
           </div>
 
           <div class="md:col-span-2">
@@ -313,15 +307,6 @@ onMounted(() => {
             <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.ops.email.recipientsHint') }}</div>
           </div>
 
-          <div>
-            <div class="mb-1 text-xs font-medium text-gray-600 dark:text-gray-300">{{ t('admin.ops.email.rateLimitPerHour') }}</div>
-            <input v-model.number="draft.alert.rate_limit_per_hour" type="number" min="0" max="100000" class="input" />
-          </div>
-
-          <div>
-            <div class="mb-1 text-xs font-medium text-gray-600 dark:text-gray-300">{{ t('admin.ops.email.batchWindowSeconds') }}</div>
-            <input v-model.number="draft.alert.batching_window_seconds" type="number" min="0" max="86400" class="input" />
-          </div>
 
           <div>
             <div class="mb-1 text-xs font-medium text-gray-600 dark:text-gray-300">{{ t('admin.ops.email.includeResolved') }}</div>

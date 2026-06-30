@@ -8,12 +8,14 @@ type OpsEmailNotificationConfig struct {
 }
 
 type OpsEmailAlertConfig struct {
-	Enabled               bool     `json:"enabled"`
-	Recipients            []string `json:"recipients"`
-	MinSeverity           string   `json:"min_severity"`
-	RateLimitPerHour      int      `json:"rate_limit_per_hour"`
-	BatchingWindowSeconds int      `json:"batching_window_seconds"`
-	IncludeResolvedAlerts bool     `json:"include_resolved_alerts"`
+	Enabled                    bool     `json:"enabled"`
+	Recipients                 []string `json:"recipients"`
+	MinSeverity                string   `json:"min_severity"`
+	RateLimitPerHour           int      `json:"rate_limit_per_hour"`
+	BatchingWindowSeconds      int      `json:"batching_window_seconds"`
+	HealthScoreThreshold       int      `json:"health_score_threshold"`
+	HealthScoreIntervalMinutes int      `json:"health_score_interval_minutes"`
+	IncludeResolvedAlerts      bool     `json:"include_resolved_alerts"`
 }
 
 type OpsEmailReportConfig struct {

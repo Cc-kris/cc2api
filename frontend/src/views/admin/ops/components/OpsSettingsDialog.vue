@@ -7,7 +7,7 @@ import { opsAPI, type AlertRule, type OpsAIAnalysisConfig } from '@/api/admin/op
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
 import Toggle from '@/components/common/Toggle.vue'
-import type { OpsAlertRuntimeSettings, EmailNotificationConfig, AlertSeverity, OpsAdvancedSettings, OpsMetricThresholds } from '../types'
+import type { OpsAlertRuntimeSettings, EmailNotificationConfig, OpsAdvancedSettings, OpsMetricThresholds } from '../types'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -125,14 +125,6 @@ watch(() => props.show, (show) => {
 const alertRecipientInput = ref('')
 const reportRecipientInput = ref('')
 
-// 严重级别选项
-const severityOptions: Array<{ value: AlertSeverity | ''; label: string }> = [
-  { value: '', label: t('admin.ops.email.minSeverityAll') },
-  { value: 'critical', label: 'Critical（仅 P0）' },
-  { value: 'warning', label: 'Warning（P0 + P1）' },
-  { value: 'info', label: 'Info（P0 + P1 + P2+）' }
-]
-
 // 验证邮箱
 function isValidEmailAddress(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
@@ -233,6 +225,8 @@ function severityFromTriggerLevel(level: AlertTriggerLevel) {
 
 function buildHealthScoreAlertPayload(): AlertRule {
   const channels = normalizeNotificationChannels(healthScoreAlert.value.notification_channels)
+  const threshold = Number(emailConfig.value?.alert.health_score_threshold ?? healthScoreAlert.value.threshold ?? 60)
+  const intervalMinutes = Number(emailConfig.value?.alert.health_score_interval_minutes ?? healthScoreAlert.value.silence_minutes ?? 10)
   return {
     id: healthScoreAlert.value.id,
     name: '健康分过低告警',
@@ -240,11 +234,11 @@ function buildHealthScoreAlertPayload(): AlertRule {
     enabled: healthScoreAlert.value.enabled,
     metric_type: 'health_score',
     operator: '<',
-    threshold: Number(healthScoreAlert.value.threshold || 0),
+    threshold,
     window_minutes: 1,
-    sustained_minutes: 1,
+    sustained_minutes: intervalMinutes,
     severity: severityFromTriggerLevel(healthScoreAlert.value.trigger_level),
-    cooldown_minutes: Number(healthScoreAlert.value.silence_minutes || 0),
+    cooldown_minutes: intervalMinutes,
     notify_email: channels.includes('email'),
     filters: { default_rule_key: 'settings_health_score_low' },
     rule_version: 'v2',
@@ -258,7 +252,7 @@ function buildHealthScoreAlertPayload(): AlertRule {
     min_recovered_fluctuations: 0,
     auto_ai_analysis: healthScoreAlert.value.auto_ai_analysis,
     notification_channels: channels,
-    silence_minutes: Number(healthScoreAlert.value.silence_minutes || 0),
+    silence_minutes: intervalMinutes,
     migration_state: 'normal'
   }
 }
@@ -298,20 +292,20 @@ const validation = computed(() => {
     if (emailConfig.value.alert.enabled && emailConfig.value.alert.recipients.length === 0 && !pendingAlert) {
       errors.push(t('admin.ops.email.validation.alertRecipientsRequired'))
     }
+    const healthScoreThreshold = Number(emailConfig.value.alert.health_score_threshold)
+    if (!Number.isFinite(healthScoreThreshold) || healthScoreThreshold < 1 || healthScoreThreshold > 100) {
+      errors.push(t('admin.ops.email.validation.healthScoreThresholdRange'))
+    }
+    const healthScoreInterval = Number(emailConfig.value.alert.health_score_interval_minutes)
+    if (!Number.isInteger(healthScoreInterval) || healthScoreInterval < 1 || healthScoreInterval > 1440) {
+      errors.push(t('admin.ops.email.validation.healthScoreIntervalRange'))
+    }
     if (emailConfig.value.report.enabled && emailConfig.value.report.recipients.length === 0 && !pendingReport) {
       errors.push(t('admin.ops.email.validation.reportRecipientsRequired'))
     }
   }
 
   if (healthScoreAlert.value) {
-    const threshold = Number(healthScoreAlert.value.threshold)
-    if (!Number.isFinite(threshold) || threshold < 0 || threshold > 100) {
-      errors.push('健康分告警阈值必须在 0～100 之间')
-    }
-    const silenceMinutes = Number(healthScoreAlert.value.silence_minutes)
-    if (!Number.isInteger(silenceMinutes) || silenceMinutes < 0 || silenceMinutes > 1440) {
-      errors.push('告警静默时间必须是 0～1440 的整数分钟')
-    }
     if (healthScoreAlert.value.enabled && healthScoreAlert.value.notification_channels.includes('email') && emailConfig.value?.alert.enabled && emailConfig.value.alert.recipients.length === 0 && !getPendingRecipientInput('alert')) {
       errors.push('健康分邮件告警需要填写预警收件人')
     }
@@ -543,9 +537,15 @@ async function saveAllSettings() {
             </p>
           </div>
 
-          <div v-if="emailConfig.alert.enabled">
-            <label class="input-label">{{ t('admin.ops.settings.minSeverity') }}</label>
-            <Select v-model="emailConfig.alert.min_severity" :options="severityOptions" />
+          <div v-if="emailConfig.alert.enabled" class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <label class="block text-sm text-gray-700 dark:text-gray-300">
+              {{ t('admin.ops.settings.healthScoreThreshold') }} <span class="text-red-500">*</span>
+              <input v-model.number="emailConfig.alert.health_score_threshold" type="number" min="1" max="100" step="1" class="input mt-1 w-full" />
+            </label>
+            <label class="block text-sm text-gray-700 dark:text-gray-300">
+              {{ t('admin.ops.settings.healthScoreIntervalMinutes') }} <span class="text-red-500">*</span>
+              <input v-model.number="emailConfig.alert.health_score_interval_minutes" type="number" min="1" max="1440" step="1" class="input mt-1 w-full" />
+            </label>
           </div>
         </div>
       </div>
@@ -624,25 +624,17 @@ async function saveAllSettings() {
           <div class="flex items-center justify-between gap-3">
             <div>
               <div class="font-medium text-gray-900 dark:text-white">健康分过低告警</div>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">健康分低于阈值时触发；若通知方式包含邮件，会发送到上方预警收件人。</p>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">健康分低于上方预警健康分值时触发；若通知方式包含邮件，会按上方提醒间隔发送到预警收件人。</p>
             </div>
             <Toggle v-model="healthScoreAlert.enabled" />
           </div>
 
-          <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-4">
-            <label class="block text-sm text-gray-700 dark:text-gray-300">
-              健康分低于 <span class="text-red-500">*</span>
-              <input v-model.number="healthScoreAlert.threshold" type="number" min="0" max="100" step="1" class="input mt-1 w-full" />
-            </label>
+          <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
             <label class="block text-sm text-gray-700 dark:text-gray-300">
               触发级别 <span class="text-red-500">*</span>
               <Select v-model="healthScoreAlert.trigger_level" class="mt-1" :options="triggerLevelOptions" />
             </label>
-            <label class="block text-sm text-gray-700 dark:text-gray-300">
-              静默分钟 <span class="text-red-500">*</span>
-              <input v-model.number="healthScoreAlert.silence_minutes" type="number" min="0" max="1440" step="1" class="input mt-1 w-full" />
-            </label>
-            <div class="flex items-end justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2 dark:border-dark-600">
+            <div class="flex items-end justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2 dark:border-dark-600 md:col-span-2">
               <span class="text-sm text-gray-700 dark:text-gray-300">自动 AI 分析</span>
               <Toggle v-model="healthScoreAlert.auto_ai_analysis" />
             </div>
@@ -673,7 +665,7 @@ async function saveAllSettings() {
           <p class="text-xs text-gray-500 dark:text-gray-400">这些阈值只影响运维看板颜色和提示，不参与新版告警规则触发。</p>
           <div>
             <label class="input-label">{{ t('admin.ops.settings.slaMinPercent') }}</label>
-            <input v-model.number="metricThresholds.sla_percent_min" type="number" min="0" max="100" step="0.1" class="input" />
+            <input v-model.number="metricThresholds.sla_percent_min" type="number" min="1" max="100" step="0.1" class="input" />
             <p class="mt-1 text-xs text-gray-500">{{ t('admin.ops.settings.slaMinPercentHint') }}</p>
           </div>
           <div>
@@ -683,12 +675,12 @@ async function saveAllSettings() {
           </div>
           <div>
             <label class="input-label">{{ t('admin.ops.settings.requestErrorRateMaxPercent') }}</label>
-            <input v-model.number="metricThresholds.request_error_rate_percent_max" type="number" min="0" max="100" step="0.1" class="input" />
+            <input v-model.number="metricThresholds.request_error_rate_percent_max" type="number" min="1" max="100" step="0.1" class="input" />
             <p class="mt-1 text-xs text-gray-500">{{ t('admin.ops.settings.requestErrorRateMaxPercentHint') }}</p>
           </div>
           <div>
             <label class="input-label">{{ t('admin.ops.settings.upstreamErrorRateMaxPercent') }}</label>
-            <input v-model.number="metricThresholds.upstream_error_rate_percent_max" type="number" min="0" max="100" step="0.1" class="input" />
+            <input v-model.number="metricThresholds.upstream_error_rate_percent_max" type="number" min="1" max="100" step="0.1" class="input" />
             <p class="mt-1 text-xs text-gray-500">{{ t('admin.ops.settings.upstreamErrorRateMaxPercentHint') }}</p>
           </div>
         </div>

@@ -819,7 +819,8 @@ func (h *AccountHandler) BatchTestActive(c *gin.Context) {
 func (h *AccountHandler) runBatchAccountTestItem(requestCtx context.Context, acc service.Account) BatchAccountTestItem {
 	started := time.Now()
 	testCtx, cancel := newBatchAccountTestContext(requestCtx)
-	result, testErr := h.accountTestService.RunTestBackground(testCtx, acc.ID, "")
+	testModelID := selectBatchAccountTestModel(acc)
+	result, testErr := h.accountTestService.RunTestBackground(testCtx, acc.ID, testModelID)
 	cancel()
 	item := BatchAccountTestItem{AccountID: acc.ID, Status: "pass", LatencyMs: time.Since(started).Milliseconds()}
 	if result != nil && result.LatencyMs > 0 {
@@ -840,6 +841,41 @@ func (h *AccountHandler) runBatchAccountTestItem(requestCtx context.Context, acc
 
 func newBatchAccountTestContext(requestCtx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(requestCtx), 90*time.Second)
+}
+
+func selectBatchAccountTestModel(account service.Account) string {
+	if account.Platform == service.PlatformSeedace || account.IsSeedace() {
+		return ""
+	}
+	mapping := account.GetModelMapping()
+	if len(mapping) == 0 {
+		return ""
+	}
+	models := make([]string, 0, len(mapping))
+	for model := range mapping {
+		model = strings.TrimSpace(model)
+		if model == "" || isBatchAccountTestSpecialMediaModel(model) {
+			continue
+		}
+		models = append(models, model)
+	}
+	if len(models) == 0 {
+		return ""
+	}
+	sort.Strings(models)
+	return models[0]
+}
+
+func isBatchAccountTestSpecialMediaModel(model string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(model))
+	if normalized == "" {
+		return false
+	}
+	return strings.HasPrefix(normalized, "gpt-image-") ||
+		strings.Contains(normalized, "image") ||
+		strings.Contains(normalized, "seedance") ||
+		strings.Contains(normalized, "seedace") ||
+		strings.Contains(normalized, "video")
 }
 
 func filterBatchTestEligibleAccounts(accounts []service.Account) []service.Account {

@@ -977,6 +977,8 @@ export interface EmailNotificationConfig {
     min_severity: AlertSeverity | ''
     rate_limit_per_hour: number
     batching_window_seconds: number
+    health_score_threshold: number
+    health_score_interval_minutes: number
     include_resolved_alerts: boolean
   }
   report: {

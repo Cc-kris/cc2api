@@ -150,6 +150,20 @@ func (s *OpsAlertEvaluatorService) getInterval() time.Duration {
 	return time.Duration(cfg.EvaluationIntervalSeconds) * time.Second
 }
 
+func applyHealthScoreEmailAlertConfig(rule *OpsAlertRule, cfg *OpsEmailAlertConfig) {
+	if rule == nil || cfg == nil || strings.TrimSpace(rule.MetricType) != "health_score" {
+		return
+	}
+	if cfg.HealthScoreThreshold > 0 && cfg.HealthScoreThreshold <= 100 {
+		rule.Threshold = float64(cfg.HealthScoreThreshold)
+	}
+	if cfg.HealthScoreIntervalMinutes > 0 {
+		rule.SustainedMinutes = cfg.HealthScoreIntervalMinutes
+		rule.CooldownMinutes = cfg.HealthScoreIntervalMinutes
+		rule.SilenceMinutes = cfg.HealthScoreIntervalMinutes
+	}
+}
+
 func (s *OpsAlertEvaluatorService) evaluateOnce(interval time.Duration) {
 	if s == nil || s.opsRepo == nil {
 		return
@@ -206,6 +220,13 @@ func (s *OpsAlertEvaluatorService) evaluateOnce(interval time.Duration) {
 
 	systemMetrics, _ := s.opsRepo.GetLatestSystemMetrics(ctx, 1)
 
+	var emailAlertCfg *OpsEmailAlertConfig
+	if s.opsService != nil {
+		if emailCfg, err := s.opsService.GetEmailNotificationConfig(ctx); err == nil && emailCfg != nil {
+			emailAlertCfg = &emailCfg.Alert
+		}
+	}
+
 	// Cleanup stale state for removed rules.
 	s.pruneRuleStates(rules)
 
@@ -237,6 +258,8 @@ func (s *OpsAlertEvaluatorService) evaluateOnce(interval time.Duration) {
 			continue
 		}
 		rulesEvaluated++
+
+		applyHealthScoreEmailAlertConfig(rule, emailAlertCfg)
 
 		breachedNow := compareMetric(metricValue, rule.Operator, rule.Threshold)
 		required := requiredSustainedBreaches(rule.SustainedMinutes, interval)
@@ -959,8 +982,11 @@ func (s *OpsAlertEvaluatorService) maybeSendAlertEmail(ctx context.Context, runt
 	if len(recipients) == 0 {
 		return false
 	}
-	if !shouldSendOpsAlertEmailByMinSeverity(strings.TrimSpace(emailCfg.Alert.MinSeverity), strings.TrimSpace(rule.Severity)) {
+	if !shouldSendOpsAlertEmailByHealthScore(rule, event, emailCfg.Alert.HealthScoreThreshold) {
 		return false
+	}
+	if emailCfg.Alert.HealthScoreIntervalMinutes > 0 && rule.CooldownMinutes < emailCfg.Alert.HealthScoreIntervalMinutes {
+		rule.CooldownMinutes = emailCfg.Alert.HealthScoreIntervalMinutes
 	}
 
 	if runtimeCfg != nil && runtimeCfg.Silencing.Enabled {
@@ -1106,39 +1132,14 @@ func buildOpsAlertEmailBody(rule *OpsAlertRule, event *OpsAlertEvent) string {
 	)
 }
 
-func shouldSendOpsAlertEmailByMinSeverity(minSeverity string, ruleSeverity string) bool {
-	minSeverity = strings.ToLower(strings.TrimSpace(minSeverity))
-	if minSeverity == "" {
-		return true
+func shouldSendOpsAlertEmailByHealthScore(rule *OpsAlertRule, event *OpsAlertEvent, threshold int) bool {
+	if rule == nil || event == nil || strings.TrimSpace(rule.MetricType) != "health_score" || event.MetricValue == nil {
+		return false
 	}
-
-	eventLevel := opsEmailSeverityForOps(ruleSeverity)
-	minLevel := strings.ToLower(minSeverity)
-
-	rank := func(level string) int {
-		switch level {
-		case "critical":
-			return 3
-		case "warning":
-			return 2
-		case "info":
-			return 1
-		default:
-			return 0
-		}
+	if threshold <= 0 {
+		threshold = 60
 	}
-	return rank(eventLevel) >= rank(minLevel)
-}
-
-func opsEmailSeverityForOps(severity string) string {
-	switch strings.ToUpper(strings.TrimSpace(severity)) {
-	case "P0":
-		return "critical"
-	case "P1":
-		return "warning"
-	default:
-		return "info"
-	}
+	return *event.MetricValue < float64(threshold)
 }
 
 func isOpsAlertSilenced(now time.Time, rule *OpsAlertRule, event *OpsAlertEvent, silencing OpsAlertSilencingSettings) bool {

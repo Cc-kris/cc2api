@@ -123,6 +123,8 @@ function emailConfig() {
       min_severity: '',
       rate_limit_per_hour: 0,
       batching_window_seconds: 0,
+      health_score_threshold: 60,
+      health_score_interval_minutes: 10,
       include_resolved_alerts: false,
     },
     report: {

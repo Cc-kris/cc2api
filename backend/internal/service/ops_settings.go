@@ -88,6 +88,8 @@ func (s *OpsService) UpdateEmailNotificationConfig(ctx context.Context, req *Ops
 		cfg.Alert.MinSeverity = strings.TrimSpace(req.Alert.MinSeverity)
 		cfg.Alert.RateLimitPerHour = req.Alert.RateLimitPerHour
 		cfg.Alert.BatchingWindowSeconds = req.Alert.BatchingWindowSeconds
+		cfg.Alert.HealthScoreThreshold = req.Alert.HealthScoreThreshold
+		cfg.Alert.HealthScoreIntervalMinutes = req.Alert.HealthScoreIntervalMinutes
 		cfg.Alert.IncludeResolvedAlerts = req.Alert.IncludeResolvedAlerts
 	}
 
@@ -108,11 +110,11 @@ func (s *OpsService) UpdateEmailNotificationConfig(ctx context.Context, req *Ops
 		cfg.Report.AccountHealthErrorRateThreshold = req.Report.AccountHealthErrorRateThreshold
 	}
 
+	normalizeOpsEmailNotificationConfig(cfg)
 	if err := validateOpsEmailNotificationConfig(cfg); err != nil {
 		return nil, err
 	}
 
-	normalizeOpsEmailNotificationConfig(cfg)
 	raw, err := json.Marshal(cfg)
 	if err != nil {
 		return nil, err
@@ -126,12 +128,14 @@ func (s *OpsService) UpdateEmailNotificationConfig(ctx context.Context, req *Ops
 func defaultOpsEmailNotificationConfig() *OpsEmailNotificationConfig {
 	return &OpsEmailNotificationConfig{
 		Alert: OpsEmailAlertConfig{
-			Enabled:               true,
-			Recipients:            []string{},
-			MinSeverity:           "",
-			RateLimitPerHour:      0,
-			BatchingWindowSeconds: 0,
-			IncludeResolvedAlerts: false,
+			Enabled:                    true,
+			Recipients:                 []string{},
+			MinSeverity:                "",
+			RateLimitPerHour:           0,
+			BatchingWindowSeconds:      0,
+			HealthScoreThreshold:       60,
+			HealthScoreIntervalMinutes: 10,
+			IncludeResolvedAlerts:      false,
 		},
 		Report: OpsEmailReportConfig{
 			Enabled:                         false,
@@ -162,6 +166,12 @@ func normalizeOpsEmailNotificationConfig(cfg *OpsEmailNotificationConfig) {
 	}
 
 	cfg.Alert.MinSeverity = strings.TrimSpace(cfg.Alert.MinSeverity)
+	if cfg.Alert.HealthScoreThreshold <= 0 {
+		cfg.Alert.HealthScoreThreshold = 60
+	}
+	if cfg.Alert.HealthScoreIntervalMinutes <= 0 {
+		cfg.Alert.HealthScoreIntervalMinutes = 10
+	}
 	cfg.Report.DailySummarySchedule = strings.TrimSpace(cfg.Report.DailySummarySchedule)
 	cfg.Report.WeeklySummarySchedule = strings.TrimSpace(cfg.Report.WeeklySummarySchedule)
 	cfg.Report.ErrorDigestSchedule = strings.TrimSpace(cfg.Report.ErrorDigestSchedule)
@@ -193,10 +203,11 @@ func validateOpsEmailNotificationConfig(cfg *OpsEmailNotificationConfig) error {
 	if cfg.Alert.BatchingWindowSeconds < 0 {
 		return errors.New("alert.batching_window_seconds must be >= 0")
 	}
-	switch strings.TrimSpace(cfg.Alert.MinSeverity) {
-	case "", "critical", "warning", "info":
-	default:
-		return errors.New("alert.min_severity must be one of: critical, warning, info, or empty")
+	if cfg.Alert.HealthScoreThreshold < 1 || cfg.Alert.HealthScoreThreshold > 100 {
+		return errors.New("alert.health_score_threshold must be between 1 and 100")
+	}
+	if cfg.Alert.HealthScoreIntervalMinutes < 1 || cfg.Alert.HealthScoreIntervalMinutes > 1440 {
+		return errors.New("alert.health_score_interval_minutes must be between 1 and 1440")
 	}
 
 	if cfg.Report.ErrorDigestMinCount < 0 {
