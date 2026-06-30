@@ -201,7 +201,21 @@ func (e *EasyPay) resolveURLs(req payment.CreatePaymentRequest) (string, string)
 	if returnURL == "" {
 		returnURL = e.config["returnUrl"]
 	}
-	return notifyURL, returnURL
+	return notifyURL, stripURLQueryAndFragment(returnURL)
+}
+
+func stripURLQueryAndFragment(rawURL string) string {
+	trimmed := strings.TrimSpace(rawURL)
+	if trimmed == "" {
+		return ""
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return trimmed
+	}
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
 }
 
 func (e *EasyPay) QueryOrder(ctx context.Context, tradeNo string) (*payment.QueryOrderResponse, error) {
@@ -209,15 +223,16 @@ func (e *EasyPay) QueryOrder(ctx context.Context, tradeNo string) (*payment.Quer
 		"act": "order", "pid": e.config["pid"],
 		"key": e.config["pkey"], "out_trade_no": tradeNo,
 	}
-	body, err := e.post(ctx, e.apiBase()+"/api.php", params)
+	body, err := e.get(ctx, e.apiBase()+"/api.php", params)
 	if err != nil {
 		return nil, fmt.Errorf("easypay query: %w", err)
 	}
 	var resp struct {
-		Code   int    `json:"code"`
-		Msg    string `json:"msg"`
-		Status int    `json:"status"`
-		Money  string `json:"money"`
+		Code    int    `json:"code"`
+		Msg     string `json:"msg"`
+		Status  int    `json:"status"`
+		Money   string `json:"money"`
+		TradeNo string `json:"trade_no"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, fmt.Errorf("easypay parse query: %w", err)
@@ -227,8 +242,12 @@ func (e *EasyPay) QueryOrder(ctx context.Context, tradeNo string) (*payment.Quer
 		status = payment.ProviderStatusPaid
 	}
 	amount, _ := strconv.ParseFloat(resp.Money, 64)
+	resultTradeNo := strings.TrimSpace(resp.TradeNo)
+	if resultTradeNo == "" {
+		resultTradeNo = tradeNo
+	}
 	return &payment.QueryOrderResponse{
-		TradeNo:  tradeNo,
+		TradeNo:  resultTradeNo,
 		Status:   status,
 		Amount:   amount,
 		Metadata: e.MerchantIdentityMetadata(),
@@ -407,6 +426,37 @@ func (e *EasyPay) resolveCID(paymentType string) string {
 		return v
 	}
 	return e.config["cid"]
+}
+
+func (e *EasyPay) get(ctx context.Context, endpoint string, params map[string]string) ([]byte, error) {
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	query := parsed.Query()
+	for k, v := range params {
+		query.Set(k, v)
+	}
+	parsed.RawQuery = query.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	client := e.httpClient
+	if client == nil {
+		client = &http.Client{Timeout: easypayHTTPTimeout}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxEasypayResponseSize))
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
 }
 
 func (e *EasyPay) post(ctx context.Context, endpoint string, params map[string]string) ([]byte, error) {

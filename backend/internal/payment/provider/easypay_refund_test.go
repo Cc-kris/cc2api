@@ -194,3 +194,76 @@ func newTestEasyPay(t *testing.T, apiBase string) *EasyPay {
 	}
 	return provider
 }
+
+func TestEasyPayQueryOrderUsesGET(t *testing.T) {
+	t.Parallel()
+
+	var gotMethod string
+	var gotPath string
+	var gotQuery url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		gotQuery = r.URL.Query()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":1,"msg":"查询订单号成功！","status":1,"money":"10.00","trade_no":"trade-123"}`))
+	}))
+	defer server.Close()
+
+	provider := newTestEasyPay(t, server.URL+"/submit.php")
+	resp, err := provider.QueryOrder(context.Background(), "out-456")
+	if err != nil {
+		t.Fatalf("QueryOrder returned error: %v", err)
+	}
+	if resp == nil || resp.Status != payment.ProviderStatusPaid || resp.Amount != 10.00 || resp.TradeNo != "trade-123" {
+		t.Fatalf("QueryOrder response = %+v, want paid amount 10 with upstream trade number", resp)
+	}
+	if gotMethod != http.MethodGet {
+		t.Fatalf("query method = %q, want GET", gotMethod)
+	}
+	if gotPath != "/api.php" {
+		t.Fatalf("query path = %q, want /api.php", gotPath)
+	}
+	for key, want := range map[string]string{
+		"act":          "order",
+		"pid":          "pid-1",
+		"key":          "pkey-1",
+		"out_trade_no": "out-456",
+	} {
+		if got := gotQuery.Get(key); got != want {
+			t.Fatalf("query[%s] = %q, want %q (query=%v)", key, got, want, gotQuery)
+		}
+	}
+}
+
+func TestEasyPayCreatePaymentStripsReturnURLQuery(t *testing.T) {
+	t.Parallel()
+
+	var gotForm url.Values
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("ParseForm: %v", err)
+		}
+		gotForm = r.PostForm
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":1,"msg":"ok","trade_no":"trade-123","payurl":"https://pay.example/checkout"}`))
+	}))
+	defer server.Close()
+
+	provider := newTestEasyPay(t, server.URL+"/mapi.php")
+	_, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
+		OrderID:     "out-456",
+		Amount:      "10.00",
+		PaymentType: "alipay",
+		Subject:     "AI咨询 10.00 CNY",
+		NotifyURL:   "https://app.example.com/api/v1/payment/webhook/easypay",
+		ReturnURL:   "https://app.example.com/payment/result?order_id=2&out_trade_no=out-456#done",
+		ClientIP:    "127.0.0.1",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment returned error: %v", err)
+	}
+	if got := gotForm.Get("return_url"); got != "https://app.example.com/payment/result" {
+		t.Fatalf("return_url = %q, want bare result URL", got)
+	}
+}
