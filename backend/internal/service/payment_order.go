@@ -776,6 +776,12 @@ func (s *PaymentService) GetOrder(ctx context.Context, orderID, userID int64) (*
 	if o.UserID != userID {
 		return nil, infraerrors.Forbidden("FORBIDDEN", "no permission for this order")
 	}
+	if o.Status == OrderStatusPending && s.reconcilePaid(ctx, o) == checkPaidResultAlreadyPaid {
+		o, err = s.entClient.PaymentOrder.Get(ctx, orderID)
+		if err != nil {
+			return nil, fmt.Errorf("reload order: %w", err)
+		}
+	}
 	return o, nil
 }
 
