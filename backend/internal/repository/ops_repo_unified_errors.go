@@ -321,6 +321,7 @@ func buildUnifiedErrorClassifiedWhere(filter *service.OpsUnifiedErrorListFilter,
 func unifiedErrorCategorySQL() string {
 	return `CASE
       WHEN text_blob LIKE '%request body is incomplete%' OR text_blob LIKE '%incomplete_body%' OR (LOWER(error_phase) = 'request' AND text_blob LIKE '%unexpected eof%') OR text_blob LIKE '%context canceled%' OR text_blob LIKE '%client canceled%' OR text_blob LIKE '%request canceled%' OR text_blob LIKE '%cancelled%' OR text_blob LIKE '%broken pipe%' OR text_blob LIKE '%connection reset%' OR text_blob LIKE '%client disconnected%' THEN 'client'
+      WHEN ` + unifiedSQLClientDefaultModelRoutingFailureExpr() + ` THEN 'client'
       WHEN text_blob LIKE '%no available accounts%' OR text_blob LIKE '%no available account%' OR text_blob LIKE '%account pool%' OR text_blob LIKE '%账号池%' OR text_blob LIKE '%账号不可用%' OR text_blob LIKE '%无可用账号%' OR text_blob LIKE '%account scheduler%' OR text_blob LIKE '%scheduling account%' THEN 'account_pool'
       WHEN (NOT ` + unifiedSQLHasUpstreamEvidenceExpr() + `) AND (text_blob LIKE '%group_disabled%' OR text_blob LIKE '%group disabled%' OR text_blob LIKE '%group inactive%' OR text_blob LIKE '%group unavailable%' OR text_blob LIKE '%group not available%' OR text_blob LIKE '%所属分组%' OR text_blob LIKE '%分组已停用%' OR text_blob LIKE '%分组不可用%' OR text_blob LIKE '%分组未启用%' OR text_blob LIKE '%分组已禁用%' OR text_blob LIKE '%subscription_not_found%' OR text_blob LIKE '%subscription_invalid%' OR text_blob LIKE '%subscription expired%' OR text_blob LIKE '%no active subscription%' OR text_blob LIKE '%订阅不存在%' OR text_blob LIKE '%订阅无效%' OR text_blob LIKE '%订阅已过期%') THEN 'client'
       WHEN ` + unifiedSQLClientSideExpr() + ` THEN 'client'
@@ -338,6 +339,7 @@ func unifiedErrorCategorySQL() string {
 func unifiedErrorSubcategorySQL() string {
 	return `CASE
       WHEN text_blob LIKE '%request body is incomplete%' OR text_blob LIKE '%incomplete_body%' OR (LOWER(error_phase) = 'request' AND text_blob LIKE '%unexpected eof%') OR text_blob LIKE '%context canceled%' OR text_blob LIKE '%client canceled%' OR text_blob LIKE '%request canceled%' OR text_blob LIKE '%cancelled%' OR text_blob LIKE '%broken pipe%' OR text_blob LIKE '%connection reset%' OR text_blob LIKE '%client disconnected%' THEN 'client_disconnect_error'
+      WHEN ` + unifiedSQLClientDefaultModelRoutingFailureExpr() + ` THEN 'client_model_error'
       WHEN text_blob LIKE '%no available accounts%' OR text_blob LIKE '%no available account%' OR text_blob LIKE '%account pool%' OR text_blob LIKE '%账号池%' OR text_blob LIKE '%账号不可用%' OR text_blob LIKE '%无可用账号%' OR text_blob LIKE '%account scheduler%' OR text_blob LIKE '%scheduling account%' THEN 'account_pool_empty'
       WHEN (NOT ` + unifiedSQLHasUpstreamEvidenceExpr() + `) AND (text_blob LIKE '%group_disabled%' OR text_blob LIKE '%group disabled%' OR text_blob LIKE '%group inactive%' OR text_blob LIKE '%group unavailable%' OR text_blob LIKE '%group not available%' OR text_blob LIKE '%所属分组%' OR text_blob LIKE '%分组已停用%' OR text_blob LIKE '%分组不可用%' OR text_blob LIKE '%分组未启用%' OR text_blob LIKE '%分组已禁用%') THEN 'client_group_error'
       WHEN (NOT ` + unifiedSQLHasUpstreamEvidenceExpr() + `) AND (text_blob LIKE '%subscription_not_found%' OR text_blob LIKE '%subscription_invalid%' OR text_blob LIKE '%subscription expired%' OR text_blob LIKE '%no active subscription%' OR text_blob LIKE '%订阅不存在%' OR text_blob LIKE '%订阅无效%' OR text_blob LIKE '%订阅已过期%') THEN 'client_subscription_error'
@@ -394,6 +396,10 @@ func unifiedSQLHasUpstreamEvidenceExpr() string {
 
 func unifiedSQLClientSideExpr() string {
 	return `((NOT ` + unifiedSQLHasUpstreamEvidenceExpr() + ` OR LOWER(error_owner) = 'client' OR LOWER(error_source) = 'client_request') AND (LOWER(error_owner) = 'client' OR LOWER(error_source) = 'client_request' OR LOWER(error_phase) IN ('auth','request')))`
+}
+
+func unifiedSQLClientDefaultModelRoutingFailureExpr() string {
+	return `((NOT ` + unifiedSQLHasUpstreamEvidenceExpr() + `) AND LOWER(error_phase) = 'routing' AND LOWER(error_owner) = 'platform' AND LOWER(error_source) = 'gateway' AND (LOWER(model) = 'codex-current' OR LOWER(requested_model) = 'codex-current') AND (text_blob LIKE '%service temporarily unavailable%' OR text_blob LIKE '%model is required%' OR text_blob LIKE '%missing required field model%' OR text_blob LIKE '%no available accounts%' OR text_blob LIKE '%no available account%'))`
 }
 
 func unifiedErrorSortExpr(sortBy string) string {

@@ -462,6 +462,20 @@ func NewOpenAIGatewayService(
 	return svc
 }
 
+func (s *OpenAIGatewayService) ResolveOpenAIPlatformFallbackModel(ctx context.Context) string {
+	if s == nil || s.settingService == nil {
+		return OpenAIDefaultFallbackModel()
+	}
+	if model := strings.TrimSpace(s.settingService.GetFallbackModel(ctx, PlatformOpenAI)); model != "" {
+		return model
+	}
+	return OpenAIDefaultFallbackModel()
+}
+
+func OpenAIDefaultFallbackModel() string {
+	return "gpt-4o"
+}
+
 // ResolveChannelMapping 解析渠道级模型映射（代理到 ChannelService）
 func (s *OpenAIGatewayService) ResolveChannelMapping(ctx context.Context, groupID int64, model string) ChannelMappingResult {
 	if s.channelService == nil {

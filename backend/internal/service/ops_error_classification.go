@@ -154,6 +154,9 @@ func ClassifyOpsError(input OpsErrorClassificationInput) OpsErrorClassification 
 	if containsAny(text, "context canceled", "client canceled", "request canceled", "cancelled", "broken pipe", "connection reset", "client disconnected") {
 		return clientClassification(OpsClientErrorSubcategoryDisconnect, "客户端连接中断或主动取消请求", OpsClassificationConfidenceHigh)
 	}
+	if isOpenAIClientDefaultModelRoutingFailure(input, hasUpstreamEvidence, text) {
+		return clientClassification(OpsClientErrorSubcategoryModel, "客户端未传入有效模型，平台占位模型无法直接调度上游账号", OpsClassificationConfidenceHigh)
+	}
 	if containsAny(text, "no available accounts", "no available account", "account pool", "账号池", "账号不可用", "无可用账号", "account scheduler", "scheduling account") {
 		return opsClassification(OpsErrorCategoryAccountPool, "account_pool_empty", "账号池没有可用上游账号或账号调度失败", OpsClassificationConfidenceHigh)
 	}
@@ -351,6 +354,30 @@ func isOpsClassificationClientSide(input OpsErrorClassificationInput, hasUpstrea
 
 func isSlowOpsError(input OpsErrorClassificationInput) bool {
 	return int64GreaterOrEqual(input.TimeToFirstTokenMs, 30000) || int64GreaterOrEqual(input.ResponseLatencyMs, 120000) || int64GreaterOrEqual(input.UpstreamLatencyMs, 120000)
+}
+
+func isOpenAIClientDefaultModelRoutingFailure(input OpsErrorClassificationInput, hasUpstreamEvidence bool, text string) bool {
+	if hasUpstreamEvidence {
+		return false
+	}
+	phase := strings.ToLower(strings.TrimSpace(input.ErrorPhase))
+	owner := strings.ToLower(strings.TrimSpace(input.ErrorOwner))
+	source := strings.ToLower(strings.TrimSpace(input.ErrorSource))
+	if phase != "routing" || owner != "platform" || source != "gateway" {
+		return false
+	}
+	model := strings.ToLower(strings.TrimSpace(input.Model))
+	requestedModel := strings.ToLower(strings.TrimSpace(input.RequestedModel))
+	if model != "codex-current" && requestedModel != "codex-current" {
+		return false
+	}
+	return containsAny(text,
+		"service temporarily unavailable",
+		"model is required",
+		"missing required field model",
+		"no available accounts",
+		"no available account",
+	)
 }
 
 func int64GreaterOrEqual(v *int64, threshold int64) bool {

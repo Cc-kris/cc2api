@@ -201,11 +201,34 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 
 	// 使用 gjson 只读提取字段做校验，避免完整 Unmarshal
 	modelResult := gjson.GetBytes(body, "model")
-	if !modelResult.Exists() || modelResult.Type != gjson.String || modelResult.String() == "" {
+	reqModel, validModelField := extractOpenAIRequestModel(body)
+	if !validModelField {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "model is required")
 		return
 	}
-	reqModel := modelResult.String()
+	if shouldFallbackOpenAIClientModel(reqModel) {
+		fallbackModel := ""
+		if h.gatewayService != nil {
+			fallbackModel = h.gatewayService.ResolveOpenAIPlatformFallbackModel(c.Request.Context())
+		}
+		if fallbackModel == "" {
+			fallbackModel = service.OpenAIDefaultFallbackModel()
+		}
+		updatedBody, fallbackReqModel, fallbackApplied, fallbackErr := applyOpenAIClientDefaultModelFallback(body, reqModel, fallbackModel)
+		if fallbackErr != nil {
+			h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "model is required")
+			return
+		}
+		if fallbackApplied {
+			reqLog.Info("openai.model_default_fallback_applied",
+				zap.String("requested_model", modelResult.String()),
+				zap.String("fallback_model", fallbackReqModel),
+			)
+			body = updatedBody
+			sessionHashBody = body
+			reqModel = fallbackReqModel
+		}
+	}
 
 	streamResult := gjson.GetBytes(body, "stream")
 	if streamResult.Exists() && streamResult.Type != gjson.True && streamResult.Type != gjson.False {

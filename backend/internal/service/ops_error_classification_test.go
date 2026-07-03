@@ -138,6 +138,12 @@ func TestClassifyOpsError_MajorCategories(t *testing.T) {
 			sub:      "account_pool_empty",
 		},
 		{
+			name:     "client default model routing failure",
+			input:    OpsErrorClassificationInput{StatusCode: 503, ErrorOwner: "platform", ErrorSource: "gateway", ErrorPhase: "routing", ErrorMessage: "Service temporarily unavailable", Model: "codex-current", RequestedModel: "codex-current"},
+			category: OpsErrorCategoryClient,
+			sub:      OpsClientErrorSubcategoryModel,
+		},
+		{
 			name:     "upstream rate limit",
 			input:    OpsErrorClassificationInput{StatusCode: 200, UpstreamStatusCode: &upstreamStatus429, ErrorOwner: "provider", ErrorSource: "upstream_http", UpstreamErrorMessage: "rate limit exceeded"},
 			category: OpsErrorCategoryRateLimit,
