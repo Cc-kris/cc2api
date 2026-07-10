@@ -180,6 +180,28 @@ func TestForwardAsChatCompletions_ClientDisconnectDrainsUpstreamUsage(t *testing
 	require.Equal(t, 4, result.Usage.CacheReadInputTokens)
 }
 
+func TestExtractOpenAIUsageParsesGPT56CacheWriteTokens(t *testing.T) {
+	body := []byte(`{
+		"response": {
+			"usage": {
+				"input_tokens": 300,
+				"output_tokens": 40,
+				"input_tokens_details": {
+					"cached_tokens": 50,
+					"cache_write_tokens": 70
+				}
+			}
+		}
+	}`)
+
+	usage, ok := ExtractOpenAIUsageFromJSONBytes(body)
+	require.True(t, ok)
+	require.Equal(t, 300, usage.InputTokens)
+	require.Equal(t, 40, usage.OutputTokens)
+	require.Equal(t, 70, usage.CacheCreationInputTokens)
+	require.Equal(t, 50, usage.CacheReadInputTokens)
+}
+
 func TestForwardAsChatCompletions_TerminalUsageWithoutUpstreamCloseReturns(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

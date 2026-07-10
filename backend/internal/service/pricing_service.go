@@ -798,6 +798,27 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
 		}
 	}
 
+	if strings.HasPrefix(model, "gpt-5.6-luna") {
+		if pricing, ok := s.pricingData["gpt-5.6-luna"]; ok {
+			return pricing
+		}
+	}
+	if strings.HasPrefix(model, "gpt-5.6-sol") {
+		if pricing, ok := s.pricingData["gpt-5.6-sol"]; ok {
+			return pricing
+		}
+	}
+	if strings.HasPrefix(model, "gpt-5.6-terra") {
+		if pricing, ok := s.pricingData["gpt-5.6-terra"]; ok {
+			return pricing
+		}
+	}
+	if strings.HasPrefix(model, "gpt-5.6") {
+		if pricing, ok := s.pricingData["gpt-5.6"]; ok {
+			return pricing
+		}
+	}
+
 	// GPT-5.5 回退到 GPT-5.4 定价
 	if strings.HasPrefix(model, "gpt-5.5") {
 		logger.With(zap.String("component", "service.pricing")).
