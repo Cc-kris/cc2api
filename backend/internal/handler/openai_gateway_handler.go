@@ -1366,6 +1366,13 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "invalid JSON payload")
 		return
 	}
+	if turnMetadata := strings.TrimSpace(c.GetHeader("x-codex-turn-metadata")); turnMetadata != "" {
+		firstMessage, err = service.AttachCodexTurnMetadata(firstMessage, turnMetadata)
+		if err != nil {
+			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "invalid Codex turn metadata")
+			return
+		}
+	}
 
 	reqModel := strings.TrimSpace(gjson.GetBytes(firstMessage, "model").String())
 	if reqModel == "" {

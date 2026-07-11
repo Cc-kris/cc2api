@@ -5332,8 +5332,7 @@ func normalizeCodexImageGenerationFunctionCallNamespace(data []byte) ([]byte, bo
 	setNamespace := func(path string, item gjson.Result) {
 		name := strings.TrimSpace(item.Get("name").String())
 		if strings.TrimSpace(item.Get("type").String()) != "function_call" ||
-			(name != codexImageGenToolName && name != codexImageGenNamespace+"__"+codexImageGenToolName) ||
-			strings.TrimSpace(item.Get("namespace").String()) != "" {
+			(name != codexImageGenToolName && name != codexImageGenNamespace+"__"+codexImageGenToolName) {
 			return
 		}
 		if name != codexImageGenToolName {
@@ -5342,8 +5341,33 @@ func normalizeCodexImageGenerationFunctionCallNamespace(data []byte) ([]byte, bo
 				return
 			}
 			normalized = next
+			changed = true
 		}
-		next, err := sjson.SetBytes(normalized, path+".namespace", codexImageGenNamespace)
+		if strings.TrimSpace(item.Get("namespace").String()) == "" {
+			next, err := sjson.SetBytes(normalized, path+".namespace", codexImageGenNamespace)
+			if err != nil {
+				return
+			}
+			normalized = next
+			changed = true
+		}
+		arguments := strings.TrimSpace(item.Get("arguments").String())
+		if arguments == "" || !gjson.Valid(arguments) {
+			return
+		}
+		count := gjson.Get(arguments, "num_last_images_to_include")
+		if !count.Exists() || count.Type != gjson.Number || (count.Int() >= 1 && count.Int() <= 5) {
+			return
+		}
+		normalizedCount := int64(1)
+		if count.Int() > 5 {
+			normalizedCount = 5
+		}
+		normalizedArguments, err := sjson.Set(arguments, "num_last_images_to_include", normalizedCount)
+		if err != nil {
+			return
+		}
+		next, err := sjson.SetBytes(normalized, path+".arguments", normalizedArguments)
 		if err != nil {
 			return
 		}

@@ -21,6 +21,28 @@ const (
 	OpenAICodexSystemBackgroundContextKey = "openai_codex_system_background"
 )
 
+// AttachCodexTurnMetadata copies the Codex turn metadata carried by a
+// WebSocket upgrade header into the Responses payload used by gateway routing.
+// Current Codex desktop builds send this metadata on the handshake, while the
+// image routing predicates consume the canonical client_metadata field.
+func AttachCodexTurnMetadata(body []byte, rawMetadata string) ([]byte, error) {
+	metadata := strings.TrimSpace(rawMetadata)
+	if metadata == "" {
+		return body, nil
+	}
+	var reqBody map[string]any
+	if err := json.Unmarshal(body, &reqBody); err != nil {
+		return body, err
+	}
+	clientMetadata, _ := reqBody["client_metadata"].(map[string]any)
+	if clientMetadata == nil {
+		clientMetadata = make(map[string]any)
+	}
+	clientMetadata["x-codex-turn-metadata"] = metadata
+	reqBody["client_metadata"] = clientMetadata
+	return json.Marshal(reqBody)
+}
+
 // HasCodexImageGenerationExtensionTool reports whether a Responses request
 // advertises the standalone image generation extension used by current Codex
 // clients. This is deliberately narrower than the legacy image_generation
@@ -215,7 +237,7 @@ func PrepareCodexImageGenerationExtensionDispatch(body []byte) ([]byte, bool, er
 	if err := json.Unmarshal(body, &reqBody); err != nil {
 		return body, false, err
 	}
-	const directive = "This request is routed through an image-only channel. You must call the imagegen function exactly once; the gateway will deliver it to Codex as image_gen.imagegen. Do not answer with text before the tool call. Preserve the user's requested image or edit intent when building the tool arguments."
+	const directive = "This request is routed through an image-only channel. You must call the imagegen function exactly once; the gateway will deliver it to Codex as image_gen.imagegen. Do not answer with text before the tool call. Preserve the user's requested image or edit intent when building the tool arguments. If you provide num_last_images_to_include, it must be an integer from 1 through 5."
 	instructions := strings.TrimSpace(firstNonEmptyString(reqBody["instructions"]))
 	if strings.Contains(instructions, directive) {
 		return body, false, nil
@@ -255,7 +277,8 @@ func PrepareCodexImageGenerationExtensionDispatch(body []byte) ([]byte, bool, er
 				},
 				"num_last_images_to_include": map[string]any{
 					"type":    "integer",
-					"minimum": 0,
+					"minimum": 1,
+					"maximum": 5,
 				},
 			},
 			"required":             []string{"prompt"},

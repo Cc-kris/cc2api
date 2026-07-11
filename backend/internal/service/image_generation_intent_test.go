@@ -109,6 +109,8 @@ func TestPrepareCodexImageGenerationExtensionDispatch(t *testing.T) {
 	require.Contains(t, gjson.GetBytes(updated, "instructions").String(), "call the imagegen function exactly once")
 	require.Equal(t, "function", gjson.GetBytes(updated, "tools.0.type").String())
 	require.Equal(t, "imagegen", gjson.GetBytes(updated, "tools.0.name").String())
+	require.Equal(t, int64(1), gjson.GetBytes(updated, "tools.0.parameters.properties.num_last_images_to_include.minimum").Int())
+	require.Equal(t, int64(5), gjson.GetBytes(updated, "tools.0.parameters.properties.num_last_images_to_include.maximum").Int())
 	require.Equal(t, "auto", gjson.GetBytes(updated, "tool_choice").String())
 
 	continuation := []byte(`{"model":"gpt-5.6-terra","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"input":[{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"},{"type":"input_text","text":"saved"}]}]}`)
@@ -117,6 +119,14 @@ func TestPrepareCodexImageGenerationExtensionDispatch(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, changed)
 	require.Equal(t, continuation, unchanged)
+}
+
+func TestAttachCodexTurnMetadataEnablesWebSocketRouting(t *testing.T) {
+	body := []byte(`{"type":"response.create","model":"gpt-5.6-terra"}`)
+	updated, err := AttachCodexTurnMetadata(body, `{"request_kind":"turn","thread_source":"user"}`)
+	require.NoError(t, err)
+	require.True(t, IsCodexImageGenerationExtensionTurn(updated))
+	require.Equal(t, "turn", gjson.Get(gjson.GetBytes(updated, "client_metadata.x-codex-turn-metadata").String(), "request_kind").String())
 }
 
 func TestIsImageGenerationPermissionIntentIgnoresToolDeclarationOnly(t *testing.T) {

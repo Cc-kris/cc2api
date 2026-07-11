@@ -405,6 +405,11 @@ func TestNormalizeCodexImageGenerationFunctionCallNamespace(t *testing.T) {
 	unchanged, changed := normalizeCodexImageGenerationFunctionCallNamespace([]byte(`{"output":[{"type":"function_call","name":"shell"}]}`))
 	require.False(t, changed)
 	require.JSONEq(t, `{"output":[{"type":"function_call","name":"shell"}]}`, string(unchanged))
+
+	productionFailure := []byte(`{"type":"response.output_item.done","item":{"type":"function_call","name":"imagegen","namespace":"image_gen","call_id":"call_1","arguments":"{\"num_last_images_to_include\":0,\"prompt\":\"麒麟头像\",\"referenced_image_paths\":[]}"}}`)
+	normalized, changed := normalizeCodexImageGenerationFunctionCallNamespace(productionFailure)
+	require.True(t, changed)
+	require.Equal(t, int64(1), gjson.Get(gjson.GetBytes(normalized, "item.arguments").String(), "num_last_images_to_include").Int())
 }
 
 func TestNormalizeCompletedImageGenerationSSEData(t *testing.T) {
