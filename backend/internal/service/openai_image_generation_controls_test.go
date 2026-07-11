@@ -274,78 +274,7 @@ func TestOpenAIGatewayServiceHandleResponsesImageOutputs_Streaming(t *testing.T)
 	require.Equal(t, 4, result.usage.ImageOutputTokens)
 }
 
-func TestCodexDesktopImageEventCompatEnabled(t *testing.T) {
-	tests := []struct {
-		name      string
-		userAgent string
-		want      bool
-	}{
-		{name: "Codex Desktop 0.143", userAgent: "Codex Desktop/0.143.9-alpha.1", want: false},
-		{name: "Codex Desktop 0.144", userAgent: "Codex Desktop/0.144.0-alpha.4", want: true},
-		{name: "Codex Desktop future major", userAgent: "Codex Desktop/1.0.0", want: true},
-		{name: "Codex CLI", userAgent: "codex-tui/0.144.1", want: false},
-		{name: "browser", userAgent: "Mozilla/5.0", want: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, codexDesktopImageEventCompatEnabled(tt.userAgent))
-		})
-	}
-}
-
-func TestOpenAIGatewayServiceHandleStreamingResponsePassthrough_CodexDesktopImageCompat(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	newResponse := func() *http.Response {
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
-			Body: io.NopCloser(strings.NewReader(
-				"data: {\"type\":\"response.created\",\"response\":{\"created_at\":1710000000}}\n\n" +
-					"data: {\"type\":\"response.image_generation_call.partial_image\",\"partial_image_b64\":\"partial-image\",\"partial_image_index\":0,\"output_format\":\"png\"}\n\n" +
-					"data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"result\":\"final-image\",\"output_format\":\"png\"}}\n\n" +
-					"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"output\":[{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"result\":\"final-image\",\"output_format\":\"png\"}]}}\n\n",
-			)),
-		}
-	}
-
-	tests := []struct {
-		name       string
-		userAgent  string
-		wantCompat bool
-	}{
-		{name: "Codex mode", userAgent: "Codex Desktop/0.144.0-alpha.4", wantCompat: true},
-		{name: "Work mode", userAgent: "Codex Desktop/0.144.0-alpha.4", wantCompat: true},
-		{name: "older desktop", userAgent: "Codex Desktop/0.143.9-alpha.1", wantCompat: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := newOpenAIImageGenerationControlTestService(&httpUpstreamRecorder{})
-			c, recorder := newOpenAIImageGenerationControlTestContext(true, tt.userAgent)
-			result, err := svc.handleStreamingResponsePassthrough(context.Background(), newResponse(), c, &Account{ID: 1}, time.Now(), "gpt-5.6-sol", "gpt-5.6-sol")
-
-			require.NoError(t, err)
-			require.NotNil(t, result)
-			require.Equal(t, 1, result.imageCount)
-			body := recorder.Body.String()
-			if tt.wantCompat {
-				require.Contains(t, body, "event: image_generation.partial_image")
-				require.Contains(t, body, "event: image_generation.completed")
-				require.Contains(t, body, `"b64_json":"partial-image"`)
-				require.Contains(t, body, `"b64_json":"final-image"`)
-				require.NotContains(t, body, "partial_image_b64")
-			} else {
-				require.NotContains(t, body, "event: image_generation.completed")
-				require.Contains(t, body, "partial_image_b64")
-			}
-			require.Contains(t, body, `"type":"response.completed"`)
-		})
-	}
-}
-
-func TestOpenAIGatewayServiceHandleStreamingResponse_CodexDesktopImageCompat(t *testing.T) {
+func TestOpenAIGatewayServiceHandleStreamingResponsePassthrough_PreservesCodexImageGenerationCall(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	newResponse := func() *http.Response {
@@ -355,45 +284,69 @@ func TestOpenAIGatewayServiceHandleStreamingResponse_CodexDesktopImageCompat(t *
 			Body: io.NopCloser(strings.NewReader(
 				"event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"created_at\":1710000000}}\n\n" +
 					"event: response.image_generation_call.partial_image\ndata: {\"type\":\"response.image_generation_call.partial_image\",\"partial_image_b64\":\"partial-image\",\"partial_image_index\":0,\"output_format\":\"png\"}\n\n" +
-					"event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"result\":\"final-image\",\"output_format\":\"png\"}}\n\n" +
-					"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"output\":[{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"result\":\"final-image\",\"output_format\":\"png\"}]}}\n\n",
+					"event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"completed\",\"revised_prompt\":\"test image\",\"result\":\"final-image\",\"output_format\":\"png\"}}\n\n" +
+					"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"output\":[{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"completed\",\"result\":\"final-image\",\"output_format\":\"png\"}]}}\n\n",
 			)),
 		}
 	}
 
-	tests := []struct {
-		name       string
-		userAgent  string
-		wantCompat bool
-	}{
-		{name: "Codex mode", userAgent: "Codex Desktop/0.144.0-alpha.4", wantCompat: true},
-		{name: "Work mode", userAgent: "Codex Desktop/0.144.0-alpha.4", wantCompat: true},
-		{name: "older desktop", userAgent: "Codex Desktop/0.143.9-alpha.1", wantCompat: false},
+	for _, mode := range []string{"Codex mode", "Work mode"} {
+		t.Run(mode, func(t *testing.T) {
+			svc := newOpenAIImageGenerationControlTestService(&httpUpstreamRecorder{})
+			c, recorder := newOpenAIImageGenerationControlTestContext(true, "Codex Desktop/0.144.0-alpha.4")
+			result, err := svc.handleStreamingResponsePassthrough(context.Background(), newResponse(), c, &Account{ID: 1}, time.Now(), "gpt-5.6-sol", "gpt-5.6-sol")
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Equal(t, 1, result.imageCount)
+			assertCodexResponsesImageGenerationCallPreserved(t, recorder.Body.String())
+		})
+	}
+}
+
+func TestOpenAIGatewayServiceHandleStreamingResponse_PreservesCodexImageGenerationCall(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	newResponse := func() *http.Response {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body: io.NopCloser(strings.NewReader(
+				"event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"created_at\":1710000000}}\n\n" +
+					"event: response.image_generation_call.partial_image\ndata: {\"type\":\"response.image_generation_call.partial_image\",\"partial_image_b64\":\"partial-image\",\"partial_image_index\":0,\"output_format\":\"png\"}\n\n" +
+					"event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"completed\",\"revised_prompt\":\"test image\",\"result\":\"final-image\",\"output_format\":\"png\"}}\n\n" +
+					"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"output\":[{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"completed\",\"result\":\"final-image\",\"output_format\":\"png\"}]}}\n\n",
+			)),
+		}
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, mode := range []string{"Codex mode", "Work mode"} {
+		t.Run(mode, func(t *testing.T) {
 			svc := newOpenAIImageGenerationControlTestService(&httpUpstreamRecorder{})
-			c, recorder := newOpenAIImageGenerationControlTestContext(true, tt.userAgent)
+			c, recorder := newOpenAIImageGenerationControlTestContext(true, "Codex Desktop/0.144.0-alpha.4")
 			result, err := svc.handleStreamingResponse(context.Background(), newResponse(), c, &Account{ID: 1}, time.Now(), "gpt-5.6-sol", "gpt-5.6-sol")
 
 			require.NoError(t, err)
 			require.NotNil(t, result)
 			require.Equal(t, 1, result.imageCount)
-			body := recorder.Body.String()
-			if tt.wantCompat {
-				require.Contains(t, body, "event: image_generation.partial_image")
-				require.Contains(t, body, "event: image_generation.completed")
-				require.Contains(t, body, `"b64_json":"partial-image"`)
-				require.Contains(t, body, `"b64_json":"final-image"`)
-				require.NotContains(t, body, "partial_image_b64")
-			} else {
-				require.NotContains(t, body, "event: image_generation.completed")
-				require.Contains(t, body, "partial_image_b64")
-			}
-			require.Contains(t, body, `"type":"response.completed"`)
+			assertCodexResponsesImageGenerationCallPreserved(t, recorder.Body.String())
 		})
 	}
+}
+
+func assertCodexResponsesImageGenerationCallPreserved(t *testing.T, body string) {
+	t.Helper()
+	require.Contains(t, body, `"type":"response.image_generation_call.partial_image"`)
+	require.Contains(t, body, `"partial_image_b64":"partial-image"`)
+	require.Contains(t, body, `"type":"response.output_item.done"`)
+	require.Contains(t, body, `"id":"ig_1"`)
+	require.Contains(t, body, `"type":"image_generation_call"`)
+	require.Contains(t, body, `"status":"completed"`)
+	require.Contains(t, body, `"revised_prompt":"test image"`)
+	require.Contains(t, body, `"result":"final-image"`)
+	require.NotContains(t, body, "event: image_generation.completed")
+	require.NotContains(t, body, `"b64_json"`)
+	require.Contains(t, body, `"type":"response.completed"`)
 }
 
 func newOpenAIImageGenerationControlTestService(upstream *httpUpstreamRecorder) *OpenAIGatewayService {
