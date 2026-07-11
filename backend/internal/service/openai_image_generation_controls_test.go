@@ -249,6 +249,23 @@ func TestOpenAIGatewayServiceHandleResponsesImageOutputs_NonStreaming(t *testing
 	require.Equal(t, 2, result.usage.ImageOutputTokens)
 }
 
+func TestChannelCodexImageGenerationOrchestratorGroupID(t *testing.T) {
+	channel := &Channel{FeaturesConfig: map[string]any{
+		featureKeyCodexImageGenerationBridge: map[string]any{
+			PlatformOpenAI:          true,
+			"orchestrator_group_id": float64(7),
+		},
+	}}
+	require.NotNil(t, channel.CodexImageGenerationOrchestratorGroupID())
+	require.Equal(t, int64(7), *channel.CodexImageGenerationOrchestratorGroupID())
+
+	channel.FeaturesConfig[featureKeyCodexImageGenerationBridge] = map[string]any{
+		PlatformOpenAI:          true,
+		"orchestrator_group_id": "14",
+	}
+	require.Equal(t, int64(14), *channel.CodexImageGenerationOrchestratorGroupID())
+}
+
 func TestOpenAIGatewayServiceHandleResponsesImageOutputs_Streaming(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -348,6 +365,46 @@ func assertCodexResponsesImageGenerationCallPreserved(t *testing.T, body string)
 	require.NotContains(t, body, "event: image_generation.completed")
 	require.NotContains(t, body, `"b64_json"`)
 	require.Contains(t, body, `"type":"response.completed"`)
+}
+
+func TestNormalizeCodexImageGenerationFunctionCallNamespace(t *testing.T) {
+	tests := []struct {
+		name      string
+		payload   string
+		path      string
+		wantValue string
+	}{
+		{
+			name:      "output item done",
+			payload:   `{"type":"response.output_item.done","item":{"type":"function_call","name":"imagegen","call_id":"call_1","arguments":"{}"}}`,
+			path:      "item.namespace",
+			wantValue: "image_gen",
+		},
+		{
+			name:      "completed response",
+			payload:   `{"type":"response.completed","response":{"output":[{"type":"function_call","name":"imagegen","call_id":"call_1","arguments":"{}"}]}}`,
+			path:      "response.output.0.namespace",
+			wantValue: "image_gen",
+		},
+		{
+			name:      "non streaming response",
+			payload:   `{"output":[{"type":"function_call","name":"image_gen__imagegen","call_id":"call_1","arguments":"{}"}]}`,
+			path:      "output.0.namespace",
+			wantValue: "image_gen",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			normalized, changed := normalizeCodexImageGenerationFunctionCallNamespace([]byte(tt.payload))
+			require.True(t, changed)
+			require.Equal(t, tt.wantValue, gjson.GetBytes(normalized, tt.path).String())
+			require.Equal(t, "imagegen", gjson.GetBytes(normalized, strings.TrimSuffix(tt.path, ".namespace")+".name").String())
+		})
+	}
+
+	unchanged, changed := normalizeCodexImageGenerationFunctionCallNamespace([]byte(`{"output":[{"type":"function_call","name":"shell"}]}`))
+	require.False(t, changed)
+	require.JSONEq(t, `{"output":[{"type":"function_call","name":"shell"}]}`, string(unchanged))
 }
 
 func TestNormalizeCompletedImageGenerationSSEData(t *testing.T) {

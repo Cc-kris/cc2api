@@ -413,6 +413,25 @@ func TestAccountSupportsOpenAIImageCapability_OAuthSupportsNative(t *testing.T) 
 	require.True(t, account.SupportsOpenAIImageCapability(OpenAIImagesCapabilityNative))
 }
 
+func TestAccountSupportsOpenAIImageRequestRejectsAPIKeyTextMapping(t *testing.T) {
+	apiKeyAccount := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{"gpt-*": "gpt-5.5"},
+		},
+	}
+	require.False(t, apiKeyAccount.SupportsOpenAIImageRequest(OpenAIImagesCapabilityNative, "gpt-image-2"))
+
+	apiKeyAccount.Credentials = map[string]any{
+		"model_mapping": map[string]any{"gpt-image-2": "gpt-image-2"},
+	}
+	require.True(t, apiKeyAccount.SupportsOpenAIImageRequest(OpenAIImagesCapabilityNative, "gpt-image-2"))
+
+	oauthAccount := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	require.True(t, oauthAccount.SupportsOpenAIImageRequest(OpenAIImagesCapabilityBasic, "gpt-image-2"))
+}
+
 func TestBuildOpenAIImagesURL_HandlesVersionedBaseURL(t *testing.T) {
 	require.Equal(t,
 		"https://image-upstream.example/v1/images/generations",

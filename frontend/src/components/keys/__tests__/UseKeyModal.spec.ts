@@ -51,6 +51,7 @@ describe('UseKeyModal', () => {
     expect(configText).toContain('base_url = "https://cc-ai.xyz"')
     expect(configText).toContain('supports_websockets = true')
     expect(configText).toContain('requires_openai_auth = false')
+    expect(configText).toContain('http_headers = { "x-openai-actor-authorization" = "ccai" }')
     expect(configText).not.toContain('OPENAI_API_KEY')
   })
 
@@ -91,6 +92,7 @@ describe('UseKeyModal', () => {
     expect(configText).toContain('experimental_bearer_token = "sk-ws-test"')
     expect(configText).toContain('base_url = "https://cc-ai.xyz"')
     expect(configText).toContain('supports_websockets = true')
+    expect(configText).toContain('http_headers = { "x-openai-actor-authorization" = "ccai" }')
     expect(configText).not.toContain('OPENAI_API_KEY')
   })
 

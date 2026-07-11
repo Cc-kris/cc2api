@@ -352,6 +352,19 @@
                 </div>
                 <Toggle v-model="section.codex_image_generation_bridge" />
               </div>
+              <div v-if="section.codex_image_generation_bridge" class="mt-3">
+                <label class="input-label text-xs mb-1">
+                  {{ t('admin.channels.form.codexImageOrchestratorGroup', '文本编排分组') }}
+                </label>
+                <Select
+                  v-model="section.codex_image_orchestrator_group_id"
+                  :options="getCodexOrchestratorGroupOptions(section)"
+                  :placeholder="t('admin.channels.form.codexImageOrchestratorGroupPlaceholder', '选择仅用于生成本地生图指令的文本分组')"
+                />
+                <p class="mt-1 text-[11px] text-gray-500 dark:text-dark-300">
+                  {{ t('admin.channels.form.codexImageOrchestratorGroupHint', '该分组只生成 Codex 本地生图指令；实际图片仍由当前生图分组和账号生成、计费。') }}
+                </p>
+              </div>
             </div>
 
             <!-- Bedrock CC Compatibility (Anthropic only) -->
@@ -684,6 +697,7 @@ interface PlatformSection {
   model_pricing: PricingFormEntry[]
   web_search_emulation: boolean
   codex_image_generation_bridge: boolean
+  codex_image_orchestrator_group_id: number | null
   bedrock_cc_compat: boolean
   account_stats_pricing_rules: FormPricingRule[]
 }
@@ -781,6 +795,7 @@ function addPlatformSection(platform: GroupPlatform) {
     model_pricing: [],
     web_search_emulation: false,
     codex_image_generation_bridge: false,
+    codex_image_orchestrator_group_id: null,
     bedrock_cc_compat: false,
     account_stats_pricing_rules: [],
   })
@@ -800,6 +815,12 @@ function togglePlatform(platform: GroupPlatform) {
 
 function getGroupsForPlatform(platform: GroupPlatform): AdminGroup[] {
   return allGroups.value.filter(g => g.platform === platform)
+}
+
+function getCodexOrchestratorGroupOptions(section: PlatformSection) {
+  return getGroupsForPlatform('openai')
+    .filter(group => !section.group_ids.includes(group.id))
+    .map(group => ({ value: group.id, label: group.name }))
 }
 
 // ── Group helpers ──
@@ -1129,11 +1150,14 @@ function formToAPI(): { group_ids: number[], model_pricing: ChannelModelPricing[
     delete featuresConfig.web_search_emulation
   }
 
-  const codexImageGenerationBridge: Record<string, boolean> = {}
+  const codexImageGenerationBridge: Record<string, boolean | number> = {}
   for (const section of form.platforms) {
     if (!section.enabled) continue
     if (section.platform === 'openai') {
       codexImageGenerationBridge[section.platform] = !!section.codex_image_generation_bridge
+      if (section.codex_image_generation_bridge && section.codex_image_orchestrator_group_id != null) {
+        codexImageGenerationBridge.orchestrator_group_id = section.codex_image_orchestrator_group_id
+      }
     }
   }
   if (Object.keys(codexImageGenerationBridge).length > 0) {
@@ -1203,8 +1227,11 @@ function apiToForm(channel: Channel): PlatformSection[] {
     const fc = channel.features_config
     const wsEmulation = fc?.web_search_emulation as Record<string, boolean> | undefined
     const webSearchEnabled = wsEmulation?.[platform] === true
-    const codexImageGenerationBridge = fc?.codex_image_generation_bridge as Record<string, boolean> | undefined
+    const codexImageGenerationBridge = fc?.codex_image_generation_bridge as Record<string, boolean | number> | undefined
     const codexImageGenerationBridgeEnabled = codexImageGenerationBridge?.[platform] === true
+    const codexImageOrchestratorGroupID = typeof codexImageGenerationBridge?.orchestrator_group_id === 'number'
+      ? codexImageGenerationBridge.orchestrator_group_id
+      : null
     const bedrockCCCompat = fc?.bedrock_cc_compat as Record<string, boolean> | undefined
     const bedrockCCCompatEnabled = bedrockCCCompat?.[platform] === true
 
@@ -1217,6 +1244,7 @@ function apiToForm(channel: Channel): PlatformSection[] {
       model_pricing: pricing,
       web_search_emulation: webSearchEnabled,
       codex_image_generation_bridge: codexImageGenerationBridgeEnabled,
+      codex_image_orchestrator_group_id: codexImageOrchestratorGroupID,
       bedrock_cc_compat: bedrockCCCompatEnabled,
       account_stats_pricing_rules: [],
     })
@@ -1436,6 +1464,12 @@ async function handleSubmit() {
     if (section.group_ids.length === 0) {
       const platformLabel = t('admin.groups.platforms.' + section.platform, section.platform)
       appStore.showError(t('admin.channels.noGroupsSelected', { platform: platformLabel }, `${platformLabel} 平台未选择分组，请至少选择一个分组或禁用该平台`))
+      activeTab.value = section.platform
+      return
+    }
+    if (section.platform === 'openai' && section.codex_image_generation_bridge &&
+        (section.codex_image_orchestrator_group_id == null || section.group_ids.includes(section.codex_image_orchestrator_group_id))) {
+      appStore.showError(t('admin.channels.form.codexImageOrchestratorGroupRequired', '启用 Codex 生图桥接时，必须选择一个不同于当前生图分组的文本编排分组'))
       activeTab.value = section.platform
       return
     }

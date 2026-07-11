@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func TestIsImageGenerationIntent(t *testing.T) {
@@ -62,6 +63,60 @@ func TestIsImageGenerationIntent(t *testing.T) {
 			require.Equal(t, tt.want, IsImageGenerationIntent(tt.endpoint, tt.model, tt.body))
 		})
 	}
+}
+
+func TestCodexImageGenerationExtensionDetection(t *testing.T) {
+	body := []byte(`{"model":"gpt-5.6-terra","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen","parameters":{"type":"object"}}]}]}`)
+	require.True(t, HasCodexImageGenerationExtensionTool(body))
+	require.True(t, ShouldUseCodexImageGenerationExtension("gpt-5.6-terra", "gpt-image-2", body))
+	require.False(t, ShouldUseCodexImageGenerationExtension("gpt-image-2", "gpt-image-2", body))
+	require.False(t, ShouldUseCodexImageGenerationExtension("gpt-5.6-terra", "gpt-5.5", body))
+
+	legacy := []byte(`{"tools":[{"type":"image_generation"}]}`)
+	require.False(t, HasCodexImageGenerationExtensionTool(legacy))
+
+	responsesLiteTurn := []byte(`{"model":"gpt-5.6-terra","client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"turn\",\"thread_source\":\"user\"}"}}`)
+	require.True(t, IsCodexImageGenerationExtensionTurn(responsesLiteTurn))
+	require.True(t, ShouldUseCodexImageGenerationExtension("gpt-5.6-terra", "gpt-image-2", responsesLiteTurn))
+
+	backgroundRequest := []byte(`{"model":"gpt-5.4-mini"}`)
+	require.False(t, IsCodexImageGenerationExtensionTurn(backgroundRequest))
+
+	prewarmRequest := []byte(`{"model":"gpt-5.4-mini","client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"prewarm\",\"thread_source\":\"user\"}"}}`)
+	require.False(t, IsCodexImageGenerationExtensionTurn(prewarmRequest))
+
+	titleRequest := []byte(`{"model":"gpt-5.4-mini","client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"turn\",\"thread_source\":\"system\"}"},"text":{"format":{"type":"json_schema","schema":{"type":"object","properties":{"title":{"type":"string"},"description":{"type":"string"}}}}},"tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}]}`)
+	require.False(t, IsCodexImageGenerationExtensionTurn(titleRequest))
+	require.True(t, IsCodexSystemBackgroundTurn(titleRequest))
+	require.True(t, ShouldBypassCodexSystemBackgroundImageMapping("gpt-5.4-mini", "gpt-image-2", titleRequest))
+	require.False(t, ShouldBypassCodexSystemBackgroundImageMapping("gpt-5.4-mini", "gpt-5.5", titleRequest))
+	require.False(t, ShouldBypassCodexSystemBackgroundImageMapping("gpt-5.4-mini", "gpt-image-2", responsesLiteTurn))
+
+	preparedTitle, err := PrepareCodexSystemBackgroundTextDispatch(titleRequest)
+	require.NoError(t, err)
+	require.Equal(t, "none", gjson.GetBytes(preparedTitle, "tool_choice").String())
+	require.Empty(t, gjson.GetBytes(preparedTitle, "tools").Array())
+	require.Equal(t, int64(36), gjson.GetBytes(preparedTitle, "text.format.schema.properties.title.maxLength").Int())
+	require.Equal(t, int64(100), gjson.GetBytes(preparedTitle, "text.format.schema.properties.description.maxLength").Int())
+	require.Contains(t, gjson.GetBytes(preparedTitle, "instructions").String(), "Codex desktop metadata helper")
+}
+
+func TestPrepareCodexImageGenerationExtensionDispatch(t *testing.T) {
+	body := []byte(`{"model":"gpt-5.6-terra","instructions":"base","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}]}`)
+	updated, changed, err := PrepareCodexImageGenerationExtensionDispatch(body)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Contains(t, gjson.GetBytes(updated, "instructions").String(), "call the imagegen function exactly once")
+	require.Equal(t, "function", gjson.GetBytes(updated, "tools.0.type").String())
+	require.Equal(t, "imagegen", gjson.GetBytes(updated, "tools.0.name").String())
+	require.Equal(t, "auto", gjson.GetBytes(updated, "tool_choice").String())
+
+	continuation := []byte(`{"model":"gpt-5.6-terra","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"input":[{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"},{"type":"input_text","text":"saved"}]}]}`)
+	require.True(t, IsCodexImageGenerationExtensionContinuation(continuation))
+	unchanged, changed, err := PrepareCodexImageGenerationExtensionDispatch(continuation)
+	require.NoError(t, err)
+	require.False(t, changed)
+	require.Equal(t, continuation, unchanged)
 }
 
 func TestIsImageGenerationPermissionIntentIgnoresToolDeclarationOnly(t *testing.T) {

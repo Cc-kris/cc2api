@@ -1099,6 +1099,23 @@ func (a *Account) SupportsOpenAIImageCapability(capability OpenAIImagesCapabilit
 	}
 }
 
+// SupportsOpenAIImageRequest validates both the account transport capability
+// and the final model produced by account-level mapping. API-key accounts must
+// keep an image model after mapping; OAuth accounts implement Images through
+// the Responses bridge and therefore do not apply this model constraint.
+func (a *Account) SupportsOpenAIImageRequest(capability OpenAIImagesCapability, requestedModel string) bool {
+	if !a.SupportsOpenAIImageCapability(capability) {
+		return false
+	}
+	if capability == "" || a.Type == AccountTypeOAuth {
+		return true
+	}
+	if a.Type != AccountTypeAPIKey {
+		return false
+	}
+	return isOpenAIImageGenerationModel(a.GetMappedModel(requestedModel))
+}
+
 func (a *Account) GetChatGPTUserID() string {
 	if !a.IsOpenAIOAuth() {
 		return ""

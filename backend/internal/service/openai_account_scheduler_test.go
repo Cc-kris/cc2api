@@ -66,6 +66,30 @@ type schedulerTestConcurrencyCache struct {
 	skipDefaultLoad bool
 }
 
+func TestOpenAIAccountSchedulerRejectsImageRequestMappedToText(t *testing.T) {
+	scheduler := &defaultOpenAIAccountScheduler{}
+	account := &Account{
+		ID:       75,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{"gpt-*": "gpt-5.5"},
+		},
+	}
+	require.False(t, scheduler.isAccountRequestCompatible(context.Background(), account, OpenAIAccountScheduleRequest{
+		RequestedModel:          "gpt-image-2",
+		RequiredImageCapability: OpenAIImagesCapabilityNative,
+	}))
+
+	account.Credentials = map[string]any{
+		"model_mapping": map[string]any{"gpt-image-2": "gpt-image-2"},
+	}
+	require.True(t, scheduler.isAccountRequestCompatible(context.Background(), account, OpenAIAccountScheduleRequest{
+		RequestedModel:          "gpt-image-2",
+		RequiredImageCapability: OpenAIImagesCapabilityNative,
+	}))
+}
+
 func (c schedulerTestConcurrencyCache) AcquireAccountSlot(ctx context.Context, accountID int64, maxConcurrency int, requestID string) (bool, error) {
 	if c.acquireResults != nil {
 		if result, ok := c.acquireResults[accountID]; ok {

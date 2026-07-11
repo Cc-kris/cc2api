@@ -102,6 +102,10 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(parsed.Stream, false)))
 
 	channelMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, parsed.Model)
+	scheduleModel := parsed.Model
+	if channelMapping.Mapped && strings.TrimSpace(channelMapping.MappedModel) != "" {
+		scheduleModel = channelMapping.MappedModel
+	}
 
 	if h.errorPassthroughService != nil {
 		service.BindErrorPassthroughService(c, h.errorPassthroughService)
@@ -144,7 +148,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 			c.Request.Context(),
 			apiKey.GroupID,
 			sessionHash,
-			parsed.Model,
+			scheduleModel,
 			failedAccountIDs,
 			parsed.RequiredCapability,
 		)
@@ -181,6 +185,20 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		)
 
 		account := selection.Account
+		if strings.TrimSpace(c.GetHeader("x-openai-actor-authorization")) != "" &&
+			!h.gatewayService.IsCodexImageGenerationBridgeEnabled(c.Request.Context(), account, apiKey) {
+			if selection.ReleaseFunc != nil {
+				selection.ReleaseFunc()
+			}
+			failedAccountIDs[account.ID] = struct{}{}
+			switchCount++
+			reqLog.Info("openai.images.codex_bridge_account_skipped", zap.Int64("account_id", account.ID))
+			if switchCount >= maxAccountSwitches {
+				h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "No image-enabled accounts available", streamStarted)
+				return
+			}
+			continue
+		}
 		sessionHash = ensureOpenAIPoolModeSessionHash(sessionHash, account)
 		reqLog.Debug("openai.images.account_selected", zap.Int64("account_id", account.ID), zap.String("account_name", account.Name))
 		setOpsSelectedAccount(c, account.ID, account.Platform)
