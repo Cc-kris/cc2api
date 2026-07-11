@@ -38,6 +38,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 
 	captureConn := &openAIWSCaptureConn{
 		events: [][]byte{
+			[]byte(`{"type":"response.output_item.done","item":{"type":"function_call","name":"imagegen","call_id":"call_image_1","arguments":"{}"}}`),
 			[]byte(`{"type":"response.completed","response":{"id":"resp_ingress_turn_1","model":"gpt-5.1","usage":{"input_tokens":1,"output_tokens":1}}}`),
 			[]byte(`{"type":"response.completed","response":{"id":"resp_ingress_turn_2","model":"gpt-5.1","usage":{"input_tokens":1,"output_tokens":1}}}`),
 		},
@@ -98,6 +99,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 		req.Header = req.Header.Clone()
 		req.Header.Set("User-Agent", "unit-test-agent/1.0")
 		ginCtx.Request = req
+		ginCtx.Set(OpenAICodexImageGenerationExtensionContextKey, true)
 
 		readCtx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		msgType, firstMessage, readErr := conn.Read(readCtx)
@@ -138,6 +140,10 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 	}
 
 	writeMessage(`{"type":"response.create","model":"gpt-5.1","stream":false}`)
+	imageToolEvent := readMessage()
+	require.Equal(t, "response.output_item.done", gjson.GetBytes(imageToolEvent, "type").String())
+	require.Equal(t, "imagegen", gjson.GetBytes(imageToolEvent, "item.name").String())
+	require.Equal(t, "image_gen", gjson.GetBytes(imageToolEvent, "item.namespace").String())
 	firstTurnEvent := readMessage()
 	require.Equal(t, "response.completed", gjson.GetBytes(firstTurnEvent, "type").String())
 	require.Equal(t, "resp_ingress_turn_1", gjson.GetBytes(firstTurnEvent, "response.id").String())

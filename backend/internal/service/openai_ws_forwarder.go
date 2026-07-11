@@ -3248,6 +3248,12 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				if openAIWSEventMayContainToolCalls(eventType) && openAIWSMessageLikelyContainsToolCalls(upstreamMessage) {
 					upstreamToolCallIDs := openAIWSUpstreamToolCallIDsFromRawMessage(upstreamMessage)
 					toolCallCorrected := false
+					if codexImageGenerationExtensionEnabled(c) {
+						if normalized, changed := normalizeCodexImageGenerationFunctionCallNamespace(upstreamMessage); changed {
+							upstreamMessage = normalized
+							toolCallCorrected = true
+						}
+					}
 					if corrected, changed := s.toolCorrector.CorrectToolCallsInSSEBytes(upstreamMessage); changed {
 						upstreamMessage = corrected
 						toolCallCorrected = true
