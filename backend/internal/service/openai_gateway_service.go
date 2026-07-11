@@ -3734,6 +3734,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	defer putSSEScannerBuf64K(scanBuf)
 
 	needModelReplace := strings.TrimSpace(originalModel) != "" && strings.TrimSpace(mappedModel) != "" && strings.TrimSpace(originalModel) != strings.TrimSpace(mappedModel)
+	codexDesktopImageCompat := c != nil && codexDesktopImageEventCompatEnabled(c.GetHeader("User-Agent"))
 	resultWithUsage := func() *openaiStreamingResultPassthrough {
 		return &openaiStreamingResultPassthrough{
 			usage:            usage,
@@ -3780,6 +3781,11 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				firstTokenMs = &ms
 			}
 			s.parseSSEUsageBytes(dataBytes, usage)
+			if codexDesktopImageCompat {
+				if compatLine, converted := buildCodexDesktopImageCompatSSELine(dataBytes); converted {
+					line = compatLine
+				}
+			}
 		}
 
 		if !clientDisconnected {

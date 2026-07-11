@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -248,6 +249,77 @@ func buildOpenAIImagesStreamCompletedPayload(
 		payload, _ = sjson.SetRawBytes(payload, "usage", usageRaw)
 	}
 	return payload
+}
+
+// codexDesktopImageEventCompatEnabled reports whether the client is a Codex
+// Desktop build that requires the legacy image event envelope. Newer Desktop
+// builds receive image bytes but no longer render Responses image output items
+// from compatible upstreams directly.
+func codexDesktopImageEventCompatEnabled(userAgent string) bool {
+	userAgent = strings.TrimSpace(userAgent)
+	const prefix = "Codex Desktop/"
+	if !strings.HasPrefix(userAgent, prefix) {
+		return false
+	}
+
+	version := strings.TrimPrefix(userAgent, prefix)
+	parts := strings.SplitN(version, ".", 3)
+	if len(parts) < 2 {
+		return false
+	}
+	major, majorErr := strconv.Atoi(parts[0])
+	minor, minorErr := strconv.Atoi(parts[1])
+	if majorErr != nil || minorErr != nil {
+		return false
+	}
+	return major > 0 || (major == 0 && minor >= 144)
+}
+
+// buildCodexDesktopImageCompatSSELine converts Responses image output items to
+// the image event envelope rendered by Codex Desktop 0.144+. The terminal
+// Responses event remains untouched so conversation state and usage are kept.
+func buildCodexDesktopImageCompatSSELine(data []byte) (string, bool) {
+	if !gjson.ValidBytes(data) {
+		return "", false
+	}
+
+	switch strings.TrimSpace(gjson.GetBytes(data, "type").String()) {
+	case "response.image_generation_call.partial_image":
+		b64 := strings.TrimSpace(gjson.GetBytes(data, "partial_image_b64").String())
+		if b64 == "" {
+			return "", false
+		}
+		meta := openAIResponsesImageResult{
+			OutputFormat: strings.TrimSpace(gjson.GetBytes(data, "output_format").String()),
+			Background:   strings.TrimSpace(gjson.GetBytes(data, "background").String()),
+			Quality:      strings.TrimSpace(gjson.GetBytes(data, "quality").String()),
+			Size:         strings.TrimSpace(gjson.GetBytes(data, "size").String()),
+		}
+		payload := buildOpenAIImagesStreamPartialPayload(
+			"image_generation.partial_image",
+			b64,
+			gjson.GetBytes(data, "partial_image_index").Int(),
+			"b64_json",
+			gjson.GetBytes(data, "created_at").Int(),
+			meta,
+		)
+		return "event: image_generation.partial_image\ndata: " + string(payload), true
+	case "response.output_item.done":
+		image, _, ok, err := extractOpenAIImageFromResponsesOutputItemDone(data)
+		if err != nil || !ok {
+			return "", false
+		}
+		payload := buildOpenAIImagesStreamCompletedPayload(
+			"image_generation.completed",
+			image,
+			"b64_json",
+			gjson.GetBytes(data, "created_at").Int(),
+			nil,
+		)
+		return "event: image_generation.completed\ndata: " + string(payload), true
+	default:
+		return "", false
+	}
 }
 
 func openAIImageOutputMIMEType(outputFormat string) string {
