@@ -5319,9 +5319,9 @@ func codexImageGenerationExtensionEnabled(c *gin.Context) bool {
 }
 
 // normalizeCodexImageGenerationFunctionCallNamespace restores the namespace
-// some OpenAI-compatible upstreams omit from imagegen function calls. Current
-// Codex registers this tool under image_gen; a plain imagegen call cannot be
-// dispatched to the local extension.
+// some OpenAI-compatible upstreams omit from imagegen function calls and removes
+// argument shapes rejected by the current Codex image extension. The generation
+// form omits both image selectors; edit calls provide exactly one selector.
 func normalizeCodexImageGenerationFunctionCallNamespace(data []byte) ([]byte, bool) {
 	if len(data) == 0 || !gjson.ValidBytes(data) {
 		return data, false
@@ -5355,16 +5355,8 @@ func normalizeCodexImageGenerationFunctionCallNamespace(data []byte) ([]byte, bo
 		if arguments == "" || !gjson.Valid(arguments) {
 			return
 		}
-		count := gjson.Get(arguments, "num_last_images_to_include")
-		if !count.Exists() || count.Type != gjson.Number || (count.Int() >= 1 && count.Int() <= 5) {
-			return
-		}
-		normalizedCount := int64(1)
-		if count.Int() > 5 {
-			normalizedCount = 5
-		}
-		normalizedArguments, err := sjson.Set(arguments, "num_last_images_to_include", normalizedCount)
-		if err != nil {
+		normalizedArguments, argumentsChanged := normalizeCodexImageGenerationArguments(arguments)
+		if !argumentsChanged {
 			return
 		}
 		next, err := sjson.SetBytes(normalized, path+".arguments", normalizedArguments)
@@ -5386,6 +5378,63 @@ func normalizeCodexImageGenerationFunctionCallNamespace(data []byte) ([]byte, bo
 	default:
 		for index, item := range gjson.GetBytes(data, "output").Array() {
 			setNamespace(fmt.Sprintf("output.%d", index), item)
+		}
+	}
+	return normalized, changed
+}
+
+func normalizeCodexImageGenerationArguments(arguments string) (string, bool) {
+	normalized := arguments
+	changed := false
+
+	paths := gjson.Get(normalized, "referenced_image_paths")
+	if paths.Exists() && paths.IsArray() {
+		values := paths.Array()
+		if len(values) == 0 {
+			next, err := sjson.Delete(normalized, "referenced_image_paths")
+			if err == nil {
+				normalized = next
+				changed = true
+			}
+		} else {
+			if len(values) > 5 {
+				trimmed := make([]string, 0, 5)
+				for _, value := range values[:5] {
+					trimmed = append(trimmed, value.String())
+				}
+				next, err := sjson.Set(normalized, "referenced_image_paths", trimmed)
+				if err == nil {
+					normalized = next
+					changed = true
+				}
+			}
+			if gjson.Get(normalized, "num_last_images_to_include").Exists() {
+				next, err := sjson.Delete(normalized, "num_last_images_to_include")
+				if err == nil {
+					normalized = next
+					changed = true
+				}
+			}
+		}
+	}
+
+	count := gjson.Get(normalized, "num_last_images_to_include")
+	if !count.Exists() {
+		return normalized, changed
+	}
+	if count.Type != gjson.Number || count.Float() != float64(count.Int()) || count.Int() <= 0 {
+		next, err := sjson.Delete(normalized, "num_last_images_to_include")
+		if err == nil {
+			normalized = next
+			changed = true
+		}
+		return normalized, changed
+	}
+	if count.Int() > 5 {
+		next, err := sjson.Set(normalized, "num_last_images_to_include", 5)
+		if err == nil {
+			normalized = next
+			changed = true
 		}
 	}
 	return normalized, changed

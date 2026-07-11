@@ -109,9 +109,23 @@ func TestPrepareCodexImageGenerationExtensionDispatch(t *testing.T) {
 	require.Contains(t, gjson.GetBytes(updated, "instructions").String(), "call the imagegen function exactly once")
 	require.Equal(t, "function", gjson.GetBytes(updated, "tools.0.type").String())
 	require.Equal(t, "imagegen", gjson.GetBytes(updated, "tools.0.name").String())
-	require.Equal(t, int64(1), gjson.GetBytes(updated, "tools.0.parameters.properties.num_last_images_to_include.minimum").Int())
-	require.Equal(t, int64(5), gjson.GetBytes(updated, "tools.0.parameters.properties.num_last_images_to_include.maximum").Int())
+	require.Contains(t, gjson.GetBytes(updated, "tools.0.description").String(), "Omit both referenced_image_paths and num_last_images_to_include")
+	require.Contains(t, gjson.GetBytes(updated, "tools.0.description").String(), "In code mode, pass the result to generatedImage(result)")
+	require.Equal(t, int64(5), gjson.GetBytes(updated, "tools.0.parameters.properties.referenced_image_paths.maxItems").Int())
+	require.False(t, gjson.GetBytes(updated, "tools.0.parameters.properties.num_last_images_to_include").Exists())
+	require.Contains(t, gjson.GetBytes(updated, "instructions").String(), "No conversation images are available")
+	require.Equal(t, 1, len(gjson.GetBytes(updated, "tools.0.parameters.required").Array()))
+	require.Equal(t, "prompt", gjson.GetBytes(updated, "tools.0.parameters.required.0").String())
+	require.False(t, gjson.GetBytes(updated, "tools.0.parameters.additionalProperties").Bool())
 	require.Equal(t, "auto", gjson.GetBytes(updated, "tool_choice").String())
+
+	editBody := []byte(`{"model":"gpt-5.6-terra","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"input":[{"type":"message","role":"user","content":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"},{"type":"input_text","text":"change it"}]}]}`)
+	editUpdated, editChanged, err := PrepareCodexImageGenerationExtensionDispatch(editBody)
+	require.NoError(t, err)
+	require.True(t, editChanged)
+	require.Equal(t, int64(1), gjson.GetBytes(editUpdated, "tools.0.parameters.properties.num_last_images_to_include.minimum").Int())
+	require.Equal(t, int64(5), gjson.GetBytes(editUpdated, "tools.0.parameters.properties.num_last_images_to_include.maximum").Int())
+	require.NotContains(t, gjson.GetBytes(editUpdated, "instructions").String(), "No conversation images are available")
 
 	continuation := []byte(`{"model":"gpt-5.6-terra","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"input":[{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"},{"type":"input_text","text":"saved"}]}]}`)
 	require.True(t, IsCodexImageGenerationExtensionContinuation(continuation))
@@ -119,6 +133,13 @@ func TestPrepareCodexImageGenerationExtensionDispatch(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, changed)
 	require.Equal(t, continuation, unchanged)
+
+	laterEdit := []byte(`{"model":"gpt-5.6-terra","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"input":[{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"}]},{"type":"message","role":"user","content":[{"type":"input_text","text":"change the previous image to green"}]}]}`)
+	require.False(t, IsCodexImageGenerationExtensionContinuation(laterEdit))
+	laterEditUpdated, laterEditChanged, err := PrepareCodexImageGenerationExtensionDispatch(laterEdit)
+	require.NoError(t, err)
+	require.True(t, laterEditChanged)
+	require.True(t, gjson.GetBytes(laterEditUpdated, "tools.0.parameters.properties.num_last_images_to_include").Exists())
 }
 
 func TestAttachCodexTurnMetadataEnablesWebSocketRouting(t *testing.T) {

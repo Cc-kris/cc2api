@@ -38,7 +38,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 
 	captureConn := &openAIWSCaptureConn{
 		events: [][]byte{
-			[]byte(`{"type":"response.output_item.done","item":{"type":"function_call","name":"imagegen","call_id":"call_image_1","arguments":"{}"}}`),
+			[]byte(`{"type":"response.output_item.done","item":{"type":"function_call","name":"imagegen","call_id":"call_image_1","arguments":"{\"prompt\":\"new image\",\"referenced_image_paths\":[],\"num_last_images_to_include\":0}"}}`),
 			[]byte(`{"type":"response.completed","response":{"id":"resp_ingress_turn_1","model":"gpt-5.1","usage":{"input_tokens":1,"output_tokens":1}}}`),
 			[]byte(`{"type":"response.completed","response":{"id":"resp_ingress_turn_2","model":"gpt-5.1","usage":{"input_tokens":1,"output_tokens":1}}}`),
 		},
@@ -144,6 +144,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_KeepLeaseAcrossT
 	require.Equal(t, "response.output_item.done", gjson.GetBytes(imageToolEvent, "type").String())
 	require.Equal(t, "imagegen", gjson.GetBytes(imageToolEvent, "item.name").String())
 	require.Equal(t, "image_gen", gjson.GetBytes(imageToolEvent, "item.namespace").String())
+	require.JSONEq(t, `{"prompt":"new image"}`, gjson.GetBytes(imageToolEvent, "item.arguments").String())
 	firstTurnEvent := readMessage()
 	require.Equal(t, "response.completed", gjson.GetBytes(firstTurnEvent, "type").String())
 	require.Equal(t, "resp_ingress_turn_1", gjson.GetBytes(firstTurnEvent, "response.id").String())

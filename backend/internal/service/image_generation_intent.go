@@ -136,32 +136,36 @@ func IsCodexImageGenerationExtensionContinuation(body []byte) bool {
 	if !input.IsArray() {
 		return false
 	}
-	found := false
+	lastUserMessage := -1
+	lastImageToolItem := -1
+	index := 0
 	input.ForEach(func(_, item gjson.Result) bool {
+		itemIndex := index
+		index++
+		if strings.TrimSpace(item.Get("type").String()) == "message" &&
+			strings.TrimSpace(item.Get("role").String()) == "user" {
+			lastUserMessage = itemIndex
+		}
 		if strings.TrimSpace(item.Get("type").String()) == "function_call" &&
 			strings.TrimSpace(item.Get("namespace").String()) == codexImageGenNamespace &&
 			strings.TrimSpace(item.Get("name").String()) == codexImageGenToolName {
-			found = true
-			return false
+			lastImageToolItem = itemIndex
 		}
 		if strings.TrimSpace(item.Get("type").String()) == "function_call_output" {
 			output := item.Get("output")
 			if output.IsArray() {
 				output.ForEach(func(_, part gjson.Result) bool {
 					if strings.TrimSpace(part.Get("type").String()) == "input_image" {
-						found = true
+						lastImageToolItem = itemIndex
 						return false
 					}
 					return true
 				})
-				if found {
-					return false
-				}
 			}
 		}
 		return true
 	})
-	return found
+	return lastImageToolItem >= 0 && lastImageToolItem > lastUserMessage
 }
 
 // ShouldUseCodexImageGenerationExtension preserves a channel's text-to-image
@@ -237,7 +241,11 @@ func PrepareCodexImageGenerationExtensionDispatch(body []byte) ([]byte, bool, er
 	if err := json.Unmarshal(body, &reqBody); err != nil {
 		return body, false, err
 	}
-	const directive = "This request is routed through an image-only channel. You must call the imagegen function exactly once; the gateway will deliver it to Codex as image_gen.imagegen. Do not answer with text before the tool call. Preserve the user's requested image or edit intent when building the tool arguments. If you provide num_last_images_to_include, it must be an integer from 1 through 5."
+	hasConversationImages := codexRequestHasConversationImages(reqBody["input"])
+	directive := "This request is routed through an image-only channel. You must call the imagegen function exactly once; the gateway will deliver it to Codex as image_gen.imagegen. Do not answer with text before or after the tool call. Preserve the user's requested image or edit intent when building the tool arguments. For a brand new image, provide only prompt and omit both referenced_image_paths and num_last_images_to_include. For an edit, use referenced_image_paths only when every target has a local path; otherwise use num_last_images_to_include with the smallest available recent-image count from 1 through 5. Never provide both image selectors."
+	if !hasConversationImages {
+		directive += " No conversation images are available in this turn, so you must omit num_last_images_to_include."
+	}
 	instructions := strings.TrimSpace(firstNonEmptyString(reqBody["instructions"]))
 	if strings.Contains(instructions, directive) {
 		return body, false, nil
@@ -263,24 +271,41 @@ func PrepareCodexImageGenerationExtensionDispatch(body []byte) ([]byte, bool, er
 		}
 		flattenedTools = append(flattenedTools, tool)
 	}
+	properties := map[string]any{
+		"prompt": map[string]any{"type": "string"},
+		"referenced_image_paths": map[string]any{
+			"type":     "array",
+			"items":    map[string]any{"type": "string"},
+			"maxItems": 5,
+		},
+	}
+	if hasConversationImages {
+		properties["num_last_images_to_include"] = map[string]any{
+			"type":    "integer",
+			"minimum": 1,
+			"maximum": 5,
+		}
+	}
 	flattenedTools = append(flattenedTools, map[string]any{
-		"type":        "function",
-		"name":        codexImageGenToolName,
-		"description": "Generate or edit an image in the local Codex client.",
+		"type": "function",
+		"name": codexImageGenToolName,
+		"description": `The image_gen.imagegen tool enables image generation from descriptions and editing of existing images based on specific instructions. Use it when the user requests a new image or wants to modify an attached or previously generated image.
+
+Guidelines:
+- In code mode, pass the result to generatedImage(result).
+- Omit both referenced_image_paths and num_last_images_to_include when generating a brand new image.
+- For edits, use referenced_image_paths when every target image has a local file path.
+- If you have not seen a local image yet, use view_image to inspect it before editing.
+- Use num_last_images_to_include only when at least one target image has no local file path.
+- Set num_last_images_to_include to the smallest number of recent conversation images that includes every target image, up to 5.
+- Never provide both referenced_image_paths and num_last_images_to_include.
+- If neither mechanism can include every target image, ask the user to attach the missing images again.
+- Directly generate the image without reconfirmation or clarification unless required images must be attached again.
+- After image generation, do not add text, mention downloads, summarize the image, or ask a follow-up question.
+- Always use this tool for image editing unless the user explicitly requests otherwise.`,
 		"parameters": map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"prompt": map[string]any{"type": "string"},
-				"referenced_image_paths": map[string]any{
-					"type":  "array",
-					"items": map[string]any{"type": "string"},
-				},
-				"num_last_images_to_include": map[string]any{
-					"type":    "integer",
-					"minimum": 1,
-					"maximum": 5,
-				},
-			},
+			"type":                 "object",
+			"properties":           properties,
 			"required":             []string{"prompt"},
 			"additionalProperties": false,
 		},
@@ -292,6 +317,31 @@ func PrepareCodexImageGenerationExtensionDispatch(body []byte) ([]byte, bool, er
 		return body, false, err
 	}
 	return updated, true, nil
+}
+
+func codexRequestHasConversationImages(value any) bool {
+	switch typed := value.(type) {
+	case []any:
+		for _, item := range typed {
+			if codexRequestHasConversationImages(item) {
+				return true
+			}
+		}
+	case map[string]any:
+		itemType := strings.TrimSpace(firstNonEmptyString(typed["type"]))
+		if itemType == "input_image" && strings.TrimSpace(firstNonEmptyString(typed["image_url"])) != "" {
+			return true
+		}
+		if itemType == "image_generation_call" && strings.TrimSpace(firstNonEmptyString(typed["result"])) != "" {
+			return true
+		}
+		for _, nested := range typed {
+			if codexRequestHasConversationImages(nested) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // ImageGenerationPermissionMessage returns the stable end-user error text for disabled groups.

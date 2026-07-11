@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -351,6 +352,92 @@ func TestOpenAIGatewayServiceHandleStreamingResponse_PreservesCodexImageGenerati
 	}
 }
 
+func TestOpenAIGatewayServiceStreamingPathsNormalizeCodexImageToolCall(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	newResponse := func() *http.Response {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body: io.NopCloser(strings.NewReader(
+				"data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"function_call\",\"name\":\"imagegen\",\"call_id\":\"call_1\",\"arguments\":\"{\\\"prompt\\\":\\\"new image\\\",\\\"referenced_image_paths\\\":[],\\\"num_last_images_to_include\\\":0}\"}}\n\n" +
+					"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"output\":[{\"type\":\"function_call\",\"name\":\"imagegen\",\"call_id\":\"call_1\",\"arguments\":\"{\\\"prompt\\\":\\\"new image\\\",\\\"referenced_image_paths\\\":[],\\\"num_last_images_to_include\\\":0}\"}],\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n",
+			)),
+		}
+	}
+
+	for _, tc := range []struct {
+		name string
+		run  func(*OpenAIGatewayService, *http.Response, *gin.Context) error
+	}{
+		{
+			name: "passthrough",
+			run: func(svc *OpenAIGatewayService, resp *http.Response, c *gin.Context) error {
+				_, err := svc.handleStreamingResponsePassthrough(context.Background(), resp, c, &Account{ID: 1}, time.Now(), "gpt-5.6-terra", "gpt-5.6-terra")
+				return err
+			},
+		},
+		{
+			name: "standard",
+			run: func(svc *OpenAIGatewayService, resp *http.Response, c *gin.Context) error {
+				_, err := svc.handleStreamingResponse(context.Background(), resp, c, &Account{ID: 1}, time.Now(), "gpt-5.6-terra", "gpt-5.6-terra")
+				return err
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newOpenAIImageGenerationControlTestService(&httpUpstreamRecorder{})
+			c, recorder := newOpenAIImageGenerationControlTestContext(true, "Codex Desktop/0.144.0-alpha.4")
+			c.Set(OpenAICodexImageGenerationExtensionContextKey, true)
+			require.NoError(t, tc.run(svc, newResponse(), c))
+			body := recorder.Body.String()
+			require.Contains(t, body, `"namespace":"image_gen"`)
+			require.Contains(t, body, `"arguments":"{\"prompt\":\"new image\"}"`)
+			require.NotContains(t, body, "num_last_images_to_include")
+		})
+	}
+}
+
+func TestOpenAIGatewayServiceNonStreamingPathsNormalizeCodexImageToolCall(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	newResponse := func() *http.Response {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"id":"resp_1","output":[{"type":"function_call","name":"imagegen","call_id":"call_1","arguments":"{\"prompt\":\"new image\",\"referenced_image_paths\":[],\"num_last_images_to_include\":0}"}],"usage":{"input_tokens":1,"output_tokens":1}}`)),
+		}
+	}
+
+	for _, tc := range []struct {
+		name string
+		run  func(*OpenAIGatewayService, *http.Response, *gin.Context) error
+	}{
+		{
+			name: "passthrough",
+			run: func(svc *OpenAIGatewayService, resp *http.Response, c *gin.Context) error {
+				_, err := svc.handleNonStreamingResponsePassthrough(context.Background(), resp, c, "gpt-5.6-terra", "gpt-5.6-terra")
+				return err
+			},
+		},
+		{
+			name: "standard",
+			run: func(svc *OpenAIGatewayService, resp *http.Response, c *gin.Context) error {
+				_, err := svc.handleNonStreamingResponse(context.Background(), resp, c, &Account{ID: 1}, "gpt-5.6-terra", "gpt-5.6-terra")
+				return err
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newOpenAIImageGenerationControlTestService(&httpUpstreamRecorder{})
+			c, recorder := newOpenAIImageGenerationControlTestContext(true, "Codex Desktop/0.144.0-alpha.4")
+			c.Set(OpenAICodexImageGenerationExtensionContextKey, true)
+			require.NoError(t, tc.run(svc, newResponse(), c))
+			arguments := gjson.Get(recorder.Body.String(), "output.0.arguments").String()
+			require.JSONEq(t, `{"prompt":"new image"}`, arguments)
+			require.Equal(t, "image_gen", gjson.Get(recorder.Body.String(), "output.0.namespace").String())
+		})
+	}
+}
+
 func assertCodexResponsesImageGenerationCallPreserved(t *testing.T, body string) {
 	t.Helper()
 	require.Contains(t, body, `"type":"response.image_generation_call.partial_image"`)
@@ -406,10 +493,54 @@ func TestNormalizeCodexImageGenerationFunctionCallNamespace(t *testing.T) {
 	require.False(t, changed)
 	require.JSONEq(t, `{"output":[{"type":"function_call","name":"shell"}]}`, string(unchanged))
 
-	productionFailure := []byte(`{"type":"response.output_item.done","item":{"type":"function_call","name":"imagegen","namespace":"image_gen","call_id":"call_1","arguments":"{\"num_last_images_to_include\":0,\"prompt\":\"麒麟头像\",\"referenced_image_paths\":[]}"}}`)
-	normalized, changed := normalizeCodexImageGenerationFunctionCallNamespace(productionFailure)
-	require.True(t, changed)
-	require.Equal(t, int64(1), gjson.Get(gjson.GetBytes(normalized, "item.arguments").String(), "num_last_images_to_include").Int())
+	argumentTests := []struct {
+		name          string
+		arguments     string
+		wantArguments string
+	}{
+		{
+			name:          "brand new image omits empty selectors and invalid zero",
+			arguments:     `{"num_last_images_to_include":0,"prompt":"麒麟头像","referenced_image_paths":[]}`,
+			wantArguments: `{"prompt":"麒麟头像"}`,
+		},
+		{
+			name:          "local edit prefers explicit paths",
+			arguments:     `{"prompt":"change color","referenced_image_paths":["/tmp/a.png"],"num_last_images_to_include":1}`,
+			wantArguments: `{"prompt":"change color","referenced_image_paths":["/tmp/a.png"]}`,
+		},
+		{
+			name:          "conversation edit preserves valid count",
+			arguments:     `{"prompt":"change color","num_last_images_to_include":2}`,
+			wantArguments: `{"prompt":"change color","num_last_images_to_include":2}`,
+		},
+		{
+			name:          "conversation edit clamps excessive count",
+			arguments:     `{"prompt":"change color","num_last_images_to_include":9}`,
+			wantArguments: `{"prompt":"change color","num_last_images_to_include":5}`,
+		},
+		{
+			name:          "fractional count is omitted",
+			arguments:     `{"prompt":"new image","num_last_images_to_include":1.5}`,
+			wantArguments: `{"prompt":"new image"}`,
+		},
+		{
+			name:          "local paths are limited to client maximum",
+			arguments:     `{"prompt":"collage","referenced_image_paths":["/1.png","/2.png","/3.png","/4.png","/5.png","/6.png"]}`,
+			wantArguments: `{"prompt":"collage","referenced_image_paths":["/1.png","/2.png","/3.png","/4.png","/5.png"]}`,
+		},
+	}
+	for _, tt := range argumentTests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := []byte(`{"type":"response.output_item.done","item":{"type":"function_call","name":"imagegen","namespace":"image_gen","call_id":"call_1","arguments":` + strconv.Quote(tt.arguments) + `}}`)
+			normalized, changed := normalizeCodexImageGenerationFunctionCallNamespace(payload)
+			if tt.arguments == tt.wantArguments {
+				require.False(t, changed)
+			} else {
+				require.True(t, changed)
+			}
+			require.JSONEq(t, tt.wantArguments, gjson.GetBytes(normalized, "item.arguments").String())
+		})
+	}
 }
 
 func TestNormalizeCompletedImageGenerationSSEData(t *testing.T) {
