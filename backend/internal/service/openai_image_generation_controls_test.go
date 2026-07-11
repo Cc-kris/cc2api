@@ -284,8 +284,8 @@ func TestOpenAIGatewayServiceHandleStreamingResponsePassthrough_PreservesCodexIm
 			Body: io.NopCloser(strings.NewReader(
 				"event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"created_at\":1710000000}}\n\n" +
 					"event: response.image_generation_call.partial_image\ndata: {\"type\":\"response.image_generation_call.partial_image\",\"partial_image_b64\":\"partial-image\",\"partial_image_index\":0,\"output_format\":\"png\"}\n\n" +
-					"event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"completed\",\"revised_prompt\":\"test image\",\"result\":\"final-image\",\"output_format\":\"png\"}}\n\n" +
-					"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"output\":[{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"completed\",\"result\":\"final-image\",\"output_format\":\"png\"}]}}\n\n",
+					"event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"generating\",\"revised_prompt\":\"test image\",\"result\":\"final-image\",\"output_format\":\"png\"}}\n\n" +
+					"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"output\":[{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"generating\",\"result\":\"final-image\",\"output_format\":\"png\"}]}}\n\n",
 			)),
 		}
 	}
@@ -314,8 +314,8 @@ func TestOpenAIGatewayServiceHandleStreamingResponse_PreservesCodexImageGenerati
 			Body: io.NopCloser(strings.NewReader(
 				"event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"created_at\":1710000000}}\n\n" +
 					"event: response.image_generation_call.partial_image\ndata: {\"type\":\"response.image_generation_call.partial_image\",\"partial_image_b64\":\"partial-image\",\"partial_image_index\":0,\"output_format\":\"png\"}\n\n" +
-					"event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"completed\",\"revised_prompt\":\"test image\",\"result\":\"final-image\",\"output_format\":\"png\"}}\n\n" +
-					"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"output\":[{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"completed\",\"result\":\"final-image\",\"output_format\":\"png\"}]}}\n\n",
+					"event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"generating\",\"revised_prompt\":\"test image\",\"result\":\"final-image\",\"output_format\":\"png\"}}\n\n" +
+					"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"output\":[{\"id\":\"ig_1\",\"type\":\"image_generation_call\",\"status\":\"generating\",\"result\":\"final-image\",\"output_format\":\"png\"}]}}\n\n",
 			)),
 		}
 	}
@@ -342,11 +342,62 @@ func assertCodexResponsesImageGenerationCallPreserved(t *testing.T, body string)
 	require.Contains(t, body, `"id":"ig_1"`)
 	require.Contains(t, body, `"type":"image_generation_call"`)
 	require.Contains(t, body, `"status":"completed"`)
+	require.NotContains(t, body, `"status":"generating"`)
 	require.Contains(t, body, `"revised_prompt":"test image"`)
 	require.Contains(t, body, `"result":"final-image"`)
 	require.NotContains(t, body, "event: image_generation.completed")
 	require.NotContains(t, body, `"b64_json"`)
 	require.Contains(t, body, `"type":"response.completed"`)
+}
+
+func TestNormalizeCompletedImageGenerationSSEData(t *testing.T) {
+	largeResult := strings.Repeat("a", 2_838_984)
+	tests := []struct {
+		name        string
+		payload     string
+		wantChanged bool
+		wantStatus  string
+	}{
+		{
+			name:        "real sized final image marked generating",
+			payload:     `{"type":"response.output_item.done","item":{"id":"ig_1","type":"image_generation_call","status":"generating","result":"` + largeResult + `"}}`,
+			wantChanged: true,
+			wantStatus:  "completed",
+		},
+		{
+			name:        "completed response output marked generating",
+			payload:     `{"type":"response.completed","response":{"output":[{"id":"ig_1","type":"image_generation_call","status":"generating","result":"final-image"}]}}`,
+			wantChanged: true,
+			wantStatus:  "completed",
+		},
+		{
+			name:        "in progress image without final result",
+			payload:     `{"type":"response.output_item.added","item":{"id":"ig_1","type":"image_generation_call","status":"generating"}}`,
+			wantChanged: false,
+			wantStatus:  "generating",
+		},
+		{
+			name:        "title text response",
+			payload:     `{"type":"response.output_item.done","item":{"id":"msg_1","type":"message","status":"completed"}}`,
+			wantChanged: false,
+			wantStatus:  "completed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			normalized, changed := normalizeCompletedImageGenerationSSEData([]byte(tt.payload))
+			require.Equal(t, tt.wantChanged, changed)
+			if strings.Contains(tt.payload, `"type":"response.completed"`) {
+				require.Equal(t, tt.wantStatus, gjson.GetBytes(normalized, "response.output.0.status").String())
+			} else {
+				require.Equal(t, tt.wantStatus, gjson.GetBytes(normalized, "item.status").String())
+			}
+			if strings.Contains(tt.payload, largeResult) {
+				require.Equal(t, largeResult, gjson.GetBytes(normalized, "item.result").String())
+			}
+		})
+	}
 }
 
 func newOpenAIImageGenerationControlTestService(upstream *httpUpstreamRecorder) *OpenAIGatewayService {

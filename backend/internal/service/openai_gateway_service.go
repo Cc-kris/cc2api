@@ -3757,6 +3757,11 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 					trimmedData = strings.TrimSpace(replacedData)
 				}
 			}
+			if normalizedData, normalized := normalizeCompletedImageGenerationSSEData(dataBytes); normalized {
+				dataBytes = normalizedData
+				trimmedData = strings.TrimSpace(string(normalizedData))
+				line = "data: " + string(normalizedData)
+			}
 			eventType := strings.TrimSpace(gjson.Get(trimmedData, "type").String())
 			if eventType == "response.failed" {
 				failedMessage = extractOpenAISSEErrorMessage(dataBytes)
@@ -4618,6 +4623,11 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			}
 
 			dataBytes := []byte(data)
+			if normalizedData, normalized := normalizeCompletedImageGenerationSSEData(dataBytes); normalized {
+				dataBytes = normalizedData
+				data = string(normalizedData)
+				line = "data: " + data
+			}
 			if openAIStreamEventIsTerminal(data) {
 				sawTerminalEvent = true
 			}
@@ -5255,6 +5265,56 @@ func extractImageGenerationOutputFromSSEData(data []byte, seen map[string]struct
 		seen[key] = struct{}{}
 	}
 	return json.RawMessage(item.Raw), true
+}
+
+// normalizeCompletedImageGenerationSSEData fixes upstream terminal events that
+// contain a final image result but still mark the image call as "generating".
+// Codex treats the item status as authoritative when rendering the completed
+// response, so terminal result-bearing image items must be "completed".
+func normalizeCompletedImageGenerationSSEData(data []byte) ([]byte, bool) {
+	if len(data) == 0 || !gjson.ValidBytes(data) {
+		return data, false
+	}
+
+	switch strings.TrimSpace(gjson.GetBytes(data, "type").String()) {
+	case "response.output_item.done":
+		item := gjson.GetBytes(data, "item")
+		if item.Get("type").String() != "image_generation_call" ||
+			strings.TrimSpace(item.Get("result").String()) == "" ||
+			item.Get("status").String() == "completed" {
+			return data, false
+		}
+		normalized, err := sjson.SetBytes(data, "item.status", "completed")
+		if err != nil {
+			return data, false
+		}
+		return normalized, true
+
+	case "response.completed", "response.done":
+		output := gjson.GetBytes(data, "response.output")
+		if !output.IsArray() {
+			return data, false
+		}
+		normalized := data
+		changed := false
+		for index, item := range output.Array() {
+			if item.Get("type").String() != "image_generation_call" ||
+				strings.TrimSpace(item.Get("result").String()) == "" ||
+				item.Get("status").String() == "completed" {
+				continue
+			}
+			next, err := sjson.SetBytes(normalized, fmt.Sprintf("response.output.%d.status", index), "completed")
+			if err != nil {
+				continue
+			}
+			normalized = next
+			changed = true
+		}
+		return normalized, changed
+
+	default:
+		return data, false
+	}
 }
 
 func (s *OpenAIGatewayService) parseSSEUsageFromBody(body string) *OpenAIUsage {
