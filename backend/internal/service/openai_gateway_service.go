@@ -4538,6 +4538,7 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 	}
 
 	needModelReplace := originalModel != mappedModel
+	codexDesktopImageCompat := c != nil && codexDesktopImageEventCompatEnabled(c.GetHeader("User-Agent"))
 	resultWithUsage := func() *openaiStreamingResult {
 		return &openaiStreamingResult{
 			usage:            usage,
@@ -4647,6 +4648,11 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 				data = string(correctedData)
 				line = "data: " + data
 				eventType = strings.TrimSpace(gjson.GetBytes(dataBytes, "type").String())
+			}
+			if codexDesktopImageCompat {
+				if compatLine, converted := buildCodexDesktopImageCompatSSELine(dataBytes); converted {
+					line = compatLine
+				}
 			}
 			startsClientOutput := forceFlushFailedEvent || openAIStreamDataStartsClientOutput(data, eventType)
 
