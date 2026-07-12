@@ -453,6 +453,57 @@ func TestHandleAnthropicBufferedStreamingResponseOverridesSSEContentType(t *test
 	require.Equal(t, "ok", gjson.Get(rec.Body.String(), "content.0.text").String())
 }
 
+func TestHandleChatStreamingResponse_SmallSilentRefusalTriggersRetryableFailover(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	upstreamBody := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"resp_silent","model":"grok-4.5"}}`,
+		``,
+		`data: {"type":"response.completed","response":{"id":"resp_silent","object":"response","model":"grok-4.5","status":"completed","output":[]}}`,
+		``,
+	}, "\n")
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_grok_silent_stream"}},
+		Body:       io.NopCloser(strings.NewReader(upstreamBody)),
+	}
+	account := &Account{ID: 120, Name: "grok", Platform: PlatformOpenAI}
+	svc := &OpenAIGatewayService{}
+
+	result, err := svc.handleChatStreamingResponse(resp, c, account, "grok-4.5", "grok-4.5", "grok-4.5", false, time.Now())
+	require.Nil(t, result)
+	var failoverErr *UpstreamFailoverError
+	require.True(t, errors.As(err, &failoverErr))
+	require.True(t, failoverErr.RetryableOnSameAccount)
+	require.True(t, IsOpenAISilentRefusalErrorBody(failoverErr.ResponseBody))
+	require.False(t, c.Writer.Written())
+}
+
+func TestHandleChatBufferedStreamingResponse_SilentRefusalTriggersRetryableFailover(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	upstreamBody := `data: {"type":"response.completed","response":{"id":"resp_silent_json","object":"response","model":"grok-4.5","status":"completed","output":[]}}` + "\n\n"
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_grok_silent_json"}},
+		Body:       io.NopCloser(strings.NewReader(upstreamBody)),
+	}
+	account := &Account{ID: 120, Name: "grok", Platform: PlatformOpenAI}
+	svc := &OpenAIGatewayService{}
+
+	result, err := svc.handleChatBufferedStreamingResponse(resp, c, account, "grok-4.5", "grok-4.5", "grok-4.5", time.Now())
+	require.Nil(t, result)
+	var failoverErr *UpstreamFailoverError
+	require.True(t, errors.As(err, &failoverErr))
+	require.True(t, failoverErr.RetryableOnSameAccount)
+	require.True(t, IsOpenAISilentRefusalErrorBody(failoverErr.ResponseBody))
+	require.False(t, c.Writer.Written())
+}
+
 func TestForwardAsChatCompletions_DoneSentinelWithoutTerminalReturnsError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

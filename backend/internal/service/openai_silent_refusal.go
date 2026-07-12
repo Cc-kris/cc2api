@@ -12,10 +12,9 @@ import (
 )
 
 const (
-	openAISilentRefusalMinRequestBodyBytes = 64 * 1024
-	openAISilentRefusalErrorCode           = "openai_silent_refusal"
-	openAISilentRefusalUpstreamMessage     = "OpenAI upstream returned an empty completion stream with finish_reason=stop and no usage"
-	openAISilentRefusalClientMessage       = "Upstream returned an empty completion without usage; no fallback account was available"
+	openAISilentRefusalErrorCode       = "openai_silent_refusal"
+	openAISilentRefusalUpstreamMessage = "OpenAI upstream returned an empty completion stream with finish_reason=stop and no usage"
+	openAISilentRefusalClientMessage   = "Upstream returned an empty completion without usage; no fallback account was available"
 )
 
 type openAIChatSilentRefusalDetector struct {
@@ -30,10 +29,8 @@ type openAIChatSilentRefusalDetector struct {
 	finishReason    string
 }
 
-func newOpenAIChatSilentRefusalDetector(requestBodyLen int) *openAIChatSilentRefusalDetector {
-	return &openAIChatSilentRefusalDetector{
-		enabled: requestBodyLen >= openAISilentRefusalMinRequestBodyBytes,
-	}
+func newOpenAIChatSilentRefusalDetector() *openAIChatSilentRefusalDetector {
+	return &openAIChatSilentRefusalDetector{enabled: true}
 }
 
 func (d *openAIChatSilentRefusalDetector) Enabled() bool {
@@ -234,6 +231,55 @@ func (d *openAIChatSilentRefusalDetector) observeResponseMessageItem(item gjson.
 	}
 }
 
+func isOpenAIChatCompletionsSilentRefusal(resp *apicompat.ChatCompletionsResponse) bool {
+	if resp == nil {
+		return false
+	}
+
+	detector := newOpenAIChatSilentRefusalDetector()
+	if resp.Usage != nil {
+		detector.sawUsage = true
+	}
+	for _, choice := range resp.Choices {
+		detector.observeFinishReason(choice.FinishReason)
+		message := choice.Message
+		if chatMessageHasContent(message.Content) {
+			detector.sawContent = true
+		}
+		if message.ReasoningContent != "" {
+			detector.sawReasoning = true
+		}
+		if len(message.ToolCalls) > 0 {
+			detector.sawToolCall = true
+		}
+		if message.FunctionCall != nil {
+			detector.sawFunctionCall = true
+		}
+	}
+	return detector.IsSilentRefusal()
+}
+
+func chatMessageHasContent(content json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(content)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return false
+	}
+
+	var text string
+	if err := json.Unmarshal(trimmed, &text); err == nil {
+		return text != ""
+	}
+
+	var parts []apicompat.ChatContentPart
+	if err := json.Unmarshal(trimmed, &parts); err == nil {
+		return len(parts) > 0
+	}
+
+	// Preserve unknown but non-empty content shapes rather than risking a false
+	// failover when an upstream adds a new representation.
+	return true
+}
+
 func newOpenAISilentRefusalFailoverError(c *gin.Context, account *Account, upstreamRequestID string) *UpstreamFailoverError {
 	accountID := int64(0)
 	accountName := ""
@@ -260,9 +306,10 @@ func newOpenAISilentRefusalFailoverError(c *gin.Context, account *Account, upstr
 		headers.Set("x-request-id", strings.TrimSpace(upstreamRequestID))
 	}
 	return &UpstreamFailoverError{
-		StatusCode:      http.StatusBadGateway,
-		ResponseBody:    openAISilentRefusalErrorBody(),
-		ResponseHeaders: headers,
+		StatusCode:             http.StatusBadGateway,
+		ResponseBody:           openAISilentRefusalErrorBody(),
+		ResponseHeaders:        headers,
+		RetryableOnSameAccount: true,
 	}
 }
 

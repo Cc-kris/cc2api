@@ -228,6 +228,7 @@ func TestForwardAsRawChatCompletions_SilentRefusalTriggersFailover(t *testing.T)
 	gin.SetMode(gin.TestMode)
 
 	body := largeRawChatCompletionsBody()
+	require.Len(t, body, 65_368, "regression request must stay below the former 64 KiB detector threshold")
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
@@ -258,8 +259,34 @@ func TestForwardAsRawChatCompletions_SilentRefusalTriggersFailover(t *testing.T)
 	require.True(t, errors.As(err, &failoverErr))
 	require.Equal(t, http.StatusBadGateway, failoverErr.StatusCode)
 	require.True(t, IsOpenAISilentRefusalErrorBody(failoverErr.ResponseBody))
+	require.True(t, failoverErr.RetryableOnSameAccount)
 	require.False(t, c.Writer.Written(), "silent refusal must not commit a 200 response before failover")
 	require.Empty(t, rec.Body.String())
+}
+
+func TestForwardAsRawChatCompletions_NonStreamingSilentRefusalTriggersFailover(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"model":"gpt-5.5","messages":[{"role":"user","content":"hello"}],"stream":false}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}, "x-request-id": []string{"rid_silent_json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"id":"chatcmpl_silent","object":"chat.completion","model":"gpt-5.5","choices":[{"index":0,"message":{"role":"assistant","content":""},"finish_reason":"stop"}]}`)),
+	}}
+	svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
+
+	result, err := svc.forwardAsRawChatCompletions(context.Background(), c, rawChatCompletionsTestAccount(), body, "")
+	require.Nil(t, result)
+	var failoverErr *UpstreamFailoverError
+	require.True(t, errors.As(err, &failoverErr))
+	require.True(t, failoverErr.RetryableOnSameAccount)
+	require.True(t, IsOpenAISilentRefusalErrorBody(failoverErr.ResponseBody))
+	require.False(t, c.Writer.Written())
 }
 
 func TestForwardAsRawChatCompletions_SilentRefusalToolCallsExempt(t *testing.T) {
@@ -330,7 +357,6 @@ func TestHandleChatStreamingResponse_SilentRefusalReasoningSummaryExempt(t *test
 		"gpt-5.5",
 		false,
 		time.Now(),
-		openAISilentRefusalMinRequestBodyBytes,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -528,7 +554,7 @@ func TestBufferRawChatCompletions_RejectsOversizedResponse(t *testing.T) {
 	svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig()}
 	svc.cfg.Gateway.UpstreamResponseReadMaxBytes = 3
 
-	result, err := svc.bufferRawChatCompletions(c, resp, "gpt-5.4", "gpt-5.4", "gpt-5.4", nil, nil, time.Now())
+	result, err := svc.bufferRawChatCompletions(c, resp, rawChatCompletionsTestAccount(), "gpt-5.4", "gpt-5.4", "gpt-5.4", nil, nil, time.Now())
 	require.ErrorIs(t, err, ErrUpstreamResponseBodyTooLarge)
 	require.Nil(t, result)
 	require.Equal(t, http.StatusBadGateway, rec.Code)
@@ -560,7 +586,8 @@ func rawChatCompletionsTestAccount() *Account {
 }
 
 func largeRawChatCompletionsBody() []byte {
-	return []byte(`{"model":"gpt-5.5","messages":[{"role":"user","content":"` +
-		strings.Repeat("x", openAISilentRefusalMinRequestBodyBytes) +
-		`"}],"stream":true}`)
+	prefix := `{"model":"gpt-5.5","messages":[{"role":"user","content":"`
+	suffix := `"}],"stream":true}`
+	const grokCLIRequestBytes = 65_368
+	return []byte(prefix + strings.Repeat("x", grokCLIRequestBytes-len(prefix)-len(suffix)) + suffix)
 }
