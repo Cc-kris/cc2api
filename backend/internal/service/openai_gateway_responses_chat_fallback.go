@@ -248,6 +248,9 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsResponses(
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	}
+	// This branch transforms the upstream Chat Completions payload into a
+	// Responses JSON payload, so the client-facing media type must be JSON.
+	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	c.JSON(http.StatusOK, responsesResp)
 
 	return &OpenAIForwardResult{

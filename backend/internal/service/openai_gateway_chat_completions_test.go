@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -392,7 +393,10 @@ func TestForwardAsChatCompletions_BufferedTerminalWithoutUpstreamCloseReturns(t 
 		Body:       upstreamStream,
 	}}
 
-	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	svc := &OpenAIGatewayService{
+		httpUpstream:         upstream,
+		responseHeaderFilter: compileResponseHeaderFilter(&config.Config{}),
+	}
 	account := &Account{
 		ID:          1,
 		Name:        "openai-oauth",
@@ -422,10 +426,31 @@ func TestForwardAsChatCompletions_BufferedTerminalWithoutUpstreamCloseReturns(t 
 		require.Equal(t, 17, got.result.Usage.InputTokens)
 		require.Equal(t, 8, got.result.Usage.OutputTokens)
 		require.Equal(t, 6, got.result.Usage.CacheReadInputTokens)
+		require.Equal(t, "application/json; charset=utf-8", rec.Header().Get("Content-Type"))
 		require.Contains(t, rec.Body.String(), `"finish_reason":"stop"`)
 	case <-time.After(time.Second):
 		require.Fail(t, "ForwardAsChatCompletions buffered response should return after terminal usage event even if upstream keeps the connection open")
 	}
+}
+
+func TestHandleAnthropicBufferedStreamingResponseOverridesSSEContentType(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	upstreamBody := `data: {"type":"response.completed","response":{"id":"resp_messages","object":"response","model":"gpt-5.4","status":"completed","output":[{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}}}` + "\n\n"
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_messages_json"}},
+		Body:       io.NopCloser(strings.NewReader(upstreamBody)),
+	}
+	svc := &OpenAIGatewayService{responseHeaderFilter: compileResponseHeaderFilter(&config.Config{})}
+
+	result, err := svc.handleAnthropicBufferedStreamingResponse(resp, c, "gpt-5.4", "gpt-5.4", "gpt-5.4", time.Now())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "application/json; charset=utf-8", rec.Header().Get("Content-Type"))
+	require.Equal(t, "ok", gjson.Get(rec.Body.String(), "content.0.text").String())
 }
 
 func TestForwardAsChatCompletions_DoneSentinelWithoutTerminalReturnsError(t *testing.T) {

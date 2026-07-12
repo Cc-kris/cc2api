@@ -454,6 +454,9 @@ func (s *GeminiMessagesCompatService) handleChatCompletionsNonStreamingResponseF
 	}
 
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+	// The Gemini payload has been converted to Chat Completions JSON, so do not
+	// let an upstream media type override the client-facing representation.
+	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	c.JSON(http.StatusOK, chatResp)
 	return usage, nil
 }

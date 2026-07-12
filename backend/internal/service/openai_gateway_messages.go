@@ -451,6 +451,9 @@ func (s *OpenAIGatewayService) handleAnthropicBufferedStreamingResponse(
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	}
+	// The upstream response is SSE, but this branch converts it into a buffered
+	// Anthropic Messages JSON response. Override the copied upstream content type.
+	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	c.JSON(http.StatusOK, anthropicResp)
 
 	return &OpenAIForwardResult{

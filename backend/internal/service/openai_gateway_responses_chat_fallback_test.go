@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -34,8 +35,9 @@ func TestForwardResponses_ForceChatCompletionsRoutesNonStreamingToChatCompletion
 		)),
 	}}
 	svc := &OpenAIGatewayService{
-		cfg:          rawChatCompletionsTestConfig(),
-		httpUpstream: upstream,
+		cfg:                  rawChatCompletionsTestConfig(),
+		httpUpstream:         upstream,
+		responseHeaderFilter: compileResponseHeaderFilter(&config.Config{}),
 	}
 
 	result, err := svc.Forward(context.Background(), c, forceChatResponsesFallbackAccount(), body)
@@ -51,6 +53,7 @@ func TestForwardResponses_ForceChatCompletionsRoutesNonStreamingToChatCompletion
 	require.Equal(t, 2, result.Usage.OutputTokens)
 	require.Equal(t, 1, result.Usage.CacheReadInputTokens)
 	require.False(t, result.Stream)
+	require.Equal(t, "application/json; charset=utf-8", rec.Header().Get("Content-Type"))
 }
 
 func TestForwardResponses_ForceChatCompletionsReasoningOnlyNonStreamingVisible(t *testing.T) {
