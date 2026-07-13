@@ -1235,9 +1235,13 @@ func TestOpenAIResponsesWebSocket_ImageGenerationOnFollowupTurnRequiresReconnect
 	})
 
 	require.Empty(t, got.event)
-	require.NotNil(t, got.closeErr)
-	require.Equal(t, coderws.StatusTryAgainLater, got.closeErr.Code)
-	require.Equal(t, "request route changed; reconnect and retry", got.closeErr.Reason)
+	require.Error(t, got.readErr)
+	if got.closeErr != nil {
+		require.Equal(t, coderws.StatusTryAgainLater, got.closeErr.Code)
+		require.Equal(t, "request route changed; reconnect and retry", got.closeErr.Reason)
+	} else {
+		require.ErrorIs(t, got.readErr, io.EOF)
+	}
 	require.Equal(t, int32(1), got.upstreamHits, "第二轮图片请求切换 HTTP 路径前不得复用原 WS 上游")
 }
 
@@ -1428,6 +1432,7 @@ type openAIResponsesWSUnsupportedImageCase struct {
 
 type openAIResponsesWSFollowupUnsupportedImageResult struct {
 	event        []byte
+	readErr      error
 	closeErr     *coderws.CloseError
 	upstreamHits int32
 }
@@ -1945,20 +1950,30 @@ func runOpenAIResponsesWebSocketFollowupUnsupportedImageCase(t *testing.T, tc op
 
 	writeOpenAIWSTestPayload(t, clientConn, tc.nextPayload)
 	var closeErr coderws.CloseError
+	var closeErrPtr *coderws.CloseError
 	_, event, err := readOpenAIWSTestMessage(t, clientConn)
 	if err != nil {
-		require.ErrorAs(t, err, &closeErr)
+		if errors.As(err, &closeErr) {
+			closeErrPtr = &closeErr
+		} else {
+			require.ErrorIs(t, err, io.EOF)
+		}
 		event = nil
 	} else {
 		_, _, err = readOpenAIWSTestMessage(t, clientConn)
 		require.Error(t, err)
-		require.ErrorAs(t, err, &closeErr)
+		if errors.As(err, &closeErr) {
+			closeErrPtr = &closeErr
+		} else {
+			require.ErrorIs(t, err, io.EOF)
+		}
 	}
 
 	require.Eventually(t, func() bool { return atomic.LoadInt32(&upstreamHits) == 1 }, time.Second, 10*time.Millisecond)
 	return openAIResponsesWSFollowupUnsupportedImageResult{
 		event:        event,
-		closeErr:     &closeErr,
+		readErr:      err,
+		closeErr:     closeErrPtr,
 		upstreamHits: atomic.LoadInt32(&upstreamHits),
 	}
 }
