@@ -1324,6 +1324,17 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	if !h.ensureResponsesDependencies(c, reqLog) {
 		return
 	}
+	bridgeGroup, bridgeLookupErr := h.gatewayService.IsCodexImageGenerationBridgeGroup(c.Request.Context(), apiKey.GroupID)
+	if bridgeLookupErr != nil {
+		reqLog.Warn("openai.websocket_image_bridge_group_lookup_failed", zap.Error(bridgeLookupErr))
+		h.errorResponse(c, http.StatusServiceUnavailable, "api_error", "Codex image channel configuration is unavailable")
+		return
+	}
+	if bridgeGroup {
+		reqLog.Info("openai.websocket_image_bridge_http_transport_required")
+		h.errorResponse(c, http.StatusUpgradeRequired, "websocket_transport_unsupported", "Codex image channels require HTTPS Responses transport")
+		return
+	}
 	reqLog.Info("openai.websocket_ingress_started")
 	clientIP := ip.GetClientIP(c)
 	userAgent := strings.TrimSpace(c.GetHeader("User-Agent"))

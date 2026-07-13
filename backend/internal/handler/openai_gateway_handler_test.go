@@ -913,26 +913,16 @@ func TestOpenAIResponsesWebSocket_PassthroughUsageLogInfersReasoningFromInitialR
 		"usage log reasoning effort 必须使用渠道映射前首帧模型后缀推导")
 }
 
-func TestOpenAIResponsesWebSocket_CodexExplicitHostedImageUsesHTTPFallback(t *testing.T) {
-	metadata := `{"request_kind":"turn","thread_source":"user"}`
-	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
-		firstPayload: `{"type":"response.create","model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"draw a blue paper airplane"}]}],"tools":[{"type":"image_generation"}]}`,
+func TestOpenAIResponsesWebSocket_CodexImageBridgeRequiresHTTPTransport(t *testing.T) {
+	runOpenAIResponsesWebSocketUnsupportedImageCase(t, openAIResponsesWSUnsupportedImageCase{
+		firstPayload: `{"type":"response.create","model":"gpt-5.6-terra","stream":true,"input":"prewarm"}`,
 		userAgent:    testStringPtr("Codex Desktop/0.144.0-alpha.4 Windows"),
 		channelMapping: map[string]string{
 			"gpt-5.6-terra": "gpt-image-2",
 		},
-		codexBridge: true,
+		codexBridge:           true,
+		expectUpgradeRequired: true,
 	})
-
-	require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(got.upstreamFirstPayload, "model").String())
-	require.Equal(t, "image_generation", gjson.GetBytes(got.upstreamFirstPayload, "tools.0.type").String())
-	require.Equal(t, "gpt-image-2", gjson.GetBytes(got.upstreamFirstPayload, "tools.0.model").String())
-	require.Equal(t, "image_generation", gjson.GetBytes(got.upstreamFirstPayload, "tool_choice.type").String())
-	require.Equal(t, 1, got.log.ImageCount)
-	require.NotNil(t, got.log.BillingMode)
-	require.Equal(t, string(service.BillingModeImage), *got.log.BillingMode)
-	require.NotNil(t, got.log.ModelMappingChain)
-	require.Equal(t, "gpt-5.6-terra→gpt-image-2→gpt-5.6-terra", *got.log.ModelMappingChain)
 }
 
 func TestOpenAIResponsesWebSocket_TextModelNativeImageToolUsesHTTPFallbackWhenGroupAllows(t *testing.T) {
@@ -1099,42 +1089,6 @@ func TestOpenAIResponsesHTTP_CodexHostedAndNamespaceExtensionRoutes(t *testing.T
 	require.Equal(t, string(service.BillingModeImage), *missingCapabilityUsage.BillingMode)
 }
 
-func TestOpenAIResponsesWebSocket_CodexPrewarmBypassesImageMapping(t *testing.T) {
-	metadata := `{"request_kind":"prewarm","thread_source":"user"}`
-	firstPayload := `{"type":"response.create","model":"gpt-5.4-mini","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":"warm"}`
-	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
-		firstPayload: firstPayload,
-		userAgent:    testStringPtr("Codex Desktop/0.144.0-alpha.4 Windows"),
-		channelMapping: map[string]string{
-			"gpt-5.4-mini": "gpt-image-2",
-		},
-		codexBridge: true,
-	})
-
-	require.JSONEq(t, firstPayload, string(got.upstreamFirstPayload))
-	require.Equal(t, "gpt-5.4-mini", got.log.Model)
-	require.Zero(t, got.log.ImageCount)
-	require.Nil(t, got.log.ChannelID)
-	require.Nil(t, got.log.ModelMappingChain)
-}
-
-func TestOpenAIResponsesWebSocket_LegacyCodexWithoutMetadataUsesHostedImageTool(t *testing.T) {
-	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
-		firstPayload: `{"type":"response.create","model":"gpt-5.5","stream":true,"input":"draw a red circle"}`,
-		userAgent:    testStringPtr("codex_cli_rs/0.90.0"),
-		channelMapping: map[string]string{
-			"gpt-5.5": "gpt-image-2",
-		},
-		codexBridge: true,
-	})
-
-	require.Equal(t, "gpt-5.5", gjson.GetBytes(got.upstreamFirstPayload, "model").String())
-	require.Equal(t, "image_generation", gjson.GetBytes(got.upstreamFirstPayload, "tools.0.type").String())
-	require.Equal(t, "gpt-image-2", gjson.GetBytes(got.upstreamFirstPayload, "tools.0.model").String())
-	require.Equal(t, "image_generation", gjson.GetBytes(got.upstreamFirstPayload, "tool_choice.type").String())
-	require.Equal(t, 1, got.log.ImageCount)
-}
-
 func TestOpenAIResponsesWebSocket_RejectsImageOnlyModel(t *testing.T) {
 	event, closeErr := runOpenAIResponsesWebSocketUnsupportedImageCase(t, openAIResponsesWSUnsupportedImageCase{
 		firstPayload: `{"type":"response.create","model":"gpt-image-2","stream":true,"input":"draw a candy on white background"}`,
@@ -1144,23 +1098,6 @@ func TestOpenAIResponsesWebSocket_RejectsImageOnlyModel(t *testing.T) {
 	assertOpenAIWSImageUnsupportedEvent(t, event, "gpt-image-2")
 	require.NotNil(t, closeErr)
 	require.Equal(t, coderws.StatusPolicyViolation, closeErr.Code)
-}
-
-func TestOpenAIResponsesWebSocket_CodexMetadataOnlyUserTurnRequiresCapabilityRetry(t *testing.T) {
-	metadata := `{"request_kind":"turn","thread_source":"user"}`
-	event, closeErr := runOpenAIResponsesWebSocketUnsupportedImageCase(t, openAIResponsesWSUnsupportedImageCase{
-		firstPayload: `{"type":"response.create","model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":"draw a paper airplane"}`,
-		userAgent:    testStringPtr("Codex Desktop/0.144.0-alpha.4 Windows"),
-		channelMapping: map[string]string{
-			"gpt-5.6-terra": "gpt-image-2",
-		},
-		codexBridge: true,
-	})
-
-	assertOpenAIWSImageUnsupportedEvent(t, event, "gpt-5.6-terra")
-	require.NotNil(t, closeErr)
-	require.Equal(t, coderws.StatusPolicyViolation, closeErr.Code)
-	require.Equal(t, openAIWSImageGenerationUnsupportedMessage, closeErr.Reason)
 }
 
 func TestOpenAIResponsesWebSocket_RejectsChannelMappedImageModelWithoutExplicitTool(t *testing.T) {
@@ -1365,10 +1302,11 @@ type openAIResponsesWSUsageLogResult struct {
 }
 
 type openAIResponsesWSUnsupportedImageCase struct {
-	firstPayload   string
-	userAgent      *string
-	channelMapping map[string]string
-	codexBridge    bool
+	firstPayload          string
+	userAgent             *string
+	channelMapping        map[string]string
+	codexBridge           bool
+	expectUpgradeRequired bool
 }
 
 type openAIResponsesWSFollowupUnsupportedImageResult struct {
@@ -2004,12 +1942,18 @@ func runOpenAIResponsesWebSocketUnsupportedImageCase(t *testing.T, tc openAIResp
 		headers.Set("User-Agent", *tc.userAgent)
 	}
 	dialCtx, cancelDial := context.WithTimeout(context.Background(), 3*time.Second)
-	clientConn, _, err := coderws.Dial(
+	clientConn, dialResponse, err := coderws.Dial(
 		dialCtx,
 		"ws"+strings.TrimPrefix(handlerServer.URL, "http")+"/openai/v1/responses",
 		&coderws.DialOptions{HTTPHeader: headers, CompressionMode: coderws.CompressionContextTakeover},
 	)
 	cancelDial()
+	if tc.expectUpgradeRequired {
+		require.Error(t, err)
+		require.NotNil(t, dialResponse)
+		require.Equal(t, http.StatusUpgradeRequired, dialResponse.StatusCode)
+		return nil, nil
+	}
 	require.NoError(t, err)
 	defer func() {
 		_ = clientConn.CloseNow()
