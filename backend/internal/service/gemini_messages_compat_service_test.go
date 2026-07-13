@@ -183,6 +183,78 @@ func TestGeminiForwardAsChatCompletions_StreamsOpenAIChunksFromGeminiSSE(t *test
 	require.Contains(t, out, "data: [DONE]")
 }
 
+func TestGeminiForwardAsChatCompletions_ToolArgumentDeltaOmitsEmptyName(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstreamBody := `data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"grep","args":{"pattern":"context_window"}}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":3,"candidatesTokenCount":2}}` + "\n\n" +
+		"data: [DONE]\n\n"
+	httpStub := &geminiCompatHTTPUpstreamStub{
+		response: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body:       io.NopCloser(strings.NewReader(upstreamBody)),
+		},
+	}
+	svc := &GeminiMessagesCompatService{httpUpstream: httpStub, cfg: &config.Config{}}
+	account := &Account{
+		ID:       103,
+		Platform: PlatformGemini,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key": "gemini-api-key",
+		},
+		Concurrency: 1,
+	}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	body := []byte(`{"model":"gemini-2.5-flash","stream":true,"stream_options":{"include_usage":true},"messages":[{"role":"user","content":"search"}],"tools":[{"type":"function","function":{"name":"grep","parameters":{"type":"object"}}}]}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+
+	result, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assertGeminiToolCallWireNameAndArguments(t, rec.Body.String(), "grep", `{"pattern":"context_window"}`)
+}
+
+func assertGeminiToolCallWireNameAndArguments(t *testing.T, body, expectedName, expectedArguments string) {
+	t.Helper()
+
+	name := ""
+	arguments := ""
+	for _, line := range strings.Split(body, "\n") {
+		if !strings.HasPrefix(line, "data: ") || line == "data: [DONE]" {
+			continue
+		}
+		var payload map[string]any
+		require.NoError(t, json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &payload))
+		choices, _ := payload["choices"].([]any)
+		if len(choices) == 0 {
+			continue
+		}
+		choice, _ := choices[0].(map[string]any)
+		delta, _ := choice["delta"].(map[string]any)
+		toolCalls, _ := delta["tool_calls"].([]any)
+		for _, rawToolCall := range toolCalls {
+			toolCall, _ := rawToolCall.(map[string]any)
+			function, _ := toolCall["function"].(map[string]any)
+			if wireName, exists := function["name"]; exists {
+				require.NotEmpty(t, wireName)
+				name = wireName.(string)
+			}
+			if wireArguments, exists := function["arguments"]; exists {
+				arguments += wireArguments.(string)
+			}
+		}
+	}
+
+	require.NotContains(t, body, `"name":""`)
+	require.Equal(t, expectedName, name)
+	require.Equal(t, expectedArguments, arguments)
+	require.Contains(t, body, `"finish_reason":"tool_calls"`)
+	require.Contains(t, body, "data: [DONE]")
+}
+
 // TestConvertClaudeToolsToGeminiTools_CustomType 测试custom类型工具转换
 func TestConvertClaudeToolsToGeminiTools_CustomType(t *testing.T) {
 	tests := []struct {

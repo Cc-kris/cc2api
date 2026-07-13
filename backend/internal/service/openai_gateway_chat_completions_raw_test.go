@@ -326,6 +326,39 @@ func TestForwardAsRawChatCompletions_SilentRefusalToolCallsExempt(t *testing.T) 
 	require.Contains(t, rec.Body.String(), `"finish_reason":"tool_calls"`)
 }
 
+func TestForwardAsRawChatCompletions_GLMAndDeepSeekToolStreamsRemainBytePreserving(t *testing.T) {
+	for _, model := range []string{"glm-4.5", "deepseek-chat"} {
+		t.Run(model, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+
+			body := []byte(`{"model":"` + model + `","messages":[{"role":"user","content":"search"}],"stream":true}`)
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+
+			toolStart := `data: {"id":"chatcmpl_tool","object":"chat.completion.chunk","model":"` + model + `","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"lookup","arguments":""}}]}}]}`
+			argsDelta := `data: {"id":"chatcmpl_tool","object":"chat.completion.chunk","model":"` + model + `","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\\"q\\":\\"x\\"}"}}]}}]}`
+			finish := `data: {"id":"chatcmpl_tool","object":"chat.completion.chunk","model":"` + model + `","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}`
+			upstreamBody := strings.Join([]string{toolStart, "", argsDelta, "", finish, "", "data: [DONE]", ""}, "\n")
+			upstream := &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body:       io.NopCloser(strings.NewReader(upstreamBody)),
+			}}
+			svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
+
+			result, err := svc.forwardAsRawChatCompletions(context.Background(), c, rawChatCompletionsTestAccount(), body, "")
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Contains(t, rec.Body.String(), toolStart)
+			require.Contains(t, rec.Body.String(), argsDelta)
+			require.Contains(t, rec.Body.String(), finish)
+			require.Contains(t, rec.Body.String(), "data: [DONE]")
+		})
+	}
+}
+
 func TestHandleChatStreamingResponse_SilentRefusalReasoningSummaryExempt(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

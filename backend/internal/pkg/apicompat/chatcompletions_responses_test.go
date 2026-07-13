@@ -2,6 +2,7 @@ package apicompat
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -913,6 +914,96 @@ func TestResponsesEventToChatChunks_ToolCallDelta(t *testing.T) {
 	tc = chunks[0].Choices[0].Delta.ToolCalls[0]
 	require.NotNil(t, tc.Index)
 	assert.Equal(t, 0, *tc.Index, "first tool arg delta must still use index 0")
+}
+
+func TestResponsesEventToChatChunks_ToolCallWireFormatPreservesNamesAcrossInterleavedDeltas(t *testing.T) {
+	state := NewResponsesEventToChatState()
+	state.Model = "grok-4.5"
+	state.SentRole = true
+	state.IncludeUsage = true
+
+	events := []*ResponsesStreamEvent{
+		{
+			Type:        "response.output_item.added",
+			OutputIndex: 1,
+			Item: &ResponsesOutput{
+				Type:   "function_call",
+				CallID: "call_grep",
+				Name:   "grep",
+			},
+		},
+		{
+			Type:        "response.output_item.added",
+			OutputIndex: 2,
+			Item: &ResponsesOutput{
+				Type:   "function_call",
+				CallID: "call_read",
+				Name:   "read_file",
+			},
+		},
+		{Type: "response.function_call_arguments.delta", OutputIndex: 1, Delta: `{"pattern":"con`},
+		{Type: "response.function_call_arguments.delta", OutputIndex: 2, Delta: `{"path":"README`},
+		{Type: "response.function_call_arguments.delta", OutputIndex: 1, Delta: `text_window"}`},
+		{Type: "response.function_call_arguments.delta", OutputIndex: 2, Delta: `.md"}`},
+		{
+			Type: "response.completed",
+			Response: &ResponsesResponse{
+				Status: "completed",
+				Usage:  &ResponsesUsage{InputTokens: 10, OutputTokens: 4},
+			},
+		},
+	}
+
+	type mergedToolCall struct {
+		name      string
+		arguments string
+	}
+	merged := map[int]*mergedToolCall{}
+	var wireFrames []string
+	for _, event := range events {
+		for _, chunk := range ResponsesEventToChatChunks(event, state) {
+			sse, err := ChatChunkToSSE(chunk)
+			require.NoError(t, err)
+			wireFrames = append(wireFrames, sse)
+
+			payload := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(sse), "data:"))
+			var wire map[string]any
+			require.NoError(t, json.Unmarshal([]byte(payload), &wire))
+			choices, _ := wire["choices"].([]any)
+			if len(choices) == 0 {
+				continue
+			}
+			choice, _ := choices[0].(map[string]any)
+			delta, _ := choice["delta"].(map[string]any)
+			toolCalls, _ := delta["tool_calls"].([]any)
+			for _, rawToolCall := range toolCalls {
+				toolCall, _ := rawToolCall.(map[string]any)
+				idx := int(toolCall["index"].(float64))
+				function, _ := toolCall["function"].(map[string]any)
+				current := merged[idx]
+				if current == nil {
+					current = &mergedToolCall{}
+					merged[idx] = current
+				}
+				if name, exists := function["name"]; exists {
+					require.NotEmpty(t, name, "wire tool-call deltas must never overwrite a name with an empty string")
+					current.name = name.(string)
+				}
+				if arguments, exists := function["arguments"]; exists {
+					current.arguments += arguments.(string)
+				}
+			}
+		}
+	}
+
+	wire := strings.Join(wireFrames, "")
+	require.NotContains(t, wire, `"name":""`)
+	require.Equal(t, "grep", merged[0].name)
+	require.Equal(t, `{"pattern":"context_window"}`, merged[0].arguments)
+	require.Equal(t, "read_file", merged[1].name)
+	require.Equal(t, `{"path":"README.md"}`, merged[1].arguments)
+	require.Contains(t, wire, `"finish_reason":"tool_calls"`)
+	require.Contains(t, wire, `"usage":{"prompt_tokens":10,"completion_tokens":4,"total_tokens":14}`)
 }
 
 func TestResponsesEventToChatChunks_Completed(t *testing.T) {
