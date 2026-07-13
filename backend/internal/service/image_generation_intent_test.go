@@ -120,7 +120,8 @@ func TestPrepareCodexImageGenerationExtensionDispatch(t *testing.T) {
 	require.Equal(t, 1, len(gjson.GetBytes(updated, "tools.0.parameters.required").Array()))
 	require.Equal(t, "prompt", gjson.GetBytes(updated, "tools.0.parameters.required.0").String())
 	require.False(t, gjson.GetBytes(updated, "tools.0.parameters.additionalProperties").Bool())
-	require.Equal(t, "auto", gjson.GetBytes(updated, "tool_choice").String())
+	require.Equal(t, "function", gjson.GetBytes(updated, "tool_choice.type").String())
+	require.Equal(t, "imagegen", gjson.GetBytes(updated, "tool_choice.name").String())
 
 	editBody := []byte(`{"model":"gpt-5.6-terra","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"input":[{"type":"message","role":"user","content":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"},{"type":"input_text","text":"change it"}]}]}`)
 	editUpdated, editChanged, err := PrepareCodexImageGenerationExtensionDispatch(editBody)
@@ -130,7 +131,7 @@ func TestPrepareCodexImageGenerationExtensionDispatch(t *testing.T) {
 	require.Equal(t, int64(5), gjson.GetBytes(editUpdated, "tools.0.parameters.properties.num_last_images_to_include.maximum").Int())
 	require.NotContains(t, gjson.GetBytes(editUpdated, "instructions").String(), "No conversation images are available")
 
-	continuation := []byte(`{"model":"gpt-5.6-terra","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"input":[{"type":"function_call","namespace":"image_gen","name":"imagegen","call_id":"call_1"},{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"},{"type":"input_text","text":"saved"}]}]}`)
+	continuation := []byte(`{"model":"gpt-5.6-terra","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"tool_choice":{"type":"function","name":"imagegen"},"input":[{"type":"function_call","namespace":"image_gen","name":"imagegen","call_id":"call_1"},{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"},{"type":"input_text","text":"saved"}]}]}`)
 	require.True(t, IsCodexImageGenerationExtensionContinuation(continuation))
 	continuationUpdated, changed, err := PrepareCodexImageGenerationExtensionDispatch(continuation)
 	require.NoError(t, err)
@@ -155,11 +156,13 @@ func TestPrepareCodexImageGenerationExtensionDispatch(t *testing.T) {
 	liteUpdated, liteChanged, err := PrepareCodexImageGenerationExtensionDispatch(lite)
 	require.NoError(t, err)
 	require.True(t, liteChanged)
-	require.False(t, gjson.GetBytes(liteUpdated, "tools").Exists())
-	require.Equal(t, "developer", gjson.GetBytes(liteUpdated, "input.0.role").String())
-	require.Equal(t, "function", gjson.GetBytes(liteUpdated, `input.#(type=="additional_tools").tools.0.type`).String())
-	require.Equal(t, "imagegen", gjson.GetBytes(liteUpdated, `input.#(type=="additional_tools").tools.0.name`).String())
-	require.Contains(t, gjson.GetBytes(liteUpdated, `input.#(role=="developer").content.0.text`).String(), "call the imagegen function exactly once")
+	require.Equal(t, "function", gjson.GetBytes(liteUpdated, "tools.0.type").String())
+	require.Equal(t, "imagegen", gjson.GetBytes(liteUpdated, "tools.0.name").String())
+	require.Equal(t, "additional_tools", gjson.GetBytes(liteUpdated, `input.#(type=="additional_tools").type`).String())
+	require.False(t, gjson.GetBytes(liteUpdated, `input.#(type=="additional_tools").tools`).Exists())
+	require.Equal(t, "function", gjson.GetBytes(liteUpdated, "tool_choice.type").String())
+	require.Equal(t, "imagegen", gjson.GetBytes(liteUpdated, "tool_choice.name").String())
+	require.Contains(t, gjson.GetBytes(liteUpdated, "instructions").String(), "call the imagegen function exactly once")
 }
 
 func TestAttachCodexTurnMetadataEnablesWebSocketRouting(t *testing.T) {
@@ -265,10 +268,13 @@ func TestPrepareCodexImageRouteRequest(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, CodexImageExecutionExtension, decision.Execution)
 		require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(prepared, "model").String())
-		require.Equal(t, "developer", gjson.GetBytes(prepared, "input.0.role").String())
-		require.Equal(t, "function", gjson.GetBytes(prepared, `input.#(type=="additional_tools").tools.0.type`).String())
-		require.Equal(t, "imagegen", gjson.GetBytes(prepared, `input.#(type=="additional_tools").tools.0.name`).String())
-		require.False(t, gjson.GetBytes(prepared, `tools.#(type=="image_generation")#`).Exists())
+		require.Equal(t, "function", gjson.GetBytes(prepared, "tools.0.type").String())
+		require.Equal(t, "imagegen", gjson.GetBytes(prepared, "tools.0.name").String())
+		require.Equal(t, "function", gjson.GetBytes(prepared, "tool_choice.type").String())
+		require.Equal(t, "imagegen", gjson.GetBytes(prepared, "tool_choice.name").String())
+		require.Contains(t, gjson.GetBytes(prepared, "instructions").String(), "call the imagegen function exactly once")
+		require.False(t, gjson.GetBytes(prepared, `input.#(type=="additional_tools")`).Exists())
+		require.Empty(t, gjson.GetBytes(prepared, `tools.#(type=="image_generation")#`).Array())
 	})
 
 	t.Run("feature turn strips image namespace but preserves text model", func(t *testing.T) {

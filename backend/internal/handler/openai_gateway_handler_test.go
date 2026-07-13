@@ -988,8 +988,7 @@ func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *tes
 			_, _ = io.WriteString(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_prewarm_e2e\",\"model\":\"gpt-5.6-terra\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"ready\"}]}],\"usage\":{\"input_tokens\":2,\"output_tokens\":1}}}\n\n")
 			return
 		}
-		if gjson.GetBytes(payload, "tools.0.name").String() == "imagegen" ||
-			gjson.GetBytes(payload, `input.#(type=="additional_tools").tools.0.name`).String() == "imagegen" {
+		if gjson.GetBytes(payload, "tools.0.name").String() == "imagegen" {
 			_, _ = io.WriteString(w, "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_http_e2e\",\"type\":\"function_call\",\"name\":\"imagegen\",\"call_id\":\"call_http_e2e\",\"arguments\":\"{}\"}}\n\n"+
 				"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_extension_e2e\",\"model\":\"gpt-5.4\",\"output\":[{\"id\":\"fc_http_e2e\",\"type\":\"function_call\",\"name\":\"imagegen\",\"call_id\":\"call_http_e2e\",\"arguments\":\"{}\"}],\"usage\":{\"input_tokens\":2,\"output_tokens\":1}}}\n\n")
 			return
@@ -1102,16 +1101,24 @@ func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *tes
 	require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(extensionForwarded, "model").String())
 	require.Equal(t, "function", gjson.GetBytes(extensionForwarded, "tools.0.type").String())
 	require.Equal(t, "imagegen", gjson.GetBytes(extensionForwarded, "tools.0.name").String())
+	require.Equal(t, "function", gjson.GetBytes(extensionForwarded, "tool_choice.type").String())
+	require.Equal(t, "imagegen", gjson.GetBytes(extensionForwarded, "tool_choice.name").String())
 
-	liteBody := []byte(`{"model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"draw via lite"}]},{"type":"additional_tools","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}]}]}`)
+	liteBody := []byte(`{"model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"draw via latest metadata-only request"}]}]}`)
 	liteReq := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(liteBody))
 	liteReq.Header.Set("Content-Type", "application/json")
 	liteRecorder := httptest.NewRecorder()
 	router.ServeHTTP(liteRecorder, liteReq)
 	require.Equal(t, http.StatusOK, liteRecorder.Code)
+	require.Contains(t, liteRecorder.Body.String(), `"namespace":"image_gen"`)
+	require.Contains(t, liteRecorder.Body.String(), `"name":"imagegen"`)
 	liteForwarded := <-upstreamPayload
-	require.Equal(t, "function", gjson.GetBytes(liteForwarded, `input.#(type=="additional_tools").tools.0.type`).String())
-	require.Equal(t, "imagegen", gjson.GetBytes(liteForwarded, `input.#(type=="additional_tools").tools.0.name`).String())
+	require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(liteForwarded, "model").String())
+	require.Equal(t, "function", gjson.GetBytes(liteForwarded, "tools.0.type").String())
+	require.Equal(t, "imagegen", gjson.GetBytes(liteForwarded, "tools.0.name").String())
+	require.Equal(t, "function", gjson.GetBytes(liteForwarded, "tool_choice.type").String())
+	require.Equal(t, "imagegen", gjson.GetBytes(liteForwarded, "tool_choice.name").String())
+	require.False(t, gjson.GetBytes(liteForwarded, `input.#(type=="additional_tools")`).Exists())
 
 	missingCapabilityBody := []byte(`{"model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":"draw without a declared image capability"}`)
 	missingCapabilityReq := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(missingCapabilityBody))

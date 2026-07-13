@@ -462,12 +462,11 @@ func PrepareCodexImageGenerationExtensionDispatch(body []byte) ([]byte, bool, er
 		directive += " No conversation images are available in this turn, so you must omit num_last_images_to_include."
 	}
 	continuation := IsCodexImageGenerationExtensionContinuation(body)
-	tools, hasClassicTools := reqBody["tools"].([]any)
-	input, hasInputArray := reqBody["input"].([]any)
+	tools, _ := reqBody["tools"].([]any)
+	input, _ := reqBody["input"].([]any)
 	additionalTools, additionalToolsIndex := codexAdditionalTools(reqBody["input"])
-	useTopLevelTools := hasClassicTools || !hasInputArray
 	toolSource := tools
-	if !useTopLevelTools && additionalToolsIndex >= 0 {
+	if len(toolSource) == 0 && additionalToolsIndex >= 0 {
 		toolSource = additionalTools
 	}
 	flattenedTools := make([]any, 0, len(toolSource)+1)
@@ -524,39 +523,33 @@ Guidelines:
 			"additionalProperties": false,
 		},
 	})
-	if useTopLevelTools {
-		reqBody["tools"] = flattenedTools
-		if !continuation {
-			instructions := strings.TrimSpace(firstNonEmptyString(reqBody["instructions"]))
-			if !strings.Contains(instructions, directive) {
-				if instructions == "" {
-					reqBody["instructions"] = directive
-				} else {
-					reqBody["instructions"] = instructions + "\n\n" + directive
-				}
-			}
-			reqBody["tool_choice"] = "auto"
-		}
-	} else {
-		delete(reqBody, "tools")
-		if additionalToolsIndex >= 0 && additionalToolsIndex < len(input) {
-			item, _ := input[additionalToolsIndex].(map[string]any)
-			item["tools"] = flattenedTools
-			input[additionalToolsIndex] = item
-		} else {
-			input = append(input, map[string]any{
-				"type":  "additional_tools",
-				"tools": flattenedTools,
-			})
-		}
-		if !continuation {
-			developerMessage := map[string]any{
-				"type": "message", "role": "developer",
-				"content": []any{map[string]any{"type": "input_text", "text": directive}},
-			}
-			input = append([]any{developerMessage}, input...)
-		}
+
+	// The model-facing contract is always the public Responses function-tool
+	// shape. Codex Desktop may omit its local image_gen namespace or older
+	// clients may carry it in a private additional_tools item; neither changes
+	// what the upstream orchestration model receives.
+	reqBody["tools"] = flattenedTools
+	if additionalToolsIndex >= 0 && additionalToolsIndex < len(input) {
+		item, _ := input[additionalToolsIndex].(map[string]any)
+		delete(item, "tools")
+		input[additionalToolsIndex] = item
 		reqBody["input"] = input
+	}
+	if !continuation {
+		instructions := strings.TrimSpace(firstNonEmptyString(reqBody["instructions"]))
+		if !strings.Contains(instructions, directive) {
+			if instructions == "" {
+				reqBody["instructions"] = directive
+			} else {
+				reqBody["instructions"] = instructions + "\n\n" + directive
+			}
+		}
+		reqBody["tool_choice"] = map[string]any{
+			"type": "function",
+			"name": codexImageGenToolName,
+		}
+	} else if codexImageToolChoiceSelected(reqBody["tool_choice"]) {
+		delete(reqBody, "tool_choice")
 	}
 	updated, err := json.Marshal(reqBody)
 	if err != nil {
