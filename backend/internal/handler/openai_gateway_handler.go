@@ -291,14 +291,21 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			zap.String("mapped_model", codexRoute.Mapping.MappedModel),
 		)
 	}
+	if codexDecision.Execution == service.CodexImageExecutionCapabilityMissing {
+		// Current Codex Desktop may retry a metadata-only WS turn over HTTP
+		// without advertising either image tool surface. HTTP is the terminal
+		// transport, so use the channel's hosted image fallback instead of
+		// rejecting or returning a textual completion.
+		codexDecision.Execution = service.CodexImageExecutionHostedImage
+		reqLog.Info("openai.codex_http_hosted_image_fallback",
+			zap.String("requested_model", reqModel),
+			zap.String("image_model", codexRoute.Mapping.MappedModel),
+		)
+	}
 	codexImageExtensionCandidate := codexDecision.Execution == service.CodexImageExecutionExtension
 	codexHostedImageTurn := codexDecision.Execution == service.CodexImageExecutionHostedImage
 	codexTextBypassTurn := codexDecision.Execution == service.CodexImageExecutionTextBypass
 	codexSystemBackgroundTurn := codexTextBypassTurn && service.IsCodexSystemBackgroundTurn(body)
-	if codexDecision.Execution == service.CodexImageExecutionCapabilityMissing {
-		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Codex image request is missing image capability; retry with image_gen or image_generation tools")
-		return
-	}
 
 	if (imagePermissionIntent || codexDecision.IsImageExecution()) && !service.GroupAllowsImageGeneration(apiKey.Group) {
 		h.errorResponse(c, http.StatusForbidden, "permission_error", service.ImageGenerationPermissionMessage())

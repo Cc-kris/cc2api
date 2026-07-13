@@ -970,7 +970,7 @@ func TestOpenAIResponsesWebSocket_PreviousResponseDoesNotSelectHTTPOnlyAccount(t
 func TestOpenAIResponsesHTTP_CodexHostedAndNamespaceExtensionRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	upstreamPayload := make(chan []byte, 3)
+	upstreamPayload := make(chan []byte, 4)
 	upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		payload, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
@@ -1086,13 +1086,17 @@ func TestOpenAIResponsesHTTP_CodexHostedAndNamespaceExtensionRoutes(t *testing.T
 	missingCapabilityReq.Header.Set("Content-Type", "application/json")
 	missingCapabilityRecorder := httptest.NewRecorder()
 	router.ServeHTTP(missingCapabilityRecorder, missingCapabilityReq)
-	require.Equal(t, http.StatusBadRequest, missingCapabilityRecorder.Code)
-	require.Contains(t, missingCapabilityRecorder.Body.String(), "missing image capability")
-	select {
-	case unexpected := <-upstreamPayload:
-		t.Fatalf("缺少图片能力的当前 Codex 请求不得访问上游: %s", string(unexpected))
-	default:
-	}
+	require.Equal(t, http.StatusOK, missingCapabilityRecorder.Code)
+	require.Contains(t, missingCapabilityRecorder.Body.String(), `"type":"image_generation_call"`)
+	missingCapabilityForwarded := <-upstreamPayload
+	require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(missingCapabilityForwarded, "model").String())
+	require.Equal(t, "image_generation", gjson.GetBytes(missingCapabilityForwarded, "tools.0.type").String())
+	require.Equal(t, "gpt-image-2", gjson.GetBytes(missingCapabilityForwarded, "tools.0.model").String())
+	require.Equal(t, "image_generation", gjson.GetBytes(missingCapabilityForwarded, "tool_choice.type").String())
+	missingCapabilityUsage := <-usageRepo.created
+	require.Equal(t, 1, missingCapabilityUsage.ImageCount)
+	require.NotNil(t, missingCapabilityUsage.BillingMode)
+	require.Equal(t, string(service.BillingModeImage), *missingCapabilityUsage.BillingMode)
 }
 
 func TestOpenAIResponsesWebSocket_CodexPrewarmBypassesImageMapping(t *testing.T) {
