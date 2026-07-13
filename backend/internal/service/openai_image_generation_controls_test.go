@@ -151,6 +151,9 @@ func TestOpenAIGatewayService_CodexImageGenerationRouteIsChannelOwned(t *testing
 	require.True(t, route.Enabled)
 	require.Equal(t, "gpt-image-2", route.Mapping.MappedModel)
 	require.Equal(t, orchestratorID, *route.OrchestratorGroupID)
+	bridgeGroup, err := svc.IsCodexImageGenerationBridgeGroup(context.Background(), &groupID)
+	require.NoError(t, err)
+	require.True(t, bridgeGroup)
 
 	t.Run("enabled image mapping reports missing orchestrator as configuration error", func(t *testing.T) {
 		invalidChannel := channel.Clone()
@@ -175,6 +178,9 @@ func TestOpenAIGatewayService_CodexImageGenerationRouteIsChannelOwned(t *testing
 		plainService := newOpenAIImageGenerationControlTestService(&httpUpstreamRecorder{})
 		plainService.cfg.Gateway.CodexImageGenerationBridgeEnabled = true
 		require.False(t, plainService.ResolveCodexImageGenerationRoute(context.Background(), &groupID, "gpt-5.6").Enabled)
+		bridgeGroup, err := plainService.IsCodexImageGenerationBridgeGroup(context.Background(), &groupID)
+		require.NoError(t, err)
+		require.False(t, bridgeGroup)
 
 		textChannel := &Channel{
 			ID: 2, Status: StatusActive, GroupIDs: []int64{groupID},
@@ -185,6 +191,9 @@ func TestOpenAIGatewayService_CodexImageGenerationRouteIsChannelOwned(t *testing
 		}
 		plainService.channelService = newOpenAIImageGenerationControlChannelService(groupID, textChannel)
 		require.False(t, plainService.ResolveCodexImageGenerationRoute(context.Background(), &groupID, "gpt-5.6").Enabled)
+		bridgeGroup, err = plainService.IsCodexImageGenerationBridgeGroup(context.Background(), &groupID)
+		require.NoError(t, err)
+		require.False(t, bridgeGroup)
 		require.False(t, plainService.ResolveCodexImageGenerationRoute(context.Background(), &groupID, "gpt-image-2").Enabled)
 
 		textChannel.Status = StatusDisabled

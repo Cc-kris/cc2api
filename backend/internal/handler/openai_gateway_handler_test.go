@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -913,28 +915,6 @@ func TestOpenAIResponsesWebSocket_PassthroughUsageLogInfersReasoningFromInitialR
 		"usage log reasoning effort 必须使用渠道映射前首帧模型后缀推导")
 }
 
-func TestOpenAIResponsesWebSocket_CodexExplicitHostedImageUsesHTTPFallback(t *testing.T) {
-	metadata := `{"request_kind":"turn","thread_source":"user"}`
-	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
-		firstPayload: `{"type":"response.create","model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"draw a blue paper airplane"}]}],"tools":[{"type":"image_generation"}]}`,
-		userAgent:    testStringPtr("Codex Desktop/0.144.0-alpha.4 Windows"),
-		channelMapping: map[string]string{
-			"gpt-5.6-terra": "gpt-image-2",
-		},
-		codexBridge: true,
-	})
-
-	require.Equal(t, "gpt-image-2", gjson.GetBytes(got.upstreamFirstPayload, "model").String())
-	require.False(t, gjson.GetBytes(got.upstreamFirstPayload, "type").Exists(), "WS frame type must not leak into HTTP /responses")
-	require.Equal(t, "image_generation", gjson.GetBytes(got.upstreamFirstPayload, "tools.0.type").String())
-	require.Equal(t, 1, got.log.ImageCount)
-	require.NotNil(t, got.log.BillingMode)
-	require.Equal(t, string(service.BillingModeImage), *got.log.BillingMode)
-	require.NotNil(t, got.log.ModelMappingChain)
-	require.Equal(t, "gpt-5.6-terra→gpt-image-2", *got.log.ModelMappingChain)
-	require.Equal(t, int64(9901), got.log.AccountID, "直接生图必须使用 API Key 原图片分组的账号")
-}
-
 func TestOpenAIResponsesWebSocket_TextModelNativeImageToolUsesHTTPFallbackWhenGroupAllows(t *testing.T) {
 	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
 		firstPayload: `{"type":"response.create","model":"gpt-5.4","stream":true,"input":"draw a green square","tools":[{"type":"image_generation","model":"gpt-image-2"}],"tool_choice":{"type":"image_generation"}}`,
@@ -947,6 +927,19 @@ func TestOpenAIResponsesWebSocket_TextModelNativeImageToolUsesHTTPFallbackWhenGr
 	require.Equal(t, 1, got.log.ImageCount)
 	require.NotNil(t, got.log.BillingMode)
 	require.Equal(t, string(service.BillingModeImage), *got.log.BillingMode)
+}
+
+func TestOpenAIResponsesWebSocket_NativeImageHTTPFailureDoesNotRetryWebSocket(t *testing.T) {
+	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+		firstPayload:       `{"type":"response.create","model":"gpt-5.4","stream":true,"input":"draw a green square","tools":[{"type":"image_generation","model":"gpt-image-2"}],"tool_choice":{"type":"image_generation"}}`,
+		userAgent:          testStringPtr("Codex Desktop/0.144.0-alpha.4 Windows"),
+		upstreamHTTPStatus: http.StatusBadGateway,
+	})
+
+	require.NotNil(t, got.closeErr)
+	require.Equal(t, coderws.StatusInternalError, got.closeErr.Code)
+	require.Equal(t, int32(1), got.upstreamHTTPHits, "原生生图失败时只能调用一次 HTTP 上游")
+	require.Zero(t, got.upstreamWSHits, "HTTP 生图失败后不得再次请求 WebSocket 上游")
 }
 
 func TestOpenAIResponsesWebSocket_HostedImageCanSelectHTTPOnlyAccount(t *testing.T) {
@@ -967,15 +960,34 @@ func TestOpenAIResponsesWebSocket_PreviousResponseDoesNotSelectHTTPOnlyAccount(t
 	})
 }
 
-func TestOpenAIResponsesHTTP_CodexHostedAndNamespaceExtensionRoutes(t *testing.T) {
+func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	upstreamPayload := make(chan []byte, 4)
+	upstreamPayload := make(chan []byte, 8)
+	streamProbeStarted := make(chan struct{})
+	streamProbeRelease := make(chan struct{})
+	var streamProbeReleaseOnce sync.Once
+	releaseStreamProbe := func() { streamProbeReleaseOnce.Do(func() { close(streamProbeRelease) }) }
+	defer releaseStreamProbe()
 	upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		payload, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		upstreamPayload <- payload
 		w.Header().Set("Content-Type", "text/event-stream")
+		if strings.Contains(gjson.GetBytes(payload, "input").String(), "stream-probe") {
+			_, _ = io.WriteString(w, "data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"id\":\"ig_stream_probe\",\"type\":\"image_generation_call\",\"status\":\"in_progress\"}}\n\n")
+			w.(http.Flusher).Flush()
+			close(streamProbeStarted)
+			<-streamProbeRelease
+			_, _ = io.WriteString(w, "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"ig_stream_probe\",\"type\":\"image_generation_call\",\"result\":\"aW1hZ2U=\",\"size\":\"1024x1024\"}}\n\n"+
+				"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_stream_probe\",\"model\":\"gpt-image-2\",\"output\":[{\"id\":\"ig_stream_probe\",\"type\":\"image_generation_call\",\"result\":\"aW1hZ2U=\",\"size\":\"1024x1024\"}],\"usage\":{\"input_tokens\":2,\"output_tokens\":1,\"output_tokens_details\":{\"image_tokens\":1}}}}\n\n")
+			return
+		}
+		turnMetadata := gjson.GetBytes(payload, "client_metadata.x-codex-turn-metadata").String()
+		if gjson.Get(turnMetadata, "request_kind").String() == "prewarm" {
+			_, _ = io.WriteString(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_prewarm_e2e\",\"model\":\"gpt-5.6-terra\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"ready\"}]}],\"usage\":{\"input_tokens\":2,\"output_tokens\":1}}}\n\n")
+			return
+		}
 		if gjson.GetBytes(payload, "tools.0.name").String() == "imagegen" ||
 			gjson.GetBytes(payload, `input.#(type=="additional_tools").tools.0.name`).String() == "imagegen" {
 			_, _ = io.WriteString(w, "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_http_e2e\",\"type\":\"function_call\",\"name\":\"imagegen\",\"call_id\":\"call_http_e2e\",\"arguments\":\"{}\"}}\n\n"+
@@ -1003,8 +1015,11 @@ func TestOpenAIResponsesHTTP_CodexHostedAndNamespaceExtensionRoutes(t *testing.T
 	channelSvc := service.NewChannelService(&openAIWSUsageHandlerChannelRepoStub{
 		channels: []service.Channel{{
 			ID: 7702, Name: "openai-http-image-channel", Status: service.StatusActive,
-			GroupIDs:     []int64{groupID},
-			ModelMapping: map[string]map[string]string{service.PlatformOpenAI: {"gpt-5.6-terra": "gpt-image-2"}},
+			GroupIDs: []int64{groupID},
+			ModelMapping: map[string]map[string]string{service.PlatformOpenAI: {
+				"gpt-5.6-terra": "gpt-image-2",
+				"gpt-5.5":       "gpt-image-2",
+			}},
 			FeaturesConfig: map[string]any{"codex_image_generation_bridge": map[string]any{
 				service.PlatformOpenAI: true, "orchestrator_group_id": int64(20),
 			}},
@@ -1036,7 +1051,24 @@ func TestOpenAIResponsesHTTP_CodexHostedAndNamespaceExtensionRoutes(t *testing.T
 		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: apiKey.User.ID, Concurrency: 1})
 		c.Next()
 	})
+	router.GET("/openai/v1/responses", h.ResponsesWebSocket)
 	router.POST("/openai/v1/responses", h.Responses)
+
+	// Codex first attempts WebSocket. A channel-managed image group must reject
+	// the upgrade before accepting it so the client can natively retry over HTTP.
+	upgradeReq := httptest.NewRequest(http.MethodGet, "/openai/v1/responses", nil)
+	upgradeReq.Header.Set("Connection", "Upgrade")
+	upgradeReq.Header.Set("Upgrade", "websocket")
+	upgradeReq.Header.Set("User-Agent", "Codex Desktop/0.144.0-alpha.4 Windows")
+	upgradeRecorder := httptest.NewRecorder()
+	router.ServeHTTP(upgradeRecorder, upgradeReq)
+	require.Equal(t, http.StatusUpgradeRequired, upgradeRecorder.Code)
+	require.Contains(t, upgradeRecorder.Body.String(), "Codex image channels require HTTPS Responses transport")
+	select {
+	case <-upstreamPayload:
+		require.Fail(t, "WebSocket handshake rejection must not call an upstream account")
+	default:
+	}
 
 	metadata := `{"request_kind":"turn","thread_source":"user"}`
 	body := []byte(`{"model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":"draw a blue paper airplane","tools":[{"type":"image_generation"}]}`)
@@ -1053,6 +1085,7 @@ func TestOpenAIResponsesHTTP_CodexHostedAndNamespaceExtensionRoutes(t *testing.T
 	require.Equal(t, "image_generation", gjson.GetBytes(forwarded, "tools.0.type").String())
 	usageLog := <-usageRepo.created
 	require.Equal(t, 1, usageLog.ImageCount)
+	require.Equal(t, int64(9902), usageLog.AccountID, "真实生图必须使用 API Key 原图片分组账号")
 	require.NotNil(t, usageLog.BillingMode)
 	require.Equal(t, string(service.BillingModeImage), *usageLog.BillingMode)
 
@@ -1096,43 +1129,77 @@ func TestOpenAIResponsesHTTP_CodexHostedAndNamespaceExtensionRoutes(t *testing.T
 	require.Equal(t, 1, missingCapabilityUsage.ImageCount)
 	require.NotNil(t, missingCapabilityUsage.BillingMode)
 	require.Equal(t, string(service.BillingModeImage), *missingCapabilityUsage.BillingMode)
-}
+	require.Equal(t, int64(9902), missingCapabilityUsage.AccountID)
 
-func TestOpenAIResponsesWebSocket_CodexPrewarmBypassesImageMapping(t *testing.T) {
-	metadata := `{"request_kind":"prewarm","thread_source":"user"}`
-	firstPayload := `{"type":"response.create","model":"gpt-5.4-mini","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":"warm"}`
-	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
-		firstPayload: firstPayload,
-		userAgent:    testStringPtr("Codex Desktop/0.144.0-alpha.4 Windows"),
-		channelMapping: map[string]string{
-			"gpt-5.4-mini": "gpt-image-2",
-		},
-		codexBridge: true,
-	})
+	// Background/prewarm turns still use their original text model after the
+	// client has fallen back to HTTP; they must not be converted into image work.
+	prewarmMetadata := `{"request_kind":"prewarm","thread_source":"user"}`
+	prewarmBody := []byte(`{"model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(prewarmMetadata) + `},"input":"warm"}`)
+	prewarmReq := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(prewarmBody))
+	prewarmReq.Header.Set("Content-Type", "application/json")
+	prewarmRecorder := httptest.NewRecorder()
+	router.ServeHTTP(prewarmRecorder, prewarmReq)
+	require.Equal(t, http.StatusOK, prewarmRecorder.Code)
+	require.NotContains(t, prewarmRecorder.Body.String(), `"type":"image_generation_call"`)
+	prewarmForwarded := <-upstreamPayload
+	require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(prewarmForwarded, "model").String())
+	require.Empty(t, gjson.GetBytes(prewarmForwarded, `tools.#(type=="image_generation")#`).Array())
+	prewarmUsage := <-usageRepo.created
+	require.Zero(t, prewarmUsage.ImageCount)
+	require.Nil(t, prewarmUsage.ChannelID)
+	require.Nil(t, prewarmUsage.ModelMappingChain)
 
-	require.JSONEq(t, firstPayload, string(got.upstreamFirstPayload))
-	require.Equal(t, "gpt-5.4-mini", got.log.Model)
-	require.Zero(t, got.log.ImageCount)
-	require.Nil(t, got.log.ChannelID)
-	require.Nil(t, got.log.ModelMappingChain)
-}
+	// Old Codex payloads without turn metadata use the same HTTP route and retain
+	// the hosted image contract.
+	legacyBody := []byte(`{"model":"gpt-5.5","stream":true,"input":"draw a red circle"}`)
+	legacyReq := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(legacyBody))
+	legacyReq.Header.Set("Content-Type", "application/json")
+	legacyReq.Header.Set("User-Agent", "codex_cli_rs/0.90.0")
+	legacyRecorder := httptest.NewRecorder()
+	router.ServeHTTP(legacyRecorder, legacyReq)
+	require.Equal(t, http.StatusOK, legacyRecorder.Code)
+	require.Contains(t, legacyRecorder.Body.String(), `"type":"image_generation_call"`)
+	legacyForwarded := <-upstreamPayload
+	require.Equal(t, "gpt-image-2", gjson.GetBytes(legacyForwarded, "model").String())
+	require.Equal(t, "image_generation", gjson.GetBytes(legacyForwarded, "tools.0.type").String())
+	legacyUsage := <-usageRepo.created
+	require.Equal(t, int64(9902), legacyUsage.AccountID)
+	require.Equal(t, 1, legacyUsage.ImageCount)
+	require.NotNil(t, legacyUsage.BillingMode)
+	require.Equal(t, string(service.BillingModeImage), *legacyUsage.BillingMode)
 
-func TestOpenAIResponsesWebSocket_LegacyCodexWithoutMetadataUsesHostedImageTool(t *testing.T) {
-	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
-		firstPayload: `{"type":"response.create","model":"gpt-5.5","stream":true,"input":"draw a red circle"}`,
-		userAgent:    testStringPtr("codex_cli_rs/0.90.0"),
-		channelMapping: map[string]string{
-			"gpt-5.5": "gpt-image-2",
-		},
-		codexBridge: true,
-	})
-
-	require.Equal(t, "gpt-image-2", gjson.GetBytes(got.upstreamFirstPayload, "model").String())
-	require.False(t, gjson.GetBytes(got.upstreamFirstPayload, "type").Exists(), "WS frame type must not leak into HTTP /responses")
-	require.Equal(t, "image_generation", gjson.GetBytes(got.upstreamFirstPayload, "tools.0.type").String())
-	require.Equal(t, "gpt-image-2", gjson.GetBytes(got.upstreamFirstPayload, "tools.0.model").String())
-	require.Equal(t, "image_generation", gjson.GetBytes(got.upstreamFirstPayload, "tool_choice.type").String())
-	require.Equal(t, 1, got.log.ImageCount)
+	// The HTTP fallback must expose upstream SSE incrementally. This guards
+	// against reintroducing the buffered HTTP-to-WebSocket adapter that caused
+	// Codex to sit idle and cancel long-running image requests.
+	handlerServer := httptest.NewServer(router)
+	defer handlerServer.Close()
+	streamBody := []byte(`{"model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":"stream-probe"}`)
+	streamReq, err := http.NewRequest(http.MethodPost, handlerServer.URL+"/openai/v1/responses", bytes.NewReader(streamBody))
+	require.NoError(t, err)
+	streamReq.Header.Set("Content-Type", "application/json")
+	streamReq.Header.Set("User-Agent", "Codex Desktop/0.144.0-alpha.4 Windows")
+	streamResp, err := handlerServer.Client().Do(streamReq)
+	require.NoError(t, err)
+	defer streamResp.Body.Close()
+	require.Equal(t, http.StatusOK, streamResp.StatusCode)
+	select {
+	case <-streamProbeStarted:
+	case <-time.After(time.Second):
+		require.FailNow(t, "upstream did not start the streaming probe")
+	}
+	reader := bufio.NewReader(streamResp.Body)
+	firstLine, err := reader.ReadString('\n')
+	require.NoError(t, err)
+	require.Contains(t, firstLine, `"type":"response.output_item.added"`, "first SSE event must reach Codex before image completion")
+	releaseStreamProbe()
+	remainder, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	require.Contains(t, string(remainder), `"type":"image_generation_call"`)
+	streamForwarded := <-upstreamPayload
+	require.Equal(t, "gpt-image-2", gjson.GetBytes(streamForwarded, "model").String())
+	streamUsage := <-usageRepo.created
+	require.Equal(t, int64(9902), streamUsage.AccountID)
+	require.Equal(t, 1, streamUsage.ImageCount)
 }
 
 func TestOpenAIResponsesWebSocket_RejectsImageOnlyModel(t *testing.T) {
@@ -1144,46 +1211,6 @@ func TestOpenAIResponsesWebSocket_RejectsImageOnlyModel(t *testing.T) {
 	assertOpenAIWSImageUnsupportedEvent(t, event, "gpt-image-2")
 	require.NotNil(t, closeErr)
 	require.Equal(t, coderws.StatusPolicyViolation, closeErr.Code)
-}
-
-func TestOpenAIResponsesWebSocket_CodexMetadataOnlyUserTurnUsesHostedImageFallback(t *testing.T) {
-	metadata := `{"request_kind":"turn","thread_source":"user"}`
-	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
-		firstPayload: `{"type":"response.create","model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":"draw a paper airplane"}`,
-		userAgent:    testStringPtr("Codex Desktop/0.144.0-alpha.4 Windows"),
-		channelMapping: map[string]string{
-			"gpt-5.6-terra": "gpt-image-2",
-		},
-		codexBridge: true,
-	})
-
-	require.Equal(t, "gpt-image-2", gjson.GetBytes(got.upstreamFirstPayload, "model").String())
-	require.False(t, gjson.GetBytes(got.upstreamFirstPayload, "type").Exists(), "WS frame type must not leak into HTTP /responses")
-	require.Equal(t, "image_generation", gjson.GetBytes(got.upstreamFirstPayload, "tools.0.type").String())
-	require.Equal(t, "gpt-image-2", gjson.GetBytes(got.upstreamFirstPayload, "tools.0.model").String())
-	require.Equal(t, "image_generation", gjson.GetBytes(got.upstreamFirstPayload, "tool_choice.type").String())
-	require.Equal(t, int64(9901), got.log.AccountID, "新版 Codex 的元数据用户回合必须留在原图片分组")
-	require.Equal(t, 1, got.log.ImageCount)
-	require.NotNil(t, got.log.BillingMode)
-	require.Equal(t, string(service.BillingModeImage), *got.log.BillingMode)
-}
-
-func TestOpenAIResponsesWebSocket_CodexHostedImageHTTPFailureDoesNotRetryWebSocket(t *testing.T) {
-	metadata := `{"request_kind":"turn","thread_source":"user"}`
-	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
-		firstPayload: `{"type":"response.create","model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":"draw a paper airplane"}`,
-		userAgent:    testStringPtr("Codex Desktop/0.144.0-alpha.4 Windows"),
-		channelMapping: map[string]string{
-			"gpt-5.6-terra": "gpt-image-2",
-		},
-		codexBridge:        true,
-		upstreamHTTPStatus: http.StatusBadGateway,
-	})
-
-	require.NotNil(t, got.closeErr)
-	require.Equal(t, coderws.StatusInternalError, got.closeErr.Code)
-	require.Equal(t, int32(1), got.upstreamHTTPHits, "图片请求只能调用一次 HTTP 上游")
-	require.Zero(t, got.upstreamWSHits, "HTTP 图片失败后不得再调用 WebSocket 上游")
 }
 
 func TestOpenAIResponsesWebSocket_RejectsChannelMappedImageModelWithoutExplicitTool(t *testing.T) {
@@ -1212,26 +1239,6 @@ func TestOpenAIResponsesWebSocket_ImageGenerationOnFollowupTurnRequiresReconnect
 	require.Equal(t, coderws.StatusTryAgainLater, got.closeErr.Code)
 	require.Equal(t, "request route changed; reconnect and retry", got.closeErr.Reason)
 	require.Equal(t, int32(1), got.upstreamHits, "第二轮图片请求切换 HTTP 路径前不得复用原 WS 上游")
-}
-
-func TestOpenAIResponsesWebSocket_CodexPrewarmThenUserImageReconnectsBeforeRouting(t *testing.T) {
-	prewarmMetadata := `{"request_kind":"prewarm","thread_source":"user"}`
-	got := runOpenAIResponsesWebSocketFollowupUnsupportedImageCase(t, openAIResponsesWSUsageLogCase{
-		firstPayload:       `{"type":"response.create","model":"gpt-5.6-terra","stream":true,"input":"warm"}`,
-		nextPayload:        `{"type":"response.create","model":"gpt-5.6-terra","stream":true,"input":"draw a paper airplane"}`,
-		userAgent:          testStringPtr("Codex Desktop/0.144.0-alpha.4 Windows"),
-		turnMetadataHeader: testStringPtr(prewarmMetadata),
-		channelMapping: map[string]string{
-			"gpt-5.6-terra": "gpt-image-2",
-		},
-		codexBridge: true,
-	})
-
-	require.Empty(t, got.event)
-	require.NotNil(t, got.closeErr)
-	require.Equal(t, coderws.StatusTryAgainLater, got.closeErr.Code)
-	require.Equal(t, "request route changed; reconnect and retry", got.closeErr.Reason)
-	require.Equal(t, int32(1), got.upstreamHits, "用户生图请求不得继续发送到预热任务绑定的文本上游")
 }
 
 func TestOpenAIResponsesWebSocket_PassthroughUsageLogLeavesUserAgentNilWhenMissing(t *testing.T) {
@@ -2368,14 +2375,14 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		readCtx, cancelRead := context.WithTimeout(context.Background(), 3*time.Second)
 		_, event, readErr := clientConn.Read(readCtx)
 		cancelRead()
-		require.NoError(t, readErr)
-		require.Equal(t, "response.failed", gjson.GetBytes(event, "type").String())
-
-		readCtx, cancelRead = context.WithTimeout(context.Background(), 3*time.Second)
-		_, _, readErr = clientConn.Read(readCtx)
-		cancelRead()
-		require.Error(t, readErr)
 		var closeErr coderws.CloseError
+		if readErr == nil {
+			require.Equal(t, "response.failed", gjson.GetBytes(event, "type").String())
+			readCtx, cancelRead = context.WithTimeout(context.Background(), 3*time.Second)
+			_, _, readErr = clientConn.Read(readCtx)
+			cancelRead()
+			require.Error(t, readErr)
+		}
 		require.ErrorAs(t, readErr, &closeErr)
 
 		select {

@@ -111,6 +111,34 @@ type CodexImageGenerationRoute struct {
 	ConfigurationError  string
 }
 
+// IsCodexImageGenerationBridgeGroup reports whether a group belongs to a
+// channel-managed Codex image route. The decision is intentionally group-level:
+// it is evaluated before accepting a WebSocket handshake so Codex can perform
+// its native fallback to an HTTP Responses stream. Request-role routing still
+// happens later in the HTTP handler from the complete request payload.
+func (s *ChannelService) IsCodexImageGenerationBridgeGroup(ctx context.Context, groupID *int64) (bool, error) {
+	if groupID == nil {
+		return false, nil
+	}
+	lk, err := s.lookupGroupChannel(ctx, *groupID)
+	if err != nil {
+		return false, err
+	}
+	if lk == nil || lk.platform != PlatformOpenAI {
+		return false, nil
+	}
+	bridgeEnabled := lk.channel.CodexImageGenerationBridgeOverride(PlatformOpenAI)
+	if bridgeEnabled == nil || !*bridgeEnabled {
+		return false, nil
+	}
+	for source, target := range lk.channel.ModelMapping[PlatformOpenAI] {
+		if !isOpenAIImageGenerationModel(source) && isOpenAIImageGenerationModel(target) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // BuildModelMappingChain 根据映射结果和上游实际模型构建映射链描述。
 // reqModel: 客户端请求的原始模型名。
 // upstreamModel: 上游实际使用的模型名（ForwardResult.UpstreamModel）。
