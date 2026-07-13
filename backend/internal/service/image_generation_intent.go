@@ -21,6 +21,184 @@ const (
 	OpenAICodexSystemBackgroundContextKey = "openai_codex_system_background"
 )
 
+type CodexRequestRole string
+
+const (
+	CodexRequestRoleUnknown    CodexRequestRole = "unknown"
+	CodexRequestRoleUserTurn   CodexRequestRole = "user_turn"
+	CodexRequestRoleFeature    CodexRequestRole = "feature"
+	CodexRequestRoleSubagent   CodexRequestRole = "subagent"
+	CodexRequestRolePrewarm    CodexRequestRole = "prewarm"
+	CodexRequestRoleCompaction CodexRequestRole = "compaction"
+	CodexRequestRoleMemory     CodexRequestRole = "memory"
+)
+
+type CodexImageExecution string
+
+const (
+	CodexImageExecutionOrdinary          CodexImageExecution = "ordinary"
+	CodexImageExecutionCapabilityMissing CodexImageExecution = "capability_missing"
+	CodexImageExecutionTextBypass        CodexImageExecution = "text_bypass"
+	CodexImageExecutionExtension         CodexImageExecution = "extension"
+	CodexImageExecutionHostedImage       CodexImageExecution = "hosted_image"
+)
+
+type CodexImageRequestDecision struct {
+	Role           CodexRequestRole
+	Execution      CodexImageExecution
+	HasMetadata    bool
+	HasExtension   bool
+	HasHostedImage bool
+	LegacyFallback bool
+}
+
+func (d CodexImageRequestDecision) UsesOrchestratorGroup() bool {
+	return d.Execution == CodexImageExecutionTextBypass ||
+		d.Execution == CodexImageExecutionExtension ||
+		d.Execution == CodexImageExecutionHostedImage
+}
+
+func (d CodexImageRequestDecision) IsImageExecution() bool {
+	return d.Execution == CodexImageExecutionExtension || d.Execution == CodexImageExecutionHostedImage
+}
+
+// PrepareCodexImageRouteRequest applies the execution selected by
+// ClassifyCodexImageRequest. HTTP and WebSocket handlers must call this same
+// adapter so transport cannot change image semantics.
+func PrepareCodexImageRouteRequest(body []byte, requestedModel, mappedModel string, decision CodexImageRequestDecision) ([]byte, error) {
+	switch decision.Execution {
+	case CodexImageExecutionExtension:
+		prepared, _, err := PrepareCodexImageGenerationExtensionDispatch(body)
+		return prepared, err
+	case CodexImageExecutionHostedImage:
+		prepared, _, err := NormalizeOpenAIWSImageGenerationChannelMapping(body, requestedModel, mappedModel)
+		return prepared, err
+	case CodexImageExecutionTextBypass:
+		if IsCodexSystemBackgroundTurn(body) {
+			return PrepareCodexSystemBackgroundTextDispatch(body)
+		}
+		prepared, _, err := stripOpenAIImageGenerationToolDeclarationsFromBody(body)
+		return prepared, err
+	default:
+		return body, nil
+	}
+}
+
+// ClassifyCodexImageRequest separates the stable Codex request role from the
+// client image capability and the channel's text-to-image business policy.
+// Model mapping alone never turns background/prewarm/compaction/subagent work
+// into image generation.
+func ClassifyCodexImageRequest(requestedModel, mappedModel string, body []byte) CodexImageRequestDecision {
+	decision := CodexImageRequestDecision{
+		Role:           CodexRequestRoleUnknown,
+		Execution:      CodexImageExecutionOrdinary,
+		HasExtension:   HasCodexImageGenerationExtensionTool(body),
+		HasHostedImage: hasExplicitOpenAIImageGenerationIntent(body),
+	}
+	decision.Role, decision.HasMetadata = classifyCodexRequestRole(body)
+
+	forcedImageRoute := !isOpenAIImageGenerationModel(requestedModel) &&
+		isOpenAIImageGenerationModel(mappedModel)
+	if !forcedImageRoute {
+		return decision
+	}
+
+	switch decision.Role {
+	case CodexRequestRoleFeature, CodexRequestRoleSubagent,
+		CodexRequestRolePrewarm, CodexRequestRoleCompaction, CodexRequestRoleMemory:
+		decision.Execution = CodexImageExecutionTextBypass
+		return decision
+	}
+
+	if decision.HasExtension {
+		decision.Execution = CodexImageExecutionExtension
+		return decision
+	}
+	if decision.HasHostedImage {
+		decision.Execution = CodexImageExecutionHostedImage
+		return decision
+	}
+	if decision.Role == CodexRequestRoleUserTurn {
+		// A current Codex user turn describes ownership, not image capability.
+		// The client must retry with either image_gen namespace tools or an
+		// explicit hosted image_generation tool.
+		decision.Execution = CodexImageExecutionCapabilityMissing
+		return decision
+	}
+	if decision.HasMetadata {
+		// Future/unknown Codex request kinds are safer on the text orchestrator.
+		// They must never inherit an image mapping merely because the channel is
+		// image-dedicated.
+		decision.Execution = CodexImageExecutionTextBypass
+		return decision
+	}
+
+	// Older Codex clients do not carry canonical turn metadata. A dedicated
+	// image channel remains their explicit product-level image intent.
+	if !decision.HasMetadata {
+		decision.Execution = CodexImageExecutionHostedImage
+		decision.LegacyFallback = true
+	}
+	return decision
+}
+
+func hasExplicitOpenAIImageGenerationIntent(body []byte) bool {
+	if len(body) == 0 || !gjson.ValidBytes(body) {
+		return false
+	}
+	return openAIJSONToolsContainImageGeneration(gjson.GetBytes(body, "tools")) ||
+		openAIJSONToolChoiceSelectsImageGeneration(gjson.GetBytes(body, "tool_choice"))
+}
+
+func classifyCodexRequestRole(body []byte) (CodexRequestRole, bool) {
+	metadata, ok := codexTurnMetadata(body)
+	if !ok {
+		return CodexRequestRoleUnknown, false
+	}
+	requestKind := strings.TrimSpace(metadata.Get("request_kind").String())
+	threadSource := strings.TrimSpace(metadata.Get("thread_source").String())
+	switch requestKind {
+	case "prewarm":
+		return CodexRequestRolePrewarm, true
+	case "compaction":
+		return CodexRequestRoleCompaction, true
+	case "memory":
+		return CodexRequestRoleMemory, true
+	case "turn":
+		switch threadSource {
+		case "user":
+			return CodexRequestRoleUserTurn, true
+		case "subagent":
+			return CodexRequestRoleSubagent, true
+		case "memory_consolidation":
+			return CodexRequestRoleMemory, true
+		default:
+			if strings.TrimSpace(metadata.Get("subagent_kind").String()) != "" {
+				return CodexRequestRoleSubagent, true
+			}
+			if threadSource != "" {
+				return CodexRequestRoleFeature, true
+			}
+		}
+	}
+	return CodexRequestRoleUnknown, true
+}
+
+func codexTurnMetadata(body []byte) (gjson.Result, bool) {
+	if len(body) == 0 || !gjson.ValidBytes(body) {
+		return gjson.Result{}, false
+	}
+	raw := gjson.GetBytes(body, `client_metadata.x-codex-turn-metadata`)
+	if raw.IsObject() {
+		return raw, true
+	}
+	value := strings.TrimSpace(raw.String())
+	if value == "" || !gjson.Valid(value) {
+		return gjson.Result{}, false
+	}
+	return gjson.Parse(value), true
+}
+
 // AttachCodexTurnMetadata copies the Codex turn metadata carried by a
 // WebSocket upgrade header into the Responses payload used by gateway routing.
 // Current Codex desktop builds send this metadata on the handshake, while the
@@ -120,15 +298,12 @@ func IsCodexImageGenerationExtensionTurn(body []byte) bool {
 // the current Codex desktop host, including thread title and description
 // generation. These turns must remain textual even inside an image-only group.
 func IsCodexSystemBackgroundTurn(body []byte) bool {
-	if len(body) == 0 || !gjson.ValidBytes(body) {
+	metadata, ok := codexTurnMetadata(body)
+	if !ok || strings.TrimSpace(metadata.Get("request_kind").String()) != "turn" {
 		return false
 	}
-	rawMetadata := strings.TrimSpace(gjson.GetBytes(body, `client_metadata.x-codex-turn-metadata`).String())
-	if rawMetadata == "" || !gjson.Valid(rawMetadata) {
-		return false
-	}
-	if strings.TrimSpace(gjson.Get(rawMetadata, "request_kind").String()) != "turn" ||
-		strings.TrimSpace(gjson.Get(rawMetadata, "thread_source").String()) != "system" {
+	threadSource := strings.TrimSpace(metadata.Get("thread_source").String())
+	if threadSource == "" || threadSource == "user" || threadSource == "subagent" || threadSource == "memory_consolidation" {
 		return false
 	}
 	format := gjson.GetBytes(body, "text.format")
@@ -209,18 +384,15 @@ func IsCodexImageGenerationExtensionContinuation(body []byte) bool {
 // mapping as a forced-image routing signal while keeping the Responses model
 // textual so current Codex clients can execute image_gen.imagegen locally.
 func ShouldUseCodexImageGenerationExtension(requestedModel, mappedModel string, body []byte) bool {
-	return !isOpenAIImageGenerationModel(requestedModel) &&
-		isOpenAIImageGenerationModel(mappedModel) &&
-		IsCodexImageGenerationExtensionTurn(body)
+	return ClassifyCodexImageRequest(requestedModel, mappedModel, body).Execution == CodexImageExecutionExtension
 }
 
 // ShouldBypassCodexSystemBackgroundImageMapping keeps Codex host helper turns
 // on their requested text model. The surrounding image-only mapping still
 // applies to the actual user turn.
 func ShouldBypassCodexSystemBackgroundImageMapping(requestedModel, mappedModel string, body []byte) bool {
-	return !isOpenAIImageGenerationModel(requestedModel) &&
-		isOpenAIImageGenerationModel(mappedModel) &&
-		IsCodexSystemBackgroundTurn(body)
+	decision := ClassifyCodexImageRequest(requestedModel, mappedModel, body)
+	return decision.Execution == CodexImageExecutionTextBypass && IsCodexSystemBackgroundTurn(body)
 }
 
 // PrepareCodexSystemBackgroundTextDispatch constrains Codex title/description
@@ -261,6 +433,10 @@ func PrepareCodexSystemBackgroundTextDispatch(body []byte) ([]byte, error) {
 		}
 	}
 	updated, err := json.Marshal(reqBody)
+	if err != nil {
+		return body, err
+	}
+	updated, _, err = stripOpenAIImageGenerationToolDeclarationsFromBody(updated)
 	if err != nil {
 		return body, err
 	}
@@ -585,34 +761,67 @@ func stripOpenAIImageGenerationToolDeclarations(reqBody map[string]any) bool {
 	if reqBody == nil {
 		return false
 	}
-	rawTools, ok := reqBody["tools"]
-	if !ok || rawTools == nil {
-		return false
+	removed := false
+	filterTools := func(tools []any) []any {
+		filtered := make([]any, 0, len(tools))
+		for _, rawTool := range tools {
+			toolMap, ok := rawTool.(map[string]any)
+			if ok {
+				toolType := strings.TrimSpace(firstNonEmptyString(toolMap["type"]))
+				toolName := strings.TrimSpace(firstNonEmptyString(toolMap["name"]))
+				if toolType == "image_generation" || (toolType == "namespace" && toolName == codexImageGenNamespace) {
+					removed = true
+					continue
+				}
+			}
+			filtered = append(filtered, rawTool)
+		}
+		return filtered
 	}
-	tools, ok := rawTools.([]any)
+
+	if tools, ok := reqBody["tools"].([]any); ok {
+		filtered := filterTools(tools)
+		if len(filtered) == 0 {
+			delete(reqBody, "tools")
+		} else {
+			reqBody["tools"] = filtered
+		}
+	}
+	if input, ok := reqBody["input"].([]any); ok {
+		filteredInput := make([]any, 0, len(input))
+		for _, rawItem := range input {
+			item, ok := rawItem.(map[string]any)
+			if !ok || strings.TrimSpace(firstNonEmptyString(item["type"])) != "additional_tools" {
+				filteredInput = append(filteredInput, rawItem)
+				continue
+			}
+			tools, _ := item["tools"].([]any)
+			filteredTools := filterTools(tools)
+			if len(filteredTools) == 0 {
+				removed = true
+				continue
+			}
+			item["tools"] = filteredTools
+			filteredInput = append(filteredInput, item)
+		}
+		reqBody["input"] = filteredInput
+	}
+	if removed && (openAIAnyToolChoiceSelectsImageGeneration(reqBody["tool_choice"]) || codexImageToolChoiceSelected(reqBody["tool_choice"])) {
+		reqBody["tool_choice"] = "none"
+	}
+	return removed
+}
+
+func codexImageToolChoiceSelected(choice any) bool {
+	choiceMap, ok := choice.(map[string]any)
 	if !ok {
 		return false
 	}
-
-	filtered := make([]any, 0, len(tools))
-	removed := false
-	for _, rawTool := range tools {
-		toolMap, ok := rawTool.(map[string]any)
-		if ok && strings.TrimSpace(firstNonEmptyString(toolMap["type"])) == "image_generation" {
-			removed = true
-			continue
-		}
-		filtered = append(filtered, rawTool)
+	name := strings.TrimSpace(firstNonEmptyString(choiceMap["name"]))
+	if function, ok := choiceMap["function"].(map[string]any); ok && name == "" {
+		name = strings.TrimSpace(firstNonEmptyString(function["name"]))
 	}
-	if !removed {
-		return false
-	}
-	if len(filtered) == 0 {
-		delete(reqBody, "tools")
-		return true
-	}
-	reqBody["tools"] = filtered
-	return true
+	return name == codexImageGenToolName || name == codexImageGenNamespace+"."+codexImageGenToolName
 }
 
 func stripOpenAIImageGenerationToolDeclarationsFromBody(body []byte) ([]byte, bool, error) {

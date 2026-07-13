@@ -737,6 +737,10 @@ func NormalizeOpenAIWSImageGenerationChannelMapping(body []byte, requestedModel 
 	if normalizeOpenAIResponsesImageGenerationToolsForModel(reqBody, mappedImageModel) {
 		modified = true
 	}
+	if !openAIAnyToolChoiceSelectsImageGeneration(reqBody["tool_choice"]) {
+		reqBody["tool_choice"] = map[string]any{"type": "image_generation"}
+		modified = true
+	}
 	if !modified {
 		return body, true, nil
 	}

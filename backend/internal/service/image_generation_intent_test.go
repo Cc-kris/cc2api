@@ -189,6 +189,99 @@ func TestCodexDesktopImageGenerationTransportFallbackShapes(t *testing.T) {
 	require.Equal(t, "imagegen", gjson.GetBytes(prepared, "tools.0.name").String())
 }
 
+func TestClassifyCodexImageRequest(t *testing.T) {
+	metadata := func(kind, source string) string {
+		return `"client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"` + kind + `\",\"thread_source\":\"` + source + `\"}"}`
+	}
+	extension := `"tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}]`
+	hosted := `"tools":[{"type":"image_generation"}]`
+
+	tests := []struct {
+		name     string
+		body     string
+		wantRole CodexRequestRole
+		wantExec CodexImageExecution
+		legacy   bool
+	}{
+		{"current extension user turn", `{` + metadata("turn", "user") + `,` + extension + `}`, CodexRequestRoleUserTurn, CodexImageExecutionExtension, false},
+		{"current user turn without image capability", `{` + metadata("turn", "user") + `}`, CodexRequestRoleUserTurn, CodexImageExecutionCapabilityMissing, false},
+		{"current hosted image user turn", `{` + metadata("turn", "user") + `,` + hosted + `}`, CodexRequestRoleUserTurn, CodexImageExecutionHostedImage, false},
+		{"feature turn bypasses extension", `{` + metadata("turn", "automation") + `,` + extension + `}`, CodexRequestRoleFeature, CodexImageExecutionTextBypass, false},
+		{"subagent bypasses image mapping", `{` + metadata("turn", "subagent") + `}`, CodexRequestRoleSubagent, CodexImageExecutionTextBypass, false},
+		{"memory consolidation source bypasses image mapping", `{` + metadata("turn", "memory_consolidation") + `}`, CodexRequestRoleMemory, CodexImageExecutionTextBypass, false},
+		{"prewarm bypasses image mapping", `{` + metadata("prewarm", "user") + `}`, CodexRequestRolePrewarm, CodexImageExecutionTextBypass, false},
+		{"compaction bypasses image mapping", `{` + metadata("compaction", "user") + `}`, CodexRequestRoleCompaction, CodexImageExecutionTextBypass, false},
+		{"memory bypasses image mapping", `{` + metadata("memory", "") + `}`, CodexRequestRoleMemory, CodexImageExecutionTextBypass, false},
+		{"future metadata kind fails safe to text", `{` + metadata("future_kind", "user") + `}`, CodexRequestRoleUnknown, CodexImageExecutionTextBypass, false},
+		{"legacy hosted tool", `{` + hosted + `}`, CodexRequestRoleUnknown, CodexImageExecutionHostedImage, false},
+		{"legacy dedicated image channel", `{"input":"draw"}`, CodexRequestRoleUnknown, CodexImageExecutionHostedImage, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision := ClassifyCodexImageRequest("gpt-5.6-terra", "gpt-image-2", []byte(tt.body))
+			require.Equal(t, tt.wantRole, decision.Role)
+			require.Equal(t, tt.wantExec, decision.Execution)
+			require.Equal(t, tt.legacy, decision.LegacyFallback)
+		})
+	}
+
+	t.Run("ordinary mappings never become image routes", func(t *testing.T) {
+		decision := ClassifyCodexImageRequest("gpt-5.6-terra", "gpt-5.6-sol", []byte(`{`+metadata("turn", "user")+`,`+extension+`}`))
+		require.Equal(t, CodexImageExecutionOrdinary, decision.Execution)
+	})
+
+	t.Run("metadata object uses the same canonical role", func(t *testing.T) {
+		body := []byte(`{"client_metadata":{"x-codex-turn-metadata":{"request_kind":"turn","thread_source":"user"}}}`)
+		decision := ClassifyCodexImageRequest("gpt-5.6-terra", "gpt-image-2", body)
+		require.Equal(t, CodexRequestRoleUserTurn, decision.Role)
+		require.Equal(t, CodexImageExecutionCapabilityMissing, decision.Execution)
+	})
+}
+
+func TestPrepareCodexImageRouteRequest(t *testing.T) {
+	userMetadata := `"client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"turn\",\"thread_source\":\"user\"}"}`
+
+	t.Run("hosted image keeps text model and forces mapped image tool", func(t *testing.T) {
+		body := []byte(`{"model":"gpt-5.6-terra",` + userMetadata + `,"input":"draw","tools":[{"type":"image_generation"}]}`)
+		decision := ClassifyCodexImageRequest("gpt-5.6-terra", "gpt-image-2", body)
+		prepared, err := PrepareCodexImageRouteRequest(body, "gpt-5.6-terra", "gpt-image-2", decision)
+		require.NoError(t, err)
+		require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(prepared, "model").String())
+		require.Equal(t, "image_generation", gjson.GetBytes(prepared, "tools.0.type").String())
+		require.Equal(t, "gpt-image-2", gjson.GetBytes(prepared, "tools.0.model").String())
+		require.Equal(t, "image_generation", gjson.GetBytes(prepared, "tool_choice.type").String())
+	})
+
+	t.Run("feature turn strips image namespace but preserves text model", func(t *testing.T) {
+		body := []byte(`{"model":"gpt-5.4-mini","client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"turn\",\"thread_source\":\"automation\"}"},"tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]},{"type":"function","name":"shell"}],"tool_choice":{"type":"function","name":"imagegen"},"input":"metadata work"}`)
+		decision := ClassifyCodexImageRequest("gpt-5.4-mini", "gpt-image-2", body)
+		prepared, err := PrepareCodexImageRouteRequest(body, "gpt-5.4-mini", "gpt-image-2", decision)
+		require.NoError(t, err)
+		require.Equal(t, CodexImageExecutionTextBypass, decision.Execution)
+		require.Equal(t, "gpt-5.4-mini", gjson.GetBytes(prepared, "model").String())
+		require.Equal(t, "shell", gjson.GetBytes(prepared, "tools.0.name").String())
+		require.Equal(t, "none", gjson.GetBytes(prepared, "tool_choice").String())
+	})
+
+	t.Run("feature metadata helper strips responses lite image namespace", func(t *testing.T) {
+		body := []byte(`{"model":"gpt-5.4-mini","client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"turn\",\"thread_source\":\"automation\"}"},"text":{"format":{"type":"json_schema","schema":{"type":"object","properties":{"title":{"type":"string"}}}}},"input":[{"type":"additional_tools","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}]}]}`)
+		decision := ClassifyCodexImageRequest("gpt-5.4-mini", "gpt-image-2", body)
+		prepared, err := PrepareCodexImageRouteRequest(body, "gpt-5.4-mini", "gpt-image-2", decision)
+		require.NoError(t, err)
+		require.Equal(t, CodexImageExecutionTextBypass, decision.Execution)
+		require.False(t, gjson.GetBytes(prepared, `input.#(type=="additional_tools")`).Exists())
+		require.Equal(t, "none", gjson.GetBytes(prepared, "tool_choice").String())
+	})
+
+	t.Run("prewarm remains byte-for-byte text", func(t *testing.T) {
+		body := []byte(`{"model":"gpt-5.4-mini","client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"prewarm\",\"thread_source\":\"user\"}"},"input":"warm"}`)
+		decision := ClassifyCodexImageRequest("gpt-5.4-mini", "gpt-image-2", body)
+		prepared, err := PrepareCodexImageRouteRequest(body, "gpt-5.4-mini", "gpt-image-2", decision)
+		require.NoError(t, err)
+		require.Equal(t, body, prepared)
+	})
+}
+
 func TestIsImageGenerationPermissionIntentIgnoresToolDeclarationOnly(t *testing.T) {
 	tests := []struct {
 		name string
