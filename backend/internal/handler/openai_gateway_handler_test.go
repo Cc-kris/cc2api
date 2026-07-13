@@ -1180,7 +1180,7 @@ func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *tes
 	streamReq.Header.Set("User-Agent", "Codex Desktop/0.144.0-alpha.4 Windows")
 	streamResp, err := handlerServer.Client().Do(streamReq)
 	require.NoError(t, err)
-	defer streamResp.Body.Close()
+	defer func() { _ = streamResp.Body.Close() }()
 	require.Equal(t, http.StatusOK, streamResp.StatusCode)
 	select {
 	case <-streamProbeStarted:
