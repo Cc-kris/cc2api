@@ -172,8 +172,8 @@ func TestAttachCodexTurnMetadataEnablesWebSocketRouting(t *testing.T) {
 
 func TestCodexDesktopImageGenerationTransportFallbackShapes(t *testing.T) {
 	// A metadata-only WebSocket attempt does not advertise the local image tool.
-	// When its channel maps the text model to an image model, it remains a native
-	// image intent and the handler may reject it so Codex reconnects over HTTP.
+	// The channel's text-to-image mapping still identifies it as a hosted image
+	// turn; the gateway supplies the standard image_generation contract.
 	wsAttempt := []byte(`{"type":"response.create","model":"gpt-5.6-sol","client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"turn\",\"thread_source\":\"user\"}"},"input":[{"role":"user","content":[{"type":"input_text","text":"draw a blue paper airplane"}]}]}`)
 	require.False(t, ShouldUseCodexImageGenerationExtension("gpt-5.6-sol", "gpt-image-2", wsAttempt))
 	require.True(t, IsImageGenerationIntent("/v1/responses", "gpt-image-2", wsAttempt))
@@ -204,7 +204,7 @@ func TestClassifyCodexImageRequest(t *testing.T) {
 		legacy   bool
 	}{
 		{"current extension user turn", `{` + metadata("turn", "user") + `,` + extension + `}`, CodexRequestRoleUserTurn, CodexImageExecutionExtension, false},
-		{"current user turn without image capability", `{` + metadata("turn", "user") + `}`, CodexRequestRoleUserTurn, CodexImageExecutionCapabilityMissing, false},
+		{"current user turn uses dedicated hosted image route", `{` + metadata("turn", "user") + `}`, CodexRequestRoleUserTurn, CodexImageExecutionHostedImage, false},
 		{"current hosted image user turn", `{` + metadata("turn", "user") + `,` + hosted + `}`, CodexRequestRoleUserTurn, CodexImageExecutionHostedImage, false},
 		{"feature turn bypasses extension", `{` + metadata("turn", "automation") + `,` + extension + `}`, CodexRequestRoleFeature, CodexImageExecutionTextBypass, false},
 		{"subagent bypasses image mapping", `{` + metadata("turn", "subagent") + `}`, CodexRequestRoleSubagent, CodexImageExecutionTextBypass, false},
@@ -230,23 +230,40 @@ func TestClassifyCodexImageRequest(t *testing.T) {
 		require.Equal(t, CodexImageExecutionOrdinary, decision.Execution)
 	})
 
+	t.Run("only text orchestration paths leave the image group", func(t *testing.T) {
+		require.True(t, CodexImageRequestDecision{Execution: CodexImageExecutionTextBypass}.UsesOrchestratorGroup())
+		require.True(t, CodexImageRequestDecision{Execution: CodexImageExecutionExtension}.UsesOrchestratorGroup())
+		require.False(t, CodexImageRequestDecision{Execution: CodexImageExecutionHostedImage}.UsesOrchestratorGroup())
+	})
+
 	t.Run("metadata object uses the same canonical role", func(t *testing.T) {
 		body := []byte(`{"client_metadata":{"x-codex-turn-metadata":{"request_kind":"turn","thread_source":"user"}}}`)
 		decision := ClassifyCodexImageRequest("gpt-5.6-terra", "gpt-image-2", body)
 		require.Equal(t, CodexRequestRoleUserTurn, decision.Role)
-		require.Equal(t, CodexImageExecutionCapabilityMissing, decision.Execution)
+		require.Equal(t, CodexImageExecutionHostedImage, decision.Execution)
 	})
 }
 
 func TestPrepareCodexImageRouteRequest(t *testing.T) {
 	userMetadata := `"client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"turn\",\"thread_source\":\"user\"}"}`
 
-	t.Run("hosted image keeps text model and forces mapped image tool", func(t *testing.T) {
+	t.Run("hosted image restores dedicated top-level model mapping", func(t *testing.T) {
 		body := []byte(`{"model":"gpt-5.6-terra",` + userMetadata + `,"input":"draw","tools":[{"type":"image_generation"}]}`)
 		decision := ClassifyCodexImageRequest("gpt-5.6-terra", "gpt-image-2", body)
 		prepared, err := PrepareCodexImageRouteRequest(body, "gpt-5.6-terra", "gpt-image-2", decision)
 		require.NoError(t, err)
-		require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(prepared, "model").String())
+		require.Equal(t, "gpt-image-2", gjson.GetBytes(prepared, "model").String())
+		require.Equal(t, "image_generation", gjson.GetBytes(prepared, "tools.0.type").String())
+		require.Equal(t, "gpt-image-2", gjson.GetBytes(prepared, "tools.0.model").String())
+		require.Equal(t, "image_generation", gjson.GetBytes(prepared, "tool_choice.type").String())
+	})
+
+	t.Run("metadata-only hosted image receives the complete image contract", func(t *testing.T) {
+		body := []byte(`{"model":"gpt-5.6-terra",` + userMetadata + `,"input":"draw"}`)
+		decision := ClassifyCodexImageRequest("gpt-5.6-terra", "gpt-image-2", body)
+		prepared, err := PrepareCodexImageRouteRequest(body, "gpt-5.6-terra", "gpt-image-2", decision)
+		require.NoError(t, err)
+		require.Equal(t, "gpt-image-2", gjson.GetBytes(prepared, "model").String())
 		require.Equal(t, "image_generation", gjson.GetBytes(prepared, "tools.0.type").String())
 		require.Equal(t, "gpt-image-2", gjson.GetBytes(prepared, "tools.0.model").String())
 		require.Equal(t, "image_generation", gjson.GetBytes(prepared, "tool_choice.type").String())

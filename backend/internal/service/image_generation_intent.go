@@ -36,11 +36,10 @@ const (
 type CodexImageExecution string
 
 const (
-	CodexImageExecutionOrdinary          CodexImageExecution = "ordinary"
-	CodexImageExecutionCapabilityMissing CodexImageExecution = "capability_missing"
-	CodexImageExecutionTextBypass        CodexImageExecution = "text_bypass"
-	CodexImageExecutionExtension         CodexImageExecution = "extension"
-	CodexImageExecutionHostedImage       CodexImageExecution = "hosted_image"
+	CodexImageExecutionOrdinary    CodexImageExecution = "ordinary"
+	CodexImageExecutionTextBypass  CodexImageExecution = "text_bypass"
+	CodexImageExecutionExtension   CodexImageExecution = "extension"
+	CodexImageExecutionHostedImage CodexImageExecution = "hosted_image"
 )
 
 type CodexImageRequestDecision struct {
@@ -54,8 +53,7 @@ type CodexImageRequestDecision struct {
 
 func (d CodexImageRequestDecision) UsesOrchestratorGroup() bool {
 	return d.Execution == CodexImageExecutionTextBypass ||
-		d.Execution == CodexImageExecutionExtension ||
-		d.Execution == CodexImageExecutionHostedImage
+		d.Execution == CodexImageExecutionExtension
 }
 
 func (d CodexImageRequestDecision) IsImageExecution() bool {
@@ -71,8 +69,16 @@ func PrepareCodexImageRouteRequest(body []byte, requestedModel, mappedModel stri
 		prepared, _, err := PrepareCodexImageGenerationExtensionDispatch(body)
 		return prepared, err
 	case CodexImageExecutionHostedImage:
+		// Dedicated image channels require both parts of the proven Responses
+		// contract: the mapped image model selects the image account, while the
+		// image_generation tool makes the upstream produce an image instead of a
+		// text completion. Current Codex user turns do not always advertise that
+		// tool, so normalize it here before applying the channel model mapping.
 		prepared, _, err := NormalizeOpenAIWSImageGenerationChannelMapping(body, requestedModel, mappedModel)
-		return prepared, err
+		if err != nil {
+			return body, err
+		}
+		return ReplaceModelInBody(prepared, mappedModel), nil
 	case CodexImageExecutionTextBypass:
 		if IsCodexSystemBackgroundTurn(body) {
 			return PrepareCodexSystemBackgroundTextDispatch(body)
@@ -119,10 +125,11 @@ func ClassifyCodexImageRequest(requestedModel, mappedModel string, body []byte) 
 		return decision
 	}
 	if decision.Role == CodexRequestRoleUserTurn {
-		// A current Codex user turn describes ownership, not image capability.
-		// The client must retry with either image_gen namespace tools or an
-		// explicit hosted image_generation tool.
-		decision.Execution = CodexImageExecutionCapabilityMissing
+		// A canonical user turn inside a dedicated text-to-image channel is the
+		// stable product-level image intent. Current Codex builds do not always
+		// advertise an image tool on the first WS attempt, so route it directly
+		// instead of making transport-specific retry decisions.
+		decision.Execution = CodexImageExecutionHostedImage
 		return decision
 	}
 	if decision.HasMetadata {

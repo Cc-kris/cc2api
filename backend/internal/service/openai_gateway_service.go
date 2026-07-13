@@ -511,13 +511,6 @@ func (s *OpenAIGatewayService) ResolveCodexImageGenerationRoute(ctx context.Cont
 	return s.channelService.ResolveCodexImageGenerationRoute(ctx, groupID, model)
 }
 
-func (s *OpenAIGatewayService) IsCodexImageGenerationBridgeGroup(ctx context.Context, groupID *int64) (bool, error) {
-	if s == nil || s.channelService == nil {
-		return false, nil
-	}
-	return s.channelService.IsCodexImageGenerationBridgeGroup(ctx, groupID)
-}
-
 func (s *OpenAIGatewayService) checkChannelPricingRestriction(ctx context.Context, groupID *int64, requestedModel string) bool {
 	if groupID == nil || s.channelService == nil || requestedModel == "" {
 		return false

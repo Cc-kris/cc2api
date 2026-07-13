@@ -23,6 +23,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 	"go.uber.org/zap"
 )
 
@@ -291,17 +292,6 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			zap.String("mapped_model", codexRoute.Mapping.MappedModel),
 		)
 	}
-	if codexDecision.Execution == service.CodexImageExecutionCapabilityMissing {
-		// Current Codex Desktop may retry a metadata-only WS turn over HTTP
-		// without advertising either image tool surface. HTTP is the terminal
-		// transport, so use the channel's hosted image fallback instead of
-		// rejecting or returning a textual completion.
-		codexDecision.Execution = service.CodexImageExecutionHostedImage
-		reqLog.Info("openai.codex_http_hosted_image_fallback",
-			zap.String("requested_model", reqModel),
-			zap.String("image_model", codexRoute.Mapping.MappedModel),
-		)
-	}
 	codexImageExtensionCandidate := codexDecision.Execution == service.CodexImageExecutionExtension
 	codexHostedImageTurn := codexDecision.Execution == service.CodexImageExecutionHostedImage
 	codexTextBypassTurn := codexDecision.Execution == service.CodexImageExecutionTextBypass
@@ -477,7 +467,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		forwardBody := body
 		useCodexImageExtension := codexImageExtensionCandidate
 		c.Set(service.OpenAICodexImageGenerationExtensionContextKey, useCodexImageExtension)
-		if codexDecision.UsesOrchestratorGroup() {
+		if codexDecision.Execution != service.CodexImageExecutionOrdinary {
 			preparedBody, prepareErr := service.PrepareCodexImageRouteRequest(body, reqModel, channelMapping.MappedModel, codexDecision)
 			if prepareErr != nil {
 				if accountReleaseFunc != nil {
@@ -1324,17 +1314,6 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	if !h.ensureResponsesDependencies(c, reqLog) {
 		return
 	}
-	bridgeGroup, bridgeLookupErr := h.gatewayService.IsCodexImageGenerationBridgeGroup(c.Request.Context(), apiKey.GroupID)
-	if bridgeLookupErr != nil {
-		reqLog.Warn("openai.websocket_image_bridge_group_lookup_failed", zap.Error(bridgeLookupErr))
-		h.errorResponse(c, http.StatusServiceUnavailable, "api_error", "Codex image channel configuration is unavailable")
-		return
-	}
-	if bridgeGroup {
-		reqLog.Info("openai.websocket_image_bridge_http_transport_required")
-		h.errorResponse(c, http.StatusUpgradeRequired, "websocket_transport_unsupported", "Codex image channels require HTTPS Responses transport")
-		return
-	}
 	reqLog.Info("openai.websocket_ingress_started")
 	clientIP := ip.GetClientIP(c)
 	userAgent := strings.TrimSpace(c.GetHeader("User-Agent"))
@@ -1448,12 +1427,6 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			zap.String("requested_model", reqModel),
 			zap.String("mapped_model", codexRouteWS.Mapping.MappedModel),
 		)
-	}
-	if codexDecisionWS.Execution == service.CodexImageExecutionCapabilityMissing {
-		reqLog.Info("openai.websocket_image_capability_retry_required", zap.String("model", reqModel))
-		writeOpenAIWSImageGenerationUnsupported(ctx, wsConn, reqModel)
-		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, openAIWSImageGenerationUnsupportedMessage)
-		return
 	}
 	if codexDecisionWS.IsImageExecution() && !service.GroupAllowsImageGeneration(apiKey.Group) {
 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, service.ImageGenerationPermissionMessage())
@@ -1578,7 +1551,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		if route.Enabled {
 			decision = service.ClassifyCodexImageRequest(model, mapping.MappedModel, payload)
 		}
-		if decision.UsesOrchestratorGroup() {
+		if decision.Execution != service.CodexImageExecutionOrdinary {
 			return service.PrepareCodexImageRouteRequest(payload, model, mapping.MappedModel, decision)
 		}
 		return h.gatewayService.ReplaceModelInBody(payload, mapping.MappedModel), nil
@@ -1803,11 +1776,17 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		// Image-producing Responses turns use the HTTP upstream path even when the
 		// Codex client connected over WebSocket. Extension turns need namespace
 		// restoration, and hosted image turns are not portable across WS providers.
-		if (useCodexImageExtensionWS || codexDecisionWS.Execution == service.CodexImageExecutionHostedImage || ordinaryNativeImageWS) && previousResponseID == "" &&
-			h.tryFallbackOpenAIWebSocketIngressToHTTP(c, wsConn, reqLog, apiKey, account, wsFirstMessage, usageChannelMappingWS) {
+		if (useCodexImageExtensionWS || codexDecisionWS.Execution == service.CodexImageExecutionHostedImage || ordinaryNativeImageWS) && previousResponseID == "" {
+			handled := h.tryFallbackOpenAIWebSocketIngressToHTTP(c, wsConn, reqLog, apiKey, account, reqModel, wsFirstMessage, usageChannelMappingWS)
 			if currentAccountRelease != nil {
 				currentAccountRelease()
 				currentAccountRelease = nil
+			}
+			if !handled {
+				// These request families deliberately use an HTTP upstream. Falling
+				// through to the WebSocket proxy would call the same image account a
+				// second time and could duplicate a successful-but-undelivered image.
+				closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "image http upstream failed")
 			}
 			return
 		}
@@ -1855,7 +1834,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				closeOpenAIClientWS(wsConn, closeErr.StatusCode(), closeErr.Reason())
 				return
 			}
-			if service.IsOpenAIWSHTTPFallbackSafe(err) && h.tryFallbackOpenAIWebSocketIngressToHTTP(c, wsConn, reqLog, apiKey, account, wsFirstMessage, usageChannelMappingWS) {
+			if service.IsOpenAIWSHTTPFallbackSafe(err) && h.tryFallbackOpenAIWebSocketIngressToHTTP(c, wsConn, reqLog, apiKey, account, reqModel, wsFirstMessage, usageChannelMappingWS) {
 				return
 			}
 			closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "upstream websocket proxy failed")
@@ -1874,6 +1853,7 @@ func (h *OpenAIGatewayHandler) tryFallbackOpenAIWebSocketIngressToHTTP(
 	reqLog *zap.Logger,
 	apiKey *service.APIKey,
 	account *service.Account,
+	requestedModel string,
 	body []byte,
 	channelMappingWS service.ChannelMappingResult,
 ) bool {
@@ -1887,6 +1867,17 @@ func (h *OpenAIGatewayHandler) tryFallbackOpenAIWebSocketIngressToHTTP(
 	if strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String()) != "" {
 		return false
 	}
+	forwardBody := body
+	if strings.TrimSpace(gjson.GetBytes(body, "type").String()) == "response.create" {
+		var normalizeErr error
+		forwardBody, normalizeErr = sjson.DeleteBytes(body, "type")
+		if normalizeErr != nil {
+			if reqLog != nil {
+				reqLog.Warn("openai.websocket_http_fallback_request_normalize_failed", zap.Error(normalizeErr))
+			}
+			return false
+		}
+	}
 	fallbackRecorder := newOpenAIHTTPFallbackRecorder()
 	fallbackCtx, _ := gin.CreateTestContext(fallbackRecorder)
 	fallbackCtx.Request = c.Request.Clone(c.Request.Context())
@@ -1898,8 +1889,14 @@ func (h *OpenAIGatewayHandler) tryFallbackOpenAIWebSocketIngressToHTTP(
 		fallbackCtx.Set(key, value)
 	}
 	setOpenAIClientTransportHTTP(fallbackCtx)
-	result, err := h.gatewayService.Forward(fallbackCtx.Request.Context(), fallbackCtx, account, body)
+	result, err := h.gatewayService.Forward(fallbackCtx.Request.Context(), fallbackCtx, account, forwardBody)
 	if err != nil {
+		// Forward normally writes the upstream error before returning it. Relay
+		// that structured failure to Codex when available; the caller still treats
+		// the HTTP attempt as terminal for image request families.
+		if len(fallbackRecorder.BodyBytes()) > 0 {
+			_ = writeOpenAIHTTPFallbackBodyToWS(c.Request.Context(), wsConn, fallbackRecorder)
+		}
 		if reqLog != nil {
 			reqLog.Warn("openai.websocket_http_fallback_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 		}
@@ -1937,7 +1934,7 @@ func (h *OpenAIGatewayHandler) tryFallbackOpenAIWebSocketIngressToHTTP(
 				IPAddress:          ip.GetClientIP(c),
 				RequestPayloadHash: service.HashUsageRequestPayload(body),
 				APIKeyService:      h.apiKeyService,
-				ChannelUsageFields: channelMappingWS.ToUsageFields(gjson.GetBytes(body, "model").String(), result.UpstreamModel),
+				ChannelUsageFields: channelMappingWS.ToUsageFields(requestedModel, result.UpstreamModel),
 			}); err != nil && reqLog != nil {
 				reqLog.Error("openai.websocket_http_fallback_record_usage_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 			}
