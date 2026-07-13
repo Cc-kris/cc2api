@@ -501,40 +501,14 @@ func (s *OpenAIGatewayService) ResolveChannelMappingAndRestrict(ctx context.Cont
 	return s.channelService.ResolveChannelMappingAndRestrict(ctx, groupID, model)
 }
 
-// IsCodexImageGenerationBridgeEnabled reports whether the Codex image bridge is enabled
-// after applying account, channel, and global overrides.
-func (s *OpenAIGatewayService) IsCodexImageGenerationBridgeEnabled(ctx context.Context, account *Account, apiKey *APIKey) bool {
-	return s.isCodexImageGenerationBridgeEnabled(ctx, account, apiKey)
-}
-
-// CodexImageGenerationOrchestratorGroupID resolves the channel-owned text
-// orchestration group without changing the API key's image group.
-func (s *OpenAIGatewayService) CodexImageGenerationOrchestratorGroupID(ctx context.Context, apiKey *APIKey) *int64 {
-	if s == nil || s.channelService == nil || apiKey == nil || apiKey.GroupID == nil {
-		return nil
+// ResolveCodexImageGenerationRoute returns the channel-owned bridge decision
+// and mapping from one cache snapshot. Account and global settings are not
+// routing inputs: ordinary groups and accounts must never gain this route.
+func (s *OpenAIGatewayService) ResolveCodexImageGenerationRoute(ctx context.Context, groupID *int64, model string) CodexImageGenerationRoute {
+	if s == nil || s.channelService == nil {
+		return CodexImageGenerationRoute{Mapping: ChannelMappingResult{MappedModel: model}}
 	}
-	channel, err := s.channelService.GetChannelForGroup(ctx, *apiKey.GroupID)
-	if err != nil || channel == nil {
-		return nil
-	}
-	return channel.CodexImageGenerationOrchestratorGroupID()
-}
-
-func (s *OpenAIGatewayService) isCodexImageGenerationBridgeEnabled(ctx context.Context, account *Account, apiKey *APIKey) bool {
-	if account != nil {
-		if override := account.CodexImageGenerationBridgeOverride(); override != nil {
-			return *override
-		}
-	}
-	if s != nil && s.channelService != nil && apiKey != nil && apiKey.GroupID != nil {
-		ch, err := s.channelService.GetChannelForGroup(ctx, *apiKey.GroupID)
-		if err != nil {
-			slog.Warn("failed to resolve codex image generation bridge channel override", "group_id", *apiKey.GroupID, "error", err)
-		} else if override := ch.CodexImageGenerationBridgeOverride(PlatformOpenAI); override != nil {
-			return *override
-		}
-	}
-	return s != nil && s.cfg != nil && s.cfg.Gateway.CodexImageGenerationBridgeEnabled
+	return s.channelService.ResolveCodexImageGenerationRoute(ctx, groupID, model)
 }
 
 func (s *OpenAIGatewayService) checkChannelPricingRestriction(ctx context.Context, groupID *int64, requestedModel string) bool {

@@ -75,9 +75,12 @@ func TestCodexImageGenerationExtensionDetection(t *testing.T) {
 	legacy := []byte(`{"tools":[{"type":"image_generation"}]}`)
 	require.False(t, HasCodexImageGenerationExtensionTool(legacy))
 
-	responsesLiteTurn := []byte(`{"model":"gpt-5.6-terra","client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"turn\",\"thread_source\":\"user\"}"}}`)
+	responsesLiteTurn := []byte(`{"model":"gpt-5.6-terra","client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"turn\",\"thread_source\":\"user\"}"},"input":[{"type":"additional_tools","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}]}]}`)
+	require.True(t, HasCodexImageGenerationExtensionTool(responsesLiteTurn))
 	require.True(t, IsCodexImageGenerationExtensionTurn(responsesLiteTurn))
 	require.True(t, ShouldUseCodexImageGenerationExtension("gpt-5.6-terra", "gpt-image-2", responsesLiteTurn))
+	metadataOnlyTurn := []byte(`{"model":"gpt-5.6-terra","client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"turn\",\"thread_source\":\"user\"}"}}`)
+	require.False(t, IsCodexImageGenerationExtensionTurn(metadataOnlyTurn))
 
 	backgroundRequest := []byte(`{"model":"gpt-5.4-mini"}`)
 	require.False(t, IsCodexImageGenerationExtensionTurn(backgroundRequest))
@@ -127,27 +130,63 @@ func TestPrepareCodexImageGenerationExtensionDispatch(t *testing.T) {
 	require.Equal(t, int64(5), gjson.GetBytes(editUpdated, "tools.0.parameters.properties.num_last_images_to_include.maximum").Int())
 	require.NotContains(t, gjson.GetBytes(editUpdated, "instructions").String(), "No conversation images are available")
 
-	continuation := []byte(`{"model":"gpt-5.6-terra","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"input":[{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"},{"type":"input_text","text":"saved"}]}]}`)
+	continuation := []byte(`{"model":"gpt-5.6-terra","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"input":[{"type":"function_call","namespace":"image_gen","name":"imagegen","call_id":"call_1"},{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"},{"type":"input_text","text":"saved"}]}]}`)
 	require.True(t, IsCodexImageGenerationExtensionContinuation(continuation))
-	unchanged, changed, err := PrepareCodexImageGenerationExtensionDispatch(continuation)
+	continuationUpdated, changed, err := PrepareCodexImageGenerationExtensionDispatch(continuation)
 	require.NoError(t, err)
-	require.False(t, changed)
-	require.Equal(t, continuation, unchanged)
+	require.True(t, changed)
+	require.Equal(t, "function", gjson.GetBytes(continuationUpdated, "tools.0.type").String())
+	require.False(t, gjson.GetBytes(continuationUpdated, "tool_choice").Exists())
+	require.NotContains(t, gjson.GetBytes(continuationUpdated, "instructions").String(), "call the imagegen function exactly once")
+	outputOnlyContinuation := []byte(`{"model":"gpt-5.6-terra","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"previous_response_id":"resp_1","input":[{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"}]}]}`)
+	require.True(t, IsCodexImageGenerationExtensionContinuation(outputOnlyContinuation))
 
-	laterEdit := []byte(`{"model":"gpt-5.6-terra","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"input":[{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"}]},{"type":"message","role":"user","content":[{"type":"input_text","text":"change the previous image to green"}]}]}`)
+	mismatched := []byte(`{"model":"gpt-5.6-terra","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"input":[{"type":"function_call","namespace":"image_gen","name":"imagegen","call_id":"call_1"},{"type":"function_call_output","call_id":"call_other","output":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"}]}]}`)
+	require.False(t, IsCodexImageGenerationExtensionContinuation(mismatched))
+
+	laterEdit := []byte(`{"model":"gpt-5.6-terra","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"input":[{"type":"function_call","namespace":"image_gen","name":"imagegen","call_id":"call_1"},{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"}]},{"type":"message","role":"user","content":[{"type":"input_text","text":"change the previous image to green"}]}]}`)
 	require.False(t, IsCodexImageGenerationExtensionContinuation(laterEdit))
 	laterEditUpdated, laterEditChanged, err := PrepareCodexImageGenerationExtensionDispatch(laterEdit)
 	require.NoError(t, err)
 	require.True(t, laterEditChanged)
 	require.True(t, gjson.GetBytes(laterEditUpdated, "tools.0.parameters.properties.num_last_images_to_include").Exists())
+
+	lite := []byte(`{"model":"gpt-5.6-terra","client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"turn\",\"thread_source\":\"user\"}"},"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"draw"}]},{"type":"additional_tools","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}]}]}`)
+	liteUpdated, liteChanged, err := PrepareCodexImageGenerationExtensionDispatch(lite)
+	require.NoError(t, err)
+	require.True(t, liteChanged)
+	require.False(t, gjson.GetBytes(liteUpdated, "tools").Exists())
+	require.Equal(t, "developer", gjson.GetBytes(liteUpdated, "input.0.role").String())
+	require.Equal(t, "function", gjson.GetBytes(liteUpdated, `input.#(type=="additional_tools").tools.0.type`).String())
+	require.Equal(t, "imagegen", gjson.GetBytes(liteUpdated, `input.#(type=="additional_tools").tools.0.name`).String())
+	require.Contains(t, gjson.GetBytes(liteUpdated, `input.#(role=="developer").content.0.text`).String(), "call the imagegen function exactly once")
 }
 
 func TestAttachCodexTurnMetadataEnablesWebSocketRouting(t *testing.T) {
 	body := []byte(`{"type":"response.create","model":"gpt-5.6-terra"}`)
 	updated, err := AttachCodexTurnMetadata(body, `{"request_kind":"turn","thread_source":"user"}`)
 	require.NoError(t, err)
-	require.True(t, IsCodexImageGenerationExtensionTurn(updated))
+	require.False(t, IsCodexImageGenerationExtensionTurn(updated), "metadata alone must not grant image capability")
 	require.Equal(t, "turn", gjson.Get(gjson.GetBytes(updated, "client_metadata.x-codex-turn-metadata").String(), "request_kind").String())
+}
+
+func TestCodexDesktopImageGenerationTransportFallbackShapes(t *testing.T) {
+	// A metadata-only WebSocket attempt does not advertise the local image tool.
+	// When its channel maps the text model to an image model, it remains a native
+	// image intent and the handler may reject it so Codex reconnects over HTTP.
+	wsAttempt := []byte(`{"type":"response.create","model":"gpt-5.6-sol","client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"turn\",\"thread_source\":\"user\"}"},"input":[{"role":"user","content":[{"type":"input_text","text":"draw a blue paper airplane"}]}]}`)
+	require.False(t, ShouldUseCodexImageGenerationExtension("gpt-5.6-sol", "gpt-image-2", wsAttempt))
+	require.True(t, IsImageGenerationIntent("/v1/responses", "gpt-image-2", wsAttempt))
+
+	// The Desktop HTTP fallback carries the concrete image_gen namespace. No
+	// actor-authorization header is part of this structural routing decision.
+	httpFallback := []byte(`{"model":"gpt-5.6-sol","input":[{"role":"user","content":[{"type":"input_text","text":"draw a blue paper airplane"}]}],"tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}]}`)
+	require.True(t, ShouldUseCodexImageGenerationExtension("gpt-5.6-sol", "gpt-image-2", httpFallback))
+	prepared, changed, err := PrepareCodexImageGenerationExtensionDispatch(httpFallback)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Equal(t, "function", gjson.GetBytes(prepared, "tools.0.type").String())
+	require.Equal(t, "imagegen", gjson.GetBytes(prepared, "tools.0.name").String())
 }
 
 func TestIsImageGenerationPermissionIntentIgnoresToolDeclarationOnly(t *testing.T) {

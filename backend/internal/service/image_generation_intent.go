@@ -51,7 +51,26 @@ func HasCodexImageGenerationExtensionTool(body []byte) bool {
 	if len(body) == 0 || !gjson.ValidBytes(body) {
 		return false
 	}
-	tools := gjson.GetBytes(body, "tools")
+	if codexJSONToolsContainImageGenerationExtension(gjson.GetBytes(body, "tools")) {
+		return true
+	}
+	input := gjson.GetBytes(body, "input")
+	if !input.IsArray() {
+		return false
+	}
+	found := false
+	input.ForEach(func(_, item gjson.Result) bool {
+		if strings.TrimSpace(item.Get("type").String()) == "additional_tools" &&
+			codexJSONToolsContainImageGenerationExtension(item.Get("tools")) {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+func codexJSONToolsContainImageGenerationExtension(tools gjson.Result) bool {
 	if !tools.IsArray() {
 		return false
 	}
@@ -79,11 +98,14 @@ func HasCodexImageGenerationExtensionTool(body []byte) bool {
 }
 
 // IsCodexImageGenerationExtensionTurn recognizes a current Codex user turn.
-// Responses-lite/custom-provider requests can keep extension tools in the
-// local runtime without serializing the image_gen namespace in top-level
-// tools, so the client-owned turn metadata is the stable fallback signal.
+// Both classic Responses and Responses Lite must advertise the concrete
+// image_gen namespace. Metadata identifies the turn owner/stage, but never
+// grants an image capability by itself.
 func IsCodexImageGenerationExtensionTurn(body []byte) bool {
 	if len(body) == 0 || !gjson.ValidBytes(body) {
+		return false
+	}
+	if !HasCodexImageGenerationExtensionTool(body) {
 		return false
 	}
 	rawMetadata := strings.TrimSpace(gjson.GetBytes(body, `client_metadata.x-codex-turn-metadata`).String())
@@ -91,7 +113,7 @@ func IsCodexImageGenerationExtensionTurn(body []byte) bool {
 		return strings.TrimSpace(gjson.Get(rawMetadata, "request_kind").String()) == "turn" &&
 			strings.TrimSpace(gjson.Get(rawMetadata, "thread_source").String()) == "user"
 	}
-	return HasCodexImageGenerationExtensionTool(body)
+	return true
 }
 
 // IsCodexSystemBackgroundTurn recognizes short-lived helper turns created by
@@ -138,6 +160,8 @@ func IsCodexImageGenerationExtensionContinuation(body []byte) bool {
 	}
 	lastUserMessage := -1
 	lastImageToolItem := -1
+	imageCallIDs := make(map[string]struct{})
+	imageOutputIDs := make(map[string]int)
 	index := 0
 	input.ForEach(func(_, item gjson.Result) bool {
 		itemIndex := index
@@ -149,14 +173,18 @@ func IsCodexImageGenerationExtensionContinuation(body []byte) bool {
 		if strings.TrimSpace(item.Get("type").String()) == "function_call" &&
 			strings.TrimSpace(item.Get("namespace").String()) == codexImageGenNamespace &&
 			strings.TrimSpace(item.Get("name").String()) == codexImageGenToolName {
-			lastImageToolItem = itemIndex
+			if callID := strings.TrimSpace(item.Get("call_id").String()); callID != "" {
+				imageCallIDs[callID] = struct{}{}
+			}
 		}
 		if strings.TrimSpace(item.Get("type").String()) == "function_call_output" {
+			callID := strings.TrimSpace(item.Get("call_id").String())
 			output := item.Get("output")
 			if output.IsArray() {
 				output.ForEach(func(_, part gjson.Result) bool {
-					if strings.TrimSpace(part.Get("type").String()) == "input_image" {
-						lastImageToolItem = itemIndex
+					if strings.TrimSpace(part.Get("type").String()) == "input_image" &&
+						strings.TrimSpace(part.Get("image_url").String()) != "" {
+						imageOutputIDs[callID] = itemIndex
 						return false
 					}
 					return true
@@ -165,6 +193,15 @@ func IsCodexImageGenerationExtensionContinuation(body []byte) bool {
 		}
 		return true
 	})
+	for callID, outputIndex := range imageOutputIDs {
+		_, matchedCall := imageCallIDs[callID]
+		// Responses continuation requests may reference the prior function call
+		// only through previous_response_id. When calls are replayed in input,
+		// require an exact call_id match; otherwise require a non-empty call_id.
+		if callID != "" && (len(imageCallIDs) == 0 || matchedCall) && outputIndex > lastImageToolItem {
+			lastImageToolItem = outputIndex
+		}
+	}
 	return lastImageToolItem >= 0 && lastImageToolItem > lastUserMessage
 }
 
@@ -234,7 +271,7 @@ func PrepareCodexSystemBackgroundTextDispatch(body []byte) ([]byte, error) {
 // turn to call the standalone Codex image tool exactly once. Follow-up turns
 // are left untouched so the model can consume the local tool result.
 func PrepareCodexImageGenerationExtensionDispatch(body []byte) ([]byte, bool, error) {
-	if !IsCodexImageGenerationExtensionTurn(body) || IsCodexImageGenerationExtensionContinuation(body) {
+	if !IsCodexImageGenerationExtensionTurn(body) {
 		return body, false, nil
 	}
 	var reqBody map[string]any
@@ -246,18 +283,15 @@ func PrepareCodexImageGenerationExtensionDispatch(body []byte) ([]byte, bool, er
 	if !hasConversationImages {
 		directive += " No conversation images are available in this turn, so you must omit num_last_images_to_include."
 	}
-	instructions := strings.TrimSpace(firstNonEmptyString(reqBody["instructions"]))
-	if strings.Contains(instructions, directive) {
-		return body, false, nil
+	continuation := IsCodexImageGenerationExtensionContinuation(body)
+	tools, hasClassicTools := reqBody["tools"].([]any)
+	additionalTools, additionalToolsIndex := codexAdditionalTools(reqBody["input"])
+	toolSource := tools
+	if !hasClassicTools && additionalToolsIndex >= 0 {
+		toolSource = additionalTools
 	}
-	if instructions == "" {
-		reqBody["instructions"] = directive
-	} else {
-		reqBody["instructions"] = instructions + "\n\n" + directive
-	}
-	tools, _ := reqBody["tools"].([]any)
-	flattenedTools := make([]any, 0, len(tools)+1)
-	for _, rawTool := range tools {
+	flattenedTools := make([]any, 0, len(toolSource)+1)
+	for _, rawTool := range toolSource {
 		tool, ok := rawTool.(map[string]any)
 		if !ok {
 			flattenedTools = append(flattenedTools, rawTool)
@@ -310,13 +344,54 @@ Guidelines:
 			"additionalProperties": false,
 		},
 	})
-	reqBody["tools"] = flattenedTools
-	reqBody["tool_choice"] = "auto"
+	if hasClassicTools {
+		reqBody["tools"] = flattenedTools
+		if !continuation {
+			instructions := strings.TrimSpace(firstNonEmptyString(reqBody["instructions"]))
+			if !strings.Contains(instructions, directive) {
+				if instructions == "" {
+					reqBody["instructions"] = directive
+				} else {
+					reqBody["instructions"] = instructions + "\n\n" + directive
+				}
+			}
+			reqBody["tool_choice"] = "auto"
+		}
+	} else {
+		delete(reqBody, "tools")
+		input, _ := reqBody["input"].([]any)
+		if additionalToolsIndex >= 0 && additionalToolsIndex < len(input) {
+			item, _ := input[additionalToolsIndex].(map[string]any)
+			item["tools"] = flattenedTools
+			input[additionalToolsIndex] = item
+		}
+		if !continuation {
+			developerMessage := map[string]any{
+				"type": "message", "role": "developer",
+				"content": []any{map[string]any{"type": "input_text", "text": directive}},
+			}
+			input = append([]any{developerMessage}, input...)
+		}
+		reqBody["input"] = input
+	}
 	updated, err := json.Marshal(reqBody)
 	if err != nil {
 		return body, false, err
 	}
 	return updated, true, nil
+}
+
+func codexAdditionalTools(value any) ([]any, int) {
+	input, _ := value.([]any)
+	for i, rawItem := range input {
+		item, _ := rawItem.(map[string]any)
+		if strings.TrimSpace(firstNonEmptyString(item["type"])) != "additional_tools" {
+			continue
+		}
+		tools, _ := item["tools"].([]any)
+		return tools, i
+	}
+	return nil, -1
 }
 
 func codexRequestHasConversationImages(value any) bool {

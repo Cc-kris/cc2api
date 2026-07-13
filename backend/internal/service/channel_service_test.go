@@ -1351,6 +1351,66 @@ func TestCreate_Success(t *testing.T) {
 	require.Equal(t, createdID, result.ID)
 }
 
+type codexBridgeValidationGroupRepo struct {
+	stubGroupRepoForAvailable
+	group *Group
+}
+
+func (r *codexBridgeValidationGroupRepo) GetByIDLite(_ context.Context, id int64) (*Group, error) {
+	if r.group != nil && r.group.ID == id {
+		return r.group, nil
+	}
+	return nil, ErrGroupNotFound
+}
+
+func TestCreate_ValidatesChannelOwnedCodexImageBridge(t *testing.T) {
+	const orchestratorID int64 = 20
+	baseRepo := func() *mockChannelRepository {
+		return &mockChannelRepository{
+			existsByNameFn:             func(_ context.Context, _ string) (bool, error) { return false, nil },
+			getGroupsInOtherChannelsFn: func(_ context.Context, _ int64, _ []int64) ([]int64, error) { return nil, nil },
+		}
+	}
+	features := map[string]any{featureKeyCodexImageGenerationBridge: map[string]any{
+		PlatformOpenAI: true, "orchestrator_group_id": orchestratorID,
+	}}
+	validGroupRepo := &codexBridgeValidationGroupRepo{group: &Group{
+		ID: orchestratorID, Platform: PlatformOpenAI, Status: StatusActive, AllowImageGeneration: false,
+	}}
+
+	t.Run("requires text to image mapping", func(t *testing.T) {
+		svc := NewChannelService(baseRepo(), validGroupRepo, nil, nil)
+		_, err := svc.Create(context.Background(), &CreateChannelInput{Name: "image", GroupIDs: []int64{14}, FeaturesConfig: features})
+		require.ErrorContains(t, err, "text-to-image model mapping")
+	})
+
+	t.Run("accepts active text orchestrator outside image channel", func(t *testing.T) {
+		repo := baseRepo()
+		repo.createFn = func(_ context.Context, ch *Channel) error { ch.ID = 1; return nil }
+		repo.getByIDFn = func(_ context.Context, id int64) (*Channel, error) {
+			return &Channel{ID: id, Status: StatusActive}, nil
+		}
+		svc := NewChannelService(repo, validGroupRepo, nil, nil)
+		_, err := svc.Create(context.Background(), &CreateChannelInput{
+			Name: "image", GroupIDs: []int64{14}, FeaturesConfig: features,
+			ModelMapping: map[string]map[string]string{PlatformOpenAI: {"gpt-5.6": "gpt-image-2"}},
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("rejects image-enabled orchestrator", func(t *testing.T) {
+		imageGroupRepo := &codexBridgeValidationGroupRepo{group: &Group{
+			ID: orchestratorID, Platform: PlatformOpenAI, Status: StatusActive, AllowImageGeneration: true,
+		}}
+		svc := NewChannelService(baseRepo(), imageGroupRepo, nil, nil)
+		_, err := svc.Create(context.Background(), &CreateChannelInput{
+			Name: "image", GroupIDs: []int64{14}, FeaturesConfig: features,
+			ModelMapping: map[string]map[string]string{PlatformOpenAI: {"gpt-5.6": "gpt-image-2"}},
+		})
+		require.ErrorContains(t, err, "must be text-only")
+	})
+}
+
 func TestCreate_NameExists(t *testing.T) {
 	repo := &mockChannelRepository{
 		existsByNameFn: func(_ context.Context, _ string) (bool, error) {
@@ -1533,6 +1593,33 @@ func TestUpdate_Success(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
+}
+
+func TestUpdate_ValidatesChannelOwnedCodexImageBridge(t *testing.T) {
+	const orchestratorID int64 = 20
+	features := map[string]any{featureKeyCodexImageGenerationBridge: map[string]any{
+		PlatformOpenAI: true, "orchestrator_group_id": orchestratorID,
+	}}
+	updateCalled := false
+	repo := &mockChannelRepository{
+		getByIDFn: func(_ context.Context, id int64) (*Channel, error) {
+			return &Channel{ID: id, Name: "image", Status: StatusActive, GroupIDs: []int64{14}}, nil
+		},
+		updateFn: func(_ context.Context, _ *Channel) error {
+			updateCalled = true
+			return nil
+		},
+	}
+	svc := NewChannelService(repo, &codexBridgeValidationGroupRepo{group: &Group{
+		ID: orchestratorID, Platform: PlatformOpenAI, Status: StatusActive, AllowImageGeneration: false,
+	}}, nil, nil)
+
+	_, err := svc.Update(context.Background(), 1, &UpdateChannelInput{
+		FeaturesConfig: features,
+		ModelMapping:   map[string]map[string]string{PlatformOpenAI: {"gpt-5.6": "gpt-5.6-sol"}},
+	})
+	require.ErrorContains(t, err, "text-to-image model mapping")
+	require.False(t, updateCalled, "invalid bridge config must be rejected before persistence")
 }
 
 func TestUpdate_NotFound(t *testing.T) {

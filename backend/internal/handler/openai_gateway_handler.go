@@ -289,24 +289,20 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	}
 
 	// 解析渠道级模型映射
-	channelMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
-	hasCodexActorHeader := strings.TrimSpace(c.GetHeader("x-openai-actor-authorization")) != ""
-	codexImageExtensionRequest := channelMapping.Mapped &&
-		hasCodexActorHeader &&
-		service.ShouldUseCodexImageGenerationExtension(reqModel, channelMapping.MappedModel, body)
-	codexSystemBackgroundRequest := channelMapping.Mapped &&
-		hasCodexActorHeader &&
-		service.ShouldBypassCodexSystemBackgroundImageMapping(reqModel, channelMapping.MappedModel, body)
-	codexBridgeTurn := (codexImageExtensionRequest || codexSystemBackgroundRequest) &&
-		h.gatewayService.IsCodexImageGenerationBridgeEnabled(c.Request.Context(), nil, apiKey)
+	codexRoute := h.gatewayService.ResolveCodexImageGenerationRoute(c.Request.Context(), apiKey.GroupID, reqModel)
+	if codexRoute.ConfigurationError != "" {
+		h.errorResponse(c, http.StatusServiceUnavailable, "api_error", codexRoute.ConfigurationError)
+		return
+	}
+	channelMapping := codexRoute.Mapping
+	codexImageExtensionRequest := codexRoute.Enabled &&
+		service.ShouldUseCodexImageGenerationExtension(reqModel, codexRoute.Mapping.MappedModel, body)
+	codexSystemBackgroundRequest := codexRoute.Enabled &&
+		service.ShouldBypassCodexSystemBackgroundImageMapping(reqModel, codexRoute.Mapping.MappedModel, body)
+	codexBridgeTurn := codexImageExtensionRequest || codexSystemBackgroundRequest
 	selectionGroupID := apiKey.GroupID
 	if codexBridgeTurn {
-		orchestratorGroupID := h.gatewayService.CodexImageGenerationOrchestratorGroupID(c.Request.Context(), apiKey)
-		if orchestratorGroupID == nil {
-			h.errorResponse(c, http.StatusServiceUnavailable, "api_error", "Codex image orchestration group is not configured")
-			return
-		}
-		selectionGroupID = orchestratorGroupID
+		selectionGroupID = codexRoute.OrchestratorGroupID
 	}
 	codexImageExtensionCandidate := codexImageExtensionRequest && codexBridgeTurn
 	codexSystemBackgroundTurn := codexSystemBackgroundRequest && codexBridgeTurn
@@ -1405,29 +1401,31 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		return
 	}
 
-	// 解析渠道级模型映射。WS 生图不再桥接到 HTTP Images API：
-	// 只要首帧或后续 turn 会进入生图路径，就直接给客户端明确错误，避免重复生成与混合成功/失败事件。
-	channelMappingWS, _ := h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, reqModel)
-	hasCodexActorHeaderWS := strings.TrimSpace(c.GetHeader("x-openai-actor-authorization")) != ""
-	codexImageExtensionRequestWS := channelMappingWS.Mapped &&
-		hasCodexActorHeaderWS &&
-		service.ShouldUseCodexImageGenerationExtension(reqModel, channelMappingWS.MappedModel, firstMessage)
-	codexSystemBackgroundRequestWS := channelMappingWS.Mapped &&
-		hasCodexActorHeaderWS &&
-		service.ShouldBypassCodexSystemBackgroundImageMapping(reqModel, channelMappingWS.MappedModel, firstMessage)
-	codexBridgeTurnWS := (codexImageExtensionRequestWS || codexSystemBackgroundRequestWS) &&
-		h.gatewayService.IsCodexImageGenerationBridgeEnabled(ctx, nil, apiKey)
+	// 从同一个渠道快照解析模型映射与 Codex 专属路由。原生 WS 生图仍返回
+	// 明确错误；Codex 本地 image_gen 扩展由文本编排组生成工具调用。
+	codexRouteWS := h.gatewayService.ResolveCodexImageGenerationRoute(ctx, apiKey.GroupID, reqModel)
+	if codexRouteWS.ConfigurationError != "" {
+		closeOpenAIClientWS(wsConn, coderws.StatusInternalError, codexRouteWS.ConfigurationError)
+		return
+	}
+	channelMappingWS := codexRouteWS.Mapping
+	codexImageExtensionRequestWS := codexRouteWS.Enabled &&
+		service.ShouldUseCodexImageGenerationExtension(reqModel, codexRouteWS.Mapping.MappedModel, firstMessage)
+	codexSystemBackgroundRequestWS := codexRouteWS.Enabled &&
+		service.ShouldBypassCodexSystemBackgroundImageMapping(reqModel, codexRouteWS.Mapping.MappedModel, firstMessage)
+	codexBridgeTurnWS := codexImageExtensionRequestWS || codexSystemBackgroundRequestWS
 	selectionGroupIDWS := apiKey.GroupID
 	if codexBridgeTurnWS {
-		orchestratorGroupID := h.gatewayService.CodexImageGenerationOrchestratorGroupID(ctx, apiKey)
-		if orchestratorGroupID == nil {
-			closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "Codex image orchestration group is not configured")
-			return
-		}
-		selectionGroupIDWS = orchestratorGroupID
+		selectionGroupIDWS = codexRouteWS.OrchestratorGroupID
 	}
 	codexImageExtensionCandidateWS := codexImageExtensionRequestWS && codexBridgeTurnWS
 	codexSystemBackgroundTurnWS := codexSystemBackgroundRequestWS && codexBridgeTurnWS
+	wsRouteFamily := "ordinary"
+	if codexImageExtensionCandidateWS {
+		wsRouteFamily = "codex_image_extension"
+	} else if codexSystemBackgroundTurnWS {
+		wsRouteFamily = "codex_system_background"
+	}
 	usageChannelMappingWS := channelMappingWS
 	if codexSystemBackgroundTurnWS {
 		usageChannelMappingWS.Mapped = false
@@ -1443,16 +1441,28 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		if strings.TrimSpace(model) == "" || strings.TrimSpace(model) == strings.TrimSpace(reqModel) {
 			return channelMappingWS
 		}
-		resolvedMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, model)
-		return resolvedMapping
+		return h.gatewayService.ResolveCodexImageGenerationRoute(ctx, apiKey.GroupID, model).Mapping
+	}
+	classifyWSRouteFamily := func(payload []byte, model string) string {
+		route := h.gatewayService.ResolveCodexImageGenerationRoute(ctx, apiKey.GroupID, model)
+		if route.ConfigurationError != "" {
+			return "invalid"
+		}
+		if route.Enabled && service.ShouldUseCodexImageGenerationExtension(model, route.Mapping.MappedModel, payload) {
+			return "codex_image_extension"
+		}
+		if route.Enabled && service.ShouldBypassCodexSystemBackgroundImageMapping(model, route.Mapping.MappedModel, payload) {
+			return "codex_system_background"
+		}
+		return "ordinary"
 	}
 	isWSImageGenerationIntent := func(payload []byte, model string) (bool, service.ChannelMappingResult) {
 		mapping := resolveWSChannelMapping(model)
-		if codexBridgeTurnWS && mapping.Mapped && hasCodexActorHeaderWS &&
+		if codexBridgeTurnWS && mapping.Mapped &&
 			service.ShouldBypassCodexSystemBackgroundImageMapping(model, mapping.MappedModel, payload) {
 			return false, mapping
 		}
-		if codexBridgeTurnWS && mapping.Mapped && hasCodexActorHeaderWS &&
+		if codexBridgeTurnWS && mapping.Mapped &&
 			service.ShouldUseCodexImageGenerationExtension(model, mapping.MappedModel, payload) {
 			return false, mapping
 		}
@@ -1519,11 +1529,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		if !mapping.Mapped {
 			return payload, nil
 		}
-		if codexBridgeTurnWS && hasCodexActorHeaderWS &&
+		if codexBridgeTurnWS &&
 			service.ShouldBypassCodexSystemBackgroundImageMapping(model, mapping.MappedModel, payload) {
 			return service.PrepareCodexSystemBackgroundTextDispatch(payload)
 		}
-		if codexBridgeTurnWS && hasCodexActorHeaderWS &&
+		if codexBridgeTurnWS &&
 			service.ShouldUseCodexImageGenerationExtension(model, mapping.MappedModel, payload) {
 			prepared, _, err := service.PrepareCodexImageGenerationExtensionDispatch(payload)
 			return prepared, err
@@ -1639,6 +1649,14 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				}
 				if model == "" {
 					model = reqModel
+				}
+				if turnFamily := classifyWSRouteFamily(payload, model); turnFamily != wsRouteFamily {
+					reqLog.Info("openai.websocket_route_family_changed",
+						zap.Int("turn", turn),
+						zap.String("connection_family", wsRouteFamily),
+						zap.String("turn_family", turnFamily),
+					)
+					return nil, service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "request route changed; reconnect and retry", nil)
 				}
 				if imageIntent, intentMapping := isWSImageGenerationIntent(payload, model); imageIntent {
 					reqLog.Info("openai.websocket_image_generation_unsupported",

@@ -720,8 +720,8 @@ type GatewayConfig struct {
 	// ForceCodexCLI: 强制将 OpenAI `/v1/responses` 请求按 Codex CLI 处理。
 	// 用于网关未透传/改写 User-Agent 时的兼容兜底（默认关闭，避免影响其他客户端）。
 	ForceCodexCLI bool `mapstructure:"force_codex_cli"`
-	// CodexImageGenerationBridgeEnabled: 是否允许 Codex `/v1/responses` 自动注入 image_generation 工具和桥接指令。
-	// 默认关闭；开启后会对可用的 Codex 请求默认补齐图片生成工具。
+	// CodexImageGenerationBridgeEnabled 仅为兼容历史配置保留。
+	// Deprecated: 网关运行时忽略该字段，桥接路由仅由当前活跃渠道控制。
 	CodexImageGenerationBridgeEnabled bool `mapstructure:"codex_image_generation_bridge_enabled"`
 	// ForcedCodexInstructionsTemplateFile: 服务端强制附加到 Codex 顶层 instructions 的模板文件路径。
 	// 模板渲染后会直接覆盖最终 instructions；若需要保留客户端 system 转换结果，请在模板中显式引用 {{ .ExistingInstructions }}。

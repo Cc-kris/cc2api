@@ -100,6 +100,17 @@ type ChannelMappingResult struct {
 	BillingModelSource string // 计费模型来源（"requested" / "upstream" / "channel_mapped"）
 }
 
+// CodexImageGenerationRoute is an atomic channel snapshot for the special
+// Codex image-extension route. Enabled can only be true for an active OpenAI
+// channel that maps the requested text model to an image model and explicitly
+// owns a text orchestrator group.
+type CodexImageGenerationRoute struct {
+	Mapping             ChannelMappingResult
+	Enabled             bool
+	OrchestratorGroupID *int64
+	ConfigurationError  string
+}
+
 // BuildModelMappingChain 根据映射结果和上游实际模型构建映射链描述。
 // reqModel: 客户端请求的原始模型名。
 // upstreamModel: 上游实际使用的模型名（ForwardResult.UpstreamModel）。
@@ -516,11 +527,46 @@ func (s *ChannelService) ResolveChannelMappingAndRestrict(ctx context.Context, g
 	if groupID == nil {
 		return ChannelMappingResult{MappedModel: model}, false
 	}
-	lk, _ := s.lookupGroupChannel(ctx, *groupID)
+	lk, err := s.lookupGroupChannel(ctx, *groupID)
+	if err != nil {
+		return ChannelMappingResult{MappedModel: model}, false
+	}
 	if lk == nil {
 		return ChannelMappingResult{MappedModel: model}, false
 	}
 	return resolveMapping(lk, *groupID, model), false
+}
+
+func (s *ChannelService) ResolveCodexImageGenerationRoute(ctx context.Context, groupID *int64, model string) CodexImageGenerationRoute {
+	result := CodexImageGenerationRoute{Mapping: ChannelMappingResult{MappedModel: model}}
+	if groupID == nil {
+		return result
+	}
+	lk, err := s.lookupGroupChannel(ctx, *groupID)
+	if err != nil {
+		result.ConfigurationError = "Codex image generation channel configuration is unavailable"
+		return result
+	}
+	if lk == nil {
+		return result
+	}
+	result.Mapping = resolveMapping(lk, *groupID, model)
+	if lk.platform != PlatformOpenAI {
+		return result
+	}
+	bridgeEnabled := lk.channel.CodexImageGenerationBridgeOverride(PlatformOpenAI)
+	if bridgeEnabled == nil || !*bridgeEnabled ||
+		!result.Mapping.Mapped || isOpenAIImageGenerationModel(model) ||
+		!isOpenAIImageGenerationModel(result.Mapping.MappedModel) {
+		return result
+	}
+	result.OrchestratorGroupID = lk.channel.CodexImageGenerationOrchestratorGroupID()
+	if result.OrchestratorGroupID == nil {
+		result.ConfigurationError = "Codex image orchestration group is not configured"
+		return result
+	}
+	result.Enabled = true
+	return result
 }
 
 // resolveMapping 基于已查找的渠道信息解析模型映射。
@@ -698,6 +744,9 @@ func (s *ChannelService) Create(ctx context.Context, input *CreateChannelInput) 
 	if err := validateChannelConfig(channel.ModelPricing, channel.ModelMapping); err != nil {
 		return nil, err
 	}
+	if err := s.validateCodexImageGenerationBridge(ctx, channel); err != nil {
+		return nil, err
+	}
 	for i, rule := range channel.AccountStatsPricingRules {
 		if err := validatePricingEntries(rule.Pricing); err != nil {
 			return nil, fmt.Errorf("account stats pricing rule #%d: %w", i+1, err)
@@ -740,6 +789,9 @@ func (s *ChannelService) Update(ctx context.Context, id int64, input *UpdateChan
 	}
 
 	if err := validateChannelConfig(channel.ModelPricing, channel.ModelMapping); err != nil {
+		return nil, err
+	}
+	if err := s.validateCodexImageGenerationBridge(ctx, channel); err != nil {
 		return nil, err
 	}
 	for i, rule := range channel.AccountStatsPricingRules {
@@ -812,6 +864,57 @@ func (s *ChannelService) applyUpdateInput(ctx context.Context, channel *Channel,
 	}
 	if input.AccountStatsPricingRules != nil {
 		channel.AccountStatsPricingRules = *input.AccountStatsPricingRules
+	}
+	return nil
+}
+
+func (s *ChannelService) validateCodexImageGenerationBridge(ctx context.Context, channel *Channel) error {
+	if channel == nil {
+		return nil
+	}
+	enabled := channel.CodexImageGenerationBridgeOverride(PlatformOpenAI)
+	if enabled == nil || !*enabled {
+		return nil
+	}
+
+	hasTextToImageMapping := false
+	for source, target := range channel.ModelMapping[PlatformOpenAI] {
+		if !isOpenAIImageGenerationModel(source) && isOpenAIImageGenerationModel(target) {
+			hasTextToImageMapping = true
+			break
+		}
+	}
+	if !hasTextToImageMapping {
+		return fmt.Errorf("codex image generation bridge requires an OpenAI text-to-image model mapping")
+	}
+	orchestratorGroupID := channel.CodexImageGenerationOrchestratorGroupID()
+	if orchestratorGroupID == nil {
+		return fmt.Errorf("codex image generation bridge requires orchestrator_group_id")
+	}
+	for _, groupID := range channel.GroupIDs {
+		if groupID == *orchestratorGroupID {
+			return fmt.Errorf("codex image generation orchestrator group cannot belong to the image channel")
+		}
+	}
+	if s.groupRepo == nil {
+		return fmt.Errorf("codex image generation orchestrator group cannot be validated")
+	}
+	group, err := s.groupRepo.GetByIDLite(ctx, *orchestratorGroupID)
+	if err != nil || group == nil {
+		return fmt.Errorf("codex image generation orchestrator group not found")
+	}
+	if !group.IsActive() || group.Platform != PlatformOpenAI {
+		return fmt.Errorf("codex image generation orchestrator group must be an active OpenAI group")
+	}
+	if group.AllowImageGeneration {
+		return fmt.Errorf("codex image generation orchestrator group must be text-only")
+	}
+	existingChannelID, lookupErr := s.repo.GetChannelIDByGroupID(ctx, *orchestratorGroupID)
+	if lookupErr != nil {
+		return fmt.Errorf("validate codex image generation orchestrator group channel: %w", lookupErr)
+	}
+	if existingChannelID > 0 && existingChannelID != channel.ID {
+		return fmt.Errorf("codex image generation orchestrator group cannot belong to another channel")
 	}
 	return nil
 }

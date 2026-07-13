@@ -219,7 +219,7 @@ describe('EditAccountModal', () => {
     })
   })
 
-  it('submits account-level Codex image generation bridge override', async () => {
+  it('removes deprecated account-level Codex image generation bridge overrides', async () => {
     const account = buildAccount()
     account.extra = {
       codex_image_generation_bridge: false,
@@ -232,11 +232,11 @@ describe('EditAccountModal', () => {
 
     const wrapper = mountModal(account)
 
-    await wrapper.get('button[data-testid="codex-image-bridge-enabled"]').trigger('click')
+    expect(wrapper.find('[data-testid^="codex-image-bridge-"]').exists()).toBe(false)
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
-    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.codex_image_generation_bridge).toBe(true)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('codex_image_generation_bridge')
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('codex_image_generation_bridge_enabled')
   })
   it('removes upstream prepaid and deprecated upstream warning fields when saving', async () => {

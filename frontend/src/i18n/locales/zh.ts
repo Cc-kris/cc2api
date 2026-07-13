@@ -3576,18 +3576,6 @@ export default {
         responsesStatusForcedChatCompletions: '已强制 Chat Completions',
         codexCLIOnly: '仅允许 Codex 官方客户端',
         codexCLIOnlyDesc: '仅对 OpenAI OAuth 生效。开启后仅允许 Codex 官方客户端家族访问；关闭后完全绕过并保持原逻辑。',
-        codexImageGenerationBridge: 'Codex 图片生成桥接',
-        codexImageGenerationBridgeDesc:
-          '账号级策略优先于渠道和全局配置。控制符合条件的 Codex /responses 请求是否自动携带 image_generation 工具；不影响独立图片生成接口。',
-        codexImageGenerationBridgeInherit: '跟随渠道',
-        codexImageGenerationBridgeInheritDesc: '不写入账号覆盖，继续使用渠道或全局策略。',
-        codexImageGenerationBridgeEnabled: '强制开启',
-        codexImageGenerationBridgeEnabledDesc: '允许符合条件的 Codex /responses 请求获得图片工具注入。',
-        codexImageGenerationBridgeDisabled: '强制关闭',
-        codexImageGenerationBridgeDisabledDesc: '阻断 Codex /responses 的图片工具注入。',
-        codexImageGenerationBridgeBadgeInherit: '渠道策略',
-        codexImageGenerationBridgeBadgeEnabled: '账号开启',
-        codexImageGenerationBridgeBadgeDisabled: '账号关闭',
         compactMode: 'Compact 模式',
         compactModeDesc:
           '控制本账号在 /responses/compact 调度中的参与方式。Auto 跟随探测结果，Force On 强制允许，Force Off 强制排除。',
