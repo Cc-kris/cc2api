@@ -125,11 +125,11 @@ func ClassifyCodexImageRequest(requestedModel, mappedModel string, body []byte) 
 		return decision
 	}
 	if decision.Role == CodexRequestRoleUserTurn {
-		// A canonical user turn inside a dedicated text-to-image channel is the
-		// stable product-level image intent. Current Codex builds do not always
-		// advertise an image tool on the first WS attempt, so route it directly
-		// instead of making transport-specific retry decisions.
-		decision.Execution = CodexImageExecutionHostedImage
+		// Current Codex Desktop builds can keep image_gen in the local runtime
+		// without serializing the namespace in the request. Canonical user-turn
+		// metadata is therefore the stable signal for restoring the local tool
+		// route, which gives the client a displayable local image result.
+		decision.Execution = CodexImageExecutionExtension
 		return decision
 	}
 	if decision.HasMetadata {
@@ -283,22 +283,17 @@ func codexJSONToolsContainImageGenerationExtension(tools gjson.Result) bool {
 }
 
 // IsCodexImageGenerationExtensionTurn recognizes a current Codex user turn.
-// Both classic Responses and Responses Lite must advertise the concrete
-// image_gen namespace. Metadata identifies the turn owner/stage, but never
-// grants an image capability by itself.
+// Current Codex Desktop builds can keep image_gen in the local runtime without
+// serializing the namespace. Canonical user-turn metadata restores that local
+// tool route; older clients without metadata must advertise the tool directly.
 func IsCodexImageGenerationExtensionTurn(body []byte) bool {
 	if len(body) == 0 || !gjson.ValidBytes(body) {
 		return false
 	}
-	if !HasCodexImageGenerationExtensionTool(body) {
-		return false
+	if role, hasMetadata := classifyCodexRequestRole(body); hasMetadata {
+		return role == CodexRequestRoleUserTurn
 	}
-	rawMetadata := strings.TrimSpace(gjson.GetBytes(body, `client_metadata.x-codex-turn-metadata`).String())
-	if rawMetadata != "" && gjson.Valid(rawMetadata) {
-		return strings.TrimSpace(gjson.Get(rawMetadata, "request_kind").String()) == "turn" &&
-			strings.TrimSpace(gjson.Get(rawMetadata, "thread_source").String()) == "user"
-	}
-	return true
+	return HasCodexImageGenerationExtensionTool(body)
 }
 
 // IsCodexSystemBackgroundTurn recognizes short-lived helper turns created by
@@ -468,9 +463,11 @@ func PrepareCodexImageGenerationExtensionDispatch(body []byte) ([]byte, bool, er
 	}
 	continuation := IsCodexImageGenerationExtensionContinuation(body)
 	tools, hasClassicTools := reqBody["tools"].([]any)
+	input, hasInputArray := reqBody["input"].([]any)
 	additionalTools, additionalToolsIndex := codexAdditionalTools(reqBody["input"])
+	useTopLevelTools := hasClassicTools || !hasInputArray
 	toolSource := tools
-	if !hasClassicTools && additionalToolsIndex >= 0 {
+	if !useTopLevelTools && additionalToolsIndex >= 0 {
 		toolSource = additionalTools
 	}
 	flattenedTools := make([]any, 0, len(toolSource)+1)
@@ -527,7 +524,7 @@ Guidelines:
 			"additionalProperties": false,
 		},
 	})
-	if hasClassicTools {
+	if useTopLevelTools {
 		reqBody["tools"] = flattenedTools
 		if !continuation {
 			instructions := strings.TrimSpace(firstNonEmptyString(reqBody["instructions"]))
@@ -542,11 +539,15 @@ Guidelines:
 		}
 	} else {
 		delete(reqBody, "tools")
-		input, _ := reqBody["input"].([]any)
 		if additionalToolsIndex >= 0 && additionalToolsIndex < len(input) {
 			item, _ := input[additionalToolsIndex].(map[string]any)
 			item["tools"] = flattenedTools
 			input[additionalToolsIndex] = item
+		} else {
+			input = append(input, map[string]any{
+				"type":  "additional_tools",
+				"tools": flattenedTools,
+			})
 		}
 		if !continuation {
 			developerMessage := map[string]any{

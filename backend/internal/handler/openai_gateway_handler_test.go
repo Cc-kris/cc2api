@@ -1119,17 +1119,17 @@ func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *tes
 	missingCapabilityRecorder := httptest.NewRecorder()
 	router.ServeHTTP(missingCapabilityRecorder, missingCapabilityReq)
 	require.Equal(t, http.StatusOK, missingCapabilityRecorder.Code)
-	require.Contains(t, missingCapabilityRecorder.Body.String(), `"type":"image_generation_call"`)
+	require.Contains(t, missingCapabilityRecorder.Body.String(), `"namespace":"image_gen"`)
+	require.Contains(t, missingCapabilityRecorder.Body.String(), `"name":"imagegen"`)
 	missingCapabilityForwarded := <-upstreamPayload
-	require.Equal(t, "gpt-image-2", gjson.GetBytes(missingCapabilityForwarded, "model").String())
-	require.Equal(t, "image_generation", gjson.GetBytes(missingCapabilityForwarded, "tools.0.type").String())
-	require.Equal(t, "gpt-image-2", gjson.GetBytes(missingCapabilityForwarded, "tools.0.model").String())
-	require.Equal(t, "image_generation", gjson.GetBytes(missingCapabilityForwarded, "tool_choice.type").String())
-	missingCapabilityUsage := <-usageRepo.created
-	require.Equal(t, 1, missingCapabilityUsage.ImageCount)
-	require.NotNil(t, missingCapabilityUsage.BillingMode)
-	require.Equal(t, string(service.BillingModeImage), *missingCapabilityUsage.BillingMode)
-	require.Equal(t, int64(9902), missingCapabilityUsage.AccountID)
+	require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(missingCapabilityForwarded, "model").String())
+	require.Equal(t, "function", gjson.GetBytes(missingCapabilityForwarded, "tools.0.type").String())
+	require.Equal(t, "imagegen", gjson.GetBytes(missingCapabilityForwarded, "tools.0.name").String())
+	select {
+	case unexpectedUsage := <-usageRepo.created:
+		require.Fail(t, "local image_gen orchestration must not be billed as a generated image", "usage=%+v", unexpectedUsage)
+	default:
+	}
 
 	// Background/prewarm turns still use their original text model after the
 	// client has fallen back to HTTP; they must not be converted into image work.
@@ -1173,7 +1173,7 @@ func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *tes
 	// Codex to sit idle and cancel long-running image requests.
 	handlerServer := httptest.NewServer(router)
 	defer handlerServer.Close()
-	streamBody := []byte(`{"model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":"stream-probe"}`)
+	streamBody := []byte(`{"model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":"stream-probe","tools":[{"type":"image_generation"}]}`)
 	streamReq, err := http.NewRequest(http.MethodPost, handlerServer.URL+"/openai/v1/responses", bytes.NewReader(streamBody))
 	require.NoError(t, err)
 	streamReq.Header.Set("Content-Type", "application/json")

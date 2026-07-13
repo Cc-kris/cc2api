@@ -80,7 +80,7 @@ func TestCodexImageGenerationExtensionDetection(t *testing.T) {
 	require.True(t, IsCodexImageGenerationExtensionTurn(responsesLiteTurn))
 	require.True(t, ShouldUseCodexImageGenerationExtension("gpt-5.6-terra", "gpt-image-2", responsesLiteTurn))
 	metadataOnlyTurn := []byte(`{"model":"gpt-5.6-terra","client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"turn\",\"thread_source\":\"user\"}"}}`)
-	require.False(t, IsCodexImageGenerationExtensionTurn(metadataOnlyTurn))
+	require.True(t, IsCodexImageGenerationExtensionTurn(metadataOnlyTurn))
 
 	backgroundRequest := []byte(`{"model":"gpt-5.4-mini"}`)
 	require.False(t, IsCodexImageGenerationExtensionTurn(backgroundRequest))
@@ -166,16 +166,16 @@ func TestAttachCodexTurnMetadataEnablesWebSocketRouting(t *testing.T) {
 	body := []byte(`{"type":"response.create","model":"gpt-5.6-terra"}`)
 	updated, err := AttachCodexTurnMetadata(body, `{"request_kind":"turn","thread_source":"user"}`)
 	require.NoError(t, err)
-	require.False(t, IsCodexImageGenerationExtensionTurn(updated), "metadata alone must not grant image capability")
+	require.True(t, IsCodexImageGenerationExtensionTurn(updated), "canonical user metadata must restore the client-local image tool route")
 	require.Equal(t, "turn", gjson.Get(gjson.GetBytes(updated, "client_metadata.x-codex-turn-metadata").String(), "request_kind").String())
 }
 
 func TestCodexDesktopImageGenerationTransportFallbackShapes(t *testing.T) {
-	// A metadata-only WebSocket attempt does not advertise the local image tool.
-	// The channel's text-to-image mapping still identifies it as a hosted image
-	// turn; the gateway supplies the standard image_generation contract.
+	// Current Desktop builds can keep the local extension out of the serialized
+	// request. Canonical user metadata must still restore the proven image_gen
+	// route so the client receives a local image result it can display.
 	wsAttempt := []byte(`{"type":"response.create","model":"gpt-5.6-sol","client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"turn\",\"thread_source\":\"user\"}"},"input":[{"role":"user","content":[{"type":"input_text","text":"draw a blue paper airplane"}]}]}`)
-	require.False(t, ShouldUseCodexImageGenerationExtension("gpt-5.6-sol", "gpt-image-2", wsAttempt))
+	require.True(t, ShouldUseCodexImageGenerationExtension("gpt-5.6-sol", "gpt-image-2", wsAttempt))
 	require.True(t, IsImageGenerationIntent("/v1/responses", "gpt-image-2", wsAttempt))
 
 	// The Desktop HTTP fallback carries the concrete image_gen namespace. No
@@ -204,7 +204,7 @@ func TestClassifyCodexImageRequest(t *testing.T) {
 		legacy   bool
 	}{
 		{"current extension user turn", `{` + metadata("turn", "user") + `,` + extension + `}`, CodexRequestRoleUserTurn, CodexImageExecutionExtension, false},
-		{"current user turn uses dedicated hosted image route", `{` + metadata("turn", "user") + `}`, CodexRequestRoleUserTurn, CodexImageExecutionHostedImage, false},
+		{"current metadata-only user turn restores local extension", `{` + metadata("turn", "user") + `}`, CodexRequestRoleUserTurn, CodexImageExecutionExtension, false},
 		{"current hosted image user turn", `{` + metadata("turn", "user") + `,` + hosted + `}`, CodexRequestRoleUserTurn, CodexImageExecutionHostedImage, false},
 		{"feature turn bypasses extension", `{` + metadata("turn", "automation") + `,` + extension + `}`, CodexRequestRoleFeature, CodexImageExecutionTextBypass, false},
 		{"subagent bypasses image mapping", `{` + metadata("turn", "subagent") + `}`, CodexRequestRoleSubagent, CodexImageExecutionTextBypass, false},
@@ -240,7 +240,7 @@ func TestClassifyCodexImageRequest(t *testing.T) {
 		body := []byte(`{"client_metadata":{"x-codex-turn-metadata":{"request_kind":"turn","thread_source":"user"}}}`)
 		decision := ClassifyCodexImageRequest("gpt-5.6-terra", "gpt-image-2", body)
 		require.Equal(t, CodexRequestRoleUserTurn, decision.Role)
-		require.Equal(t, CodexImageExecutionHostedImage, decision.Execution)
+		require.Equal(t, CodexImageExecutionExtension, decision.Execution)
 	})
 }
 
@@ -258,15 +258,17 @@ func TestPrepareCodexImageRouteRequest(t *testing.T) {
 		require.Equal(t, "image_generation", gjson.GetBytes(prepared, "tool_choice.type").String())
 	})
 
-	t.Run("metadata-only hosted image receives the complete image contract", func(t *testing.T) {
-		body := []byte(`{"model":"gpt-5.6-terra",` + userMetadata + `,"input":"draw"}`)
+	t.Run("metadata-only user turn receives local image extension contract", func(t *testing.T) {
+		body := []byte(`{"model":"gpt-5.6-terra",` + userMetadata + `,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"draw"}]}]}`)
 		decision := ClassifyCodexImageRequest("gpt-5.6-terra", "gpt-image-2", body)
 		prepared, err := PrepareCodexImageRouteRequest(body, "gpt-5.6-terra", "gpt-image-2", decision)
 		require.NoError(t, err)
-		require.Equal(t, "gpt-image-2", gjson.GetBytes(prepared, "model").String())
-		require.Equal(t, "image_generation", gjson.GetBytes(prepared, "tools.0.type").String())
-		require.Equal(t, "gpt-image-2", gjson.GetBytes(prepared, "tools.0.model").String())
-		require.Equal(t, "image_generation", gjson.GetBytes(prepared, "tool_choice.type").String())
+		require.Equal(t, CodexImageExecutionExtension, decision.Execution)
+		require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(prepared, "model").String())
+		require.Equal(t, "developer", gjson.GetBytes(prepared, "input.0.role").String())
+		require.Equal(t, "function", gjson.GetBytes(prepared, `input.#(type=="additional_tools").tools.0.type`).String())
+		require.Equal(t, "imagegen", gjson.GetBytes(prepared, `input.#(type=="additional_tools").tools.0.name`).String())
+		require.False(t, gjson.GetBytes(prepared, `tools.#(type=="image_generation")#`).Exists())
 	})
 
 	t.Run("feature turn strips image namespace but preserves text model", func(t *testing.T) {
