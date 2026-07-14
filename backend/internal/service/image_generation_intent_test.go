@@ -158,11 +158,21 @@ func TestPrepareCodexImageGenerationExtensionDispatch(t *testing.T) {
 	require.True(t, liteChanged)
 	require.Equal(t, "function", gjson.GetBytes(liteUpdated, "tools.0.type").String())
 	require.Equal(t, "imagegen", gjson.GetBytes(liteUpdated, "tools.0.name").String())
-	require.Equal(t, "additional_tools", gjson.GetBytes(liteUpdated, `input.#(type=="additional_tools").type`).String())
-	require.False(t, gjson.GetBytes(liteUpdated, `input.#(type=="additional_tools").tools`).Exists())
+	require.Len(t, gjson.GetBytes(liteUpdated, "tools").Array(), 1)
+	require.False(t, gjson.GetBytes(liteUpdated, `input.#(type=="additional_tools")`).Exists())
 	require.Equal(t, "function", gjson.GetBytes(liteUpdated, "tool_choice.type").String())
 	require.Equal(t, "imagegen", gjson.GetBytes(liteUpdated, "tool_choice.name").String())
 	require.Contains(t, gjson.GetBytes(liteUpdated, "instructions").String(), "call the imagegen function exactly once")
+
+	hostTools := []byte(`{"model":"gpt-5.6-terra","client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"turn\",\"thread_source\":\"user\"}"},"input":[{"type":"additional_tools","tools":[{"type":"custom","name":"exec"},{"type":"function","name":"wait"},{"type":"function","name":"request_user_input"}]},{"type":"message","role":"user","content":[{"type":"input_text","text":"draw"}]}]}`)
+	hostToolsUpdated, hostToolsChanged, err := PrepareCodexImageGenerationExtensionDispatch(hostTools)
+	require.NoError(t, err)
+	require.True(t, hostToolsChanged)
+	require.Len(t, gjson.GetBytes(hostToolsUpdated, "tools").Array(), 1)
+	require.Equal(t, "imagegen", gjson.GetBytes(hostToolsUpdated, "tools.0.name").String())
+	require.False(t, gjson.GetBytes(hostToolsUpdated, `tools.#(name=="exec")`).Exists())
+	require.False(t, gjson.GetBytes(hostToolsUpdated, `tools.#(name=="wait")`).Exists())
+	require.False(t, gjson.GetBytes(hostToolsUpdated, `input.#(type=="additional_tools")`).Exists())
 }
 
 func TestAttachCodexTurnMetadataEnablesWebSocketRouting(t *testing.T) {

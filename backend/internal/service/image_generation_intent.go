@@ -462,28 +462,13 @@ func PrepareCodexImageGenerationExtensionDispatch(body []byte) ([]byte, bool, er
 		directive += " No conversation images are available in this turn, so you must omit num_last_images_to_include."
 	}
 	continuation := IsCodexImageGenerationExtensionContinuation(body)
-	tools, _ := reqBody["tools"].([]any)
 	input, _ := reqBody["input"].([]any)
-	additionalTools, additionalToolsIndex := codexAdditionalTools(reqBody["input"])
-	toolSource := tools
-	if len(toolSource) == 0 && additionalToolsIndex >= 0 {
-		toolSource = additionalTools
-	}
-	flattenedTools := make([]any, 0, len(toolSource)+1)
-	for _, rawTool := range toolSource {
-		tool, ok := rawTool.(map[string]any)
-		if !ok {
-			flattenedTools = append(flattenedTools, rawTool)
-			continue
-		}
-		toolType := strings.TrimSpace(firstNonEmptyString(tool["type"]))
-		toolName := strings.TrimSpace(firstNonEmptyString(tool["name"]))
-		if (toolType == "namespace" && toolName == codexImageGenNamespace) ||
-			(toolType == "function" && (toolName == codexImageGenToolName || toolName == codexImageGenNamespace+"__"+codexImageGenToolName)) {
-			continue
-		}
-		flattenedTools = append(flattenedTools, tool)
-	}
+	_, additionalToolsIndex := codexAdditionalTools(reqBody["input"])
+	// A forced image-only orchestration turn exposes exactly one public function.
+	// Codex may advertise exec, wait, or other host tools in additional_tools, but
+	// forwarding those private host contracts to the upstream makes otherwise
+	// valid Responses providers reject the entire request.
+	flattenedTools := make([]any, 0, 1)
 	properties := map[string]any{
 		"prompt": map[string]any{"type": "string"},
 		"referenced_image_paths": map[string]any{
@@ -530,9 +515,7 @@ Guidelines:
 	// what the upstream orchestration model receives.
 	reqBody["tools"] = flattenedTools
 	if additionalToolsIndex >= 0 && additionalToolsIndex < len(input) {
-		item, _ := input[additionalToolsIndex].(map[string]any)
-		delete(item, "tools")
-		input[additionalToolsIndex] = item
+		input = append(input[:additionalToolsIndex], input[additionalToolsIndex+1:]...)
 		reqBody["input"] = input
 	}
 	if !continuation {
