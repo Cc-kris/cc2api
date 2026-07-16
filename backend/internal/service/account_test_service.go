@@ -1510,6 +1510,7 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
 		"prompt":          prompt,
 		"n":               1,
 		"response_format": "b64_json",
+		"output_format":   "png",
 	}
 	payloadBytes, _ := json.Marshal(payload)
 

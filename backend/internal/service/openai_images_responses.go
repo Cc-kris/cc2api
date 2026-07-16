@@ -325,6 +325,10 @@ func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel st
 	tool := []byte(`{"type":"image_generation","action":"","model":""}`)
 	tool, _ = sjson.SetBytes(tool, "action", action)
 	tool, _ = sjson.SetBytes(tool, "model", strings.TrimSpace(toolModel))
+	outputFormat := strings.TrimSpace(parsed.OutputFormat)
+	if outputFormat == "" {
+		outputFormat = "png"
+	}
 	if shouldPassOpenAIImagesN(toolModel, parsed.N) {
 		tool, _ = sjson.SetBytes(tool, "n", parsed.N)
 	}
@@ -336,7 +340,7 @@ func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel st
 		{path: "size", value: parsed.Size},
 		{path: "quality", value: parsed.Quality},
 		{path: "background", value: parsed.Background},
-		{path: "output_format", value: parsed.OutputFormat},
+		{path: "output_format", value: outputFormat},
 		{path: "moderation", value: parsed.Moderation},
 		{path: "style", value: parsed.Style},
 	} {

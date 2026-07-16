@@ -458,6 +458,9 @@ func applyOpenAIImagesDefaults(req *OpenAIImagesRequest) {
 	if req.N <= 0 {
 		req.N = 1
 	}
+	if strings.TrimSpace(req.OutputFormat) == "" {
+		req.OutputFormat = "png"
+	}
 	if strings.TrimSpace(req.Model) != "" {
 		req.Model = strings.TrimSpace(req.Model)
 		return
@@ -595,7 +598,18 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 		parsed.Endpoint,
 		account.Type,
 	)
-	forwardBody, forwardContentType, err := rewriteOpenAIImagesModel(body, parsed.ContentType, upstreamModel)
+	responseFormat := strings.TrimSpace(parsed.ResponseFormat)
+	if responseFormat == "" && CodexImageResponseAdapterEnabled(c) &&
+		openaiutil.IsCodexOfficialClientByHeaders(c.GetHeader("User-Agent"), c.GetHeader("originator")) {
+		responseFormat = "b64_json"
+	}
+	forwardBody, forwardContentType, err := rewriteOpenAIImagesRequest(
+		body,
+		parsed.ContentType,
+		upstreamModel,
+		parsed.OutputFormat,
+		responseFormat,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -806,24 +820,56 @@ func buildOpenAIImagesURL(base string, endpoint string) string {
 	return buildOpenAIEndpointURL(base, endpoint)
 }
 
-func rewriteOpenAIImagesModel(body []byte, contentType string, model string) ([]byte, string, error) {
+func rewriteOpenAIImagesRequest(
+	body []byte,
+	contentType string,
+	model string,
+	outputFormat string,
+	responseFormat string,
+) ([]byte, string, error) {
 	model = strings.TrimSpace(model)
-	if model == "" {
-		return body, contentType, nil
-	}
+	outputFormat = strings.TrimSpace(outputFormat)
+	responseFormat = strings.TrimSpace(responseFormat)
 	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err == nil && strings.EqualFold(mediaType, "multipart/form-data") {
-		rewrittenBody, rewrittenType, rewriteErr := rewriteOpenAIImagesMultipartModel(body, contentType, model)
+		rewrittenBody, rewrittenType, rewriteErr := rewriteOpenAIImagesMultipartRequest(
+			body,
+			contentType,
+			model,
+			outputFormat,
+			responseFormat,
+		)
 		return rewrittenBody, rewrittenType, rewriteErr
 	}
-	rewritten, err := sjson.SetBytes(body, "model", model)
-	if err != nil {
-		return nil, "", fmt.Errorf("rewrite image request model: %w", err)
+	rewritten := body
+	if model != "" {
+		rewritten, err = sjson.SetBytes(rewritten, "model", model)
+		if err != nil {
+			return nil, "", fmt.Errorf("rewrite image request model: %w", err)
+		}
+	}
+	if outputFormat != "" && !gjson.GetBytes(body, "output_format").Exists() {
+		rewritten, err = sjson.SetBytes(rewritten, "output_format", outputFormat)
+		if err != nil {
+			return nil, "", fmt.Errorf("append image request output_format: %w", err)
+		}
+	}
+	if responseFormat != "" && !gjson.GetBytes(body, "response_format").Exists() {
+		rewritten, err = sjson.SetBytes(rewritten, "response_format", responseFormat)
+		if err != nil {
+			return nil, "", fmt.Errorf("append image request response_format: %w", err)
+		}
 	}
 	return rewritten, contentType, nil
 }
 
-func rewriteOpenAIImagesMultipartModel(body []byte, contentType string, model string) ([]byte, string, error) {
+func rewriteOpenAIImagesMultipartRequest(
+	body []byte,
+	contentType string,
+	model string,
+	outputFormat string,
+	responseFormat string,
+) ([]byte, string, error) {
 	_, params, err := mime.ParseMediaType(contentType)
 	if err != nil {
 		return nil, "", fmt.Errorf("parse multipart content-type: %w", err)
@@ -837,6 +883,8 @@ func rewriteOpenAIImagesMultipartModel(body []byte, contentType string, model st
 	var buffer bytes.Buffer
 	writer := multipart.NewWriter(&buffer)
 	modelWritten := false
+	outputFormatWritten := false
+	responseFormatWritten := false
 
 	for {
 		part, err := reader.NextPart()
@@ -864,6 +912,14 @@ func rewriteOpenAIImagesMultipartModel(body []byte, contentType string, model st
 			_ = part.Close()
 			continue
 		}
+		if part.FileName() == "" {
+			switch formName {
+			case "output_format":
+				outputFormatWritten = true
+			case "response_format":
+				responseFormatWritten = true
+			}
+		}
 		if _, err := io.Copy(target, part); err != nil {
 			_ = part.Close()
 			return nil, "", fmt.Errorf("copy multipart part: %w", err)
@@ -874,6 +930,16 @@ func rewriteOpenAIImagesMultipartModel(body []byte, contentType string, model st
 	if !modelWritten {
 		if err := writer.WriteField("model", model); err != nil {
 			return nil, "", fmt.Errorf("append multipart model field: %w", err)
+		}
+	}
+	if outputFormat != "" && !outputFormatWritten {
+		if err := writer.WriteField("output_format", outputFormat); err != nil {
+			return nil, "", fmt.Errorf("append multipart output_format field: %w", err)
+		}
+	}
+	if responseFormat != "" && !responseFormatWritten {
+		if err := writer.WriteField("response_format", responseFormat); err != nil {
+			return nil, "", fmt.Errorf("append multipart response_format field: %w", err)
 		}
 	}
 	if err := writer.Close(); err != nil {
