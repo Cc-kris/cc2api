@@ -522,6 +522,44 @@ func TestNormalizeCodexImageGenerationFunctionCallNamespace(t *testing.T) {
 	}
 }
 
+func TestNormalizeCodexImageGenerationExtensionResponseTracksActualToolChoice(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("imagegen call is tracked even when namespace is already present", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Set(OpenAICodexImageGenerationExtensionContextKey, true)
+		payload := []byte(`{"type":"response.output_item.done","item":{"type":"function_call","namespace":"image_gen","name":"imagegen","call_id":"call_1","arguments":"{}"}}`)
+
+		normalized := normalizeCodexImageGenerationExtensionResponse(c, payload)
+
+		require.JSONEq(t, string(payload), string(normalized))
+		require.True(t, CodexImageGenerationToolCalled(c))
+	})
+
+	t.Run("flattened imagegen call is normalized and tracked", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Set(OpenAICodexImageGenerationExtensionContextKey, true)
+		payload := []byte(`{"type":"response.completed","response":{"output":[{"type":"function_call","name":"image_gen__imagegen","call_id":"call_1","arguments":"{}"}]}}`)
+
+		normalized := normalizeCodexImageGenerationExtensionResponse(c, payload)
+
+		require.Equal(t, "image_gen", gjson.GetBytes(normalized, "response.output.0.namespace").String())
+		require.Equal(t, "imagegen", gjson.GetBytes(normalized, "response.output.0.name").String())
+		require.True(t, CodexImageGenerationToolCalled(c))
+	})
+
+	t.Run("ordinary text response remains unmarked", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Set(OpenAICodexImageGenerationExtensionContextKey, true)
+		payload := []byte(`{"type":"response.completed","response":{"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hello"}]}]}}`)
+
+		normalized := normalizeCodexImageGenerationExtensionResponse(c, payload)
+
+		require.JSONEq(t, string(payload), string(normalized))
+		require.False(t, CodexImageGenerationToolCalled(c))
+	})
+}
+
 func TestNormalizeCompletedImageGenerationSSEData(t *testing.T) {
 	largeResult := strings.Repeat("a", 2_838_984)
 	tests := []struct {

@@ -109,7 +109,8 @@ func TestPrepareCodexImageGenerationExtensionDispatch(t *testing.T) {
 	updated, changed, err := PrepareCodexImageGenerationExtensionDispatch(body)
 	require.NoError(t, err)
 	require.True(t, changed)
-	require.Contains(t, gjson.GetBytes(updated, "instructions").String(), "call the imagegen function exactly once")
+	require.Contains(t, gjson.GetBytes(updated, "instructions").String(), "only when the user's actual intent")
+	require.Contains(t, gjson.GetBytes(updated, "instructions").String(), "explicit request not to generate an image")
 	require.Equal(t, "function", gjson.GetBytes(updated, "tools.0.type").String())
 	require.Equal(t, "imagegen", gjson.GetBytes(updated, "tools.0.name").String())
 	require.Contains(t, gjson.GetBytes(updated, "tools.0.description").String(), "Omit both referenced_image_paths and num_last_images_to_include")
@@ -120,8 +121,7 @@ func TestPrepareCodexImageGenerationExtensionDispatch(t *testing.T) {
 	require.Equal(t, 1, len(gjson.GetBytes(updated, "tools.0.parameters.required").Array()))
 	require.Equal(t, "prompt", gjson.GetBytes(updated, "tools.0.parameters.required.0").String())
 	require.False(t, gjson.GetBytes(updated, "tools.0.parameters.additionalProperties").Bool())
-	require.Equal(t, "function", gjson.GetBytes(updated, "tool_choice.type").String())
-	require.Equal(t, "imagegen", gjson.GetBytes(updated, "tool_choice.name").String())
+	require.Equal(t, "auto", gjson.GetBytes(updated, "tool_choice").String())
 
 	editBody := []byte(`{"model":"gpt-5.6-terra","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"input":[{"type":"message","role":"user","content":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"},{"type":"input_text","text":"change it"}]}]}`)
 	editUpdated, editChanged, err := PrepareCodexImageGenerationExtensionDispatch(editBody)
@@ -138,7 +138,7 @@ func TestPrepareCodexImageGenerationExtensionDispatch(t *testing.T) {
 	require.True(t, changed)
 	require.Equal(t, "function", gjson.GetBytes(continuationUpdated, "tools.0.type").String())
 	require.False(t, gjson.GetBytes(continuationUpdated, "tool_choice").Exists())
-	require.NotContains(t, gjson.GetBytes(continuationUpdated, "instructions").String(), "call the imagegen function exactly once")
+	require.NotContains(t, gjson.GetBytes(continuationUpdated, "instructions").String(), "only when the user's actual intent")
 	outputOnlyContinuation := []byte(`{"model":"gpt-5.6-terra","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}],"previous_response_id":"resp_1","input":[{"type":"function_call_output","call_id":"call_1","output":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"}]}]}`)
 	require.True(t, IsCodexImageGenerationExtensionContinuation(outputOnlyContinuation))
 
@@ -160,9 +160,8 @@ func TestPrepareCodexImageGenerationExtensionDispatch(t *testing.T) {
 	require.Equal(t, "imagegen", gjson.GetBytes(liteUpdated, "tools.0.name").String())
 	require.Len(t, gjson.GetBytes(liteUpdated, "tools").Array(), 1)
 	require.False(t, gjson.GetBytes(liteUpdated, `input.#(type=="additional_tools")`).Exists())
-	require.Equal(t, "function", gjson.GetBytes(liteUpdated, "tool_choice.type").String())
-	require.Equal(t, "imagegen", gjson.GetBytes(liteUpdated, "tool_choice.name").String())
-	require.Contains(t, gjson.GetBytes(liteUpdated, "instructions").String(), "call the imagegen function exactly once")
+	require.Equal(t, "auto", gjson.GetBytes(liteUpdated, "tool_choice").String())
+	require.Contains(t, gjson.GetBytes(liteUpdated, "instructions").String(), "only when the user's actual intent")
 
 	hostTools := []byte(`{"model":"gpt-5.6-terra","client_metadata":{"x-codex-turn-metadata":"{\"request_kind\":\"turn\",\"thread_source\":\"user\"}"},"input":[{"type":"additional_tools","tools":[{"type":"custom","name":"exec"},{"type":"function","name":"wait"},{"type":"function","name":"request_user_input"}]},{"type":"message","role":"user","content":[{"type":"input_text","text":"draw"}]}]}`)
 	hostToolsUpdated, hostToolsChanged, err := PrepareCodexImageGenerationExtensionDispatch(hostTools)
@@ -227,7 +226,7 @@ func TestClassifyCodexImageRequest(t *testing.T) {
 		{"memory bypasses image mapping", `{` + metadata("memory", "") + `}`, CodexRequestRoleMemory, CodexImageExecutionTextBypass, false},
 		{"future metadata kind fails safe to text", `{` + metadata("future_kind", "user") + `}`, CodexRequestRoleUnknown, CodexImageExecutionTextBypass, false},
 		{"legacy hosted tool", `{` + hosted + `}`, CodexRequestRoleUnknown, CodexImageExecutionHostedImage, false},
-		{"legacy dedicated image channel", `{"input":"draw"}`, CodexRequestRoleUnknown, CodexImageExecutionHostedImage, true},
+		{"legacy request without image tool stays text", `{"input":"explain an API"}`, CodexRequestRoleUnknown, CodexImageExecutionTextBypass, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -280,9 +279,8 @@ func TestPrepareCodexImageRouteRequest(t *testing.T) {
 		require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(prepared, "model").String())
 		require.Equal(t, "function", gjson.GetBytes(prepared, "tools.0.type").String())
 		require.Equal(t, "imagegen", gjson.GetBytes(prepared, "tools.0.name").String())
-		require.Equal(t, "function", gjson.GetBytes(prepared, "tool_choice.type").String())
-		require.Equal(t, "imagegen", gjson.GetBytes(prepared, "tool_choice.name").String())
-		require.Contains(t, gjson.GetBytes(prepared, "instructions").String(), "call the imagegen function exactly once")
+		require.Equal(t, "auto", gjson.GetBytes(prepared, "tool_choice").String())
+		require.Contains(t, gjson.GetBytes(prepared, "instructions").String(), "only when the user's actual intent")
 		require.False(t, gjson.GetBytes(prepared, `input.#(type=="additional_tools")`).Exists())
 		require.Empty(t, gjson.GetBytes(prepared, `tools.#(type=="image_generation")#`).Array())
 	})

@@ -16,6 +16,10 @@ const (
 	// OpenAICodexImageGenerationExtensionContextKey marks a request whose
 	// imagegen function-call response needs its namespace restored.
 	OpenAICodexImageGenerationExtensionContextKey = "openai_codex_image_generation_extension"
+	// OpenAICodexImageGenerationToolCalledContextKey records whether the
+	// orchestrator actually selected imagegen. Intent-aware image channels use
+	// this to distinguish an internal image dispatch from an ordinary text turn.
+	OpenAICodexImageGenerationToolCalledContextKey = "openai_codex_image_generation_tool_called"
 	// OpenAICodexSystemBackgroundContextKey marks a non-billable Codex title or
 	// description helper routed through the internal text orchestrator.
 	OpenAICodexSystemBackgroundContextKey = "openai_codex_system_background"
@@ -140,10 +144,12 @@ func ClassifyCodexImageRequest(requestedModel, mappedModel string, body []byte) 
 		return decision
 	}
 
-	// Older Codex clients do not carry canonical turn metadata. A dedicated
-	// image channel remains their explicit product-level image intent.
+	// Older Codex clients do not carry canonical turn metadata. They advertise
+	// image_generation only on actual image turns, so a metadata-free request
+	// with no image tool must keep the requested text model instead of inheriting
+	// the channel's image mapping.
 	if !decision.HasMetadata {
-		decision.Execution = CodexImageExecutionHostedImage
+		decision.Execution = CodexImageExecutionTextBypass
 		decision.LegacyFallback = true
 	}
 	return decision
@@ -445,9 +451,10 @@ func PrepareCodexSystemBackgroundTextDispatch(body []byte) ([]byte, error) {
 	return updated, nil
 }
 
-// PrepareCodexImageGenerationExtensionDispatch forces the first mapped image
-// turn to call the standalone Codex image tool exactly once. Follow-up turns
-// are left untouched so the model can consume the local tool result.
+// PrepareCodexImageGenerationExtensionDispatch exposes the standalone Codex
+// image tool to the text orchestrator. The orchestrator decides whether the
+// user's actual intent requires image generation; follow-up turns are left
+// untouched so the model can consume the local tool result.
 func PrepareCodexImageGenerationExtensionDispatch(body []byte) ([]byte, bool, error) {
 	if !IsCodexImageGenerationExtensionTurn(body) {
 		return body, false, nil
@@ -457,14 +464,14 @@ func PrepareCodexImageGenerationExtensionDispatch(body []byte) ([]byte, bool, er
 		return body, false, err
 	}
 	hasConversationImages := codexRequestHasConversationImages(reqBody["input"])
-	directive := "This request is routed through an image-only channel. You must call the imagegen function exactly once; the gateway will deliver it to Codex as image_gen.imagegen. Do not answer with text before or after the tool call. Preserve the user's requested image or edit intent when building the tool arguments. For a brand new image, provide only prompt and omit both referenced_image_paths and num_last_images_to_include. For an edit, use referenced_image_paths only when every target has a local path; otherwise use num_last_images_to_include with the smallest available recent-image count from 1 through 5. Never provide both image selectors."
+	directive := "This channel can generate and edit images through the imagegen function, which the gateway will deliver to Codex as image_gen.imagegen. Call imagegen exactly once only when the user's actual intent is to create, generate, edit, transform, or otherwise produce an image. For ordinary conversation, image analysis, questions about image generation, code-writing requests, or an explicit request not to generate an image, answer normally with text and do not call imagegen. When imagegen is needed, do not answer with text before or after the tool call. Preserve the user's requested image or edit intent when building the tool arguments. For a brand new image, provide only prompt and omit both referenced_image_paths and num_last_images_to_include. For an edit, use referenced_image_paths only when every target has a local path; otherwise use num_last_images_to_include with the smallest available recent-image count from 1 through 5. Never provide both image selectors."
 	if !hasConversationImages {
 		directive += " No conversation images are available in this turn, so you must omit num_last_images_to_include."
 	}
 	continuation := IsCodexImageGenerationExtensionContinuation(body)
 	input, _ := reqBody["input"].([]any)
 	_, additionalToolsIndex := codexAdditionalTools(reqBody["input"])
-	// A forced image-only orchestration turn exposes exactly one public function.
+	// The intent-aware orchestration turn exposes exactly one public function.
 	// Codex may advertise exec, wait, or other host tools in additional_tools, but
 	// forwarding those private host contracts to the upstream makes otherwise
 	// valid Responses providers reject the entire request.
@@ -527,10 +534,7 @@ Guidelines:
 				reqBody["instructions"] = instructions + "\n\n" + directive
 			}
 		}
-		reqBody["tool_choice"] = map[string]any{
-			"type": "function",
-			"name": codexImageGenToolName,
-		}
+		reqBody["tool_choice"] = "auto"
 	} else if codexImageToolChoiceSelected(reqBody["tool_choice"]) {
 		delete(reqBody, "tool_choice")
 	}

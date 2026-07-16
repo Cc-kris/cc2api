@@ -462,8 +462,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())
 		forwardStart := time.Now()
 		// Current Codex clients display generated images only after executing the
-		// local image_gen extension. Keep the channel mapping as the forced-image
-		// routing signal, but preserve the text model for the orchestration turn.
+		// local image_gen extension. Keep the channel mapping as the image-capable
+		// routing signal, but let the text orchestrator decide whether the user's
+		// actual intent requires that tool.
 		forwardBody := body
 		useCodexImageExtension := codexImageExtensionCandidate
 		c.Set(service.OpenAICodexImageGenerationExtensionContextKey, useCodexImageExtension)
@@ -594,13 +595,25 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			reqLog.Info("openai.codex_system_background_completed", zap.Int64("account_id", account.ID))
 			return
 		}
-		if useCodexImageExtension {
+		if useCodexImageExtension && service.CodexImageGenerationToolCalled(c) {
 			reqLog.Info("openai.codex_image_generation_extension_dispatched",
 				zap.Int64("account_id", account.ID),
 				zap.String("requested_model", reqModel),
 				zap.String("image_model", channelMapping.MappedModel),
 			)
 			return
+		}
+		if useCodexImageExtension {
+			reqLog.Info("openai.codex_image_orchestrator_text_completed",
+				zap.Int64("account_id", account.ID),
+				zap.String("requested_model", reqModel),
+			)
+			// The channel's text-to-image mapping describes the optional tool, not
+			// the billing model for a turn where the orchestrator returned text.
+			usageChannelMapping.ChannelID = 0
+			usageChannelMapping.Mapped = false
+			usageChannelMapping.MappedModel = reqModel
+			usageChannelMapping.BillingModelSource = service.BillingModelSourceRequested
 		}
 		h.persistLocalResponseCache(c, localCacheLookup, localCacheCfg, localCacheCapture, body, nil, reqLog)
 
@@ -1920,6 +1933,10 @@ func (h *OpenAIGatewayHandler) tryFallbackOpenAIWebSocketIngressToHTTP(
 	if result == nil {
 		return false
 	}
+	codexImageToolCalled := service.CodexImageGenerationToolCalled(fallbackCtx)
+	if codexImageToolCalled {
+		c.Set(service.OpenAICodexImageGenerationToolCalledContextKey, true)
+	}
 	if !writeOpenAIHTTPFallbackBodyToWS(c.Request.Context(), wsConn, fallbackRecorder) {
 		return false
 	}
@@ -1934,9 +1951,16 @@ func (h *OpenAIGatewayHandler) tryFallbackOpenAIWebSocketIngressToHTTP(
 	codexImageExtensionEnabled, _ := codexImageExtension.(bool)
 	codexSystemBackground, _ := c.Get(service.OpenAICodexSystemBackgroundContextKey)
 	codexSystemBackgroundEnabled, _ := codexSystemBackground.(bool)
-	if apiKey != nil && !codexImageExtensionEnabled && !codexSystemBackgroundEnabled {
+	if apiKey != nil && (!codexImageExtensionEnabled || !codexImageToolCalled) && !codexSystemBackgroundEnabled {
 		inboundEndpoint := GetInboundEndpoint(c)
 		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
+		usageChannelMapping := channelMappingWS
+		if codexImageExtensionEnabled && !codexImageToolCalled {
+			usageChannelMapping.ChannelID = 0
+			usageChannelMapping.Mapped = false
+			usageChannelMapping.MappedModel = requestedModel
+			usageChannelMapping.BillingModelSource = service.BillingModelSourceRequested
+		}
 		h.submitOpenAIUsageRecordTask(result, func(taskCtx context.Context) {
 			if err := h.gatewayService.RecordUsage(taskCtx, &service.OpenAIRecordUsageInput{
 				Result:             result,
@@ -1949,7 +1973,7 @@ func (h *OpenAIGatewayHandler) tryFallbackOpenAIWebSocketIngressToHTTP(
 				IPAddress:          ip.GetClientIP(c),
 				RequestPayloadHash: service.HashUsageRequestPayload(body),
 				APIKeyService:      h.apiKeyService,
-				ChannelUsageFields: channelMappingWS.ToUsageFields(requestedModel, result.UpstreamModel),
+				ChannelUsageFields: usageChannelMapping.ToUsageFields(requestedModel, result.UpstreamModel),
 			}); err != nil && reqLog != nil {
 				reqLog.Error("openai.websocket_http_fallback_record_usage_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 			}

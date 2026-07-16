@@ -988,7 +988,16 @@ func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *tes
 			_, _ = io.WriteString(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_prewarm_e2e\",\"model\":\"gpt-5.6-terra\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"ready\"}]}],\"usage\":{\"input_tokens\":2,\"output_tokens\":1}}}\n\n")
 			return
 		}
+		if strings.Contains(gjson.GetBytes(payload, "input").String(), "legacy text request") {
+			_, _ = io.WriteString(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_legacy_text_e2e\",\"model\":\"gpt-5.5\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"legacy text answer\"}]}],\"usage\":{\"input_tokens\":3,\"output_tokens\":2}}}\n\n")
+			return
+		}
 		if gjson.GetBytes(payload, "tools.0.name").String() == "imagegen" {
+			if strings.Contains(string(payload), "explain image APIs without generating") {
+				_, _ = io.WriteString(w, "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_text_e2e\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"text-only answer\"}]}}\n\n"+
+					"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_text_e2e\",\"model\":\"gpt-5.4\",\"output\":[{\"id\":\"msg_text_e2e\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"text-only answer\"}]}],\"usage\":{\"input_tokens\":3,\"output_tokens\":2}}}\n\n")
+				return
+			}
 			_, _ = io.WriteString(w, "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_http_e2e\",\"type\":\"function_call\",\"name\":\"imagegen\",\"call_id\":\"call_http_e2e\",\"arguments\":\"{}\"}}\n\n"+
 				"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_extension_e2e\",\"model\":\"gpt-5.4\",\"output\":[{\"id\":\"fc_http_e2e\",\"type\":\"function_call\",\"name\":\"imagegen\",\"call_id\":\"call_http_e2e\",\"arguments\":\"{}\"}],\"usage\":{\"input_tokens\":2,\"output_tokens\":1}}}\n\n")
 			return
@@ -1101,8 +1110,7 @@ func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *tes
 	require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(extensionForwarded, "model").String())
 	require.Equal(t, "function", gjson.GetBytes(extensionForwarded, "tools.0.type").String())
 	require.Equal(t, "imagegen", gjson.GetBytes(extensionForwarded, "tools.0.name").String())
-	require.Equal(t, "function", gjson.GetBytes(extensionForwarded, "tool_choice.type").String())
-	require.Equal(t, "imagegen", gjson.GetBytes(extensionForwarded, "tool_choice.name").String())
+	require.Equal(t, "auto", gjson.GetBytes(extensionForwarded, "tool_choice").String())
 
 	liteBody := []byte(`{"model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"draw via latest metadata-only request"}]}]}`)
 	liteReq := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(liteBody))
@@ -1116,8 +1124,7 @@ func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *tes
 	require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(liteForwarded, "model").String())
 	require.Equal(t, "function", gjson.GetBytes(liteForwarded, "tools.0.type").String())
 	require.Equal(t, "imagegen", gjson.GetBytes(liteForwarded, "tools.0.name").String())
-	require.Equal(t, "function", gjson.GetBytes(liteForwarded, "tool_choice.type").String())
-	require.Equal(t, "imagegen", gjson.GetBytes(liteForwarded, "tool_choice.name").String())
+	require.Equal(t, "auto", gjson.GetBytes(liteForwarded, "tool_choice").String())
 	require.False(t, gjson.GetBytes(liteForwarded, `input.#(type=="additional_tools")`).Exists())
 
 	missingCapabilityBody := []byte(`{"model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":"draw without a declared image capability"}`)
@@ -1138,6 +1145,26 @@ func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *tes
 	default:
 	}
 
+	// An image-capable Codex turn that has no generation intent must remain a
+	// normal text response and must be recorded through the ordinary text path.
+	textBody := []byte(`{"model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":"explain image APIs without generating","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}]}`)
+	textReq := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(textBody))
+	textReq.Header.Set("Content-Type", "application/json")
+	textRecorder := httptest.NewRecorder()
+	router.ServeHTTP(textRecorder, textReq)
+	require.Equal(t, http.StatusOK, textRecorder.Code)
+	require.Contains(t, textRecorder.Body.String(), "text-only answer")
+	require.NotContains(t, textRecorder.Body.String(), `"name":"imagegen"`)
+	textForwarded := <-upstreamPayload
+	require.Equal(t, "auto", gjson.GetBytes(textForwarded, "tool_choice").String())
+	require.Contains(t, gjson.GetBytes(textForwarded, "instructions").String(), "only when the user's actual intent")
+	textUsage := <-usageRepo.created
+	require.Zero(t, textUsage.ImageCount)
+	require.NotNil(t, textUsage.BillingMode)
+	require.Equal(t, string(service.BillingModeToken), *textUsage.BillingMode)
+	require.Nil(t, textUsage.ChannelID)
+	require.Nil(t, textUsage.ModelMappingChain)
+
 	// Background/prewarm turns still use their original text model after the
 	// client has fallen back to HTTP; they must not be converted into image work.
 	prewarmMetadata := `{"request_kind":"prewarm","thread_source":"user"}`
@@ -1156,9 +1183,9 @@ func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *tes
 	require.Nil(t, prewarmUsage.ChannelID)
 	require.Nil(t, prewarmUsage.ModelMappingChain)
 
-	// Old Codex payloads without turn metadata use the same HTTP route and retain
+	// Older Codex image turns explicitly advertise image_generation and retain
 	// the hosted image contract.
-	legacyBody := []byte(`{"model":"gpt-5.5","stream":true,"input":"draw a red circle"}`)
+	legacyBody := []byte(`{"model":"gpt-5.5","stream":true,"input":"draw a red circle","tools":[{"type":"image_generation"}],"tool_choice":{"type":"image_generation"}}`)
 	legacyReq := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(legacyBody))
 	legacyReq.Header.Set("Content-Type", "application/json")
 	legacyReq.Header.Set("User-Agent", "codex_cli_rs/0.90.0")
@@ -1174,6 +1201,27 @@ func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *tes
 	require.Equal(t, 1, legacyUsage.ImageCount)
 	require.NotNil(t, legacyUsage.BillingMode)
 	require.Equal(t, string(service.BillingModeImage), *legacyUsage.BillingMode)
+
+	// Older Codex text turns do not carry canonical metadata or an image tool.
+	// They must preserve the requested text model and normal text accounting.
+	legacyTextBody := []byte(`{"model":"gpt-5.5","stream":true,"input":"legacy text request"}`)
+	legacyTextReq := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(legacyTextBody))
+	legacyTextReq.Header.Set("Content-Type", "application/json")
+	legacyTextReq.Header.Set("User-Agent", "codex_cli_rs/0.90.0")
+	legacyTextRecorder := httptest.NewRecorder()
+	router.ServeHTTP(legacyTextRecorder, legacyTextReq)
+	require.Equal(t, http.StatusOK, legacyTextRecorder.Code)
+	require.Contains(t, legacyTextRecorder.Body.String(), "legacy text answer")
+	require.NotContains(t, legacyTextRecorder.Body.String(), `"type":"image_generation_call"`)
+	legacyTextForwarded := <-upstreamPayload
+	require.Equal(t, "gpt-5.5", gjson.GetBytes(legacyTextForwarded, "model").String())
+	require.Empty(t, gjson.GetBytes(legacyTextForwarded, "tools").Array())
+	legacyTextUsage := <-usageRepo.created
+	require.Zero(t, legacyTextUsage.ImageCount)
+	require.NotNil(t, legacyTextUsage.BillingMode)
+	require.Equal(t, string(service.BillingModeToken), *legacyTextUsage.BillingMode)
+	require.Nil(t, legacyTextUsage.ChannelID)
+	require.Nil(t, legacyTextUsage.ModelMappingChain)
 
 	// The HTTP fallback must expose upstream SSE incrementally. This guards
 	// against reintroducing the buffered HTTP-to-WebSocket adapter that caused

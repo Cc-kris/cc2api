@@ -3757,7 +3757,8 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				line = "data: " + string(normalizedData)
 			}
 			if codexImageGenerationExtensionEnabled(c) {
-				if normalizedData, normalized := normalizeCodexImageGenerationFunctionCallNamespace(dataBytes); normalized {
+				normalizedData := normalizeCodexImageGenerationExtensionResponse(c, dataBytes)
+				if !bytes.Equal(normalizedData, dataBytes) {
 					dataBytes = normalizedData
 					trimmedData = strings.TrimSpace(string(normalizedData))
 					line = "data: " + string(normalizedData)
@@ -3903,7 +3904,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	}
 	body = normalizeOpenAICompactResponseBody(c, body)
 	if codexImageGenerationExtensionEnabled(c) {
-		body, _ = normalizeCodexImageGenerationFunctionCallNamespace(body)
+		body = normalizeCodexImageGenerationExtensionResponse(c, body)
 	}
 	c.Data(resp.StatusCode, contentType, body)
 	return &openaiNonStreamingResultPassthrough{
@@ -3969,7 +3970,7 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 		}
 	}
 	if codexImageGenerationExtensionEnabled(c) {
-		body, _ = normalizeCodexImageGenerationFunctionCallNamespace(body)
+		body = normalizeCodexImageGenerationExtensionResponse(c, body)
 	}
 	c.Data(resp.StatusCode, contentType, body)
 
@@ -4636,7 +4637,8 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 				line = "data: " + data
 			}
 			if codexImageGenerationExtensionEnabled(c) {
-				if normalizedData, normalized := normalizeCodexImageGenerationFunctionCallNamespace(dataBytes); normalized {
+				normalizedData := normalizeCodexImageGenerationExtensionResponse(c, dataBytes)
+				if !bytes.Equal(normalizedData, dataBytes) {
 					dataBytes = normalizedData
 					data = string(normalizedData)
 					line = "data: " + data
@@ -5062,7 +5064,7 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 	}
 	body = normalizeOpenAICompactResponseBody(c, body)
 	if codexImageGenerationExtensionEnabled(c) {
-		body, _ = normalizeCodexImageGenerationFunctionCallNamespace(body)
+		body = normalizeCodexImageGenerationExtensionResponse(c, body)
 	}
 
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
@@ -5141,7 +5143,7 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 		}
 	}
 	if codexImageGenerationExtensionEnabled(c) {
-		body, _ = normalizeCodexImageGenerationFunctionCallNamespace(body)
+		body = normalizeCodexImageGenerationExtensionResponse(c, body)
 	}
 	c.Data(resp.StatusCode, contentType, body)
 
@@ -5297,6 +5299,68 @@ func codexImageGenerationExtensionEnabled(c *gin.Context) bool {
 	}
 	enabled, _ := value.(bool)
 	return enabled
+}
+
+// CodexImageGenerationToolCalled reports whether the upstream orchestrator
+// selected imagegen for this request. A false result means the intent-aware
+// orchestration completed as an ordinary text turn.
+func CodexImageGenerationToolCalled(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	value, exists := c.Get(OpenAICodexImageGenerationToolCalledContextKey)
+	if !exists {
+		return false
+	}
+	called, _ := value.(bool)
+	return called
+}
+
+func markCodexImageGenerationToolCall(c *gin.Context, data []byte) {
+	if c == nil || CodexImageGenerationToolCalled(c) || !hasCodexImageGenerationFunctionCall(data) {
+		return
+	}
+	c.Set(OpenAICodexImageGenerationToolCalledContextKey, true)
+}
+
+func hasCodexImageGenerationFunctionCall(data []byte) bool {
+	if len(data) == 0 || !gjson.ValidBytes(data) {
+		return false
+	}
+	isImagegen := func(item gjson.Result) bool {
+		if !item.Exists() || !item.IsObject() || strings.TrimSpace(item.Get("type").String()) != "function_call" {
+			return false
+		}
+		name := strings.TrimSpace(item.Get("name").String())
+		return name == codexImageGenToolName || name == codexImageGenNamespace+"__"+codexImageGenToolName
+	}
+	containsImagegen := func(items gjson.Result) bool {
+		for _, item := range items.Array() {
+			if isImagegen(item) {
+				return true
+			}
+		}
+		return false
+	}
+
+	eventType := strings.TrimSpace(gjson.GetBytes(data, "type").String())
+	switch eventType {
+	case "response.output_item.added", "response.output_item.done":
+		return isImagegen(gjson.GetBytes(data, "item"))
+	case "response.completed", "response.done":
+		return containsImagegen(gjson.GetBytes(data, "response.output"))
+	default:
+		return containsImagegen(gjson.GetBytes(data, "output"))
+	}
+}
+
+func normalizeCodexImageGenerationExtensionResponse(c *gin.Context, data []byte) []byte {
+	if !codexImageGenerationExtensionEnabled(c) {
+		return data
+	}
+	markCodexImageGenerationToolCall(c, data)
+	normalized, _ := normalizeCodexImageGenerationFunctionCallNamespace(data)
+	return normalized
 }
 
 // normalizeCodexImageGenerationFunctionCallNamespace restores the namespace
