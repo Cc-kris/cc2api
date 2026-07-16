@@ -14,12 +14,14 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	openaiutil "github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
 	"github.com/imroc/req/v3"
@@ -40,7 +42,16 @@ const (
 	openAIImageMaxDownloadBytes    = 20 << 20 // 20MB per image download
 	openAIImageMaxUploadPartSize   = 20 << 20 // 20MB per multipart upload part
 	openAIImagesResponsesMainModel = "gpt-5.4-mini"
+	codexImageMaxTotalBytes        = 40 << 20
+	codexImageMaxURLDownloads      = 10
+	codexImageResponseJSONOverhead = 1 << 20
+	codexImageMaxResponseJSONBytes = ((codexImageMaxTotalBytes + 2) / 3 * 4) + codexImageResponseJSONOverhead
+	codexImageDownloadTimeout      = 30 * time.Second
+	codexImageNormalizeTimeout     = 60 * time.Second
+	codexImageDownloadMaxRedirects = 3
 )
+
+var defaultCodexImageDownloadHTTPClient = newCodexImageDownloadHTTPClient()
 
 type OpenAIImagesCapability string
 
@@ -642,7 +653,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			return nil, &UpstreamFailoverError{
 				StatusCode:             resp.StatusCode,
 				ResponseBody:           respBody,
-				RetryableOnSameAccount: isPoolModeRetryableStatus(resp.StatusCode),
+				RetryableOnSameAccount: isOpenAIImageSameAccountRetryableStatus(resp.StatusCode),
 			}
 		}
 		return s.handleErrorResponse(upstreamCtx, resp, c, account, forwardBody)
@@ -692,9 +703,28 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			ImageOutputSizes: imageOutputSizes,
 		}, nil
 	} else {
-		nonStreamUsage, nonStreamCount, nonStreamSizes, err := s.handleOpenAIImagesNonStreamingResponse(resp, c)
+		nonStreamUsage, nonStreamCount, nonStreamSizes, err := s.handleOpenAIImagesNonStreamingResponse(upstreamCtx, resp, c, parsed.N)
 		if err != nil {
-			return nil, err
+			if nonStreamCount <= 0 {
+				nonStreamCount = parsed.N
+			}
+			// The provider completed a billable image request even though its
+			// response could not be adapted for the client. Preserve the successful
+			// image count so billing follows upstream completion rather than client
+			// rendering capability.
+			return &OpenAIForwardResult{
+				RequestID:        resp.Header.Get("x-request-id"),
+				Usage:            nonStreamUsage,
+				Model:            requestModel,
+				UpstreamModel:    upstreamModel,
+				Stream:           parsed.Stream,
+				ResponseHeaders:  resp.Header.Clone(),
+				Duration:         time.Since(startTime),
+				ImageCount:       nonStreamCount,
+				ImageSize:        parsed.SizeTier,
+				ImageInputSize:   parsed.Size,
+				ImageOutputSizes: nonStreamSizes,
+			}, err
 		}
 		usage = nonStreamUsage
 		if nonStreamCount > 0 {
@@ -715,6 +745,15 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			ImageOutputSizes: nonStreamSizes,
 		}, nil
 	}
+}
+
+func isOpenAIImageSameAccountRetryableStatus(status int) bool {
+	// A 5xx after a long-running paid image operation is ambiguous: the image
+	// may already exist even though an intermediary failed to deliver the
+	// response. Skip replaying the same account, but keep Handler-level failover
+	// to other configured accounts. Non-5xx pool-mode statuses retain the
+	// existing retry policy.
+	return status < http.StatusInternalServerError && isPoolModeRetryableStatus(status)
 }
 
 func (s *OpenAIGatewayService) buildOpenAIImagesRequest(
@@ -853,10 +892,41 @@ func cloneMultipartHeader(src textproto.MIMEHeader) textproto.MIMEHeader {
 	return dst
 }
 
-func (s *OpenAIGatewayService) handleOpenAIImagesNonStreamingResponse(resp *http.Response, c *gin.Context) (OpenAIUsage, int, []string, error) {
-	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
+func (s *OpenAIGatewayService) handleOpenAIImagesNonStreamingResponse(
+	ctx context.Context,
+	resp *http.Response,
+	c *gin.Context,
+	expectedImageCount int,
+) (OpenAIUsage, int, []string, error) {
+	// The Handler stores the final channel + client decision. Retain the header
+	// check here as defense in depth for direct service callers.
+	isCodexClient := CodexImageResponseAdapterEnabled(c) &&
+		openaiutil.IsCodexOfficialClientByHeaders(c.GetHeader("User-Agent"), c.GetHeader("originator"))
+	responseBody := io.Reader(resp.Body)
+	if isCodexClient {
+		responseBody = io.LimitReader(resp.Body, codexImageMaxResponseJSONBytes+1)
+	}
+	body, err := ReadUpstreamResponseBody(io.NopCloser(responseBody), s.cfg, c, openAITooLargeError)
 	if err != nil {
+		if isCodexClient {
+			s.writeCodexImageIncompatibleResponse(c, resp)
+		}
 		return OpenAIUsage{}, 0, nil, err
+	}
+	if isCodexClient && len(body) > codexImageMaxResponseJSONBytes {
+		s.writeCodexImageIncompatibleResponse(c, resp)
+		return OpenAIUsage{}, 0, nil, fmt.Errorf("Codex image response exceeds %d bytes", codexImageMaxResponseJSONBytes)
+	}
+	usage, _ := extractOpenAIUsageFromJSONBytes(body)
+	imageCount := extractOpenAIImageCountFromJSONBytes(body)
+	imageSizes := collectOpenAIResponseImageOutputSizesFromJSONBytes(body)
+	if isCodexClient {
+		normalized, normalizeErr := s.normalizeCodexImagesResponse(ctx, body, expectedImageCount)
+		if normalizeErr != nil {
+			s.writeCodexImageIncompatibleResponse(c, resp)
+			return usage, imageCount, imageSizes, normalizeErr
+		}
+		body = normalized
 	}
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	contentType := "application/json"
@@ -866,9 +936,231 @@ func (s *OpenAIGatewayService) handleOpenAIImagesNonStreamingResponse(resp *http
 		}
 	}
 	c.Data(resp.StatusCode, contentType, body)
+	return usage, imageCount, imageSizes, nil
+}
 
-	usage, _ := extractOpenAIUsageFromJSONBytes(body)
-	return usage, extractOpenAIImageCountFromJSONBytes(body), collectOpenAIResponseImageOutputSizesFromJSONBytes(body), nil
+func (s *OpenAIGatewayService) writeCodexImageIncompatibleResponse(c *gin.Context, resp *http.Response) {
+	if c == nil || c.Writer == nil || c.Writer.Written() {
+		return
+	}
+	if resp != nil {
+		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+	}
+	// The upstream image request already returned 2xx and may already be billed.
+	// Use a non-retryable client status so Codex does not replay the paid image
+	// operation merely because the provider response could not be adapted.
+	c.JSON(http.StatusUnprocessableEntity, gin.H{"error": gin.H{
+		"message": "Image provider returned an incompatible image response",
+		"type":    "image_response_incompatible",
+	}})
+}
+
+// normalizeCodexImagesResponse converts common OpenAI-compatible image response
+// variants into the strict shape consumed by the Codex image extension. Ordinary
+// API clients keep the provider response unchanged.
+func (s *OpenAIGatewayService) normalizeCodexImagesResponse(
+	ctx context.Context,
+	body []byte,
+	expectedImageCount int,
+) ([]byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	normalizeCtx, cancel := context.WithTimeout(ctx, codexImageNormalizeTimeout)
+	defer cancel()
+
+	if len(body) > codexImageMaxResponseJSONBytes {
+		return nil, fmt.Errorf("Codex image response exceeds %d bytes", codexImageMaxResponseJSONBytes)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("decode Codex image response: %w", err)
+	}
+	data, ok := payload["data"].([]any)
+	if !ok || len(data) == 0 {
+		return nil, fmt.Errorf("Codex image response contains no data items")
+	}
+	if expectedImageCount > 0 && len(data) > expectedImageCount {
+		return nil, fmt.Errorf("Codex image response contains %d items; request expected at most %d", len(data), expectedImageCount)
+	}
+	if _, ok := payload["created"]; !ok {
+		payload["created"] = time.Now().Unix()
+	}
+
+	totalImageBytes := 0
+	urlDownloads := 0
+	for index, raw := range data {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("Codex image response data item %d is invalid", index)
+		}
+		if encoded := normalizeOpenAIImageBase64(firstNonEmptyString(
+			item["b64_json"],
+			item["base64"],
+			item["image_base64"],
+			item["result"],
+		)); encoded != "" {
+			imageBytes := base64.StdEncoding.DecodedLen(len(encoded))
+			if imageBytes > openAIImageMaxDownloadBytes {
+				return nil, fmt.Errorf("Codex image response data item %d exceeds %d bytes", index, openAIImageMaxDownloadBytes)
+			}
+			totalImageBytes += imageBytes
+			if totalImageBytes > codexImageMaxTotalBytes {
+				return nil, fmt.Errorf("Codex image response exceeds total image size %d", codexImageMaxTotalBytes)
+			}
+			setCodexImageResponseBase64(item, encoded)
+			continue
+		}
+
+		imageURL := strings.TrimSpace(firstNonEmptyString(item["url"], item["image_url"]))
+		if imageURL == "" {
+			return nil, fmt.Errorf("Codex image response data item %d has no image bytes or URL", index)
+		}
+		if strings.HasPrefix(strings.ToLower(imageURL), "data:") {
+			if encoded := normalizeOpenAIImageBase64(imageURL); encoded != "" {
+				imageBytes := base64.StdEncoding.DecodedLen(len(encoded))
+				if imageBytes > openAIImageMaxDownloadBytes {
+					return nil, fmt.Errorf("Codex image response data item %d exceeds %d bytes", index, openAIImageMaxDownloadBytes)
+				}
+				totalImageBytes += imageBytes
+				if totalImageBytes > codexImageMaxTotalBytes {
+					return nil, fmt.Errorf("Codex image response exceeds total image size %d", codexImageMaxTotalBytes)
+				}
+				setCodexImageResponseBase64(item, encoded)
+				continue
+			}
+			return nil, fmt.Errorf("Codex image response data item %d has invalid data URL", index)
+		}
+		urlDownloads++
+		if urlDownloads > codexImageMaxURLDownloads {
+			return nil, fmt.Errorf("Codex image response contains more than %d downloadable URLs", codexImageMaxURLDownloads)
+		}
+
+		download := s.downloadCodexImageResponseURL
+		if s.codexImageDownloader != nil {
+			download = s.codexImageDownloader
+		}
+		imageBytes, err := download(normalizeCtx, imageURL)
+		if err != nil {
+			return nil, fmt.Errorf("download Codex image response data item %d: %w", index, err)
+		}
+		if len(imageBytes) == 0 || len(imageBytes) > openAIImageMaxDownloadBytes {
+			return nil, fmt.Errorf("Codex image response data item %d has invalid size %d", index, len(imageBytes))
+		}
+		totalImageBytes += len(imageBytes)
+		if totalImageBytes > codexImageMaxTotalBytes {
+			return nil, fmt.Errorf("Codex image response exceeds total image size %d", codexImageMaxTotalBytes)
+		}
+		setCodexImageResponseBase64(item, base64.StdEncoding.EncodeToString(imageBytes))
+	}
+
+	normalized, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("encode Codex image response: %w", err)
+	}
+	return normalized, nil
+}
+
+func setCodexImageResponseBase64(item map[string]any, encoded string) {
+	item["b64_json"] = encoded
+	delete(item, "url")
+	delete(item, "image_url")
+	delete(item, "base64")
+	delete(item, "image_base64")
+	delete(item, "result")
+}
+
+func (s *OpenAIGatewayService) downloadCodexImageResponseURL(
+	ctx context.Context,
+	imageURL string,
+) ([]byte, error) {
+	if _, err := validateCodexImageDownloadURL(ctx, imageURL); err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "image/*,*/*;q=0.8")
+	resp, err := defaultCodexImageDownloadHTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp == nil || resp.Body == nil {
+		return nil, fmt.Errorf("empty image download response")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("image download returned status %d", resp.StatusCode)
+	}
+	limited := io.LimitReader(resp.Body, openAIImageMaxDownloadBytes+1)
+	imageBytes, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, err
+	}
+	if len(imageBytes) == 0 {
+		return nil, fmt.Errorf("image download returned an empty body")
+	}
+	if len(imageBytes) > openAIImageMaxDownloadBytes {
+		return nil, fmt.Errorf("image download exceeds %d bytes", openAIImageMaxDownloadBytes)
+	}
+	if contentType := http.DetectContentType(imageBytes); !strings.HasPrefix(contentType, "image/") {
+		return nil, fmt.Errorf("image download returned %s", contentType)
+	}
+	return imageBytes, nil
+}
+
+func newCodexImageDownloadHTTPClient() *http.Client {
+	transport := &http.Transport{
+		DialContext:           safeDialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          32,
+		MaxIdleConnsPerHost:   4,
+		IdleConnTimeout:       30 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 15 * time.Second,
+	}
+	return &http.Client{
+		Timeout:       codexImageDownloadTimeout,
+		Transport:     transport,
+		CheckRedirect: checkCodexImageDownloadRedirect,
+	}
+}
+
+func checkCodexImageDownloadRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= codexImageDownloadMaxRedirects {
+		return fmt.Errorf("image download stopped after %d redirects", codexImageDownloadMaxRedirects)
+	}
+	if req == nil || req.URL == nil {
+		return fmt.Errorf("image download redirect URL is empty")
+	}
+	_, err := validateCodexImageDownloadURL(req.Context(), req.URL.String())
+	return err
+}
+
+func validateCodexImageDownloadURL(ctx context.Context, raw string) (*url.URL, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return nil, fmt.Errorf("invalid image download URL: %w", err)
+	}
+	if !strings.EqualFold(parsed.Scheme, "https") {
+		return nil, fmt.Errorf("image download URL must use HTTPS")
+	}
+	if parsed.User != nil {
+		return nil, fmt.Errorf("image download URL must not contain user info")
+	}
+	hostname := strings.TrimSpace(parsed.Hostname())
+	if hostname == "" {
+		return nil, fmt.Errorf("image download URL has no hostname")
+	}
+	blocked, err := isPrivateOrLoopbackHost(ctx, hostname)
+	if err != nil {
+		return nil, fmt.Errorf("resolve image download hostname: %w", err)
+	}
+	if blocked {
+		return nil, fmt.Errorf("image download URL is blocked by SSRF policy")
+	}
+	return parsed, nil
 }
 
 func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(

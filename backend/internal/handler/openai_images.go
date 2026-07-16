@@ -10,6 +10,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	openaiutil "github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
@@ -77,6 +78,17 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		zap.Bool("multipart", parsed.Multipart),
 		zap.String("capability", string(parsed.RequiredCapability)),
 	)
+
+	// The strict Codex response adapter belongs to the channel-managed image
+	// bridge. Client headers identify the Codex runtime, but never enable the
+	// bridge by themselves; direct legacy Images clients keep normal passthrough.
+	bridgeGroup, bridgeLookupErr := h.gatewayService.IsCodexImageGenerationBridgeGroup(c.Request.Context(), apiKey.GroupID)
+	if bridgeLookupErr != nil {
+		reqLog.Warn("openai.images.codex_bridge_group_lookup_failed", zap.Error(bridgeLookupErr))
+		bridgeGroup = false
+	}
+	isOfficialCodex := openaiutil.IsCodexOfficialClientByHeaders(c.GetHeader("User-Agent"), c.GetHeader("originator"))
+	service.SetCodexImageResponseAdapterEnabled(c, bridgeGroup && isOfficialCodex)
 
 	if !service.GroupAllowsImageGeneration(apiKey.Group) {
 		h.errorResponse(c, http.StatusForbidden, "permission_error", service.ImageGenerationPermissionMessage())

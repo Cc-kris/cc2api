@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"io"
 	"mime/multipart"
@@ -11,6 +12,7 @@ import (
 	"net/textproto"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
@@ -679,6 +681,320 @@ func TestOpenAIGatewayServiceForwardImages_APIKeyGenerationUsesConfiguredV1BaseU
 	require.Equal(t, "gpt-image-2", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "aGVsbG8=", gjson.Get(rec.Body.String(), "data.0.b64_json").String())
+}
+
+func TestOpenAIGatewayServiceForwardImages_CodexNormalizesURLResponseToBase64(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-image-2","prompt":"draw a cat"}`)
+	imageBytes := []byte("\x89PNG\r\n\x1a\nimage-data")
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Codex Desktop/0.144.2")
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = req
+	SetCodexImageResponseAdapterEnabled(c, true)
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}, "X-Request-Id": []string{"req_url_image"}},
+		Body:       io.NopCloser(strings.NewReader(`{"data":[{"url":"https://cdn.example/image.png"}]}`)),
+	}}
+	downloadedURL := ""
+	svc := &OpenAIGatewayService{
+		cfg:          &config.Config{},
+		httpUpstream: upstream,
+		codexImageDownloader: func(_ context.Context, rawURL string) ([]byte, error) {
+			downloadedURL = rawURL
+			return imageBytes, nil
+		},
+	}
+	parsed, err := svc.ParseOpenAIImagesRequest(c, body)
+	require.NoError(t, err)
+	account := &Account{
+		ID: 6, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "test-api-key", "base_url": "https://image-upstream.example/v1"},
+	}
+
+	result, err := svc.ForwardImages(context.Background(), c, account, body, parsed, "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, result.ImageCount)
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, "https://cdn.example/image.png", downloadedURL)
+	require.Equal(t, base64.StdEncoding.EncodeToString(imageBytes), gjson.Get(rec.Body.String(), "data.0.b64_json").String())
+	require.False(t, gjson.Get(rec.Body.String(), "data.0.url").Exists())
+	require.True(t, gjson.Get(rec.Body.String(), "created").Int() > 0)
+}
+
+func TestOpenAIGatewayServiceForwardImages_CodexNormalizesRequestedMultipleImages(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-image-2","prompt":"draw two cats","n":2}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Codex Desktop/0.144.2")
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = req
+	SetCodexImageResponseAdapterEnabled(c, true)
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"data":[{"url":"https://cdn.example/one.png"},{"url":"https://cdn.example/two.png"}]}`)),
+	}}
+	downloaded := make([]string, 0, 2)
+	svc := &OpenAIGatewayService{
+		cfg:          &config.Config{},
+		httpUpstream: upstream,
+		codexImageDownloader: func(_ context.Context, rawURL string) ([]byte, error) {
+			downloaded = append(downloaded, rawURL)
+			return []byte("\x89PNG\r\n\x1a\n" + rawURL), nil
+		},
+	}
+	parsed, err := svc.ParseOpenAIImagesRequest(c, body)
+	require.NoError(t, err)
+	account := &Account{
+		ID: 6, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "test-api-key", "base_url": "https://image-upstream.example/v1"},
+	}
+
+	result, err := svc.ForwardImages(context.Background(), c, account, body, parsed, "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 2, result.ImageCount)
+	require.Equal(t, []string{"https://cdn.example/one.png", "https://cdn.example/two.png"}, downloaded)
+	require.Len(t, gjson.Get(rec.Body.String(), "data").Array(), 2)
+	require.NotEmpty(t, gjson.Get(rec.Body.String(), "data.0.b64_json").String())
+	require.NotEmpty(t, gjson.Get(rec.Body.String(), "data.1.b64_json").String())
+	require.False(t, gjson.Get(rec.Body.String(), "data.0.url").Exists())
+	require.False(t, gjson.Get(rec.Body.String(), "data.1.url").Exists())
+}
+
+func TestOpenAIGatewayServiceForwardImages_CodexNormalizesSingleImageEdit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-image-2","prompt":"make the cat blue","images":[{"image_url":"https://input.example/cat.png"}]}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/edits", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Codex Desktop/0.144.2")
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = req
+	SetCodexImageResponseAdapterEnabled(c, true)
+
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{},
+		httpUpstream: &httpUpstreamRecorder{resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"data":[{"url":"https://cdn.example/edited.png"}]}`)),
+		}},
+		codexImageDownloader: func(_ context.Context, rawURL string) ([]byte, error) {
+			require.Equal(t, "https://cdn.example/edited.png", rawURL)
+			return []byte("\x89PNG\r\n\x1a\nedited-image"), nil
+		},
+	}
+	parsed, err := svc.ParseOpenAIImagesRequest(c, body)
+	require.NoError(t, err)
+	require.True(t, parsed.IsEdits())
+	account := &Account{
+		ID: 6, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "test-api-key", "base_url": "https://image-upstream.example/v1"},
+	}
+
+	result, err := svc.ForwardImages(context.Background(), c, account, body, parsed, "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, result.ImageCount)
+	require.NotEmpty(t, gjson.Get(rec.Body.String(), "data.0.b64_json").String())
+	require.False(t, gjson.Get(rec.Body.String(), "data.0.url").Exists())
+	upstream := svc.httpUpstream.(*httpUpstreamRecorder)
+	require.Equal(t, "https://image-upstream.example/v1/images/edits", upstream.lastReq.URL.String())
+}
+
+func TestOpenAIGatewayServiceForwardImages_NonBridgeClientsKeepURLResponse(t *testing.T) {
+	for _, testCase := range []struct {
+		name      string
+		userAgent string
+	}{
+		{name: "ordinary client", userAgent: "curl/8.0"},
+		{name: "Codex headers alone", userAgent: "Codex Desktop/0.144.2"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			body := []byte(`{"model":"gpt-image-2","prompt":"draw a cat","response_format":"url"}`)
+			req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("User-Agent", testCase.userAgent)
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = req
+
+			upstream := &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"created":1710000007,"data":[{"url":"https://cdn.example/image.png"}]}`)),
+			}}
+			svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+			parsed, err := svc.ParseOpenAIImagesRequest(c, body)
+			require.NoError(t, err)
+			account := &Account{
+				ID: 6, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+				Credentials: map[string]any{"api_key": "test-api-key", "base_url": "https://image-upstream.example/v1"},
+			}
+
+			result, err := svc.ForwardImages(context.Background(), c, account, body, parsed, "")
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Len(t, upstream.requests, 1)
+			require.Equal(t, "https://cdn.example/image.png", gjson.Get(rec.Body.String(), "data.0.url").String())
+			require.False(t, gjson.Get(rec.Body.String(), "data.0.b64_json").Exists())
+		})
+	}
+}
+
+func TestOpenAIGatewayServiceForwardImages_CodexIncompatibleResponseStillReturnsBillableResult(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-image-2","prompt":"draw a cat"}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Codex Desktop/0.144.2")
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = req
+	SetCodexImageResponseAdapterEnabled(c, true)
+
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{},
+		httpUpstream: &httpUpstreamRecorder{resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}, "X-Request-Id": []string{"req_bad_image"}},
+			Body:       io.NopCloser(strings.NewReader(`{"data":[{"revised_prompt":"draw a cat"}]}`)),
+		}},
+	}
+	parsed, err := svc.ParseOpenAIImagesRequest(c, body)
+	require.NoError(t, err)
+	account := &Account{
+		ID: 6, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "test-api-key", "base_url": "https://image-upstream.example/v1"},
+	}
+
+	result, err := svc.ForwardImages(context.Background(), c, account, body, parsed, "")
+	require.Error(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, result.ImageCount)
+	require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+	require.Equal(t, "image_response_incompatible", gjson.Get(rec.Body.String(), "error.type").String())
+}
+
+func TestCodexImageDownloadSecurityPolicy(t *testing.T) {
+	for _, rawURL := range []string{
+		"http://example.com/image.png",
+		"https://localhost/image.png",
+		"https://127.0.0.1/image.png",
+		"https://169.254.169.254/latest/meta-data",
+		"https://[::1]/image.png",
+		"https://user:pass@example.com/image.png",
+	} {
+		t.Run(rawURL, func(t *testing.T) {
+			_, err := validateCodexImageDownloadURL(context.Background(), rawURL)
+			require.Error(t, err)
+		})
+	}
+
+	redirect := httptest.NewRequest(http.MethodGet, "https://127.0.0.1/private.png", nil)
+	require.Error(t, checkCodexImageDownloadRedirect(redirect, []*http.Request{
+		httptest.NewRequest(http.MethodGet, "https://public.example/image.png", nil),
+	}))
+	require.Equal(t, codexImageDownloadTimeout, newCodexImageDownloadHTTPClient().Timeout)
+}
+
+func TestNormalizeCodexImagesResponse_EnforcesCountAndSizeLimits(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	multiple := []byte(`{"data":[{"b64_json":"aGVsbG8="},{"b64_json":"aGVsbG8="}]}`)
+	normalized, err := svc.normalizeCodexImagesResponse(context.Background(), multiple, 2)
+	require.NoError(t, err)
+	require.Len(t, gjson.GetBytes(normalized, "data").Array(), 2)
+	_, err = svc.normalizeCodexImagesResponse(context.Background(), multiple, 1)
+	require.ErrorContains(t, err, "expected at most 1")
+
+	svc.codexImageDownloader = func(context.Context, string) ([]byte, error) {
+		return make([]byte, openAIImageMaxDownloadBytes+1), nil
+	}
+	_, err = svc.normalizeCodexImagesResponse(context.Background(), []byte(`{"data":[{"url":"https://cdn.example/image.png"}]}`), 1)
+	require.ErrorContains(t, err, "invalid size")
+
+	_, err = svc.normalizeCodexImagesResponse(context.Background(), make([]byte, codexImageMaxResponseJSONBytes+1), 1)
+	require.ErrorContains(t, err, "exceeds")
+}
+
+func TestNormalizeCodexImagesResponse_AppliesAggregateDeadline(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	svc.codexImageDownloader = func(ctx context.Context, _ string) ([]byte, error) {
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok)
+		require.LessOrEqual(t, time.Until(deadline), codexImageNormalizeTimeout)
+		return []byte("\x89PNG\r\n\x1a\nimage-data"), nil
+	}
+
+	_, err := svc.normalizeCodexImagesResponse(context.Background(), []byte(`{"data":[{"url":"https://cdn.example/image.png"}]}`), 1)
+	require.NoError(t, err)
+}
+
+func TestNormalizeCodexImagesResponse_HonorsCallerTimeout(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	svc.codexImageDownloader = func(ctx context.Context, _ string) ([]byte, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+
+	startedAt := time.Now()
+	_, err := svc.normalizeCodexImagesResponse(ctx, []byte(`{"data":[{"url":"https://cdn.example/image.png"}]}`), 1)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.Less(t, time.Since(startedAt), time.Second)
+}
+
+func TestOpenAIGatewayServiceForwardImages_5xxReturnsFailoverWithoutSameAccountRetry(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"gpt-image-2","prompt":"draw a cat"}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = req
+
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{},
+		httpUpstream: &httpUpstreamRecorder{resp: &http.Response{
+			StatusCode: http.StatusBadGateway,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"bad gateway"}}`)),
+		}},
+	}
+	parsed, err := svc.ParseOpenAIImagesRequest(c, body)
+	require.NoError(t, err)
+	account := &Account{
+		ID: 6, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "test-api-key", "base_url": "https://image-upstream.example/v1"},
+	}
+
+	result, err := svc.ForwardImages(context.Background(), c, account, body, parsed, "")
+	require.Nil(t, result)
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, err, &failoverErr)
+	require.False(t, failoverErr.RetryableOnSameAccount)
+}
+
+func TestOpenAIImageSameAccountRetryableStatus(t *testing.T) {
+	for _, status := range []int{400, 401, 403, 429} {
+		require.True(t, isOpenAIImageSameAccountRetryableStatus(status), "status %d should retain pool retry", status)
+	}
+	for _, status := range []int{500, 502, 503, 504, 529} {
+		require.False(t, isOpenAIImageSameAccountRetryableStatus(status), "status %d must skip same-account replay", status)
+	}
 }
 
 func TestOpenAIGatewayServiceForwardImages_APIKeyStreamJSONResponseBillsImage(t *testing.T) {

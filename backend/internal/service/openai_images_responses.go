@@ -1192,7 +1192,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 			return nil, &UpstreamFailoverError{
 				StatusCode:             resp.StatusCode,
 				ResponseBody:           respBody,
-				RetryableOnSameAccount: isPoolModeRetryableStatus(resp.StatusCode),
+				RetryableOnSameAccount: isOpenAIImageSameAccountRetryableStatus(resp.StatusCode),
 			}
 		}
 		return s.handleErrorResponse(upstreamCtx, resp, c, account, responsesBody)

@@ -468,6 +468,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		forwardBody := body
 		useCodexImageExtension := codexImageExtensionCandidate
 		c.Set(service.OpenAICodexImageGenerationExtensionContextKey, useCodexImageExtension)
+		c.Set(service.OpenAICodexImageGenerationToolCalledContextKey, false)
 		if codexDecision.Execution != service.CodexImageExecutionOrdinary {
 			preparedBody, prepareErr := service.PrepareCodexImageRouteRequest(body, reqModel, channelMapping.MappedModel, codexDecision)
 			if prepareErr != nil {
@@ -1916,6 +1917,7 @@ func (h *OpenAIGatewayHandler) tryFallbackOpenAIWebSocketIngressToHTTP(
 		}
 		fallbackCtx.Set(key, value)
 	}
+	fallbackCtx.Set(service.OpenAICodexImageGenerationToolCalledContextKey, false)
 	setOpenAIClientTransportHTTP(fallbackCtx)
 	result, err := h.gatewayService.Forward(fallbackCtx.Request.Context(), fallbackCtx, account, forwardBody)
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 )
 
@@ -20,6 +21,11 @@ const (
 	// orchestrator actually selected imagegen. Intent-aware image channels use
 	// this to distinguish an internal image dispatch from an ordinary text turn.
 	OpenAICodexImageGenerationToolCalledContextKey = "openai_codex_image_generation_tool_called"
+	// OpenAICodexImageResponseAdapterContextKey marks legacy Images requests
+	// that came through a channel-managed Codex image bridge. Codex headers
+	// alone are not sufficient: ordinary Images API traffic must keep the
+	// provider response unchanged even when it uses a Codex user agent.
+	OpenAICodexImageResponseAdapterContextKey = "openai_codex_image_response_adapter"
 	// OpenAICodexSystemBackgroundContextKey marks a non-billable Codex title or
 	// description helper routed through the internal text orchestrator.
 	OpenAICodexSystemBackgroundContextKey = "openai_codex_system_background"
@@ -344,7 +350,12 @@ func IsCodexImageGenerationExtensionContinuation(body []byte) bool {
 	lastUserMessage := -1
 	lastImageToolItem := -1
 	imageCallIDs := make(map[string]struct{})
-	imageOutputIDs := make(map[string]int)
+	type imageOutputSignal struct {
+		index           int
+		hasImage        bool
+		hasKnownFailure bool
+	}
+	imageOutputIDs := make(map[string]imageOutputSignal)
 	index := 0
 	input.ForEach(func(_, item gjson.Result) bool {
 		itemIndex := index
@@ -363,29 +374,47 @@ func IsCodexImageGenerationExtensionContinuation(body []byte) bool {
 		if strings.TrimSpace(item.Get("type").String()) == "function_call_output" {
 			callID := strings.TrimSpace(item.Get("call_id").String())
 			output := item.Get("output")
+			signal := imageOutputSignal{
+				index:           itemIndex,
+				hasKnownFailure: isCodexImageGenerationFailureOutput(output),
+			}
 			if output.IsArray() {
 				output.ForEach(func(_, part gjson.Result) bool {
 					if strings.TrimSpace(part.Get("type").String()) == "input_image" &&
 						strings.TrimSpace(part.Get("image_url").String()) != "" {
-						imageOutputIDs[callID] = itemIndex
+						signal.hasImage = true
 						return false
 					}
 					return true
 				})
 			}
+			if callID != "" {
+				imageOutputIDs[callID] = signal
+			}
 		}
 		return true
 	})
-	for callID, outputIndex := range imageOutputIDs {
+	for callID, signal := range imageOutputIDs {
 		_, matchedCall := imageCallIDs[callID]
 		// Responses continuation requests may reference the prior function call
-		// only through previous_response_id. When calls are replayed in input,
-		// require an exact call_id match; otherwise require a non-empty call_id.
-		if callID != "" && (len(imageCallIDs) == 0 || matchedCall) && outputIndex > lastImageToolItem {
-			lastImageToolItem = outputIndex
+		// only through previous_response_id. Without a replayed call, require a
+		// successful input_image or the official image-extension failure prefix;
+		// an arbitrary tool output is not sufficient evidence of an image turn.
+		isImageOutput := matchedCall || (len(imageCallIDs) == 0 && (signal.hasImage || signal.hasKnownFailure))
+		if callID != "" && isImageOutput && signal.index > lastImageToolItem {
+			lastImageToolItem = signal.index
 		}
 	}
 	return lastImageToolItem >= 0 && lastImageToolItem > lastUserMessage
+}
+
+func isCodexImageGenerationFailureOutput(output gjson.Result) bool {
+	if output.Type != gjson.String {
+		return false
+	}
+	message := strings.ToLower(strings.TrimSpace(output.String()))
+	return strings.HasPrefix(message, "image generation failed:") ||
+		strings.HasPrefix(message, "image generation returned no image data")
 }
 
 // ShouldUseCodexImageGenerationExtension preserves a channel's text-to-image
@@ -516,16 +545,23 @@ Guidelines:
 		},
 	})
 
-	// The model-facing contract is always the public Responses function-tool
-	// shape. Codex Desktop may omit its local image_gen namespace or older
-	// clients may carry it in a private additional_tools item; neither changes
-	// what the upstream orchestration model receives.
-	reqBody["tools"] = flattenedTools
 	if additionalToolsIndex >= 0 && additionalToolsIndex < len(input) {
 		input = append(input[:additionalToolsIndex], input[additionalToolsIndex+1:]...)
 		reqBody["input"] = input
 	}
-	if !continuation {
+	if continuation {
+		// The local image tool has already completed (successfully or with an
+		// error). Do not expose imagegen again on the follow-up turn: the Codex
+		// model provider retries transport failures itself, while another model
+		// tool call would create a second billable image request.
+		delete(reqBody, "tools")
+		delete(reqBody, "tool_choice")
+	} else {
+		// The model-facing contract is always the public Responses function-tool
+		// shape. Codex Desktop may omit its local image_gen namespace or older
+		// clients may carry it in a private additional_tools item; neither changes
+		// what the upstream orchestration model receives.
+		reqBody["tools"] = flattenedTools
 		instructions := strings.TrimSpace(firstNonEmptyString(reqBody["instructions"]))
 		if !strings.Contains(instructions, directive) {
 			if instructions == "" {
@@ -535,8 +571,6 @@ Guidelines:
 			}
 		}
 		reqBody["tool_choice"] = "auto"
-	} else if codexImageToolChoiceSelected(reqBody["tool_choice"]) {
-		delete(reqBody, "tool_choice")
 	}
 	updated, err := json.Marshal(reqBody)
 	if err != nil {
@@ -591,6 +625,30 @@ func ImageGenerationPermissionMessage() string {
 // GroupAllowsImageGeneration preserves ungrouped-key behavior and enforces the flag when a group is present.
 func GroupAllowsImageGeneration(group *Group) bool {
 	return group == nil || group.AllowImageGeneration
+}
+
+// SetCodexImageResponseAdapterEnabled binds the final response-adapter decision
+// to the current request. The caller must already have verified both the
+// channel-owned bridge switch and the official Codex client identity.
+func SetCodexImageResponseAdapterEnabled(c *gin.Context, enabled bool) {
+	if c == nil {
+		return
+	}
+	c.Set(OpenAICodexImageResponseAdapterContextKey, enabled)
+}
+
+// CodexImageResponseAdapterEnabled reports whether the current request may use
+// the strict Codex Images response adapter.
+func CodexImageResponseAdapterEnabled(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	value, exists := c.Get(OpenAICodexImageResponseAdapterContextKey)
+	if !exists {
+		return false
+	}
+	enabled, _ := value.(bool)
+	return enabled
 }
 
 // IsImageGenerationIntent classifies requests that can produce generated images.

@@ -19,6 +19,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/Wei-Shaw/sub2api/internal/repository"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -993,7 +994,8 @@ func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *tes
 			return
 		}
 		if gjson.GetBytes(payload, "tools.0.name").String() == "imagegen" {
-			if strings.Contains(string(payload), "explain image APIs without generating") {
+			if strings.Contains(string(payload), "explain image APIs without generating") ||
+				strings.Contains(string(payload), "nonstream text request") {
 				_, _ = io.WriteString(w, "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_text_e2e\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"text-only answer\"}]}}\n\n"+
 					"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_text_e2e\",\"model\":\"gpt-5.4\",\"output\":[{\"id\":\"msg_text_e2e\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"text-only answer\"}]}],\"usage\":{\"input_tokens\":3,\"output_tokens\":2}}}\n\n")
 				return
@@ -1164,6 +1166,39 @@ func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *tes
 	require.Equal(t, string(service.BillingModeToken), *textUsage.BillingMode)
 	require.Nil(t, textUsage.ChannelID)
 	require.Nil(t, textUsage.ModelMappingChain)
+
+	// The stream=false path aggregates upstream SSE into one JSON response. It
+	// must make the same intent and billing decision as the streaming path.
+	nonStreamTextBody := []byte(`{"model":"gpt-5.6-terra","stream":false,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":"nonstream text request","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}]}`)
+	nonStreamTextReq := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(nonStreamTextBody))
+	nonStreamTextReq.Header.Set("Content-Type", "application/json")
+	nonStreamTextRecorder := httptest.NewRecorder()
+	router.ServeHTTP(nonStreamTextRecorder, nonStreamTextReq)
+	require.Equal(t, http.StatusOK, nonStreamTextRecorder.Code)
+	require.Contains(t, nonStreamTextRecorder.Body.String(), "text-only answer")
+	require.NotContains(t, nonStreamTextRecorder.Body.String(), `"name":"imagegen"`)
+	nonStreamTextForwarded := <-upstreamPayload
+	require.False(t, gjson.GetBytes(nonStreamTextForwarded, "stream").Bool())
+	nonStreamTextUsage := <-usageRepo.created
+	require.Zero(t, nonStreamTextUsage.ImageCount)
+	require.NotNil(t, nonStreamTextUsage.BillingMode)
+	require.Equal(t, string(service.BillingModeToken), *nonStreamTextUsage.BillingMode)
+	require.Nil(t, nonStreamTextUsage.ChannelID)
+
+	nonStreamImageBody := []byte(`{"model":"gpt-5.6-terra","stream":false,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":"generate a nonstream blue circle","tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]}]}`)
+	nonStreamImageReq := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(nonStreamImageBody))
+	nonStreamImageReq.Header.Set("Content-Type", "application/json")
+	nonStreamImageRecorder := httptest.NewRecorder()
+	router.ServeHTTP(nonStreamImageRecorder, nonStreamImageReq)
+	require.Equal(t, http.StatusOK, nonStreamImageRecorder.Code)
+	require.Equal(t, "image_gen", gjson.GetBytes(nonStreamImageRecorder.Body.Bytes(), "output.0.namespace").String())
+	require.Equal(t, "imagegen", gjson.GetBytes(nonStreamImageRecorder.Body.Bytes(), "output.0.name").String())
+	_ = <-upstreamPayload
+	select {
+	case unexpectedUsage := <-usageRepo.created:
+		require.Fail(t, "nonstream imagegen orchestration must not create token usage", "usage=%+v", unexpectedUsage)
+	case <-time.After(100 * time.Millisecond):
+	}
 
 	// Background/prewarm turns still use their original text model after the
 	// client has fallen back to HTTP; they must not be converted into image work.
@@ -1616,6 +1651,211 @@ func TestOpenAIResponsesWebSocket_SilentRetrySwitchesAccountBeforeDownstream(t *
 	case extra := <-usageRepo.created:
 		t.Fatalf("unexpected duplicate usage log: %+v", extra)
 	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestOpenAIImages_5xxSkipsSameAccountReplayAndFailsOver(t *testing.T) {
+	var failedHits int32
+	failedUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&failedHits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = io.WriteString(w, `{"error":{"message":"synthetic bad gateway"}}`)
+	}))
+	defer failedUpstream.Close()
+
+	var successHits int32
+	successUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&successHits, 1)
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Request-Id", "req_second_image_account")
+		_, _ = io.WriteString(w, `{"created":1710000000,"data":[{"b64_json":"aW1hZ2U="}]}`)
+	}))
+	defer successUpstream.Close()
+
+	accounts := []service.Account{
+		{
+			ID: 9401, Name: "image-first-502", Platform: service.PlatformOpenAI,
+			Type: service.AccountTypeAPIKey, Status: service.StatusActive, Schedulable: true, Concurrency: 1, Priority: 0,
+			Credentials: map[string]any{
+				"api_key": "sk-first", "base_url": failedUpstream.URL + "/v1",
+				"model_mapping": map[string]any{"gpt-image-2": "gpt-image-2"},
+			},
+		},
+		{
+			ID: 9402, Name: "image-second-success", Platform: service.PlatformOpenAI,
+			Type: service.AccountTypeAPIKey, Status: service.StatusActive, Schedulable: true, Concurrency: 1, Priority: 1,
+			Credentials: map[string]any{
+				"api_key": "sk-second", "base_url": successUpstream.URL + "/v1",
+				"model_mapping": map[string]any{"gpt-image-2": "gpt-image-2"},
+			},
+		},
+	}
+
+	cfg := &config.Config{}
+	cfg.RunMode = config.RunModeSimple
+	cfg.Default.RateMultiplier = 1
+	cfg.Security.URLAllowlist.Enabled = false
+	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
+	cfg.Gateway.MaxAccountSwitches = 2
+	usageRepo := &openAIWSUsageHandlerUsageLogRepoStub{created: make(chan *service.UsageLog, 1)}
+	billingCacheSvc := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
+	gatewaySvc := service.NewOpenAIGatewayService(
+		&openAIWSSilentRetryAccountRepoStub{accounts: accounts}, usageRepo,
+		nil, nil, nil, nil, nil, cfg, nil, nil,
+		service.NewBillingService(cfg, nil), nil, billingCacheSvc, repository.NewHTTPUpstream(cfg),
+		&service.DeferredService{}, nil, nil, nil, nil, nil, nil, nil,
+	)
+	cache := &concurrencyCacheMock{
+		acquireUserSlotFn:    func(context.Context, int64, int, string) (bool, error) { return true, nil },
+		acquireAccountSlotFn: func(context.Context, int64, int, string) (bool, error) { return true, nil },
+	}
+	h := NewOpenAIGatewayHandler(
+		gatewaySvc,
+		service.NewConcurrencyService(cache),
+		billingCacheSvc,
+		&service.APIKeyService{},
+		nil, nil, nil, cfg,
+	)
+
+	groupID := int64(4401)
+	apiKey := &service.APIKey{
+		ID: 2001, GroupID: &groupID,
+		Group: &service.Group{ID: groupID, Platform: service.PlatformOpenAI, Status: service.StatusActive, AllowImageGeneration: true},
+		User:  &service.User{ID: 2002, Status: service.StatusActive},
+	}
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyAPIKey), apiKey)
+		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: apiKey.User.ID, Concurrency: 1})
+		c.Next()
+	})
+	router.POST("/v1/images/generations", h.Images)
+
+	body := []byte(`{"model":"gpt-image-2","prompt":"draw a cat","response_format":"b64_json"}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "aW1hZ2U=", gjson.Get(recorder.Body.String(), "data.0.b64_json").String())
+	require.Equal(t, int32(1), atomic.LoadInt32(&failedHits), "502 账号不得同账号重放")
+	require.Equal(t, int32(1), atomic.LoadInt32(&successHits), "必须切换到第二个图片账号")
+	select {
+	case usageLog := <-usageRepo.created:
+		require.Equal(t, int64(9402), usageLog.AccountID)
+		require.Equal(t, 1, usageLog.ImageCount)
+	case <-time.After(3 * time.Second):
+		t.Fatal("等待图片故障切换 usage log 超时")
+	}
+}
+
+type openAIImagesOAuthFailoverUpstream struct {
+	failedAccountID  int64
+	successAccountID int64
+	failedHits       atomic.Int32
+	successHits      atomic.Int32
+}
+
+func (u *openAIImagesOAuthFailoverUpstream) Do(_ *http.Request, _ string, accountID int64, _ int) (*http.Response, error) {
+	switch accountID {
+	case u.failedAccountID:
+		u.failedHits.Add(1)
+		return &http.Response{
+			StatusCode: http.StatusBadGateway,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"synthetic bad gateway"}}`)),
+		}, nil
+	case u.successAccountID:
+		u.successHits.Add(1)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{
+				"Content-Type": []string{"text/event-stream"},
+				"X-Request-Id": []string{"req_second_oauth_image_account"},
+			},
+			Body: io.NopCloser(strings.NewReader("data: {\"type\":\"response.completed\",\"response\":{\"created_at\":1710000000,\"usage\":{\"input_tokens\":2,\"output_tokens\":1},\"tool_usage\":{\"image_gen\":{\"images\":1}},\"output\":[{\"type\":\"image_generation_call\",\"result\":\"aW1hZ2U=\",\"output_format\":\"png\",\"size\":\"1024x1024\"}]}}\n\ndata: [DONE]\n\n")),
+		}, nil
+	default:
+		return nil, errors.New("unexpected image OAuth account")
+	}
+}
+
+func (u *openAIImagesOAuthFailoverUpstream) DoWithTLS(req *http.Request, proxyURL string, accountID int64, accountConcurrency int, _ *tlsfingerprint.Profile) (*http.Response, error) {
+	return u.Do(req, proxyURL, accountID, accountConcurrency)
+}
+
+func TestOpenAIImages_OAuth5xxSkipsSameAccountReplayAndFailsOver(t *testing.T) {
+	const failedAccountID int64 = 9451
+	const successAccountID int64 = 9452
+	upstream := &openAIImagesOAuthFailoverUpstream{
+		failedAccountID:  failedAccountID,
+		successAccountID: successAccountID,
+	}
+	accounts := []service.Account{
+		{
+			ID: failedAccountID, Name: "image-oauth-first-502", Platform: service.PlatformOpenAI,
+			Type: service.AccountTypeOAuth, Status: service.StatusActive, Schedulable: true, Concurrency: 1, Priority: 0,
+			Credentials: map[string]any{"access_token": "token-first", "chatgpt_account_id": "acct-first"},
+		},
+		{
+			ID: successAccountID, Name: "image-oauth-second-success", Platform: service.PlatformOpenAI,
+			Type: service.AccountTypeOAuth, Status: service.StatusActive, Schedulable: true, Concurrency: 1, Priority: 1,
+			Credentials: map[string]any{"access_token": "token-second", "chatgpt_account_id": "acct-second"},
+		},
+	}
+
+	cfg := &config.Config{}
+	cfg.RunMode = config.RunModeSimple
+	cfg.Default.RateMultiplier = 1
+	cfg.Gateway.MaxAccountSwitches = 2
+	usageRepo := &openAIWSUsageHandlerUsageLogRepoStub{created: make(chan *service.UsageLog, 1)}
+	billingCacheSvc := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
+	gatewaySvc := service.NewOpenAIGatewayService(
+		&openAIWSSilentRetryAccountRepoStub{accounts: accounts}, usageRepo,
+		nil, nil, nil, nil, nil, cfg, nil, nil,
+		service.NewBillingService(cfg, nil), nil, billingCacheSvc, upstream,
+		&service.DeferredService{}, nil, nil, nil, nil, nil, nil, nil,
+	)
+	cache := &concurrencyCacheMock{
+		acquireUserSlotFn:    func(context.Context, int64, int, string) (bool, error) { return true, nil },
+		acquireAccountSlotFn: func(context.Context, int64, int, string) (bool, error) { return true, nil },
+	}
+	h := NewOpenAIGatewayHandler(
+		gatewaySvc, service.NewConcurrencyService(cache), billingCacheSvc,
+		&service.APIKeyService{}, nil, nil, nil, cfg,
+	)
+
+	groupID := int64(4451)
+	apiKey := &service.APIKey{
+		ID: 2051, GroupID: &groupID,
+		Group: &service.Group{ID: groupID, Platform: service.PlatformOpenAI, Status: service.StatusActive, AllowImageGeneration: true},
+		User:  &service.User{ID: 2052, Status: service.StatusActive},
+	}
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyAPIKey), apiKey)
+		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: apiKey.User.ID, Concurrency: 1})
+		c.Next()
+	})
+	router.POST("/v1/images/generations", h.Images)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewReader([]byte(`{"model":"gpt-image-2","prompt":"draw a cat","response_format":"b64_json"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "aW1hZ2U=", gjson.Get(recorder.Body.String(), "data.0.b64_json").String())
+	require.Equal(t, int32(1), upstream.failedHits.Load(), "OAuth 502 账号不得同账号重放")
+	require.Equal(t, int32(1), upstream.successHits.Load(), "OAuth 必须切换到第二个图片账号")
+	select {
+	case usageLog := <-usageRepo.created:
+		require.Equal(t, successAccountID, usageLog.AccountID)
+		require.Equal(t, 1, usageLog.ImageCount)
+	case <-time.After(3 * time.Second):
+		t.Fatal("等待 OAuth 图片故障切换 usage log 超时")
 	}
 }
 

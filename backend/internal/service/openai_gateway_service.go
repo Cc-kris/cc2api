@@ -354,6 +354,7 @@ type OpenAIGatewayService struct {
 	billingCacheService   *BillingCacheService
 	userGroupRateResolver *userGroupRateResolver
 	httpUpstream          HTTPUpstream
+	codexImageDownloader  func(context.Context, string) ([]byte, error)
 	deferredService       *DeferredService
 	openAITokenProvider   *OpenAITokenProvider
 	toolCorrector         *CodexToolCorrector
