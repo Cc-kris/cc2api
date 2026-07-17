@@ -982,7 +982,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesNonStreamingResponse(
 	}
 	if isCodexClient && len(body) > codexImageMaxResponseJSONBytes {
 		s.writeCodexImageIncompatibleResponse(c, resp)
-		return OpenAIUsage{}, 0, nil, fmt.Errorf("Codex image response exceeds %d bytes", codexImageMaxResponseJSONBytes)
+		return OpenAIUsage{}, 0, nil, fmt.Errorf("codex image response exceeds %d bytes", codexImageMaxResponseJSONBytes)
 	}
 	usage, _ := extractOpenAIUsageFromJSONBytes(body)
 	imageCount := extractOpenAIImageCountFromJSONBytes(body)
@@ -1039,7 +1039,7 @@ func (s *OpenAIGatewayService) normalizeCodexImagesResponse(
 	defer cancel()
 
 	if len(body) > codexImageMaxResponseJSONBytes {
-		return nil, fmt.Errorf("Codex image response exceeds %d bytes", codexImageMaxResponseJSONBytes)
+		return nil, fmt.Errorf("codex image response exceeds %d bytes", codexImageMaxResponseJSONBytes)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
@@ -1047,10 +1047,10 @@ func (s *OpenAIGatewayService) normalizeCodexImagesResponse(
 	}
 	data, ok := payload["data"].([]any)
 	if !ok || len(data) == 0 {
-		return nil, fmt.Errorf("Codex image response contains no data items")
+		return nil, fmt.Errorf("codex image response contains no data items")
 	}
 	if expectedImageCount > 0 && len(data) > expectedImageCount {
-		return nil, fmt.Errorf("Codex image response contains %d items; request expected at most %d", len(data), expectedImageCount)
+		return nil, fmt.Errorf("codex image response contains %d items; request expected at most %d", len(data), expectedImageCount)
 	}
 	if _, ok := payload["created"]; !ok {
 		payload["created"] = time.Now().Unix()
@@ -1061,7 +1061,7 @@ func (s *OpenAIGatewayService) normalizeCodexImagesResponse(
 	for index, raw := range data {
 		item, ok := raw.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("Codex image response data item %d is invalid", index)
+			return nil, fmt.Errorf("codex image response data item %d is invalid", index)
 		}
 		if encoded := normalizeOpenAIImageBase64(firstNonEmptyString(
 			item["b64_json"],
@@ -1076,11 +1076,11 @@ func (s *OpenAIGatewayService) normalizeCodexImagesResponse(
 			encoded = normalizedEncoded
 			imageBytes := base64.StdEncoding.DecodedLen(len(encoded))
 			if imageBytes > openAIImageMaxDownloadBytes {
-				return nil, fmt.Errorf("Codex image response data item %d exceeds %d bytes", index, openAIImageMaxDownloadBytes)
+				return nil, fmt.Errorf("codex image response data item %d exceeds %d bytes", index, openAIImageMaxDownloadBytes)
 			}
 			totalImageBytes += imageBytes
 			if totalImageBytes > codexImageMaxTotalBytes {
-				return nil, fmt.Errorf("Codex image response exceeds total image size %d", codexImageMaxTotalBytes)
+				return nil, fmt.Errorf("codex image response exceeds total image size %d", codexImageMaxTotalBytes)
 			}
 			setCodexImageResponseBase64(item, encoded)
 			if actualSize != "" {
@@ -1092,7 +1092,7 @@ func (s *OpenAIGatewayService) normalizeCodexImagesResponse(
 
 		imageURL := strings.TrimSpace(firstNonEmptyString(item["url"], item["image_url"]))
 		if imageURL == "" {
-			return nil, fmt.Errorf("Codex image response data item %d has no image bytes or URL", index)
+			return nil, fmt.Errorf("codex image response data item %d has no image bytes or URL", index)
 		}
 		if strings.HasPrefix(strings.ToLower(imageURL), "data:") {
 			if encoded := normalizeOpenAIImageBase64(imageURL); encoded != "" {
@@ -1103,11 +1103,11 @@ func (s *OpenAIGatewayService) normalizeCodexImagesResponse(
 				encoded = normalizedEncoded
 				imageBytes := base64.StdEncoding.DecodedLen(len(encoded))
 				if imageBytes > openAIImageMaxDownloadBytes {
-					return nil, fmt.Errorf("Codex image response data item %d exceeds %d bytes", index, openAIImageMaxDownloadBytes)
+					return nil, fmt.Errorf("codex image response data item %d exceeds %d bytes", index, openAIImageMaxDownloadBytes)
 				}
 				totalImageBytes += imageBytes
 				if totalImageBytes > codexImageMaxTotalBytes {
-					return nil, fmt.Errorf("Codex image response exceeds total image size %d", codexImageMaxTotalBytes)
+					return nil, fmt.Errorf("codex image response exceeds total image size %d", codexImageMaxTotalBytes)
 				}
 				setCodexImageResponseBase64(item, encoded)
 				if actualSize != "" {
@@ -1116,11 +1116,11 @@ func (s *OpenAIGatewayService) normalizeCodexImagesResponse(
 				}
 				continue
 			}
-			return nil, fmt.Errorf("Codex image response data item %d has invalid data URL", index)
+			return nil, fmt.Errorf("codex image response data item %d has invalid data URL", index)
 		}
 		urlDownloads++
 		if urlDownloads > codexImageMaxURLDownloads {
-			return nil, fmt.Errorf("Codex image response contains more than %d downloadable URLs", codexImageMaxURLDownloads)
+			return nil, fmt.Errorf("codex image response contains more than %d downloadable URLs", codexImageMaxURLDownloads)
 		}
 
 		download := s.downloadCodexImageResponseURL
@@ -1132,7 +1132,7 @@ func (s *OpenAIGatewayService) normalizeCodexImagesResponse(
 			return nil, fmt.Errorf("download Codex image response data item %d: %w", index, err)
 		}
 		if len(imageBytes) == 0 || len(imageBytes) > openAIImageMaxDownloadBytes {
-			return nil, fmt.Errorf("Codex image response data item %d has invalid size %d", index, len(imageBytes))
+			return nil, fmt.Errorf("codex image response data item %d has invalid size %d", index, len(imageBytes))
 		}
 		imageBytes, actualSize, err := normalizeCodexImageOutputBytes(imageBytes, targetSize)
 		if err != nil {
@@ -1140,7 +1140,7 @@ func (s *OpenAIGatewayService) normalizeCodexImagesResponse(
 		}
 		totalImageBytes += len(imageBytes)
 		if totalImageBytes > codexImageMaxTotalBytes {
-			return nil, fmt.Errorf("Codex image response exceeds total image size %d", codexImageMaxTotalBytes)
+			return nil, fmt.Errorf("codex image response exceeds total image size %d", codexImageMaxTotalBytes)
 		}
 		setCodexImageResponseBase64(item, base64.StdEncoding.EncodeToString(imageBytes))
 		if actualSize != "" {

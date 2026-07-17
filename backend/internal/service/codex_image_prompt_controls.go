@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"image"
-	_ "image/jpeg"
+	"image/jpeg"
 	"image/png"
 	"regexp"
 	"sort"
@@ -17,7 +17,6 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 	xdraw "golang.org/x/image/draw"
-	_ "golang.org/x/image/webp"
 )
 
 const (
@@ -146,7 +145,7 @@ func validateUnsupportedCodexPromptControls(prompt string, body []byte) error {
 	if explicitSize != "" && !strings.EqualFold(explicitSize, "auto") {
 		width, height, ok := parseCodexPromptSize(explicitSize)
 		if !ok {
-			return fmt.Errorf("Codex Desktop image size must use WIDTHxHEIGHT or auto")
+			return fmt.Errorf("the Codex Desktop image size must use WIDTHxHEIGHT or auto")
 		}
 		if err := validateCodexPromptDimensions(width, height); err != nil {
 			return err
@@ -158,20 +157,20 @@ func validateUnsupportedCodexPromptControls(prompt string, body []byte) error {
 		explicitFormat = "jpeg"
 	}
 	if explicitFormat != "" && explicitFormat != "png" {
-		return fmt.Errorf("Codex Desktop only saves generated artifacts as PNG; requested output format %s is not supported by the stock client", explicitFormat)
+		return fmt.Errorf("the Codex Desktop client only saves generated artifacts as PNG; requested output format %s is not supported", explicitFormat)
 	}
 	if !outputFormatResult.Exists() || explicitFormat == "" {
 		formats := uniqueCodexPromptFormats(prompt)
 		if len(formats) > 1 {
-			return fmt.Errorf("Codex image prompt contains conflicting output formats: %s", strings.Join(formats, ", "))
+			return fmt.Errorf("the Codex image prompt contains conflicting output formats: %s", strings.Join(formats, ", "))
 		}
 		if len(formats) == 1 && formats[0] != "png" {
-			return fmt.Errorf("Codex Desktop only saves generated artifacts as PNG; requested output format %s is not supported by the stock client", formats[0])
+			return fmt.Errorf("the Codex Desktop client only saves generated artifacts as PNG; requested output format %s is not supported", formats[0])
 		}
 	}
 
 	if explicitCount := int(gjson.GetBytes(body, "n").Int()); explicitCount > 1 {
-		return fmt.Errorf("Codex Desktop consumes one image per imagegen call; requesting %d images in one call would create unused billable outputs", explicitCount)
+		return fmt.Errorf("the Codex Desktop client consumes one image per imagegen call; requesting %d images in one call would create unused billable outputs", explicitCount)
 	}
 	if !gjson.GetBytes(body, "n").Exists() {
 		count, err := inferCodexPromptOutputCount(prompt)
@@ -179,21 +178,21 @@ func validateUnsupportedCodexPromptControls(prompt string, body []byte) error {
 			return err
 		}
 		if count > 1 {
-			return fmt.Errorf("Codex Desktop consumes one image per imagegen call; requesting %d images in one call would create unused billable outputs", count)
+			return fmt.Errorf("the Codex Desktop client consumes one image per imagegen call; requesting %d images in one call would create unused billable outputs", count)
 		}
 	}
 
 	if gjson.GetBytes(body, "output_compression").Exists() || codexImageCompression.MatchString(prompt) {
-		return fmt.Errorf("Codex Desktop PNG artifacts do not support requested output compression")
+		return fmt.Errorf("the Codex Desktop PNG artifact does not support requested output compression")
 	}
 	if codexImageDPI.MatchString(prompt) {
-		return fmt.Errorf("Codex Desktop image bridge cannot apply requested DPI metadata")
+		return fmt.Errorf("the Codex Desktop image bridge cannot apply requested DPI metadata")
 	}
 	if codexImageColorSpace.MatchString(prompt) {
-		return fmt.Errorf("Codex Desktop image bridge cannot apply requested color-space conversion")
+		return fmt.Errorf("the Codex Desktop image bridge cannot apply requested color-space conversion")
 	}
 	if codexImageTargetFileSize.MatchString(prompt) {
-		return fmt.Errorf("Codex Desktop image bridge cannot guarantee requested target file size")
+		return fmt.Errorf("the Codex Desktop image bridge cannot guarantee requested target file size")
 	}
 	return nil
 }
@@ -207,7 +206,7 @@ func inferCodexPromptSize(prompt string) (string, error) {
 		dimensions[size] = [2]int{width, height}
 	}
 	if len(dimensions) > 1 {
-		return "", fmt.Errorf("Codex image prompt contains conflicting explicit image dimensions")
+		return "", fmt.Errorf("the Codex image prompt contains conflicting explicit image dimensions")
 	}
 
 	var explicit [2]int
@@ -297,7 +296,7 @@ func inferCodexPromptRatio(prompt string) ([2]int, error) {
 			continue
 		}
 		if ratio[0] != 0 && ratio != candidate {
-			return [2]int{}, fmt.Errorf("Codex image prompt contains conflicting aspect ratios")
+			return [2]int{}, fmt.Errorf("the Codex image prompt contains conflicting aspect ratios")
 		}
 		ratio = candidate
 	}
@@ -338,7 +337,7 @@ func inferCodexPromptOrientation(prompt string) (string, error) {
 		}
 	}
 	if len(orientations) > 1 {
-		return "", fmt.Errorf("Codex image prompt contains conflicting orientations")
+		return "", fmt.Errorf("the Codex image prompt contains conflicting orientations")
 	}
 	for orientation := range orientations {
 		return orientation, nil
@@ -397,7 +396,7 @@ func inferCodexPromptQuality(prompt string) (string, error) {
 		}
 	}
 	if len(values) > 1 {
-		return "", fmt.Errorf("Codex image prompt contains conflicting quality levels")
+		return "", fmt.Errorf("the Codex image prompt contains conflicting quality levels")
 	}
 	for quality := range values {
 		return quality, nil
@@ -415,7 +414,7 @@ func inferCodexPromptBackground(prompt string) (string, error) {
 	}
 	transparent := codexPromptContainsAny(transparentText, "透明背景", "背景透明", "透明通道", "alpha 通道", "alpha channel", "transparent background")
 	if transparent && opaque {
-		return "", fmt.Errorf("Codex image prompt contains conflicting background transparency requirements")
+		return "", fmt.Errorf("the Codex image prompt contains conflicting background transparency requirements")
 	}
 	if transparent {
 		return "transparent", nil
@@ -462,7 +461,7 @@ func inferCodexPromptOutputCount(prompt string) (int, error) {
 		}
 	}
 	if len(counts) > 1 {
-		return 0, fmt.Errorf("Codex image prompt contains conflicting output counts")
+		return 0, fmt.Errorf("the Codex image prompt contains conflicting output counts")
 	}
 	for count := range counts {
 		if count > 10 {
@@ -542,7 +541,7 @@ func normalizeCodexImageOutputBytes(raw []byte, targetSize string) ([]byte, stri
 	if !ok {
 		return raw, "", nil
 	}
-	config, format, err := image.DecodeConfig(bytes.NewReader(raw))
+	config, format, err := decodeCodexImageConfig(raw)
 	if err != nil {
 		return nil, "", fmt.Errorf("decode generated image dimensions: %w", err)
 	}
@@ -551,7 +550,7 @@ func normalizeCodexImageOutputBytes(raw []byte, targetSize string) ([]byte, stri
 		return raw, actualSize, nil
 	}
 
-	source, _, err := image.Decode(bytes.NewReader(raw))
+	source, err := decodeCodexImage(raw, format)
 	if err != nil {
 		return nil, "", fmt.Errorf("decode generated image for exact-size correction: %w", err)
 	}
@@ -565,6 +564,30 @@ func normalizeCodexImageOutputBytes(raw []byte, targetSize string) ([]byte, stri
 		return nil, "", fmt.Errorf("exact-size Codex PNG exceeds %d bytes", openAIImageMaxDownloadBytes)
 	}
 	return output.Bytes(), fmt.Sprintf("%dx%d", targetWidth, targetHeight), nil
+}
+
+func decodeCodexImageConfig(raw []byte) (image.Config, string, error) {
+	switch {
+	case bytes.HasPrefix(raw, []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}):
+		config, err := png.DecodeConfig(bytes.NewReader(raw))
+		return config, "png", err
+	case len(raw) >= 3 && raw[0] == 0xff && raw[1] == 0xd8 && raw[2] == 0xff:
+		config, err := jpeg.DecodeConfig(bytes.NewReader(raw))
+		return config, "jpeg", err
+	default:
+		return image.Config{}, "", fmt.Errorf("unsupported generated image encoding; expected PNG or JPEG")
+	}
+}
+
+func decodeCodexImage(raw []byte, format string) (image.Image, error) {
+	switch format {
+	case "png":
+		return png.Decode(bytes.NewReader(raw))
+	case "jpeg":
+		return jpeg.Decode(bytes.NewReader(raw))
+	default:
+		return nil, fmt.Errorf("unsupported generated image encoding %q", format)
+	}
 }
 
 func normalizeCodexResponsesImageResults(results []openAIResponsesImageResult, targetSize string) error {

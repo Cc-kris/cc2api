@@ -112,7 +112,7 @@ func TestApplyCodexImagePromptControls_RejectsUnsupportedOrConflictingConstraint
 		{name: "conflicting ratio", prompt: "生成 2000x2000、16:9 的图片", wantErr: "conflict with aspect ratio"},
 		{name: "explicit jpeg", prompt: "生成图片", body: `{"model":"gpt-image-2","prompt":"生成图片","size":"auto","output_format":"jpeg"}`, wantErr: "only saves generated artifacts as PNG"},
 		{name: "explicit multiple outputs", prompt: "生成图片", body: `{"model":"gpt-image-2","prompt":"生成图片","size":"auto","n":2}`, wantErr: "one image per imagegen call"},
-		{name: "explicit compression", prompt: "生成图片", body: `{"model":"gpt-image-2","prompt":"生成图片","size":"auto","output_compression":80}`, wantErr: "do not support requested output compression"},
+		{name: "explicit compression", prompt: "生成图片", body: `{"model":"gpt-image-2","prompt":"生成图片","size":"auto","output_compression":80}`, wantErr: "does not support requested output compression"},
 		{name: "invalid explicit size", prompt: "生成图片", body: `{"model":"gpt-image-2","prompt":"生成图片","size":"2001x2000"}`, wantErr: "multiples of 16"},
 	}
 
@@ -155,6 +155,12 @@ func TestNormalizeCodexImageOutputBase64_CorrectsExactPixelDimensionsAndPNGEncod
 	require.Equal(t, "png", format)
 	require.Equal(t, 2000, config.Width)
 	require.Equal(t, 2000, config.Height)
+}
+
+func TestNormalizeCodexImageOutputBase64_RejectsUnsupportedEncoding(t *testing.T) {
+	webpHeader := []byte("RIFF\x10\x00\x00\x00WEBPVP8 ")
+	_, _, err := normalizeCodexImageOutputBase64(base64.StdEncoding.EncodeToString(webpHeader), "2000x2000")
+	require.ErrorContains(t, err, "unsupported generated image encoding")
 }
 
 func parseCodexImagePromptControlsTestRequest(body []byte) (*OpenAIImagesRequest, error) {

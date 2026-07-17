@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/repository"
+	"github.com/Wei-Shaw/sub2api/internal/repository" //nolint:depguard // integration test exercises the real upstream adapter
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
@@ -139,7 +139,7 @@ func TestOpenAIGatewayHandlerImages_CodexPromptControlsApplyOnlyToBridge(t *test
 	require.Equal(t, http.StatusOK, ordinaryRecorder.Code)
 	ordinaryForwarded := <-upstreamPayloads
 	require.Equal(t, "auto", gjson.GetBytes(ordinaryForwarded, "size").String())
-	_ = <-usageRepo.created
+	<-usageRepo.created
 }
 
 func solidPNGBase64(t *testing.T, width, height int) string {
