@@ -717,7 +717,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			ImageOutputSizes: imageOutputSizes,
 		}, nil
 	} else {
-		nonStreamUsage, nonStreamCount, nonStreamSizes, err := s.handleOpenAIImagesNonStreamingResponse(upstreamCtx, resp, c, parsed.N)
+		nonStreamUsage, nonStreamCount, nonStreamSizes, err := s.handleOpenAIImagesNonStreamingResponse(upstreamCtx, resp, c, parsed.N, parsed.Size)
 		if err != nil {
 			if nonStreamCount <= 0 {
 				nonStreamCount = parsed.N
@@ -963,6 +963,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesNonStreamingResponse(
 	resp *http.Response,
 	c *gin.Context,
 	expectedImageCount int,
+	targetSize string,
 ) (OpenAIUsage, int, []string, error) {
 	// The Handler stores the final channel + client decision. Retain the header
 	// check here as defense in depth for direct service callers.
@@ -987,12 +988,13 @@ func (s *OpenAIGatewayService) handleOpenAIImagesNonStreamingResponse(
 	imageCount := extractOpenAIImageCountFromJSONBytes(body)
 	imageSizes := collectOpenAIResponseImageOutputSizesFromJSONBytes(body)
 	if isCodexClient {
-		normalized, normalizeErr := s.normalizeCodexImagesResponse(ctx, body, expectedImageCount)
+		normalized, normalizeErr := s.normalizeCodexImagesResponse(ctx, body, expectedImageCount, targetSize)
 		if normalizeErr != nil {
 			s.writeCodexImageIncompatibleResponse(c, resp)
 			return usage, imageCount, imageSizes, normalizeErr
 		}
 		body = normalized
+		imageSizes = collectOpenAIResponseImageOutputSizesFromJSONBytes(body)
 	}
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	contentType := "application/json"
@@ -1028,6 +1030,7 @@ func (s *OpenAIGatewayService) normalizeCodexImagesResponse(
 	ctx context.Context,
 	body []byte,
 	expectedImageCount int,
+	targetSize string,
 ) ([]byte, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -1066,6 +1069,11 @@ func (s *OpenAIGatewayService) normalizeCodexImagesResponse(
 			item["image_base64"],
 			item["result"],
 		)); encoded != "" {
+			normalizedEncoded, actualSize, normalizeErr := normalizeCodexImageOutputBase64(encoded, targetSize)
+			if normalizeErr != nil {
+				return nil, fmt.Errorf("normalize Codex image response data item %d: %w", index, normalizeErr)
+			}
+			encoded = normalizedEncoded
 			imageBytes := base64.StdEncoding.DecodedLen(len(encoded))
 			if imageBytes > openAIImageMaxDownloadBytes {
 				return nil, fmt.Errorf("Codex image response data item %d exceeds %d bytes", index, openAIImageMaxDownloadBytes)
@@ -1075,6 +1083,10 @@ func (s *OpenAIGatewayService) normalizeCodexImagesResponse(
 				return nil, fmt.Errorf("Codex image response exceeds total image size %d", codexImageMaxTotalBytes)
 			}
 			setCodexImageResponseBase64(item, encoded)
+			if actualSize != "" {
+				item["size"] = actualSize
+				item["output_format"] = "png"
+			}
 			continue
 		}
 
@@ -1084,6 +1096,11 @@ func (s *OpenAIGatewayService) normalizeCodexImagesResponse(
 		}
 		if strings.HasPrefix(strings.ToLower(imageURL), "data:") {
 			if encoded := normalizeOpenAIImageBase64(imageURL); encoded != "" {
+				normalizedEncoded, actualSize, normalizeErr := normalizeCodexImageOutputBase64(encoded, targetSize)
+				if normalizeErr != nil {
+					return nil, fmt.Errorf("normalize Codex image response data item %d: %w", index, normalizeErr)
+				}
+				encoded = normalizedEncoded
 				imageBytes := base64.StdEncoding.DecodedLen(len(encoded))
 				if imageBytes > openAIImageMaxDownloadBytes {
 					return nil, fmt.Errorf("Codex image response data item %d exceeds %d bytes", index, openAIImageMaxDownloadBytes)
@@ -1093,6 +1110,10 @@ func (s *OpenAIGatewayService) normalizeCodexImagesResponse(
 					return nil, fmt.Errorf("Codex image response exceeds total image size %d", codexImageMaxTotalBytes)
 				}
 				setCodexImageResponseBase64(item, encoded)
+				if actualSize != "" {
+					item["size"] = actualSize
+					item["output_format"] = "png"
+				}
 				continue
 			}
 			return nil, fmt.Errorf("Codex image response data item %d has invalid data URL", index)
@@ -1113,11 +1134,19 @@ func (s *OpenAIGatewayService) normalizeCodexImagesResponse(
 		if len(imageBytes) == 0 || len(imageBytes) > openAIImageMaxDownloadBytes {
 			return nil, fmt.Errorf("Codex image response data item %d has invalid size %d", index, len(imageBytes))
 		}
+		imageBytes, actualSize, err := normalizeCodexImageOutputBytes(imageBytes, targetSize)
+		if err != nil {
+			return nil, fmt.Errorf("normalize Codex image response data item %d: %w", index, err)
+		}
 		totalImageBytes += len(imageBytes)
 		if totalImageBytes > codexImageMaxTotalBytes {
 			return nil, fmt.Errorf("Codex image response exceeds total image size %d", codexImageMaxTotalBytes)
 		}
 		setCodexImageResponseBase64(item, base64.StdEncoding.EncodeToString(imageBytes))
+		if actualSize != "" {
+			item["size"] = actualSize
+			item["output_format"] = "png"
+		}
 	}
 
 	normalized, err := json.Marshal(payload)

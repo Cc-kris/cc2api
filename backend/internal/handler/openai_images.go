@@ -72,13 +72,6 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		return
 	}
 
-	reqLog = reqLog.With(
-		zap.String("model", parsed.Model),
-		zap.Bool("stream", parsed.Stream),
-		zap.Bool("multipart", parsed.Multipart),
-		zap.String("capability", string(parsed.RequiredCapability)),
-	)
-
 	// The strict Codex response adapter belongs to the channel-managed image
 	// bridge. Client headers identify the Codex runtime, but never enable the
 	// bridge by themselves; direct legacy Images clients keep normal passthrough.
@@ -88,12 +81,38 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		bridgeGroup = false
 	}
 	isOfficialCodex := openaiutil.IsCodexOfficialClientByHeaders(c.GetHeader("User-Agent"), c.GetHeader("originator"))
-	service.SetCodexImageResponseAdapterEnabled(c, bridgeGroup && isOfficialCodex)
-
+	codexImageBridge := bridgeGroup && isOfficialCodex
+	service.SetCodexImageResponseAdapterEnabled(c, codexImageBridge)
 	if !service.GroupAllowsImageGeneration(apiKey.Group) {
 		h.errorResponse(c, http.StatusForbidden, "permission_error", service.ImageGenerationPermissionMessage())
 		return
 	}
+	if codexImageBridge {
+		rewrittenBody, appliedControls, applyErr := service.ApplyCodexImagePromptControls(body, parsed)
+		if applyErr != nil {
+			reqLog.Warn("openai.images.codex_prompt_controls_rejected", zap.Error(applyErr))
+			h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", applyErr.Error())
+			return
+		}
+		if len(appliedControls) > 0 {
+			body = rewrittenBody
+			reqLog.Info("openai.images.codex_prompt_controls_applied",
+				zap.Strings("controls", appliedControls),
+				zap.String("size", parsed.Size),
+				zap.String("quality", parsed.Quality),
+				zap.String("background", parsed.Background),
+				zap.String("output_format", parsed.OutputFormat),
+			)
+		}
+	}
+
+	reqLog = reqLog.With(
+		zap.String("model", parsed.Model),
+		zap.Bool("stream", parsed.Stream),
+		zap.Bool("multipart", parsed.Multipart),
+		zap.String("capability", string(parsed.RequiredCapability)),
+	)
+
 	if decision := h.checkContentModeration(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIImages, parsed.Model, parsed.ModerationBody()); decision != nil && decision.Blocked {
 		h.errorResponse(c, contentModerationStatus(decision), contentModerationErrorCode(decision), decision.Message)
 		return

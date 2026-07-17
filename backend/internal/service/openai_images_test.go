@@ -918,19 +918,19 @@ func TestCodexImageDownloadSecurityPolicy(t *testing.T) {
 func TestNormalizeCodexImagesResponse_EnforcesCountAndSizeLimits(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	multiple := []byte(`{"data":[{"b64_json":"aGVsbG8="},{"b64_json":"aGVsbG8="}]}`)
-	normalized, err := svc.normalizeCodexImagesResponse(context.Background(), multiple, 2)
+	normalized, err := svc.normalizeCodexImagesResponse(context.Background(), multiple, 2, "")
 	require.NoError(t, err)
 	require.Len(t, gjson.GetBytes(normalized, "data").Array(), 2)
-	_, err = svc.normalizeCodexImagesResponse(context.Background(), multiple, 1)
+	_, err = svc.normalizeCodexImagesResponse(context.Background(), multiple, 1, "")
 	require.ErrorContains(t, err, "expected at most 1")
 
 	svc.codexImageDownloader = func(context.Context, string) ([]byte, error) {
 		return make([]byte, openAIImageMaxDownloadBytes+1), nil
 	}
-	_, err = svc.normalizeCodexImagesResponse(context.Background(), []byte(`{"data":[{"url":"https://cdn.example/image.png"}]}`), 1)
+	_, err = svc.normalizeCodexImagesResponse(context.Background(), []byte(`{"data":[{"url":"https://cdn.example/image.png"}]}`), 1, "")
 	require.ErrorContains(t, err, "invalid size")
 
-	_, err = svc.normalizeCodexImagesResponse(context.Background(), make([]byte, codexImageMaxResponseJSONBytes+1), 1)
+	_, err = svc.normalizeCodexImagesResponse(context.Background(), make([]byte, codexImageMaxResponseJSONBytes+1), 1, "")
 	require.ErrorContains(t, err, "exceeds")
 }
 
@@ -943,7 +943,7 @@ func TestNormalizeCodexImagesResponse_AppliesAggregateDeadline(t *testing.T) {
 		return []byte("\x89PNG\r\n\x1a\nimage-data"), nil
 	}
 
-	_, err := svc.normalizeCodexImagesResponse(context.Background(), []byte(`{"data":[{"url":"https://cdn.example/image.png"}]}`), 1)
+	_, err := svc.normalizeCodexImagesResponse(context.Background(), []byte(`{"data":[{"url":"https://cdn.example/image.png"}]}`), 1, "")
 	require.NoError(t, err)
 }
 
@@ -957,7 +957,7 @@ func TestNormalizeCodexImagesResponse_HonorsCallerTimeout(t *testing.T) {
 	defer cancel()
 
 	startedAt := time.Now()
-	_, err := svc.normalizeCodexImagesResponse(ctx, []byte(`{"data":[{"url":"https://cdn.example/image.png"}]}`), 1)
+	_, err := svc.normalizeCodexImagesResponse(ctx, []byte(`{"data":[{"url":"https://cdn.example/image.png"}]}`), 1, "")
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.Less(t, time.Since(startedAt), time.Second)
 }
