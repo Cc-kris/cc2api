@@ -556,7 +556,6 @@ experimental_bearer_token = "${apiKey}"
 wire_api = "responses"
 requires_openai_auth = false
 supports_websockets = true
-http_headers = { "x-openai-actor-authorization" = "ccai" }
 
 [features]
 goals = true
