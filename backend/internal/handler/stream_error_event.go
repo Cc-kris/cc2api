@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/gin-gonic/gin"
@@ -33,6 +34,68 @@ type responsesFailedBody struct {
 type responsesFailedEvent struct {
 	Type     string              `json:"type"`
 	Response responsesFailedBody `json:"response"`
+}
+
+type responsesCompletedUsage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
+	TotalTokens  int `json:"total_tokens"`
+}
+
+type responsesCompletedBody struct {
+	ID        string                  `json:"id"`
+	Object    string                  `json:"object"`
+	CreatedAt int64                   `json:"created_at"`
+	Model     string                  `json:"model,omitempty"`
+	Status    string                  `json:"status"`
+	Output    []any                   `json:"output"`
+	Usage     responsesCompletedUsage `json:"usage"`
+}
+
+type responsesCompletedEvent struct {
+	Type     string                 `json:"type"`
+	Response responsesCompletedBody `json:"response"`
+}
+
+// writeCodexImageContinuationCompleted ends the no-text follow-up sent after
+// Codex has already received a generated image. Calling another model here
+// would resend the full image, add latency and create an unrelated token charge.
+func writeCodexImageContinuationCompleted(c *gin.Context, stream bool) {
+	responseBody := responsesCompletedBody{
+		ID:        synthesizeResponseID(c),
+		Object:    "response",
+		CreatedAt: time.Now().Unix(),
+		Model:     requestModel(c),
+		Status:    "completed",
+		Output:    []any{},
+		Usage:     responsesCompletedUsage{},
+	}
+	if !stream {
+		c.JSON(http.StatusOK, responseBody)
+		return
+	}
+
+	payload, err := json.Marshal(responsesCompletedEvent{
+		Type:     "response.completed",
+		Response: responseBody,
+	})
+	if err != nil {
+		_ = c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{"type": "server_error", "message": "Failed to complete image continuation"},
+		})
+		return
+	}
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Status(http.StatusOK)
+	if _, err := fmt.Fprintf(c.Writer, "event: response.completed\ndata: %s\n\n", payload); err != nil {
+		_ = c.Error(err)
+		return
+	}
+	if flusher, ok := c.Writer.(http.Flusher); ok {
+		flusher.Flush()
+	}
 }
 
 // writeResponsesFailedSSE emits a `response.failed` SSE event in the OpenAI

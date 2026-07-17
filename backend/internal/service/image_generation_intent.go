@@ -336,16 +336,37 @@ func IsCodexSystemBackgroundTurn(body []byte) bool {
 	return true
 }
 
+type codexImageGenerationContinuationKind uint8
+
+const (
+	codexImageGenerationContinuationNone codexImageGenerationContinuationKind = iota
+	codexImageGenerationContinuationUnknown
+	codexImageGenerationContinuationSuccess
+	codexImageGenerationContinuationFailure
+)
+
 // IsCodexImageGenerationExtensionContinuation identifies the follow-up turn
 // sent after Codex has executed image_gen.imagegen locally. The channel must
 // keep the text model for this turn, but must not force another image call.
 func IsCodexImageGenerationExtensionContinuation(body []byte) bool {
+	return classifyCodexImageGenerationExtensionContinuation(body) != codexImageGenerationContinuationNone
+}
+
+// IsSuccessfulCodexImageGenerationExtensionContinuation reports whether the
+// latest tool result contains an actual generated image. Only this exact shape
+// may be completed locally; failures and ambiguous tool outputs still need the
+// text orchestrator so Codex can surface the error safely.
+func IsSuccessfulCodexImageGenerationExtensionContinuation(body []byte) bool {
+	return classifyCodexImageGenerationExtensionContinuation(body) == codexImageGenerationContinuationSuccess
+}
+
+func classifyCodexImageGenerationExtensionContinuation(body []byte) codexImageGenerationContinuationKind {
 	if len(body) == 0 || !gjson.ValidBytes(body) {
-		return false
+		return codexImageGenerationContinuationNone
 	}
 	input := gjson.GetBytes(body, "input")
 	if !input.IsArray() {
-		return false
+		return codexImageGenerationContinuationNone
 	}
 	lastUserMessage := -1
 	lastImageToolItem := -1
@@ -394,6 +415,7 @@ func IsCodexImageGenerationExtensionContinuation(body []byte) bool {
 		}
 		return true
 	})
+	continuationKind := codexImageGenerationContinuationNone
 	for callID, signal := range imageOutputIDs {
 		_, matchedCall := imageCallIDs[callID]
 		// Responses continuation requests may reference the prior function call
@@ -403,9 +425,20 @@ func IsCodexImageGenerationExtensionContinuation(body []byte) bool {
 		isImageOutput := matchedCall || (len(imageCallIDs) == 0 && (signal.hasImage || signal.hasKnownFailure))
 		if callID != "" && isImageOutput && signal.index > lastImageToolItem {
 			lastImageToolItem = signal.index
+			switch {
+			case signal.hasKnownFailure:
+				continuationKind = codexImageGenerationContinuationFailure
+			case signal.hasImage:
+				continuationKind = codexImageGenerationContinuationSuccess
+			default:
+				continuationKind = codexImageGenerationContinuationUnknown
+			}
 		}
 	}
-	return lastImageToolItem >= 0 && lastImageToolItem > lastUserMessage
+	if lastImageToolItem < 0 || lastImageToolItem <= lastUserMessage {
+		return codexImageGenerationContinuationNone
+	}
+	return continuationKind
 }
 
 func isCodexImageGenerationFailureOutput(output gjson.Result) bool {

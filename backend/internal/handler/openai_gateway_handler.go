@@ -239,25 +239,14 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	reqStream := streamResult.Bool()
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
 	previousResponseID := strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String())
+	previousResponseIDKind := ""
 	if previousResponseID != "" {
-		previousResponseIDKind := service.ClassifyOpenAIPreviousResponseIDKind(previousResponseID)
+		previousResponseIDKind = service.ClassifyOpenAIPreviousResponseIDKind(previousResponseID)
 		reqLog = reqLog.With(
 			zap.Bool("has_previous_response_id", true),
 			zap.String("previous_response_id_kind", previousResponseIDKind),
 			zap.Int("previous_response_id_len", len(previousResponseID)),
 		)
-		if previousResponseIDKind == service.OpenAIPreviousResponseIDKindMessageID {
-			reqLog.Warn("openai.request_validation_failed",
-				zap.String("reason", "previous_response_id_looks_like_message_id"),
-			)
-			h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "previous_response_id must be a response.id (resp_*), not a message id")
-			return
-		}
-		reqLog.Warn("openai.request_validation_failed",
-			zap.String("reason", "previous_response_id_requires_wsv2"),
-		)
-		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "previous_response_id is only supported on Responses WebSocket v2")
-		return
 	}
 
 	setOpsRequestContext(c, reqModel, reqStream)
@@ -296,6 +285,28 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	codexHostedImageTurn := codexDecision.Execution == service.CodexImageExecutionHostedImage
 	codexTextBypassTurn := codexDecision.Execution == service.CodexImageExecutionTextBypass
 	codexSystemBackgroundTurn := codexTextBypassTurn && service.IsCodexSystemBackgroundTurn(body)
+	if codexImageExtensionCandidate && service.IsSuccessfulCodexImageGenerationExtensionContinuation(body) {
+		reqLog.Info("openai.codex_image_success_continuation_completed_locally",
+			zap.Int("body_bytes", len(body)),
+			zap.String("requested_model", reqModel),
+		)
+		writeCodexImageContinuationCompleted(c, reqStream)
+		return
+	}
+	if previousResponseID != "" {
+		if previousResponseIDKind == service.OpenAIPreviousResponseIDKindMessageID {
+			reqLog.Warn("openai.request_validation_failed",
+				zap.String("reason", "previous_response_id_looks_like_message_id"),
+			)
+			h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "previous_response_id must be a response.id (resp_*), not a message id")
+			return
+		}
+		reqLog.Warn("openai.request_validation_failed",
+			zap.String("reason", "previous_response_id_requires_wsv2"),
+		)
+		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "previous_response_id is only supported on Responses WebSocket v2")
+		return
+	}
 
 	if (imagePermissionIntent || codexDecision.IsImageExecution()) && !service.GroupAllowsImageGeneration(apiKey.Group) {
 		h.errorResponse(c, http.StatusForbidden, "permission_error", service.ImageGenerationPermissionMessage())

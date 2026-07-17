@@ -993,6 +993,11 @@ func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *tes
 			_, _ = io.WriteString(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_legacy_text_e2e\",\"model\":\"gpt-5.5\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"legacy text answer\"}]}],\"usage\":{\"input_tokens\":3,\"output_tokens\":2}}}\n\n")
 			return
 		}
+		if strings.Contains(string(payload), "image generation failed: invalid response") ||
+			strings.Contains(string(payload), "change the previous image to green") {
+			_, _ = io.WriteString(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_continuation_text_e2e\",\"model\":\"gpt-5.6-terra\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"handled by text orchestrator\"}]}],\"usage\":{\"input_tokens\":3,\"output_tokens\":2}}}\n\n")
+			return
+		}
 		if gjson.GetBytes(payload, "tools.0.name").String() == "imagegen" {
 			if strings.Contains(string(payload), "explain image APIs without generating") ||
 				strings.Contains(string(payload), "nonstream text request") {
@@ -1128,6 +1133,87 @@ func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *tes
 	require.Equal(t, "imagegen", gjson.GetBytes(liteForwarded, "tools.0.name").String())
 	require.Equal(t, "auto", gjson.GetBytes(liteForwarded, "tool_choice").String())
 	require.False(t, gjson.GetBytes(liteForwarded, `input.#(type=="additional_tools")`).Exists())
+
+	// Once Codex has received a generated image, its local extension sends the
+	// image back in a continuation request. Completing this turn locally avoids
+	// uploading several megabytes to a text model and creating a second charge.
+	largeImage := strings.Repeat("A", 3*1024*1024)
+	continuationInput := `[{"type":"function_call","namespace":"image_gen","name":"imagegen","call_id":"call_completed"},{"type":"function_call_output","call_id":"call_completed","output":[{"type":"input_image","image_url":"data:image/png;base64,` + largeImage + `"},{"type":"input_text","text":"saved"}]}]`
+	continuationBody := []byte(`{"model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":` + continuationInput + `}`)
+	continuationReq := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(continuationBody))
+	continuationReq.Header.Set("Content-Type", "application/json")
+	continuationReq.Header.Set("User-Agent", "Codex Desktop/0.144.5 Windows")
+	continuationRecorder := httptest.NewRecorder()
+	router.ServeHTTP(continuationRecorder, continuationReq)
+	require.Equal(t, http.StatusOK, continuationRecorder.Code)
+	require.Contains(t, continuationRecorder.Header().Get("Content-Type"), "text/event-stream")
+	require.Contains(t, continuationRecorder.Body.String(), "event: response.completed")
+	require.Contains(t, continuationRecorder.Body.String(), `"status":"completed"`)
+	require.Contains(t, continuationRecorder.Body.String(), `"output":[]`)
+	require.Contains(t, continuationRecorder.Body.String(), `"total_tokens":0`)
+	require.Less(t, continuationRecorder.Body.Len(), 2048, "local completion must not echo image bytes")
+	select {
+	case unexpectedPayload := <-upstreamPayload:
+		require.Fail(t, "successful image continuation must not call text upstream", "payload_bytes=%d", len(unexpectedPayload))
+	default:
+	}
+	select {
+	case unexpectedUsage := <-usageRepo.created:
+		require.Fail(t, "successful image continuation must not create token usage", "usage=%+v", unexpectedUsage)
+	default:
+	}
+
+	nonStreamContinuationBody := []byte(`{"model":"gpt-5.6-terra","stream":false,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":` + continuationInput + `}`)
+	nonStreamContinuationReq := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(nonStreamContinuationBody))
+	nonStreamContinuationReq.Header.Set("Content-Type", "application/json")
+	nonStreamContinuationRecorder := httptest.NewRecorder()
+	router.ServeHTTP(nonStreamContinuationRecorder, nonStreamContinuationReq)
+	require.Equal(t, http.StatusOK, nonStreamContinuationRecorder.Code)
+	require.Contains(t, nonStreamContinuationRecorder.Header().Get("Content-Type"), "application/json")
+	require.Equal(t, "response", gjson.GetBytes(nonStreamContinuationRecorder.Body.Bytes(), "object").String())
+	require.Equal(t, "completed", gjson.GetBytes(nonStreamContinuationRecorder.Body.Bytes(), "status").String())
+	require.Empty(t, gjson.GetBytes(nonStreamContinuationRecorder.Body.Bytes(), "output").Array())
+	require.Zero(t, gjson.GetBytes(nonStreamContinuationRecorder.Body.Bytes(), "usage.total_tokens").Int())
+	select {
+	case unexpectedPayload := <-upstreamPayload:
+		require.Fail(t, "non-stream image continuation must not call text upstream", "payload_bytes=%d", len(unexpectedPayload))
+	default:
+	}
+
+	previousResponseContinuationBody := []byte(`{"model":"gpt-5.6-terra","stream":false,"previous_response_id":"resp_completed","client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":[{"type":"function_call_output","call_id":"call_completed","output":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"}]}]}`)
+	previousResponseContinuationReq := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(previousResponseContinuationBody))
+	previousResponseContinuationReq.Header.Set("Content-Type", "application/json")
+	previousResponseContinuationRecorder := httptest.NewRecorder()
+	router.ServeHTTP(previousResponseContinuationRecorder, previousResponseContinuationReq)
+	require.Equal(t, http.StatusOK, previousResponseContinuationRecorder.Code)
+	require.Equal(t, "completed", gjson.GetBytes(previousResponseContinuationRecorder.Body.Bytes(), "status").String())
+	select {
+	case unexpectedPayload := <-upstreamPayload:
+		require.Fail(t, "successful previous-response image continuation must not call text upstream", "payload_bytes=%d", len(unexpectedPayload))
+	default:
+	}
+
+	failedContinuationBody := []byte(`{"model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":[{"type":"function_call","namespace":"image_gen","name":"imagegen","call_id":"call_failed"},{"type":"function_call_output","call_id":"call_failed","output":"image generation failed: invalid response"}]}`)
+	failedContinuationReq := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(failedContinuationBody))
+	failedContinuationReq.Header.Set("Content-Type", "application/json")
+	failedContinuationRecorder := httptest.NewRecorder()
+	router.ServeHTTP(failedContinuationRecorder, failedContinuationReq)
+	require.Equal(t, http.StatusOK, failedContinuationRecorder.Code)
+	failedContinuationForwarded := <-upstreamPayload
+	require.Contains(t, string(failedContinuationForwarded), "image generation failed: invalid response")
+	failedContinuationUsage := <-usageRepo.created
+	require.Zero(t, failedContinuationUsage.ImageCount)
+
+	laterEditBody := []byte(`{"model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":[{"type":"function_call","namespace":"image_gen","name":"imagegen","call_id":"call_edit"},{"type":"function_call_output","call_id":"call_edit","output":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"}]},{"type":"message","role":"user","content":[{"type":"input_text","text":"change the previous image to green"}]}]}`)
+	laterEditReq := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(laterEditBody))
+	laterEditReq.Header.Set("Content-Type", "application/json")
+	laterEditRecorder := httptest.NewRecorder()
+	router.ServeHTTP(laterEditRecorder, laterEditReq)
+	require.Equal(t, http.StatusOK, laterEditRecorder.Code)
+	laterEditForwarded := <-upstreamPayload
+	require.Contains(t, string(laterEditForwarded), "change the previous image to green")
+	laterEditUsage := <-usageRepo.created
+	require.Zero(t, laterEditUsage.ImageCount)
 
 	missingCapabilityBody := []byte(`{"model":"gpt-5.6-terra","stream":true,"client_metadata":{"x-codex-turn-metadata":` + strconv.Quote(metadata) + `},"input":"draw without a declared image capability"}`)
 	missingCapabilityReq := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(missingCapabilityBody))
