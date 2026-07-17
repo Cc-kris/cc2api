@@ -158,6 +158,8 @@ func TestUsageLogFromService_IncludesImageBillingMetadataForUserAndAdmin(t *test
 	log := &service.UsageLog{
 		RequestID:          "req_image_metadata",
 		Model:              "gpt-image-2",
+		ImageOutputTokens:  383,
+		ImageOutputCost:    0.01149,
 		ImageCount:         2,
 		ImageSize:          &imageSize,
 		ImageInputSize:     &inputSize,
@@ -170,6 +172,8 @@ func TestUsageLogFromService_IncludesImageBillingMetadataForUserAndAdmin(t *test
 	adminDTO := UsageLogFromServiceAdmin(log)
 
 	for _, got := range []*UsageLog{userDTO, &adminDTO.UsageLog} {
+		require.Equal(t, 383, got.ImageOutputTokens)
+		require.InDelta(t, 0.01149, got.ImageOutputCost, 1e-12)
 		require.Equal(t, 2, got.ImageCount)
 		require.NotNil(t, got.ImageSize)
 		require.Equal(t, imageSize, *got.ImageSize)

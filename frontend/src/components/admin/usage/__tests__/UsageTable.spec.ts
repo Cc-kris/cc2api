@@ -199,6 +199,49 @@ describe('admin UsageTable tooltip', () => {
     expect(text).toContain('claude-sonnet-4-20250514')
   })
 
+  it('respects explicit token billing for rows that generated images', async () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [
+          {
+            ...baseImageRow,
+            request_id: 'req-admin-image-token',
+            billing_mode: 'token',
+            input_tokens: 1671,
+            output_tokens: 383,
+            image_output_tokens: 383,
+            input_cost: 0.008355,
+            output_cost: 0,
+            image_output_cost: 0.01149,
+            total_cost: 0.019845,
+            actual_cost: 0.019845,
+          },
+        ],
+        loading: false,
+        columns: [],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('Token')
+    expect(wrapper.text()).not.toContain('2 images')
+
+    const tooltipTriggers = wrapper.findAll('.group.relative')
+    await tooltipTriggers[tooltipTriggers.length - 1].trigger('mouseenter')
+    await nextTick()
+
+    const text = wrapper.text()
+    expect(text).toContain('$30.0000 / 1M tokens')
+    expect(text).not.toContain('Per-image price')
+  })
+
   it.each([
     {
       name: 'defaulted row',

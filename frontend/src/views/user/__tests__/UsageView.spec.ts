@@ -467,6 +467,82 @@ describe('user UsageView tooltip', () => {
     expect(text).not.toContain('(2K)')
   })
 
+  it('respects explicit token billing for rows that generated images', async () => {
+    query.mockResolvedValue({
+      items: [
+        {
+          request_id: 'req-user-image-token',
+          actual_cost: 0.019845,
+          total_cost: 0.019845,
+          rate_multiplier: 1,
+          service_tier: null,
+          input_cost: 0.008355,
+          output_cost: 0,
+          image_output_cost: 0.01149,
+          input_tokens: 1671,
+          output_tokens: 383,
+          image_output_tokens: 383,
+          cache_creation_cost: 0,
+          cache_read_cost: 0,
+          cache_creation_tokens: 0,
+          cache_read_tokens: 0,
+          cache_creation_5m_tokens: 0,
+          cache_creation_1h_tokens: 0,
+          image_count: 1,
+          image_size: '2K',
+          image_input_size: null,
+          image_output_size: '2000x2000',
+          image_size_source: 'output',
+          image_size_breakdown: { '2K': 1 },
+          billing_mode: 'token',
+          first_token_ms: null,
+          duration_ms: 1,
+          created_at: '2026-07-17T00:00:00Z',
+          model: 'gpt-image-2',
+        },
+      ],
+      total: 1,
+      pages: 1,
+    })
+    getStatsByDateRange.mockResolvedValue({
+      total_requests: 1,
+      total_tokens: 2054,
+      total_cost: 0.019845,
+      avg_duration_ms: 1,
+    })
+    list.mockResolvedValue({ items: [] })
+
+    const wrapper = mount(UsageView, {
+      global: {
+        stubs: {
+          AppLayout: AppLayoutStub,
+          TablePageLayout: TablePageLayoutStub,
+          Pagination: true,
+          EmptyState: true,
+          Select: true,
+          DateRangePicker: true,
+          DataTable: DataTableStub,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    await flushPromises()
+    await nextTick()
+
+    expect(wrapper.text()).toContain('Token')
+    expect(wrapper.text()).not.toContain('1 images')
+
+    const tooltipTriggers = wrapper.findAll('.group.relative')
+    await tooltipTriggers[tooltipTriggers.length - 1].trigger('mouseenter')
+    await nextTick()
+
+    const text = wrapper.text()
+    expect(text).toContain('$30.0000 / 1M tokens')
+    expect(text).not.toContain('Per-image price')
+  })
+
   it('shows image billing metadata in the user cost tooltip', async () => {
     query.mockResolvedValue({
       items: [],

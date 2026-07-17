@@ -1212,6 +1212,7 @@ export interface UsageLog {
 
   input_tokens: number
   output_tokens: number
+  image_output_tokens: number
   cache_creation_tokens: number
   cache_read_tokens: number
   cache_creation_5m_tokens: number
@@ -1219,6 +1220,7 @@ export interface UsageLog {
 
   input_cost: number
   output_cost: number
+  image_output_cost: number
   cache_creation_cost: number
   cache_read_cost: number
   total_cost: number

@@ -197,8 +197,8 @@
           </template>
 
           <template #cell-tokens="{ row }">
-            <!-- 图片生成请求 -->
-            <div v-if="isImageUsage(row)" class="flex items-center gap-1.5">
+            <!-- 按张计费的图片生成请求 -->
+            <div v-if="getDisplayBillingMode(row) === BILLING_MODE_IMAGE" class="flex items-center gap-1.5">
               <svg
                 class="h-4 w-4 text-indigo-500"
                 fill="none"
@@ -443,12 +443,12 @@
               <span class="text-gray-400">{{ t('admin.usage.inputCost') }}</span>
               <span class="font-medium text-white">${{ tooltipData.input_cost.toFixed(6) }}</span>
             </div>
-            <div v-if="tooltipData && tooltipData.output_cost > 0" class="flex items-center justify-between gap-4">
+            <div v-if="outputCostForDisplay(tooltipData) > 0" class="flex items-center justify-between gap-4">
               <span class="text-gray-400">{{ t('admin.usage.outputCost') }}</span>
-              <span class="font-medium text-white">${{ tooltipData.output_cost.toFixed(6) }}</span>
+              <span class="font-medium text-white">${{ outputCostForDisplay(tooltipData).toFixed(6) }}</span>
             </div>
             <!-- Per-image billing: show image metadata and unit price -->
-            <template v-if="tooltipData && isImageUsage(tooltipData)">
+            <template v-if="tooltipData && getDisplayBillingMode(tooltipData) === BILLING_MODE_IMAGE">
               <div class="flex items-center justify-between gap-4">
                 <span class="text-gray-400">{{ t('usage.imageCount') }}</span>
                 <span class="font-medium text-white">{{ tooltipData.image_count }}{{ t('usage.imageUnit') }}</span>
@@ -490,7 +490,7 @@
               </div>
               <div v-if="tooltipData && tooltipData.output_tokens > 0" class="flex items-center justify-between gap-4">
                 <span class="text-gray-400">{{ t('usage.outputTokenPrice') }}</span>
-                <span class="font-medium text-violet-300">{{ formatTokenPricePerMillion(tooltipData.output_cost, tooltipData.output_tokens) }} {{ t('usage.perMillionTokens') }}</span>
+                <span class="font-medium text-violet-300">{{ formatTokenPricePerMillion(outputCostForDisplay(tooltipData), tooltipData.output_tokens) }} {{ t('usage.perMillionTokens') }}</span>
               </div>
             </template>
             <div v-else class="flex items-center justify-between gap-4">
@@ -683,10 +683,17 @@ const isImageUsage = (row: Pick<UsageLog, 'image_count'> | null | undefined): bo
 }
 
 const getDisplayBillingMode = (row: Pick<UsageLog, 'billing_mode' | 'image_count'> | null | undefined): string | null | undefined => {
+  if (row?.billing_mode) {
+    return row.billing_mode
+  }
   if (isImageUsage(row)) {
     return BILLING_MODE_IMAGE
   }
   return row?.billing_mode
+}
+
+const outputCostForDisplay = (row: Pick<UsageLog, 'output_cost' | 'image_output_cost'> | null | undefined): number => {
+  return (row?.output_cost ?? 0) + (row?.image_output_cost ?? 0)
 }
 
 const formatUserAgent = (ua: string): string => {
