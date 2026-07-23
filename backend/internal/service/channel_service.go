@@ -607,7 +607,7 @@ func (s *ChannelService) ResolveCodexModelsManifestGroupID(ctx context.Context, 
 	}
 	lk, err := s.lookupGroupChannel(ctx, *groupID)
 	if err != nil {
-		return nil, fmt.Errorf("Codex models channel configuration is unavailable: %w", err)
+		return nil, fmt.Errorf("codex models channel configuration is unavailable: %w", err)
 	}
 	if lk == nil || lk.platform != PlatformOpenAI {
 		return groupID, nil
@@ -622,7 +622,7 @@ func (s *ChannelService) ResolveCodexModelsManifestGroupID(ctx context.Context, 
 		}
 		orchestratorGroupID := lk.channel.CodexImageGenerationOrchestratorGroupID()
 		if orchestratorGroupID == nil {
-			return nil, errors.New("Codex image orchestration group is not configured")
+			return nil, errors.New("codex image orchestration group is not configured")
 		}
 		return orchestratorGroupID, nil
 	}
