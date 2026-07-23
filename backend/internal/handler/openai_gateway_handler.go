@@ -96,6 +96,15 @@ func resolveOpenAIMessagesDispatchMappedModel(apiKey *service.APIKey, requestedM
 	return strings.TrimSpace(apiKey.Group.ResolveMessagesDispatchModel(requestedModel))
 }
 
+func resolveChannelMappedAccountSelectionModel(fallbackModel string, channelMapping service.ChannelMappingResult, applyChannelMapping bool) string {
+	if applyChannelMapping && channelMapping.Mapped {
+		if mappedModel := strings.TrimSpace(channelMapping.MappedModel); mappedModel != "" {
+			return mappedModel
+		}
+	}
+	return fallbackModel
+}
+
 // NewOpenAIGatewayHandler creates a new OpenAIGatewayHandler
 func NewOpenAIGatewayHandler(
 	gatewayService *service.OpenAIGatewayService,
@@ -332,6 +341,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	if codexDecision.UsesOrchestratorGroup() {
 		selectionGroupID = codexRoute.OrchestratorGroupID
 	}
+	selectionModel := resolveChannelMappedAccountSelectionModel(reqModel, channelMapping, !codexDecision.UsesOrchestratorGroup())
 	c.Set(service.OpenAICodexSystemBackgroundContextKey, codexSystemBackgroundTurn)
 	usageChannelMapping := channelMapping
 	if codexTextBypassTurn {
@@ -416,7 +426,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			selectionGroupID,
 			previousResponseID,
 			sessionHash,
-			reqModel,
+			selectionModel,
 			failedAccountIDs,
 			service.OpenAIUpstreamTransportAny,
 			requireCompact,
@@ -888,6 +898,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		if effectiveMappedModel != "" {
 			currentRoutingModel = effectiveMappedModel
 		}
+		currentRoutingModel = resolveChannelMappedAccountSelectionModel(currentRoutingModel, channelMappingMsg, true)
 		reqLog.Debug("openai_messages.account_selecting", zap.Int("excluded_account_count", len(failedAccountIDs)))
 		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithScheduler(
 			c.Request.Context(),
@@ -1476,6 +1487,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	if codexDecisionWS.UsesOrchestratorGroup() {
 		selectionGroupIDWS = codexRouteWS.OrchestratorGroupID
 	}
+	selectionModelWS := resolveChannelMappedAccountSelectionModel(reqModel, channelMappingWS, !codexDecisionWS.UsesOrchestratorGroup())
 	codexImageExtensionCandidateWS := codexDecisionWS.Execution == service.CodexImageExecutionExtension
 	codexSystemBackgroundTurnWS := codexDecisionWS.Execution == service.CodexImageExecutionTextBypass && service.IsCodexSystemBackgroundTurn(firstMessage)
 	wsRouteFamily := string(codexDecisionWS.Execution)
@@ -1611,7 +1623,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			selectionGroupIDWS,
 			previousResponseID,
 			sessionHash,
-			reqModel,
+			selectionModelWS,
 			excludedAccountIDs,
 			selectionTransportWS,
 			false,

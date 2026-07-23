@@ -452,6 +452,146 @@ func TestResolveOpenAIMessagesDispatchMappedModel(t *testing.T) {
 	})
 }
 
+func TestResolveChannelMappedAccountSelectionModel(t *testing.T) {
+	tests := []struct {
+		name                string
+		fallbackModel       string
+		channelMapping      service.ChannelMappingResult
+		applyChannelMapping bool
+		want                string
+	}{
+		{
+			name:                "uses channel mapped model for account selection",
+			fallbackModel:       "gpt-5.6-luna",
+			channelMapping:      service.ChannelMappingResult{Mapped: true, MappedModel: "grok-4.5"},
+			applyChannelMapping: true,
+			want:                "grok-4.5",
+		},
+		{
+			name:                "keeps requested model for orchestrator routing",
+			fallbackModel:       "gpt-5.6-luna",
+			channelMapping:      service.ChannelMappingResult{Mapped: true, MappedModel: "gpt-image-2"},
+			applyChannelMapping: false,
+			want:                "gpt-5.6-luna",
+		},
+		{
+			name:                "keeps fallback when mapped model is empty",
+			fallbackModel:       "gpt-5.6-luna",
+			channelMapping:      service.ChannelMappingResult{Mapped: true},
+			applyChannelMapping: true,
+			want:                "gpt-5.6-luna",
+		},
+		{
+			name:                "keeps fallback without channel mapping",
+			fallbackModel:       "gpt-5.6-luna",
+			channelMapping:      service.ChannelMappingResult{MappedModel: "gpt-5.6-luna"},
+			applyChannelMapping: true,
+			want:                "gpt-5.6-luna",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, resolveChannelMappedAccountSelectionModel(tt.fallbackModel, tt.channelMapping, tt.applyChannelMapping))
+		})
+	}
+}
+
+func TestChannelMappedAccountSelectionAcrossTextModels(t *testing.T) {
+	accounts := []service.Account{
+		newChannelMappedTextAccount(8101, "grok-account", "grok-4.5"),
+		newChannelMappedTextAccount(8102, "deepseek-account", "deepseek-v4-pro"),
+		newChannelMappedTextAccount(8103, "kimi-account", "kimi-k3"),
+		newChannelMappedTextAccount(8104, "glm-account", "glm-5.2"),
+		newChannelMappedTextAccount(8105, "openai-account", "gpt-5.6-terra"),
+	}
+	cfg := &config.Config{}
+	cfg.RunMode = config.RunModeSimple
+	channelSvc := service.NewChannelService(&openAIWSUsageHandlerChannelRepoStub{
+		channels: []service.Channel{
+			{ID: 8201, Name: "grok-channel", Status: service.StatusActive, GroupIDs: []int64{8301}, ModelMapping: map[string]map[string]string{service.PlatformOpenAI: {"*": "grok-4.5"}}},
+			{ID: 8202, Name: "deepseek-channel", Status: service.StatusActive, GroupIDs: []int64{8302}, ModelMapping: map[string]map[string]string{service.PlatformOpenAI: {"gpt-5.5": "deepseek-v4-pro"}}},
+			{ID: 8203, Name: "kimi-channel", Status: service.StatusActive, GroupIDs: []int64{8303}, ModelMapping: map[string]map[string]string{service.PlatformOpenAI: {"*": "kimi-k3"}}},
+			{ID: 8204, Name: "glm-channel", Status: service.StatusActive, GroupIDs: []int64{8304}},
+		},
+		groupPlatforms: map[int64]string{
+			8301: service.PlatformOpenAI,
+			8302: service.PlatformOpenAI,
+			8303: service.PlatformOpenAI,
+			8304: service.PlatformOpenAI,
+		},
+	}, nil, nil, nil)
+	gatewaySvc := service.NewOpenAIGatewayService(
+		&openAIWSSilentRetryAccountRepoStub{accounts: accounts},
+		nil, nil, nil, nil, nil, nil, cfg, nil, nil,
+		service.NewBillingService(cfg, nil), nil, nil, repository.NewHTTPUpstream(cfg),
+		&service.DeferredService{}, nil, nil, channelSvc, nil, nil, nil, nil,
+	)
+
+	tests := []struct {
+		name           string
+		groupID        int64
+		requestedModel string
+		wantAccountID  int64
+	}{
+		{
+			name:           "grok channel",
+			groupID:        8301,
+			requestedModel: "gpt-5.6-luna",
+			wantAccountID:  8101,
+		},
+		{
+			name:           "deepseek channel",
+			groupID:        8302,
+			requestedModel: "gpt-5.5",
+			wantAccountID:  8102,
+		},
+		{
+			name:           "kimi channel",
+			groupID:        8303,
+			requestedModel: "gpt-5.6-sol",
+			wantAccountID:  8103,
+		},
+		{
+			name:           "unmapped glm channel",
+			groupID:        8304,
+			requestedModel: "glm-5.2",
+			wantAccountID:  8104,
+		},
+		{
+			name:           "unmapped openai channel",
+			groupID:        8399,
+			requestedModel: "gpt-5.6-terra",
+			wantAccountID:  8105,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mapping := channelSvc.ResolveChannelMapping(context.Background(), tt.groupID, tt.requestedModel)
+			selectionModel := resolveChannelMappedAccountSelectionModel(tt.requestedModel, mapping, true)
+			account, err := gatewaySvc.SelectAccountForModelWithExclusions(context.Background(), &tt.groupID, "", selectionModel, nil)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantAccountID, account.ID)
+		})
+	}
+}
+
+func newChannelMappedTextAccount(id int64, name, model string) service.Account {
+	return service.Account{
+		ID:          id,
+		Name:        name,
+		Platform:    service.PlatformOpenAI,
+		Type:        service.AccountTypeAPIKey,
+		Status:      service.StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{model: model},
+		},
+	}
+}
+
 func TestOpenAIResponses_MissingDependencies_ReturnsServiceUnavailable(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -914,6 +1054,112 @@ func TestOpenAIResponsesWebSocket_PassthroughUsageLogInfersReasoningFromInitialR
 	require.NotNil(t, got.log.ReasoningEffort)
 	require.Equal(t, "xhigh", *got.log.ReasoningEffort,
 		"usage log reasoning effort 必须使用渠道映射前首帧模型后缀推导")
+}
+
+func TestOpenAIResponsesWebSocket_ChannelMappedModelSelectsMappedAccount(t *testing.T) {
+	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+		firstPayload:        `{"model":"gpt-5.6-luna","input":"reply OK"}`,
+		channelMapping:      map[string]string{"*": "grok-4.5"},
+		accountModelMapping: map[string]any{"grok-4.5": "grok-4.5"},
+	})
+
+	require.Equal(t, "grok-4.5", gjson.GetBytes(got.upstreamFirstPayload, "model").String())
+	require.Equal(t, int64(9901), got.log.AccountID)
+}
+
+func TestOpenAIResponses_ChannelMappedModelSelectsMappedAccount(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstreamPayload := make(chan []byte, 1)
+	upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		payload, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		upstreamPayload <- payload
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"id":"resp_grok_mapping","object":"response","status":"completed","model":"grok-4.5","output":[],"usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3}}`)
+	}))
+	defer upstreamServer.Close()
+
+	groupID := int64(4203)
+	accountRepo := &openAIWSUsageHandlerAccountRepoStub{account: service.Account{
+		ID:          9903,
+		Name:        "grok-channel-mapped-account",
+		Platform:    service.PlatformOpenAI,
+		Type:        service.AccountTypeAPIKey,
+		Status:      service.StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"api_key":       "sk-test",
+			"base_url":      upstreamServer.URL,
+			"model_mapping": map[string]any{"grok-4.5": "grok-4.5"},
+		},
+		Extra: map[string]any{"openai_passthrough": true},
+	}}
+	usageRepo := &openAIWSUsageHandlerUsageLogRepoStub{created: make(chan *service.UsageLog, 1)}
+	cfg := &config.Config{}
+	cfg.RunMode = config.RunModeSimple
+	cfg.Default.RateMultiplier = 1
+	cfg.Security.URLAllowlist.Enabled = false
+	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
+	channelSvc := service.NewChannelService(&openAIWSUsageHandlerChannelRepoStub{
+		channels: []service.Channel{{
+			ID:           7703,
+			Name:         "grok-text-channel",
+			Status:       service.StatusActive,
+			GroupIDs:     []int64{groupID},
+			ModelMapping: map[string]map[string]string{service.PlatformOpenAI: {"*": "grok-4.5"}},
+		}},
+		groupPlatforms: map[int64]string{groupID: service.PlatformOpenAI},
+	}, nil, nil, nil)
+	billingCacheSvc := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
+	gatewaySvc := service.NewOpenAIGatewayService(
+		accountRepo, usageRepo, nil, nil, nil, nil, nil, cfg, nil, nil,
+		service.NewBillingService(cfg, nil), nil, billingCacheSvc, repository.NewHTTPUpstream(cfg),
+		&service.DeferredService{}, nil, nil, channelSvc, nil, nil, nil, nil,
+	)
+	cache := &concurrencyCacheMock{
+		acquireUserSlotFn:    func(context.Context, int64, int, string) (bool, error) { return true, nil },
+		acquireAccountSlotFn: func(context.Context, int64, int, string) (bool, error) { return true, nil },
+	}
+	h := &OpenAIGatewayHandler{
+		gatewayService: gatewaySvc, billingCacheService: billingCacheSvc, apiKeyService: &service.APIKeyService{},
+		concurrencyHelper: NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second),
+	}
+	apiKey := &service.APIKey{
+		ID: 1803, GroupID: &groupID,
+		Group: &service.Group{ID: groupID, Platform: service.PlatformOpenAI, Status: service.StatusActive},
+		User:  &service.User{ID: 1703, Status: service.StatusActive},
+	}
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyAPIKey), apiKey)
+		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: apiKey.User.ID, Concurrency: 1})
+		c.Next()
+	})
+	router.POST("/openai/v1/responses", h.Responses)
+
+	req := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", strings.NewReader(`{"model":"gpt-5.6-luna","input":"reply OK","stream":false}`))
+	req.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+	select {
+	case payload := <-upstreamPayload:
+		require.Equal(t, "grok-4.5", gjson.GetBytes(payload, "model").String())
+	case <-time.After(3 * time.Second):
+		t.Fatal("等待渠道映射后的 HTTP 上游请求超时")
+	}
+	select {
+	case usageLog := <-usageRepo.created:
+		require.Equal(t, int64(9903), usageLog.AccountID)
+		require.Equal(t, "gpt-5.6-luna", usageLog.RequestedModel)
+		require.NotNil(t, usageLog.ModelMappingChain)
+		require.Equal(t, "gpt-5.6-luna→grok-4.5", *usageLog.ModelMappingChain)
+	case <-time.After(3 * time.Second):
+		t.Fatal("等待渠道映射后的 HTTP usage log 超时")
+	}
 }
 
 func TestOpenAIResponsesWebSocket_TextModelNativeImageToolUsesHTTPFallbackWhenGroupAllows(t *testing.T) {
@@ -1584,6 +1830,7 @@ type openAIResponsesWSUsageLogCase struct {
 	userAgent              *string
 	turnMetadataHeader     *string
 	channelMapping         map[string]string
+	accountModelMapping    map[string]any
 	codexBridge            bool
 	httpOnlyAccount        bool
 	upstreamHTTPStatus     int
@@ -2639,6 +2886,9 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 			"openai_apikey_responses_websockets_v2_enabled": true,
 			"openai_apikey_responses_websockets_v2_mode":    service.OpenAIWSIngressModePassthrough,
 		},
+	}
+	if len(tc.accountModelMapping) > 0 {
+		account.Credentials["model_mapping"] = tc.accountModelMapping
 	}
 	if tc.httpOnlyAccount {
 		account.Extra = map[string]any{
