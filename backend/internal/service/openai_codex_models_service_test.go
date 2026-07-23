@@ -105,8 +105,10 @@ func TestFetchCodexModelsManifestRejectsInvalidEnvelope(t *testing.T) {
 	require.True(t, IsRetryableCodexModelsManifestError(err))
 }
 
-func TestFetchCodexModelsManifestRejectsIncompleteModelEntry(t *testing.T) {
-	upstream := &codexModelsHTTPUpstreamStub{response: codexModelsTestResponse(http.StatusOK, `{"models":[{"slug":"gpt-5.6"}]}`)}
+func TestFetchCodexModelsManifestConvertsSlugOnlyModelList(t *testing.T) {
+	upstream := &codexModelsHTTPUpstreamStub{response: codexModelsTestResponse(http.StatusOK, `{
+		"models":[{"slug":"grok-4.5"},{"slug":"grok-build"},{"slug":"grok-search"}]
+	}`)}
 	service := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
 	account := &Account{
 		ID: 15, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
@@ -115,9 +117,28 @@ func TestFetchCodexModelsManifestRejectsIncompleteModelEntry(t *testing.T) {
 
 	manifest, err := service.FetchCodexModelsManifest(context.Background(), account, "0.137.0", "")
 
+	require.NoError(t, err)
+	require.NotNil(t, manifest)
+	require.Equal(t, "grok-4.5", gjson.GetBytes(manifest.Body, "models.0.slug").String())
+	require.Equal(t, "grok-4.5", gjson.GetBytes(manifest.Body, "models.0.display_name").String())
+	require.Equal(t, "grok-build", gjson.GetBytes(manifest.Body, "models.1.slug").String())
+	require.Equal(t, "grok-search", gjson.GetBytes(manifest.Body, "models.2.slug").String())
+	require.Equal(t, "shell_command", gjson.GetBytes(manifest.Body, "models.0.shell_type").String())
+}
+
+func TestFetchCodexModelsManifestRejectsModelEntryWithoutIdentifier(t *testing.T) {
+	upstream := &codexModelsHTTPUpstreamStub{response: codexModelsTestResponse(http.StatusOK, `{"models":[{"name":"gpt-5.6"}]}`)}
+	service := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	account := &Account{
+		ID: 17, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://upstream.example/v1"},
+	}
+
+	manifest, err := service.FetchCodexModelsManifest(context.Background(), account, "0.137.0", "")
+
 	require.Nil(t, manifest)
 	require.ErrorContains(t, err, "missing required field")
-	require.ErrorContains(t, err, "display_name")
+	require.ErrorContains(t, err, "slug")
 	require.True(t, IsRetryableCodexModelsManifestError(err))
 }
 

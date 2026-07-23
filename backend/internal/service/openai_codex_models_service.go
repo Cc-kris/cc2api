@@ -188,22 +188,33 @@ func convertOpenAIModelListToCodexManifest(body []byte) []byte {
 	if err := json.Unmarshal(body, &envelope); err != nil || envelope == nil {
 		return body
 	}
-	if _, ok := envelope["models"]; ok {
+
+	var rawEntries json.RawMessage
+	if models, ok := envelope["models"]; ok {
+		if validateCodexModelsManifestEnvelope(body) == nil {
+			return body
+		}
+		rawEntries = models
+	} else if data, ok := envelope["data"]; ok {
+		rawEntries = data
+	} else {
 		return body
 	}
-	data, ok := envelope["data"]
-	if !ok {
-		return body
-	}
+
 	var entries []struct {
-		ID string `json:"id"`
+		ID   string `json:"id"`
+		Slug string `json:"slug"`
 	}
-	if err := json.Unmarshal(data, &entries); err != nil {
+	if err := json.Unmarshal(rawEntries, &entries); err != nil {
 		return body
 	}
 	models := make([]codexModelManifestEntry, 0, len(entries))
 	for _, entry := range entries {
-		if id := strings.TrimSpace(entry.ID); id != "" {
+		id := strings.TrimSpace(entry.Slug)
+		if id == "" {
+			id = strings.TrimSpace(entry.ID)
+		}
+		if id != "" {
 			models = append(models, newCodexModelManifestEntry(id, len(models)+1))
 		}
 	}
