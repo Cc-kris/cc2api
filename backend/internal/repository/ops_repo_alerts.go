@@ -991,6 +991,24 @@ RETURNING
 	return scanOpsAlertEvent(row)
 }
 
+const updateAlertEventStatusQuery = `
+UPDATE ops_alert_events
+SET status = $2::text,
+    lifecycle_status = $2::text,
+    acknowledged_at = CASE WHEN $2::text = 'acknowledged' THEN COALESCE(acknowledged_at, NOW()) ELSE acknowledged_at END,
+    acknowledged_by = CASE WHEN $2::text = 'acknowledged' THEN COALESCE($5, acknowledged_by) ELSE acknowledged_by END,
+    acknowledged_note = CASE WHEN $2::text = 'acknowledged' THEN COALESCE($3, acknowledged_note) ELSE acknowledged_note END,
+    processing_at = CASE WHEN $2::text = 'processing' THEN COALESCE(processing_at, NOW()) ELSE processing_at END,
+    processing_by = CASE WHEN $2::text = 'processing' THEN COALESCE($5, processing_by) ELSE processing_by END,
+    processing_note = CASE WHEN $2::text = 'processing' THEN COALESCE($3, processing_note) ELSE processing_note END,
+    processing_action = CASE WHEN $2::text = 'processing' THEN COALESCE($4, processing_action) ELSE processing_action END,
+    recovered_at = CASE WHEN $2::text = 'recovered' THEN COALESCE($6, NOW()) ELSE recovered_at END,
+    closed_at = CASE WHEN $2::text = 'closed' THEN COALESCE($6, NOW()) ELSE closed_at END,
+    closed_by = CASE WHEN $2::text = 'closed' THEN COALESCE($5, closed_by) ELSE closed_by END,
+    closed_reason = CASE WHEN $2::text = 'closed' THEN COALESCE($3, closed_reason) ELSE closed_reason END,
+    resolved_at = CASE WHEN $2::text IN ('recovered', 'closed') THEN COALESCE($6, NOW()) ELSE resolved_at END
+WHERE id = $1`
+
 func (r *opsRepository) UpdateAlertEventStatus(ctx context.Context, eventID int64, status string, note string, processingAction string, operatorID *int64, resolvedAt *time.Time) error {
 	if r == nil || r.db == nil {
 		return fmt.Errorf("nil ops repository")
@@ -1002,25 +1020,7 @@ func (r *opsRepository) UpdateAlertEventStatus(ctx context.Context, eventID int6
 		return fmt.Errorf("invalid status")
 	}
 
-	q := `
-UPDATE ops_alert_events
-SET status = $2,
-    lifecycle_status = $2,
-    acknowledged_at = CASE WHEN $2 = 'acknowledged' THEN COALESCE(acknowledged_at, NOW()) ELSE acknowledged_at END,
-    acknowledged_by = CASE WHEN $2 = 'acknowledged' THEN COALESCE($5, acknowledged_by) ELSE acknowledged_by END,
-    acknowledged_note = CASE WHEN $2 = 'acknowledged' THEN COALESCE($3, acknowledged_note) ELSE acknowledged_note END,
-    processing_at = CASE WHEN $2 = 'processing' THEN COALESCE(processing_at, NOW()) ELSE processing_at END,
-    processing_by = CASE WHEN $2 = 'processing' THEN COALESCE($5, processing_by) ELSE processing_by END,
-    processing_note = CASE WHEN $2 = 'processing' THEN COALESCE($3, processing_note) ELSE processing_note END,
-    processing_action = CASE WHEN $2 = 'processing' THEN COALESCE($4, processing_action) ELSE processing_action END,
-    recovered_at = CASE WHEN $2 = 'recovered' THEN COALESCE($6, NOW()) ELSE recovered_at END,
-    closed_at = CASE WHEN $2 = 'closed' THEN COALESCE($6, NOW()) ELSE closed_at END,
-    closed_by = CASE WHEN $2 = 'closed' THEN COALESCE($5, closed_by) ELSE closed_by END,
-    closed_reason = CASE WHEN $2 = 'closed' THEN COALESCE($3, closed_reason) ELSE closed_reason END,
-    resolved_at = CASE WHEN $2 IN ('recovered', 'closed') THEN COALESCE($6, NOW()) ELSE resolved_at END
-WHERE id = $1`
-
-	_, err := r.db.ExecContext(ctx, q, eventID, strings.TrimSpace(status), opsNullString(note), opsNullString(processingAction), opsNullInt64(operatorID), opsNullTime(resolvedAt))
+	_, err := r.db.ExecContext(ctx, updateAlertEventStatusQuery, eventID, strings.TrimSpace(status), opsNullString(note), opsNullString(processingAction), opsNullInt64(operatorID), opsNullTime(resolvedAt))
 	return err
 }
 

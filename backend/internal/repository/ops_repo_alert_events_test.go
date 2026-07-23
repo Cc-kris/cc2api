@@ -155,7 +155,7 @@ func TestOpsRepositoryUpdateAlertEventStatusWritesLifecycleFields(t *testing.T) 
 		{name: "silenced", status: service.OpsAlertStatusSilenced, note: "静默"},
 	}
 	for _, tt := range tests {
-		mock.ExpectExec(`(?s)UPDATE ops_alert_events.*lifecycle_status = \$2.*acknowledged_at.*processing_at.*processing_action.*recovered_at.*closed_at.*resolved_at`).
+		mock.ExpectExec(`(?s)UPDATE ops_alert_events.*status = \$2::text.*lifecycle_status = \$2::text.*acknowledged_at.*processing_at.*processing_action.*recovered_at.*closed_at.*resolved_at`).
 			WithArgs(int64(31), tt.status, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -171,7 +171,7 @@ func TestOpsRepositoryUpdateAlertEventStatusKeepsProcessingNoteAndActionSeparate
 	repo := &opsRepository{db: db}
 	operatorID := int64(6)
 
-	mock.ExpectExec(`(?s)UPDATE ops_alert_events.*processing_note = CASE WHEN \$2 = 'processing'.*processing_action = CASE WHEN \$2 = 'processing'`).
+	mock.ExpectExec(`(?s)UPDATE ops_alert_events.*processing_note = CASE WHEN \$2::text = 'processing'.*processing_action = CASE WHEN \$2::text = 'processing'`).
 		WithArgs(int64(31), service.OpsAlertStatusProcessing, "处理说明", "切换上游账号", sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 

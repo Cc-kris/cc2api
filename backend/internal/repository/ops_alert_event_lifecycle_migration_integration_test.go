@@ -4,9 +4,11 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/Wei-Shaw/sub2api/migrations"
 	"github.com/stretchr/testify/require"
 )
@@ -115,4 +117,40 @@ WHERE id = 4`).Scan(&lifecycleStatus, &mergedCount, &lastSeenAt))
 	require.Equal(t, "firing", lifecycleStatus)
 	require.Equal(t, 0, mergedCount)
 	require.False(t, lastSeenAt.IsZero())
+}
+
+func TestUpdateAlertEventStatusQuerySupportsDifferentVarcharLengths(t *testing.T) {
+	tx := testTx(t)
+	ctx := context.Background()
+
+	var eventID int64
+	err := tx.QueryRowContext(ctx, `
+INSERT INTO ops_alert_events (rule_id, severity, status, lifecycle_status, title)
+VALUES (99144, 'P2', 'firing', 'firing', 'status type inference regression')
+RETURNING id`).Scan(&eventID)
+	require.NoError(t, err)
+
+	resolvedAt := time.Date(2026, 7, 23, 10, 0, 0, 0, time.UTC)
+	_, err = tx.ExecContext(
+		ctx,
+		updateAlertEventStatusQuery,
+		eventID,
+		service.OpsAlertStatusRecovered,
+		sql.NullString{},
+		sql.NullString{},
+		sql.NullInt64{},
+		sql.NullTime{Time: resolvedAt, Valid: true},
+	)
+	require.NoError(t, err)
+
+	var status string
+	var lifecycleStatus string
+	var gotResolvedAt time.Time
+	require.NoError(t, tx.QueryRowContext(ctx, `
+SELECT status, lifecycle_status, resolved_at
+FROM ops_alert_events
+WHERE id = $1`, eventID).Scan(&status, &lifecycleStatus, &gotResolvedAt))
+	require.Equal(t, service.OpsAlertStatusRecovered, status)
+	require.Equal(t, service.OpsAlertStatusRecovered, lifecycleStatus)
+	require.True(t, gotResolvedAt.Equal(resolvedAt))
 }
