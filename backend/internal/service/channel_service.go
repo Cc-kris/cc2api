@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -595,6 +596,37 @@ func (s *ChannelService) ResolveCodexImageGenerationRoute(ctx context.Context, g
 	}
 	result.Enabled = true
 	return result
+}
+
+// ResolveCodexModelsManifestGroupID returns the text orchestrator group for a
+// channel-owned Codex image bridge. Ordinary groups continue to use their own
+// accounts for model discovery.
+func (s *ChannelService) ResolveCodexModelsManifestGroupID(ctx context.Context, groupID *int64) (*int64, error) {
+	if groupID == nil {
+		return nil, nil
+	}
+	lk, err := s.lookupGroupChannel(ctx, *groupID)
+	if err != nil {
+		return nil, fmt.Errorf("Codex models channel configuration is unavailable: %w", err)
+	}
+	if lk == nil || lk.platform != PlatformOpenAI {
+		return groupID, nil
+	}
+	bridgeEnabled := lk.channel.CodexImageGenerationBridgeOverride(PlatformOpenAI)
+	if bridgeEnabled == nil || !*bridgeEnabled {
+		return groupID, nil
+	}
+	for source, target := range lk.channel.ModelMapping[PlatformOpenAI] {
+		if isOpenAIImageGenerationModel(source) || !isOpenAIImageGenerationModel(target) {
+			continue
+		}
+		orchestratorGroupID := lk.channel.CodexImageGenerationOrchestratorGroupID()
+		if orchestratorGroupID == nil {
+			return nil, errors.New("Codex image orchestration group is not configured")
+		}
+		return orchestratorGroupID, nil
+	}
+	return groupID, nil
 }
 
 // resolveMapping 基于已查找的渠道信息解析模型映射。

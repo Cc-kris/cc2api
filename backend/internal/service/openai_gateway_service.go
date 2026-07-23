@@ -512,6 +512,15 @@ func (s *OpenAIGatewayService) ResolveCodexImageGenerationRoute(ctx context.Cont
 	return s.channelService.ResolveCodexImageGenerationRoute(ctx, groupID, model)
 }
 
+// ResolveCodexModelsManifestGroupID routes image bridge model discovery through
+// the configured text orchestrator group.
+func (s *OpenAIGatewayService) ResolveCodexModelsManifestGroupID(ctx context.Context, groupID *int64) (*int64, error) {
+	if s == nil || s.channelService == nil {
+		return groupID, nil
+	}
+	return s.channelService.ResolveCodexModelsManifestGroupID(ctx, groupID)
+}
+
 func (s *OpenAIGatewayService) IsCodexImageGenerationBridgeGroup(ctx context.Context, groupID *int64) (bool, error) {
 	if s == nil || s.channelService == nil {
 		return false, nil

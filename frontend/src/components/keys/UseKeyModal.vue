@@ -557,6 +557,9 @@ wire_api = "responses"
 requires_openai_auth = false
 supports_websockets = true
 
+[model_providers.ccai.http_headers]
+X-OpenAI-Actor-Authorization = "ccai-image-generation"
+
 [features]
 goals = true
 multi_agent = true

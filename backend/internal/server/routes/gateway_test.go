@@ -77,3 +77,15 @@ func TestGatewayRoutesOpenAIImagesPathsAreRegistered(t *testing.T) {
 		require.NotEqual(t, http.StatusNotFound, w.Code, "path=%s should hit OpenAI images handler", path)
 	}
 }
+
+func TestGatewayRoutesCodexModelsPathsAreRegistered(t *testing.T) {
+	router := newGatewayRoutesTestRouter()
+	routes := router.Routes()
+	registered := make(map[string]bool, len(routes))
+	for _, route := range routes {
+		registered[route.Method+" "+route.Path] = true
+	}
+
+	require.True(t, registered[http.MethodGet+" /v1/models"])
+	require.True(t, registered[http.MethodGet+" /backend-api/codex/models"])
+}
