@@ -168,6 +168,8 @@ type UsageLog struct {
 	ImageOutputSize      *string
 	ImageSizeSource      *string
 	ImageSizeBreakdown   map[string]int
+	VideoCount           int
+	VideoResolution      *string
 	VideoDurationSeconds *int
 	VideoTaskID          *string
 	MediaType            *string

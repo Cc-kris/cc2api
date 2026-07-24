@@ -167,6 +167,7 @@ type providerAdapter struct {
 //nolint:gochecknoglobals // 适配器表是只读静态数据，初始化后不变更。
 var providerAdapters = map[string]providerAdapter{
 	MonitorProviderOpenAI: providerOpenAIChatAdapter,
+	MonitorProviderGrok:   providerGrokChatAdapter,
 	MonitorProviderAnthropic: {
 		buildPath: func(string) string { return providerAnthropicPath },
 		buildBody: func(model, prompt string) ([]byte, error) {
@@ -218,6 +219,14 @@ var providerOpenAIChatAdapter = providerAdapter{
 		return map[string]string{"Authorization": "Bearer " + apiKey}
 	},
 	textPath: "choices.0.message.content",
+}
+
+//nolint:gochecknoglobals // Grok uses the OpenAI-compatible chat protocol.
+var providerGrokChatAdapter = providerAdapter{
+	buildPath:    func(string) string { return providerGrokPath },
+	buildBody:    providerOpenAIChatAdapter.buildBody,
+	buildHeaders: providerOpenAIChatAdapter.buildHeaders,
+	textPath:     providerOpenAIChatAdapter.textPath,
 }
 
 //nolint:gochecknoglobals // 适配器表是只读静态数据，初始化后不变更。
@@ -407,8 +416,9 @@ func buildRequestBody(adapter providerAdapter, provider, apiMode, model, prompt 
 var bodyMergeKeyDenyList = map[string]map[string]bool{
 	MonitorProviderOpenAI + ":" + MonitorAPIModeChatCompletions: {"model": true, "messages": true, "stream": true},
 	MonitorProviderOpenAI + ":" + MonitorAPIModeResponses:       {"model": true, "instructions": true, "input": true, "stream": true},
-	MonitorProviderAnthropic:                                    {"model": true, "messages": true},
-	MonitorProviderGemini:                                       {"contents": true},
+	MonitorProviderGrok:      {"model": true, "messages": true, "stream": true},
+	MonitorProviderAnthropic: {"model": true, "messages": true},
+	MonitorProviderGemini:    {"contents": true},
 }
 
 func checkAPIMode(opts *CheckOptions) string {
@@ -426,7 +436,7 @@ func bodyMergeDenyKey(provider, apiMode string) string {
 }
 
 func validateReplaceRequestBody(provider, apiMode string, body map[string]any) error {
-	if provider != MonitorProviderOpenAI {
+	if provider != MonitorProviderOpenAI && provider != MonitorProviderGrok {
 		return nil
 	}
 	switch defaultAPIMode(apiMode) {

@@ -110,6 +110,11 @@ type Group struct {
 	ImagePrice1K         *float64 `json:"image_price_1k"`
 	ImagePrice2K         *float64 `json:"image_price_2k"`
 	ImagePrice4K         *float64 `json:"image_price_4k"`
+	VideoRateIndependent bool     `json:"video_rate_independent"`
+	VideoRateMultiplier  float64  `json:"video_rate_multiplier"`
+	VideoPrice480P       *float64 `json:"video_price_480p"`
+	VideoPrice720P       *float64 `json:"video_price_720p"`
+	VideoPrice1080P      *float64 `json:"video_price_1080p"`
 
 	// Claude Code 客户端限制
 	ClaudeCodeOnly  bool   `json:"claude_code_only"`
@@ -478,6 +483,8 @@ type UsageLog struct {
 	ImageOutputSize    *string        `json:"image_output_size"`
 	ImageSizeSource    *string        `json:"image_size_source"`
 	ImageSizeBreakdown map[string]int `json:"image_size_breakdown"`
+	VideoCount         int            `json:"video_count"`
+	VideoResolution    *string        `json:"video_resolution"`
 	MediaType          *string        `json:"media_type"`
 
 	// User-Agent

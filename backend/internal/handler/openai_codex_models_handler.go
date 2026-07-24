@@ -17,15 +17,19 @@ func (h *OpenAIGatewayHandler) CodexModels(c *gin.Context) {
 		h.errorResponse(c, http.StatusUnauthorized, "invalid_request_error", "API key group is required")
 		return
 	}
-	if apiKey.Group.Platform != service.PlatformOpenAI {
-		h.errorResponse(c, http.StatusNotFound, "not_found_error", "Codex models manifest is only available for OpenAI groups")
+	if apiKey.Group.Platform != service.PlatformOpenAI && apiKey.Group.Platform != service.PlatformGrok {
+		h.errorResponse(c, http.StatusNotFound, "not_found_error", "Codex models manifest is only available for OpenAI-compatible groups")
 		return
 	}
 
-	manifestGroupID, err := h.gatewayService.ResolveCodexModelsManifestGroupID(c.Request.Context(), apiKey.GroupID)
-	if err != nil {
-		h.errorResponse(c, http.StatusServiceUnavailable, "configuration_error", "Codex models manifest configuration is unavailable")
-		return
+	manifestGroupID := apiKey.GroupID
+	if apiKey.Group.Platform == service.PlatformOpenAI {
+		var err error
+		manifestGroupID, err = h.gatewayService.ResolveCodexModelsManifestGroupID(c.Request.Context(), apiKey.GroupID)
+		if err != nil {
+			h.errorResponse(c, http.StatusServiceUnavailable, "configuration_error", "Codex models manifest configuration is unavailable")
+			return
+		}
 	}
 
 	maxAccountSwitches := h.maxAccountSwitches
@@ -34,13 +38,32 @@ func (h *OpenAIGatewayHandler) CodexModels(c *gin.Context) {
 	}
 	failedAccountIDs := make(map[int64]struct{})
 	for switchCount := 0; ; switchCount++ {
-		account, selectErr := h.gatewayService.SelectAccountForModelWithExclusions(c.Request.Context(), manifestGroupID, "", "", failedAccountIDs)
+		var account *service.Account
+		var release func()
+		var selectErr error
+		if apiKey.Group.Platform == service.PlatformGrok {
+			selection, _, err := h.gatewayService.SelectAccountWithSchedulerForCapability(
+				c.Request.Context(), manifestGroupID, "", "", "", failedAccountIDs,
+				service.OpenAIUpstreamTransportHTTPSSE, service.OpenAIEndpointCapabilityResponses,
+				false, false, false, service.PlatformGrok,
+			)
+			selectErr = err
+			if selection != nil {
+				account = selection.Account
+				release = selection.ReleaseFunc
+			}
+		} else {
+			account, selectErr = h.gatewayService.SelectAccountForModelWithExclusions(c.Request.Context(), manifestGroupID, "", "", failedAccountIDs)
+		}
 		if selectErr != nil {
-			h.errorResponse(c, http.StatusServiceUnavailable, "upstream_error", "No available OpenAI accounts")
+			h.errorResponse(c, http.StatusServiceUnavailable, "upstream_error", "No available compatible accounts")
 			return
 		}
 
 		manifest, fetchErr := h.gatewayService.FetchCodexModelsManifest(c.Request.Context(), account, c.Query("client_version"), c.GetHeader("If-None-Match"))
+		if release != nil {
+			release()
+		}
 		if fetchErr != nil {
 			if service.IsRetryableCodexModelsManifestError(fetchErr) && switchCount < maxAccountSwitches {
 				failedAccountIDs[account.ID] = struct{}{}

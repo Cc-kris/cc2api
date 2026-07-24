@@ -77,16 +77,34 @@ func (r *openAIHTTPFallbackRecorder) Flush() {}
 
 // OpenAIGatewayHandler handles OpenAI API gateway requests
 type OpenAIGatewayHandler struct {
-	gatewayService           *service.OpenAIGatewayService
-	billingCacheService      *service.BillingCacheService
-	apiKeyService            *service.APIKeyService
-	usageRecordWorkerPool    *service.UsageRecordWorkerPool
-	errorPassthroughService  *service.ErrorPassthroughService
-	contentModerationService *service.ContentModerationService
-	concurrencyHelper        *ConcurrencyHelper
-	imageLimiter             *imageConcurrencyLimiter
-	maxAccountSwitches       int
-	cfg                      *config.Config
+	gatewayService             *service.OpenAIGatewayService
+	billingCacheService        *service.BillingCacheService
+	apiKeyService              *service.APIKeyService
+	usageRecordWorkerPool      *service.UsageRecordWorkerPool
+	errorPassthroughService    *service.ErrorPassthroughService
+	contentModerationService   *service.ContentModerationService
+	grokMediaEligibilityProber grokMediaEligibilityProber
+	concurrencyHelper          *ConcurrencyHelper
+	imageLimiter               *imageConcurrencyLimiter
+	maxAccountSwitches         int
+	cfg                        *config.Config
+}
+
+type grokMediaEligibilityProber interface {
+	ProbeMediaEligibility(ctx context.Context, accountID int64) (bool, string, error)
+}
+
+func openAICompatibleRequestPlatform(apiKey *service.APIKey) string {
+	if apiKey != nil && apiKey.Group != nil && apiKey.Group.Platform == service.PlatformGrok {
+		return service.PlatformGrok
+	}
+	return service.PlatformOpenAI
+}
+
+func (h *OpenAIGatewayHandler) SetGrokMediaEligibilityProber(prober grokMediaEligibilityProber) {
+	if h != nil {
+		h.grokMediaEligibilityProber = prober
+	}
 }
 
 func resolveOpenAIMessagesDispatchMappedModel(apiKey *service.APIKey, requestedModel string) string {
@@ -216,7 +234,8 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "model is required")
 		return
 	}
-	if shouldFallbackOpenAIClientModel(reqModel) {
+	requestPlatform := openAICompatibleRequestPlatform(apiKey)
+	if requestPlatform == service.PlatformOpenAI && shouldFallbackOpenAIClientModel(reqModel) {
 		fallbackModel := ""
 		if h.gatewayService != nil {
 			fallbackModel = h.gatewayService.ResolveOpenAIPlatformFallbackModel(c.Request.Context())
@@ -266,7 +285,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 
-	imagePermissionIntent := service.IsImageGenerationPermissionIntent("/v1/responses", reqModel, body)
+	imagePermissionIntent := service.IsImageGenerationPermissionIntentForPlatform("/v1/responses", reqModel, body, requestPlatform)
 
 	// Resolve the channel policy once, then classify the stable Codex request
 	// role separately from the client image capability and transport.
@@ -321,7 +340,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		h.errorResponse(c, http.StatusForbidden, "permission_error", service.ImageGenerationPermissionMessage())
 		return
 	}
-	imageIntent := service.IsImageGenerationIntent("/v1/responses", reqModel, body) || codexHostedImageTurn
+	imageIntent := service.IsImageGenerationIntentForPlatform("/v1/responses", reqModel, body, requestPlatform) || codexHostedImageTurn
 	if imageIntent && !imagePermissionIntent && !codexHostedImageTurn && !service.GroupAllowsImageGeneration(apiKey.Group) {
 		imageIntent = false
 	}
@@ -421,7 +440,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	for {
 		// Select account supporting the requested model
 		reqLog.Debug("openai.account_selecting", zap.Int("excluded_account_count", len(failedAccountIDs)))
-		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithScheduler(
+		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithSchedulerForCapability(
 			c.Request.Context(),
 			selectionGroupID,
 			previousResponseID,
@@ -429,7 +448,11 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			selectionModel,
 			failedAccountIDs,
 			service.OpenAIUpstreamTransportAny,
+			service.OpenAIEndpointCapabilityResponses,
 			requireCompact,
+			false,
+			true,
+			requestPlatform,
 		)
 		if err != nil {
 			reqLog.Warn("openai.account_select_failed",
@@ -1391,12 +1414,17 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	defer func() {
 		_ = wsConn.CloseNow()
 	}()
-	wsConn.SetReadLimit(16 * 1024 * 1024)
+	wsConn.SetReadLimit(service.ResolveOpenAIWSClientReadLimitBytes(h.cfg))
 
 	ctx := c.Request.Context()
-	readCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	msgType, firstMessage, err := wsConn.Read(readCtx)
-	cancel()
+	firstMessageTimeout := service.ResolveOpenAIWSClientFirstMessageTimeout(h.cfg)
+	msgType, firstMessage, err := service.ReadOpenAIWSClientMessage(
+		ctx,
+		wsConn,
+		firstMessageTimeout,
+		coderws.StatusPolicyViolation,
+		"missing first response.create message",
+	)
 	if err != nil {
 		closeStatus, closeReason := summarizeWSCloseErrorForLog(err)
 		reqLog.Warn("openai.websocket_read_first_message_failed",
@@ -1404,7 +1432,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			zap.String("client_ip", clientIP),
 			zap.String("close_status", closeStatus),
 			zap.String("close_reason", closeReason),
-			zap.Duration("read_timeout", 30*time.Second),
+			zap.Duration("read_timeout", firstMessageTimeout),
 		)
 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "missing first response.create message")
 		return
@@ -1451,7 +1479,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		return
 	}
 
-	if service.IsImageGenerationPermissionIntent("/v1/responses", reqModel, firstMessage) && !service.GroupAllowsImageGeneration(apiKey.Group) {
+	if service.IsImageGenerationPermissionIntentForPlatform("/v1/responses", reqModel, firstMessage, openAICompatibleRequestPlatform(apiKey)) && !service.GroupAllowsImageGeneration(apiKey.Group) {
 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, service.ImageGenerationPermissionMessage())
 		return
 	}
@@ -1579,6 +1607,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	currentUserRelease = wrapReleaseOnDone(ctx, userReleaseFunc)
 
 	subscription, _ := middleware2.GetSubscriptionFromContext(c)
+	requestPlatform := openAICompatibleRequestPlatform(apiKey)
 	if err := h.billingCacheService.CheckBillingEligibility(ctx, apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
 		reqLog.Info("openai.websocket_billing_eligibility_check_failed", zap.Error(err))
 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "billing check failed")
@@ -1613,12 +1642,19 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	canSwitchAccountSilently := previousResponseID == ""
 	ordinaryNativeImageWS := isOrdinaryNativeImage(firstMessage, reqModel, codexRouteWS)
 	selectionTransportWS := service.OpenAIUpstreamTransportResponsesWebsocketV2
+	if requestPlatform == service.PlatformGrok {
+		selectionTransportWS = service.OpenAIUpstreamTransportHTTPSSE
+	}
 	if previousResponseID == "" && (codexImageExtensionCandidateWS || codexDecisionWS.Execution == service.CodexImageExecutionHostedImage || ordinaryNativeImageWS) {
 		selectionTransportWS = service.OpenAIUpstreamTransportAny
 	}
+	requiredCapabilityWS := service.OpenAIEndpointCapabilityChatCompletions
+	if requestPlatform == service.PlatformOpenAI && service.IsExplicitImageGenerationIntent("/v1/responses", reqModel, firstMessage) {
+		requiredCapabilityWS = service.OpenAIEndpointCapabilityResponses
+	}
 
 	for attempt := 1; attempt <= maxOpenAIWSSilentSwitchAttempts; attempt++ {
-		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithScheduler(
+		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithSchedulerForCapability(
 			ctx,
 			selectionGroupIDWS,
 			previousResponseID,
@@ -1626,7 +1662,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			selectionModelWS,
 			excludedAccountIDs,
 			selectionTransportWS,
+			requiredCapabilityWS,
 			false,
+			previousResponseID == "",
+			true,
+			requestPlatform,
 		)
 		if err != nil {
 			reqLog.Warn("openai.websocket_account_select_failed", zap.Error(err), zap.Int("silent_retry_attempt", attempt))

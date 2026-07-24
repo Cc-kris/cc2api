@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -14,14 +15,21 @@ import (
 
 type tokenRefreshAccountRepo struct {
 	mockAccountRepoForGemini
-	updateCalls            int
-	fullUpdateCalls        int
-	updateCredentialsCalls int
-	setErrorCalls          int
-	clearTempCalls         int
-	setTempUnschedCalls    int
-	lastAccount            *Account
-	updateErr              error
+	updateCalls             int
+	fullUpdateCalls         int
+	updateCredentialsCalls  int
+	setErrorCalls           int
+	clearTempCalls          int
+	setTempUnschedCalls     int
+	lastErrorMessage        string
+	lastTempUnschedReason   string
+	lastAccount             *Account
+	updateErr               error
+	setErrorErr             error
+	setTempUnschedErr       error
+	beforeConditionalState  func()
+	conditionalSuccessCalls int
+	conditionalSuccessErr   error
 }
 
 func (r *tokenRefreshAccountRepo) Update(ctx context.Context, account *Account) error {
@@ -51,7 +59,8 @@ func (r *tokenRefreshAccountRepo) UpdateCredentials(ctx context.Context, id int6
 
 func (r *tokenRefreshAccountRepo) SetError(ctx context.Context, id int64, errorMsg string) error {
 	r.setErrorCalls++
-	return nil
+	r.lastErrorMessage = errorMsg
+	return r.setErrorErr
 }
 
 func (r *tokenRefreshAccountRepo) ClearTempUnschedulable(ctx context.Context, id int64) error {
@@ -61,7 +70,90 @@ func (r *tokenRefreshAccountRepo) ClearTempUnschedulable(ctx context.Context, id
 
 func (r *tokenRefreshAccountRepo) SetTempUnschedulable(ctx context.Context, id int64, until time.Time, reason string) error {
 	r.setTempUnschedCalls++
-	return nil
+	r.lastTempUnschedReason = reason
+	return r.setTempUnschedErr
+}
+
+func (r *tokenRefreshAccountRepo) SetGrokCredentialErrorIfMatch(
+	_ context.Context,
+	id int64,
+	snapshot GrokCredentialMutationSnapshot,
+	errorMsg string,
+) (bool, error) {
+	if r.beforeConditionalState != nil {
+		hook := r.beforeConditionalState
+		r.beforeConditionalState = nil
+		hook()
+	}
+	account := r.accountsByID[id]
+	if !grokCredentialSnapshotMatchesTestAccount(account, snapshot) ||
+		(errorMsg == string(GrokCredentialReasonProxyInvalid) && account.Proxy != nil) {
+		return false, nil
+	}
+	r.setErrorCalls++
+	r.lastErrorMessage = errorMsg
+	if r.setErrorErr != nil {
+		return false, r.setErrorErr
+	}
+	account.Status = StatusError
+	account.Schedulable = false
+	account.ErrorMessage = errorMsg
+	return true, nil
+}
+
+func (r *tokenRefreshAccountRepo) SetGrokCredentialTempUnschedulableIfMatch(
+	_ context.Context,
+	id int64,
+	snapshot GrokCredentialMutationSnapshot,
+	until time.Time,
+	reason string,
+) (bool, error) {
+	if r.beforeConditionalState != nil {
+		hook := r.beforeConditionalState
+		r.beforeConditionalState = nil
+		hook()
+	}
+	account := r.accountsByID[id]
+	if !grokCredentialSnapshotMatchesTestAccount(account, snapshot) {
+		return false, nil
+	}
+	r.setTempUnschedCalls++
+	r.lastTempUnschedReason = reason
+	if r.setTempUnschedErr != nil {
+		return false, r.setTempUnschedErr
+	}
+	value := until
+	account.TempUnschedulableUntil = &value
+	return true, nil
+}
+
+func grokCredentialSnapshotMatchesTestAccount(account *Account, snapshot GrokCredentialMutationSnapshot) bool {
+	return account != nil && account.IsGrokOAuth() && account.IsSchedulable() &&
+		grokCredentialMutationSnapshot(account).CredentialsJSON == snapshot.CredentialsJSON &&
+		reflect.DeepEqual(account.ProxyID, snapshot.ProxyID)
+}
+
+func (r *tokenRefreshAccountRepo) UpdateGrokOAuthCredentialsIfUnchanged(
+	_ context.Context,
+	id int64,
+	expectedCredentials map[string]any,
+	expectedProxyID *int64,
+	credentials map[string]any,
+) (bool, error) {
+	r.conditionalSuccessCalls++
+	if r.conditionalSuccessErr != nil {
+		return false, r.conditionalSuccessErr
+	}
+	account := r.accountsByID[id]
+	if account == nil || account.Platform != PlatformGrok || account.Type != AccountTypeOAuth ||
+		!reflect.DeepEqual(account.Credentials, expectedCredentials) || !reflect.DeepEqual(account.ProxyID, expectedProxyID) {
+		return false, nil
+	}
+	r.updateCalls++
+	r.updateCredentialsCalls++
+	account.Credentials = cloneCredentials(credentials)
+	r.lastAccount = account
+	return true, nil
 }
 
 type tokenCacheInvalidatorStub struct {

@@ -154,6 +154,14 @@ func (UsageLog) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("视频计费秒数"),
+		field.Int("video_count").
+			Default(0).
+			Comment("视频生成数量"),
+		field.String("video_resolution").
+			MaxLen(10).
+			Optional().
+			Nillable().
+			Comment("计费用视频分辨率"),
 		field.String("video_task_id").
 			MaxLen(128).
 			Optional().

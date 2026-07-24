@@ -71,7 +71,8 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "model is required")
 		return
 	}
-	if shouldFallbackOpenAIClientModel(reqModel) {
+	requestPlatform := openAICompatibleRequestPlatform(apiKey)
+	if requestPlatform == service.PlatformOpenAI && shouldFallbackOpenAIClientModel(reqModel) {
 		fallbackModel := ""
 		if h.gatewayService != nil {
 			fallbackModel = h.gatewayService.ResolveOpenAIPlatformFallbackModel(c.Request.Context())
@@ -163,7 +164,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 
 	for {
 		reqLog.Debug("openai_chat_completions.account_selecting", zap.Int("excluded_account_count", len(failedAccountIDs)))
-		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithScheduler(
+		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithSchedulerForCapability(
 			c.Request.Context(),
 			apiKey.GroupID,
 			"",
@@ -171,7 +172,11 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			selectionModel,
 			failedAccountIDs,
 			service.OpenAIUpstreamTransportAny,
+			service.OpenAIEndpointCapabilityChatCompletions,
 			false,
+			false,
+			true,
+			requestPlatform,
 		)
 		if err != nil {
 			reqLog.Warn("openai_chat_completions.account_select_failed",

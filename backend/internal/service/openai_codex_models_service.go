@@ -87,6 +87,31 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		requestEndpoint = normalizedBaseURL
 		useAPIKeyUpstream = true
 		appendModelsPath = true
+	case account.IsGrok():
+		if account.Type == AccountTypeOAuth {
+			if s.grokTokenProvider == nil {
+				return nil, infraerrors.New(http.StatusBadGateway, "GROK_CODEX_MODELS_TOKEN_PROVIDER_MISSING", "Grok token provider is unavailable")
+			}
+			var tokenErr error
+			authToken, tokenErr = s.grokTokenProvider.GetAccessToken(ctx, account)
+			if tokenErr != nil || strings.TrimSpace(authToken) == "" {
+				return nil, infraerrors.New(http.StatusBadGateway, "GROK_CODEX_MODELS_TOKEN_MISSING", "account has no Grok access token")
+			}
+		} else if account.Type == AccountTypeAPIKey {
+			authToken = strings.TrimSpace(account.GetCredential("api_key"))
+			if authToken == "" {
+				return nil, infraerrors.New(http.StatusBadGateway, "GROK_CODEX_MODELS_API_KEY_MISSING", "account has no API key for the Grok models upstream")
+			}
+		} else {
+			return nil, infraerrors.Newf(http.StatusBadGateway, "GROK_CODEX_MODELS_ACCOUNT_TYPE_UNSUPPORTED", "Grok account type %q cannot fetch the Codex models manifest", account.Type)
+		}
+		normalizedBaseURL, err := s.validateUpstreamBaseURL(account.GetGrokBaseURL())
+		if err != nil {
+			return nil, infraerrors.Newf(http.StatusBadGateway, "GROK_CODEX_MODELS_UPSTREAM_INVALID", "invalid Grok models upstream base URL: %v", err)
+		}
+		requestEndpoint = normalizedBaseURL
+		useAPIKeyUpstream = true
+		appendModelsPath = true
 	default:
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_CODEX_MODELS_ACCOUNT_TYPE_UNSUPPORTED", "account type %q cannot fetch the Codex models manifest", account.Type)
 	}

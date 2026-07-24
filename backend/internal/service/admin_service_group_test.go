@@ -991,3 +991,39 @@ func TestAdminService_UpdateGroup_InvalidRequestFallbackAllowsAntigravity(t *tes
 	require.NotNil(t, repo.updated)
 	require.Equal(t, fallbackID, *repo.updated.FallbackGroupIDOnInvalidRequest)
 }
+
+func TestAdminService_CreateGroup_WithVideoPricing(t *testing.T) {
+	repo := &groupRepoStubForAdmin{}
+	svc := &adminServiceImpl{groupRepo: repo}
+	price480P, price720P, price1080P := 0.08, 0.12, 0.18
+	videoMultiplier := 0.75
+
+	group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
+		Name:                 "grok-video",
+		Platform:             PlatformGrok,
+		RateMultiplier:       1,
+		VideoRateIndependent: true,
+		VideoRateMultiplier:  &videoMultiplier,
+		VideoPrice480P:       &price480P,
+		VideoPrice720P:       &price720P,
+		VideoPrice1080P:      &price1080P,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, group)
+	require.True(t, repo.created.VideoRateIndependent)
+	require.InDelta(t, 0.75, repo.created.VideoRateMultiplier, 1e-12)
+	require.InDelta(t, 0.08, *repo.created.VideoPrice480P, 1e-12)
+	require.InDelta(t, 0.12, *repo.created.VideoPrice720P, 1e-12)
+	require.InDelta(t, 0.18, *repo.created.VideoPrice1080P, 1e-12)
+}
+
+func TestAdminService_UpdateGroup_RejectsNegativeVideoRateMultiplier(t *testing.T) {
+	repo := &groupRepoStubForAdmin{getByID: &Group{ID: 1, Name: "grok", Platform: PlatformGrok, Status: StatusActive}}
+	svc := &adminServiceImpl{groupRepo: repo}
+	negative := -0.1
+
+	_, err := svc.UpdateGroup(context.Background(), 1, &UpdateGroupInput{VideoRateMultiplier: &negative})
+
+	require.ErrorContains(t, err, "video_rate_multiplier must be >= 0")
+}

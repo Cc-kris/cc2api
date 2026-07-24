@@ -250,6 +250,16 @@ func VideoDurationSeconds(v int) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldVideoDurationSeconds, v))
 }
 
+// VideoCount applies equality check predicate on the "video_count" field. It's identical to VideoCountEQ.
+func VideoCount(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldVideoCount, v))
+}
+
+// VideoResolution applies equality check predicate on the "video_resolution" field. It's identical to VideoResolutionEQ.
+func VideoResolution(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldVideoResolution, v))
+}
+
 // VideoTaskID applies equality check predicate on the "video_task_id" field. It's identical to VideoTaskIDEQ.
 func VideoTaskID(v string) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldVideoTaskID, v))
@@ -2208,6 +2218,121 @@ func VideoDurationSecondsIsNil() predicate.UsageLog {
 // VideoDurationSecondsNotNil applies the NotNil predicate on the "video_duration_seconds" field.
 func VideoDurationSecondsNotNil() predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldNotNull(FieldVideoDurationSeconds))
+}
+
+// VideoCountEQ applies the EQ predicate on the "video_count" field.
+func VideoCountEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldVideoCount, v))
+}
+
+// VideoCountNEQ applies the NEQ predicate on the "video_count" field.
+func VideoCountNEQ(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldVideoCount, v))
+}
+
+// VideoCountIn applies the In predicate on the "video_count" field.
+func VideoCountIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldVideoCount, vs...))
+}
+
+// VideoCountNotIn applies the NotIn predicate on the "video_count" field.
+func VideoCountNotIn(vs ...int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldVideoCount, vs...))
+}
+
+// VideoCountGT applies the GT predicate on the "video_count" field.
+func VideoCountGT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldVideoCount, v))
+}
+
+// VideoCountGTE applies the GTE predicate on the "video_count" field.
+func VideoCountGTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldVideoCount, v))
+}
+
+// VideoCountLT applies the LT predicate on the "video_count" field.
+func VideoCountLT(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldVideoCount, v))
+}
+
+// VideoCountLTE applies the LTE predicate on the "video_count" field.
+func VideoCountLTE(v int) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldVideoCount, v))
+}
+
+// VideoResolutionEQ applies the EQ predicate on the "video_resolution" field.
+func VideoResolutionEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldVideoResolution, v))
+}
+
+// VideoResolutionNEQ applies the NEQ predicate on the "video_resolution" field.
+func VideoResolutionNEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldVideoResolution, v))
+}
+
+// VideoResolutionIn applies the In predicate on the "video_resolution" field.
+func VideoResolutionIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldVideoResolution, vs...))
+}
+
+// VideoResolutionNotIn applies the NotIn predicate on the "video_resolution" field.
+func VideoResolutionNotIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldVideoResolution, vs...))
+}
+
+// VideoResolutionGT applies the GT predicate on the "video_resolution" field.
+func VideoResolutionGT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldVideoResolution, v))
+}
+
+// VideoResolutionGTE applies the GTE predicate on the "video_resolution" field.
+func VideoResolutionGTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldVideoResolution, v))
+}
+
+// VideoResolutionLT applies the LT predicate on the "video_resolution" field.
+func VideoResolutionLT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldVideoResolution, v))
+}
+
+// VideoResolutionLTE applies the LTE predicate on the "video_resolution" field.
+func VideoResolutionLTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldVideoResolution, v))
+}
+
+// VideoResolutionContains applies the Contains predicate on the "video_resolution" field.
+func VideoResolutionContains(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContains(FieldVideoResolution, v))
+}
+
+// VideoResolutionHasPrefix applies the HasPrefix predicate on the "video_resolution" field.
+func VideoResolutionHasPrefix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasPrefix(FieldVideoResolution, v))
+}
+
+// VideoResolutionHasSuffix applies the HasSuffix predicate on the "video_resolution" field.
+func VideoResolutionHasSuffix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasSuffix(FieldVideoResolution, v))
+}
+
+// VideoResolutionIsNil applies the IsNil predicate on the "video_resolution" field.
+func VideoResolutionIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldVideoResolution))
+}
+
+// VideoResolutionNotNil applies the NotNil predicate on the "video_resolution" field.
+func VideoResolutionNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldVideoResolution))
+}
+
+// VideoResolutionEqualFold applies the EqualFold predicate on the "video_resolution" field.
+func VideoResolutionEqualFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEqualFold(FieldVideoResolution, v))
+}
+
+// VideoResolutionContainsFold applies the ContainsFold predicate on the "video_resolution" field.
+func VideoResolutionContainsFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContainsFold(FieldVideoResolution, v))
 }
 
 // VideoTaskIDEQ applies the EQ predicate on the "video_task_id" field.

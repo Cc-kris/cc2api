@@ -72,6 +72,71 @@ describe('AccountUsageCell', () => {
     })
   })
 
+  it('renders Grok billing, local usage and native quota snapshots', async () => {
+    getUsage.mockResolvedValue({
+      subscription_tier: 'SuperGrok',
+      grok_entitlement_status: 'active',
+      grok_billing: {
+        plan: 'SuperGrok',
+        period_type: 'weekly',
+        usage_percent: 35,
+        period_end: '2026-07-31T00:00:00Z'
+      },
+      grok_local_usage_7d: {
+        requests: 7,
+        tokens: 12345,
+        cost: 1.25,
+        standard_cost: 1.25,
+        user_cost: 1.5
+      },
+      grok_request_quota: {
+        limit: 100,
+        remaining: 80,
+        reset_at: '2026-07-25T00:00:00Z'
+      },
+      grok_token_quota: {
+        limit: 100000,
+        remaining: 75000,
+        reset_at: '2026-07-25T00:00:00Z'
+      },
+      grok_quota_snapshot_state: 'observed',
+      grok_last_status_code: 200
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({
+          id: 4501,
+          platform: 'grok',
+          type: 'oauth'
+        })
+      },
+      global: {
+        stubs: {
+          UsageProgressBar: {
+            props: ['label', 'utilization', 'resetsAt'],
+            template: '<div class="usage-bar">{{ label }}|{{ utilization }}|{{ resetsAt }}</div>'
+          },
+          AccountQuotaInfo: true,
+          GrokQuotaProbeCell: {
+            template: '<div data-test="grok-probe" />'
+          }
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(getUsage).toHaveBeenCalledWith(4501)
+    expect(wrapper.text()).toContain('active')
+    expect(wrapper.text()).toContain('7 req')
+    expect(wrapper.text()).toContain('12.3K')
+    expect(wrapper.text()).toContain('A $1.25')
+    expect(wrapper.text()).toContain('U $1.50')
+    expect(wrapper.text()).toContain('7d|35|2026-07-31T00:00:00Z')
+    expect(wrapper.find('[data-test="grok-probe"]').exists()).toBe(true)
+  })
+
   it('Antigravity 图片用量会聚合新旧 image 模型', async () => {
     getUsage.mockResolvedValue({
       antigravity_quota: {

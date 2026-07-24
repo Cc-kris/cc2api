@@ -52,6 +52,8 @@ type CreateGroupRequest struct {
 	AllowImageGeneration bool     `json:"allow_image_generation"`
 	ImageRateIndependent bool     `json:"image_rate_independent"`
 	ImageRateMultiplier  *float64 `json:"image_rate_multiplier"`
+	VideoRateIndependent bool     `json:"video_rate_independent"`
+	VideoRateMultiplier  *float64 `json:"video_rate_multiplier"`
 }
 
 // UpdateGroupRequest 更新分组请求
@@ -64,6 +66,8 @@ type UpdateGroupRequest struct {
 	AllowImageGeneration *bool    `json:"allow_image_generation"`
 	ImageRateIndependent *bool    `json:"image_rate_independent"`
 	ImageRateMultiplier  *float64 `json:"image_rate_multiplier"`
+	VideoRateIndependent *bool    `json:"video_rate_independent"`
+	VideoRateMultiplier  *float64 `json:"video_rate_multiplier"`
 }
 
 // GroupService 分组管理服务
@@ -89,6 +93,13 @@ func (s *GroupService) Create(ctx context.Context, req CreateGroupRequest) (*Gro
 		}
 		imageRateMultiplier = *req.ImageRateMultiplier
 	}
+	videoRateMultiplier := 1.0
+	if req.VideoRateMultiplier != nil {
+		if *req.VideoRateMultiplier < 0 {
+			return nil, fmt.Errorf("video_rate_multiplier must be >= 0")
+		}
+		videoRateMultiplier = *req.VideoRateMultiplier
+	}
 	// 检查名称是否已存在
 	exists, err := s.groupRepo.ExistsByName(ctx, req.Name)
 	if err != nil {
@@ -110,6 +121,8 @@ func (s *GroupService) Create(ctx context.Context, req CreateGroupRequest) (*Gro
 		AllowImageGeneration: req.AllowImageGeneration,
 		ImageRateIndependent: req.ImageRateIndependent,
 		ImageRateMultiplier:  imageRateMultiplier,
+		VideoRateIndependent: req.VideoRateIndependent,
+		VideoRateMultiplier:  videoRateMultiplier,
 	}
 
 	if err := s.groupRepo.Create(ctx, group); err != nil {
@@ -192,6 +205,15 @@ func (s *GroupService) Update(ctx context.Context, id int64, req UpdateGroupRequ
 			return nil, fmt.Errorf("image_rate_multiplier must be >= 0")
 		}
 		group.ImageRateMultiplier = *req.ImageRateMultiplier
+	}
+	if req.VideoRateIndependent != nil {
+		group.VideoRateIndependent = *req.VideoRateIndependent
+	}
+	if req.VideoRateMultiplier != nil {
+		if *req.VideoRateMultiplier < 0 {
+			return nil, fmt.Errorf("video_rate_multiplier must be >= 0")
+		}
+		group.VideoRateMultiplier = *req.VideoRateMultiplier
 	}
 
 	if err := s.groupRepo.Update(ctx, group); err != nil {

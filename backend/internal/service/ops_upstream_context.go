@@ -34,10 +34,30 @@ const (
 
 	// Client-side configuration denials should remain visible in ops_error_logs,
 	// but should be excluded from SLA/error-rate calculations.
-	OpsClientBusinessLimitedKey                 = "ops_client_business_limited"
-	OpsClientBusinessLimitedReasonKey           = "ops_client_business_limited_reason"
-	OpsClientBusinessLimitedReasonIPRestriction = "api_key_ip_restriction"
+	OpsClientBusinessLimitedKey                     = "ops_client_business_limited"
+	OpsClientBusinessLimitedReasonKey               = "ops_client_business_limited_reason"
+	OpsClientBusinessLimitedReasonIPRestriction     = "api_key_ip_restriction"
+	OpsClientBusinessLimitedReasonLocalPolicyDenied = "local_policy_denied"
+	ResponseCommittedKey                            = "response_committed"
 )
+
+func MarkResponseCommitted(c *gin.Context) {
+	if c != nil {
+		c.Set(ResponseCommittedKey, true)
+	}
+}
+
+func IsResponseCommitted(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	v, ok := c.Get(ResponseCommittedKey)
+	if !ok {
+		return false
+	}
+	b, _ := v.(bool)
+	return b
+}
 
 func SetOpsLatencyMs(c *gin.Context, key string, value int64) {
 	if c == nil || strings.TrimSpace(key) == "" || value < 0 {
@@ -117,6 +137,10 @@ type OpsUpstreamErrorEvent struct {
 
 	// Kind: http_error | request_error | retry_exhausted | failover
 	Kind string `json:"kind,omitempty"`
+	// Stage/Scope/Reason distinguish credential acquisition from inference.
+	Stage  string `json:"stage,omitempty"`
+	Scope  string `json:"scope,omitempty"`
+	Reason string `json:"reason,omitempty"`
 
 	Message string `json:"message,omitempty"`
 	Detail  string `json:"detail,omitempty"`

@@ -122,3 +122,11 @@ func defaultAPIMode(apiMode string) string {
 	}
 	return strings.TrimSpace(apiMode)
 }
+
+func normalizeMonitorPrimaryModel(provider, model string) string {
+	model = strings.TrimSpace(model)
+	if model == "" && provider == MonitorProviderGrok {
+		return MonitorDefaultGrokModel
+	}
+	return model
+}

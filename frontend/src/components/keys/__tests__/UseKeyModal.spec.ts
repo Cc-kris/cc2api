@@ -19,6 +19,78 @@ vi.mock('@/composables/useClipboard', () => ({
 import UseKeyModal from '../UseKeyModal.vue'
 
 describe('UseKeyModal', () => {
+  it('renders Grok Build config for Grok groups', () => {
+    const wrapper = mount(UseKeyModal, {
+      props: {
+        show: true,
+        apiKey: 'sk-grok-test',
+        baseUrl: 'https://example.com/v1',
+        platform: 'grok'
+      },
+      global: {
+        stubs: {
+          BaseDialog: {
+            template: '<div><slot /><slot name="footer" /></div>'
+          },
+          Icon: {
+            template: '<span />'
+          }
+        }
+      }
+    })
+
+    const grokConfig = wrapper.findAll('pre code')
+      .map((code) => code.text())
+      .find((content) => content.includes('[model."grok"]'))
+
+    expect(grokConfig).toBeDefined()
+    expect(grokConfig).toContain('model = "grok-4.5"')
+    expect(grokConfig).toContain('base_url = "https://example.com/v1"')
+    expect(grokConfig).toContain('api_key = "sk-grok-test"')
+    expect(grokConfig).toContain('api_backend = "responses"')
+  })
+
+  it('renders Codex WebSocket setup through the native Grok Responses gateway', async () => {
+    const wrapper = mount(UseKeyModal, {
+      props: {
+        show: true,
+        apiKey: 'sk-grok-codex-test',
+        baseUrl: 'https://example.com/v1',
+        platform: 'grok'
+      },
+      global: {
+        stubs: {
+          BaseDialog: {
+            template: '<div><slot /><slot name="footer" /></div>'
+          },
+          Icon: {
+            template: '<span />'
+          }
+        }
+      }
+    })
+
+    const codexTab = wrapper.findAll('button').find((button) =>
+      button.text().includes('keys.useKeyModal.cliTabs.codexCli')
+    )
+    expect(codexTab).toBeDefined()
+    await codexTab!.trigger('click')
+    await nextTick()
+
+    const codeBlocks = wrapper.findAll('pre code').map((code) => code.text())
+    const configToml = codeBlocks.find((content) => content.includes('[model_providers.sub2api_grok]'))
+    expect(configToml).toBeDefined()
+    expect(configToml).toContain('model_provider = "sub2api_grok"')
+    expect(configToml).toContain('model = "grok-4.5"')
+    expect(configToml).toContain('base_url = "https://example.com/v1"')
+    expect(configToml).toContain('env_key = "SUB2API_API_KEY"')
+    expect(configToml).toContain('wire_api = "responses"')
+    expect(configToml).toContain('supports_websockets = true')
+    expect(configToml).toContain('[features]\nresponses_websockets_v2 = true')
+    expect(codeBlocks).toContain('export SUB2API_API_KEY="sk-grok-codex-test"')
+    expect(wrapper.text()).not.toContain('auth.json')
+  })
+
   it('renders Codex config as a single config.toml with inline bearer token', async () => {
     const wrapper = mount(UseKeyModal, {
       props: {

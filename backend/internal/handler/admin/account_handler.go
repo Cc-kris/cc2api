@@ -54,6 +54,8 @@ type AccountHandler struct {
 	openaiOAuthService      *service.OpenAIOAuthService
 	geminiOAuthService      *service.GeminiOAuthService
 	antigravityOAuthService *service.AntigravityOAuthService
+	grokOAuthService        service.GrokOAuthTokenService
+	grokImportProber        grokImportProber
 	rateLimitService        *service.RateLimitService
 	accountUsageService     *service.AccountUsageService
 	accountTestService      *service.AccountTestService
@@ -66,6 +68,13 @@ type AccountHandler struct {
 	sessionLimitCache       service.SessionLimitCache
 	rpmCache                service.RPMCache
 	tokenCacheInvalidator   service.TokenCacheInvalidator
+}
+
+func (h *AccountHandler) SetGrokServices(oauth service.GrokOAuthTokenService, prober grokImportProber) {
+	if h != nil {
+		h.grokOAuthService = oauth
+		h.grokImportProber = prober
+	}
 }
 
 // NewAccountHandler creates a new admin account handler

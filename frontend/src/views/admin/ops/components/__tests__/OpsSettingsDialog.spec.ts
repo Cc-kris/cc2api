@@ -326,7 +326,7 @@ describe('OpsSettingsDialog', () => {
         threshold: 55,
         trigger_level: 'P1',
         notification_channels: ['in_app', 'email'],
-        silence_minutes: 15,
+        silence_minutes: 10,
         notify_email: true,
       })
     )

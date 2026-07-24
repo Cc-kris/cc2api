@@ -57,6 +57,25 @@ func TestFetchCodexModelsManifestConvertsStandardOpenAIList(t *testing.T) {
 	require.Equal(t, "Bearer sk-test", upstream.request.Header.Get("Authorization"))
 }
 
+func TestFetchCodexModelsManifestSupportsGrokAPIKeyAccount(t *testing.T) {
+	upstream := &codexModelsHTTPUpstreamStub{response: codexModelsTestResponse(http.StatusOK, `{
+		"object":"list",
+		"data":[{"id":"grok-4.5"}]
+	}`)}
+	service := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	account := &Account{
+		ID: 13, Platform: PlatformGrok, Type: AccountTypeAPIKey, Concurrency: 1,
+		Credentials: map[string]any{"api_key": "xai-test", "base_url": "https://api.x.ai/v1"},
+	}
+
+	manifest, err := service.FetchCodexModelsManifest(context.Background(), account, "0.137.0", "")
+
+	require.NoError(t, err)
+	require.Equal(t, "grok-4.5", gjson.GetBytes(manifest.Body, "models.0.slug").String())
+	require.Equal(t, "https://api.x.ai/v1/models?client_version=0.137.0", upstream.request.URL.String())
+	require.Equal(t, "Bearer xai-test", upstream.request.Header.Get("Authorization"))
+}
+
 func TestFetchCodexModelsManifestPreservesNativeManifest(t *testing.T) {
 	native := codexModelsNativeTestManifest("gpt-5.6")
 	upstream := &codexModelsHTTPUpstreamStub{response: codexModelsTestResponse(http.StatusOK, native)}

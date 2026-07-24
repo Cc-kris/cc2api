@@ -11,7 +11,10 @@ import (
 const (
 	// antigravityRefreshWindow Antigravity token 提前刷新窗口：15分钟
 	// Google OAuth token 有效期55分钟，提前15分钟刷新
-	antigravityRefreshWindow = 15 * time.Minute
+	antigravityRefreshWindow                   = 15 * time.Minute
+	antigravityForceTokenRefreshExtraKey       = "antigravity_force_token_refresh"
+	antigravityForceTokenRefreshReasonExtraKey = "antigravity_force_token_refresh_reason"
+	antigravityForceTokenRefreshAtExtraKey     = "antigravity_force_token_refresh_at"
 )
 
 // AntigravityTokenRefresher 实现 TokenRefresher 接口
@@ -52,6 +55,18 @@ func (r *AntigravityTokenRefresher) NeedsRefresh(account *Account, _ time.Durati
 			account.ID, expiresAt.Format("2006-01-02 15:04:05"), timeUntilExpiry, antigravityRefreshWindow)
 	}
 	return needsRefresh
+}
+
+func accountNeedsAntigravityForceTokenRefresh(account *Account) bool {
+	return account != nil && account.Platform == PlatformAntigravity && account.Type == AccountTypeOAuth && account.getExtraBool(antigravityForceTokenRefreshExtraKey)
+}
+
+func clearAntigravityForceTokenRefreshExtra() map[string]any {
+	return map[string]any{
+		antigravityForceTokenRefreshExtraKey:       false,
+		antigravityForceTokenRefreshReasonExtraKey: "",
+		antigravityForceTokenRefreshAtExtraKey:     "",
+	}
 }
 
 // Refresh 执行 token 刷新

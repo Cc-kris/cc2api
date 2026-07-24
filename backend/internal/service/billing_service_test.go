@@ -874,3 +874,22 @@ func TestGetModelPricingWithChannel_UnknownModelReturnsError(t *testing.T) {
 	require.Nil(t, pricing)
 	require.Contains(t, err.Error(), "pricing not found")
 }
+
+func TestCalculateVideoCostUsesSeparateConfigAndDuration(t *testing.T) {
+	svc := newTestBillingService()
+	videoPrice := 0.08
+	cost := svc.CalculateVideoCost("grok-imagine-video", VideoBillingResolution480P, 1, 10, &VideoPriceConfig{Price480P: &videoPrice}, 0.5)
+
+	require.InDelta(t, 0.8, cost.TotalCost, 1e-10)
+	require.InDelta(t, 0.4, cost.ActualCost, 1e-10)
+	require.Equal(t, string(BillingModeVideo), cost.BillingMode)
+}
+
+func TestCalculateGrokMediaCostUsesOfficialDefaultRateCard(t *testing.T) {
+	svc := newTestBillingService()
+	image := svc.CalculateImageCost("grok-imagine-image", "1K", 1, nil, 1)
+	video := svc.CalculateVideoCost("grok-imagine-video-1.5", "1080p", 1, 8, nil, 1)
+
+	require.InDelta(t, 0.02, image.TotalCost, 1e-10)
+	require.InDelta(t, 2.0, video.TotalCost, 1e-10)
+}

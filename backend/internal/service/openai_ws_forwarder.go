@@ -2623,9 +2623,10 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	}
 
 	wsDecision := s.getOpenAIWSProtocolResolver().Resolve(account)
+	forceHTTPBridge := account.Platform == PlatformGrok
 	modeRouterV2Enabled := s != nil && s.cfg != nil && s.cfg.Gateway.OpenAIWS.ModeRouterV2Enabled
 	ingressMode := OpenAIWSIngressModeCtxPool
-	if modeRouterV2Enabled {
+	if modeRouterV2Enabled && !forceHTTPBridge {
 		ingressMode = account.ResolveOpenAIResponsesWebSocketV2Mode(s.cfg.Gateway.OpenAIWS.IngressModeDefault)
 		if ingressMode == OpenAIWSIngressModeOff {
 			return NewOpenAIWSClientCloseError(
@@ -2649,30 +2650,39 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				hooks,
 				wsDecision,
 			)
+		case OpenAIWSIngressModeHTTPBridge:
+			forceHTTPBridge = true
 		case OpenAIWSIngressModeCtxPool, OpenAIWSIngressModeShared, OpenAIWSIngressModeDedicated:
 			// continue
 		default:
 			return NewOpenAIWSClientCloseError(
 				coderws.StatusPolicyViolation,
-				"websocket mode only supports ctx_pool/passthrough",
+				"websocket mode only supports ctx_pool/passthrough/http_bridge",
 				nil,
 			)
 		}
 	}
-	if wsDecision.Transport != OpenAIUpstreamTransportResponsesWebsocketV2 {
+	if !forceHTTPBridge && wsDecision.Transport != OpenAIUpstreamTransportResponsesWebsocketV2 {
 		return fmt.Errorf("websocket ingress requires ws_v2 transport, got=%s", wsDecision.Transport)
 	}
 	dedicatedMode := modeRouterV2Enabled && ingressMode == OpenAIWSIngressModeDedicated
 
-	wsURL, err := s.buildOpenAIResponsesWSURL(account)
-	if err != nil {
-		return fmt.Errorf("build ws url: %w", err)
-	}
+	wsURL := ""
 	wsHost := "-"
 	wsPath := "-"
-	if parsedURL, parseErr := url.Parse(wsURL); parseErr == nil && parsedURL != nil {
-		wsHost = normalizeOpenAIWSLogValue(parsedURL.Host)
-		wsPath = normalizeOpenAIWSLogValue(parsedURL.Path)
+	if forceHTTPBridge {
+		wsHost = "xai-http-bridge"
+		wsPath = "/v1/responses"
+	} else {
+		var err error
+		wsURL, err = s.buildOpenAIResponsesWSURL(account)
+		if err != nil {
+			return fmt.Errorf("build ws url: %w", err)
+		}
+		if parsedURL, parseErr := url.Parse(wsURL); parseErr == nil && parsedURL != nil {
+			wsHost = normalizeOpenAIWSLogValue(parsedURL.Host)
+			wsPath = normalizeOpenAIWSLogValue(parsedURL.Path)
+		}
 	}
 	debugEnabled := isOpenAIWSModeDebugEnabled()
 
@@ -2901,6 +2911,140 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	if stateStore != nil && storeDisabled && firstPayload.previousResponseID == "" && sessionHash != "" {
 		if connID, ok := stateStore.GetSessionConn(groupID, sessionHash); ok {
 			preferredConnID = connID
+		}
+	}
+
+	if forceHTTPBridge || s.shouldBridgeOpenAIWSHTTP(account, firstPayload.payloadBytes, firstPayload.previousResponseID) {
+		writeBridgeClientMessage := func(message []byte) error {
+			writeCtx, cancel := context.WithTimeout(ctx, s.openAIWSWriteTimeout())
+			defer cancel()
+			return clientConn.Write(writeCtx, coderws.MessageText, message)
+		}
+		readBridgeClientMessage := func() ([]byte, error) {
+			msgType, payload, readErr := clientConn.Read(ctx)
+			if readErr != nil {
+				return nil, readErr
+			}
+			if msgType != coderws.MessageText && msgType != coderws.MessageBinary {
+				return nil, NewOpenAIWSClientCloseError(
+					coderws.StatusPolicyViolation,
+					fmt.Sprintf("unsupported websocket client message type: %s", msgType.String()),
+					nil,
+				)
+			}
+			return payload, nil
+		}
+
+		logOpenAIWSModeInfo(
+			"ingress_ws_http_bridge_start account_id=%d account_type=%s payload_bytes=%d threshold_bytes=%d has_session_hash=%v store_disabled=%v",
+			account.ID,
+			account.Type,
+			firstPayload.payloadBytes,
+			s.openAIWSHTTPBridgeThresholdBytes(),
+			sessionHash != "",
+			storeDisabled,
+		)
+		currentBridgePayload := firstPayload
+		grokCacheSeedPayload := firstPayload.payloadRaw
+		var bridgeReplayInput []json.RawMessage
+		bridgeReplayInputExists := false
+		for turn := 1; ; turn++ {
+			if turn > 1 && hooks != nil && hooks.BeforeRequest != nil {
+				updatedPayload, hookErr := hooks.BeforeRequest(turn, currentBridgePayload.payloadRaw, currentBridgePayload.originalModel)
+				if hookErr != nil {
+					return hookErr
+				}
+				if updatedPayload != nil {
+					currentBridgePayload.payloadRaw = updatedPayload
+					currentBridgePayload.payloadBytes = len(updatedPayload)
+					if model := strings.TrimSpace(gjson.GetBytes(updatedPayload, "model").String()); model != "" {
+						currentBridgePayload.originalModel = model
+					}
+				}
+			}
+			if hooks != nil && hooks.BeforeTurn != nil {
+				if hookErr := hooks.BeforeTurn(turn); hookErr != nil {
+					return hookErr
+				}
+			}
+
+			bridgePayloadRaw := currentBridgePayload.payloadRaw
+			bridgePayloadBytes := currentBridgePayload.payloadBytes
+			needsBridgeReplay := currentBridgePayload.previousResponseID != "" || openAIWSRawPayloadHasToolCallOutput(currentBridgePayload.payloadRaw)
+			turnReplayInput, turnReplayInputExists, replayInputErr := buildOpenAIWSReplayInputSequence(
+				bridgeReplayInput,
+				bridgeReplayInputExists,
+				currentBridgePayload.payloadRaw,
+				needsBridgeReplay,
+			)
+			if replayInputErr != nil {
+				return fmt.Errorf("build websocket http bridge replay input: %w", replayInputErr)
+			}
+			if needsBridgeReplay && turnReplayInputExists {
+				updatedPayload, setInputErr := setOpenAIWSPayloadInputSequence(currentBridgePayload.payloadRaw, turnReplayInput, true)
+				if setInputErr != nil {
+					return fmt.Errorf("set websocket http bridge replay input: %w", setInputErr)
+				}
+				bridgePayloadRaw = updatedPayload
+				bridgePayloadBytes = len(updatedPayload)
+			}
+
+			grokCacheIdentity := ""
+			if account.Platform == PlatformGrok {
+				var cacheErr error
+				grokCacheIdentity, cacheErr = resolveGrokWSCacheIdentity(c, account, grokCacheSeedPayload, currentBridgePayload.originalModel)
+				if cacheErr != nil {
+					return fmt.Errorf("resolve Grok websocket cache identity: %w", cacheErr)
+				}
+			}
+			result, bridgeErr := s.proxyOpenAIWSHTTPBridgeTurn(
+				ctx,
+				c,
+				account,
+				token,
+				bridgePayloadRaw,
+				bridgePayloadBytes,
+				currentBridgePayload.originalModel,
+				currentBridgePayload.imageBillingModel,
+				currentBridgePayload.imageSizeTier,
+				currentBridgePayload.imageInputSize,
+				grokCacheIdentity,
+				turn,
+				writeBridgeClientMessage,
+			)
+			if hooks != nil && hooks.AfterTurn != nil {
+				hooks.AfterTurn(turn, result, bridgeErr)
+			}
+			if bridgeErr != nil {
+				return bridgeErr
+			}
+			if result == nil {
+				return errors.New("websocket http bridge turn result is nil")
+			}
+			bridgeReplayInput = cloneOpenAIWSRawMessages(turnReplayInput)
+			bridgeReplayInputExists = turnReplayInputExists
+			if result.wsReplayInputExists {
+				bridgeReplayInput = append(bridgeReplayInput, cloneOpenAIWSRawMessages(result.wsReplayInput)...)
+				bridgeReplayInputExists = true
+			}
+			responseID := strings.TrimSpace(result.RequestID)
+			if responseID != "" && stateStore != nil {
+				ttl := s.openAIWSResponseStickyTTL()
+				logOpenAIWSBindResponseAccountWarn(groupID, account.ID, responseID, stateStore.BindResponseAccount(ctx, groupID, responseID, account.ID, ttl))
+			}
+
+			nextClientMessage, readErr := readBridgeClientMessage()
+			if readErr != nil {
+				if isOpenAIWSClientDisconnectError(readErr) {
+					return nil
+				}
+				return fmt.Errorf("read client websocket request: %w", readErr)
+			}
+			nextPayload, parseErr := parseClientPayload(nextClientMessage, false)
+			if parseErr != nil {
+				return parseErr
+			}
+			currentBridgePayload = nextPayload
 		}
 	}
 
@@ -4165,6 +4309,85 @@ func isOpenAIWSTerminalEvent(eventType string) bool {
 	default:
 		return false
 	}
+}
+
+func normalizeOpenAIWSTerminalEvent(eventType string) string {
+	switch strings.TrimSpace(eventType) {
+	case "response.completed":
+		return "response.completed"
+	case "response.done":
+		return "response.done"
+	case "response.failed":
+		return "response.failed"
+	case "response.incomplete":
+		return "response.incomplete"
+	case "response.cancelled", "response.canceled":
+		return "response.cancelled"
+	default:
+		return ""
+	}
+}
+
+func openAIWSPayloadTransientStatus(payload []byte) int {
+	if len(payload) == 0 {
+		return 0
+	}
+	status := int(gjson.GetBytes(payload, "response.error.status_code").Int())
+	if status == 0 {
+		status = int(gjson.GetBytes(payload, "response.error.status").Int())
+	}
+	if status == 0 {
+		status = int(gjson.GetBytes(payload, "error.status_code").Int())
+	}
+	if status == 0 {
+		status = int(gjson.GetBytes(payload, "error.status").Int())
+	}
+	if shouldCooldownOpenAITransientUpstreamError(status, payload) {
+		return status
+	}
+	if status != 0 {
+		return 0
+	}
+	code := strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "response.error.code").String()))
+	errType := strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "response.error.type").String()))
+	if code == "" {
+		code = strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "error.code").String()))
+	}
+	if errType == "" {
+		errType = strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "error.type").String()))
+	}
+	switch {
+	case code == "server_is_overloaded", code == "slow_down":
+		return http.StatusServiceUnavailable
+	case strings.Contains(code, "server_error"),
+		strings.Contains(code, "internal_error"),
+		strings.Contains(code, "upstream_error"),
+		strings.Contains(errType, "server_error"),
+		strings.Contains(errType, "internal_error"),
+		strings.Contains(errType, "upstream_error"):
+		return http.StatusInternalServerError
+	default:
+		return 0
+	}
+}
+
+func (s *OpenAIGatewayService) handleOpenAIWSTerminalTransientFailure(
+	ctx context.Context,
+	account *Account,
+	canonicalModel string,
+	headers http.Header,
+	payload []byte,
+) string {
+	eventType, _, _ := parseOpenAIWSEventEnvelope(payload)
+	terminalEvent := normalizeOpenAIWSTerminalEvent(eventType)
+	if terminalEvent != "response.failed" {
+		return terminalEvent
+	}
+	status := openAIWSPayloadTransientStatus(payload)
+	if status != 0 {
+		s.handleOpenAIAccountUpstreamError(ctx, account, status, headers, payload, canonicalModel)
+	}
+	return terminalEvent
 }
 
 func isOpenAIWSTokenEvent(eventType string) bool {

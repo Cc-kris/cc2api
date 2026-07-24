@@ -1126,6 +1126,41 @@ func (s *OpenAIGatewayService) SelectAccountWithSchedulerForImages(
 	return selection, decision, err
 }
 
+// SelectAccountWithSchedulerForCapability selects an account for an
+// OpenAI-compatible platform while enforcing the endpoint capability.
+func (s *OpenAIGatewayService) SelectAccountWithSchedulerForCapability(
+	ctx context.Context,
+	groupID *int64,
+	previousResponseID string,
+	sessionHash string,
+	requestedModel string,
+	excludedIDs map[int64]struct{},
+	requiredTransport OpenAIUpstreamTransport,
+	requiredCapability OpenAIEndpointCapability,
+	requireCompact bool,
+	previousResponseCanMove bool,
+	useUpstreamTokenCost bool,
+	platformOverride ...string,
+) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
+	platform := PlatformOpenAI
+	if len(platformOverride) > 0 && platformOverride[0] != "" {
+		platform = platformOverride[0]
+	}
+	if platform == PlatformOpenAI {
+		return s.SelectAccountWithScheduler(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requireCompact)
+	}
+	return s.selectCompatiblePlatformAccount(ctx, groupID, sessionHash, requestedModel, excludedIDs, requiredCapability, platform)
+}
+
+// ReportOpenAIAccountScheduleModelResult preserves the local scheduler API and
+// clears model-scoped transient failures after a successful call.
+func (s *OpenAIGatewayService) ReportOpenAIAccountScheduleModelResult(accountID int64, model string, success bool, firstTokenMs *int) {
+	if success && s != nil && s.openaiModelTransient != nil {
+		s.openaiModelTransient.recordSuccess(accountID, normalizeOpenAIAccountModelTransientModel(model))
+	}
+	s.ReportOpenAIAccountScheduleResult(accountID, success, firstTokenMs)
+}
+
 func (s *OpenAIGatewayService) selectAccountWithScheduler(
 	ctx context.Context,
 	groupID *int64,
