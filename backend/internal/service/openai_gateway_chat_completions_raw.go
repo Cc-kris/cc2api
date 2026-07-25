@@ -298,6 +298,12 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	}
 	if result != nil && account.Platform == PlatformGrok {
 		addOpenAIUsage(&result.Usage, bridgeUsage)
+		if bridgeUsage.InputTokens > 0 || bridgeUsage.OutputTokens > 0 || bridgeUsage.CacheCreationInputTokens > 0 || bridgeUsage.CacheReadInputTokens > 0 {
+			result.AuxiliaryUsages = append(result.AuxiliaryUsages, OpenAIAuxiliaryUsage{
+				Model: grokComposerImageBridgeVisionModel,
+				Usage: bridgeUsage,
+			})
+		}
 		result.UpstreamEndpoint = grokChatRawEndpoint
 	}
 	return result, forwardErr

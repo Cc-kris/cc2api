@@ -1506,6 +1506,102 @@ func (r *usageLogRepository) GetSeedaceVideoByTaskID(ctx context.Context, apiKey
 	return log, nil
 }
 
+func (r *usageLogRepository) CreateGrokVideoTaskBinding(
+	ctx context.Context,
+	apiKeyID, userID int64,
+	groupID *int64,
+	taskID string,
+	accountID int64,
+) error {
+	taskID = strings.TrimSpace(taskID)
+	if apiKeyID <= 0 || userID <= 0 || taskID == "" || accountID <= 0 {
+		return service.ErrGrokVideoTaskBindingConflict
+	}
+	result, err := r.sql.ExecContext(ctx, `
+		INSERT INTO grok_video_task_bindings (api_key_id, user_id, group_id, task_id, account_id)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (api_key_id, user_id, task_id) DO NOTHING
+	`, apiKeyID, userID, groupID, taskID, accountID)
+	if err != nil {
+		return err
+	}
+	inserted, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if inserted > 0 {
+		return nil
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT account_id, group_id
+		FROM grok_video_task_bindings
+		WHERE api_key_id = $1 AND user_id = $2 AND task_id = $3
+	`, apiKeyID, userID, taskID)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		return service.ErrGrokVideoTaskBindingConflict
+	}
+	var existingAccountID int64
+	var existingGroupID sql.NullInt64
+	if err := rows.Scan(&existingAccountID, &existingGroupID); err != nil {
+		return err
+	}
+	wantedGroupID := sql.NullInt64{}
+	if groupID != nil {
+		wantedGroupID = sql.NullInt64{Int64: *groupID, Valid: true}
+	}
+	if existingAccountID != accountID || existingGroupID != wantedGroupID {
+		return service.ErrGrokVideoTaskBindingConflict
+	}
+	return nil
+}
+
+func (r *usageLogRepository) GetGrokVideoTaskAccountID(
+	ctx context.Context,
+	apiKeyID, userID int64,
+	groupID *int64,
+	taskID string,
+) (int64, error) {
+	taskID = strings.TrimSpace(taskID)
+	if apiKeyID <= 0 || userID <= 0 || taskID == "" {
+		return 0, service.ErrUsageLogNotFound
+	}
+	query := `
+		SELECT account_id
+		FROM grok_video_task_bindings
+		WHERE api_key_id = $1 AND user_id = $2 AND task_id = $3
+	`
+	args := []any{apiKeyID, userID, taskID}
+	if groupID == nil {
+		query += " AND group_id IS NULL"
+	} else {
+		query += " AND group_id = $4"
+		args = append(args, *groupID)
+	}
+	rows, err := r.sql.QueryContext(ctx, query, args...)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, err
+		}
+		return 0, service.ErrUsageLogNotFound
+	}
+	var accountID int64
+	if err := rows.Scan(&accountID); err != nil {
+		return 0, err
+	}
+	return accountID, nil
+}
+
 func (r *usageLogRepository) ListByUser(ctx context.Context, userID int64, params pagination.PaginationParams) ([]service.UsageLog, *pagination.PaginationResult, error) {
 	return r.listUsageLogsWithPagination(ctx, "WHERE user_id = $1", []any{userID}, params)
 }

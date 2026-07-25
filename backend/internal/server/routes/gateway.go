@@ -106,9 +106,13 @@ func RegisterGatewayRoutes(
 			}
 			h.Gateway.Messages(c)
 		})
-		// /v1/messages/count_tokens: OpenAI groups get 404
+		// /v1/messages/count_tokens: Grok estimates locally; OpenAI remains unsupported.
 		gateway.POST("/messages/count_tokens", func(c *gin.Context) {
-			if getGroupPlatform(c) == service.PlatformOpenAI {
+			switch getGroupPlatform(c) {
+			case service.PlatformGrok:
+				h.OpenAIGateway.GrokCountTokens(c)
+				return
+			case service.PlatformOpenAI:
 				c.JSON(http.StatusNotFound, gin.H{
 					"type": "error",
 					"error": gin.H{

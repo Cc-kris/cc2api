@@ -30,6 +30,8 @@ type UsageLogRepository interface {
 	Create(ctx context.Context, log *UsageLog) (inserted bool, err error)
 	GetByID(ctx context.Context, id int64) (*UsageLog, error)
 	GetSeedaceVideoByTaskID(ctx context.Context, apiKeyID int64, taskID string) (*UsageLog, error)
+	CreateGrokVideoTaskBinding(ctx context.Context, apiKeyID, userID int64, groupID *int64, taskID string, accountID int64) error
+	GetGrokVideoTaskAccountID(ctx context.Context, apiKeyID, userID int64, groupID *int64, taskID string) (int64, error)
 	Delete(ctx context.Context, id int64) error
 
 	ListByUser(ctx context.Context, userID int64, params pagination.PaginationParams) ([]UsageLog, *pagination.PaginationResult, error)

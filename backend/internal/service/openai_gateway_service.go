@@ -230,6 +230,11 @@ type OpenAIUsage struct {
 	ImageOutputTokens        int `json:"image_output_tokens,omitempty"`
 }
 
+type OpenAIAuxiliaryUsage struct {
+	Model string
+	Usage OpenAIUsage
+}
+
 const actualOpenAIUpstreamEndpointKey = "actual_openai_upstream_endpoint"
 
 func SetActualOpenAIUpstreamEndpoint(c *gin.Context, endpoint string) {
@@ -289,6 +294,10 @@ type OpenAIForwardResult struct {
 	VideoResolution       string
 	VideoDurationSeconds  int
 	WebSearchCalls        int
+	AuxiliaryUsages       []OpenAIAuxiliaryUsage
+	GrokMediaResponseBody []byte
+	GrokMediaStatusCode   int
+	GrokMediaBuffered     bool
 
 	wsReplayInput       []json.RawMessage
 	wsReplayInputExists bool
@@ -6096,6 +6105,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		usageLog.VideoResolution = optionalTrimmedStringPtr(NormalizeVideoBillingResolutionOrDefault(result.VideoResolution))
 		videoDurationSeconds := NormalizeVideoBillingDurationSecondsOrDefault(result.VideoDurationSeconds)
 		usageLog.VideoDurationSeconds = &videoDurationSeconds
+		usageLog.VideoTaskID = optionalTrimmedStringPtr(result.ResponseID)
 	}
 	if cost != nil {
 		usageLog.InputCost = cost.InputCost
@@ -6257,6 +6267,50 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(
 	if len(billingModels) == 0 || billingModel == "" {
 		return nil, errors.New("openai usage billing model is empty")
 	}
+	if len(result.AuxiliaryUsages) > 0 {
+		mainTokens := tokens
+		for _, auxiliary := range result.AuxiliaryUsages {
+			mainTokens = subtractUsageTokens(mainTokens, usageTokensFromOpenAIUsage(auxiliary.Usage))
+		}
+		combined, err := s.calculateOpenAIRecordUsageTokenCostCandidates(ctx, apiKey, billingModels, multiplier, mainTokens, serviceTier)
+		if err != nil {
+			return nil, err
+		}
+		for _, auxiliary := range result.AuxiliaryUsages {
+			model := strings.TrimSpace(auxiliary.Model)
+			if model == "" {
+				return nil, errors.New("openai auxiliary usage billing model is empty")
+			}
+			auxiliaryCost, err := s.calculateOpenAIRecordUsageTokenCost(ctx, apiKey, model, multiplier, usageTokensFromOpenAIUsage(auxiliary.Usage), "")
+			if err != nil {
+				if !isUsagePricingUnavailableError(err) {
+					return nil, fmt.Errorf("calculate auxiliary model %s cost: %w", model, err)
+				}
+				// Preserve the correctly calculated main-model charge. The global
+				// missing-pricing policy remains fail-open, but an auxiliary lookup
+				// must never zero the entire multi-model request.
+				logger.L().With(
+					zap.String("component", "service.openai_gateway"),
+					zap.String("auxiliary_model", model),
+					zap.Int64("api_key_id", apiKey.ID),
+				).Warn("openai_usage.auxiliary_pricing_missing_skipped", zap.Error(err))
+				continue
+			}
+			addCostBreakdown(combined, auxiliaryCost)
+		}
+		return combined, nil
+	}
+	return s.calculateOpenAIRecordUsageTokenCostCandidates(ctx, apiKey, billingModels, multiplier, tokens, serviceTier)
+}
+
+func (s *OpenAIGatewayService) calculateOpenAIRecordUsageTokenCostCandidates(
+	ctx context.Context,
+	apiKey *APIKey,
+	billingModels []string,
+	multiplier float64,
+	tokens UsageTokens,
+	serviceTier string,
+) (*CostBreakdown, error) {
 	var lastErr error
 	for _, candidate := range billingModels {
 		candidate = strings.TrimSpace(candidate)
@@ -6273,6 +6327,44 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(
 		lastErr = errors.New("no non-empty billing model candidates")
 	}
 	return nil, fmt.Errorf("calculate OpenAI usage cost failed for billing models %s: %w", strings.Join(billingModels, ","), lastErr)
+}
+
+func usageTokensFromOpenAIUsage(usage OpenAIUsage) UsageTokens {
+	actualInputTokens := usage.InputTokens - usage.CacheReadInputTokens
+	if actualInputTokens < 0 {
+		actualInputTokens = 0
+	}
+	return UsageTokens{
+		InputTokens:         actualInputTokens,
+		OutputTokens:        usage.OutputTokens,
+		CacheCreationTokens: usage.CacheCreationInputTokens,
+		CacheReadTokens:     usage.CacheReadInputTokens,
+		ImageOutputTokens:   usage.ImageOutputTokens,
+	}
+}
+
+func subtractUsageTokens(total, sub UsageTokens) UsageTokens {
+	total.InputTokens = max(total.InputTokens-sub.InputTokens, 0)
+	total.OutputTokens = max(total.OutputTokens-sub.OutputTokens, 0)
+	total.CacheCreationTokens = max(total.CacheCreationTokens-sub.CacheCreationTokens, 0)
+	total.CacheReadTokens = max(total.CacheReadTokens-sub.CacheReadTokens, 0)
+	total.CacheCreation5mTokens = max(total.CacheCreation5mTokens-sub.CacheCreation5mTokens, 0)
+	total.CacheCreation1hTokens = max(total.CacheCreation1hTokens-sub.CacheCreation1hTokens, 0)
+	total.ImageOutputTokens = max(total.ImageOutputTokens-sub.ImageOutputTokens, 0)
+	return total
+}
+
+func addCostBreakdown(dst, src *CostBreakdown) {
+	if dst == nil || src == nil {
+		return
+	}
+	dst.InputCost += src.InputCost
+	dst.OutputCost += src.OutputCost
+	dst.ImageOutputCost += src.ImageOutputCost
+	dst.CacheCreationCost += src.CacheCreationCost
+	dst.CacheReadCost += src.CacheReadCost
+	dst.TotalCost += src.TotalCost
+	dst.ActualCost += src.ActualCost
 }
 
 func isGrokVideoBillingModel(model string) bool {
@@ -6385,12 +6477,16 @@ func (s *OpenAIGatewayService) calculateOpenAIVideoCost(
 	}
 	if resolved := s.resolveOpenAIChannelPricing(ctx, billingModel, apiKey); resolved != nil &&
 		(resolved.Mode == BillingModePerRequest || resolved.Mode == BillingModeImage || resolved.Mode == BillingModePerSecond) {
+		requestCount := videoCount
+		if resolved.Mode == BillingModePerSecond {
+			requestCount *= durationSeconds
+		}
 		gid := apiKey.Group.ID
 		cost, err := s.billingService.CalculateCostUnified(CostInput{
 			Ctx:            ctx,
 			Model:          billingModel,
 			GroupID:        &gid,
-			RequestCount:   videoCount,
+			RequestCount:   requestCount,
 			SizeTier:       resolution,
 			RateMultiplier: multiplier,
 			Resolver:       s.resolver,

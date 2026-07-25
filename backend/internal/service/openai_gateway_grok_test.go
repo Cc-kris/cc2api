@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -714,6 +715,34 @@ func TestParseGrokMediaRequestBuildsMultipartModerationBody(t *testing.T) {
 	require.True(t, strings.HasPrefix(gjson.GetBytes(moderationBody, "images.0.image_url").String(), "data:image/"))
 }
 
+func TestParseGrokMediaRequestStrictRejectsOversizedMultipartPart(t *testing.T) {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	part, err := writer.CreateFormFile("image", "oversized.png")
+	require.NoError(t, err)
+	_, err = part.Write(bytes.Repeat([]byte{'x'}, int(openAIImageMaxUploadPartSize)+1))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	_, err = ParseGrokMediaRequestStrict(writer.FormDataContentType(), buf.Bytes())
+	require.ErrorIs(t, err, ErrGrokMediaUploadPartTooLarge)
+}
+
+func TestParseGrokMediaRequestStrictAcceptsPartAtLimit(t *testing.T) {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	part, err := writer.CreateFormFile("image", "at-limit.png")
+	require.NoError(t, err)
+	_, err = part.Write(bytes.Repeat([]byte{'x'}, int(openAIImageMaxUploadPartSize)))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	info, err := ParseGrokMediaRequestStrict(writer.FormDataContentType(), buf.Bytes())
+	require.NoError(t, err)
+	require.Len(t, info.Uploads, 1)
+	require.Len(t, info.Uploads[0].Data, int(openAIImageMaxUploadPartSize))
+}
+
 func TestParseGrokMediaVideoRequestResolution(t *testing.T) {
 	info := ParseGrokMediaRequest("application/json", []byte(`{"model":"grok-imagine-video","prompt":"waves","resolution":"720p"}`))
 
@@ -1160,6 +1189,11 @@ func TestForwardGrokMediaVideoGenerationReturnsUsageAndResponseID(t *testing.T) 
 	require.Equal(t, 1, result.VideoCount)
 	require.Equal(t, VideoBillingResolution720P, result.VideoResolution)
 	require.Equal(t, 10, result.VideoDurationSeconds)
+	require.True(t, result.GrokMediaBuffered)
+	require.Empty(t, recorder.Body.String())
+	require.NoError(t, svc.CommitBufferedGrokMediaResponse(c, result))
+	require.JSONEq(t, `{"request_id":"video-request-123","usage":{"prompt_tokens":3,"completion_tokens":4}}`, recorder.Body.String())
+	require.False(t, result.GrokMediaBuffered)
 }
 
 func TestForwardGrokMediaVideoGenerationPreservesImageToVideoModel(t *testing.T) {
@@ -1344,7 +1378,8 @@ func TestGrokMediaVideoRequestBindingIsScopedToUserAndAPIKey(t *testing.T) {
 	c.Request.Header.Set("session_id", "shared-client-session")
 	groupID := int64(7)
 	cache := &stubGatewayCache{}
-	svc := &OpenAIGatewayService{cache: cache}
+	usageRepo := &openAIRecordUsageLogRepoStub{}
+	svc := &OpenAIGatewayService{cache: cache, usageLogRepo: usageRepo}
 	const userID int64 = 41
 	const apiKeyID int64 = 51
 	require.NotEmpty(t, svc.GenerateExplicitSessionHash(c, nil))
@@ -1365,6 +1400,30 @@ func TestGrokMediaVideoRequestBindingIsScopedToUserAndAPIKey(t *testing.T) {
 	accountID, err = svc.ResolveGrokMediaVideoRequestAccount(ctx, &groupID, "video-request-123", userID, apiKeyID+1)
 	require.Error(t, err)
 	require.Zero(t, accountID)
+}
+
+func TestGrokMediaVideoRequestBindingRecoversFromPersistentBinding(t *testing.T) {
+	groupID := int64(7)
+	cache := &stubGatewayCache{}
+	usageRepo := &openAIRecordUsageLogRepoStub{lookupLog: &UsageLog{AccountID: 63}}
+	svc := &OpenAIGatewayService{cache: cache, usageLogRepo: usageRepo}
+
+	accountID, err := svc.ResolveGrokMediaVideoRequestAccount(context.Background(), &groupID, "video-request-123", 41, 51)
+	require.NoError(t, err)
+	require.Equal(t, int64(63), accountID)
+
+	hash := svc.openAISessionCacheKey(GrokMediaVideoRequestSessionHash("video-request-123", 41, 51))
+	require.Equal(t, int64(63), cache.sessionBindings[hash])
+}
+
+func TestGrokMediaVideoRequestBindingFailsClosedWhenPersistentStoreFails(t *testing.T) {
+	groupID := int64(7)
+	storeErr := errors.New("binding database unavailable")
+	usageRepo := &openAIRecordUsageLogRepoStub{lookupErr: storeErr}
+	svc := &OpenAIGatewayService{cache: &stubGatewayCache{}, usageLogRepo: usageRepo}
+
+	err := svc.BindGrokMediaVideoRequestAccount(context.Background(), &groupID, "video-request-123", 41, 51, 63)
+	require.ErrorIs(t, err, storeErr)
 }
 
 func TestForwardGrokMedia429ReconcilesRateLimitBeforeCustomErrorBypass(t *testing.T) {
@@ -2242,6 +2301,10 @@ func TestForwardAsChatCompletionsForGrokComposerBridgesImageInput(t *testing.T) 
 	require.Contains(t, gjson.GetBytes(upstream.bodies[1], "messages.1.content").String(), "A small diagram with ABC letters.")
 	require.Equal(t, 14, result.Usage.InputTokens)
 	require.Equal(t, 12, result.Usage.OutputTokens)
+	require.Len(t, result.AuxiliaryUsages, 1)
+	require.Equal(t, "grok-build-0.1", result.AuxiliaryUsages[0].Model)
+	require.Equal(t, 11, result.AuxiliaryUsages[0].Usage.InputTokens)
+	require.Equal(t, 7, result.AuxiliaryUsages[0].Usage.OutputTokens)
 	require.Equal(t, "It shows ABC.", gjson.Get(recorder.Body.String(), "choices.0.message.content").String())
 	require.NotNil(t, repo.updates[55][grokQuotaSnapshotExtraKey])
 }

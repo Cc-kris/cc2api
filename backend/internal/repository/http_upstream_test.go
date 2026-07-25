@@ -1,9 +1,11 @@
 package repository
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -14,6 +16,99 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
+
+func TestGrokAccessDeniedFallbackRetriesOfficialAPI(t *testing.T) {
+	var hosts []string
+	var fallbackHeaders http.Header
+	transport := &grokAccessDeniedFallbackTransport{base: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		hosts = append(hosts, req.URL.Hostname())
+		if req.URL.Hostname() == grokCLIProxyHost {
+			return &http.Response{StatusCode: http.StatusForbidden, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"error":"Access denied"}`)), Request: req}, nil
+		}
+		fallbackHeaders = req.Header.Clone()
+		body, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+		require.JSONEq(t, `{"model":"grok-4.5"}`, string(body))
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"id":"ok"}`)), Request: req}, nil
+	})}
+	req, err := http.NewRequest(http.MethodPost, "https://cli-chat-proxy.grok.com/v1/responses", bytes.NewReader([]byte(`{"model":"grok-4.5"}`)))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer oauth-token")
+	req.Header.Set("X-XAI-Token-Auth", "xai-grok-cli")
+	req.Header.Set("X-Grok-Client-Version", "0.2.93")
+	req.Header.Set("X-UserID", "user-id")
+
+	resp, err := transport.RoundTrip(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+	require.Equal(t, []string{grokCLIProxyHost, grokOfficialAPIHost}, hosts)
+	require.Equal(t, "Bearer oauth-token", fallbackHeaders.Get("Authorization"))
+	require.Empty(t, fallbackHeaders.Get("X-XAI-Token-Auth"))
+	require.Empty(t, fallbackHeaders.Get("X-Grok-Client-Version"))
+	require.Empty(t, fallbackHeaders.Get("X-UserID"))
+}
+
+func TestGrokAccessDeniedFallbackDoesNotRetryBusinessDenial(t *testing.T) {
+	calls := 0
+	transport := &grokAccessDeniedFallbackTransport{base: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		return &http.Response{StatusCode: http.StatusForbidden, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"code":"permission_denied","error":"Access to the chat endpoint is denied because a subscription is required"}`)), Request: req}, nil
+	})}
+	req, err := http.NewRequest(http.MethodPost, "https://cli-chat-proxy.grok.com/v1/responses", strings.NewReader(`{"model":"grok-4.5"}`))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer oauth-token")
+	req.Header.Set("X-XAI-Token-Auth", "xai-grok-cli")
+
+	resp, err := transport.RoundTrip(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode)
+	require.Equal(t, 1, calls)
+	require.NoError(t, resp.Body.Close())
+}
+
+func TestGrokAccessDeniedFallbackDoesNotRetryUnrelatedAccessDeniedText(t *testing.T) {
+	calls := 0
+	transport := &grokAccessDeniedFallbackTransport{base: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		return &http.Response{
+			StatusCode: http.StatusForbidden,
+			Body:       io.NopCloser(strings.NewReader(`{"code":"permission_denied","error":"Access denied because this account has no Grok entitlement"}`)),
+			Request:    req,
+		}, nil
+	})}
+	req, err := http.NewRequest(http.MethodPost, "https://cli-chat-proxy.grok.com/v1/responses", strings.NewReader(`{"model":"grok-4.5"}`))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer oauth-token")
+	req.Header.Set("X-XAI-Token-Auth", "xai-grok-cli")
+
+	resp, err := transport.RoundTrip(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode)
+	require.Equal(t, 1, calls)
+	require.NoError(t, resp.Body.Close())
+}
+
+func TestGrokAccessDeniedFallbackRequiresAuthenticatedReplayableCLI403(t *testing.T) {
+	newRequest := func() *http.Request {
+		req, err := http.NewRequest(http.MethodPost, "https://cli-chat-proxy.grok.com/v1/responses", strings.NewReader(`{}`))
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer oauth-token")
+		req.Header.Set("X-XAI-Token-Auth", "xai-grok-cli")
+		return req
+	}
+	response := &http.Response{StatusCode: http.StatusForbidden}
+	require.True(t, isGrokCLIAccessDeniedFallbackCandidate(newRequest(), response))
+	req := newRequest()
+	req.GetBody = nil
+	require.False(t, isGrokCLIAccessDeniedFallbackCandidate(req, response))
+	req = newRequest()
+	req.Header.Del("Authorization")
+	require.False(t, isGrokCLIAccessDeniedFallbackCandidate(req, response))
+	req = newRequest()
+	req.URL.Host = "api.x.ai"
+	require.False(t, isGrokCLIAccessDeniedFallbackCandidate(req, response))
+}
 
 // HTTPUpstreamSuite HTTP 上游服务测试套件
 // 使用 testify/suite 组织测试，支持 SetupTest 初始化

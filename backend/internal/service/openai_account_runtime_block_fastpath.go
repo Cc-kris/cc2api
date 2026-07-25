@@ -28,6 +28,12 @@ func isOpenAIOAuthAccount(account *Account) bool {
 	return account != nil && account.Platform == PlatformOpenAI && account.Type == AccountTypeOAuth
 }
 
+// OpenAIOAuth429FailoverState gives a Grok OAuth 429 exactly one follow-up
+// account attempt, even when the next selected account uses API-key auth.
+type OpenAIOAuth429FailoverState struct {
+	grokOAuth429FollowupPending bool
+}
+
 func isOpenAIAccount(account *Account) bool {
 	return account != nil && (account.Platform == PlatformOpenAI || account.Platform == PlatformGrok)
 }
@@ -167,11 +173,28 @@ func (s *OpenAIGatewayService) isOpenAIOAuth429Storm() bool {
 	return s.openaiOAuth429WindowCount.Load() >= openAIOAuth429StormThreshold
 }
 
-func (s *OpenAIGatewayService) ShouldStopOpenAIOAuth429Failover(account *Account, statusCode int, failedSwitches int) bool {
-	if statusCode != http.StatusTooManyRequests || failedSwitches < openAIOAuth429StormMaxAccountSwitches {
+func (s *OpenAIGatewayService) ShouldStopOpenAIOAuth429Failover(
+	account *Account,
+	statusCode int,
+	failedSwitches int,
+	state *OpenAIOAuth429FailoverState,
+) bool {
+	if failedSwitches < openAIOAuth429StormMaxAccountSwitches {
 		return false
 	}
-	if !isOpenAIOAuthAccount(account) {
+	if state != nil && state.grokOAuth429FollowupPending {
+		return true
+	}
+	if isGrokOAuthAccount(account) {
+		if state == nil {
+			return statusCode == http.StatusTooManyRequests && failedSwitches >= 2
+		}
+		if statusCode == http.StatusTooManyRequests {
+			state.grokOAuth429FollowupPending = true
+		}
+		return false
+	}
+	if statusCode != http.StatusTooManyRequests || !isOpenAIOAuthAccount(account) {
 		return false
 	}
 	return s.isOpenAIOAuth429Storm()

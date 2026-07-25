@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -43,6 +44,15 @@ func (e GrokMediaEndpoint) IsVideoLookupRequest() bool {
 func (e GrokMediaEndpoint) IsGenerationRequest() bool {
 	switch e {
 	case GrokMediaEndpointImagesGenerations, GrokMediaEndpointImagesEdits, GrokMediaEndpointVideosGenerations, GrokMediaEndpointVideosEdits, GrokMediaEndpointVideosExtensions:
+		return true
+	default:
+		return false
+	}
+}
+
+func (e GrokMediaEndpoint) IsVideoCreationRequest() bool {
+	switch e {
+	case GrokMediaEndpointVideosGenerations, GrokMediaEndpointVideosEdits, GrokMediaEndpointVideosExtensions:
 		return true
 	default:
 		return false
@@ -113,11 +123,27 @@ func ExtractGrokMediaModel(contentType string, body []byte) string {
 }
 
 func ParseGrokMediaRequest(contentType string, body []byte) GrokMediaRequestInfo {
+	info, _ := parseGrokMediaRequest(contentType, body, false)
+	return info
+}
+
+var ErrGrokMediaUploadPartTooLarge = errors.New("grok media upload part too large")
+var ErrGrokVideoTaskBindingConflict = errors.New("grok video task binding conflicts with an existing owner")
+
+// ParseGrokMediaRequestStrict rejects malformed or oversized multipart bodies so
+// moderation always evaluates the same bytes that will be forwarded upstream.
+func ParseGrokMediaRequestStrict(contentType string, body []byte) (GrokMediaRequestInfo, error) {
+	return parseGrokMediaRequest(contentType, body, true)
+}
+
+func parseGrokMediaRequest(contentType string, body []byte, strict bool) (GrokMediaRequestInfo, error) {
 	info := GrokMediaRequestInfo{N: 1}
 	if gjson.ValidBytes(body) {
 		parseGrokMediaJSONRequest(body, &info)
 	} else {
-		parseGrokMediaMultipartRequest(contentType, body, &info)
+		if err := parseGrokMediaMultipartRequest(contentType, body, &info); err != nil && strict {
+			return GrokMediaRequestInfo{}, err
+		}
 	}
 	info.Model = strings.TrimSpace(info.Model)
 	info.Prompt = strings.TrimSpace(info.Prompt)
@@ -128,7 +154,7 @@ func ParseGrokMediaRequest(contentType string, body []byte) GrokMediaRequestInfo
 	if info.N <= 0 {
 		info.N = 1
 	}
-	return info
+	return info, nil
 }
 
 func parseGrokMediaJSONRequest(body []byte, info *GrokMediaRequestInfo) {
@@ -191,36 +217,39 @@ func grokMediaJSONImageURL(value gjson.Result) string {
 	return strings.TrimSpace(value.Get("image_url").String())
 }
 
-func parseGrokMediaMultipartRequest(contentType string, body []byte, info *GrokMediaRequestInfo) {
+func parseGrokMediaMultipartRequest(contentType string, body []byte, info *GrokMediaRequestInfo) error {
 	if info == nil {
-		return
+		return errors.New("grok media request info is nil")
 	}
 	mediaType, params, err := mime.ParseMediaType(strings.TrimSpace(contentType))
 	if err != nil || !strings.EqualFold(mediaType, "multipart/form-data") {
-		return
+		return fmt.Errorf("invalid grok media multipart content type: %w", err)
 	}
 	boundary := strings.TrimSpace(params["boundary"])
 	if boundary == "" {
-		return
+		return errors.New("invalid grok media multipart boundary")
 	}
 	reader := multipart.NewReader(bytes.NewReader(body), boundary)
 	for {
 		part, err := reader.NextPart()
 		if err == io.EOF {
-			return
+			return nil
 		}
 		if err != nil {
-			return
+			return fmt.Errorf("read grok media multipart part: %w", err)
 		}
 		name := strings.TrimSpace(part.FormName())
 		if name == "" {
 			_ = part.Close()
 			continue
 		}
-		data, err := io.ReadAll(io.LimitReader(part, openAIImageMaxUploadPartSize))
+		data, err := io.ReadAll(io.LimitReader(part, openAIImageMaxUploadPartSize+1))
 		_ = part.Close()
 		if err != nil {
-			return
+			return fmt.Errorf("read grok media multipart part %q: %w", name, err)
+		}
+		if int64(len(data)) > openAIImageMaxUploadPartSize {
+			return fmt.Errorf("%w: field=%s limit=%d", ErrGrokMediaUploadPartTooLarge, name, openAIImageMaxUploadPartSize)
 		}
 		fileName := strings.TrimSpace(part.FileName())
 		partContentType := strings.TrimSpace(part.Header.Get("Content-Type"))
@@ -284,19 +313,27 @@ func (s *OpenAIGatewayService) BindGrokMediaVideoRequestAccount(
 	requestID string,
 	userID, apiKeyID, accountID int64,
 ) error {
-	if s == nil || s.cache == nil {
-		return fmt.Errorf("grok video request binding cache is unavailable")
+	if s == nil || s.usageLogRepo == nil {
+		return fmt.Errorf("grok video request binding repository is unavailable")
 	}
 	sessionHash := GrokMediaVideoRequestSessionHash(requestID, userID, apiKeyID)
 	cacheKey := s.openAISessionCacheKey(sessionHash)
 	if cacheKey == "" || accountID <= 0 {
 		return fmt.Errorf("grok video request binding is invalid")
 	}
+	if err := s.usageLogRepo.CreateGrokVideoTaskBinding(ctx, apiKeyID, userID, groupID, requestID, accountID); err != nil {
+		return err
+	}
+	if s.cache == nil {
+		return nil
+	}
 	ttl := openaiStickySessionTTL
 	if s.cfg != nil && s.cfg.Gateway.OpenAIWS.StickySessionTTLSeconds > 0 {
 		ttl = time.Duration(s.cfg.Gateway.OpenAIWS.StickySessionTTLSeconds) * time.Second
 	}
-	return s.cache.SetSessionAccountID(ctx, derefGroupID(groupID), cacheKey, accountID, ttl)
+	// The database binding is authoritative. Cache failure only removes the fast path.
+	_ = s.cache.SetSessionAccountID(ctx, derefGroupID(groupID), cacheKey, accountID, ttl)
+	return nil
 }
 
 func (s *OpenAIGatewayService) ResolveGrokMediaVideoRequestAccount(
@@ -305,14 +342,33 @@ func (s *OpenAIGatewayService) ResolveGrokMediaVideoRequestAccount(
 	requestID string,
 	userID, apiKeyID int64,
 ) (int64, error) {
-	if s == nil || s.cache == nil {
-		return 0, fmt.Errorf("grok video request binding cache is unavailable")
+	if s == nil {
+		return 0, fmt.Errorf("grok video request resolver is unavailable")
 	}
 	cacheKey := s.openAISessionCacheKey(GrokMediaVideoRequestSessionHash(requestID, userID, apiKeyID))
 	if cacheKey == "" {
 		return 0, fmt.Errorf("grok video request binding is invalid")
 	}
-	return s.cache.GetSessionAccountID(ctx, derefGroupID(groupID), cacheKey)
+	if s.cache != nil {
+		accountID, err := s.cache.GetSessionAccountID(ctx, derefGroupID(groupID), cacheKey)
+		if err == nil && accountID > 0 {
+			return accountID, nil
+		}
+	}
+	if s.usageLogRepo == nil {
+		return 0, ErrUsageLogNotFound
+	}
+	accountID, err := s.usageLogRepo.GetGrokVideoTaskAccountID(ctx, apiKeyID, userID, groupID, requestID)
+	if err != nil {
+		return 0, err
+	}
+	if accountID <= 0 {
+		return 0, ErrUsageLogNotFound
+	}
+	if s.cache != nil {
+		_ = s.cache.SetSessionAccountID(ctx, derefGroupID(groupID), cacheKey, accountID, openaiStickySessionTTL)
+	}
+	return accountID, nil
 }
 
 func (s *OpenAIGatewayService) ForwardGrokMedia(
@@ -435,9 +491,12 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 			grokMediaContentProxyURL(c, requestID),
 		)
 	}
-	writeGrokMediaResponse(c, resp, respBody, s.responseHeaderFilter)
 	usage := grokMediaUsageFromResponse(endpoint, requestInfo, respBody)
-	return &OpenAIForwardResult{
+	if endpoint.IsVideoCreationRequest() && strings.TrimSpace(usage.ResponseID) == "" {
+		setOpsUpstreamError(c, http.StatusBadGateway, "xAI upstream returned no video task id", truncateString(string(respBody), 512))
+		return nil, fmt.Errorf("grok video response is missing task id")
+	}
+	result := &OpenAIForwardResult{
 		RequestID:            requestIDHeader,
 		ResponseID:           usage.ResponseID,
 		Usage:                usage.Usage,
@@ -453,7 +512,31 @@ func (s *OpenAIGatewayService) ForwardGrokMedia(
 		VideoCount:           usage.VideoCount,
 		VideoResolution:      usage.VideoResolution,
 		VideoDurationSeconds: usage.VideoDurationSeconds,
-	}, nil
+	}
+	if endpoint.IsVideoCreationRequest() {
+		result.GrokMediaResponseBody = respBody
+		result.GrokMediaStatusCode = resp.StatusCode
+		result.GrokMediaBuffered = true
+		return result, nil
+	}
+	writeGrokMediaResponse(c, resp, respBody, s.responseHeaderFilter)
+	return result, nil
+}
+
+// CommitBufferedGrokMediaResponse exposes a video creation response only after
+// the handler has durably stored its ownership binding.
+func (s *OpenAIGatewayService) CommitBufferedGrokMediaResponse(c *gin.Context, result *OpenAIForwardResult) error {
+	if result == nil || !result.GrokMediaBuffered {
+		return nil
+	}
+	if c == nil || result.GrokMediaStatusCode < http.StatusOK || result.GrokMediaStatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("buffered grok media response is invalid")
+	}
+	resp := &http.Response{StatusCode: result.GrokMediaStatusCode, Header: result.ResponseHeaders.Clone()}
+	writeGrokMediaResponse(c, resp, result.GrokMediaResponseBody, s.responseHeaderFilter)
+	result.GrokMediaResponseBody = nil
+	result.GrokMediaBuffered = false
+	return nil
 }
 
 func (s *OpenAIGatewayService) forwardGrokMediaVideoContent(

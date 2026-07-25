@@ -1599,6 +1599,8 @@ const qualityTargetLabel = (target: string) => {
       return 'Anthropic'
     case 'gemini':
       return 'Gemini'
+    case 'grok':
+      return 'Grok'
     default:
       return target
   }

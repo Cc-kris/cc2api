@@ -36,6 +36,27 @@ func TestBuildSchedulerMetadataAccount_KeepsOpenAIWSFlags(t *testing.T) {
 	require.Nil(t, got.Extra["unused_large_field"])
 }
 
+func TestBuildSchedulerMetadataAccount_KeepsGrokPolicyFields(t *testing.T) {
+	account := service.Account{
+		ID:       43,
+		Platform: service.PlatformGrok,
+		Type:     service.AccountTypeOAuth,
+		Extra: map[string]any{
+			service.GrokMediaEligibleExtraKey: false,
+			"grok_billing_snapshot":           map[string]any{"weekly_status_code": 403},
+			"grok_client_tool_cache_enabled":  false,
+			"unused_large_field":              "drop-me",
+		},
+	}
+
+	got := buildSchedulerMetadataAccount(account)
+
+	require.Equal(t, false, got.Extra[service.GrokMediaEligibleExtraKey])
+	require.NotNil(t, got.Extra["grok_billing_snapshot"])
+	require.Equal(t, false, got.Extra["grok_client_tool_cache_enabled"])
+	require.Nil(t, got.Extra["unused_large_field"])
+}
+
 func TestBuildSchedulerMetadataAccount_KeepsSlimGroupMembership(t *testing.T) {
 	account := service.Account{
 		ID:       42,

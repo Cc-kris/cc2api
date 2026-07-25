@@ -15,6 +15,10 @@ import (
 )
 
 func newGatewayRoutesTestRouter() *gin.Engine {
+	return newGatewayRoutesTestRouterForPlatform(service.PlatformOpenAI)
+}
+
+func newGatewayRoutesTestRouterForPlatform(platform string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 
@@ -28,7 +32,7 @@ func newGatewayRoutesTestRouter() *gin.Engine {
 			groupID := int64(1)
 			c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{
 				GroupID: &groupID,
-				Group:   &service.Group{Platform: service.PlatformOpenAI},
+				Group:   &service.Group{Platform: platform},
 			})
 			c.Next()
 		}),
@@ -36,10 +40,22 @@ func newGatewayRoutesTestRouter() *gin.Engine {
 		nil,
 		nil,
 		nil,
-		&config.Config{},
+		&config.Config{Gateway: config.GatewayConfig{MaxBodySize: config.DefaultMaxRequestBodySize}},
 	)
 
 	return router
+}
+
+func TestGatewayRoutesGrokCountTokensEstimatesLocally(t *testing.T) {
+	router := newGatewayRoutesTestRouterForPlatform(service.PlatformGrok)
+	req := httptest.NewRequest(http.MethodPost, "/v1/messages/count_tokens", strings.NewReader(`{"model":"grok-4","messages":[{"role":"user","content":"hello world"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"input_tokens":`)
 }
 
 func TestGatewayRoutesOpenAIResponsesCompactPathIsRegistered(t *testing.T) {

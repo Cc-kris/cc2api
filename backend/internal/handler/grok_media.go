@@ -99,6 +99,21 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 
 	contentType := c.GetHeader("Content-Type")
 	requestInfo := service.ParseGrokMediaRequest(contentType, body)
+	var parseErr error
+	if endpoint.RequiresRequestBody() {
+		requestInfo, parseErr = service.ParseGrokMediaRequestStrict(contentType, body)
+	}
+	if parseErr != nil {
+		status := http.StatusBadRequest
+		message := "Invalid media request body"
+		if errors.Is(parseErr, service.ErrGrokMediaUploadPartTooLarge) {
+			status = http.StatusRequestEntityTooLarge
+			message = "Uploaded media exceeds the maximum allowed size"
+		}
+		reqLog.Warn("grok_media.request_parse_failed", zap.Error(parseErr))
+		h.errorResponse(c, status, "invalid_request_error", message)
+		return
+	}
 	requestModel := requestInfo.Model
 	routingModel := service.NormalizeGrokMediaModelForEndpoint(endpoint, requestModel, requestInfo.HasInputImage())
 	if endpoint.IsGenerationRequest() && strings.TrimSpace(requestModel) == "" {
@@ -181,6 +196,7 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 	failedAccountIDs := make(map[int64]struct{})
 	sameAccountRetryCount := make(map[int64]int)
 	var lastFailoverErr *service.UpstreamFailoverError
+	var oauth429FailoverState service.OpenAIOAuth429FailoverState
 	mediaEligibilityRejected := false
 	switchCount := 0
 	maxAccountSwitches := h.maxAccountSwitches
@@ -362,7 +378,7 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 					return
 				}
 				switchCount++
-				if h.gatewayService.ShouldStopOpenAIOAuth429Failover(account, failoverErr.StatusCode, switchCount) {
+				if h.gatewayService.ShouldStopOpenAIOAuth429Failover(account, failoverErr.StatusCode, switchCount, &oauth429FailoverState) {
 					h.handleFailoverExhausted(c, failoverErr, false)
 					return
 				}
@@ -386,16 +402,23 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		}
 
 		h.gatewayService.ReportOpenAIAccountScheduleModelResult(account.ID, grokMediaScheduleModel(account, routingModel, result), true, nil)
-		if endpoint.IsGenerationRequest() && strings.TrimSpace(result.ResponseID) != "" {
+		if endpoint.IsVideoCreationRequest() && strings.TrimSpace(result.ResponseID) != "" {
 			if err := h.gatewayService.BindGrokMediaVideoRequestAccount(
 				requestCtx, apiKey.GroupID, result.ResponseID, subject.UserID, apiKey.ID, account.ID,
 			); err != nil {
-				reqLog.Warn("grok_media.bind_video_request_account_failed",
+				reqLog.Error("grok_media.bind_video_request_account_failed",
 					zap.Int64("account_id", account.ID),
 					zap.String("request_id", result.ResponseID),
 					zap.Error(err),
 				)
+				h.errorResponse(c, http.StatusBadGateway, "upstream_error", "Video request could not be stored safely")
+				return
 			}
+		}
+		if err := h.gatewayService.CommitBufferedGrokMediaResponse(c, result); err != nil {
+			reqLog.Error("grok_media.commit_buffered_response_failed", zap.Error(err))
+			h.errorResponse(c, http.StatusBadGateway, "upstream_error", "Upstream response could not be delivered")
+			return
 		}
 		if shouldRecordGrokMediaUsage(endpoint, requestModel) {
 			recordGrokMediaUsage(c, h, reqLog, apiKey, subject, subscription, account, result, requestModel, body, requestID)
@@ -471,7 +494,7 @@ func recordGrokMediaUsage(
 		OriginalModel:      requestModel,
 		ChannelMappedModel: requestModel,
 	}
-	h.submitOpenAIUsageRecordTask(result, func(ctx context.Context) {
+	recordTask := func(ctx context.Context) {
 		if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 			Result:             result,
 			APIKey:             apiKey,
@@ -496,5 +519,6 @@ func recordGrokMediaUsage(
 			).Error("grok_media.record_usage_failed", zap.Error(err))
 			reqLog.Debug("grok_media.record_usage_failed", zap.Error(err))
 		}
-	})
+	}
+	h.submitOpenAIUsageRecordTask(result, recordTask)
 }

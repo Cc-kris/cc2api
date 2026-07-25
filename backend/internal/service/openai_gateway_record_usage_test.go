@@ -20,6 +20,42 @@ type openAIRecordUsageLogRepoStub struct {
 	calls      int
 	lastLog    *UsageLog
 	lastCtxErr error
+	lookupLog  *UsageLog
+	lookupErr  error
+	binding    struct {
+		apiKeyID, userID, accountID int64
+		groupID                     *int64
+		taskID                      string
+	}
+}
+
+func (s *openAIRecordUsageLogRepoStub) CreateGrokVideoTaskBinding(_ context.Context, apiKeyID, userID int64, groupID *int64, taskID string, accountID int64) error {
+	s.binding.apiKeyID = apiKeyID
+	s.binding.userID = userID
+	s.binding.groupID = groupID
+	s.binding.taskID = taskID
+	s.binding.accountID = accountID
+	return s.lookupErr
+}
+
+func (s *openAIRecordUsageLogRepoStub) GetGrokVideoTaskAccountID(_ context.Context, apiKeyID, userID int64, groupID *int64, taskID string) (int64, error) {
+	if s.lookupErr != nil {
+		return 0, s.lookupErr
+	}
+	if s.lookupLog == nil {
+		if s.binding.apiKeyID != apiKeyID || s.binding.userID != userID || s.binding.taskID != taskID || !equalOptionalInt64(s.binding.groupID, groupID) {
+			return 0, ErrUsageLogNotFound
+		}
+		return s.binding.accountID, nil
+	}
+	return s.lookupLog.AccountID, nil
+}
+
+func equalOptionalInt64(left, right *int64) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
 }
 
 func (s *openAIRecordUsageLogRepoStub) Create(ctx context.Context, log *UsageLog) (bool, error) {
@@ -1902,6 +1938,7 @@ func TestGrokVideoBillingUsesSeparateVideoRateMultiplier(t *testing.T) {
 	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
 		Result: &OpenAIForwardResult{
 			RequestID:            "video-request-123",
+			ResponseID:           "video-task-123",
 			Model:                "grok-imagine-video-1.5",
 			BillingModel:         "grok-imagine-video-1.5",
 			ImageCount:           1,
@@ -1939,4 +1976,115 @@ func TestGrokVideoBillingUsesSeparateVideoRateMultiplier(t *testing.T) {
 	require.Equal(t, 1, usageRepo.lastLog.VideoCount)
 	require.Equal(t, VideoBillingResolution480P, *usageRepo.lastLog.VideoResolution)
 	require.Equal(t, 1, *usageRepo.lastLog.VideoDurationSeconds)
+	require.NotNil(t, usageRepo.lastLog.VideoTaskID)
+	require.Equal(t, "video-task-123", *usageRepo.lastLog.VideoTaskID)
+}
+
+func TestGrokVideoChannelPerSecondBillingMultipliesDurationAndCount(t *testing.T) {
+	groupID := int64(1261)
+	pricePerSecond := 0.10
+	cache := newEmptyChannelCache()
+	cache.pricingByGroupModel[channelModelKey{groupID: groupID, model: "grok-imagine-video-1.5"}] = &ChannelModelPricing{
+		BillingMode:     BillingModePerSecond,
+		PerRequestPrice: &pricePerSecond,
+	}
+	cache.channelByGroupID[groupID] = &Channel{ID: groupID, Status: StatusActive}
+	cache.loadedAt = time.Now()
+	channelService := &ChannelService{}
+	channelService.cache.Store(cache)
+	billingService := NewBillingService(&config.Config{}, nil)
+	svc := &OpenAIGatewayService{
+		billingService: billingService,
+		resolver:       NewModelPricingResolver(channelService, billingService),
+	}
+	apiKey := &APIKey{GroupID: i64p(groupID), Group: &Group{ID: groupID}}
+
+	for _, tt := range []struct {
+		name     string
+		duration int
+		count    int
+		want     float64
+	}{
+		{name: "one second", duration: 1, count: 1, want: 0.10},
+		{name: "eight seconds", duration: 8, count: 1, want: 0.80},
+		{name: "fifteen seconds two videos", duration: 15, count: 2, want: 3.00},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cost := svc.calculateOpenAIVideoCost(context.Background(), "grok-imagine-video-1.5", apiKey, &OpenAIForwardResult{
+				VideoCount:           tt.count,
+				VideoDurationSeconds: tt.duration,
+				VideoResolution:      VideoBillingResolution720P,
+			}, 1)
+			require.NotNil(t, cost)
+			require.InDelta(t, tt.want, cost.TotalCost, 1e-12)
+		})
+	}
+}
+
+func TestOpenAIRecordUsagePricesAuxiliaryModelSeparately(t *testing.T) {
+	groupID := int64(1262)
+	mainInput, mainOutput := 0.10, 0.20
+	auxInput, auxOutput := 0.30, 0.40
+	cache := newEmptyChannelCache()
+	cache.pricingByGroupModel[channelModelKey{groupID: groupID, model: "grok-composer-2.5-fast"}] = &ChannelModelPricing{
+		BillingMode: BillingModeToken, InputPrice: &mainInput, OutputPrice: &mainOutput,
+	}
+	cache.pricingByGroupModel[channelModelKey{groupID: groupID, model: "grok-build-0.1"}] = &ChannelModelPricing{
+		BillingMode: BillingModeToken, InputPrice: &auxInput, OutputPrice: &auxOutput,
+	}
+	cache.channelByGroupID[groupID] = &Channel{ID: groupID, Status: StatusActive}
+	cache.loadedAt = time.Now()
+	channelService := &ChannelService{}
+	channelService.cache.Store(cache)
+	billingService := NewBillingService(&config.Config{}, nil)
+	svc := &OpenAIGatewayService{billingService: billingService, resolver: NewModelPricingResolver(channelService, billingService)}
+	result := &OpenAIForwardResult{
+		Model:        "grok-composer-2.5-fast",
+		BillingModel: "grok-composer-2.5-fast",
+		Usage:        OpenAIUsage{InputTokens: 15, OutputTokens: 8},
+		AuxiliaryUsages: []OpenAIAuxiliaryUsage{{
+			Model: "grok-build-0.1",
+			Usage: OpenAIUsage{InputTokens: 5, OutputTokens: 3},
+		}},
+	}
+
+	cost, err := svc.calculateOpenAIRecordUsageCost(
+		context.Background(), result, &APIKey{GroupID: i64p(groupID), Group: &Group{ID: groupID}}, []string{"grok-composer-2.5-fast"}, 1, 1, 1,
+		UsageTokens{InputTokens: 15, OutputTokens: 8}, "",
+	)
+	require.NoError(t, err)
+	require.InDelta(t, 4.70, cost.TotalCost, 1e-12)
+	require.InDelta(t, 4.70, cost.ActualCost, 1e-12)
+}
+
+func TestOpenAIRecordUsageMissingAuxiliaryPriceKeepsMainCharge(t *testing.T) {
+	groupID := int64(1263)
+	mainInput, mainOutput := 0.10, 0.20
+	cache := newEmptyChannelCache()
+	cache.pricingByGroupModel[channelModelKey{groupID: groupID, model: "grok-composer-2.5-fast"}] = &ChannelModelPricing{
+		BillingMode: BillingModeToken, InputPrice: &mainInput, OutputPrice: &mainOutput,
+	}
+	cache.channelByGroupID[groupID] = &Channel{ID: groupID, Status: StatusActive}
+	cache.loadedAt = time.Now()
+	channelService := &ChannelService{}
+	channelService.cache.Store(cache)
+	billingService := NewBillingService(&config.Config{}, nil)
+	svc := &OpenAIGatewayService{billingService: billingService, resolver: NewModelPricingResolver(channelService, billingService)}
+	result := &OpenAIForwardResult{
+		Model:        "grok-composer-2.5-fast",
+		BillingModel: "grok-composer-2.5-fast",
+		Usage:        OpenAIUsage{InputTokens: 15, OutputTokens: 8},
+		AuxiliaryUsages: []OpenAIAuxiliaryUsage{{
+			Model: "grok-unknown-bridge",
+			Usage: OpenAIUsage{InputTokens: 5, OutputTokens: 3},
+		}},
+	}
+
+	cost, err := svc.calculateOpenAIRecordUsageCost(
+		context.Background(), result, &APIKey{ID: 9, GroupID: i64p(groupID), Group: &Group{ID: groupID}}, []string{"grok-composer-2.5-fast"}, 1, 1, 1,
+		UsageTokens{InputTokens: 15, OutputTokens: 8}, "priority",
+	)
+	require.NoError(t, err)
+	require.InDelta(t, 2.0, cost.TotalCost, 1e-12)
+	require.InDelta(t, 2.0, cost.ActualCost, 1e-12)
 }

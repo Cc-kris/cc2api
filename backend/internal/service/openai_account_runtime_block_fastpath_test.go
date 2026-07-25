@@ -87,15 +87,34 @@ func TestShouldStopOpenAIOAuth429Failover_OnlyDuringStorm(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	account := &Account{ID: 42, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
 	apiKeyAccount := &Account{ID: 43, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
+	state := OpenAIOAuth429FailoverState{}
 
-	require.False(t, svc.ShouldStopOpenAIOAuth429Failover(account, http.StatusTooManyRequests, 1))
+	require.False(t, svc.ShouldStopOpenAIOAuth429Failover(account, http.StatusTooManyRequests, 1, &state))
 
 	for i := 0; i < openAIOAuth429StormThreshold; i++ {
 		svc.recordOpenAIOAuth429()
 	}
 
-	require.True(t, svc.ShouldStopOpenAIOAuth429Failover(account, http.StatusTooManyRequests, 1))
-	require.False(t, svc.ShouldStopOpenAIOAuth429Failover(apiKeyAccount, http.StatusTooManyRequests, 1))
-	require.False(t, svc.ShouldStopOpenAIOAuth429Failover(account, http.StatusInternalServerError, 1))
-	require.False(t, svc.ShouldStopOpenAIOAuth429Failover(account, http.StatusTooManyRequests, 0))
+	require.True(t, svc.ShouldStopOpenAIOAuth429Failover(account, http.StatusTooManyRequests, 1, &state))
+	require.False(t, svc.ShouldStopOpenAIOAuth429Failover(apiKeyAccount, http.StatusTooManyRequests, 1, &state))
+	require.False(t, svc.ShouldStopOpenAIOAuth429Failover(account, http.StatusInternalServerError, 1, &state))
+	require.False(t, svc.ShouldStopOpenAIOAuth429Failover(account, http.StatusTooManyRequests, 0, &state))
+}
+
+func TestShouldStopOpenAIOAuth429Failover_GrokAllowsExactlyOneFollowup(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	grokOAuth := &Account{ID: 51, Platform: PlatformGrok, Type: AccountTypeOAuth}
+	grokAPIKey := &Account{ID: 52, Platform: PlatformGrok, Type: AccountTypeAPIKey}
+
+	t.Run("second failure stops regardless of auth type", func(t *testing.T) {
+		state := OpenAIOAuth429FailoverState{}
+		require.False(t, svc.ShouldStopOpenAIOAuth429Failover(grokOAuth, http.StatusTooManyRequests, 1, &state))
+		require.True(t, svc.ShouldStopOpenAIOAuth429Failover(grokAPIKey, http.StatusInternalServerError, 2, &state))
+	})
+
+	t.Run("non-429 does not arm followup budget", func(t *testing.T) {
+		state := OpenAIOAuth429FailoverState{}
+		require.False(t, svc.ShouldStopOpenAIOAuth429Failover(grokOAuth, http.StatusInternalServerError, 1, &state))
+		require.False(t, svc.ShouldStopOpenAIOAuth429Failover(grokAPIKey, http.StatusTooManyRequests, 2, &state))
+	})
 }
