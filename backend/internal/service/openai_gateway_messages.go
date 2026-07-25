@@ -312,20 +312,60 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	if account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
-	if err != nil {
-		safeErr := sanitizeUpstreamErrorMessage(err.Error())
-		setOpsUpstreamError(c, 0, safeErr, "")
-		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
-			Platform:           account.Platform,
-			AccountID:          account.ID,
-			AccountName:        account.Name,
-			UpstreamStatusCode: 0,
-			Kind:               "request_error",
-			Message:            safeErr,
-		})
-		writeAnthropicError(c, http.StatusBadGateway, "api_error", "Upstream request failed")
-		return nil, fmt.Errorf("upstream request failed: %s", safeErr)
+	var resp *http.Response
+	for attempt := 0; ; attempt++ {
+		if attempt > 0 {
+			upstreamCtxRetry, releaseRetry := detachUpstreamContext(ctx)
+			upstreamReq, err = buildGrokResponsesRequest(upstreamCtxRetry, c, account, responsesBody, token, grokCacheIdentity, s.cfg)
+			releaseRetry()
+			if err != nil {
+				return nil, fmt.Errorf("build grok retry request: %w", err)
+			}
+		}
+
+		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+		if err != nil {
+			safeErr := sanitizeUpstreamErrorMessage(err.Error())
+			setOpsUpstreamError(c, 0, safeErr, "")
+			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+				Platform:           account.Platform,
+				AccountID:          account.ID,
+				AccountName:        account.Name,
+				UpstreamStatusCode: 0,
+				Kind:               "request_error",
+				Message:            safeErr,
+			})
+			writeAnthropicError(c, http.StatusBadGateway, "api_error", "Upstream request failed")
+			return nil, fmt.Errorf("upstream request failed: %s", safeErr)
+		}
+		if account.Platform != PlatformGrok || attempt > 0 || resp.StatusCode != http.StatusBadRequest {
+			break
+		}
+
+		respBody := s.readUpstreamErrorBody(resp)
+		if resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+		shouldStrip := isGrokInvalidEncryptedContentResponse(resp.StatusCode, respBody) ||
+			requestHasGrokEncryptedReasoning(responsesBody)
+		if !shouldStrip {
+			resp.Body = io.NopCloser(bytes.NewReader(respBody))
+			break
+		}
+		retryBody, changed, trimErr := trimGrokInvalidEncryptedContentRetryBody(responsesBody)
+		if trimErr != nil {
+			return nil, fmt.Errorf("prepare Grok invalid encrypted_content retry: %w", trimErr)
+		}
+		if !changed {
+			resp.Body = io.NopCloser(bytes.NewReader(respBody))
+			break
+		}
+		responsesBody = retryBody
+		logger.L().Info("openai messages: retrying after stripping invalid Grok encrypted_content",
+			zap.Int64("account_id", account.ID),
+			zap.Bool("cache_identity_present", strings.TrimSpace(grokCacheIdentity) != ""),
+			zap.String("upstream_error_preview", truncateOpenAIWSLogValue(string(respBody), 240)),
+		)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -338,6 +378,15 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(respBody))
 		upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
 		if account.Platform == PlatformGrok {
+			if isGrokInvalidEncryptedContentResponse(resp.StatusCode, respBody) &&
+				!grokEncryptedContentStripRetried(ctx) {
+				if strippedBody, ok := stripAnthropicThinkingSignatures(body); ok {
+					logger.L().Info("openai messages: stripping thinking signatures for Grok failover retry",
+						zap.Int64("account_id", account.ID),
+					)
+					return s.ForwardAsAnthropic(markGrokEncryptedContentStripRetried(ctx), c, account, strippedBody, promptCacheKey, defaultMappedModel)
+				}
+			}
 			s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
 			if s.shouldFailoverGrokUpstreamError(resp.StatusCode, respBody) {
 				return nil, &UpstreamFailoverError{

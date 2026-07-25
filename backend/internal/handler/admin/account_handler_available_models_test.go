@@ -76,6 +76,76 @@ func setupSyncUpstreamModelsRouter(adminSvc service.AdminService, upstream servi
 	return router
 }
 
+func TestAccountHandlerGetAvailableModels_GrokUsesXAIModels(t *testing.T) {
+	svc := &availableModelsAdminService{
+		stubAdminService: newStubAdminService(),
+		account: service.Account{
+			ID:       44,
+			Name:     "grok-oauth",
+			Platform: service.PlatformGrok,
+			Type:     service.AccountTypeOAuth,
+			Status:   service.StatusActive,
+			Credentials: map[string]any{
+				"model_mapping": map[string]any{
+					"grok-4.3": "grok-4.3",
+				},
+			},
+		},
+	}
+	router := setupAvailableModelsRouter(svc)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/accounts/44/models", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Data, 1)
+	require.Equal(t, "grok-4.3", resp.Data[0].ID)
+}
+
+func TestAccountHandlerGetAvailableModels_GrokDefaultsToXAIModelsWithoutMapping(t *testing.T) {
+	svc := &availableModelsAdminService{
+		stubAdminService: newStubAdminService(),
+		account: service.Account{
+			ID:       45,
+			Name:     "grok-oauth-defaults",
+			Platform: service.PlatformGrok,
+			Type:     service.AccountTypeOAuth,
+			Status:   service.StatusActive,
+		},
+	}
+	router := setupAvailableModelsRouter(svc)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/accounts/45/models", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.NotEmpty(t, resp.Data)
+
+	ids := make([]string, 0, len(resp.Data))
+	for _, model := range resp.Data {
+		ids = append(ids, model.ID)
+		require.NotContains(t, strings.ToLower(model.ID), "claude")
+	}
+	require.Contains(t, ids, "grok-4.5")
+	require.Contains(t, ids, "grok-build-0.1")
+}
+
 func TestAccountHandlerGetAvailableModels_OpenAIOAuthUsesExplicitModelMapping(t *testing.T) {
 	svc := &availableModelsAdminService{
 		stubAdminService: newStubAdminService(),
@@ -255,6 +325,59 @@ func TestAccountHandlerFetchUpstreamModels_OpenAIAPIKeyUsesUpstreamList(t *testi
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.Equal(t, []string{"a-model", "z-model"}, []string{resp.Data[0].ID, resp.Data[1].ID})
+}
+
+func TestAccountHandlerFetchUpstreamModels_GrokAPIKeyUsesGrokModelList(t *testing.T) {
+	svc := &availableModelsAdminService{
+		stubAdminService: newStubAdminService(),
+		account: service.Account{
+			ID:       45,
+			Name:     "grok-key",
+			Platform: service.PlatformGrok,
+			Type:     service.AccountTypeAPIKey,
+			Status:   service.StatusActive,
+			Credentials: map[string]any{
+				"api_key":  "xai-test",
+				"base_url": "https://api.x.ai/v1",
+			},
+		},
+	}
+	upstream := &upstreamModelsHTTPStub{response: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(`{"data":[{"id":"grok-4.5"},{"id":"grok-code-fast-1"},{"id":"grok-4.5"}]}`)),
+	}}
+	accountTestSvc := service.NewAccountTestService(
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		upstream,
+		&config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
+		nil,
+	)
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	handler := NewAccountHandler(svc, nil, nil, nil, nil, nil, nil, accountTestSvc, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	router.POST("/api/v1/admin/accounts/:id/upstream-models", handler.FetchUpstreamModels)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/45/upstream-models", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, "https://api.x.ai/v1/models", upstream.requests[0].URL.String())
+	require.Equal(t, "Bearer xai-test", upstream.requests[0].Header.Get("Authorization"))
+
+	var resp struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, []string{"grok-4.5", "grok-code-fast-1"}, []string{resp.Data[0].ID, resp.Data[1].ID})
 }
 
 func TestAccountHandlerFetchUpstreamModels_OpenAIFiltersCrossPlatformModels(t *testing.T) {

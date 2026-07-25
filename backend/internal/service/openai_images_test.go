@@ -814,7 +814,8 @@ func TestOpenAIGatewayServiceForwardImages_CodexNormalizesSingleImageEdit(t *tes
 	require.Equal(t, 1, result.ImageCount)
 	require.NotEmpty(t, gjson.Get(rec.Body.String(), "data.0.b64_json").String())
 	require.False(t, gjson.Get(rec.Body.String(), "data.0.url").Exists())
-	upstream := svc.httpUpstream.(*httpUpstreamRecorder)
+	upstream, ok := svc.httpUpstream.(*httpUpstreamRecorder)
+	require.True(t, ok)
 	require.Equal(t, "https://image-upstream.example/v1/images/edits", upstream.lastReq.URL.String())
 }
 

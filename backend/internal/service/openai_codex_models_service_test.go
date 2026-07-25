@@ -57,6 +57,27 @@ func TestFetchCodexModelsManifestConvertsStandardOpenAIList(t *testing.T) {
 	require.Equal(t, "Bearer sk-test", upstream.request.Header.Get("Authorization"))
 }
 
+func TestFetchCodexModelsManifestSupportsOpenAICompatibleGrokUpstream(t *testing.T) {
+	upstream := &codexModelsHTTPUpstreamStub{response: codexModelsTestResponse(http.StatusOK, `{
+		"object":"list",
+		"data":[{"id":"grok-4.5"},{"id":"grok-code-fast-1"}]
+	}`)}
+	service := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	account := &Account{
+		ID: 18, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1,
+		Credentials: map[string]any{"api_key": "sk-openai-compatible", "base_url": "https://grok-compatible.example/v1"},
+	}
+
+	manifest, err := service.FetchCodexModelsManifest(context.Background(), account, "0.137.0", "")
+
+	require.NoError(t, err)
+	require.NotNil(t, manifest)
+	require.Equal(t, "grok-4.5", gjson.GetBytes(manifest.Body, "models.0.slug").String())
+	require.Equal(t, "grok-code-fast-1", gjson.GetBytes(manifest.Body, "models.1.slug").String())
+	require.Equal(t, "https://grok-compatible.example/v1/models?client_version=0.137.0", upstream.request.URL.String())
+	require.Equal(t, "Bearer sk-openai-compatible", upstream.request.Header.Get("Authorization"))
+}
+
 func TestFetchCodexModelsManifestSupportsGrokAPIKeyAccount(t *testing.T) {
 	upstream := &codexModelsHTTPUpstreamStub{response: codexModelsTestResponse(http.StatusOK, `{
 		"object":"list",

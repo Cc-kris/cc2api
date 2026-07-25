@@ -174,7 +174,7 @@ const normalizedPlatforms = computed(() => {
   )
 })
 
-const upstreamSyncPlatforms = new Set(['anthropic', 'openai', 'gemini', 'antigravity', 'seedace'])
+const upstreamSyncPlatforms = new Set(['anthropic', 'openai', 'gemini', 'antigravity', 'grok', 'seedace'])
 const canSyncUpstream = computed(() => {
   if (!props.accountId) return false
   if (normalizedPlatforms.value.length === 0) return true

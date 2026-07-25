@@ -630,7 +630,7 @@ func renderAnnouncementEmailNode(out *strings.Builder, n *nethtml.Node) {
 	}
 	switch n.Type {
 	case nethtml.TextNode:
-		out.WriteString(stdhtml.EscapeString(n.Data))
+		_, _ = out.WriteString(stdhtml.EscapeString(n.Data))
 	case nethtml.ElementNode:
 		renderAnnouncementEmailElement(out, n)
 	default:
@@ -655,37 +655,37 @@ func renderAnnouncementEmailElement(out *strings.Builder, n *nethtml.Node) {
 		}
 		return
 	}
-	out.WriteByte('<')
-	out.WriteString(tag)
+	_ = out.WriteByte('<')
+	_, _ = out.WriteString(tag)
 	for _, attr := range announcementEmailAllowedAttrs(tag, n.Attr) {
-		out.WriteByte(' ')
-		out.WriteString(attr.Key)
-		out.WriteString(`="`)
-		out.WriteString(stdhtml.EscapeString(attr.Val))
-		out.WriteByte('"')
+		_ = out.WriteByte(' ')
+		_, _ = out.WriteString(attr.Key)
+		_, _ = out.WriteString(`="`)
+		_, _ = out.WriteString(stdhtml.EscapeString(attr.Val))
+		_ = out.WriteByte('"')
 	}
-	out.WriteByte('>')
+	_ = out.WriteByte('>')
 	for child := n.FirstChild; child != nil; child = child.NextSibling {
 		renderAnnouncementEmailNode(out, child)
 	}
-	out.WriteString("</")
-	out.WriteString(tag)
-	out.WriteByte('>')
+	_, _ = out.WriteString("</")
+	_, _ = out.WriteString(tag)
+	_ = out.WriteByte('>')
 }
 
 func renderAnnouncementEmailVideo(out *strings.Builder, n *nethtml.Node) {
 	src := firstAnnouncementVideoSource(n)
 	poster := htmlAttr(n.Attr, "poster")
-	out.WriteString(`<div class="video-fallback">`)
+	_, _ = out.WriteString(`<div class="video-fallback">`)
 	if isSafeAnnouncementMediaURL(poster) {
-		out.WriteString(`<a href="` + stdhtml.EscapeString(srcOrHome(src)) + `"><img src="` + stdhtml.EscapeString(poster) + `" alt="视频预览" style="max-width:100%;border-radius:10px;border:1px solid #e5e7eb;"></a>`)
+		_, _ = out.WriteString(`<a href="` + stdhtml.EscapeString(srcOrHome(src)) + `"><img src="` + stdhtml.EscapeString(poster) + `" alt="视频预览" style="max-width:100%;border-radius:10px;border:1px solid #e5e7eb;"></a>`)
 	}
 	if isSafeAnnouncementMediaURL(src) || isSafeAnnouncementLinkURL(src) {
-		out.WriteString(`<p><a class="button" href="` + stdhtml.EscapeString(src) + `">查看视频</a></p>`)
+		_, _ = out.WriteString(`<p><a class="button" href="` + stdhtml.EscapeString(src) + `">查看视频</a></p>`)
 	} else {
-		out.WriteString(`<p>该公告包含视频，请登录系统查看。</p>`)
+		_, _ = out.WriteString(`<p>该公告包含视频，请登录系统查看。</p>`)
 	}
-	out.WriteString(`</div>`)
+	_, _ = out.WriteString(`</div>`)
 }
 
 func firstAnnouncementVideoSource(n *nethtml.Node) string {

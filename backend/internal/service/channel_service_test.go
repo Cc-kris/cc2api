@@ -2029,6 +2029,10 @@ func TestIsPlatformPricingMatch(t *testing.T) {
 		{"gemini matches gemini", PlatformGemini, PlatformGemini, true},
 		{"gemini does NOT match antigravity", PlatformGemini, PlatformAntigravity, false},
 		{"gemini does NOT match anthropic", PlatformGemini, PlatformAnthropic, false},
+		{"openai matches openai", PlatformOpenAI, PlatformOpenAI, true},
+		{"openai does NOT match grok", PlatformOpenAI, PlatformGrok, false},
+		{"grok matches grok", PlatformGrok, PlatformGrok, true},
+		{"grok does NOT match openai", PlatformGrok, PlatformOpenAI, false},
 		{"empty string matches nothing", "", PlatformAnthropic, false},
 		{"empty string matches empty", "", "", true},
 	}

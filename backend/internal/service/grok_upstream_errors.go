@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/gin-gonic/gin"
 )
 
 // isGrokContentPolicyRejection identifies request-scoped safety refusals from
@@ -237,39 +235,4 @@ func (s *OpenAIGatewayService) applyGrokForbiddenPolicy(ctx context.Context, acc
 		s.tempUnscheduleGrok(ctx, account, cooldown, "grok configured forbidden rule")
 	}
 	return true
-}
-
-func (s *OpenAIGatewayService) failoverOpenAIUpstreamHTTPError(
-	ctx context.Context,
-	c *gin.Context,
-	account *Account,
-	resp *http.Response,
-	body []byte,
-	upstreamMsg string,
-	requestedModel string,
-) error {
-	if account == nil || resp == nil {
-		return nil
-	}
-	if account.Platform == PlatformGrok {
-		if isGrokContentPolicyRejection(resp.StatusCode, body) {
-			return nil
-		}
-		s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body)
-		if !s.shouldFailoverGrokUpstreamError(resp.StatusCode, body) {
-			return nil
-		}
-	} else {
-		s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, requestedModel)
-		if !s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, body) {
-			return nil
-		}
-	}
-	_ = c
-	return &UpstreamFailoverError{
-		StatusCode:      resp.StatusCode,
-		ResponseHeaders: cloneHeader(resp.Header),
-		ResponseBody:    append([]byte(nil), body...),
-		ClientMessage:   upstreamMsg,
-	}
 }

@@ -20,7 +20,7 @@ import (
 	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
-	"github.com/Wei-Shaw/sub2api/internal/repository"
+	"github.com/Wei-Shaw/sub2api/internal/repository" //nolint:depguard // integration tests exercise the real upstream adapter
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	coderws "github.com/coder/websocket"
@@ -1067,6 +1067,22 @@ func TestOpenAIResponsesWebSocket_ChannelMappedModelSelectsMappedAccount(t *test
 	require.Equal(t, int64(9901), got.log.AccountID)
 }
 
+func TestOpenAIResponsesWebSocket_OpenAICompatibleGrokWithoutResponsesUsesHTTPChatFallback(t *testing.T) {
+	responsesSupported := false
+	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
+		firstPayload:        `{"type":"response.create","model":"gpt-5.6-luna","input":"reply OK","stream":false}`,
+		channelMapping:      map[string]string{"*": "grok-4.5"},
+		accountModelMapping: map[string]any{"grok-4.5": "grok-4.5"},
+		responsesSupported:  &responsesSupported,
+	})
+
+	require.Equal(t, int32(1), got.upstreamHTTPHits)
+	require.Equal(t, int32(0), got.upstreamWSHits)
+	require.Equal(t, "grok-4.5", gjson.GetBytes(got.upstreamFirstPayload, "model").String())
+	require.True(t, gjson.GetBytes(got.upstreamFirstPayload, "messages").Exists())
+	require.Equal(t, int64(9901), got.log.AccountID)
+}
+
 func TestOpenAIResponses_ChannelMappedModelSelectsMappedAccount(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -1223,7 +1239,9 @@ func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *tes
 		w.Header().Set("Content-Type", "text/event-stream")
 		if strings.Contains(gjson.GetBytes(payload, "input").String(), "stream-probe") {
 			_, _ = io.WriteString(w, "data: {\"type\":\"response.output_item.added\",\"output_index\":0,\"item\":{\"id\":\"ig_stream_probe\",\"type\":\"image_generation_call\",\"status\":\"in_progress\"}}\n\n")
-			w.(http.Flusher).Flush()
+			if flusher, ok := w.(http.Flusher); ok {
+				flusher.Flush()
+			}
 			close(streamProbeStarted)
 			<-streamProbeRelease
 			_, _ = io.WriteString(w, "data: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"ig_stream_probe\",\"type\":\"image_generation_call\",\"result\":\"aW1hZ2U=\",\"size\":\"1024x1024\"}}\n\n"+
@@ -1525,7 +1543,7 @@ func TestOpenAIResponses_CodexImageBridgeFallsBackToHTTPAndRoutesRequests(t *tes
 	require.Equal(t, http.StatusOK, nonStreamImageRecorder.Code)
 	require.Equal(t, "image_gen", gjson.GetBytes(nonStreamImageRecorder.Body.Bytes(), "output.0.namespace").String())
 	require.Equal(t, "imagegen", gjson.GetBytes(nonStreamImageRecorder.Body.Bytes(), "output.0.name").String())
-	_ = <-upstreamPayload
+	<-upstreamPayload
 	select {
 	case unexpectedUsage := <-usageRepo.created:
 		require.Fail(t, "nonstream imagegen orchestration must not create token usage", "usage=%+v", unexpectedUsage)
@@ -1831,6 +1849,7 @@ type openAIResponsesWSUsageLogCase struct {
 	turnMetadataHeader     *string
 	channelMapping         map[string]string
 	accountModelMapping    map[string]any
+	responsesSupported     *bool
 	codexBridge            bool
 	httpOnlyAccount        bool
 	upstreamHTTPStatus     int
@@ -2795,6 +2814,12 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 				upstreamErrCh <- nil
 				return
 			}
+			if strings.HasSuffix(r.URL.Path, "/chat/completions") {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, `{"id":"chatcmpl_usage_e2e","object":"chat.completion","model":"grok-4.5","choices":[{"index":0,"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}`)
+				upstreamErrCh <- nil
+				return
+			}
 			w.Header().Set("Content-Type", "text/event-stream")
 			if gjson.GetBytes(payload, "tool_choice.type").String() == "image_generation" ||
 				gjson.GetBytes(payload, "model").String() == "gpt-image-2" {
@@ -2886,6 +2911,9 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 			"openai_apikey_responses_websockets_v2_enabled": true,
 			"openai_apikey_responses_websockets_v2_mode":    service.OpenAIWSIngressModePassthrough,
 		},
+	}
+	if tc.responsesSupported != nil {
+		account.Extra["openai_responses_supported"] = *tc.responsesSupported
 	}
 	if len(tc.accountModelMapping) > 0 {
 		account.Credentials["model_mapping"] = tc.accountModelMapping

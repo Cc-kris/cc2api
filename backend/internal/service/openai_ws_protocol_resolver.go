@@ -1,6 +1,9 @@
 package service
 
-import "github.com/Wei-Shaw/sub2api/internal/config"
+import (
+	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
+)
 
 // OpenAIUpstreamTransport 表示 OpenAI 上游传输协议。
 type OpenAIUpstreamTransport string
@@ -41,6 +44,9 @@ func (r *defaultOpenAIWSProtocolResolver) Resolve(account *Account) OpenAIWSProt
 	}
 	if account.IsOpenAIWSForceHTTPEnabled() {
 		return openAIWSHTTPDecision("account_force_http")
+	}
+	if account.IsOpenAIApiKey() && !openai_compat.ShouldUseResponsesAPI(account.Extra) {
+		return openAIWSHTTPDecision("apikey_responses_unsupported")
 	}
 	if r == nil || r.cfg == nil {
 		return openAIWSHTTPDecision("config_missing")

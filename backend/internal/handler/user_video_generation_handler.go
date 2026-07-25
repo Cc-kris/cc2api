@@ -180,7 +180,7 @@ func (h *UserVideoGenerationHandler) Download(c *gin.Context) {
 		response.Error(c, http.StatusBadGateway, fmt.Sprintf("download video: %v", err))
 		return
 	}
-	defer upstreamResp.Body.Close()
+	defer func() { _ = upstreamResp.Body.Close() }()
 	if upstreamResp.StatusCode < 200 || upstreamResp.StatusCode >= 300 {
 		response.Error(c, http.StatusBadGateway, "Video download URL is unavailable")
 		return
@@ -204,7 +204,7 @@ func safeVideoFilenamePart(value string) string {
 	var b strings.Builder
 	for _, r := range value {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' {
-			b.WriteRune(r)
+			_, _ = b.WriteRune(r)
 		}
 	}
 	out := b.String()

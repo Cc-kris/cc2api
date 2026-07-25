@@ -112,14 +112,6 @@ func TestGrokContentPolicy403DoesNotMutateOrFailover(t *testing.T) {
 	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
 	require.False(t, svc.shouldFailoverGrokUpstreamError(http.StatusForbidden, body))
 
-	gin.SetMode(gin.TestMode)
-	recorder := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
-	resp := &http.Response{StatusCode: http.StatusForbidden, Header: http.Header{}}
-	got := svc.failoverOpenAIUpstreamHTTPError(context.Background(), c, account, resp, body, "text is sensitive", "grok-4.5")
-	require.Nil(t, got)
-	require.Zero(t, repo.tempUnschedCalls)
 }
 
 func TestGrokContentPolicy403SharedErrorFallbackDoesNotMutate(t *testing.T) {

@@ -122,6 +122,35 @@ func TestOpenAIWSProtocolResolver_Resolve(t *testing.T) {
 		require.Equal(t, "apikey_disabled", decision.Reason)
 	})
 
+	t.Run("API Key 上游不支持Responses时强制回退HTTP", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeAPIKey,
+			Extra: map[string]any{
+				"openai_responses_supported":                    false,
+				"openai_apikey_responses_websockets_v2_enabled": true,
+			},
+		}
+		decision := NewOpenAIWSProtocolResolver(baseCfg).Resolve(account)
+		require.Equal(t, OpenAIUpstreamTransportHTTPSSE, decision.Transport)
+		require.Equal(t, "apikey_responses_unsupported", decision.Reason)
+	})
+
+	t.Run("API Key 强制Responses模式优先于旧探测结果", func(t *testing.T) {
+		account := &Account{
+			Platform: PlatformOpenAI,
+			Type:     AccountTypeAPIKey,
+			Extra: map[string]any{
+				"openai_responses_mode":                         "force_responses",
+				"openai_responses_supported":                    false,
+				"openai_apikey_responses_websockets_v2_enabled": true,
+			},
+		}
+		decision := NewOpenAIWSProtocolResolver(baseCfg).Resolve(account)
+		require.Equal(t, OpenAIUpstreamTransportResponsesWebsocketV2, decision.Transport)
+		require.Equal(t, "ws_v2_enabled", decision.Reason)
+	})
+
 	t.Run("未知认证类型回退HTTP", func(t *testing.T) {
 		account := &Account{
 			Platform: PlatformOpenAI,

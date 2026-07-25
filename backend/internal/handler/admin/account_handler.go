@@ -29,6 +29,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -613,6 +614,7 @@ func (h *AccountHandler) Create(c *gin.Context) {
 	// OpenAI APIKey 账号创建后异步探测上游 /v1/responses 能力。
 	// 探测失败不影响账号创建响应。
 	h.scheduleOpenAIResponsesProbe(createdAccount)
+	h.scheduleGrokImportProbe(createdAccount)
 	response.Success(c, result.Data)
 }
 
@@ -1034,7 +1036,7 @@ func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *serv
 		}
 	} else if account.Platform == service.PlatformGrok {
 		if h.grokOAuthService == nil {
-			return nil, "", errors.New("Grok OAuth service is not configured")
+			return nil, "", errors.New("grok OAuth service is not configured")
 		}
 		tokenInfo, err := h.grokOAuthService.RefreshAccountToken(ctx, account)
 		if err != nil {
@@ -1472,6 +1474,7 @@ func (h *AccountHandler) BatchCreate(c *gin.Context) {
 			}
 			// OpenAI APIKey 账号异步探测 /v1/responses 能力。
 			h.scheduleOpenAIResponsesProbe(account)
+			h.scheduleGrokImportProbe(account)
 			success++
 			results = append(results, gin.H{
 				"name":    item.Name,
@@ -2176,6 +2179,56 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 		return
 	}
 
+	// Handle Grok accounts
+	if account.Platform == service.PlatformGrok {
+		defaultModels := xai.DefaultModels()
+
+		hasExplicitMapping := false
+		switch rawMapping := account.Credentials["model_mapping"].(type) {
+		case map[string]any:
+			hasExplicitMapping = len(rawMapping) > 0
+		case map[string]string:
+			hasExplicitMapping = len(rawMapping) > 0
+		}
+		if !hasExplicitMapping {
+			response.Success(c, defaultModels)
+			return
+		}
+
+		mapping := account.GetModelMapping()
+		if len(mapping) == 0 {
+			response.Success(c, defaultModels)
+			return
+		}
+
+		defaultByID := make(map[string]xai.Model, len(defaultModels))
+		for _, model := range defaultModels {
+			defaultByID[model.ID] = model
+		}
+
+		requestedModels := make([]string, 0, len(mapping))
+		for requestedModel := range mapping {
+			requestedModels = append(requestedModels, requestedModel)
+		}
+		sort.Strings(requestedModels)
+
+		models := make([]xai.Model, 0, len(requestedModels))
+		for _, requestedModel := range requestedModels {
+			if defaultModel, found := defaultByID[requestedModel]; found {
+				models = append(models, defaultModel)
+				continue
+			}
+			models = append(models, xai.Model{
+				ID:          requestedModel,
+				Object:      "model",
+				OwnedBy:     "xai",
+				DisplayName: requestedModel,
+			})
+		}
+		response.Success(c, models)
+		return
+	}
+
 	// Handle Claude/Anthropic accounts
 	// For OAuth and Setup-Token accounts: return default models
 	if account.IsOAuth() {
@@ -2286,6 +2339,13 @@ func (h *AccountHandler) fetchUpstreamModels(ctx context.Context, account *servi
 		models, err = h.fetchGeminiUpstreamModels(ctx, account)
 	case service.PlatformAntigravity:
 		models, err = h.fetchAntigravityUpstreamModels(ctx, account)
+	case service.PlatformGrok:
+		if h.accountTestService == nil {
+			return nil, errors.New("account test service is not configured")
+		}
+		var modelIDs []string
+		modelIDs, err = h.accountTestService.FetchUpstreamSupportedModels(ctx, account)
+		models = modelInfosFromIDs(modelIDs)
 	case service.PlatformAnthropic:
 		if account.IsBedrock() {
 			models, err = h.fetchBedrockUpstreamModels(ctx, account)

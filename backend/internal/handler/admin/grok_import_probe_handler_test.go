@@ -117,3 +117,83 @@ func TestAccountCreateWithoutAutomaticGrokProbeServiceStillSucceeds(t *testing.T
 
 	require.Equal(t, http.StatusOK, recorder.Code)
 }
+
+func TestAccountCreateSchedulesAutomaticGrokProbe(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	prober := newGrokImportProbeStub(1)
+	handler := NewAccountHandler(
+		newGrokImportAdminService(),
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+	)
+	handler.SetGrokServices(nil, prober)
+
+	router := gin.New()
+	router.POST("/api/v1/admin/accounts", handler.Create)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/admin/accounts",
+		strings.NewReader(`{"name":"grok-create","platform":"grok","type":"oauth","credentials":{"refresh_token":"secret"}}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	awaitGrokProbeSignal(t, prober.done)
+	calls, _, _ := prober.snapshot()
+	require.Equal(t, map[int64]int{501: 1}, calls)
+}
+
+func TestBatchCreateSchedulesAutomaticGrokProbes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	prober := newGrokImportProbeStub(2)
+	handler := NewAccountHandler(
+		newGrokImportAdminService(),
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+	)
+	handler.SetGrokServices(nil, prober)
+
+	router := gin.New()
+	router.POST("/api/v1/admin/accounts/batch", handler.BatchCreate)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/admin/accounts/batch",
+		strings.NewReader(`{"accounts":[
+			{"name":"grok-batch-1","platform":"grok","type":"oauth","credentials":{"refresh_token":"one"}},
+			{"name":"grok-batch-2","platform":"grok","type":"oauth","credentials":{"refresh_token":"two"}}
+		]}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	awaitGrokProbeSignal(t, prober.done)
+	awaitGrokProbeSignal(t, prober.done)
+	calls, _, _ := prober.snapshot()
+	require.Equal(t, map[int64]int{501: 1, 502: 1}, calls)
+}
+
+func TestDataImportSchedulesAutomaticGrokProbe(t *testing.T) {
+	prober := newGrokImportProbeStub(1)
+	handler := NewAccountHandler(
+		newGrokImportAdminService(),
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+	)
+	handler.SetGrokServices(nil, prober)
+
+	result, err := handler.importData(context.Background(), DataImportRequest{Data: DataPayload{
+		Accounts: []DataAccount{{
+			Name:        "grok-import",
+			Platform:    service.PlatformGrok,
+			Type:        service.AccountTypeOAuth,
+			Credentials: map[string]any{"refresh_token": "secret"},
+		}},
+	}})
+
+	require.NoError(t, err)
+	require.Equal(t, 1, result.AccountCreated)
+	awaitGrokProbeSignal(t, prober.done)
+	calls, _, _ := prober.snapshot()
+	require.Equal(t, map[int64]int{501: 1}, calls)
+}

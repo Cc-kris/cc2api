@@ -4,7 +4,7 @@ vi.mock('@/api/admin/accounts', () => ({
   getAntigravityDefaultModelMapping: vi.fn()
 }))
 
-import { buildModelMappingObject, getModelsByPlatform, splitModelMappingObject } from '../useModelWhitelist'
+import { buildModelMappingObject, getModelsByPlatform, getPresetMappingsByPlatform, splitModelMappingObject } from '../useModelWhitelist'
 
 describe('useModelWhitelist', () => {
   it('openai 模型列表包含 GPT-5.4 官方快照', () => {
@@ -33,6 +33,23 @@ describe('useModelWhitelist', () => {
     expect(models).toContain('gemini-2.5-flash-image')
     expect(models).toContain('gemini-3.1-flash-image')
     expect(models).toContain('gemini-3-pro-image')
+  })
+
+  it('Grok 平台使用 xAI 模型目录而不是 Claude 默认目录', () => {
+    const models = getModelsByPlatform('grok')
+
+    expect(models).toContain('grok-4.5')
+    expect(models).toContain('grok-build-0.1')
+    expect(models).toContain('grok-imagine-video-1.5')
+    expect(models.some(model => model.startsWith('claude-'))).toBe(false)
+  })
+
+  it('Grok 平台使用 Grok 预设映射', () => {
+    const presets = getPresetMappingsByPlatform('grok')
+
+    expect(presets).toContainEqual(expect.objectContaining({ from: 'grok-latest', to: 'grok-4.5' }))
+    expect(presets).toContainEqual(expect.objectContaining({ from: 'grok-imagine', to: 'grok-imagine-image-quality' }))
+    expect(presets.some(preset => preset.from.startsWith('claude-'))).toBe(false)
   })
 
   it('gemini 模型列表包含原生生图模型', () => {

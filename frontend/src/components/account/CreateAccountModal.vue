@@ -1106,9 +1106,11 @@
                 ? 'https://api.openai.com'
                 : form.platform === 'gemini'
                   ? 'https://generativelanguage.googleapis.com'
-                  : form.platform === 'seedace'
-                    ? 'https://ai.silkroadai.io/v1'
-                  : 'https://api.anthropic.com'
+                  : form.platform === 'grok'
+                    ? 'https://api.x.ai/v1'
+                    : form.platform === 'seedace'
+                      ? 'https://ai.silkroadai.io/v1'
+                      : 'https://api.anthropic.com'
             "
           />
           <p class="input-hint">{{ baseUrlHint }}</p>
@@ -3940,9 +3942,11 @@ watch(
         ? 'https://api.openai.com'
         : newPlatform === 'gemini'
           ? 'https://generativelanguage.googleapis.com'
-          : newPlatform === 'seedace'
-            ? 'https://ai.silkroadai.io/v1'
-          : 'https://api.anthropic.com'
+          : newPlatform === 'grok'
+            ? 'https://api.x.ai/v1'
+            : newPlatform === 'seedace'
+              ? 'https://ai.silkroadai.io/v1'
+              : 'https://api.anthropic.com'
     // Clear model-related settings
     allowedModels.value = []
     modelMappings.value = []

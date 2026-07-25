@@ -575,6 +575,37 @@ func TestConvertGrokResponseToOpenAICompactRequiresEncryptedContent(t *testing.T
 	require.ErrorContains(t, err, "reasoning.encrypted_content")
 }
 
+func TestHandleNonStreamingResponseConvertsGrokCompactShape(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses/compact", nil)
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body: io.NopCloser(strings.NewReader(`{
+			"id":"resp_compact",
+			"model":"grok-4.5",
+			"output":[
+				{"type":"reasoning","encrypted_content":"encrypted-compact"},
+				{"type":"message","content":[{"type":"output_text","text":"data: quoted summary"}]}
+			],
+			"usage":{"input_tokens":3,"output_tokens":2}
+		}`)),
+	}
+	account := &Account{ID: 575, Platform: PlatformGrok, Type: AccountTypeOAuth}
+	svc := &OpenAIGatewayService{}
+
+	result, err := svc.handleNonStreamingResponse(context.Background(), resp, c, account, "grok", "grok-4.5")
+
+	require.NoError(t, err)
+	require.Equal(t, 3, result.usage.InputTokens)
+	require.Equal(t, 2, result.usage.OutputTokens)
+	require.Equal(t, "compaction", gjson.Get(recorder.Body.String(), "output.0.type").String())
+	require.Equal(t, "encrypted-compact", gjson.Get(recorder.Body.String(), "output.0.encrypted_content").String())
+	require.Equal(t, "data: quoted summary", gjson.Get(recorder.Body.String(), "output.0.summary.0.text").String())
+}
+
 func TestBuildGrokResponsesRequestAllowsPublicAPIKeyBaseURLByDefault(t *testing.T) {
 	account := &Account{
 		Platform: PlatformGrok,
@@ -2361,6 +2392,53 @@ func TestForwardAsAnthropicForGrokUsesXAIResponses(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), "ok")
 }
 
+func TestForwardAsAnthropicForGrokRetriesInvalidEncryptedContentOnce(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	body := []byte(`{
+		"model":"grok",
+		"max_tokens":32,
+		"stream":false,
+		"messages":[
+			{"role":"assistant","content":[{"type":"thinking","thinking":"keep summary","signature":"encrypted-reasoning"}]},
+			{"role":"user","content":"continue"}
+		]
+	}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", bytes.NewReader(body))
+	c.Set("api_key", &APIKey{ID: 5751})
+
+	account := healthyGrokOAuthGatewayTestAccount(5751, "access-token")
+	repo := &grokQuotaAccountRepo{
+		mockAccountRepoForPlatform: &mockAccountRepoForPlatform{
+			accountsByID: map[int64]*Account{5751: account},
+		},
+	}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{
+			StatusCode: http.StatusBadRequest,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"code":"invalid-argument","error":"Could not decrypt the provided encrypted_content."}`)),
+		},
+		grokMessagesSSECompletedResponse("resp_grok_messages_retry", 0),
+	}}
+	svc := &OpenAIGatewayService{
+		httpUpstream:      upstream,
+		grokTokenProvider: NewGrokTokenProvider(repo, nil),
+		accountRepo:       repo,
+	}
+
+	result, err := svc.ForwardAsAnthropic(context.Background(), c, account, body, "", "")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, upstream.bodies, 2)
+	require.Contains(t, string(upstream.bodies[0]), "encrypted-reasoning")
+	require.NotContains(t, string(upstream.bodies[1]), "encrypted-reasoning")
+	require.Contains(t, string(upstream.bodies[1]), "keep summary")
+}
+
 func TestForwardAsAnthropicForGrokFunctionToolUsesCacheCapableMixedRoute(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -2997,25 +3075,16 @@ func TestOpenAIWSHTTPBridgeGrokExhaustedSuccessPersistsRateLimit(t *testing.T) {
 	require.True(t, svc.isOpenAIAccountRuntimeBlocked(account))
 }
 
-func TestFailoverOpenAIUpstreamHTTPErrorUsesOnlyGrokRateLimitPolicy(t *testing.T) {
-	gin.SetMode(gin.TestMode)
+func TestGrokRateLimitErrorUsesOnlyGrokRateLimitPolicy(t *testing.T) {
 	repo := &grokQuotaAccountRepo{}
 	svc := &OpenAIGatewayService{accountRepo: repo}
 	account := &Account{ID: 70, Platform: PlatformGrok, Type: AccountTypeOAuth}
-	resp := &http.Response{
-		StatusCode: http.StatusTooManyRequests,
-		Header:     http.Header{"Retry-After": []string{"45"}},
-	}
-	recorder := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	body := []byte(`{"error":{"message":"rate limited"}}`)
+	header := http.Header{"Retry-After": []string{"45"}}
 
-	failoverErr := svc.failoverOpenAIUpstreamHTTPError(
-		context.Background(), c, account, resp,
-		[]byte(`{"error":{"message":"rate limited"}}`), "rate limited", "grok-4.3",
-	)
+	svc.handleGrokAccountUpstreamError(context.Background(), account, http.StatusTooManyRequests, header, body)
 
-	require.NotNil(t, failoverErr)
+	require.True(t, svc.shouldFailoverGrokUpstreamError(http.StatusTooManyRequests, body))
 	require.Equal(t, 1, repo.rateLimitedCalls)
 	require.Zero(t, repo.tempUnschedCalls)
 }

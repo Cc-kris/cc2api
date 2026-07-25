@@ -1670,6 +1670,28 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			true,
 			requestPlatform,
 		)
+		if err != nil && previousResponseID == "" && requestPlatform == service.PlatformOpenAI && selectionTransportWS == service.OpenAIUpstreamTransportResponsesWebsocketV2 {
+			// Prefer a reusable upstream WebSocket. If the group only has an
+			// OpenAI-compatible Chat Completions account, allow the first turn to
+			// select it and bridge the downstream Codex WebSocket through HTTP.
+			selection, scheduleDecision, err = h.gatewayService.SelectAccountWithSchedulerForCapability(
+				ctx,
+				selectionGroupIDWS,
+				previousResponseID,
+				sessionHash,
+				selectionModelWS,
+				excludedAccountIDs,
+				service.OpenAIUpstreamTransportAny,
+				requiredCapabilityWS,
+				false,
+				true,
+				true,
+				requestPlatform,
+			)
+			if err == nil {
+				reqLog.Info("openai.websocket_account_http_fallback_selection")
+			}
+		}
 		if err != nil {
 			reqLog.Warn("openai.websocket_account_select_failed", zap.Error(err), zap.Int("silent_retry_attempt", attempt))
 			closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "no available account")
@@ -1740,6 +1762,23 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			zap.Int("candidate_count", scheduleDecision.CandidateCount),
 			zap.Int("silent_retry_attempt", attempt),
 		)
+
+		wsProtocolDecision := h.gatewayService.ResolveOpenAIWSProtocol(account)
+		if previousResponseID == "" && wsProtocolDecision.Transport == service.OpenAIUpstreamTransportHTTPSSE {
+			reqLog.Info("openai.websocket_account_http_transport_selected",
+				zap.Int64("account_id", account.ID),
+				zap.String("reason", wsProtocolDecision.Reason),
+			)
+			handled := h.tryFallbackOpenAIWebSocketIngressToHTTP(c, wsConn, reqLog, apiKey, account, reqModel, wsFirstMessage, usageChannelMappingWS)
+			if currentAccountRelease != nil {
+				currentAccountRelease()
+				currentAccountRelease = nil
+			}
+			if !handled {
+				closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "http upstream fallback failed")
+			}
+			return
+		}
 
 		completedWSTurns := 0
 		hooks := &service.OpenAIWSIngressHooks{

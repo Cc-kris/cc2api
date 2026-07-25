@@ -2,12 +2,13 @@
 
 ## 文档信息
 
-- 文档版本：1.2
+- 文档版本：1.6
 - 审计日期：2026-07-24（America/New_York）
 - 本地发布基线：`v0.2.110`，提交 `71919518f2f5602808724c6f8042de3af493afde`
-- 本地当前基线：提交 `3aab5a23e`
+- 本地当前基线：`v0.2.112`，提交 `4843bb048df8d9810dc0c2585708345bcce68845`
 - 官方 Grok 功能分支：`feat/grok-custom-base-url-and-headers`，提交 `221581400b1c4c16fb01bfa22e93b970b66a5a64`
 - 官方最新主线：`main`，提交 `cb24522dd53f8f363d008e3afdc8e4baf9788cab`，对应官方版本 `v0.1.164`
+- 二次审计官方主线：`main`，提交 `37ed639d1e696daf1e3266aae3c172e837a53842`
 - 官方功能分支快照：`/tmp/sub2api-official-grok.6Za1Sx`
 - 官方最新主线快照：`/tmp/sub2api-official-main.dcu8tj`
 - 审计对象：Grok 账号、OAuth、请求转发、模型同步、媒体、计费、调度缓存、代理检测、前端配置与测试
@@ -20,7 +21,7 @@
 2. Grok 接入本地已有网关、计费、调度和清理机制时，连接层存在遗漏。
 3. 官方最新代码自身仍有媒体安全、异步任务归属和跨模型计费缺陷，本地迁移时一并继承。
 
-审计确认 14 个需要处理的问题，其中 P0 1 个、P1 10 个、P2 3 个。独立的 Composite 平台不属于 Grok 模块补漏，本次不迁移。
+首轮审计确认 18 个需要处理的问题，其中 P0 1 个、P1 13 个、P2 4 个。2026-07-25 二次审计进一步确认：首轮迁移覆盖了核心请求链，但遗漏了账号模型目录、分组、渠道和定价等管理面接入点，导致原生 Grok 无法从后台完整配置并投入 Codex 使用。独立的 Composite 平台不属于 Grok 模块补漏，本次不迁移。
 
 ## 二、对比方法与覆盖范围
 
@@ -132,6 +133,30 @@
 - 修复：在 Anthropic 兜底前加入显式 Grok 分支，通过 Grok OAuth service 刷新；保留账号自定义 `base_url` 和其他非 token 凭据；测试改用 `SetGrokServices` 注入。
 - 验证：断言只调用 Grok OAuth service、新 token 写入、自定义 base URL 保留、管理员与服务契约测试可编译并通过。
 
+### P1-11：通用账号创建、批量创建和数据导入没有触发 Grok 主动探测
+
+- 类型：官方调用点迁移遗漏
+- 影响：通过通用账号页面、批量创建或数据导入产生的 Grok 账号不会执行主动探测；只有 Grok 专用 OAuth/SSO 入口会探测，导致同类账号因创建入口不同而产生能力状态差异。
+- 证据：`scheduleGrokImportProbe` 在本地只被 Grok OAuth handler 调用；官方最新代码还在 `AccountHandler.Create`、`BatchCreate` 和 `importData` 三处调用。
+- 修复：补齐三个创建链路的调度调用；幂等重放仍不重复调度，探测失败不影响创建结果。
+- 验证：分别覆盖单个创建、批量创建和数据导入，断言每个新 Grok 账号仅探测一次。
+
+### P1-12：Messages 转 Grok Responses 缺少加密推理清理与单次重试
+
+- 类型：官方调用点迁移遗漏
+- 影响：Claude/Codex 多轮会话携带旧账号生成的 `thinking.signature` 时，Grok 返回无法解密的 400；本地直接进入错误/切换账号流程，新账号继续收到相同签名，形成连续失败。
+- 证据：本地已迁入 `requestHasGrokEncryptedReasoning`、`stripAnthropicThinkingSignatures` 和重试状态函数，但均没有生产调用；官方在 `ForwardAsAnthropic` 的请求发送和错误处理两层接入。
+- 修复：发送层在首个 400 后移除 Responses `encrypted_content` 并重试一次；仍失败时从原始 Messages 请求移除 `thinking.signature`，并用请求级标记禁止无限重试。
+- 验证：模拟首次解密失败、第二次成功，断言仅发送两次、缓存身份保持不变、第二次请求不含旧加密内容。
+
+### P1-13：Grok `/responses/compact` 响应转换函数未接入实际返回链路
+
+- 类型：官方调用点迁移遗漏
+- 影响：请求 Compact 接口时，上游返回普通 reasoning/message 数组，本地未转换成 Codex 需要的单个 `compaction` 输出；函数虽然存在且有单元测试，但真实请求永远不会调用。
+- 证据：`convertGrokResponseToOpenAICompact` 只在测试中出现；官方在非流式响应处理、提取 usage 前按 Grok + Compact 路径调用。
+- 修复：在非流式响应链路接入转换，并迁入按物理行识别 SSE 的判断，避免 JSON 文本里的 `data:` 被误认为 SSE 而绕过 Compact 转换。
+- 验证：端到端调用非流式响应处理，断言输出为 `compaction`、加密状态和摘要保留、usage 正常提取，摘要中包含 `data:` 仍按 JSON 处理。
+
 ### P2-01：代理质量检测没有 Grok
 
 - 类型：官方后续修复遗漏
@@ -154,6 +179,84 @@
 - 缺失组：`headerOverride`、`grokCustomBaseUrl`、`grokClientToolCache`。
 - 修复：补齐中英文文案，并按官方最新含义明确“仅已识别 Free OAuth 账号生效，可能改变客户端自动工具选择”。
 - 验证：中英文键集合完整、页面不显示原始 i18n key、类型检查通过。
+
+### P2-04：迁移后的 Grok 可达性没有纳入静态检查验收
+
+- 类型：迁移与验收流程缺陷
+- 影响：函数文件已存在但调用点遗漏，普通 Go 编译与函数级单测仍能通过；直到 GitHub `golangci-lint` 才以未使用函数暴露不完整迁移。
+- 证据：主动探测、Messages 加密恢复和 Compact 转换均出现“实现存在、生产不可达”；同时存在大写错误文本和可简化状态分支等静态检查问题。
+- 修复：以官方生产调用点为清单进行反向可达性核对；接通必要链路，删除本地架构已替代的冗余故障切换 helper，并修复本次 Grok 静态检查项。
+- 验证：GitHub lint 日志不再出现本次涉及的 Grok 未使用函数、错误文本或状态分支问题。
+
+## 三-A、2026-07-25 二次审计：原生 Grok 配置链路断点
+
+### P0-02：Grok 账号模型目录错误回落到 Claude
+
+- 现象：新建账号选择 Grok 后，模型选择器展示 Claude；管理员账号测试接口对 Grok OAuth 也返回 Claude 默认模型。
+- 根因：前端平台值使用 `grok`，模型目录只识别 `xai`；后端管理员模型接口没有 Grok 分支，最终进入 Anthropic 默认分支。
+- 官方对照：官方当前主线同时识别 `grok`/`xai`，并使用 `xai.DefaultModels()` 返回 Grok 模型。
+- 修复：同步官方 Grok 模型目录、别名和预设映射；管理员模型接口增加 Grok 映射与默认目录分支。
+
+### P0-03：Grok 分组和渠道无法从后台建立
+
+- 现象：分组平台下拉和渠道平台列表均没有 Grok，渠道定价页面因此没有 Grok 入口。
+- 根因：类型定义已包含 `grok`，页面实际选项数组和渠道平台顺序未同步。
+- 影响：Grok 账号即使创建成功，也无法通过正常后台流程绑定原生 Grok 分组、渠道映射和渠道定价。
+- 修复：分组创建/筛选、渠道平台段和跨页面配置验收统一加入 Grok，同时保留本地 Seedace 扩展。
+
+### P0-04：Grok API Key 默认地址被写成 Anthropic
+
+- 现象：账号弹窗切换到 Grok API Key 时，如果管理员不手动点击地址预设，提交值仍是 `https://api.anthropic.com`。
+- 根因：平台切换监听和输入框占位没有 Grok 分支；提交时非空的错误地址覆盖了 Grok 正确默认值。
+- 修复：平台切换、占位和提交三处统一使用 `https://api.x.ai/v1`。
+
+### P0-05：OpenAI 兼容 Grok 账号被 Codex WebSocket 筛选器排除
+
+- 现象：Codex 桌面端使用 WebSocket 请求 OpenAI 分组时，已探测为仅支持 Chat Completions 的 Grok 兼容账号仍被要求使用 Responses WebSocket，导致重连、上游失败或无可用账号。
+- 根因：WebSocket 协议判定器没有读取 `openai_responses_supported=false`；首轮账号调度又只允许 WebSocket 上游，使现有 Responses 转 Chat Completions 的 HTTP 兼容逻辑无法到达。
+- 修复：协议判定器将不支持 Responses 的 OpenAI API Key 账号强制定为 HTTP；Codex WebSocket 首轮允许选择 HTTP 账号，选中后直接进入 Responses 转 Chat Completions 链路；携带 `previous_response_id` 的续轮仍保持 WebSocket 会话约束。
+- 验证：Codex 客户端 WebSocket 请求经 OpenAI 渠道映射为 `grok-4.5` 后，上游 HTTP Chat Completions 命中 1 次、上游 WebSocket 命中 0 次，完整结果与用量记录正常返回。
+
+### P1-14：Grok 上游模型同步入口被前端隐藏
+
+- 现象：后端已经支持 Grok `/models` 同步，但模型选择组件没有把 Grok 列为可同步平台；编辑账号切到模型映射模式后，旧同步按钮又会进入不支持 Grok 的后端分支。
+- 修复：前端同步能力列表加入 Grok；旧模型映射入口复用同一套 Grok 上游模型能力，API Key 与 OAuth 均不再回落到 OpenAI/Anthropic 实现。
+- 验证：覆盖 Grok API Key 的请求地址、鉴权头、模型去重排序和前端同步入口。
+
+### P1-15：公共 `/v1/models` 对原生 Grok 回落到 Claude
+
+- 现象：原生 Grok 分组没有显式账号模型映射时，公共模型接口返回 Claude 默认清单。
+- 根因：公共模型接口只有 OpenAI、Gemini 两个平台分支，其余统一回落 Claude。
+- 修复：按官方实现使用 xAI 默认目录，并为 Grok 4.5/Build 模型返回 Codex 可识别的推理档位元数据。
+
+### P1-16：渠道定价同步后端拒绝 Grok
+
+- 现象：即使绕过前端直接请求 Grok 定价模型同步，后端也返回不支持平台。
+- 根因：LiteLLM provider 映射缺少 `grok -> xai`。
+- 修复：加入 xAI provider 映射；渠道计价继续保持分组平台与定价平台严格一致，原生 Grok 必须使用 `platform=grok` 的价格项。
+
+### P1-17：简单模式不会建立 Grok 默认分组
+
+- 现象：简单模式启动只确保 Anthropic、OpenAI、Gemini、Antigravity 默认分组。
+- 修复：同步官方 Grok 默认分组和默认媒体开关逻辑。
+
+### 线上证据与现有数据边界
+
+- 线上版本为 `v0.2.112`。数据库当前没有 `platform=grok` 的账号。
+- 现有 Grok 分组 34、账号 120/126、渠道 10 和渠道价格全部标记为 `openai`；渠道映射为 `openai:* -> grok-4.5`。
+- 2026-07-25 本次复核时 API Key 284 实际绑定的是分组 7，不是 Grok 分组 34；其当前用量也来自普通 GPT 账号。这个密钥在重新绑定分组 34 前不能作为 Grok 线上验收样本。
+- API Key 284 在 2026-07-25 12:33 至 12:36（UTC+8）的 Codex 请求先发生 WebSocket 代理失败，HTTP 降级后收到上游 524；该时间窗没有成功用量记录。
+- 当前线上链路属于 OpenAI 兼容格式的 Grok 上游，使用通用 Responses 转 Chat Completions 桥接，不触发只对 `platform=grok` 生效的 Grok OAuth 和原生媒体路由。
+- 本次代码修复是在保留 OpenAI 兼容 Grok 链路的基础上，补齐并行的原生 Grok 配置能力。现有 `platform=openai` 数据不应迁移成 `platform=grok`，除非上游连接方式本身发生变化。
+
+### 两条并行链路的最终边界
+
+| 配置场景 | 账号平台 | 分组平台 | 渠道映射与定价平台 | 客户调用协议 | 上游处理方式 |
+| --- | --- | --- | --- | --- | --- |
+| OpenAI 兼容格式的 Grok 上游 | `openai` | `openai` | `openai` | OpenAI `/responses`、`/chat/completions` | 保持 OpenAI 兼容转发，按账号或渠道映射把客户模型改写为 `grok-*` |
+| 原生 Grok/xAI 账号 | `grok` | `grok` | `grok` | 同样使用 OpenAI `/responses`、`/chat/completions` | 进入 Grok 专用认证、协议桥接、媒体和错误处理链路 |
+
+平台字段表示本站连接上游时使用的适配器和定价命名空间，不表示客户请求必须使用哪一种协议。Codex 无论使用哪条链路，面向本站发送的都是 OpenAI 兼容请求。
 
 ## 四、明确不纳入本次开发的内容
 
@@ -179,8 +282,9 @@
 2. 真实可用性：Grok OAuth 模型同步、CLI 403 受限回退、调度缓存字段。
 3. 计费正确性：`per_second` 视频、Composer 辅助模型分项计费。
 4. 任务可恢复性：视频任务持久归属与缓存恢复。
-5. 运维与界面：OAuth 清理、代理质量检测、媒体模型维度上报、i18n。
-6. 每组完成后运行定向测试；全部完成后执行独立 Code Review、全量后端测试、前端测试、类型检查和生产构建。
+5. 调用可达性：通用创建入口主动探测、Messages 加密恢复、Compact 响应转换。
+6. 运维与界面：OAuth 清理、代理质量检测、媒体模型维度上报、i18n。
+7. 每组完成后运行定向测试；全部完成后执行独立 Code Review、全量后端测试、前端测试、类型检查和生产构建。
 
 ## 六、验收标准
 
@@ -204,6 +308,8 @@
 - 异步任务：新增 migration 171 和持久归属读写；视频创建响应在持久归属成功前不提交给客户端。
 - 重试：迁入 Grok OAuth 请求级 429 后续尝试预算，并接入五条请求链。
 - 运维与前端：增加 Grok 代理质量目标，补齐中英文配置文案与键集合测试。
+- 原生配置链路：补齐 Grok 账号模型目录、API Key 默认地址、分组、渠道、渠道定价、公共模型清单、白名单同步、模型映射同步和简单模式默认分组。
+- OpenAI 兼容 Grok：修复 Codex WebSocket 首轮对 Chat Completions-only 账号的调度与 HTTP 转换，不改变现有 OpenAI 账号、分组、渠道和定价归属。
 
 ### 第一轮独立审查
 
@@ -223,6 +329,7 @@
 - 后端全量：`go test ./...` 通过，包含 service、repository、handler、routes、migrations 和 Wire 装配测试。
 - 后端静态检查：受影响包 `go vet` 通过；`go mod tidy -diff` 与 `git diff --check` 通过。
 - 带 `unit` 标签的本次 Grok 定向测试通过，覆盖持久绑定隔离与冲突、视频响应缓冲、403 业务拒绝不回退、OAuth 429 一次后续尝试、跨模型计费、缺价边界、上游模型同步和本地 token 估算。
-- 全仓 `unit` 标签已完成编译校验；执行测试时仍有未修改的 `oauth_refresh_api_test.go` 数据基线失败，对应生产代码和测试文件与当前 HEAD 无差异，不属于本次 Grok 变更的回归。
-- 前端：126 个测试文件、754 个测试用例全部通过；ESLint、Vue/TypeScript 类型检查和生产构建通过。
+- 全仓 `unit` 标签已完成编译校验；此前记录的 `oauth_refresh_api_test.go` 数据基线失败已不再出现，当前后端全量测试为通过状态。
+- 前端：127 个测试文件、759 个测试用例全部通过；ESLint、Vue/TypeScript 类型检查和生产构建通过。
+- 双链路回归：OpenAI 类型账号从兼容上游读取 `grok-*` 模型并转换为 Codex 清单通过；OpenAI 分组映射到 `grok-4.5` 的 HTTP/WS 请求通过；OpenAI 与原生 Grok 渠道定价双向隔离测试通过。
 - 构建仅保留既有的动态/静态混合导入和大 chunk 警告，不影响本次功能与发布。

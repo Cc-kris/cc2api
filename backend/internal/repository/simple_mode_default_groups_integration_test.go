@@ -31,8 +31,15 @@ func TestEnsureSimpleModeDefaultGroups_CreatesMissingDefaults(t *testing.T) {
 	assertGroupExists(service.PlatformAnthropic + "-default")
 	assertGroupExists(service.PlatformOpenAI + "-default")
 	assertGroupExists(service.PlatformGemini + "-default")
+	assertGroupExists(service.PlatformGrok + "-default")
 	assertGroupExists(service.PlatformAntigravity + "-default-1")
 	assertGroupExists(service.PlatformAntigravity + "-default-2")
+
+	grokDefault, err := client.Group.Query().
+		Where(group.NameEQ(service.PlatformGrok+"-default"), group.DeletedAtIsNil()).
+		Only(seedCtx)
+	require.NoError(t, err)
+	require.True(t, grokDefault.AllowImageGeneration)
 }
 
 func TestEnsureSimpleModeDefaultGroups_IgnoresSoftDeletedGroups(t *testing.T) {

@@ -697,6 +697,14 @@ func (s *OpenAIGatewayService) getOpenAIWSProtocolResolver() OpenAIWSProtocolRes
 	return NewOpenAIWSProtocolResolver(cfg)
 }
 
+// ResolveOpenAIWSProtocol returns the effective upstream transport for an
+// account. Handlers use the same decision as the scheduler and forwarder so a
+// downstream WebSocket does not force a Chat Completions-only upstream onto a
+// Responses WebSocket path.
+func (s *OpenAIGatewayService) ResolveOpenAIWSProtocol(account *Account) OpenAIWSProtocolDecision {
+	return s.getOpenAIWSProtocolResolver().Resolve(account)
+}
+
 func classifyOpenAIWSReconnectReason(err error) (string, bool) {
 	if err == nil {
 		return "", false
@@ -1257,21 +1265,6 @@ func isOpenAITransientProcessingError(upstreamStatusCode int, upstreamMsg string
 // Used by ForwardAsAnthropic to pass as prompt_cache_key for upstream cache.
 func (s *OpenAIGatewayService) ExtractSessionID(c *gin.Context, body []byte) string {
 	return explicitOpenAIRequestSessionID(c, body)
-}
-
-func explicitOpenAISessionID(c *gin.Context, body []byte) string {
-	if c == nil {
-		return ""
-	}
-
-	sessionID := strings.TrimSpace(c.GetHeader("session_id"))
-	if sessionID == "" {
-		sessionID = strings.TrimSpace(c.GetHeader("conversation_id"))
-	}
-	if sessionID == "" && len(body) > 0 {
-		sessionID = strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
-	}
-	return sessionID
 }
 
 // GenerateExplicitSessionHash generates a sticky-session hash only from explicit
@@ -5148,15 +5141,22 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 	// This heuristic is NOT applied to API-key accounts to avoid false
 	// positives on JSON responses that coincidentally contain "data:" or
 	// "event:" in their text content.
-	if account.Type == AccountTypeOAuth {
-		bodyLooksLikeSSE := bytes.Contains(body, []byte("data:")) || bytes.Contains(body, []byte("event:"))
-		if bodyLooksLikeSSE {
-			return s.handleSSEToJSON(resp, c, body, originalModel, mappedModel)
+	bodyLooksLikeSSE := bodyHasSSEFraming(body)
+	if account.Type == AccountTypeOAuth && bodyLooksLikeSSE {
+		return s.handleSSEToJSON(resp, c, body, originalModel, mappedModel)
+	}
+	if account != nil && account.IsGrok() && isOpenAIResponsesCompactPath(c) {
+		body, err = convertGrokResponseToOpenAICompact(body)
+		if err != nil {
+			return nil, fmt.Errorf("convert Grok compact response: %w", err)
 		}
 	}
 
 	usageValue, usageOK := extractOpenAIUsageFromJSONBytes(body)
 	if !usageOK {
+		if bodyLooksLikeSSE {
+			return s.handleSSEToJSON(resp, c, body, originalModel, mappedModel)
+		}
 		return nil, fmt.Errorf("parse response: invalid json response")
 	}
 	usage := &usageValue
@@ -5196,6 +5196,16 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 func isEventStreamResponse(header http.Header) bool {
 	contentType := strings.ToLower(header.Get("Content-Type"))
 	return strings.Contains(contentType, "text/event-stream")
+}
+
+func bodyHasSSEFraming(body []byte) bool {
+	for _, line := range bytes.Split(body, []byte("\n")) {
+		line = bytes.TrimRight(line, "\r")
+		if bytes.HasPrefix(line, []byte("data:")) || bytes.HasPrefix(line, []byte("event:")) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Context, body []byte, originalModel, mappedModel string) (*openaiNonStreamingResult, error) {

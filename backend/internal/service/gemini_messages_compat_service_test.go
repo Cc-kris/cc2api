@@ -240,10 +240,14 @@ func assertGeminiToolCallWireNameAndArguments(t *testing.T, body, expectedName, 
 			function, _ := toolCall["function"].(map[string]any)
 			if wireName, exists := function["name"]; exists {
 				require.NotEmpty(t, wireName)
-				name = wireName.(string)
+				wireNameString, ok := wireName.(string)
+				require.True(t, ok)
+				name = wireNameString
 			}
 			if wireArguments, exists := function["arguments"]; exists {
-				arguments += wireArguments.(string)
+				wireArgumentsString, ok := wireArguments.(string)
+				require.True(t, ok)
+				arguments += wireArgumentsString
 			}
 		}
 	}
