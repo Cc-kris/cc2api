@@ -2,7 +2,7 @@
 
 ## 文档信息
 
-- 文档版本：1.1
+- 文档版本：1.2
 - 审计日期：2026-07-24（America/New_York）
 - 本地发布基线：`v0.2.110`，提交 `71919518f2f5602808724c6f8042de3af493afde`
 - 本地当前基线：提交 `3aab5a23e`
@@ -20,7 +20,7 @@
 2. Grok 接入本地已有网关、计费、调度和清理机制时，连接层存在遗漏。
 3. 官方最新代码自身仍有媒体安全、异步任务归属和跨模型计费缺陷，本地迁移时一并继承。
 
-审计确认 13 个需要处理的问题，其中 P0 1 个、P1 9 个、P2 3 个。独立的 Composite 平台不属于 Grok 模块补漏，本次不迁移。
+审计确认 14 个需要处理的问题，其中 P0 1 个、P1 10 个、P2 3 个。独立的 Composite 平台不属于 Grok 模块补漏，本次不迁移。
 
 ## 二、对比方法与覆盖范围
 
@@ -124,6 +124,14 @@
 - 修复：迁入请求级状态并接入 Responses、Messages、Chat Completions、Images 和 Grok Media 五条调用链。
 - 验证：首个 429 不立即停止；第二个账号任意失败停止；非 429 不启动该预算；OpenAI OAuth 风暴逻辑保持原行为。
 
+### P1-10：管理员手动刷新 Grok OAuth 账号仍落入 Anthropic 刷新链路
+
+- 类型：本地集成遗漏；CI 回归暴露
+- 影响：管理员对 Grok OAuth 账号执行手动刷新时，`refreshSingleAccount` 没有 Grok 分支，最终调用 Anthropic OAuth 服务；服务未配置时直接崩溃，配置存在时会使用错误协议。
+- 证据：`AccountHandler` 已持有 Grok OAuth service，但刷新分支只识别 OpenAI、Gemini 和 Antigravity，其余平台统一进入 Anthropic；原 Grok 测试的构造参数也已落后于当前构造函数，导致 `unit` 标签 CI 无法编译。
+- 修复：在 Anthropic 兜底前加入显式 Grok 分支，通过 Grok OAuth service 刷新；保留账号自定义 `base_url` 和其他非 token 凭据；测试改用 `SetGrokServices` 注入。
+- 验证：断言只调用 Grok OAuth service、新 token 写入、自定义 base URL 保留、管理员与服务契约测试可编译并通过。
+
 ### P2-01：代理质量检测没有 Grok
 
 - 类型：官方后续修复遗漏
@@ -191,7 +199,7 @@
 ### 已实施
 
 - 安全：Grok `count_tokens` 改为本地估算；multipart 文件严格执行 20 MiB 单文件上限。
-- 可用性：迁入 OAuth/API Key 模型同步、受限 CLI 403 回退、调度缓存字段与 Grok OAuth 退出清理。
+- 可用性：迁入 OAuth/API Key 模型同步、受限 CLI 403 回退、调度缓存字段与 Grok OAuth 退出清理；修复管理员手动刷新误入 Anthropic 链路。
 - 计费：修复视频按秒计费；Composer 主模型与视觉辅助模型分开计价；辅助模型缺价不再清零整单。
 - 异步任务：新增 migration 171 和持久归属读写；视频创建响应在持久归属成功前不提交给客户端。
 - 重试：迁入 Grok OAuth 请求级 429 后续尝试预算，并接入五条请求链。
@@ -207,6 +215,7 @@
 
 - 主 Agent 按最终差异重新检查了视频任务归属、CLI 403 回退、OAuth 429 切换、跨模型计费和本地 token 估算五条高风险链路。
 - 复审追加发现：图片生成响应如果携带 ID，原条件会误写入视频任务归属表。现已把绑定条件收窄到视频创建、编辑和续写端点。
+- GitHub `unit` 标签 CI 追加发现：Grok 管理员手动刷新未接入 Grok OAuth service、两个测试构造器落后、服务契约桩缺少新增持久绑定接口、Header 测试使用非规范键。上述本次责任项均已修复。
 - 最终结论：第一轮阻断项均已关闭；修复后复审未发现新的发布阻断项。
 
 ### 验证记录
@@ -214,6 +223,6 @@
 - 后端全量：`go test ./...` 通过，包含 service、repository、handler、routes、migrations 和 Wire 装配测试。
 - 后端静态检查：受影响包 `go vet` 通过；`go mod tidy -diff` 与 `git diff --check` 通过。
 - 带 `unit` 标签的本次 Grok 定向测试通过，覆盖持久绑定隔离与冲突、视频响应缓冲、403 业务拒绝不回退、OAuth 429 一次后续尝试、跨模型计费、缺价边界、上游模型同步和本地 token 估算。
-- 全仓 `unit` 标签测试仍有未修改的 `oauth_refresh_api_test.go` 基线失败；对应生产代码和测试文件与当前 HEAD 无差异，不属于本次 Grok 变更的回归。
+- 全仓 `unit` 标签已完成编译校验；执行测试时仍有未修改的 `oauth_refresh_api_test.go` 数据基线失败，对应生产代码和测试文件与当前 HEAD 无差异，不属于本次 Grok 变更的回归。
 - 前端：126 个测试文件、754 个测试用例全部通过；ESLint、Vue/TypeScript 类型检查和生产构建通过。
 - 构建仅保留既有的动态/静态混合导入和大 chunk 警告，不影响本次功能与发布。

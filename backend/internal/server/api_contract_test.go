@@ -353,9 +353,14 @@ func TestAPIContracts(t *testing.T) {
 						"image_price_1k": null,
 						"image_price_2k": null,
 						"image_price_4k": null,
+						"video_price_480p": null,
+						"video_price_720p": null,
+						"video_price_1080p": null,
 						"allow_image_generation": false,
 						"image_rate_independent": false,
 						"image_rate_multiplier": 0,
+						"video_rate_independent": false,
+						"video_rate_multiplier": 0,
 						"claude_code_only": false,
 						"allow_messages_dispatch": false,
 						"fallback_group_id": null,
@@ -585,6 +590,8 @@ func TestAPIContracts(t *testing.T) {
 							"image_output_size": null,
 							"image_size_source": null,
 							"image_size_breakdown": null,
+							"video_count": 0,
+							"video_resolution": null,
 							"media_type": null,
 							"cache_ttl_overridden": false,
 							"created_at": "2025-01-02T03:04:05Z",
@@ -2266,6 +2273,14 @@ func (r *stubUsageLogRepo) GetByID(ctx context.Context, id int64) (*service.Usag
 
 func (r *stubUsageLogRepo) GetSeedaceVideoByTaskID(ctx context.Context, apiKeyID int64, taskID string) (*service.UsageLog, error) {
 	return nil, service.ErrUsageLogNotFound
+}
+
+func (r *stubUsageLogRepo) CreateGrokVideoTaskBinding(ctx context.Context, apiKeyID, userID int64, groupID *int64, taskID string, accountID int64) error {
+	return errors.New("not implemented")
+}
+
+func (r *stubUsageLogRepo) GetGrokVideoTaskAccountID(ctx context.Context, apiKeyID, userID int64, groupID *int64, taskID string) (int64, error) {
+	return 0, service.ErrUsageLogNotFound
 }
 
 func (r *stubUsageLogRepo) Delete(ctx context.Context, id int64) error {

@@ -133,7 +133,7 @@ func TestBuildUpstreamModelsRequestSupportsGrokAPIKeyCustomBaseAndHeaders(t *tes
 	require.NoError(t, err)
 	require.Equal(t, "https://grok.example.com/openai/v1/models", req.URL.String())
 	require.Equal(t, "Bearer grok-api-key", req.Header.Get("Authorization"))
-	require.Equal(t, []string{"tenant-7"}, req.Header["x-tenant"])
+	require.Equal(t, "tenant-7", getHeaderRaw(req.Header, "x-tenant"))
 	require.Empty(t, req.Header.Get("X-XAI-Token-Auth"))
 }
 

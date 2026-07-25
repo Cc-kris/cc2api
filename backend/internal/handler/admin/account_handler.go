@@ -1032,6 +1032,24 @@ func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *serv
 				newCredentials[k] = v
 			}
 		}
+	} else if account.Platform == service.PlatformGrok {
+		if h.grokOAuthService == nil {
+			return nil, "", errors.New("Grok OAuth service is not configured")
+		}
+		tokenInfo, err := h.grokOAuthService.RefreshAccountToken(ctx, account)
+		if err != nil {
+			return nil, "", err
+		}
+
+		newCredentials = h.grokOAuthService.BuildAccountCredentials(tokenInfo)
+		for k, v := range account.Credentials {
+			if _, exists := newCredentials[k]; !exists {
+				newCredentials[k] = v
+			}
+		}
+		if baseURL := strings.TrimSpace(account.GetCredential("base_url")); baseURL != "" {
+			newCredentials["base_url"] = baseURL
+		}
 	} else if account.Platform == service.PlatformGemini {
 		tokenInfo, err := h.geminiOAuthService.RefreshAccountToken(ctx, account)
 		if err != nil {
