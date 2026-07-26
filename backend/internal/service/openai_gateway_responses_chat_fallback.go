@@ -28,6 +28,28 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 	body []byte,
 ) (*OpenAIForwardResult, error) {
 	startTime := time.Now()
+	requestAPIKey := getAPIKeyFromContext(c)
+	if !GroupAllowsImageGeneration(apiKeyGroup(requestAPIKey)) {
+		requestedModel, _, _ := extractOpenAIRequestMetaFromBody(body)
+		if IsImageGenerationPermissionIntent(openAIResponsesEndpoint, requestedModel, body) {
+			setOpsUpstreamError(c, http.StatusForbidden, ImageGenerationPermissionMessage(), "")
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": gin.H{
+					"type":    "permission_error",
+					"message": ImageGenerationPermissionMessage(),
+				},
+			})
+			return nil, errors.New("image generation disabled for group")
+		}
+		strippedBody, stripped, stripErr := stripOpenAIImageGenerationToolDeclarationsFromBody(body)
+		if stripErr != nil {
+			return nil, stripErr
+		}
+		if stripped {
+			body = strippedBody
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI Responses->Chat Completions] Removed image generation tool declaration for disabled group")
+		}
+	}
 
 	var responsesReq apicompat.ResponsesRequest
 	if err := json.Unmarshal(body, &responsesReq); err != nil {

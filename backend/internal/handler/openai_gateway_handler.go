@@ -1549,6 +1549,13 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				return false
 			}
 		}
+		if !service.GroupAllowsImageGeneration(apiKey.Group) {
+			requestPlatform := openAICompatibleRequestPlatform(apiKey)
+			if service.IsImageGenerationPermissionIntentForPlatform("/v1/responses", model, payload, requestPlatform) {
+				return true
+			}
+			return route.Mapping.Mapped && service.IsImageGenerationPermissionIntentForPlatform("/v1/responses", route.Mapping.MappedModel, payload, requestPlatform)
+		}
 		if isOrdinaryNativeImage(payload, model, route) {
 			return false
 		}

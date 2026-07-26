@@ -233,6 +233,61 @@ func TestForwardResponses_AutoSupportedAccountStillUsesResponsesEndpoint(t *test
 	require.Equal(t, "ok", gjson.Get(rec.Body.String(), "output.0.content.0.text").String())
 }
 
+func TestForwardResponses_ForceChatCompletionsDisabledGroupStripsPassiveImageTools(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"model":"gpt-5.6-luna","input":"reply OK","stream":false,"tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]},{"type":"function","name":"shell","description":"Run shell","parameters":{"type":"object"}}],"tool_choice":"auto"}`)
+	c, recorder := newOpenAIImageGenerationControlTestContext(false, "Codex Desktop/0.144.0-alpha.4")
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body: io.NopCloser(strings.NewReader(
+			`{"id":"chatcmpl_passive_tools","object":"chat.completion","model":"grok-4.5","choices":[{"index":0,"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}`,
+		)),
+	}}
+	svc := &OpenAIGatewayService{
+		cfg:                  rawChatCompletionsTestConfig(),
+		httpUpstream:         upstream,
+		responseHeaderFilter: compileResponseHeaderFilter(&config.Config{}),
+	}
+
+	result, err := svc.Forward(context.Background(), c, forceChatResponsesFallbackAccount(), body)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.NotNil(t, upstream.lastReq)
+	require.Equal(t, "/v1/chat/completions", upstream.lastReq.URL.Path)
+	require.Equal(t, "shell", gjson.GetBytes(upstream.lastBody, "tools.0.function.name").String())
+	require.NotContains(t, string(upstream.lastBody), "image_gen")
+	require.NotContains(t, string(upstream.lastBody), "imagegen")
+}
+
+func TestForwardResponses_ForceChatCompletionsDisabledGroupRejectsExplicitImage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"model":"gpt-5.6-luna","input":"draw a cat","stream":false,"tools":[{"type":"image_generation"}],"tool_choice":{"type":"image_generation"}}`)
+	c, recorder := newOpenAIImageGenerationControlTestContext(false, "Codex Desktop/0.144.0-alpha.4")
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	upstream := &httpUpstreamRecorder{}
+	svc := &OpenAIGatewayService{
+		cfg:                  rawChatCompletionsTestConfig(),
+		httpUpstream:         upstream,
+		responseHeaderFilter: compileResponseHeaderFilter(&config.Config{}),
+	}
+
+	result, err := svc.Forward(context.Background(), c, forceChatResponsesFallbackAccount(), body)
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+	require.Equal(t, "permission_error", gjson.Get(recorder.Body.String(), "error.type").String())
+	require.Nil(t, upstream.lastReq)
+}
+
 func forceChatResponsesFallbackAccount() *Account {
 	account := rawChatCompletionsTestAccount()
 	account.Extra = map[string]any{

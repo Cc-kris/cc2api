@@ -1069,17 +1069,22 @@ func TestOpenAIResponsesWebSocket_ChannelMappedModelSelectsMappedAccount(t *test
 
 func TestOpenAIResponsesWebSocket_OpenAICompatibleGrokWithoutResponsesUsesHTTPChatFallback(t *testing.T) {
 	responsesSupported := false
+	allowImageGeneration := false
 	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
-		firstPayload:        `{"type":"response.create","model":"gpt-5.6-luna","input":"reply OK","stream":false}`,
-		channelMapping:      map[string]string{"*": "grok-4.5"},
-		accountModelMapping: map[string]any{"grok-4.5": "grok-4.5"},
-		responsesSupported:  &responsesSupported,
+		firstPayload:         `{"type":"response.create","model":"gpt-5.6-luna","input":"reply OK","stream":false,"tools":[{"type":"namespace","name":"image_gen","tools":[{"type":"function","name":"imagegen"}]},{"type":"function","name":"shell","description":"Run shell","parameters":{"type":"object"}}],"tool_choice":"auto"}`,
+		channelMapping:       map[string]string{"*": "grok-4.5"},
+		accountModelMapping:  map[string]any{"grok-4.5": "grok-4.5"},
+		responsesSupported:   &responsesSupported,
+		allowImageGeneration: &allowImageGeneration,
 	})
 
 	require.Equal(t, int32(1), got.upstreamHTTPHits)
 	require.Equal(t, int32(0), got.upstreamWSHits)
 	require.Equal(t, "grok-4.5", gjson.GetBytes(got.upstreamFirstPayload, "model").String())
 	require.True(t, gjson.GetBytes(got.upstreamFirstPayload, "messages").Exists())
+	require.Equal(t, "shell", gjson.GetBytes(got.upstreamFirstPayload, "tools.0.function.name").String())
+	require.NotContains(t, string(got.upstreamFirstPayload), "image_gen")
+	require.NotContains(t, string(got.upstreamFirstPayload), "imagegen")
 	require.Equal(t, int64(9901), got.log.AccountID)
 }
 
@@ -1864,6 +1869,7 @@ type openAIResponsesWSUsageLogCase struct {
 	channelMapping         map[string]string
 	accountModelMapping    map[string]any
 	responsesSupported     *bool
+	allowImageGeneration   *bool
 	codexBridge            bool
 	httpOnlyAccount        bool
 	upstreamHTTPStatus     int
@@ -3021,11 +3027,15 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		concurrencyHelper:   NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second),
 	}
 
+	allowImageGeneration := true
+	if tc.allowImageGeneration != nil {
+		allowImageGeneration = *tc.allowImageGeneration
+	}
 	apiKey := &service.APIKey{
 		ID:      1801,
 		GroupID: &groupID,
 		Group: &service.Group{
-			ID: groupID, Platform: service.PlatformOpenAI, Status: service.StatusActive, AllowImageGeneration: true,
+			ID: groupID, Platform: service.PlatformOpenAI, Status: service.StatusActive, AllowImageGeneration: allowImageGeneration,
 		},
 		User: &service.User{ID: 1701, Status: service.StatusActive},
 	}
