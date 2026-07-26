@@ -24,11 +24,18 @@ type refreshAPIAccountRepo struct {
 	updateCredentialsCalls int
 }
 
+func activeRefreshAPITestAccount(account *Account) *Account {
+	if account != nil && account.Status == "" {
+		account.Status = StatusActive
+	}
+	return account
+}
+
 func (r *refreshAPIAccountRepo) GetByID(_ context.Context, _ int64) (*Account, error) {
 	if r.getByIDErr != nil {
 		return nil, r.getByIDErr
 	}
-	return r.account, nil
+	return activeRefreshAPITestAccount(r.account), nil
 }
 
 func (r *refreshAPIAccountRepo) Update(_ context.Context, _ *Account) error {
@@ -232,7 +239,8 @@ func TestRefreshIfNeeded_RefreshError(t *testing.T) {
 	result, err := api.RefreshIfNeeded(context.Background(), account, executor, 3*time.Minute)
 
 	require.Error(t, err)
-	require.Nil(t, result)
+	require.NotNil(t, result)
+	require.Equal(t, account.ID, result.Account.ID) // 返回本次失败所使用的账号快照
 	require.Contains(t, err.Error(), "invalid_grant")
 	require.Equal(t, 0, repo.updateCalls)   // no DB update on refresh error
 	require.Equal(t, 1, cache.releaseCalls) // lock still released via defer
@@ -255,7 +263,7 @@ func TestRefreshIfNeeded_DBUpdateError(t *testing.T) {
 
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Contains(t, err.Error(), "DB update failed")
+	require.Contains(t, err.Error(), "oauth refresh credential persistence failed")
 	require.Equal(t, 1, repo.updateCalls) // attempted
 }
 
@@ -274,9 +282,10 @@ func TestRefreshIfNeeded_DBRereadFails(t *testing.T) {
 	api := NewOAuthRefreshAPI(repo, cache)
 	result, err := api.RefreshIfNeeded(context.Background(), account, executor, 3*time.Minute)
 
-	require.NoError(t, err)
-	require.True(t, result.Refreshed)
-	require.Equal(t, 1, executor.refreshCalls) // still refreshes using passed-in account
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Contains(t, err.Error(), "OAuth refresh account state is unavailable")
+	require.Equal(t, 0, executor.refreshCalls) // DB 状态不可用时不能使用过期快照刷新
 }
 
 func TestRefreshIfNeeded_NilCredentials(t *testing.T) {
@@ -396,13 +405,13 @@ type refreshAPIAccountRepoWithRace struct {
 
 func (r *refreshAPIAccountRepoWithRace) GetByID(_ context.Context, _ int64) (*Account, error) {
 	r.getByIDCalls++
-	if r.getByIDCalls > 1 && r.raceAccount != nil {
-		return r.raceAccount, nil
+	if r.getByIDCalls > 1 {
+		return activeRefreshAPITestAccount(r.raceAccount), nil
 	}
 	if r.getByIDErr != nil {
 		return nil, r.getByIDErr
 	}
-	return r.account, nil
+	return activeRefreshAPITestAccount(r.account), nil
 }
 
 // ========== Race recovery tests ==========
@@ -465,7 +474,8 @@ func TestRefreshIfNeeded_InvalidGrantGenuine(t *testing.T) {
 	result, err := api.RefreshIfNeeded(context.Background(), account, executor, 3*time.Minute)
 
 	require.Error(t, err, "genuine invalid_grant should propagate error")
-	require.Nil(t, result)
+	require.NotNil(t, result)
+	require.Equal(t, "revoked-rt", result.Account.GetCredential("refresh_token"))
 	require.Contains(t, err.Error(), "invalid_grant")
 }
 
@@ -490,7 +500,8 @@ func TestRefreshIfNeeded_InvalidGrantDBRereadFailsOnRecovery(t *testing.T) {
 	result, err := api.RefreshIfNeeded(context.Background(), account, executor, 3*time.Minute)
 
 	require.Error(t, err, "should propagate error when recovery DB re-read fails")
-	require.Nil(t, result)
+	require.NotNil(t, result)
+	require.Equal(t, "old-rt", result.Account.GetCredential("refresh_token"))
 }
 
 func TestRefreshIfNeeded_LocalMutexSerializesConcurrent(t *testing.T) {

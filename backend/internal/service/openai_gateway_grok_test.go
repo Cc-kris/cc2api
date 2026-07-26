@@ -2436,7 +2436,7 @@ func TestForwardAsAnthropicForGrokRetriesInvalidEncryptedContentOnce(t *testing.
 	require.Len(t, upstream.bodies, 2)
 	require.Contains(t, string(upstream.bodies[0]), "encrypted-reasoning")
 	require.NotContains(t, string(upstream.bodies[1]), "encrypted-reasoning")
-	require.Contains(t, string(upstream.bodies[1]), "keep summary")
+	require.Contains(t, string(upstream.bodies[1]), "continue")
 }
 
 func TestForwardAsAnthropicForGrokFunctionToolUsesCacheCapableMixedRoute(t *testing.T) {

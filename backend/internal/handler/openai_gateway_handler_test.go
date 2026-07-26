@@ -1086,11 +1086,22 @@ func TestOpenAIResponsesWebSocket_OpenAICompatibleGrokWithoutResponsesUsesHTTPCh
 func TestOpenAIResponses_ChannelMappedModelSelectsMappedAccount(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	upstreamPayload := make(chan []byte, 1)
+	type capturedRequest struct {
+		path              string
+		authorization     string
+		grokClientVersion string
+		payload           []byte
+	}
+	upstreamRequest := make(chan capturedRequest, 1)
 	upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		payload, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
-		upstreamPayload <- payload
+		upstreamRequest <- capturedRequest{
+			path:              r.URL.Path,
+			authorization:     r.Header.Get("Authorization"),
+			grokClientVersion: r.Header.Get("X-Grok-Client-Version"),
+			payload:           payload,
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"id":"resp_grok_mapping","object":"response","status":"completed","model":"grok-4.5","output":[],"usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3}}`)
 	}))
@@ -1162,8 +1173,11 @@ func TestOpenAIResponses_ChannelMappedModelSelectsMappedAccount(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
 	select {
-	case payload := <-upstreamPayload:
-		require.Equal(t, "grok-4.5", gjson.GetBytes(payload, "model").String())
+	case upstream := <-upstreamRequest:
+		require.Equal(t, "/v1/responses", upstream.path)
+		require.Equal(t, "Bearer sk-test", upstream.authorization)
+		require.Empty(t, upstream.grokClientVersion)
+		require.Equal(t, "grok-4.5", gjson.GetBytes(upstream.payload, "model").String())
 	case <-time.After(3 * time.Second):
 		t.Fatal("等待渠道映射后的 HTTP 上游请求超时")
 	}

@@ -181,7 +181,7 @@ func TestForwardResponses_ForceChatCompletionsReasoningOnlyStreamingVisible(t *t
 	outputItemAddedAt := strings.Index(bodyText, "event: response.output_item.added")
 	outputTextDeltaAt := strings.Index(bodyText, "event: response.output_text.delta")
 	outputTextDoneAt := strings.Index(bodyText, "event: response.output_text.done")
-	outputItemDoneAt := strings.Index(bodyText, "event: response.output_item.done")
+	outputItemDoneAt := strings.LastIndex(bodyText, "event: response.output_item.done")
 	completedAt := strings.Index(bodyText, "event: response.completed")
 	require.NotEqual(t, -1, outputItemAddedAt)
 	require.NotEqual(t, -1, outputTextDeltaAt)
