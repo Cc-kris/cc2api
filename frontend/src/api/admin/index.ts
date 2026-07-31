@@ -34,6 +34,9 @@ import affiliatesAPI from './affiliates'
 import riskControlAPI from './riskControl'
 import cacheAPI from './cache'
 import upstreamsAPI from './upstreams'
+import financeAPI from './finance'
+import upstreamWalletsAPI from './upstreamWallets'
+import upstreamFinanceProtocolsAPI from './upstreamFinanceProtocols'
 
 /**
  * Unified admin API object for convenient access
@@ -69,7 +72,10 @@ export const adminAPI = {
   affiliates: affiliatesAPI,
   riskControl: riskControlAPI,
   cache: cacheAPI,
-  upstreams: upstreamsAPI
+  upstreams: upstreamsAPI,
+  upstreamWallets: upstreamWalletsAPI,
+  upstreamFinanceProtocols: upstreamFinanceProtocolsAPI,
+  finance: financeAPI
 }
 
 export {
@@ -103,7 +109,10 @@ export {
   affiliatesAPI,
   riskControlAPI,
   cacheAPI,
-  upstreamsAPI
+  upstreamsAPI,
+  upstreamWalletsAPI,
+  upstreamFinanceProtocolsAPI,
+  financeAPI
 }
 
 export default adminAPI

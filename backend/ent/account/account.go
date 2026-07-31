@@ -43,6 +43,16 @@ const (
 	FieldPriority = "priority"
 	// FieldRateMultiplier holds the string denoting the rate_multiplier field in the database.
 	FieldRateMultiplier = "rate_multiplier"
+	// FieldUpstreamCostMultiplier holds the string denoting the upstream_cost_multiplier field in the database.
+	FieldUpstreamCostMultiplier = "upstream_cost_multiplier"
+	// FieldUpstreamCostMultiplierUpdatedAt holds the string denoting the upstream_cost_multiplier_updated_at field in the database.
+	FieldUpstreamCostMultiplierUpdatedAt = "upstream_cost_multiplier_updated_at"
+	// FieldUpstreamCostMultiplierChangeID holds the string denoting the upstream_cost_multiplier_change_id field in the database.
+	FieldUpstreamCostMultiplierChangeID = "upstream_cost_multiplier_change_id"
+	// FieldUpstreamCostMultiplierSource holds the string denoting the upstream_cost_multiplier_source field in the database.
+	FieldUpstreamCostMultiplierSource = "upstream_cost_multiplier_source"
+	// FieldCurrentFinanceProfileID holds the string denoting the current_finance_profile_id field in the database.
+	FieldCurrentFinanceProfileID = "current_finance_profile_id"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
@@ -126,6 +136,11 @@ var Columns = []string{
 	FieldLoadFactor,
 	FieldPriority,
 	FieldRateMultiplier,
+	FieldUpstreamCostMultiplier,
+	FieldUpstreamCostMultiplierUpdatedAt,
+	FieldUpstreamCostMultiplierChangeID,
+	FieldUpstreamCostMultiplierSource,
+	FieldCurrentFinanceProfileID,
 	FieldStatus,
 	FieldErrorMessage,
 	FieldLastUsedAt,
@@ -188,6 +203,10 @@ var (
 	DefaultPriority int
 	// DefaultRateMultiplier holds the default value on creation for the "rate_multiplier" field.
 	DefaultRateMultiplier float64
+	// DefaultUpstreamCostMultiplierSource holds the default value on creation for the "upstream_cost_multiplier_source" field.
+	DefaultUpstreamCostMultiplierSource string
+	// UpstreamCostMultiplierSourceValidator is a validator for the "upstream_cost_multiplier_source" field. It is called by the builders before save.
+	UpstreamCostMultiplierSourceValidator func(string) error
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -266,6 +285,31 @@ func ByPriority(opts ...sql.OrderTermOption) OrderOption {
 // ByRateMultiplier orders the results by the rate_multiplier field.
 func ByRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRateMultiplier, opts...).ToFunc()
+}
+
+// ByUpstreamCostMultiplier orders the results by the upstream_cost_multiplier field.
+func ByUpstreamCostMultiplier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamCostMultiplier, opts...).ToFunc()
+}
+
+// ByUpstreamCostMultiplierUpdatedAt orders the results by the upstream_cost_multiplier_updated_at field.
+func ByUpstreamCostMultiplierUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamCostMultiplierUpdatedAt, opts...).ToFunc()
+}
+
+// ByUpstreamCostMultiplierChangeID orders the results by the upstream_cost_multiplier_change_id field.
+func ByUpstreamCostMultiplierChangeID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamCostMultiplierChangeID, opts...).ToFunc()
+}
+
+// ByUpstreamCostMultiplierSource orders the results by the upstream_cost_multiplier_source field.
+func ByUpstreamCostMultiplierSource(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamCostMultiplierSource, opts...).ToFunc()
+}
+
+// ByCurrentFinanceProfileID orders the results by the current_finance_profile_id field.
+func ByCurrentFinanceProfileID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCurrentFinanceProfileID, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

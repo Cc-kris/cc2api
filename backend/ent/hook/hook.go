@@ -33,6 +33,30 @@ func (f AccountFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AccountMutation", m)
 }
 
+// The AccountFinanceCounterSnapshotFunc type is an adapter to allow the use of ordinary
+// function as AccountFinanceCounterSnapshot mutator.
+type AccountFinanceCounterSnapshotFunc func(context.Context, *ent.AccountFinanceCounterSnapshotMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AccountFinanceCounterSnapshotFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AccountFinanceCounterSnapshotMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AccountFinanceCounterSnapshotMutation", m)
+}
+
+// The AccountFinanceProfileFunc type is an adapter to allow the use of ordinary
+// function as AccountFinanceProfile mutator.
+type AccountFinanceProfileFunc func(context.Context, *ent.AccountFinanceProfileMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AccountFinanceProfileFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AccountFinanceProfileMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AccountFinanceProfileMutation", m)
+}
+
 // The AccountGroupFunc type is an adapter to allow the use of ordinary
 // function as AccountGroup mutator.
 type AccountGroupFunc func(context.Context, *ent.AccountGroupMutation) (ent.Value, error)
@@ -43,6 +67,18 @@ func (f AccountGroupFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AccountGroupMutation", m)
+}
+
+// The AccountUpstreamMultiplierChangeFunc type is an adapter to allow the use of ordinary
+// function as AccountUpstreamMultiplierChange mutator.
+type AccountUpstreamMultiplierChangeFunc func(context.Context, *ent.AccountUpstreamMultiplierChangeMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f AccountUpstreamMultiplierChangeFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.AccountUpstreamMultiplierChangeMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.AccountUpstreamMultiplierChangeMutation", m)
 }
 
 // The AnnouncementFunc type is an adapter to allow the use of ordinary
@@ -153,6 +189,90 @@ func (f ErrorPassthroughRuleFunc) Mutate(ctx context.Context, m ent.Mutation) (e
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ErrorPassthroughRuleMutation", m)
 }
 
+// The FinanceAlertFunc type is an adapter to allow the use of ordinary
+// function as FinanceAlert mutator.
+type FinanceAlertFunc func(context.Context, *ent.FinanceAlertMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f FinanceAlertFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.FinanceAlertMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.FinanceAlertMutation", m)
+}
+
+// The FinanceAsyncJobFunc type is an adapter to allow the use of ordinary
+// function as FinanceAsyncJob mutator.
+type FinanceAsyncJobFunc func(context.Context, *ent.FinanceAsyncJobMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f FinanceAsyncJobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.FinanceAsyncJobMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.FinanceAsyncJobMutation", m)
+}
+
+// The FinanceBackfillJobFunc type is an adapter to allow the use of ordinary
+// function as FinanceBackfillJob mutator.
+type FinanceBackfillJobFunc func(context.Context, *ent.FinanceBackfillJobMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f FinanceBackfillJobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.FinanceBackfillJobMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.FinanceBackfillJobMutation", m)
+}
+
+// The FinanceCalculationRevisionFunc type is an adapter to allow the use of ordinary
+// function as FinanceCalculationRevision mutator.
+type FinanceCalculationRevisionFunc func(context.Context, *ent.FinanceCalculationRevisionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f FinanceCalculationRevisionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.FinanceCalculationRevisionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.FinanceCalculationRevisionMutation", m)
+}
+
+// The FinanceDailyAggregateFunc type is an adapter to allow the use of ordinary
+// function as FinanceDailyAggregate mutator.
+type FinanceDailyAggregateFunc func(context.Context, *ent.FinanceDailyAggregateMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f FinanceDailyAggregateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.FinanceDailyAggregateMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.FinanceDailyAggregateMutation", m)
+}
+
+// The FinanceExportJobFunc type is an adapter to allow the use of ordinary
+// function as FinanceExportJob mutator.
+type FinanceExportJobFunc func(context.Context, *ent.FinanceExportJobMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f FinanceExportJobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.FinanceExportJobMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.FinanceExportJobMutation", m)
+}
+
+// The FinanceFXRateVersionFunc type is an adapter to allow the use of ordinary
+// function as FinanceFXRateVersion mutator.
+type FinanceFXRateVersionFunc func(context.Context, *ent.FinanceFXRateVersionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f FinanceFXRateVersionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.FinanceFXRateVersionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.FinanceFXRateVersionMutation", m)
+}
+
 // The GroupFunc type is an adapter to allow the use of ordinary
 // function as Group mutator.
 type GroupFunc func(context.Context, *ent.GroupMutation) (ent.Value, error)
@@ -211,6 +331,18 @@ func (f PaymentOrderFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PaymentOrderMutation", m)
+}
+
+// The PaymentProviderFeeEventFunc type is an adapter to allow the use of ordinary
+// function as PaymentProviderFeeEvent mutator.
+type PaymentProviderFeeEventFunc func(context.Context, *ent.PaymentProviderFeeEventMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f PaymentProviderFeeEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.PaymentProviderFeeEventMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PaymentProviderFeeEventMutation", m)
 }
 
 // The PaymentProviderInstanceFunc type is an adapter to allow the use of ordinary
@@ -321,6 +453,30 @@ func (f SubscriptionPlanFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.V
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SubscriptionPlanMutation", m)
 }
 
+// The SubscriptionRevenueRecognitionFunc type is an adapter to allow the use of ordinary
+// function as SubscriptionRevenueRecognition mutator.
+type SubscriptionRevenueRecognitionFunc func(context.Context, *ent.SubscriptionRevenueRecognitionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SubscriptionRevenueRecognitionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SubscriptionRevenueRecognitionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SubscriptionRevenueRecognitionMutation", m)
+}
+
+// The SystemModelPriceVersionFunc type is an adapter to allow the use of ordinary
+// function as SystemModelPriceVersion mutator.
+type SystemModelPriceVersionFunc func(context.Context, *ent.SystemModelPriceVersionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SystemModelPriceVersionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SystemModelPriceVersionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SystemModelPriceVersionMutation", m)
+}
+
 // The TLSFingerprintProfileFunc type is an adapter to allow the use of ordinary
 // function as TLSFingerprintProfile mutator.
 type TLSFingerprintProfileFunc func(context.Context, *ent.TLSFingerprintProfileMutation) (ent.Value, error)
@@ -331,6 +487,126 @@ func (f TLSFingerprintProfileFunc) Mutate(ctx context.Context, m ent.Mutation) (
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TLSFingerprintProfileMutation", m)
+}
+
+// The UpstreamBalanceSnapshotFunc type is an adapter to allow the use of ordinary
+// function as UpstreamBalanceSnapshot mutator.
+type UpstreamBalanceSnapshotFunc func(context.Context, *ent.UpstreamBalanceSnapshotMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UpstreamBalanceSnapshotFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UpstreamBalanceSnapshotMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UpstreamBalanceSnapshotMutation", m)
+}
+
+// The UpstreamBillReconciliationFunc type is an adapter to allow the use of ordinary
+// function as UpstreamBillReconciliation mutator.
+type UpstreamBillReconciliationFunc func(context.Context, *ent.UpstreamBillReconciliationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UpstreamBillReconciliationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UpstreamBillReconciliationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UpstreamBillReconciliationMutation", m)
+}
+
+// The UpstreamCostSettlementIntervalFunc type is an adapter to allow the use of ordinary
+// function as UpstreamCostSettlementInterval mutator.
+type UpstreamCostSettlementIntervalFunc func(context.Context, *ent.UpstreamCostSettlementIntervalMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UpstreamCostSettlementIntervalFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UpstreamCostSettlementIntervalMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UpstreamCostSettlementIntervalMutation", m)
+}
+
+// The UpstreamFinanceProtocolFunc type is an adapter to allow the use of ordinary
+// function as UpstreamFinanceProtocol mutator.
+type UpstreamFinanceProtocolFunc func(context.Context, *ent.UpstreamFinanceProtocolMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UpstreamFinanceProtocolFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UpstreamFinanceProtocolMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UpstreamFinanceProtocolMutation", m)
+}
+
+// The UpstreamFinanceProtocolVersionFunc type is an adapter to allow the use of ordinary
+// function as UpstreamFinanceProtocolVersion mutator.
+type UpstreamFinanceProtocolVersionFunc func(context.Context, *ent.UpstreamFinanceProtocolVersionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UpstreamFinanceProtocolVersionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UpstreamFinanceProtocolVersionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UpstreamFinanceProtocolVersionMutation", m)
+}
+
+// The UpstreamFinanceSyncRunFunc type is an adapter to allow the use of ordinary
+// function as UpstreamFinanceSyncRun mutator.
+type UpstreamFinanceSyncRunFunc func(context.Context, *ent.UpstreamFinanceSyncRunMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UpstreamFinanceSyncRunFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UpstreamFinanceSyncRunMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UpstreamFinanceSyncRunMutation", m)
+}
+
+// The UpstreamFundEventFunc type is an adapter to allow the use of ordinary
+// function as UpstreamFundEvent mutator.
+type UpstreamFundEventFunc func(context.Context, *ent.UpstreamFundEventMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UpstreamFundEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UpstreamFundEventMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UpstreamFundEventMutation", m)
+}
+
+// The UpstreamModelPriceVersionFunc type is an adapter to allow the use of ordinary
+// function as UpstreamModelPriceVersion mutator.
+type UpstreamModelPriceVersionFunc func(context.Context, *ent.UpstreamModelPriceVersionMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UpstreamModelPriceVersionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UpstreamModelPriceVersionMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UpstreamModelPriceVersionMutation", m)
+}
+
+// The UpstreamWalletFunc type is an adapter to allow the use of ordinary
+// function as UpstreamWallet mutator.
+type UpstreamWalletFunc func(context.Context, *ent.UpstreamWalletMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UpstreamWalletFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UpstreamWalletMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UpstreamWalletMutation", m)
+}
+
+// The UpstreamWalletAccountFunc type is an adapter to allow the use of ordinary
+// function as UpstreamWalletAccount mutator.
+type UpstreamWalletAccountFunc func(context.Context, *ent.UpstreamWalletAccountMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UpstreamWalletAccountFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UpstreamWalletAccountMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UpstreamWalletAccountMutation", m)
 }
 
 // The UsageCleanupTaskFunc type is an adapter to allow the use of ordinary
@@ -345,6 +621,42 @@ func (f UsageCleanupTaskFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.V
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UsageCleanupTaskMutation", m)
 }
 
+// The UsageCostSettlementAllocationFunc type is an adapter to allow the use of ordinary
+// function as UsageCostSettlementAllocation mutator.
+type UsageCostSettlementAllocationFunc func(context.Context, *ent.UsageCostSettlementAllocationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UsageCostSettlementAllocationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UsageCostSettlementAllocationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UsageCostSettlementAllocationMutation", m)
+}
+
+// The UsageFinanceCostSegmentFunc type is an adapter to allow the use of ordinary
+// function as UsageFinanceCostSegment mutator.
+type UsageFinanceCostSegmentFunc func(context.Context, *ent.UsageFinanceCostSegmentMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UsageFinanceCostSegmentFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UsageFinanceCostSegmentMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UsageFinanceCostSegmentMutation", m)
+}
+
+// The UsageFinanceRecordFunc type is an adapter to allow the use of ordinary
+// function as UsageFinanceRecord mutator.
+type UsageFinanceRecordFunc func(context.Context, *ent.UsageFinanceRecordMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UsageFinanceRecordFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UsageFinanceRecordMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UsageFinanceRecordMutation", m)
+}
+
 // The UsageLogFunc type is an adapter to allow the use of ordinary
 // function as UsageLog mutator.
 type UsageLogFunc func(context.Context, *ent.UsageLogMutation) (ent.Value, error)
@@ -355,6 +667,30 @@ func (f UsageLogFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, er
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UsageLogMutation", m)
+}
+
+// The UsageRevenueAllocationFunc type is an adapter to allow the use of ordinary
+// function as UsageRevenueAllocation mutator.
+type UsageRevenueAllocationFunc func(context.Context, *ent.UsageRevenueAllocationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UsageRevenueAllocationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UsageRevenueAllocationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UsageRevenueAllocationMutation", m)
+}
+
+// The UsageUpstreamAttemptFunc type is an adapter to allow the use of ordinary
+// function as UsageUpstreamAttempt mutator.
+type UsageUpstreamAttemptFunc func(context.Context, *ent.UsageUpstreamAttemptMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UsageUpstreamAttemptFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UsageUpstreamAttemptMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UsageUpstreamAttemptMutation", m)
 }
 
 // The UserFunc type is an adapter to allow the use of ordinary

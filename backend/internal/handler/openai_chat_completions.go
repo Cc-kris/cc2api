@@ -250,6 +250,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			} else {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
+					appendBillableUsageAttemptFromFailover(c, account, reqModel, failoverErr)
 					if c.Writer.Size() != writerSizeBeforeForward {
 						h.handleFailoverExhausted(c, failoverErr, true)
 						return
@@ -316,19 +317,22 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		inboundEndpoint := GetInboundEndpoint(c)
 		upstreamEndpoint := resolveRawCCUpstreamEndpoint(c, account)
 
+		upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
 		h.submitOpenAIUsageRecordTask(result, func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
-				Result:             result,
-				APIKey:             apiKey,
-				User:               apiKey.User,
-				Account:            account,
-				Subscription:       subscription,
-				InboundEndpoint:    inboundEndpoint,
-				UpstreamEndpoint:   upstreamEndpoint,
-				UserAgent:          userAgent,
-				IPAddress:          clientIP,
-				APIKeyService:      h.apiKeyService,
-				ChannelUsageFields: channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+				Result:                 result,
+				APIKey:                 apiKey,
+				User:                   apiKey.User,
+				Account:                account,
+				UpstreamCostMultiplier: service.CloneDecimalSnapshot(account.UpstreamCostMultiplier),
+				Subscription:           subscription,
+				InboundEndpoint:        inboundEndpoint,
+				UpstreamEndpoint:       upstreamEndpoint,
+				UserAgent:              userAgent,
+				IPAddress:              clientIP,
+				APIKeyService:          h.apiKeyService,
+				ChannelUsageFields:     channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+				UpstreamAttempts:       service.CloneUsageUpstreamAttempts(upstreamAttempts),
 			}); err != nil {
 				logger.L().With(
 					zap.String("component", "handler.openai_gateway.chat_completions"),

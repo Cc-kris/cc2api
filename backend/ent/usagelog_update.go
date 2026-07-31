@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -17,6 +18,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
+	"github.com/shopspring/decimal"
 )
 
 // UsageLogUpdate is the builder for updating UsageLog entities.
@@ -569,6 +571,325 @@ func (_u *UsageLogUpdate) ClearAccountRateMultiplier() *UsageLogUpdate {
 	return _u
 }
 
+// SetUpstreamCostMultiplier sets the "upstream_cost_multiplier" field.
+func (_u *UsageLogUpdate) SetUpstreamCostMultiplier(v decimal.Decimal) *UsageLogUpdate {
+	_u.mutation.ResetUpstreamCostMultiplier()
+	_u.mutation.SetUpstreamCostMultiplier(v)
+	return _u
+}
+
+// SetNillableUpstreamCostMultiplier sets the "upstream_cost_multiplier" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableUpstreamCostMultiplier(v *decimal.Decimal) *UsageLogUpdate {
+	if v != nil {
+		_u.SetUpstreamCostMultiplier(*v)
+	}
+	return _u
+}
+
+// AddUpstreamCostMultiplier adds value to the "upstream_cost_multiplier" field.
+func (_u *UsageLogUpdate) AddUpstreamCostMultiplier(v decimal.Decimal) *UsageLogUpdate {
+	_u.mutation.AddUpstreamCostMultiplier(v)
+	return _u
+}
+
+// ClearUpstreamCostMultiplier clears the value of the "upstream_cost_multiplier" field.
+func (_u *UsageLogUpdate) ClearUpstreamCostMultiplier() *UsageLogUpdate {
+	_u.mutation.ClearUpstreamCostMultiplier()
+	return _u
+}
+
+// SetUpstreamMultiplierChangeID sets the "upstream_multiplier_change_id" field.
+func (_u *UsageLogUpdate) SetUpstreamMultiplierChangeID(v int64) *UsageLogUpdate {
+	_u.mutation.ResetUpstreamMultiplierChangeID()
+	_u.mutation.SetUpstreamMultiplierChangeID(v)
+	return _u
+}
+
+// SetNillableUpstreamMultiplierChangeID sets the "upstream_multiplier_change_id" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableUpstreamMultiplierChangeID(v *int64) *UsageLogUpdate {
+	if v != nil {
+		_u.SetUpstreamMultiplierChangeID(*v)
+	}
+	return _u
+}
+
+// AddUpstreamMultiplierChangeID adds value to the "upstream_multiplier_change_id" field.
+func (_u *UsageLogUpdate) AddUpstreamMultiplierChangeID(v int64) *UsageLogUpdate {
+	_u.mutation.AddUpstreamMultiplierChangeID(v)
+	return _u
+}
+
+// ClearUpstreamMultiplierChangeID clears the value of the "upstream_multiplier_change_id" field.
+func (_u *UsageLogUpdate) ClearUpstreamMultiplierChangeID() *UsageLogUpdate {
+	_u.mutation.ClearUpstreamMultiplierChangeID()
+	return _u
+}
+
+// SetUpstreamMultiplierSource sets the "upstream_multiplier_source" field.
+func (_u *UsageLogUpdate) SetUpstreamMultiplierSource(v string) *UsageLogUpdate {
+	_u.mutation.SetUpstreamMultiplierSource(v)
+	return _u
+}
+
+// SetNillableUpstreamMultiplierSource sets the "upstream_multiplier_source" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableUpstreamMultiplierSource(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetUpstreamMultiplierSource(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamMultiplierSource clears the value of the "upstream_multiplier_source" field.
+func (_u *UsageLogUpdate) ClearUpstreamMultiplierSource() *UsageLogUpdate {
+	_u.mutation.ClearUpstreamMultiplierSource()
+	return _u
+}
+
+// SetUpstreamMultiplierEffectiveAt sets the "upstream_multiplier_effective_at" field.
+func (_u *UsageLogUpdate) SetUpstreamMultiplierEffectiveAt(v time.Time) *UsageLogUpdate {
+	_u.mutation.SetUpstreamMultiplierEffectiveAt(v)
+	return _u
+}
+
+// SetNillableUpstreamMultiplierEffectiveAt sets the "upstream_multiplier_effective_at" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableUpstreamMultiplierEffectiveAt(v *time.Time) *UsageLogUpdate {
+	if v != nil {
+		_u.SetUpstreamMultiplierEffectiveAt(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamMultiplierEffectiveAt clears the value of the "upstream_multiplier_effective_at" field.
+func (_u *UsageLogUpdate) ClearUpstreamMultiplierEffectiveAt() *UsageLogUpdate {
+	_u.mutation.ClearUpstreamMultiplierEffectiveAt()
+	return _u
+}
+
+// SetAccountFinanceProfileID sets the "account_finance_profile_id" field.
+func (_u *UsageLogUpdate) SetAccountFinanceProfileID(v int64) *UsageLogUpdate {
+	_u.mutation.ResetAccountFinanceProfileID()
+	_u.mutation.SetAccountFinanceProfileID(v)
+	return _u
+}
+
+// SetNillableAccountFinanceProfileID sets the "account_finance_profile_id" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableAccountFinanceProfileID(v *int64) *UsageLogUpdate {
+	if v != nil {
+		_u.SetAccountFinanceProfileID(*v)
+	}
+	return _u
+}
+
+// AddAccountFinanceProfileID adds value to the "account_finance_profile_id" field.
+func (_u *UsageLogUpdate) AddAccountFinanceProfileID(v int64) *UsageLogUpdate {
+	_u.mutation.AddAccountFinanceProfileID(v)
+	return _u
+}
+
+// ClearAccountFinanceProfileID clears the value of the "account_finance_profile_id" field.
+func (_u *UsageLogUpdate) ClearAccountFinanceProfileID() *UsageLogUpdate {
+	_u.mutation.ClearAccountFinanceProfileID()
+	return _u
+}
+
+// SetSalesModel sets the "sales_model" field.
+func (_u *UsageLogUpdate) SetSalesModel(v string) *UsageLogUpdate {
+	_u.mutation.SetSalesModel(v)
+	return _u
+}
+
+// SetNillableSalesModel sets the "sales_model" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableSalesModel(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetSalesModel(*v)
+	}
+	return _u
+}
+
+// ClearSalesModel clears the value of the "sales_model" field.
+func (_u *UsageLogUpdate) ClearSalesModel() *UsageLogUpdate {
+	_u.mutation.ClearSalesModel()
+	return _u
+}
+
+// SetSalesPricingEffectiveModel sets the "sales_pricing_effective_model" field.
+func (_u *UsageLogUpdate) SetSalesPricingEffectiveModel(v string) *UsageLogUpdate {
+	_u.mutation.SetSalesPricingEffectiveModel(v)
+	return _u
+}
+
+// SetNillableSalesPricingEffectiveModel sets the "sales_pricing_effective_model" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableSalesPricingEffectiveModel(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetSalesPricingEffectiveModel(*v)
+	}
+	return _u
+}
+
+// ClearSalesPricingEffectiveModel clears the value of the "sales_pricing_effective_model" field.
+func (_u *UsageLogUpdate) ClearSalesPricingEffectiveModel() *UsageLogUpdate {
+	_u.mutation.ClearSalesPricingEffectiveModel()
+	return _u
+}
+
+// SetSalesPricingLegacySource sets the "sales_pricing_legacy_source" field.
+func (_u *UsageLogUpdate) SetSalesPricingLegacySource(v string) *UsageLogUpdate {
+	_u.mutation.SetSalesPricingLegacySource(v)
+	return _u
+}
+
+// SetNillableSalesPricingLegacySource sets the "sales_pricing_legacy_source" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableSalesPricingLegacySource(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetSalesPricingLegacySource(*v)
+	}
+	return _u
+}
+
+// ClearSalesPricingLegacySource clears the value of the "sales_pricing_legacy_source" field.
+func (_u *UsageLogUpdate) ClearSalesPricingLegacySource() *UsageLogUpdate {
+	_u.mutation.ClearSalesPricingLegacySource()
+	return _u
+}
+
+// SetSalesPricingVersion sets the "sales_pricing_version" field.
+func (_u *UsageLogUpdate) SetSalesPricingVersion(v string) *UsageLogUpdate {
+	_u.mutation.SetSalesPricingVersion(v)
+	return _u
+}
+
+// SetNillableSalesPricingVersion sets the "sales_pricing_version" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableSalesPricingVersion(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetSalesPricingVersion(*v)
+	}
+	return _u
+}
+
+// ClearSalesPricingVersion clears the value of the "sales_pricing_version" field.
+func (_u *UsageLogUpdate) ClearSalesPricingVersion() *UsageLogUpdate {
+	_u.mutation.ClearSalesPricingVersion()
+	return _u
+}
+
+// SetSalesPricingSource sets the "sales_pricing_source" field.
+func (_u *UsageLogUpdate) SetSalesPricingSource(v string) *UsageLogUpdate {
+	_u.mutation.SetSalesPricingSource(v)
+	return _u
+}
+
+// SetNillableSalesPricingSource sets the "sales_pricing_source" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableSalesPricingSource(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetSalesPricingSource(*v)
+	}
+	return _u
+}
+
+// ClearSalesPricingSource clears the value of the "sales_pricing_source" field.
+func (_u *UsageLogUpdate) ClearSalesPricingSource() *UsageLogUpdate {
+	_u.mutation.ClearSalesPricingSource()
+	return _u
+}
+
+// SetSalesPricingChecksum sets the "sales_pricing_checksum" field.
+func (_u *UsageLogUpdate) SetSalesPricingChecksum(v string) *UsageLogUpdate {
+	_u.mutation.SetSalesPricingChecksum(v)
+	return _u
+}
+
+// SetNillableSalesPricingChecksum sets the "sales_pricing_checksum" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableSalesPricingChecksum(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetSalesPricingChecksum(*v)
+	}
+	return _u
+}
+
+// ClearSalesPricingChecksum clears the value of the "sales_pricing_checksum" field.
+func (_u *UsageLogUpdate) ClearSalesPricingChecksum() *UsageLogUpdate {
+	_u.mutation.ClearSalesPricingChecksum()
+	return _u
+}
+
+// SetSalesPricingSnapshot sets the "sales_pricing_snapshot" field.
+func (_u *UsageLogUpdate) SetSalesPricingSnapshot(v map[string]interface{}) *UsageLogUpdate {
+	_u.mutation.SetSalesPricingSnapshot(v)
+	return _u
+}
+
+// ClearSalesPricingSnapshot clears the value of the "sales_pricing_snapshot" field.
+func (_u *UsageLogUpdate) ClearSalesPricingSnapshot() *UsageLogUpdate {
+	_u.mutation.ClearSalesPricingSnapshot()
+	return _u
+}
+
+// SetSalesPricingShadowSnapshot sets the "sales_pricing_shadow_snapshot" field.
+func (_u *UsageLogUpdate) SetSalesPricingShadowSnapshot(v map[string]interface{}) *UsageLogUpdate {
+	_u.mutation.SetSalesPricingShadowSnapshot(v)
+	return _u
+}
+
+// ClearSalesPricingShadowSnapshot clears the value of the "sales_pricing_shadow_snapshot" field.
+func (_u *UsageLogUpdate) ClearSalesPricingShadowSnapshot() *UsageLogUpdate {
+	_u.mutation.ClearSalesPricingShadowSnapshot()
+	return _u
+}
+
+// SetSalesPricingShadowDelta sets the "sales_pricing_shadow_delta" field.
+func (_u *UsageLogUpdate) SetSalesPricingShadowDelta(v decimal.Decimal) *UsageLogUpdate {
+	_u.mutation.ResetSalesPricingShadowDelta()
+	_u.mutation.SetSalesPricingShadowDelta(v)
+	return _u
+}
+
+// SetNillableSalesPricingShadowDelta sets the "sales_pricing_shadow_delta" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableSalesPricingShadowDelta(v *decimal.Decimal) *UsageLogUpdate {
+	if v != nil {
+		_u.SetSalesPricingShadowDelta(*v)
+	}
+	return _u
+}
+
+// AddSalesPricingShadowDelta adds value to the "sales_pricing_shadow_delta" field.
+func (_u *UsageLogUpdate) AddSalesPricingShadowDelta(v decimal.Decimal) *UsageLogUpdate {
+	_u.mutation.AddSalesPricingShadowDelta(v)
+	return _u
+}
+
+// ClearSalesPricingShadowDelta clears the value of the "sales_pricing_shadow_delta" field.
+func (_u *UsageLogUpdate) ClearSalesPricingShadowDelta() *UsageLogUpdate {
+	_u.mutation.ClearSalesPricingShadowDelta()
+	return _u
+}
+
+// SetUsageListValue sets the "usage_list_value" field.
+func (_u *UsageLogUpdate) SetUsageListValue(v decimal.Decimal) *UsageLogUpdate {
+	_u.mutation.ResetUsageListValue()
+	_u.mutation.SetUsageListValue(v)
+	return _u
+}
+
+// SetNillableUsageListValue sets the "usage_list_value" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableUsageListValue(v *decimal.Decimal) *UsageLogUpdate {
+	if v != nil {
+		_u.SetUsageListValue(*v)
+	}
+	return _u
+}
+
+// AddUsageListValue adds value to the "usage_list_value" field.
+func (_u *UsageLogUpdate) AddUsageListValue(v decimal.Decimal) *UsageLogUpdate {
+	_u.mutation.AddUsageListValue(v)
+	return _u
+}
+
+// ClearUsageListValue clears the value of the "usage_list_value" field.
+func (_u *UsageLogUpdate) ClearUsageListValue() *UsageLogUpdate {
+	_u.mutation.ClearUsageListValue()
+	return _u
+}
+
 // SetBillingType sets the "billing_type" field.
 func (_u *UsageLogUpdate) SetBillingType(v int8) *UsageLogUpdate {
 	_u.mutation.ResetBillingType()
@@ -1037,6 +1358,41 @@ func (_u *UsageLogUpdate) check() error {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "UsageLog.billing_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.UpstreamMultiplierSource(); ok {
+		if err := usagelog.UpstreamMultiplierSourceValidator(v); err != nil {
+			return &ValidationError{Name: "upstream_multiplier_source", err: fmt.Errorf(`ent: validator failed for field "UsageLog.upstream_multiplier_source": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SalesModel(); ok {
+		if err := usagelog.SalesModelValidator(v); err != nil {
+			return &ValidationError{Name: "sales_model", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_model": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SalesPricingEffectiveModel(); ok {
+		if err := usagelog.SalesPricingEffectiveModelValidator(v); err != nil {
+			return &ValidationError{Name: "sales_pricing_effective_model", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_pricing_effective_model": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SalesPricingLegacySource(); ok {
+		if err := usagelog.SalesPricingLegacySourceValidator(v); err != nil {
+			return &ValidationError{Name: "sales_pricing_legacy_source", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_pricing_legacy_source": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SalesPricingVersion(); ok {
+		if err := usagelog.SalesPricingVersionValidator(v); err != nil {
+			return &ValidationError{Name: "sales_pricing_version", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_pricing_version": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SalesPricingSource(); ok {
+		if err := usagelog.SalesPricingSourceValidator(v); err != nil {
+			return &ValidationError{Name: "sales_pricing_source", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_pricing_source": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SalesPricingChecksum(); ok {
+		if err := usagelog.SalesPricingChecksumValidator(v); err != nil {
+			return &ValidationError{Name: "sales_pricing_checksum", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_pricing_checksum": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.UserAgent(); ok {
 		if err := usagelog.UserAgentValidator(v); err != nil {
 			return &ValidationError{Name: "user_agent", err: fmt.Errorf(`ent: validator failed for field "UsageLog.user_agent": %w`, err)}
@@ -1232,6 +1588,111 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.AccountRateMultiplierCleared() {
 		_spec.ClearField(usagelog.FieldAccountRateMultiplier, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.UpstreamCostMultiplier(); ok {
+		_spec.SetField(usagelog.FieldUpstreamCostMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedUpstreamCostMultiplier(); ok {
+		_spec.AddField(usagelog.FieldUpstreamCostMultiplier, field.TypeFloat64, value)
+	}
+	if _u.mutation.UpstreamCostMultiplierCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamCostMultiplier, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.UpstreamMultiplierChangeID(); ok {
+		_spec.SetField(usagelog.FieldUpstreamMultiplierChangeID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedUpstreamMultiplierChangeID(); ok {
+		_spec.AddField(usagelog.FieldUpstreamMultiplierChangeID, field.TypeInt64, value)
+	}
+	if _u.mutation.UpstreamMultiplierChangeIDCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamMultiplierChangeID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.UpstreamMultiplierSource(); ok {
+		_spec.SetField(usagelog.FieldUpstreamMultiplierSource, field.TypeString, value)
+	}
+	if _u.mutation.UpstreamMultiplierSourceCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamMultiplierSource, field.TypeString)
+	}
+	if value, ok := _u.mutation.UpstreamMultiplierEffectiveAt(); ok {
+		_spec.SetField(usagelog.FieldUpstreamMultiplierEffectiveAt, field.TypeTime, value)
+	}
+	if _u.mutation.UpstreamMultiplierEffectiveAtCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamMultiplierEffectiveAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.AccountFinanceProfileID(); ok {
+		_spec.SetField(usagelog.FieldAccountFinanceProfileID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedAccountFinanceProfileID(); ok {
+		_spec.AddField(usagelog.FieldAccountFinanceProfileID, field.TypeInt64, value)
+	}
+	if _u.mutation.AccountFinanceProfileIDCleared() {
+		_spec.ClearField(usagelog.FieldAccountFinanceProfileID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.SalesModel(); ok {
+		_spec.SetField(usagelog.FieldSalesModel, field.TypeString, value)
+	}
+	if _u.mutation.SalesModelCleared() {
+		_spec.ClearField(usagelog.FieldSalesModel, field.TypeString)
+	}
+	if value, ok := _u.mutation.SalesPricingEffectiveModel(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingEffectiveModel, field.TypeString, value)
+	}
+	if _u.mutation.SalesPricingEffectiveModelCleared() {
+		_spec.ClearField(usagelog.FieldSalesPricingEffectiveModel, field.TypeString)
+	}
+	if value, ok := _u.mutation.SalesPricingLegacySource(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingLegacySource, field.TypeString, value)
+	}
+	if _u.mutation.SalesPricingLegacySourceCleared() {
+		_spec.ClearField(usagelog.FieldSalesPricingLegacySource, field.TypeString)
+	}
+	if value, ok := _u.mutation.SalesPricingVersion(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingVersion, field.TypeString, value)
+	}
+	if _u.mutation.SalesPricingVersionCleared() {
+		_spec.ClearField(usagelog.FieldSalesPricingVersion, field.TypeString)
+	}
+	if value, ok := _u.mutation.SalesPricingSource(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingSource, field.TypeString, value)
+	}
+	if _u.mutation.SalesPricingSourceCleared() {
+		_spec.ClearField(usagelog.FieldSalesPricingSource, field.TypeString)
+	}
+	if value, ok := _u.mutation.SalesPricingChecksum(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingChecksum, field.TypeString, value)
+	}
+	if _u.mutation.SalesPricingChecksumCleared() {
+		_spec.ClearField(usagelog.FieldSalesPricingChecksum, field.TypeString)
+	}
+	if value, ok := _u.mutation.SalesPricingSnapshot(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingSnapshot, field.TypeJSON, value)
+	}
+	if _u.mutation.SalesPricingSnapshotCleared() {
+		_spec.ClearField(usagelog.FieldSalesPricingSnapshot, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.SalesPricingShadowSnapshot(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingShadowSnapshot, field.TypeJSON, value)
+	}
+	if _u.mutation.SalesPricingShadowSnapshotCleared() {
+		_spec.ClearField(usagelog.FieldSalesPricingShadowSnapshot, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.SalesPricingShadowDelta(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingShadowDelta, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedSalesPricingShadowDelta(); ok {
+		_spec.AddField(usagelog.FieldSalesPricingShadowDelta, field.TypeFloat64, value)
+	}
+	if _u.mutation.SalesPricingShadowDeltaCleared() {
+		_spec.ClearField(usagelog.FieldSalesPricingShadowDelta, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.UsageListValue(); ok {
+		_spec.SetField(usagelog.FieldUsageListValue, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedUsageListValue(); ok {
+		_spec.AddField(usagelog.FieldUsageListValue, field.TypeFloat64, value)
+	}
+	if _u.mutation.UsageListValueCleared() {
+		_spec.ClearField(usagelog.FieldUsageListValue, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.BillingType(); ok {
 		_spec.SetField(usagelog.FieldBillingType, field.TypeInt8, value)
@@ -2040,6 +2501,325 @@ func (_u *UsageLogUpdateOne) ClearAccountRateMultiplier() *UsageLogUpdateOne {
 	return _u
 }
 
+// SetUpstreamCostMultiplier sets the "upstream_cost_multiplier" field.
+func (_u *UsageLogUpdateOne) SetUpstreamCostMultiplier(v decimal.Decimal) *UsageLogUpdateOne {
+	_u.mutation.ResetUpstreamCostMultiplier()
+	_u.mutation.SetUpstreamCostMultiplier(v)
+	return _u
+}
+
+// SetNillableUpstreamCostMultiplier sets the "upstream_cost_multiplier" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableUpstreamCostMultiplier(v *decimal.Decimal) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetUpstreamCostMultiplier(*v)
+	}
+	return _u
+}
+
+// AddUpstreamCostMultiplier adds value to the "upstream_cost_multiplier" field.
+func (_u *UsageLogUpdateOne) AddUpstreamCostMultiplier(v decimal.Decimal) *UsageLogUpdateOne {
+	_u.mutation.AddUpstreamCostMultiplier(v)
+	return _u
+}
+
+// ClearUpstreamCostMultiplier clears the value of the "upstream_cost_multiplier" field.
+func (_u *UsageLogUpdateOne) ClearUpstreamCostMultiplier() *UsageLogUpdateOne {
+	_u.mutation.ClearUpstreamCostMultiplier()
+	return _u
+}
+
+// SetUpstreamMultiplierChangeID sets the "upstream_multiplier_change_id" field.
+func (_u *UsageLogUpdateOne) SetUpstreamMultiplierChangeID(v int64) *UsageLogUpdateOne {
+	_u.mutation.ResetUpstreamMultiplierChangeID()
+	_u.mutation.SetUpstreamMultiplierChangeID(v)
+	return _u
+}
+
+// SetNillableUpstreamMultiplierChangeID sets the "upstream_multiplier_change_id" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableUpstreamMultiplierChangeID(v *int64) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetUpstreamMultiplierChangeID(*v)
+	}
+	return _u
+}
+
+// AddUpstreamMultiplierChangeID adds value to the "upstream_multiplier_change_id" field.
+func (_u *UsageLogUpdateOne) AddUpstreamMultiplierChangeID(v int64) *UsageLogUpdateOne {
+	_u.mutation.AddUpstreamMultiplierChangeID(v)
+	return _u
+}
+
+// ClearUpstreamMultiplierChangeID clears the value of the "upstream_multiplier_change_id" field.
+func (_u *UsageLogUpdateOne) ClearUpstreamMultiplierChangeID() *UsageLogUpdateOne {
+	_u.mutation.ClearUpstreamMultiplierChangeID()
+	return _u
+}
+
+// SetUpstreamMultiplierSource sets the "upstream_multiplier_source" field.
+func (_u *UsageLogUpdateOne) SetUpstreamMultiplierSource(v string) *UsageLogUpdateOne {
+	_u.mutation.SetUpstreamMultiplierSource(v)
+	return _u
+}
+
+// SetNillableUpstreamMultiplierSource sets the "upstream_multiplier_source" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableUpstreamMultiplierSource(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetUpstreamMultiplierSource(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamMultiplierSource clears the value of the "upstream_multiplier_source" field.
+func (_u *UsageLogUpdateOne) ClearUpstreamMultiplierSource() *UsageLogUpdateOne {
+	_u.mutation.ClearUpstreamMultiplierSource()
+	return _u
+}
+
+// SetUpstreamMultiplierEffectiveAt sets the "upstream_multiplier_effective_at" field.
+func (_u *UsageLogUpdateOne) SetUpstreamMultiplierEffectiveAt(v time.Time) *UsageLogUpdateOne {
+	_u.mutation.SetUpstreamMultiplierEffectiveAt(v)
+	return _u
+}
+
+// SetNillableUpstreamMultiplierEffectiveAt sets the "upstream_multiplier_effective_at" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableUpstreamMultiplierEffectiveAt(v *time.Time) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetUpstreamMultiplierEffectiveAt(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamMultiplierEffectiveAt clears the value of the "upstream_multiplier_effective_at" field.
+func (_u *UsageLogUpdateOne) ClearUpstreamMultiplierEffectiveAt() *UsageLogUpdateOne {
+	_u.mutation.ClearUpstreamMultiplierEffectiveAt()
+	return _u
+}
+
+// SetAccountFinanceProfileID sets the "account_finance_profile_id" field.
+func (_u *UsageLogUpdateOne) SetAccountFinanceProfileID(v int64) *UsageLogUpdateOne {
+	_u.mutation.ResetAccountFinanceProfileID()
+	_u.mutation.SetAccountFinanceProfileID(v)
+	return _u
+}
+
+// SetNillableAccountFinanceProfileID sets the "account_finance_profile_id" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableAccountFinanceProfileID(v *int64) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetAccountFinanceProfileID(*v)
+	}
+	return _u
+}
+
+// AddAccountFinanceProfileID adds value to the "account_finance_profile_id" field.
+func (_u *UsageLogUpdateOne) AddAccountFinanceProfileID(v int64) *UsageLogUpdateOne {
+	_u.mutation.AddAccountFinanceProfileID(v)
+	return _u
+}
+
+// ClearAccountFinanceProfileID clears the value of the "account_finance_profile_id" field.
+func (_u *UsageLogUpdateOne) ClearAccountFinanceProfileID() *UsageLogUpdateOne {
+	_u.mutation.ClearAccountFinanceProfileID()
+	return _u
+}
+
+// SetSalesModel sets the "sales_model" field.
+func (_u *UsageLogUpdateOne) SetSalesModel(v string) *UsageLogUpdateOne {
+	_u.mutation.SetSalesModel(v)
+	return _u
+}
+
+// SetNillableSalesModel sets the "sales_model" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableSalesModel(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetSalesModel(*v)
+	}
+	return _u
+}
+
+// ClearSalesModel clears the value of the "sales_model" field.
+func (_u *UsageLogUpdateOne) ClearSalesModel() *UsageLogUpdateOne {
+	_u.mutation.ClearSalesModel()
+	return _u
+}
+
+// SetSalesPricingEffectiveModel sets the "sales_pricing_effective_model" field.
+func (_u *UsageLogUpdateOne) SetSalesPricingEffectiveModel(v string) *UsageLogUpdateOne {
+	_u.mutation.SetSalesPricingEffectiveModel(v)
+	return _u
+}
+
+// SetNillableSalesPricingEffectiveModel sets the "sales_pricing_effective_model" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableSalesPricingEffectiveModel(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetSalesPricingEffectiveModel(*v)
+	}
+	return _u
+}
+
+// ClearSalesPricingEffectiveModel clears the value of the "sales_pricing_effective_model" field.
+func (_u *UsageLogUpdateOne) ClearSalesPricingEffectiveModel() *UsageLogUpdateOne {
+	_u.mutation.ClearSalesPricingEffectiveModel()
+	return _u
+}
+
+// SetSalesPricingLegacySource sets the "sales_pricing_legacy_source" field.
+func (_u *UsageLogUpdateOne) SetSalesPricingLegacySource(v string) *UsageLogUpdateOne {
+	_u.mutation.SetSalesPricingLegacySource(v)
+	return _u
+}
+
+// SetNillableSalesPricingLegacySource sets the "sales_pricing_legacy_source" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableSalesPricingLegacySource(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetSalesPricingLegacySource(*v)
+	}
+	return _u
+}
+
+// ClearSalesPricingLegacySource clears the value of the "sales_pricing_legacy_source" field.
+func (_u *UsageLogUpdateOne) ClearSalesPricingLegacySource() *UsageLogUpdateOne {
+	_u.mutation.ClearSalesPricingLegacySource()
+	return _u
+}
+
+// SetSalesPricingVersion sets the "sales_pricing_version" field.
+func (_u *UsageLogUpdateOne) SetSalesPricingVersion(v string) *UsageLogUpdateOne {
+	_u.mutation.SetSalesPricingVersion(v)
+	return _u
+}
+
+// SetNillableSalesPricingVersion sets the "sales_pricing_version" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableSalesPricingVersion(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetSalesPricingVersion(*v)
+	}
+	return _u
+}
+
+// ClearSalesPricingVersion clears the value of the "sales_pricing_version" field.
+func (_u *UsageLogUpdateOne) ClearSalesPricingVersion() *UsageLogUpdateOne {
+	_u.mutation.ClearSalesPricingVersion()
+	return _u
+}
+
+// SetSalesPricingSource sets the "sales_pricing_source" field.
+func (_u *UsageLogUpdateOne) SetSalesPricingSource(v string) *UsageLogUpdateOne {
+	_u.mutation.SetSalesPricingSource(v)
+	return _u
+}
+
+// SetNillableSalesPricingSource sets the "sales_pricing_source" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableSalesPricingSource(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetSalesPricingSource(*v)
+	}
+	return _u
+}
+
+// ClearSalesPricingSource clears the value of the "sales_pricing_source" field.
+func (_u *UsageLogUpdateOne) ClearSalesPricingSource() *UsageLogUpdateOne {
+	_u.mutation.ClearSalesPricingSource()
+	return _u
+}
+
+// SetSalesPricingChecksum sets the "sales_pricing_checksum" field.
+func (_u *UsageLogUpdateOne) SetSalesPricingChecksum(v string) *UsageLogUpdateOne {
+	_u.mutation.SetSalesPricingChecksum(v)
+	return _u
+}
+
+// SetNillableSalesPricingChecksum sets the "sales_pricing_checksum" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableSalesPricingChecksum(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetSalesPricingChecksum(*v)
+	}
+	return _u
+}
+
+// ClearSalesPricingChecksum clears the value of the "sales_pricing_checksum" field.
+func (_u *UsageLogUpdateOne) ClearSalesPricingChecksum() *UsageLogUpdateOne {
+	_u.mutation.ClearSalesPricingChecksum()
+	return _u
+}
+
+// SetSalesPricingSnapshot sets the "sales_pricing_snapshot" field.
+func (_u *UsageLogUpdateOne) SetSalesPricingSnapshot(v map[string]interface{}) *UsageLogUpdateOne {
+	_u.mutation.SetSalesPricingSnapshot(v)
+	return _u
+}
+
+// ClearSalesPricingSnapshot clears the value of the "sales_pricing_snapshot" field.
+func (_u *UsageLogUpdateOne) ClearSalesPricingSnapshot() *UsageLogUpdateOne {
+	_u.mutation.ClearSalesPricingSnapshot()
+	return _u
+}
+
+// SetSalesPricingShadowSnapshot sets the "sales_pricing_shadow_snapshot" field.
+func (_u *UsageLogUpdateOne) SetSalesPricingShadowSnapshot(v map[string]interface{}) *UsageLogUpdateOne {
+	_u.mutation.SetSalesPricingShadowSnapshot(v)
+	return _u
+}
+
+// ClearSalesPricingShadowSnapshot clears the value of the "sales_pricing_shadow_snapshot" field.
+func (_u *UsageLogUpdateOne) ClearSalesPricingShadowSnapshot() *UsageLogUpdateOne {
+	_u.mutation.ClearSalesPricingShadowSnapshot()
+	return _u
+}
+
+// SetSalesPricingShadowDelta sets the "sales_pricing_shadow_delta" field.
+func (_u *UsageLogUpdateOne) SetSalesPricingShadowDelta(v decimal.Decimal) *UsageLogUpdateOne {
+	_u.mutation.ResetSalesPricingShadowDelta()
+	_u.mutation.SetSalesPricingShadowDelta(v)
+	return _u
+}
+
+// SetNillableSalesPricingShadowDelta sets the "sales_pricing_shadow_delta" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableSalesPricingShadowDelta(v *decimal.Decimal) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetSalesPricingShadowDelta(*v)
+	}
+	return _u
+}
+
+// AddSalesPricingShadowDelta adds value to the "sales_pricing_shadow_delta" field.
+func (_u *UsageLogUpdateOne) AddSalesPricingShadowDelta(v decimal.Decimal) *UsageLogUpdateOne {
+	_u.mutation.AddSalesPricingShadowDelta(v)
+	return _u
+}
+
+// ClearSalesPricingShadowDelta clears the value of the "sales_pricing_shadow_delta" field.
+func (_u *UsageLogUpdateOne) ClearSalesPricingShadowDelta() *UsageLogUpdateOne {
+	_u.mutation.ClearSalesPricingShadowDelta()
+	return _u
+}
+
+// SetUsageListValue sets the "usage_list_value" field.
+func (_u *UsageLogUpdateOne) SetUsageListValue(v decimal.Decimal) *UsageLogUpdateOne {
+	_u.mutation.ResetUsageListValue()
+	_u.mutation.SetUsageListValue(v)
+	return _u
+}
+
+// SetNillableUsageListValue sets the "usage_list_value" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableUsageListValue(v *decimal.Decimal) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetUsageListValue(*v)
+	}
+	return _u
+}
+
+// AddUsageListValue adds value to the "usage_list_value" field.
+func (_u *UsageLogUpdateOne) AddUsageListValue(v decimal.Decimal) *UsageLogUpdateOne {
+	_u.mutation.AddUsageListValue(v)
+	return _u
+}
+
+// ClearUsageListValue clears the value of the "usage_list_value" field.
+func (_u *UsageLogUpdateOne) ClearUsageListValue() *UsageLogUpdateOne {
+	_u.mutation.ClearUsageListValue()
+	return _u
+}
+
 // SetBillingType sets the "billing_type" field.
 func (_u *UsageLogUpdateOne) SetBillingType(v int8) *UsageLogUpdateOne {
 	_u.mutation.ResetBillingType()
@@ -2521,6 +3301,41 @@ func (_u *UsageLogUpdateOne) check() error {
 			return &ValidationError{Name: "billing_mode", err: fmt.Errorf(`ent: validator failed for field "UsageLog.billing_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.UpstreamMultiplierSource(); ok {
+		if err := usagelog.UpstreamMultiplierSourceValidator(v); err != nil {
+			return &ValidationError{Name: "upstream_multiplier_source", err: fmt.Errorf(`ent: validator failed for field "UsageLog.upstream_multiplier_source": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SalesModel(); ok {
+		if err := usagelog.SalesModelValidator(v); err != nil {
+			return &ValidationError{Name: "sales_model", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_model": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SalesPricingEffectiveModel(); ok {
+		if err := usagelog.SalesPricingEffectiveModelValidator(v); err != nil {
+			return &ValidationError{Name: "sales_pricing_effective_model", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_pricing_effective_model": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SalesPricingLegacySource(); ok {
+		if err := usagelog.SalesPricingLegacySourceValidator(v); err != nil {
+			return &ValidationError{Name: "sales_pricing_legacy_source", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_pricing_legacy_source": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SalesPricingVersion(); ok {
+		if err := usagelog.SalesPricingVersionValidator(v); err != nil {
+			return &ValidationError{Name: "sales_pricing_version", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_pricing_version": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SalesPricingSource(); ok {
+		if err := usagelog.SalesPricingSourceValidator(v); err != nil {
+			return &ValidationError{Name: "sales_pricing_source", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_pricing_source": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SalesPricingChecksum(); ok {
+		if err := usagelog.SalesPricingChecksumValidator(v); err != nil {
+			return &ValidationError{Name: "sales_pricing_checksum", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_pricing_checksum": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.UserAgent(); ok {
 		if err := usagelog.UserAgentValidator(v); err != nil {
 			return &ValidationError{Name: "user_agent", err: fmt.Errorf(`ent: validator failed for field "UsageLog.user_agent": %w`, err)}
@@ -2733,6 +3548,111 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if _u.mutation.AccountRateMultiplierCleared() {
 		_spec.ClearField(usagelog.FieldAccountRateMultiplier, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.UpstreamCostMultiplier(); ok {
+		_spec.SetField(usagelog.FieldUpstreamCostMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedUpstreamCostMultiplier(); ok {
+		_spec.AddField(usagelog.FieldUpstreamCostMultiplier, field.TypeFloat64, value)
+	}
+	if _u.mutation.UpstreamCostMultiplierCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamCostMultiplier, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.UpstreamMultiplierChangeID(); ok {
+		_spec.SetField(usagelog.FieldUpstreamMultiplierChangeID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedUpstreamMultiplierChangeID(); ok {
+		_spec.AddField(usagelog.FieldUpstreamMultiplierChangeID, field.TypeInt64, value)
+	}
+	if _u.mutation.UpstreamMultiplierChangeIDCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamMultiplierChangeID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.UpstreamMultiplierSource(); ok {
+		_spec.SetField(usagelog.FieldUpstreamMultiplierSource, field.TypeString, value)
+	}
+	if _u.mutation.UpstreamMultiplierSourceCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamMultiplierSource, field.TypeString)
+	}
+	if value, ok := _u.mutation.UpstreamMultiplierEffectiveAt(); ok {
+		_spec.SetField(usagelog.FieldUpstreamMultiplierEffectiveAt, field.TypeTime, value)
+	}
+	if _u.mutation.UpstreamMultiplierEffectiveAtCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamMultiplierEffectiveAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.AccountFinanceProfileID(); ok {
+		_spec.SetField(usagelog.FieldAccountFinanceProfileID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedAccountFinanceProfileID(); ok {
+		_spec.AddField(usagelog.FieldAccountFinanceProfileID, field.TypeInt64, value)
+	}
+	if _u.mutation.AccountFinanceProfileIDCleared() {
+		_spec.ClearField(usagelog.FieldAccountFinanceProfileID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.SalesModel(); ok {
+		_spec.SetField(usagelog.FieldSalesModel, field.TypeString, value)
+	}
+	if _u.mutation.SalesModelCleared() {
+		_spec.ClearField(usagelog.FieldSalesModel, field.TypeString)
+	}
+	if value, ok := _u.mutation.SalesPricingEffectiveModel(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingEffectiveModel, field.TypeString, value)
+	}
+	if _u.mutation.SalesPricingEffectiveModelCleared() {
+		_spec.ClearField(usagelog.FieldSalesPricingEffectiveModel, field.TypeString)
+	}
+	if value, ok := _u.mutation.SalesPricingLegacySource(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingLegacySource, field.TypeString, value)
+	}
+	if _u.mutation.SalesPricingLegacySourceCleared() {
+		_spec.ClearField(usagelog.FieldSalesPricingLegacySource, field.TypeString)
+	}
+	if value, ok := _u.mutation.SalesPricingVersion(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingVersion, field.TypeString, value)
+	}
+	if _u.mutation.SalesPricingVersionCleared() {
+		_spec.ClearField(usagelog.FieldSalesPricingVersion, field.TypeString)
+	}
+	if value, ok := _u.mutation.SalesPricingSource(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingSource, field.TypeString, value)
+	}
+	if _u.mutation.SalesPricingSourceCleared() {
+		_spec.ClearField(usagelog.FieldSalesPricingSource, field.TypeString)
+	}
+	if value, ok := _u.mutation.SalesPricingChecksum(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingChecksum, field.TypeString, value)
+	}
+	if _u.mutation.SalesPricingChecksumCleared() {
+		_spec.ClearField(usagelog.FieldSalesPricingChecksum, field.TypeString)
+	}
+	if value, ok := _u.mutation.SalesPricingSnapshot(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingSnapshot, field.TypeJSON, value)
+	}
+	if _u.mutation.SalesPricingSnapshotCleared() {
+		_spec.ClearField(usagelog.FieldSalesPricingSnapshot, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.SalesPricingShadowSnapshot(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingShadowSnapshot, field.TypeJSON, value)
+	}
+	if _u.mutation.SalesPricingShadowSnapshotCleared() {
+		_spec.ClearField(usagelog.FieldSalesPricingShadowSnapshot, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.SalesPricingShadowDelta(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingShadowDelta, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedSalesPricingShadowDelta(); ok {
+		_spec.AddField(usagelog.FieldSalesPricingShadowDelta, field.TypeFloat64, value)
+	}
+	if _u.mutation.SalesPricingShadowDeltaCleared() {
+		_spec.ClearField(usagelog.FieldSalesPricingShadowDelta, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.UsageListValue(); ok {
+		_spec.SetField(usagelog.FieldUsageListValue, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedUsageListValue(); ok {
+		_spec.AddField(usagelog.FieldUsageListValue, field.TypeFloat64, value)
+	}
+	if _u.mutation.UsageListValueCleared() {
+		_spec.ClearField(usagelog.FieldUsageListValue, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.BillingType(); ok {
 		_spec.SetField(usagelog.FieldBillingType, field.TypeInt8, value)

@@ -6,40 +6,43 @@ import (
 
 // AdminHandlers contains all admin-related HTTP handlers
 type AdminHandlers struct {
-	Dashboard              *admin.DashboardHandler
-	User                   *admin.UserHandler
-	Group                  *admin.GroupHandler
-	Account                *admin.AccountHandler
-	Announcement           *admin.AnnouncementHandler
-	DataManagement         *admin.DataManagementHandler
-	Backup                 *admin.BackupHandler
-	OAuth                  *admin.OAuthHandler
-	OpenAIOAuth            *admin.OpenAIOAuthHandler
-	GeminiOAuth            *admin.GeminiOAuthHandler
-	AntigravityOAuth       *admin.AntigravityOAuthHandler
-	GrokOAuth              *admin.GrokOAuthHandler
-	Proxy                  *admin.ProxyHandler
-	Redeem                 *admin.RedeemHandler
-	Promo                  *admin.PromoHandler
-	Setting                *admin.SettingHandler
-	Ops                    *admin.OpsHandler
-	System                 *admin.SystemHandler
-	Subscription           *admin.SubscriptionHandler
-	Usage                  *admin.UsageHandler
-	UserAttribute          *admin.UserAttributeHandler
-	ErrorPassthrough       *admin.ErrorPassthroughHandler
-	TLSFingerprintProfile  *admin.TLSFingerprintProfileHandler
-	APIKey                 *admin.AdminAPIKeyHandler
-	ScheduledTest          *admin.ScheduledTestHandler
-	Channel                *admin.ChannelHandler
-	ChannelMonitor         *admin.ChannelMonitorHandler
-	ChannelMonitorTemplate *admin.ChannelMonitorRequestTemplateHandler
-	ContentModeration      *admin.ContentModerationHandler
-	Payment                *admin.PaymentHandler
-	Affiliate              *admin.AffiliateHandler
-	CacheConfig            *admin.CacheConfigHandler
-	CacheStats             *admin.CacheStatsHandler
-	Upstream               *admin.UpstreamHandler
+	Dashboard               *admin.DashboardHandler
+	User                    *admin.UserHandler
+	Group                   *admin.GroupHandler
+	Account                 *admin.AccountHandler
+	Announcement            *admin.AnnouncementHandler
+	DataManagement          *admin.DataManagementHandler
+	Backup                  *admin.BackupHandler
+	OAuth                   *admin.OAuthHandler
+	OpenAIOAuth             *admin.OpenAIOAuthHandler
+	GeminiOAuth             *admin.GeminiOAuthHandler
+	AntigravityOAuth        *admin.AntigravityOAuthHandler
+	GrokOAuth               *admin.GrokOAuthHandler
+	Proxy                   *admin.ProxyHandler
+	Redeem                  *admin.RedeemHandler
+	Promo                   *admin.PromoHandler
+	Setting                 *admin.SettingHandler
+	Ops                     *admin.OpsHandler
+	System                  *admin.SystemHandler
+	Subscription            *admin.SubscriptionHandler
+	Usage                   *admin.UsageHandler
+	Finance                 *admin.FinanceHandler
+	UserAttribute           *admin.UserAttributeHandler
+	ErrorPassthrough        *admin.ErrorPassthroughHandler
+	TLSFingerprintProfile   *admin.TLSFingerprintProfileHandler
+	APIKey                  *admin.AdminAPIKeyHandler
+	ScheduledTest           *admin.ScheduledTestHandler
+	Channel                 *admin.ChannelHandler
+	ChannelMonitor          *admin.ChannelMonitorHandler
+	ChannelMonitorTemplate  *admin.ChannelMonitorRequestTemplateHandler
+	ContentModeration       *admin.ContentModerationHandler
+	Payment                 *admin.PaymentHandler
+	Affiliate               *admin.AffiliateHandler
+	CacheConfig             *admin.CacheConfigHandler
+	CacheStats              *admin.CacheStatsHandler
+	Upstream                *admin.UpstreamHandler
+	UpstreamWallet          *admin.UpstreamWalletHandler
+	UpstreamFinanceProtocol *admin.UpstreamFinanceProtocolHandler
 }
 
 // Handlers contains all HTTP handlers
@@ -62,6 +65,7 @@ type Handlers struct {
 	Payment          *PaymentHandler
 	PaymentWebhook   *PaymentWebhookHandler
 	AvailableChannel *AvailableChannelHandler
+	ModelSquare      *ModelSquareHandler
 }
 
 // BuildInfo contains build-time information

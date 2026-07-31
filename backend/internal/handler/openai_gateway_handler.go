@@ -563,6 +563,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			} else {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
+					appendBillableUsageAttemptFromFailover(c, account, reqModel, failoverErr)
 					if c.Writer.Size() != writerSizeBeforeForward {
 						h.handleFailoverExhausted(c, failoverErr, true)
 						return
@@ -671,20 +672,23 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
 
 		// 使用量记录通过有界 worker 池提交，避免请求热路径创建无界 goroutine。
+		upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
 		h.submitOpenAIUsageRecordTask(result, func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
-				Result:             result,
-				APIKey:             apiKey,
-				User:               apiKey.User,
-				Account:            account,
-				Subscription:       subscription,
-				InboundEndpoint:    inboundEndpoint,
-				UpstreamEndpoint:   upstreamEndpoint,
-				UserAgent:          userAgent,
-				IPAddress:          clientIP,
-				RequestPayloadHash: requestPayloadHash,
-				APIKeyService:      h.apiKeyService,
-				ChannelUsageFields: usageChannelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+				Result:                 result,
+				APIKey:                 apiKey,
+				User:                   apiKey.User,
+				Account:                account,
+				UpstreamCostMultiplier: service.CloneDecimalSnapshot(account.UpstreamCostMultiplier),
+				Subscription:           subscription,
+				InboundEndpoint:        inboundEndpoint,
+				UpstreamEndpoint:       upstreamEndpoint,
+				UserAgent:              userAgent,
+				IPAddress:              clientIP,
+				RequestPayloadHash:     requestPayloadHash,
+				APIKeyService:          h.apiKeyService,
+				ChannelUsageFields:     usageChannelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+				UpstreamAttempts:       service.CloneUsageUpstreamAttempts(upstreamAttempts),
 			}); err != nil {
 				logger.L().With(
 					zap.String("component", "handler.openai_gateway.responses"),
@@ -1009,6 +1013,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			} else {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
+					appendBillableUsageAttemptFromFailover(c, account, reqModel, failoverErr)
 					h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
 					// 池模式：同账号重试
 					if failoverErr.RetryableOnSameAccount {
@@ -1072,20 +1077,23 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		inboundEndpoint := GetInboundEndpoint(c)
 		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
 
+		upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
 		h.submitOpenAIUsageRecordTask(result, func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
-				Result:             result,
-				APIKey:             apiKey,
-				User:               apiKey.User,
-				Account:            account,
-				Subscription:       subscription,
-				InboundEndpoint:    inboundEndpoint,
-				UpstreamEndpoint:   upstreamEndpoint,
-				UserAgent:          userAgent,
-				IPAddress:          clientIP,
-				RequestPayloadHash: requestPayloadHash,
-				APIKeyService:      h.apiKeyService,
-				ChannelUsageFields: channelMappingMsg.ToUsageFields(reqModel, result.UpstreamModel),
+				Result:                 result,
+				APIKey:                 apiKey,
+				User:                   apiKey.User,
+				Account:                account,
+				UpstreamCostMultiplier: service.CloneDecimalSnapshot(account.UpstreamCostMultiplier),
+				Subscription:           subscription,
+				InboundEndpoint:        inboundEndpoint,
+				UpstreamEndpoint:       upstreamEndpoint,
+				UserAgent:              userAgent,
+				IPAddress:              clientIP,
+				RequestPayloadHash:     requestPayloadHash,
+				APIKeyService:          h.apiKeyService,
+				ChannelUsageFields:     channelMappingMsg.ToUsageFields(reqModel, result.UpstreamModel),
+				UpstreamAttempts:       service.CloneUsageUpstreamAttempts(upstreamAttempts),
 			}); err != nil {
 				logger.L().With(
 					zap.String("component", "handler.openai_gateway.messages"),
@@ -1888,20 +1896,23 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, result.FirstTokenMs)
 				inboundEndpoint := GetInboundEndpoint(c)
 				upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
+				upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
 				h.submitOpenAIUsageRecordTask(result, func(taskCtx context.Context) {
 					if err := h.gatewayService.RecordUsage(taskCtx, &service.OpenAIRecordUsageInput{
-						Result:             result,
-						APIKey:             apiKey,
-						User:               apiKey.User,
-						Account:            account,
-						Subscription:       subscription,
-						InboundEndpoint:    inboundEndpoint,
-						UpstreamEndpoint:   upstreamEndpoint,
-						UserAgent:          userAgent,
-						IPAddress:          clientIP,
-						RequestPayloadHash: service.HashUsageRequestPayload(firstMessage),
-						APIKeyService:      h.apiKeyService,
-						ChannelUsageFields: usageChannelMappingWS.ToUsageFields(reqModel, result.UpstreamModel),
+						Result:                 result,
+						APIKey:                 apiKey,
+						User:                   apiKey.User,
+						Account:                account,
+						UpstreamCostMultiplier: service.CloneDecimalSnapshot(account.UpstreamCostMultiplier),
+						Subscription:           subscription,
+						InboundEndpoint:        inboundEndpoint,
+						UpstreamEndpoint:       upstreamEndpoint,
+						UserAgent:              userAgent,
+						IPAddress:              clientIP,
+						RequestPayloadHash:     service.HashUsageRequestPayload(firstMessage),
+						APIKeyService:          h.apiKeyService,
+						ChannelUsageFields:     usageChannelMappingWS.ToUsageFields(reqModel, result.UpstreamModel),
+						UpstreamAttempts:       service.CloneUsageUpstreamAttempts(upstreamAttempts),
 					}); err != nil {
 						reqLog.Error("openai.websocket_record_usage_failed",
 							zap.Int64("account_id", account.ID),
@@ -2074,19 +2085,22 @@ func (h *OpenAIGatewayHandler) tryFallbackOpenAIWebSocketIngressToHTTP(
 			usageChannelMapping.MappedModel = requestedModel
 			usageChannelMapping.BillingModelSource = service.BillingModelSourceRequested
 		}
+		upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
 		h.submitOpenAIUsageRecordTask(result, func(taskCtx context.Context) {
 			if err := h.gatewayService.RecordUsage(taskCtx, &service.OpenAIRecordUsageInput{
-				Result:             result,
-				APIKey:             apiKey,
-				User:               apiKey.User,
-				Account:            account,
-				InboundEndpoint:    inboundEndpoint,
-				UpstreamEndpoint:   upstreamEndpoint,
-				UserAgent:          strings.TrimSpace(c.GetHeader("User-Agent")),
-				IPAddress:          ip.GetClientIP(c),
-				RequestPayloadHash: service.HashUsageRequestPayload(body),
-				APIKeyService:      h.apiKeyService,
-				ChannelUsageFields: usageChannelMapping.ToUsageFields(requestedModel, result.UpstreamModel),
+				Result:                 result,
+				APIKey:                 apiKey,
+				User:                   apiKey.User,
+				Account:                account,
+				UpstreamCostMultiplier: service.CloneDecimalSnapshot(account.UpstreamCostMultiplier),
+				InboundEndpoint:        inboundEndpoint,
+				UpstreamEndpoint:       upstreamEndpoint,
+				UserAgent:              strings.TrimSpace(c.GetHeader("User-Agent")),
+				IPAddress:              ip.GetClientIP(c),
+				RequestPayloadHash:     service.HashUsageRequestPayload(body),
+				APIKeyService:          h.apiKeyService,
+				ChannelUsageFields:     usageChannelMapping.ToUsageFields(requestedModel, result.UpstreamModel),
+				UpstreamAttempts:       service.CloneUsageUpstreamAttempts(upstreamAttempts),
 			}); err != nil && reqLog != nil {
 				reqLog.Error("openai.websocket_http_fallback_record_usage_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 			}

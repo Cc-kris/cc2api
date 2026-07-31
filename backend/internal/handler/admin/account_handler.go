@@ -27,12 +27,15 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
+	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -131,6 +134,7 @@ type CreateAccountRequest struct {
 	Concurrency             int            `json:"concurrency"`
 	Priority                int            `json:"priority"`
 	RateMultiplier          *float64       `json:"rate_multiplier"`
+	UpstreamCostMultiplier  *string        `json:"upstream_cost_multiplier"`
 	LoadFactor              *int           `json:"load_factor"`
 	GroupIDs                []int64        `json:"group_ids"`
 	ExpiresAt               *int64         `json:"expires_at"`
@@ -141,39 +145,43 @@ type CreateAccountRequest struct {
 // UpdateAccountRequest represents update account request
 // 使用指针类型来区分"未提供"和"设置为0"
 type UpdateAccountRequest struct {
-	Name                    string         `json:"name"`
-	Notes                   *string        `json:"notes"`
-	Type                    string         `json:"type" binding:"omitempty,oneof=oauth setup-token apikey upstream bedrock service_account"`
-	Credentials             map[string]any `json:"credentials"`
-	Extra                   map[string]any `json:"extra"`
-	ProxyID                 *int64         `json:"proxy_id"`
-	Concurrency             *int           `json:"concurrency"`
-	Priority                *int           `json:"priority"`
-	RateMultiplier          *float64       `json:"rate_multiplier"`
-	LoadFactor              *int           `json:"load_factor"`
-	Status                  string         `json:"status" binding:"omitempty,oneof=active inactive error"`
-	GroupIDs                *[]int64       `json:"group_ids"`
-	ExpiresAt               *int64         `json:"expires_at"`
-	AutoPauseOnExpired      *bool          `json:"auto_pause_on_expired"`
-	ConfirmMixedChannelRisk *bool          `json:"confirm_mixed_channel_risk"` // 用户确认混合渠道风险
+	Name                               string         `json:"name"`
+	Notes                              *string        `json:"notes"`
+	Type                               string         `json:"type" binding:"omitempty,oneof=oauth setup-token apikey upstream bedrock service_account"`
+	Credentials                        map[string]any `json:"credentials"`
+	Extra                              map[string]any `json:"extra"`
+	ProxyID                            *int64         `json:"proxy_id"`
+	Concurrency                        *int           `json:"concurrency"`
+	Priority                           *int           `json:"priority"`
+	RateMultiplier                     *float64       `json:"rate_multiplier"`
+	UpstreamCostMultiplier             *string        `json:"upstream_cost_multiplier"`
+	UpstreamCostMultiplierChangeReason string         `json:"upstream_cost_multiplier_change_reason"`
+	LoadFactor                         *int           `json:"load_factor"`
+	Status                             string         `json:"status" binding:"omitempty,oneof=active inactive error"`
+	GroupIDs                           *[]int64       `json:"group_ids"`
+	ExpiresAt                          *int64         `json:"expires_at"`
+	AutoPauseOnExpired                 *bool          `json:"auto_pause_on_expired"`
+	ConfirmMixedChannelRisk            *bool          `json:"confirm_mixed_channel_risk"` // 用户确认混合渠道风险
 }
 
 // BulkUpdateAccountsRequest represents the payload for bulk editing accounts
 type BulkUpdateAccountsRequest struct {
-	AccountIDs              []int64                   `json:"account_ids"`
-	Filters                 *BulkUpdateAccountFilters `json:"filters"`
-	Name                    string                    `json:"name"`
-	ProxyID                 *int64                    `json:"proxy_id"`
-	Concurrency             *int                      `json:"concurrency"`
-	Priority                *int                      `json:"priority"`
-	RateMultiplier          *float64                  `json:"rate_multiplier"`
-	LoadFactor              *int                      `json:"load_factor"`
-	Status                  string                    `json:"status" binding:"omitempty,oneof=active inactive error"`
-	Schedulable             *bool                     `json:"schedulable"`
-	GroupIDs                *[]int64                  `json:"group_ids"`
-	Credentials             map[string]any            `json:"credentials"`
-	Extra                   map[string]any            `json:"extra"`
-	ConfirmMixedChannelRisk *bool                     `json:"confirm_mixed_channel_risk"` // 用户确认混合渠道风险
+	AccountIDs                         []int64                   `json:"account_ids"`
+	Filters                            *BulkUpdateAccountFilters `json:"filters"`
+	Name                               string                    `json:"name"`
+	ProxyID                            *int64                    `json:"proxy_id"`
+	Concurrency                        *int                      `json:"concurrency"`
+	Priority                           *int                      `json:"priority"`
+	RateMultiplier                     *float64                  `json:"rate_multiplier"`
+	UpstreamCostMultiplier             *string                   `json:"upstream_cost_multiplier"`
+	UpstreamCostMultiplierChangeReason string                    `json:"upstream_cost_multiplier_change_reason"`
+	LoadFactor                         *int                      `json:"load_factor"`
+	Status                             string                    `json:"status" binding:"omitempty,oneof=active inactive error"`
+	Schedulable                        *bool                     `json:"schedulable"`
+	GroupIDs                           *[]int64                  `json:"group_ids"`
+	Credentials                        map[string]any            `json:"credentials"`
+	Extra                              map[string]any            `json:"extra"`
+	ConfirmMixedChannelRisk            *bool                     `json:"confirm_mixed_channel_risk"` // 用户确认混合渠道风险
 }
 
 type BulkUpdateAccountFilters struct {
@@ -183,6 +191,23 @@ type BulkUpdateAccountFilters struct {
 	Group       string `json:"group"`
 	Search      string `json:"search"`
 	PrivacyMode string `json:"privacy_mode"`
+}
+
+type accountUpstreamMultiplierChangeResponse struct {
+	ID            int64     `json:"id"`
+	AccountID     int64     `json:"account_id"`
+	OldMultiplier *string   `json:"old_multiplier"`
+	NewMultiplier string    `json:"new_multiplier"`
+	ChangeType    string    `json:"change_type"`
+	EffectiveAt   time.Time `json:"effective_at"`
+	OperatorID    *int64    `json:"operator_id"`
+	OperatorName  *string   `json:"operator_name"`
+	Reason        string    `json:"reason"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+type accountUpstreamMultiplierHistoryService interface {
+	ListAccountUpstreamMultiplierChanges(ctx context.Context, accountID int64, params pagination.PaginationParams) ([]service.AccountUpstreamMultiplierChange, *pagination.PaginationResult, error)
 }
 
 // CheckMixedChannelRequest represents check mixed channel risk request
@@ -551,6 +576,15 @@ func (h *AccountHandler) Create(c *gin.Context) {
 		response.BadRequest(c, "rate_multiplier must be >= 0")
 		return
 	}
+	upstreamCostMultiplier, err := parseUpstreamCostMultiplier(req.UpstreamCostMultiplier, true)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	var operatorID *int64
+	if subject, ok := middleware2.GetAuthSubjectFromContext(c); ok && subject.UserID > 0 {
+		operatorID = &subject.UserID
+	}
 	// base_rpm 输入校验：负值归零，超过 10000 截断
 	sanitizeExtraBaseRPM(req.Extra)
 
@@ -563,21 +597,23 @@ func (h *AccountHandler) Create(c *gin.Context) {
 
 	result, err := executeAdminIdempotent(c, "admin.accounts.create", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
 		account, execErr := h.adminService.CreateAccount(ctx, &service.CreateAccountInput{
-			Name:                  req.Name,
-			Notes:                 req.Notes,
-			Platform:              req.Platform,
-			Type:                  req.Type,
-			Credentials:           req.Credentials,
-			Extra:                 req.Extra,
-			ProxyID:               req.ProxyID,
-			Concurrency:           req.Concurrency,
-			Priority:              req.Priority,
-			RateMultiplier:        req.RateMultiplier,
-			LoadFactor:            req.LoadFactor,
-			GroupIDs:              req.GroupIDs,
-			ExpiresAt:             req.ExpiresAt,
-			AutoPauseOnExpired:    req.AutoPauseOnExpired,
-			SkipMixedChannelCheck: skipCheck,
+			Name:                   req.Name,
+			Notes:                  req.Notes,
+			Platform:               req.Platform,
+			Type:                   req.Type,
+			Credentials:            req.Credentials,
+			Extra:                  req.Extra,
+			ProxyID:                req.ProxyID,
+			Concurrency:            req.Concurrency,
+			Priority:               req.Priority,
+			RateMultiplier:         req.RateMultiplier,
+			UpstreamCostMultiplier: upstreamCostMultiplier,
+			OperatorID:             operatorID,
+			LoadFactor:             req.LoadFactor,
+			GroupIDs:               req.GroupIDs,
+			ExpiresAt:              req.ExpiresAt,
+			AutoPauseOnExpired:     req.AutoPauseOnExpired,
+			SkipMixedChannelCheck:  skipCheck,
 		})
 		if execErr != nil {
 			return nil, execErr
@@ -636,6 +672,15 @@ func (h *AccountHandler) Update(c *gin.Context) {
 		response.BadRequest(c, "rate_multiplier must be >= 0")
 		return
 	}
+	upstreamCostMultiplier, err := parseUpstreamCostMultiplier(req.UpstreamCostMultiplier, false)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	var operatorID *int64
+	if subject, ok := middleware2.GetAuthSubjectFromContext(c); ok && subject.UserID > 0 {
+		operatorID = &subject.UserID
+	}
 	// base_rpm 输入校验：负值归零，超过 10000 截断
 	sanitizeExtraBaseRPM(req.Extra)
 
@@ -643,21 +688,24 @@ func (h *AccountHandler) Update(c *gin.Context) {
 	skipCheck := req.ConfirmMixedChannelRisk != nil && *req.ConfirmMixedChannelRisk
 
 	account, err := h.adminService.UpdateAccount(c.Request.Context(), accountID, &service.UpdateAccountInput{
-		Name:                  req.Name,
-		Notes:                 req.Notes,
-		Type:                  req.Type,
-		Credentials:           req.Credentials,
-		Extra:                 req.Extra,
-		ProxyID:               req.ProxyID,
-		Concurrency:           req.Concurrency, // 指针类型，nil 表示未提供
-		Priority:              req.Priority,    // 指针类型，nil 表示未提供
-		RateMultiplier:        req.RateMultiplier,
-		LoadFactor:            req.LoadFactor,
-		Status:                req.Status,
-		GroupIDs:              req.GroupIDs,
-		ExpiresAt:             req.ExpiresAt,
-		AutoPauseOnExpired:    req.AutoPauseOnExpired,
-		SkipMixedChannelCheck: skipCheck,
+		Name:                               req.Name,
+		Notes:                              req.Notes,
+		Type:                               req.Type,
+		Credentials:                        req.Credentials,
+		Extra:                              req.Extra,
+		ProxyID:                            req.ProxyID,
+		Concurrency:                        req.Concurrency, // 指针类型，nil 表示未提供
+		Priority:                           req.Priority,    // 指针类型，nil 表示未提供
+		RateMultiplier:                     req.RateMultiplier,
+		UpstreamCostMultiplier:             upstreamCostMultiplier,
+		UpstreamCostMultiplierChangeReason: req.UpstreamCostMultiplierChangeReason,
+		OperatorID:                         operatorID,
+		LoadFactor:                         req.LoadFactor,
+		Status:                             req.Status,
+		GroupIDs:                           req.GroupIDs,
+		ExpiresAt:                          req.ExpiresAt,
+		AutoPauseOnExpired:                 req.AutoPauseOnExpired,
+		SkipMixedChannelCheck:              skipCheck,
 	})
 	if err != nil {
 		// 检查是否为混合渠道错误
@@ -682,6 +730,62 @@ func (h *AccountHandler) Update(c *gin.Context) {
 	}
 
 	response.Success(c, h.buildAccountResponseWithRuntime(c.Request.Context(), account))
+}
+
+func (h *AccountHandler) ListUpstreamMultiplierChanges(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	if page < 1 || pageSize < 1 || pageSize > 100 {
+		response.BadRequest(c, "page must be >= 1 and page_size must be between 1 and 100")
+		return
+	}
+	historyService, ok := h.adminService.(accountUpstreamMultiplierHistoryService)
+	if !ok {
+		response.InternalError(c, "account upstream multiplier history service is unavailable")
+		return
+	}
+	items, result, err := historyService.ListAccountUpstreamMultiplierChanges(c.Request.Context(), accountID, pagination.PaginationParams{Page: page, PageSize: pageSize})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	output := make([]accountUpstreamMultiplierChangeResponse, 0, len(items))
+	for _, item := range items {
+		var oldMultiplier *string
+		if item.OldMultiplier != nil {
+			value := item.OldMultiplier.StringFixed(4)
+			oldMultiplier = &value
+		}
+		output = append(output, accountUpstreamMultiplierChangeResponse{
+			ID: item.ID, AccountID: item.AccountID, OldMultiplier: oldMultiplier,
+			NewMultiplier: item.NewMultiplier.StringFixed(4), ChangeType: item.ChangeType,
+			EffectiveAt: item.EffectiveAt, OperatorID: item.OperatorID,
+			OperatorName: item.OperatorName, Reason: item.Reason, CreatedAt: item.CreatedAt,
+		})
+	}
+	response.Paginated(c, output, result.Total, result.Page, result.PageSize)
+}
+
+func parseUpstreamCostMultiplier(raw *string, defaultOnMissing bool) (*decimal.Decimal, error) {
+	if raw == nil {
+		// Missing is materially different from a multiplier of 1. A silent
+		// default would turn an unknown cost into a confirmed cost.
+		_ = defaultOnMissing
+		return nil, nil
+	}
+	value, err := decimal.NewFromString(strings.TrimSpace(*raw))
+	if err != nil {
+		return nil, errors.New("upstream_cost_multiplier must be a decimal string")
+	}
+	if err := service.ValidateUpstreamCostMultiplier(value); err != nil {
+		return nil, err
+	}
+	return &value, nil
 }
 
 // scheduleOpenAIResponsesProbe 异步触发 OpenAI APIKey 账号的 Responses API 能力探测。
@@ -1432,6 +1536,16 @@ func (h *AccountHandler) BatchCreate(c *gin.Context) {
 				})
 				continue
 			}
+			upstreamCostMultiplier, parseErr := parseUpstreamCostMultiplier(item.UpstreamCostMultiplier, true)
+			if parseErr != nil {
+				failed++
+				results = append(results, gin.H{"name": item.Name, "success": false, "error": parseErr.Error()})
+				continue
+			}
+			var operatorID *int64
+			if subject, ok := middleware2.GetAuthSubjectFromContext(c); ok && subject.UserID > 0 {
+				operatorID = &subject.UserID
+			}
 
 			// base_rpm 输入校验：负值归零，超过 10000 截断
 			sanitizeExtraBaseRPM(item.Extra)
@@ -1439,20 +1553,22 @@ func (h *AccountHandler) BatchCreate(c *gin.Context) {
 			skipCheck := item.ConfirmMixedChannelRisk != nil && *item.ConfirmMixedChannelRisk
 
 			account, err := h.adminService.CreateAccount(ctx, &service.CreateAccountInput{
-				Name:                  item.Name,
-				Notes:                 item.Notes,
-				Platform:              item.Platform,
-				Type:                  item.Type,
-				Credentials:           item.Credentials,
-				Extra:                 item.Extra,
-				ProxyID:               item.ProxyID,
-				Concurrency:           item.Concurrency,
-				Priority:              item.Priority,
-				RateMultiplier:        item.RateMultiplier,
-				GroupIDs:              item.GroupIDs,
-				ExpiresAt:             item.ExpiresAt,
-				AutoPauseOnExpired:    item.AutoPauseOnExpired,
-				SkipMixedChannelCheck: skipCheck,
+				Name:                   item.Name,
+				Notes:                  item.Notes,
+				Platform:               item.Platform,
+				Type:                   item.Type,
+				Credentials:            item.Credentials,
+				Extra:                  item.Extra,
+				ProxyID:                item.ProxyID,
+				Concurrency:            item.Concurrency,
+				Priority:               item.Priority,
+				RateMultiplier:         item.RateMultiplier,
+				UpstreamCostMultiplier: upstreamCostMultiplier,
+				OperatorID:             operatorID,
+				GroupIDs:               item.GroupIDs,
+				ExpiresAt:              item.ExpiresAt,
+				AutoPauseOnExpired:     item.AutoPauseOnExpired,
+				SkipMixedChannelCheck:  skipCheck,
 			})
 			if err != nil {
 				failed++
@@ -1623,6 +1739,18 @@ func (h *AccountHandler) BulkUpdate(c *gin.Context) {
 		response.BadRequest(c, "rate_multiplier must be >= 0")
 		return
 	}
+	upstreamCostMultiplier, err := parseUpstreamCostMultiplier(req.UpstreamCostMultiplier, false)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	if upstreamCostMultiplier != nil {
+		reason := strings.TrimSpace(req.UpstreamCostMultiplierChangeReason)
+		if len([]rune(reason)) < 5 || len([]rune(reason)) > 500 {
+			response.BadRequest(c, "upstream_cost_multiplier_change_reason must be 5 to 500 characters")
+			return
+		}
+	}
 	if len(req.AccountIDs) == 0 && req.Filters == nil {
 		response.BadRequest(c, "account_ids or filters is required")
 		return
@@ -1638,6 +1766,7 @@ func (h *AccountHandler) BulkUpdate(c *gin.Context) {
 		req.Concurrency != nil ||
 		req.Priority != nil ||
 		req.RateMultiplier != nil ||
+		upstreamCostMultiplier != nil ||
 		req.LoadFactor != nil ||
 		req.Status != "" ||
 		req.Schedulable != nil ||
@@ -1649,22 +1778,38 @@ func (h *AccountHandler) BulkUpdate(c *gin.Context) {
 		response.BadRequest(c, "No updates provided")
 		return
 	}
+	if upstreamCostMultiplier != nil {
+		hasOtherUpdates := req.Name != "" || req.ProxyID != nil || req.Concurrency != nil || req.Priority != nil ||
+			req.RateMultiplier != nil || req.LoadFactor != nil || req.Status != "" || req.Schedulable != nil ||
+			req.GroupIDs != nil || len(req.Credentials) > 0 || len(req.Extra) > 0
+		if hasOtherUpdates {
+			response.BadRequest(c, "upstream_cost_multiplier must be updated separately")
+			return
+		}
+	}
+	var operatorID *int64
+	if subject, ok := middleware2.GetAuthSubjectFromContext(c); ok && subject.UserID > 0 {
+		operatorID = &subject.UserID
+	}
 
 	result, err := h.adminService.BulkUpdateAccounts(c.Request.Context(), &service.BulkUpdateAccountsInput{
-		AccountIDs:            req.AccountIDs,
-		Filters:               toServiceBulkUpdateAccountFilters(req.Filters),
-		Name:                  req.Name,
-		ProxyID:               req.ProxyID,
-		Concurrency:           req.Concurrency,
-		Priority:              req.Priority,
-		RateMultiplier:        req.RateMultiplier,
-		LoadFactor:            req.LoadFactor,
-		Status:                req.Status,
-		Schedulable:           req.Schedulable,
-		GroupIDs:              req.GroupIDs,
-		Credentials:           req.Credentials,
-		Extra:                 req.Extra,
-		SkipMixedChannelCheck: skipCheck,
+		AccountIDs:                         req.AccountIDs,
+		Filters:                            toServiceBulkUpdateAccountFilters(req.Filters),
+		Name:                               req.Name,
+		ProxyID:                            req.ProxyID,
+		Concurrency:                        req.Concurrency,
+		Priority:                           req.Priority,
+		RateMultiplier:                     req.RateMultiplier,
+		UpstreamCostMultiplier:             upstreamCostMultiplier,
+		UpstreamCostMultiplierChangeReason: strings.TrimSpace(req.UpstreamCostMultiplierChangeReason),
+		OperatorID:                         operatorID,
+		LoadFactor:                         req.LoadFactor,
+		Status:                             req.Status,
+		Schedulable:                        req.Schedulable,
+		GroupIDs:                           req.GroupIDs,
+		Credentials:                        req.Credentials,
+		Extra:                              req.Extra,
+		SkipMixedChannelCheck:              skipCheck,
 	})
 	if err != nil {
 		var mixedErr *service.MixedChannelError

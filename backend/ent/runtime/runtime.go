@@ -6,7 +6,10 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/ent/account"
+	"github.com/Wei-Shaw/sub2api/ent/accountfinancecountersnapshot"
+	"github.com/Wei-Shaw/sub2api/ent/accountfinanceprofile"
 	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
+	"github.com/Wei-Shaw/sub2api/ent/accountupstreammultiplierchange"
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
@@ -17,11 +20,19 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorhistory"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorrequesttemplate"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
+	"github.com/Wei-Shaw/sub2api/ent/financealert"
+	"github.com/Wei-Shaw/sub2api/ent/financeasyncjob"
+	"github.com/Wei-Shaw/sub2api/ent/financebackfilljob"
+	"github.com/Wei-Shaw/sub2api/ent/financecalculationrevision"
+	"github.com/Wei-Shaw/sub2api/ent/financedailyaggregate"
+	"github.com/Wei-Shaw/sub2api/ent/financeexportjob"
+	"github.com/Wei-Shaw/sub2api/ent/financefxrateversion"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
 	"github.com/Wei-Shaw/sub2api/ent/identityadoptiondecision"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
+	"github.com/Wei-Shaw/sub2api/ent/paymentproviderfeeevent"
 	"github.com/Wei-Shaw/sub2api/ent/paymentproviderinstance"
 	"github.com/Wei-Shaw/sub2api/ent/pendingauthsession"
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
@@ -32,9 +43,26 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
+	"github.com/Wei-Shaw/sub2api/ent/subscriptionrevenuerecognition"
+	"github.com/Wei-Shaw/sub2api/ent/systemmodelpriceversion"
 	"github.com/Wei-Shaw/sub2api/ent/tlsfingerprintprofile"
+	"github.com/Wei-Shaw/sub2api/ent/upstreambalancesnapshot"
+	"github.com/Wei-Shaw/sub2api/ent/upstreambillreconciliation"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamcostsettlementinterval"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamfinanceprotocol"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamfinanceprotocolversion"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamfinancesyncrun"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamfundevent"
+	"github.com/Wei-Shaw/sub2api/ent/upstreammodelpriceversion"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamwallet"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamwalletaccount"
 	"github.com/Wei-Shaw/sub2api/ent/usagecleanuptask"
+	"github.com/Wei-Shaw/sub2api/ent/usagecostsettlementallocation"
+	"github.com/Wei-Shaw/sub2api/ent/usagefinancecostsegment"
+	"github.com/Wei-Shaw/sub2api/ent/usagefinancerecord"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
+	"github.com/Wei-Shaw/sub2api/ent/usagerevenueallocation"
+	"github.com/Wei-Shaw/sub2api/ent/usageupstreamattempt"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
@@ -234,24 +262,144 @@ func init() {
 	accountDescRateMultiplier := accountFields[10].Descriptor()
 	// account.DefaultRateMultiplier holds the default value on creation for the rate_multiplier field.
 	account.DefaultRateMultiplier = accountDescRateMultiplier.Default.(float64)
+	// accountDescUpstreamCostMultiplierSource is the schema descriptor for upstream_cost_multiplier_source field.
+	accountDescUpstreamCostMultiplierSource := accountFields[14].Descriptor()
+	// account.DefaultUpstreamCostMultiplierSource holds the default value on creation for the upstream_cost_multiplier_source field.
+	account.DefaultUpstreamCostMultiplierSource = accountDescUpstreamCostMultiplierSource.Default.(string)
+	// account.UpstreamCostMultiplierSourceValidator is a validator for the "upstream_cost_multiplier_source" field. It is called by the builders before save.
+	account.UpstreamCostMultiplierSourceValidator = accountDescUpstreamCostMultiplierSource.Validators[0].(func(string) error)
 	// accountDescStatus is the schema descriptor for status field.
-	accountDescStatus := accountFields[11].Descriptor()
+	accountDescStatus := accountFields[16].Descriptor()
 	// account.DefaultStatus holds the default value on creation for the status field.
 	account.DefaultStatus = accountDescStatus.Default.(string)
 	// account.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	account.StatusValidator = accountDescStatus.Validators[0].(func(string) error)
 	// accountDescAutoPauseOnExpired is the schema descriptor for auto_pause_on_expired field.
-	accountDescAutoPauseOnExpired := accountFields[15].Descriptor()
+	accountDescAutoPauseOnExpired := accountFields[20].Descriptor()
 	// account.DefaultAutoPauseOnExpired holds the default value on creation for the auto_pause_on_expired field.
 	account.DefaultAutoPauseOnExpired = accountDescAutoPauseOnExpired.Default.(bool)
 	// accountDescSchedulable is the schema descriptor for schedulable field.
-	accountDescSchedulable := accountFields[16].Descriptor()
+	accountDescSchedulable := accountFields[21].Descriptor()
 	// account.DefaultSchedulable holds the default value on creation for the schedulable field.
 	account.DefaultSchedulable = accountDescSchedulable.Default.(bool)
 	// accountDescSessionWindowStatus is the schema descriptor for session_window_status field.
-	accountDescSessionWindowStatus := accountFields[24].Descriptor()
+	accountDescSessionWindowStatus := accountFields[29].Descriptor()
 	// account.SessionWindowStatusValidator is a validator for the "session_window_status" field. It is called by the builders before save.
 	account.SessionWindowStatusValidator = accountDescSessionWindowStatus.Validators[0].(func(string) error)
+	accountfinancecountersnapshotFields := schema.AccountFinanceCounterSnapshot{}.Fields()
+	_ = accountfinancecountersnapshotFields
+	// accountfinancecountersnapshotDescScopeKey is the schema descriptor for scope_key field.
+	accountfinancecountersnapshotDescScopeKey := accountfinancecountersnapshotFields[2].Descriptor()
+	// accountfinancecountersnapshot.ScopeKeyValidator is a validator for the "scope_key" field. It is called by the builders before save.
+	accountfinancecountersnapshot.ScopeKeyValidator = accountfinancecountersnapshotDescScopeKey.Validators[0].(func(string) error)
+	// accountfinancecountersnapshotDescIdempotencyKey is the schema descriptor for idempotency_key field.
+	accountfinancecountersnapshotDescIdempotencyKey := accountfinancecountersnapshotFields[3].Descriptor()
+	// accountfinancecountersnapshot.IdempotencyKeyValidator is a validator for the "idempotency_key" field. It is called by the builders before save.
+	accountfinancecountersnapshot.IdempotencyKeyValidator = accountfinancecountersnapshotDescIdempotencyKey.Validators[0].(func(string) error)
+	// accountfinancecountersnapshotDescUpstreamCounterID is the schema descriptor for upstream_counter_id field.
+	accountfinancecountersnapshotDescUpstreamCounterID := accountfinancecountersnapshotFields[4].Descriptor()
+	// accountfinancecountersnapshot.UpstreamCounterIDValidator is a validator for the "upstream_counter_id" field. It is called by the builders before save.
+	accountfinancecountersnapshot.UpstreamCounterIDValidator = accountfinancecountersnapshotDescUpstreamCounterID.Validators[0].(func(string) error)
+	// accountfinancecountersnapshotDescCounterPeriod is the schema descriptor for counter_period field.
+	accountfinancecountersnapshotDescCounterPeriod := accountfinancecountersnapshotFields[5].Descriptor()
+	// accountfinancecountersnapshot.CounterPeriodValidator is a validator for the "counter_period" field. It is called by the builders before save.
+	accountfinancecountersnapshot.CounterPeriodValidator = accountfinancecountersnapshotDescCounterPeriod.Validators[0].(func(string) error)
+	// accountfinancecountersnapshotDescUnitCode is the schema descriptor for unit_code field.
+	accountfinancecountersnapshotDescUnitCode := accountfinancecountersnapshotFields[8].Descriptor()
+	// accountfinancecountersnapshot.UnitCodeValidator is a validator for the "unit_code" field. It is called by the builders before save.
+	accountfinancecountersnapshot.UnitCodeValidator = accountfinancecountersnapshotDescUnitCode.Validators[0].(func(string) error)
+	// accountfinancecountersnapshotDescUnitSemantics is the schema descriptor for unit_semantics field.
+	accountfinancecountersnapshotDescUnitSemantics := accountfinancecountersnapshotFields[9].Descriptor()
+	// accountfinancecountersnapshot.UnitSemanticsValidator is a validator for the "unit_semantics" field. It is called by the builders before save.
+	accountfinancecountersnapshot.UnitSemanticsValidator = accountfinancecountersnapshotDescUnitSemantics.Validators[0].(func(string) error)
+	// accountfinancecountersnapshotDescCurrency is the schema descriptor for currency field.
+	accountfinancecountersnapshotDescCurrency := accountfinancecountersnapshotFields[10].Descriptor()
+	// accountfinancecountersnapshot.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
+	accountfinancecountersnapshot.CurrencyValidator = accountfinancecountersnapshotDescCurrency.Validators[0].(func(string) error)
+	// accountfinancecountersnapshotDescChecksum is the schema descriptor for checksum field.
+	accountfinancecountersnapshotDescChecksum := accountfinancecountersnapshotFields[14].Descriptor()
+	// accountfinancecountersnapshot.ChecksumValidator is a validator for the "checksum" field. It is called by the builders before save.
+	accountfinancecountersnapshot.ChecksumValidator = accountfinancecountersnapshotDescChecksum.Validators[0].(func(string) error)
+	// accountfinancecountersnapshotDescDerivationStatus is the schema descriptor for derivation_status field.
+	accountfinancecountersnapshotDescDerivationStatus := accountfinancecountersnapshotFields[19].Descriptor()
+	// accountfinancecountersnapshot.DerivationStatusValidator is a validator for the "derivation_status" field. It is called by the builders before save.
+	accountfinancecountersnapshot.DerivationStatusValidator = accountfinancecountersnapshotDescDerivationStatus.Validators[0].(func(string) error)
+	// accountfinancecountersnapshotDescAnomalyCode is the schema descriptor for anomaly_code field.
+	accountfinancecountersnapshotDescAnomalyCode := accountfinancecountersnapshotFields[20].Descriptor()
+	// accountfinancecountersnapshot.AnomalyCodeValidator is a validator for the "anomaly_code" field. It is called by the builders before save.
+	accountfinancecountersnapshot.AnomalyCodeValidator = accountfinancecountersnapshotDescAnomalyCode.Validators[0].(func(string) error)
+	// accountfinancecountersnapshotDescCreatedAt is the schema descriptor for created_at field.
+	accountfinancecountersnapshotDescCreatedAt := accountfinancecountersnapshotFields[23].Descriptor()
+	// accountfinancecountersnapshot.DefaultCreatedAt holds the default value on creation for the created_at field.
+	accountfinancecountersnapshot.DefaultCreatedAt = accountfinancecountersnapshotDescCreatedAt.Default.(func() time.Time)
+	accountfinanceprofileFields := schema.AccountFinanceProfile{}.Fields()
+	_ = accountfinanceprofileFields
+	// accountfinanceprofileDescAccountID is the schema descriptor for account_id field.
+	accountfinanceprofileDescAccountID := accountfinanceprofileFields[0].Descriptor()
+	// accountfinanceprofile.AccountIDValidator is a validator for the "account_id" field. It is called by the builders before save.
+	accountfinanceprofile.AccountIDValidator = accountfinanceprofileDescAccountID.Validators[0].(func(int64) error)
+	// accountfinanceprofileDescCostMode is the schema descriptor for cost_mode field.
+	accountfinanceprofileDescCostMode := accountfinanceprofileFields[3].Descriptor()
+	// accountfinanceprofile.CostModeValidator is a validator for the "cost_mode" field. It is called by the builders before save.
+	accountfinanceprofile.CostModeValidator = accountfinanceprofileDescCostMode.Validators[0].(func(string) error)
+	// accountfinanceprofileDescPricingGroup is the schema descriptor for pricing_group field.
+	accountfinanceprofileDescPricingGroup := accountfinanceprofileFields[4].Descriptor()
+	// accountfinanceprofile.PricingGroupValidator is a validator for the "pricing_group" field. It is called by the builders before save.
+	accountfinanceprofile.PricingGroupValidator = accountfinanceprofileDescPricingGroup.Validators[0].(func(string) error)
+	// accountfinanceprofileDescEndpointSource is the schema descriptor for endpoint_source field.
+	accountfinanceprofileDescEndpointSource := accountfinanceprofileFields[5].Descriptor()
+	// accountfinanceprofile.DefaultEndpointSource holds the default value on creation for the endpoint_source field.
+	accountfinanceprofile.DefaultEndpointSource = accountfinanceprofileDescEndpointSource.Default.(string)
+	// accountfinanceprofile.EndpointSourceValidator is a validator for the "endpoint_source" field. It is called by the builders before save.
+	accountfinanceprofile.EndpointSourceValidator = accountfinanceprofileDescEndpointSource.Validators[0].(func(string) error)
+	// accountfinanceprofileDescEndpointBaseURLSnapshot is the schema descriptor for endpoint_base_url_snapshot field.
+	accountfinanceprofileDescEndpointBaseURLSnapshot := accountfinanceprofileFields[6].Descriptor()
+	// accountfinanceprofile.DefaultEndpointBaseURLSnapshot holds the default value on creation for the endpoint_base_url_snapshot field.
+	accountfinanceprofile.DefaultEndpointBaseURLSnapshot = accountfinanceprofileDescEndpointBaseURLSnapshot.Default.(string)
+	// accountfinanceprofileDescCredentialSource is the schema descriptor for credential_source field.
+	accountfinanceprofileDescCredentialSource := accountfinanceprofileFields[7].Descriptor()
+	// accountfinanceprofile.DefaultCredentialSource holds the default value on creation for the credential_source field.
+	accountfinanceprofile.DefaultCredentialSource = accountfinanceprofileDescCredentialSource.Default.(string)
+	// accountfinanceprofile.CredentialSourceValidator is a validator for the "credential_source" field. It is called by the builders before save.
+	accountfinanceprofile.CredentialSourceValidator = accountfinanceprofileDescCredentialSource.Validators[0].(func(string) error)
+	// accountfinanceprofileDescCounterScope is the schema descriptor for counter_scope field.
+	accountfinanceprofileDescCounterScope := accountfinanceprofileFields[8].Descriptor()
+	// accountfinanceprofile.DefaultCounterScope holds the default value on creation for the counter_scope field.
+	accountfinanceprofile.DefaultCounterScope = accountfinanceprofileDescCounterScope.Default.(string)
+	// accountfinanceprofile.CounterScopeValidator is a validator for the "counter_scope" field. It is called by the builders before save.
+	accountfinanceprofile.CounterScopeValidator = accountfinanceprofileDescCounterScope.Validators[0].(func(string) error)
+	// accountfinanceprofileDescCounterScopeKey is the schema descriptor for counter_scope_key field.
+	accountfinanceprofileDescCounterScopeKey := accountfinanceprofileFields[9].Descriptor()
+	// accountfinanceprofile.CounterScopeKeyValidator is a validator for the "counter_scope_key" field. It is called by the builders before save.
+	accountfinanceprofile.CounterScopeKeyValidator = accountfinanceprofileDescCounterScopeKey.Validators[0].(func(string) error)
+	// accountfinanceprofileDescBalanceUnitSemantics is the schema descriptor for balance_unit_semantics field.
+	accountfinanceprofileDescBalanceUnitSemantics := accountfinanceprofileFields[10].Descriptor()
+	// accountfinanceprofile.DefaultBalanceUnitSemantics holds the default value on creation for the balance_unit_semantics field.
+	accountfinanceprofile.DefaultBalanceUnitSemantics = accountfinanceprofileDescBalanceUnitSemantics.Default.(string)
+	// accountfinanceprofile.BalanceUnitSemanticsValidator is a validator for the "balance_unit_semantics" field. It is called by the builders before save.
+	accountfinanceprofile.BalanceUnitSemanticsValidator = accountfinanceprofileDescBalanceUnitSemantics.Validators[0].(func(string) error)
+	// accountfinanceprofileDescRechargeOwnerType is the schema descriptor for recharge_owner_type field.
+	accountfinanceprofileDescRechargeOwnerType := accountfinanceprofileFields[11].Descriptor()
+	// accountfinanceprofile.RechargeOwnerTypeValidator is a validator for the "recharge_owner_type" field. It is called by the builders before save.
+	accountfinanceprofile.RechargeOwnerTypeValidator = accountfinanceprofileDescRechargeOwnerType.Validators[0].(func(string) error)
+	// accountfinanceprofileDescContractType is the schema descriptor for contract_type field.
+	accountfinanceprofileDescContractType := accountfinanceprofileFields[16].Descriptor()
+	// accountfinanceprofile.ContractTypeValidator is a validator for the "contract_type" field. It is called by the builders before save.
+	accountfinanceprofile.ContractTypeValidator = accountfinanceprofileDescContractType.Validators[0].(func(string) error)
+	// accountfinanceprofileDescReadinessStatus is the schema descriptor for readiness_status field.
+	accountfinanceprofileDescReadinessStatus := accountfinanceprofileFields[19].Descriptor()
+	// accountfinanceprofile.ReadinessStatusValidator is a validator for the "readiness_status" field. It is called by the builders before save.
+	accountfinanceprofile.ReadinessStatusValidator = accountfinanceprofileDescReadinessStatus.Validators[0].(func(string) error)
+	// accountfinanceprofileDescVersion is the schema descriptor for version field.
+	accountfinanceprofileDescVersion := accountfinanceprofileFields[21].Descriptor()
+	// accountfinanceprofile.DefaultVersion holds the default value on creation for the version field.
+	accountfinanceprofile.DefaultVersion = accountfinanceprofileDescVersion.Default.(int)
+	// accountfinanceprofile.VersionValidator is a validator for the "version" field. It is called by the builders before save.
+	accountfinanceprofile.VersionValidator = accountfinanceprofileDescVersion.Validators[0].(func(int) error)
+	// accountfinanceprofileDescCreatedAt is the schema descriptor for created_at field.
+	accountfinanceprofileDescCreatedAt := accountfinanceprofileFields[26].Descriptor()
+	// accountfinanceprofile.DefaultCreatedAt holds the default value on creation for the created_at field.
+	accountfinanceprofile.DefaultCreatedAt = accountfinanceprofileDescCreatedAt.Default.(func() time.Time)
 	accountgroupFields := schema.AccountGroup{}.Fields()
 	_ = accountgroupFields
 	// accountgroupDescPriority is the schema descriptor for priority field.
@@ -262,6 +410,16 @@ func init() {
 	accountgroupDescCreatedAt := accountgroupFields[3].Descriptor()
 	// accountgroup.DefaultCreatedAt holds the default value on creation for the created_at field.
 	accountgroup.DefaultCreatedAt = accountgroupDescCreatedAt.Default.(func() time.Time)
+	accountupstreammultiplierchangeFields := schema.AccountUpstreamMultiplierChange{}.Fields()
+	_ = accountupstreammultiplierchangeFields
+	// accountupstreammultiplierchangeDescChangeType is the schema descriptor for change_type field.
+	accountupstreammultiplierchangeDescChangeType := accountupstreammultiplierchangeFields[3].Descriptor()
+	// accountupstreammultiplierchange.ChangeTypeValidator is a validator for the "change_type" field. It is called by the builders before save.
+	accountupstreammultiplierchange.ChangeTypeValidator = accountupstreammultiplierchangeDescChangeType.Validators[0].(func(string) error)
+	// accountupstreammultiplierchangeDescCreatedAt is the schema descriptor for created_at field.
+	accountupstreammultiplierchangeDescCreatedAt := accountupstreammultiplierchangeFields[7].Descriptor()
+	// accountupstreammultiplierchange.DefaultCreatedAt holds the default value on creation for the created_at field.
+	accountupstreammultiplierchange.DefaultCreatedAt = accountupstreammultiplierchangeDescCreatedAt.Default.(func() time.Time)
 	announcementFields := schema.Announcement{}.Fields()
 	_ = announcementFields
 	// announcementDescTitle is the schema descriptor for title field.
@@ -767,6 +925,194 @@ func init() {
 	errorpassthroughruleDescSkipMonitoring := errorpassthroughruleFields[11].Descriptor()
 	// errorpassthroughrule.DefaultSkipMonitoring holds the default value on creation for the skip_monitoring field.
 	errorpassthroughrule.DefaultSkipMonitoring = errorpassthroughruleDescSkipMonitoring.Default.(bool)
+	financealertFields := schema.FinanceAlert{}.Fields()
+	_ = financealertFields
+	// financealertDescAlertType is the schema descriptor for alert_type field.
+	financealertDescAlertType := financealertFields[0].Descriptor()
+	// financealert.AlertTypeValidator is a validator for the "alert_type" field. It is called by the builders before save.
+	financealert.AlertTypeValidator = financealertDescAlertType.Validators[0].(func(string) error)
+	// financealertDescSeverity is the schema descriptor for severity field.
+	financealertDescSeverity := financealertFields[1].Descriptor()
+	// financealert.SeverityValidator is a validator for the "severity" field. It is called by the builders before save.
+	financealert.SeverityValidator = financealertDescSeverity.Validators[0].(func(string) error)
+	// financealertDescAggregationKey is the schema descriptor for aggregation_key field.
+	financealertDescAggregationKey := financealertFields[2].Descriptor()
+	// financealert.AggregationKeyValidator is a validator for the "aggregation_key" field. It is called by the builders before save.
+	financealert.AggregationKeyValidator = financealertDescAggregationKey.Validators[0].(func(string) error)
+	// financealertDescTitle is the schema descriptor for title field.
+	financealertDescTitle := financealertFields[3].Descriptor()
+	// financealert.TitleValidator is a validator for the "title" field. It is called by the builders before save.
+	financealert.TitleValidator = financealertDescTitle.Validators[0].(func(string) error)
+	// financealertDescDimensionType is the schema descriptor for dimension_type field.
+	financealertDescDimensionType := financealertFields[5].Descriptor()
+	// financealert.DimensionTypeValidator is a validator for the "dimension_type" field. It is called by the builders before save.
+	financealert.DimensionTypeValidator = financealertDescDimensionType.Validators[0].(func(string) error)
+	// financealertDescRequestCount is the schema descriptor for request_count field.
+	financealertDescRequestCount := financealertFields[8].Descriptor()
+	// financealert.DefaultRequestCount holds the default value on creation for the request_count field.
+	financealert.DefaultRequestCount = financealertDescRequestCount.Default.(int64)
+	// financealert.RequestCountValidator is a validator for the "request_count" field. It is called by the builders before save.
+	financealert.RequestCountValidator = financealertDescRequestCount.Validators[0].(func(int64) error)
+	// financealertDescOccurrenceCount is the schema descriptor for occurrence_count field.
+	financealertDescOccurrenceCount := financealertFields[9].Descriptor()
+	// financealert.DefaultOccurrenceCount holds the default value on creation for the occurrence_count field.
+	financealert.DefaultOccurrenceCount = financealertDescOccurrenceCount.Default.(int64)
+	// financealert.OccurrenceCountValidator is a validator for the "occurrence_count" field. It is called by the builders before save.
+	financealert.OccurrenceCountValidator = financealertDescOccurrenceCount.Validators[0].(func(int64) error)
+	// financealertDescStatus is the schema descriptor for status field.
+	financealertDescStatus := financealertFields[10].Descriptor()
+	// financealert.DefaultStatus holds the default value on creation for the status field.
+	financealert.DefaultStatus = financealertDescStatus.Default.(string)
+	// financealert.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	financealert.StatusValidator = financealertDescStatus.Validators[0].(func(string) error)
+	// financealertDescCreatedAt is the schema descriptor for created_at field.
+	financealertDescCreatedAt := financealertFields[17].Descriptor()
+	// financealert.DefaultCreatedAt holds the default value on creation for the created_at field.
+	financealert.DefaultCreatedAt = financealertDescCreatedAt.Default.(func() time.Time)
+	// financealertDescUpdatedAt is the schema descriptor for updated_at field.
+	financealertDescUpdatedAt := financealertFields[18].Descriptor()
+	// financealert.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	financealert.DefaultUpdatedAt = financealertDescUpdatedAt.Default.(func() time.Time)
+	// financealert.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	financealert.UpdateDefaultUpdatedAt = financealertDescUpdatedAt.UpdateDefault.(func() time.Time)
+	financeasyncjobFields := schema.FinanceAsyncJob{}.Fields()
+	_ = financeasyncjobFields
+	// financeasyncjobDescJobType is the schema descriptor for job_type field.
+	financeasyncjobDescJobType := financeasyncjobFields[0].Descriptor()
+	// financeasyncjob.JobTypeValidator is a validator for the "job_type" field. It is called by the builders before save.
+	financeasyncjob.JobTypeValidator = financeasyncjobDescJobType.Validators[0].(func(string) error)
+	// financeasyncjobDescStatus is the schema descriptor for status field.
+	financeasyncjobDescStatus := financeasyncjobFields[1].Descriptor()
+	// financeasyncjob.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	financeasyncjob.StatusValidator = financeasyncjobDescStatus.Validators[0].(func(string) error)
+	// financeasyncjobDescIdempotencyKey is the schema descriptor for idempotency_key field.
+	financeasyncjobDescIdempotencyKey := financeasyncjobFields[2].Descriptor()
+	// financeasyncjob.IdempotencyKeyValidator is a validator for the "idempotency_key" field. It is called by the builders before save.
+	financeasyncjob.IdempotencyKeyValidator = financeasyncjobDescIdempotencyKey.Validators[0].(func(string) error)
+	// financeasyncjobDescRequestChecksum is the schema descriptor for request_checksum field.
+	financeasyncjobDescRequestChecksum := financeasyncjobFields[3].Descriptor()
+	// financeasyncjob.RequestChecksumValidator is a validator for the "request_checksum" field. It is called by the builders before save.
+	financeasyncjob.RequestChecksumValidator = financeasyncjobDescRequestChecksum.Validators[0].(func(string) error)
+	// financeasyncjobDescParameters is the schema descriptor for parameters field.
+	financeasyncjobDescParameters := financeasyncjobFields[4].Descriptor()
+	// financeasyncjob.DefaultParameters holds the default value on creation for the parameters field.
+	financeasyncjob.DefaultParameters = financeasyncjobDescParameters.Default.(func() map[string]interface{})
+	// financeasyncjobDescProcessedCount is the schema descriptor for processed_count field.
+	financeasyncjobDescProcessedCount := financeasyncjobFields[7].Descriptor()
+	// financeasyncjob.DefaultProcessedCount holds the default value on creation for the processed_count field.
+	financeasyncjob.DefaultProcessedCount = financeasyncjobDescProcessedCount.Default.(int64)
+	// financeasyncjob.ProcessedCountValidator is a validator for the "processed_count" field. It is called by the builders before save.
+	financeasyncjob.ProcessedCountValidator = financeasyncjobDescProcessedCount.Validators[0].(func(int64) error)
+	// financeasyncjobDescSuccessCount is the schema descriptor for success_count field.
+	financeasyncjobDescSuccessCount := financeasyncjobFields[8].Descriptor()
+	// financeasyncjob.DefaultSuccessCount holds the default value on creation for the success_count field.
+	financeasyncjob.DefaultSuccessCount = financeasyncjobDescSuccessCount.Default.(int64)
+	// financeasyncjob.SuccessCountValidator is a validator for the "success_count" field. It is called by the builders before save.
+	financeasyncjob.SuccessCountValidator = financeasyncjobDescSuccessCount.Validators[0].(func(int64) error)
+	// financeasyncjobDescFailedCount is the schema descriptor for failed_count field.
+	financeasyncjobDescFailedCount := financeasyncjobFields[9].Descriptor()
+	// financeasyncjob.DefaultFailedCount holds the default value on creation for the failed_count field.
+	financeasyncjob.DefaultFailedCount = financeasyncjobDescFailedCount.Default.(int64)
+	// financeasyncjob.FailedCountValidator is a validator for the "failed_count" field. It is called by the builders before save.
+	financeasyncjob.FailedCountValidator = financeasyncjobDescFailedCount.Validators[0].(func(int64) error)
+	// financeasyncjobDescLeaseOwner is the schema descriptor for lease_owner field.
+	financeasyncjobDescLeaseOwner := financeasyncjobFields[10].Descriptor()
+	// financeasyncjob.LeaseOwnerValidator is a validator for the "lease_owner" field. It is called by the builders before save.
+	financeasyncjob.LeaseOwnerValidator = financeasyncjobDescLeaseOwner.Validators[0].(func(string) error)
+	// financeasyncjobDescCreatedAt is the schema descriptor for created_at field.
+	financeasyncjobDescCreatedAt := financeasyncjobFields[14].Descriptor()
+	// financeasyncjob.DefaultCreatedAt holds the default value on creation for the created_at field.
+	financeasyncjob.DefaultCreatedAt = financeasyncjobDescCreatedAt.Default.(func() time.Time)
+	// financeasyncjobDescUpdatedAt is the schema descriptor for updated_at field.
+	financeasyncjobDescUpdatedAt := financeasyncjobFields[17].Descriptor()
+	// financeasyncjob.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	financeasyncjob.DefaultUpdatedAt = financeasyncjobDescUpdatedAt.Default.(func() time.Time)
+	// financeasyncjob.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	financeasyncjob.UpdateDefaultUpdatedAt = financeasyncjobDescUpdatedAt.UpdateDefault.(func() time.Time)
+	financebackfilljobFields := schema.FinanceBackfillJob{}.Fields()
+	_ = financebackfilljobFields
+	// financebackfilljobDescMode is the schema descriptor for mode field.
+	financebackfilljobDescMode := financebackfilljobFields[3].Descriptor()
+	// financebackfilljob.ModeValidator is a validator for the "mode" field. It is called by the builders before save.
+	financebackfilljob.ModeValidator = financebackfilljobDescMode.Validators[0].(func(string) error)
+	// financebackfilljobDescPricingPolicy is the schema descriptor for pricing_policy field.
+	financebackfilljobDescPricingPolicy := financebackfilljobFields[4].Descriptor()
+	// financebackfilljob.PricingPolicyValidator is a validator for the "pricing_policy" field. It is called by the builders before save.
+	financebackfilljob.PricingPolicyValidator = financebackfilljobDescPricingPolicy.Validators[0].(func(string) error)
+	// financebackfilljobDescPreviewTokenHash is the schema descriptor for preview_token_hash field.
+	financebackfilljobDescPreviewTokenHash := financebackfilljobFields[5].Descriptor()
+	// financebackfilljob.PreviewTokenHashValidator is a validator for the "preview_token_hash" field. It is called by the builders before save.
+	financebackfilljob.PreviewTokenHashValidator = financebackfilljobDescPreviewTokenHash.Validators[0].(func(string) error)
+	// financebackfilljobDescScope is the schema descriptor for scope field.
+	financebackfilljobDescScope := financebackfilljobFields[7].Descriptor()
+	// financebackfilljob.DefaultScope holds the default value on creation for the scope field.
+	financebackfilljob.DefaultScope = financebackfilljobDescScope.Default.(func() map[string]interface{})
+	financecalculationrevisionFields := schema.FinanceCalculationRevision{}.Fields()
+	_ = financecalculationrevisionFields
+	// financecalculationrevisionDescEntityType is the schema descriptor for entity_type field.
+	financecalculationrevisionDescEntityType := financecalculationrevisionFields[0].Descriptor()
+	// financecalculationrevision.EntityTypeValidator is a validator for the "entity_type" field. It is called by the builders before save.
+	financecalculationrevision.EntityTypeValidator = financecalculationrevisionDescEntityType.Validators[0].(func(string) error)
+	// financecalculationrevisionDescRevision is the schema descriptor for revision field.
+	financecalculationrevisionDescRevision := financecalculationrevisionFields[2].Descriptor()
+	// financecalculationrevision.RevisionValidator is a validator for the "revision" field. It is called by the builders before save.
+	financecalculationrevision.RevisionValidator = financecalculationrevisionDescRevision.Validators[0].(func(int) error)
+	// financecalculationrevisionDescCreatedAt is the schema descriptor for created_at field.
+	financecalculationrevisionDescCreatedAt := financecalculationrevisionFields[8].Descriptor()
+	// financecalculationrevision.DefaultCreatedAt holds the default value on creation for the created_at field.
+	financecalculationrevision.DefaultCreatedAt = financecalculationrevisionDescCreatedAt.Default.(func() time.Time)
+	financedailyaggregateFields := schema.FinanceDailyAggregate{}.Fields()
+	_ = financedailyaggregateFields
+	// financedailyaggregateDescTimezone is the schema descriptor for timezone field.
+	financedailyaggregateDescTimezone := financedailyaggregateFields[1].Descriptor()
+	// financedailyaggregate.TimezoneValidator is a validator for the "timezone" field. It is called by the builders before save.
+	financedailyaggregate.TimezoneValidator = financedailyaggregateDescTimezone.Validators[0].(func(string) error)
+	// financedailyaggregateDescDimensionType is the schema descriptor for dimension_type field.
+	financedailyaggregateDescDimensionType := financedailyaggregateFields[2].Descriptor()
+	// financedailyaggregate.DimensionTypeValidator is a validator for the "dimension_type" field. It is called by the builders before save.
+	financedailyaggregate.DimensionTypeValidator = financedailyaggregateDescDimensionType.Validators[0].(func(string) error)
+	// financedailyaggregateDescDimensionKey is the schema descriptor for dimension_key field.
+	financedailyaggregateDescDimensionKey := financedailyaggregateFields[3].Descriptor()
+	// financedailyaggregate.DimensionKeyValidator is a validator for the "dimension_key" field. It is called by the builders before save.
+	financedailyaggregate.DimensionKeyValidator = financedailyaggregateDescDimensionKey.Validators[0].(func(string) error)
+	financeexportjobFields := schema.FinanceExportJob{}.Fields()
+	_ = financeexportjobFields
+	// financeexportjobDescReport is the schema descriptor for report field.
+	financeexportjobDescReport := financeexportjobFields[1].Descriptor()
+	// financeexportjob.ReportValidator is a validator for the "report" field. It is called by the builders before save.
+	financeexportjob.ReportValidator = financeexportjobDescReport.Validators[0].(func(string) error)
+	// financeexportjobDescFormat is the schema descriptor for format field.
+	financeexportjobDescFormat := financeexportjobFields[2].Descriptor()
+	// financeexportjob.DefaultFormat holds the default value on creation for the format field.
+	financeexportjob.DefaultFormat = financeexportjobDescFormat.Default.(string)
+	// financeexportjob.FormatValidator is a validator for the "format" field. It is called by the builders before save.
+	financeexportjob.FormatValidator = financeexportjobDescFormat.Validators[0].(func(string) error)
+	// financeexportjobDescTimezone is the schema descriptor for timezone field.
+	financeexportjobDescTimezone := financeexportjobFields[4].Descriptor()
+	// financeexportjob.TimezoneValidator is a validator for the "timezone" field. It is called by the builders before save.
+	financeexportjob.TimezoneValidator = financeexportjobDescTimezone.Validators[0].(func(string) error)
+	// financeexportjobDescCreatedAt is the schema descriptor for created_at field.
+	financeexportjobDescCreatedAt := financeexportjobFields[9].Descriptor()
+	// financeexportjob.DefaultCreatedAt holds the default value on creation for the created_at field.
+	financeexportjob.DefaultCreatedAt = financeexportjobDescCreatedAt.Default.(func() time.Time)
+	financefxrateversionFields := schema.FinanceFXRateVersion{}.Fields()
+	_ = financefxrateversionFields
+	// financefxrateversionDescCurrency is the schema descriptor for currency field.
+	financefxrateversionDescCurrency := financefxrateversionFields[0].Descriptor()
+	// financefxrateversion.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
+	financefxrateversion.CurrencyValidator = financefxrateversionDescCurrency.Validators[0].(func(string) error)
+	// financefxrateversionDescSource is the schema descriptor for source field.
+	financefxrateversionDescSource := financefxrateversionFields[2].Descriptor()
+	// financefxrateversion.SourceValidator is a validator for the "source" field. It is called by the builders before save.
+	financefxrateversion.SourceValidator = financefxrateversionDescSource.Validators[0].(func(string) error)
+	// financefxrateversionDescChecksum is the schema descriptor for checksum field.
+	financefxrateversionDescChecksum := financefxrateversionFields[6].Descriptor()
+	// financefxrateversion.ChecksumValidator is a validator for the "checksum" field. It is called by the builders before save.
+	financefxrateversion.ChecksumValidator = financefxrateversionDescChecksum.Validators[0].(func(string) error)
+	// financefxrateversionDescCreatedAt is the schema descriptor for created_at field.
+	financefxrateversionDescCreatedAt := financefxrateversionFields[7].Descriptor()
+	// financefxrateversion.DefaultCreatedAt holds the default value on creation for the created_at field.
+	financefxrateversion.DefaultCreatedAt = financefxrateversionDescCreatedAt.Default.(func() time.Time)
 	groupMixin := schema.Group{}.Mixin()
 	groupMixinHooks1 := groupMixin[1].Hooks()
 	group.Hooks[0] = groupMixinHooks1[0]
@@ -1068,6 +1414,32 @@ func init() {
 	paymentorder.DefaultUpdatedAt = paymentorderDescUpdatedAt.Default.(func() time.Time)
 	// paymentorder.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	paymentorder.UpdateDefaultUpdatedAt = paymentorderDescUpdatedAt.UpdateDefault.(func() time.Time)
+	paymentproviderfeeeventFields := schema.PaymentProviderFeeEvent{}.Fields()
+	_ = paymentproviderfeeeventFields
+	// paymentproviderfeeeventDescProvider is the schema descriptor for provider field.
+	paymentproviderfeeeventDescProvider := paymentproviderfeeeventFields[1].Descriptor()
+	// paymentproviderfeeevent.ProviderValidator is a validator for the "provider" field. It is called by the builders before save.
+	paymentproviderfeeevent.ProviderValidator = paymentproviderfeeeventDescProvider.Validators[0].(func(string) error)
+	// paymentproviderfeeeventDescBillEventID is the schema descriptor for bill_event_id field.
+	paymentproviderfeeeventDescBillEventID := paymentproviderfeeeventFields[2].Descriptor()
+	// paymentproviderfeeevent.BillEventIDValidator is a validator for the "bill_event_id" field. It is called by the builders before save.
+	paymentproviderfeeevent.BillEventIDValidator = paymentproviderfeeeventDescBillEventID.Validators[0].(func(string) error)
+	// paymentproviderfeeeventDescCurrency is the schema descriptor for currency field.
+	paymentproviderfeeeventDescCurrency := paymentproviderfeeeventFields[6].Descriptor()
+	// paymentproviderfeeevent.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
+	paymentproviderfeeevent.CurrencyValidator = paymentproviderfeeeventDescCurrency.Validators[0].(func(string) error)
+	// paymentproviderfeeeventDescFeeStatus is the schema descriptor for fee_status field.
+	paymentproviderfeeeventDescFeeStatus := paymentproviderfeeeventFields[11].Descriptor()
+	// paymentproviderfeeevent.FeeStatusValidator is a validator for the "fee_status" field. It is called by the builders before save.
+	paymentproviderfeeevent.FeeStatusValidator = paymentproviderfeeeventDescFeeStatus.Validators[0].(func(string) error)
+	// paymentproviderfeeeventDescSource is the schema descriptor for source field.
+	paymentproviderfeeeventDescSource := paymentproviderfeeeventFields[12].Descriptor()
+	// paymentproviderfeeevent.SourceValidator is a validator for the "source" field. It is called by the builders before save.
+	paymentproviderfeeevent.SourceValidator = paymentproviderfeeeventDescSource.Validators[0].(func(string) error)
+	// paymentproviderfeeeventDescCreatedAt is the schema descriptor for created_at field.
+	paymentproviderfeeeventDescCreatedAt := paymentproviderfeeeventFields[14].Descriptor()
+	// paymentproviderfeeevent.DefaultCreatedAt holds the default value on creation for the created_at field.
+	paymentproviderfeeevent.DefaultCreatedAt = paymentproviderfeeeventDescCreatedAt.Default.(func() time.Time)
 	paymentproviderinstanceFields := schema.PaymentProviderInstance{}.Fields()
 	_ = paymentproviderinstanceFields
 	// paymentproviderinstanceDescProviderKey is the schema descriptor for provider_key field.
@@ -1553,6 +1925,54 @@ func init() {
 	subscriptionplan.DefaultUpdatedAt = subscriptionplanDescUpdatedAt.Default.(func() time.Time)
 	// subscriptionplan.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	subscriptionplan.UpdateDefaultUpdatedAt = subscriptionplanDescUpdatedAt.UpdateDefault.(func() time.Time)
+	subscriptionrevenuerecognitionFields := schema.SubscriptionRevenueRecognition{}.Fields()
+	_ = subscriptionrevenuerecognitionFields
+	// subscriptionrevenuerecognitionDescAllocationStatus is the schema descriptor for allocation_status field.
+	subscriptionrevenuerecognitionDescAllocationStatus := subscriptionrevenuerecognitionFields[8].Descriptor()
+	// subscriptionrevenuerecognition.AllocationStatusValidator is a validator for the "allocation_status" field. It is called by the builders before save.
+	subscriptionrevenuerecognition.AllocationStatusValidator = subscriptionrevenuerecognitionDescAllocationStatus.Validators[0].(func(string) error)
+	// subscriptionrevenuerecognitionDescCalculationDetail is the schema descriptor for calculation_detail field.
+	subscriptionrevenuerecognitionDescCalculationDetail := subscriptionrevenuerecognitionFields[9].Descriptor()
+	// subscriptionrevenuerecognition.DefaultCalculationDetail holds the default value on creation for the calculation_detail field.
+	subscriptionrevenuerecognition.DefaultCalculationDetail = subscriptionrevenuerecognitionDescCalculationDetail.Default.(func() map[string]interface{})
+	// subscriptionrevenuerecognitionDescCurrentRevision is the schema descriptor for current_revision field.
+	subscriptionrevenuerecognitionDescCurrentRevision := subscriptionrevenuerecognitionFields[10].Descriptor()
+	// subscriptionrevenuerecognition.DefaultCurrentRevision holds the default value on creation for the current_revision field.
+	subscriptionrevenuerecognition.DefaultCurrentRevision = subscriptionrevenuerecognitionDescCurrentRevision.Default.(int)
+	// subscriptionrevenuerecognition.CurrentRevisionValidator is a validator for the "current_revision" field. It is called by the builders before save.
+	subscriptionrevenuerecognition.CurrentRevisionValidator = subscriptionrevenuerecognitionDescCurrentRevision.Validators[0].(func(int) error)
+	// subscriptionrevenuerecognitionDescCreatedAt is the schema descriptor for created_at field.
+	subscriptionrevenuerecognitionDescCreatedAt := subscriptionrevenuerecognitionFields[11].Descriptor()
+	// subscriptionrevenuerecognition.DefaultCreatedAt holds the default value on creation for the created_at field.
+	subscriptionrevenuerecognition.DefaultCreatedAt = subscriptionrevenuerecognitionDescCreatedAt.Default.(func() time.Time)
+	// subscriptionrevenuerecognitionDescUpdatedAt is the schema descriptor for updated_at field.
+	subscriptionrevenuerecognitionDescUpdatedAt := subscriptionrevenuerecognitionFields[12].Descriptor()
+	// subscriptionrevenuerecognition.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	subscriptionrevenuerecognition.DefaultUpdatedAt = subscriptionrevenuerecognitionDescUpdatedAt.Default.(func() time.Time)
+	// subscriptionrevenuerecognition.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	subscriptionrevenuerecognition.UpdateDefaultUpdatedAt = subscriptionrevenuerecognitionDescUpdatedAt.UpdateDefault.(func() time.Time)
+	systemmodelpriceversionFields := schema.SystemModelPriceVersion{}.Fields()
+	_ = systemmodelpriceversionFields
+	// systemmodelpriceversionDescCatalogChecksum is the schema descriptor for catalog_checksum field.
+	systemmodelpriceversionDescCatalogChecksum := systemmodelpriceversionFields[0].Descriptor()
+	// systemmodelpriceversion.CatalogChecksumValidator is a validator for the "catalog_checksum" field. It is called by the builders before save.
+	systemmodelpriceversion.CatalogChecksumValidator = systemmodelpriceversionDescCatalogChecksum.Validators[0].(func(string) error)
+	// systemmodelpriceversionDescProvider is the schema descriptor for provider field.
+	systemmodelpriceversionDescProvider := systemmodelpriceversionFields[1].Descriptor()
+	// systemmodelpriceversion.ProviderValidator is a validator for the "provider" field. It is called by the builders before save.
+	systemmodelpriceversion.ProviderValidator = systemmodelpriceversionDescProvider.Validators[0].(func(string) error)
+	// systemmodelpriceversionDescModelName is the schema descriptor for model_name field.
+	systemmodelpriceversionDescModelName := systemmodelpriceversionFields[2].Descriptor()
+	// systemmodelpriceversion.ModelNameValidator is a validator for the "model_name" field. It is called by the builders before save.
+	systemmodelpriceversion.ModelNameValidator = systemmodelpriceversionDescModelName.Validators[0].(func(string) error)
+	// systemmodelpriceversionDescBillingMode is the schema descriptor for billing_mode field.
+	systemmodelpriceversionDescBillingMode := systemmodelpriceversionFields[3].Descriptor()
+	// systemmodelpriceversion.BillingModeValidator is a validator for the "billing_mode" field. It is called by the builders before save.
+	systemmodelpriceversion.BillingModeValidator = systemmodelpriceversionDescBillingMode.Validators[0].(func(string) error)
+	// systemmodelpriceversionDescCreatedAt is the schema descriptor for created_at field.
+	systemmodelpriceversionDescCreatedAt := systemmodelpriceversionFields[7].Descriptor()
+	// systemmodelpriceversion.DefaultCreatedAt holds the default value on creation for the created_at field.
+	systemmodelpriceversion.DefaultCreatedAt = systemmodelpriceversionDescCreatedAt.Default.(func() time.Time)
 	tlsfingerprintprofileMixin := schema.TLSFingerprintProfile{}.Mixin()
 	tlsfingerprintprofileMixinFields0 := tlsfingerprintprofileMixin[0].Fields()
 	_ = tlsfingerprintprofileMixinFields0
@@ -1590,6 +2010,360 @@ func init() {
 	tlsfingerprintprofileDescEnableGrease := tlsfingerprintprofileFields[2].Descriptor()
 	// tlsfingerprintprofile.DefaultEnableGrease holds the default value on creation for the enable_grease field.
 	tlsfingerprintprofile.DefaultEnableGrease = tlsfingerprintprofileDescEnableGrease.Default.(bool)
+	upstreambalancesnapshotFields := schema.UpstreamBalanceSnapshot{}.Fields()
+	_ = upstreambalancesnapshotFields
+	// upstreambalancesnapshotDescDedupeKey is the schema descriptor for dedupe_key field.
+	upstreambalancesnapshotDescDedupeKey := upstreambalancesnapshotFields[1].Descriptor()
+	// upstreambalancesnapshot.DedupeKeyValidator is a validator for the "dedupe_key" field. It is called by the builders before save.
+	upstreambalancesnapshot.DedupeKeyValidator = upstreambalancesnapshotDescDedupeKey.Validators[0].(func(string) error)
+	// upstreambalancesnapshotDescBalanceKind is the schema descriptor for balance_kind field.
+	upstreambalancesnapshotDescBalanceKind := upstreambalancesnapshotFields[2].Descriptor()
+	// upstreambalancesnapshot.BalanceKindValidator is a validator for the "balance_kind" field. It is called by the builders before save.
+	upstreambalancesnapshot.BalanceKindValidator = upstreambalancesnapshotDescBalanceKind.Validators[0].(func(string) error)
+	// upstreambalancesnapshotDescCurrency is the schema descriptor for currency field.
+	upstreambalancesnapshotDescCurrency := upstreambalancesnapshotFields[6].Descriptor()
+	// upstreambalancesnapshot.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
+	upstreambalancesnapshot.CurrencyValidator = upstreambalancesnapshotDescCurrency.Validators[0].(func(string) error)
+	// upstreambalancesnapshotDescSource is the schema descriptor for source field.
+	upstreambalancesnapshotDescSource := upstreambalancesnapshotFields[7].Descriptor()
+	// upstreambalancesnapshot.SourceValidator is a validator for the "source" field. It is called by the builders before save.
+	upstreambalancesnapshot.SourceValidator = upstreambalancesnapshotDescSource.Validators[0].(func(string) error)
+	// upstreambalancesnapshotDescSyncStatus is the schema descriptor for sync_status field.
+	upstreambalancesnapshotDescSyncStatus := upstreambalancesnapshotFields[9].Descriptor()
+	// upstreambalancesnapshot.SyncStatusValidator is a validator for the "sync_status" field. It is called by the builders before save.
+	upstreambalancesnapshot.SyncStatusValidator = upstreambalancesnapshotDescSyncStatus.Validators[0].(func(string) error)
+	// upstreambalancesnapshotDescCreatedAt is the schema descriptor for created_at field.
+	upstreambalancesnapshotDescCreatedAt := upstreambalancesnapshotFields[11].Descriptor()
+	// upstreambalancesnapshot.DefaultCreatedAt holds the default value on creation for the created_at field.
+	upstreambalancesnapshot.DefaultCreatedAt = upstreambalancesnapshotDescCreatedAt.Default.(func() time.Time)
+	upstreambillreconciliationFields := schema.UpstreamBillReconciliation{}.Fields()
+	_ = upstreambillreconciliationFields
+	// upstreambillreconciliationDescCurrency is the schema descriptor for currency field.
+	upstreambillreconciliationDescCurrency := upstreambillreconciliationFields[7].Descriptor()
+	// upstreambillreconciliation.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
+	upstreambillreconciliation.CurrencyValidator = upstreambillreconciliationDescCurrency.Validators[0].(func(string) error)
+	// upstreambillreconciliationDescSourceReference is the schema descriptor for source_reference field.
+	upstreambillreconciliationDescSourceReference := upstreambillreconciliationFields[8].Descriptor()
+	// upstreambillreconciliation.SourceReferenceValidator is a validator for the "source_reference" field. It is called by the builders before save.
+	upstreambillreconciliation.SourceReferenceValidator = upstreambillreconciliationDescSourceReference.Validators[0].(func(string) error)
+	// upstreambillreconciliationDescSourceFileChecksum is the schema descriptor for source_file_checksum field.
+	upstreambillreconciliationDescSourceFileChecksum := upstreambillreconciliationFields[9].Descriptor()
+	// upstreambillreconciliation.SourceFileChecksumValidator is a validator for the "source_file_checksum" field. It is called by the builders before save.
+	upstreambillreconciliation.SourceFileChecksumValidator = upstreambillreconciliationDescSourceFileChecksum.Validators[0].(func(string) error)
+	// upstreambillreconciliationDescStatus is the schema descriptor for status field.
+	upstreambillreconciliationDescStatus := upstreambillreconciliationFields[10].Descriptor()
+	// upstreambillreconciliation.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	upstreambillreconciliation.StatusValidator = upstreambillreconciliationDescStatus.Validators[0].(func(string) error)
+	// upstreambillreconciliationDescCreatedAt is the schema descriptor for created_at field.
+	upstreambillreconciliationDescCreatedAt := upstreambillreconciliationFields[14].Descriptor()
+	// upstreambillreconciliation.DefaultCreatedAt holds the default value on creation for the created_at field.
+	upstreambillreconciliation.DefaultCreatedAt = upstreambillreconciliationDescCreatedAt.Default.(func() time.Time)
+	// upstreambillreconciliationDescUpdatedAt is the schema descriptor for updated_at field.
+	upstreambillreconciliationDescUpdatedAt := upstreambillreconciliationFields[15].Descriptor()
+	// upstreambillreconciliation.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	upstreambillreconciliation.DefaultUpdatedAt = upstreambillreconciliationDescUpdatedAt.Default.(func() time.Time)
+	// upstreambillreconciliation.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	upstreambillreconciliation.UpdateDefaultUpdatedAt = upstreambillreconciliationDescUpdatedAt.UpdateDefault.(func() time.Time)
+	upstreamcostsettlementintervalFields := schema.UpstreamCostSettlementInterval{}.Fields()
+	_ = upstreamcostsettlementintervalFields
+	// upstreamcostsettlementintervalDescOwnerType is the schema descriptor for owner_type field.
+	upstreamcostsettlementintervalDescOwnerType := upstreamcostsettlementintervalFields[0].Descriptor()
+	// upstreamcostsettlementinterval.OwnerTypeValidator is a validator for the "owner_type" field. It is called by the builders before save.
+	upstreamcostsettlementinterval.OwnerTypeValidator = upstreamcostsettlementintervalDescOwnerType.Validators[0].(func(string) error)
+	// upstreamcostsettlementintervalDescOwnerID is the schema descriptor for owner_id field.
+	upstreamcostsettlementintervalDescOwnerID := upstreamcostsettlementintervalFields[1].Descriptor()
+	// upstreamcostsettlementinterval.OwnerIDValidator is a validator for the "owner_id" field. It is called by the builders before save.
+	upstreamcostsettlementinterval.OwnerIDValidator = upstreamcostsettlementintervalDescOwnerID.Validators[0].(func(int64) error)
+	// upstreamcostsettlementintervalDescScopeKey is the schema descriptor for scope_key field.
+	upstreamcostsettlementintervalDescScopeKey := upstreamcostsettlementintervalFields[5].Descriptor()
+	// upstreamcostsettlementinterval.ScopeKeyValidator is a validator for the "scope_key" field. It is called by the builders before save.
+	upstreamcostsettlementinterval.ScopeKeyValidator = upstreamcostsettlementintervalDescScopeKey.Validators[0].(func(string) error)
+	// upstreamcostsettlementintervalDescPreviousSnapshotID is the schema descriptor for previous_snapshot_id field.
+	upstreamcostsettlementintervalDescPreviousSnapshotID := upstreamcostsettlementintervalFields[6].Descriptor()
+	// upstreamcostsettlementinterval.PreviousSnapshotIDValidator is a validator for the "previous_snapshot_id" field. It is called by the builders before save.
+	upstreamcostsettlementinterval.PreviousSnapshotIDValidator = upstreamcostsettlementintervalDescPreviousSnapshotID.Validators[0].(func(int64) error)
+	// upstreamcostsettlementintervalDescCurrentSnapshotID is the schema descriptor for current_snapshot_id field.
+	upstreamcostsettlementintervalDescCurrentSnapshotID := upstreamcostsettlementintervalFields[7].Descriptor()
+	// upstreamcostsettlementinterval.CurrentSnapshotIDValidator is a validator for the "current_snapshot_id" field. It is called by the builders before save.
+	upstreamcostsettlementinterval.CurrentSnapshotIDValidator = upstreamcostsettlementintervalDescCurrentSnapshotID.Validators[0].(func(int64) error)
+	// upstreamcostsettlementintervalDescUnitSemantics is the schema descriptor for unit_semantics field.
+	upstreamcostsettlementintervalDescUnitSemantics := upstreamcostsettlementintervalFields[10].Descriptor()
+	// upstreamcostsettlementinterval.UnitSemanticsValidator is a validator for the "unit_semantics" field. It is called by the builders before save.
+	upstreamcostsettlementinterval.UnitSemanticsValidator = upstreamcostsettlementintervalDescUnitSemantics.Validators[0].(func(string) error)
+	// upstreamcostsettlementintervalDescCurrency is the schema descriptor for currency field.
+	upstreamcostsettlementintervalDescCurrency := upstreamcostsettlementintervalFields[11].Descriptor()
+	// upstreamcostsettlementinterval.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
+	upstreamcostsettlementinterval.CurrencyValidator = upstreamcostsettlementintervalDescCurrency.Validators[0].(func(string) error)
+	// upstreamcostsettlementintervalDescFxSource is the schema descriptor for fx_source field.
+	upstreamcostsettlementintervalDescFxSource := upstreamcostsettlementintervalFields[14].Descriptor()
+	// upstreamcostsettlementinterval.FxSourceValidator is a validator for the "fx_source" field. It is called by the builders before save.
+	upstreamcostsettlementinterval.FxSourceValidator = upstreamcostsettlementintervalDescFxSource.Validators[0].(func(string) error)
+	// upstreamcostsettlementintervalDescStatus is the schema descriptor for status field.
+	upstreamcostsettlementintervalDescStatus := upstreamcostsettlementintervalFields[19].Descriptor()
+	// upstreamcostsettlementinterval.DefaultStatus holds the default value on creation for the status field.
+	upstreamcostsettlementinterval.DefaultStatus = upstreamcostsettlementintervalDescStatus.Default.(string)
+	// upstreamcostsettlementinterval.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	upstreamcostsettlementinterval.StatusValidator = upstreamcostsettlementintervalDescStatus.Validators[0].(func(string) error)
+	// upstreamcostsettlementintervalDescCurrentRevision is the schema descriptor for current_revision field.
+	upstreamcostsettlementintervalDescCurrentRevision := upstreamcostsettlementintervalFields[20].Descriptor()
+	// upstreamcostsettlementinterval.DefaultCurrentRevision holds the default value on creation for the current_revision field.
+	upstreamcostsettlementinterval.DefaultCurrentRevision = upstreamcostsettlementintervalDescCurrentRevision.Default.(int)
+	// upstreamcostsettlementinterval.CurrentRevisionValidator is a validator for the "current_revision" field. It is called by the builders before save.
+	upstreamcostsettlementinterval.CurrentRevisionValidator = upstreamcostsettlementintervalDescCurrentRevision.Validators[0].(func(int) error)
+	// upstreamcostsettlementintervalDescRequestCount is the schema descriptor for request_count field.
+	upstreamcostsettlementintervalDescRequestCount := upstreamcostsettlementintervalFields[21].Descriptor()
+	// upstreamcostsettlementinterval.DefaultRequestCount holds the default value on creation for the request_count field.
+	upstreamcostsettlementinterval.DefaultRequestCount = upstreamcostsettlementintervalDescRequestCount.Default.(int64)
+	// upstreamcostsettlementinterval.RequestCountValidator is a validator for the "request_count" field. It is called by the builders before save.
+	upstreamcostsettlementinterval.RequestCountValidator = upstreamcostsettlementintervalDescRequestCount.Validators[0].(func(int64) error)
+	// upstreamcostsettlementintervalDescSegmentCount is the schema descriptor for segment_count field.
+	upstreamcostsettlementintervalDescSegmentCount := upstreamcostsettlementintervalFields[22].Descriptor()
+	// upstreamcostsettlementinterval.DefaultSegmentCount holds the default value on creation for the segment_count field.
+	upstreamcostsettlementinterval.DefaultSegmentCount = upstreamcostsettlementintervalDescSegmentCount.Default.(int64)
+	// upstreamcostsettlementinterval.SegmentCountValidator is a validator for the "segment_count" field. It is called by the builders before save.
+	upstreamcostsettlementinterval.SegmentCountValidator = upstreamcostsettlementintervalDescSegmentCount.Validators[0].(func(int64) error)
+	// upstreamcostsettlementintervalDescErrorSummary is the schema descriptor for error_summary field.
+	upstreamcostsettlementintervalDescErrorSummary := upstreamcostsettlementintervalFields[26].Descriptor()
+	// upstreamcostsettlementinterval.DefaultErrorSummary holds the default value on creation for the error_summary field.
+	upstreamcostsettlementinterval.DefaultErrorSummary = upstreamcostsettlementintervalDescErrorSummary.Default.(string)
+	// upstreamcostsettlementintervalDescCreatedAt is the schema descriptor for created_at field.
+	upstreamcostsettlementintervalDescCreatedAt := upstreamcostsettlementintervalFields[28].Descriptor()
+	// upstreamcostsettlementinterval.DefaultCreatedAt holds the default value on creation for the created_at field.
+	upstreamcostsettlementinterval.DefaultCreatedAt = upstreamcostsettlementintervalDescCreatedAt.Default.(func() time.Time)
+	// upstreamcostsettlementintervalDescUpdatedAt is the schema descriptor for updated_at field.
+	upstreamcostsettlementintervalDescUpdatedAt := upstreamcostsettlementintervalFields[29].Descriptor()
+	// upstreamcostsettlementinterval.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	upstreamcostsettlementinterval.DefaultUpdatedAt = upstreamcostsettlementintervalDescUpdatedAt.Default.(func() time.Time)
+	// upstreamcostsettlementinterval.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	upstreamcostsettlementinterval.UpdateDefaultUpdatedAt = upstreamcostsettlementintervalDescUpdatedAt.UpdateDefault.(func() time.Time)
+	upstreamfinanceprotocolFields := schema.UpstreamFinanceProtocol{}.Fields()
+	_ = upstreamfinanceprotocolFields
+	// upstreamfinanceprotocolDescCode is the schema descriptor for code field.
+	upstreamfinanceprotocolDescCode := upstreamfinanceprotocolFields[0].Descriptor()
+	// upstreamfinanceprotocol.CodeValidator is a validator for the "code" field. It is called by the builders before save.
+	upstreamfinanceprotocol.CodeValidator = upstreamfinanceprotocolDescCode.Validators[0].(func(string) error)
+	// upstreamfinanceprotocolDescName is the schema descriptor for name field.
+	upstreamfinanceprotocolDescName := upstreamfinanceprotocolFields[1].Descriptor()
+	// upstreamfinanceprotocol.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	upstreamfinanceprotocol.NameValidator = upstreamfinanceprotocolDescName.Validators[0].(func(string) error)
+	// upstreamfinanceprotocolDescProtocolType is the schema descriptor for protocol_type field.
+	upstreamfinanceprotocolDescProtocolType := upstreamfinanceprotocolFields[2].Descriptor()
+	// upstreamfinanceprotocol.ProtocolTypeValidator is a validator for the "protocol_type" field. It is called by the builders before save.
+	upstreamfinanceprotocol.ProtocolTypeValidator = upstreamfinanceprotocolDescProtocolType.Validators[0].(func(string) error)
+	// upstreamfinanceprotocolDescStatus is the schema descriptor for status field.
+	upstreamfinanceprotocolDescStatus := upstreamfinanceprotocolFields[3].Descriptor()
+	// upstreamfinanceprotocol.DefaultStatus holds the default value on creation for the status field.
+	upstreamfinanceprotocol.DefaultStatus = upstreamfinanceprotocolDescStatus.Default.(string)
+	// upstreamfinanceprotocol.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	upstreamfinanceprotocol.StatusValidator = upstreamfinanceprotocolDescStatus.Validators[0].(func(string) error)
+	// upstreamfinanceprotocolDescCreatedAt is the schema descriptor for created_at field.
+	upstreamfinanceprotocolDescCreatedAt := upstreamfinanceprotocolFields[7].Descriptor()
+	// upstreamfinanceprotocol.DefaultCreatedAt holds the default value on creation for the created_at field.
+	upstreamfinanceprotocol.DefaultCreatedAt = upstreamfinanceprotocolDescCreatedAt.Default.(func() time.Time)
+	// upstreamfinanceprotocolDescUpdatedAt is the schema descriptor for updated_at field.
+	upstreamfinanceprotocolDescUpdatedAt := upstreamfinanceprotocolFields[8].Descriptor()
+	// upstreamfinanceprotocol.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	upstreamfinanceprotocol.DefaultUpdatedAt = upstreamfinanceprotocolDescUpdatedAt.Default.(func() time.Time)
+	// upstreamfinanceprotocol.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	upstreamfinanceprotocol.UpdateDefaultUpdatedAt = upstreamfinanceprotocolDescUpdatedAt.UpdateDefault.(func() time.Time)
+	upstreamfinanceprotocolversionFields := schema.UpstreamFinanceProtocolVersion{}.Fields()
+	_ = upstreamfinanceprotocolversionFields
+	// upstreamfinanceprotocolversionDescVersion is the schema descriptor for version field.
+	upstreamfinanceprotocolversionDescVersion := upstreamfinanceprotocolversionFields[1].Descriptor()
+	// upstreamfinanceprotocolversion.VersionValidator is a validator for the "version" field. It is called by the builders before save.
+	upstreamfinanceprotocolversion.VersionValidator = upstreamfinanceprotocolversionDescVersion.Validators[0].(func(int) error)
+	// upstreamfinanceprotocolversionDescChecksum is the schema descriptor for checksum field.
+	upstreamfinanceprotocolversionDescChecksum := upstreamfinanceprotocolversionFields[3].Descriptor()
+	// upstreamfinanceprotocolversion.ChecksumValidator is a validator for the "checksum" field. It is called by the builders before save.
+	upstreamfinanceprotocolversion.ChecksumValidator = upstreamfinanceprotocolversionDescChecksum.Validators[0].(func(string) error)
+	// upstreamfinanceprotocolversionDescValidationStatus is the schema descriptor for validation_status field.
+	upstreamfinanceprotocolversionDescValidationStatus := upstreamfinanceprotocolversionFields[4].Descriptor()
+	// upstreamfinanceprotocolversion.DefaultValidationStatus holds the default value on creation for the validation_status field.
+	upstreamfinanceprotocolversion.DefaultValidationStatus = upstreamfinanceprotocolversionDescValidationStatus.Default.(string)
+	// upstreamfinanceprotocolversion.ValidationStatusValidator is a validator for the "validation_status" field. It is called by the builders before save.
+	upstreamfinanceprotocolversion.ValidationStatusValidator = upstreamfinanceprotocolversionDescValidationStatus.Validators[0].(func(string) error)
+	// upstreamfinanceprotocolversionDescCreatedAt is the schema descriptor for created_at field.
+	upstreamfinanceprotocolversionDescCreatedAt := upstreamfinanceprotocolversionFields[8].Descriptor()
+	// upstreamfinanceprotocolversion.DefaultCreatedAt holds the default value on creation for the created_at field.
+	upstreamfinanceprotocolversion.DefaultCreatedAt = upstreamfinanceprotocolversionDescCreatedAt.Default.(func() time.Time)
+	upstreamfinancesyncrunFields := schema.UpstreamFinanceSyncRun{}.Fields()
+	_ = upstreamfinancesyncrunFields
+	// upstreamfinancesyncrunDescSyncType is the schema descriptor for sync_type field.
+	upstreamfinancesyncrunDescSyncType := upstreamfinancesyncrunFields[2].Descriptor()
+	// upstreamfinancesyncrun.SyncTypeValidator is a validator for the "sync_type" field. It is called by the builders before save.
+	upstreamfinancesyncrun.SyncTypeValidator = upstreamfinancesyncrunDescSyncType.Validators[0].(func(string) error)
+	// upstreamfinancesyncrunDescStatus is the schema descriptor for status field.
+	upstreamfinancesyncrunDescStatus := upstreamfinancesyncrunFields[3].Descriptor()
+	// upstreamfinancesyncrun.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	upstreamfinancesyncrun.StatusValidator = upstreamfinancesyncrunDescStatus.Validators[0].(func(string) error)
+	// upstreamfinancesyncrunDescCollectedCount is the schema descriptor for collected_count field.
+	upstreamfinancesyncrunDescCollectedCount := upstreamfinancesyncrunFields[4].Descriptor()
+	// upstreamfinancesyncrun.DefaultCollectedCount holds the default value on creation for the collected_count field.
+	upstreamfinancesyncrun.DefaultCollectedCount = upstreamfinancesyncrunDescCollectedCount.Default.(int64)
+	// upstreamfinancesyncrun.CollectedCountValidator is a validator for the "collected_count" field. It is called by the builders before save.
+	upstreamfinancesyncrun.CollectedCountValidator = upstreamfinancesyncrunDescCollectedCount.Validators[0].(func(int64) error)
+	// upstreamfinancesyncrunDescSkippedCount is the schema descriptor for skipped_count field.
+	upstreamfinancesyncrunDescSkippedCount := upstreamfinancesyncrunFields[5].Descriptor()
+	// upstreamfinancesyncrun.DefaultSkippedCount holds the default value on creation for the skipped_count field.
+	upstreamfinancesyncrun.DefaultSkippedCount = upstreamfinancesyncrunDescSkippedCount.Default.(int64)
+	// upstreamfinancesyncrun.SkippedCountValidator is a validator for the "skipped_count" field. It is called by the builders before save.
+	upstreamfinancesyncrun.SkippedCountValidator = upstreamfinancesyncrunDescSkippedCount.Validators[0].(func(int64) error)
+	// upstreamfinancesyncrunDescCreatedAt is the schema descriptor for created_at field.
+	upstreamfinancesyncrunDescCreatedAt := upstreamfinancesyncrunFields[11].Descriptor()
+	// upstreamfinancesyncrun.DefaultCreatedAt holds the default value on creation for the created_at field.
+	upstreamfinancesyncrun.DefaultCreatedAt = upstreamfinancesyncrunDescCreatedAt.Default.(func() time.Time)
+	upstreamfundeventFields := schema.UpstreamFundEvent{}.Fields()
+	_ = upstreamfundeventFields
+	// upstreamfundeventDescEventType is the schema descriptor for event_type field.
+	upstreamfundeventDescEventType := upstreamfundeventFields[1].Descriptor()
+	// upstreamfundevent.EventTypeValidator is a validator for the "event_type" field. It is called by the builders before save.
+	upstreamfundevent.EventTypeValidator = upstreamfundeventDescEventType.Validators[0].(func(string) error)
+	// upstreamfundeventDescCurrency is the schema descriptor for currency field.
+	upstreamfundeventDescCurrency := upstreamfundeventFields[3].Descriptor()
+	// upstreamfundevent.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
+	upstreamfundevent.CurrencyValidator = upstreamfundeventDescCurrency.Validators[0].(func(string) error)
+	// upstreamfundeventDescFxSource is the schema descriptor for fx_source field.
+	upstreamfundeventDescFxSource := upstreamfundeventFields[5].Descriptor()
+	// upstreamfundevent.DefaultFxSource holds the default value on creation for the fx_source field.
+	upstreamfundevent.DefaultFxSource = upstreamfundeventDescFxSource.Default.(string)
+	// upstreamfundevent.FxSourceValidator is a validator for the "fx_source" field. It is called by the builders before save.
+	upstreamfundevent.FxSourceValidator = upstreamfundeventDescFxSource.Validators[0].(func(string) error)
+	// upstreamfundeventDescBonusStatus is the schema descriptor for bonus_status field.
+	upstreamfundeventDescBonusStatus := upstreamfundeventFields[16].Descriptor()
+	// upstreamfundevent.DefaultBonusStatus holds the default value on creation for the bonus_status field.
+	upstreamfundevent.DefaultBonusStatus = upstreamfundeventDescBonusStatus.Default.(string)
+	// upstreamfundevent.BonusStatusValidator is a validator for the "bonus_status" field. It is called by the builders before save.
+	upstreamfundevent.BonusStatusValidator = upstreamfundeventDescBonusStatus.Validators[0].(func(string) error)
+	// upstreamfundeventDescReferenceNo is the schema descriptor for reference_no field.
+	upstreamfundeventDescReferenceNo := upstreamfundeventFields[19].Descriptor()
+	// upstreamfundevent.ReferenceNoValidator is a validator for the "reference_no" field. It is called by the builders before save.
+	upstreamfundevent.ReferenceNoValidator = upstreamfundeventDescReferenceNo.Validators[0].(func(string) error)
+	// upstreamfundeventDescIdempotencyKey is the schema descriptor for idempotency_key field.
+	upstreamfundeventDescIdempotencyKey := upstreamfundeventFields[22].Descriptor()
+	// upstreamfundevent.IdempotencyKeyValidator is a validator for the "idempotency_key" field. It is called by the builders before save.
+	upstreamfundevent.IdempotencyKeyValidator = upstreamfundeventDescIdempotencyKey.Validators[0].(func(string) error)
+	// upstreamfundeventDescCreatedAt is the schema descriptor for created_at field.
+	upstreamfundeventDescCreatedAt := upstreamfundeventFields[23].Descriptor()
+	// upstreamfundevent.DefaultCreatedAt holds the default value on creation for the created_at field.
+	upstreamfundevent.DefaultCreatedAt = upstreamfundeventDescCreatedAt.Default.(func() time.Time)
+	upstreammodelpriceversionFields := schema.UpstreamModelPriceVersion{}.Fields()
+	_ = upstreammodelpriceversionFields
+	// upstreammodelpriceversionDescModelPattern is the schema descriptor for model_pattern field.
+	upstreammodelpriceversionDescModelPattern := upstreammodelpriceversionFields[1].Descriptor()
+	// upstreammodelpriceversion.ModelPatternValidator is a validator for the "model_pattern" field. It is called by the builders before save.
+	upstreammodelpriceversion.ModelPatternValidator = upstreammodelpriceversionDescModelPattern.Validators[0].(func(string) error)
+	// upstreammodelpriceversionDescIsWildcard is the schema descriptor for is_wildcard field.
+	upstreammodelpriceversionDescIsWildcard := upstreammodelpriceversionFields[2].Descriptor()
+	// upstreammodelpriceversion.DefaultIsWildcard holds the default value on creation for the is_wildcard field.
+	upstreammodelpriceversion.DefaultIsWildcard = upstreammodelpriceversionDescIsWildcard.Default.(bool)
+	// upstreammodelpriceversionDescBillingMode is the schema descriptor for billing_mode field.
+	upstreammodelpriceversionDescBillingMode := upstreammodelpriceversionFields[3].Descriptor()
+	// upstreammodelpriceversion.BillingModeValidator is a validator for the "billing_mode" field. It is called by the builders before save.
+	upstreammodelpriceversion.BillingModeValidator = upstreammodelpriceversionDescBillingMode.Validators[0].(func(string) error)
+	// upstreammodelpriceversionDescServiceTier is the schema descriptor for service_tier field.
+	upstreammodelpriceversionDescServiceTier := upstreammodelpriceversionFields[4].Descriptor()
+	// upstreammodelpriceversion.ServiceTierValidator is a validator for the "service_tier" field. It is called by the builders before save.
+	upstreammodelpriceversion.ServiceTierValidator = upstreammodelpriceversionDescServiceTier.Validators[0].(func(string) error)
+	// upstreammodelpriceversionDescCurrency is the schema descriptor for currency field.
+	upstreammodelpriceversionDescCurrency := upstreammodelpriceversionFields[6].Descriptor()
+	// upstreammodelpriceversion.DefaultCurrency holds the default value on creation for the currency field.
+	upstreammodelpriceversion.DefaultCurrency = upstreammodelpriceversionDescCurrency.Default.(string)
+	// upstreammodelpriceversion.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
+	upstreammodelpriceversion.CurrencyValidator = upstreammodelpriceversionDescCurrency.Validators[0].(func(string) error)
+	// upstreammodelpriceversionDescSource is the schema descriptor for source field.
+	upstreammodelpriceversionDescSource := upstreammodelpriceversionFields[7].Descriptor()
+	// upstreammodelpriceversion.SourceValidator is a validator for the "source" field. It is called by the builders before save.
+	upstreammodelpriceversion.SourceValidator = upstreammodelpriceversionDescSource.Validators[0].(func(string) error)
+	// upstreammodelpriceversionDescChecksum is the schema descriptor for checksum field.
+	upstreammodelpriceversionDescChecksum := upstreammodelpriceversionFields[9].Descriptor()
+	// upstreammodelpriceversion.ChecksumValidator is a validator for the "checksum" field. It is called by the builders before save.
+	upstreammodelpriceversion.ChecksumValidator = upstreammodelpriceversionDescChecksum.Validators[0].(func(string) error)
+	// upstreammodelpriceversionDescCreatedAt is the schema descriptor for created_at field.
+	upstreammodelpriceversionDescCreatedAt := upstreammodelpriceversionFields[12].Descriptor()
+	// upstreammodelpriceversion.DefaultCreatedAt holds the default value on creation for the created_at field.
+	upstreammodelpriceversion.DefaultCreatedAt = upstreammodelpriceversionDescCreatedAt.Default.(func() time.Time)
+	upstreamwalletFields := schema.UpstreamWallet{}.Fields()
+	_ = upstreamwalletFields
+	// upstreamwalletDescName is the schema descriptor for name field.
+	upstreamwalletDescName := upstreamwalletFields[1].Descriptor()
+	// upstreamwallet.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	upstreamwallet.NameValidator = upstreamwalletDescName.Validators[0].(func(string) error)
+	// upstreamwalletDescPricingAdapter is the schema descriptor for pricing_adapter field.
+	upstreamwalletDescPricingAdapter := upstreamwalletFields[3].Descriptor()
+	// upstreamwallet.DefaultPricingAdapter holds the default value on creation for the pricing_adapter field.
+	upstreamwallet.DefaultPricingAdapter = upstreamwalletDescPricingAdapter.Default.(string)
+	// upstreamwallet.PricingAdapterValidator is a validator for the "pricing_adapter" field. It is called by the builders before save.
+	upstreamwallet.PricingAdapterValidator = upstreamwalletDescPricingAdapter.Validators[0].(func(string) error)
+	// upstreamwalletDescPricingGroup is the schema descriptor for pricing_group field.
+	upstreamwalletDescPricingGroup := upstreamwalletFields[4].Descriptor()
+	// upstreamwallet.PricingGroupValidator is a validator for the "pricing_group" field. It is called by the builders before save.
+	upstreamwallet.PricingGroupValidator = upstreamwalletDescPricingGroup.Validators[0].(func(string) error)
+	// upstreamwalletDescBalanceAdapter is the schema descriptor for balance_adapter field.
+	upstreamwalletDescBalanceAdapter := upstreamwalletFields[5].Descriptor()
+	// upstreamwallet.DefaultBalanceAdapter holds the default value on creation for the balance_adapter field.
+	upstreamwallet.DefaultBalanceAdapter = upstreamwalletDescBalanceAdapter.Default.(string)
+	// upstreamwallet.BalanceAdapterValidator is a validator for the "balance_adapter" field. It is called by the builders before save.
+	upstreamwallet.BalanceAdapterValidator = upstreamwalletDescBalanceAdapter.Validators[0].(func(string) error)
+	// upstreamwalletDescQuotaAdapter is the schema descriptor for quota_adapter field.
+	upstreamwalletDescQuotaAdapter := upstreamwalletFields[6].Descriptor()
+	// upstreamwallet.DefaultQuotaAdapter holds the default value on creation for the quota_adapter field.
+	upstreamwallet.DefaultQuotaAdapter = upstreamwalletDescQuotaAdapter.Default.(string)
+	// upstreamwallet.QuotaAdapterValidator is a validator for the "quota_adapter" field. It is called by the builders before save.
+	upstreamwallet.QuotaAdapterValidator = upstreamwalletDescQuotaAdapter.Validators[0].(func(string) error)
+	// upstreamwalletDescBalanceScopeKey is the schema descriptor for balance_scope_key field.
+	upstreamwalletDescBalanceScopeKey := upstreamwalletFields[7].Descriptor()
+	// upstreamwallet.BalanceScopeKeyValidator is a validator for the "balance_scope_key" field. It is called by the builders before save.
+	upstreamwallet.BalanceScopeKeyValidator = upstreamwalletDescBalanceScopeKey.Validators[0].(func(string) error)
+	// upstreamwalletDescCurrency is the schema descriptor for currency field.
+	upstreamwalletDescCurrency := upstreamwalletFields[10].Descriptor()
+	// upstreamwallet.DefaultCurrency holds the default value on creation for the currency field.
+	upstreamwallet.DefaultCurrency = upstreamwalletDescCurrency.Default.(string)
+	// upstreamwallet.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
+	upstreamwallet.CurrencyValidator = upstreamwalletDescCurrency.Validators[0].(func(string) error)
+	// upstreamwalletDescBalanceKind is the schema descriptor for balance_kind field.
+	upstreamwalletDescBalanceKind := upstreamwalletFields[11].Descriptor()
+	// upstreamwallet.DefaultBalanceKind holds the default value on creation for the balance_kind field.
+	upstreamwallet.DefaultBalanceKind = upstreamwalletDescBalanceKind.Default.(string)
+	// upstreamwallet.BalanceKindValidator is a validator for the "balance_kind" field. It is called by the builders before save.
+	upstreamwallet.BalanceKindValidator = upstreamwalletDescBalanceKind.Validators[0].(func(string) error)
+	// upstreamwalletDescEnabled is the schema descriptor for enabled field.
+	upstreamwalletDescEnabled := upstreamwalletFields[12].Descriptor()
+	// upstreamwallet.DefaultEnabled holds the default value on creation for the enabled field.
+	upstreamwallet.DefaultEnabled = upstreamwalletDescEnabled.Default.(bool)
+	// upstreamwalletDescPricingSyncStatus is the schema descriptor for pricing_sync_status field.
+	upstreamwalletDescPricingSyncStatus := upstreamwalletFields[14].Descriptor()
+	// upstreamwallet.DefaultPricingSyncStatus holds the default value on creation for the pricing_sync_status field.
+	upstreamwallet.DefaultPricingSyncStatus = upstreamwalletDescPricingSyncStatus.Default.(string)
+	// upstreamwallet.PricingSyncStatusValidator is a validator for the "pricing_sync_status" field. It is called by the builders before save.
+	upstreamwallet.PricingSyncStatusValidator = upstreamwalletDescPricingSyncStatus.Validators[0].(func(string) error)
+	// upstreamwalletDescBalanceSyncStatus is the schema descriptor for balance_sync_status field.
+	upstreamwalletDescBalanceSyncStatus := upstreamwalletFields[17].Descriptor()
+	// upstreamwallet.DefaultBalanceSyncStatus holds the default value on creation for the balance_sync_status field.
+	upstreamwallet.DefaultBalanceSyncStatus = upstreamwalletDescBalanceSyncStatus.Default.(string)
+	// upstreamwallet.BalanceSyncStatusValidator is a validator for the "balance_sync_status" field. It is called by the builders before save.
+	upstreamwallet.BalanceSyncStatusValidator = upstreamwalletDescBalanceSyncStatus.Validators[0].(func(string) error)
+	// upstreamwalletDescQuotaSyncStatus is the schema descriptor for quota_sync_status field.
+	upstreamwalletDescQuotaSyncStatus := upstreamwalletFields[20].Descriptor()
+	// upstreamwallet.DefaultQuotaSyncStatus holds the default value on creation for the quota_sync_status field.
+	upstreamwallet.DefaultQuotaSyncStatus = upstreamwalletDescQuotaSyncStatus.Default.(string)
+	// upstreamwallet.QuotaSyncStatusValidator is a validator for the "quota_sync_status" field. It is called by the builders before save.
+	upstreamwallet.QuotaSyncStatusValidator = upstreamwalletDescQuotaSyncStatus.Validators[0].(func(string) error)
+	// upstreamwalletDescCreatedAt is the schema descriptor for created_at field.
+	upstreamwalletDescCreatedAt := upstreamwalletFields[22].Descriptor()
+	// upstreamwallet.DefaultCreatedAt holds the default value on creation for the created_at field.
+	upstreamwallet.DefaultCreatedAt = upstreamwalletDescCreatedAt.Default.(func() time.Time)
+	// upstreamwalletDescUpdatedAt is the schema descriptor for updated_at field.
+	upstreamwalletDescUpdatedAt := upstreamwalletFields[23].Descriptor()
+	// upstreamwallet.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	upstreamwallet.DefaultUpdatedAt = upstreamwalletDescUpdatedAt.Default.(func() time.Time)
+	// upstreamwallet.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	upstreamwallet.UpdateDefaultUpdatedAt = upstreamwalletDescUpdatedAt.UpdateDefault.(func() time.Time)
+	upstreamwalletaccountFields := schema.UpstreamWalletAccount{}.Fields()
+	_ = upstreamwalletaccountFields
+	// upstreamwalletaccountDescCreatedAt is the schema descriptor for created_at field.
+	upstreamwalletaccountDescCreatedAt := upstreamwalletaccountFields[6].Descriptor()
+	// upstreamwalletaccount.DefaultCreatedAt holds the default value on creation for the created_at field.
+	upstreamwalletaccount.DefaultCreatedAt = upstreamwalletaccountDescCreatedAt.Default.(func() time.Time)
 	usagecleanuptaskMixin := schema.UsageCleanupTask{}.Mixin()
 	usagecleanuptaskMixinFields0 := usagecleanuptaskMixin[0].Fields()
 	_ = usagecleanuptaskMixinFields0
@@ -1627,6 +2401,132 @@ func init() {
 	usagecleanuptaskDescDeletedRows := usagecleanuptaskFields[3].Descriptor()
 	// usagecleanuptask.DefaultDeletedRows holds the default value on creation for the deleted_rows field.
 	usagecleanuptask.DefaultDeletedRows = usagecleanuptaskDescDeletedRows.Default.(int64)
+	usagecostsettlementallocationFields := schema.UsageCostSettlementAllocation{}.Fields()
+	_ = usagecostsettlementallocationFields
+	// usagecostsettlementallocationDescSettlementIntervalID is the schema descriptor for settlement_interval_id field.
+	usagecostsettlementallocationDescSettlementIntervalID := usagecostsettlementallocationFields[0].Descriptor()
+	// usagecostsettlementallocation.SettlementIntervalIDValidator is a validator for the "settlement_interval_id" field. It is called by the builders before save.
+	usagecostsettlementallocation.SettlementIntervalIDValidator = usagecostsettlementallocationDescSettlementIntervalID.Validators[0].(func(int64) error)
+	// usagecostsettlementallocationDescUsageLogID is the schema descriptor for usage_log_id field.
+	usagecostsettlementallocationDescUsageLogID := usagecostsettlementallocationFields[1].Descriptor()
+	// usagecostsettlementallocation.UsageLogIDValidator is a validator for the "usage_log_id" field. It is called by the builders before save.
+	usagecostsettlementallocation.UsageLogIDValidator = usagecostsettlementallocationDescUsageLogID.Validators[0].(func(int64) error)
+	// usagecostsettlementallocationDescAttemptNo is the schema descriptor for attempt_no field.
+	usagecostsettlementallocationDescAttemptNo := usagecostsettlementallocationFields[2].Descriptor()
+	// usagecostsettlementallocation.AttemptNoValidator is a validator for the "attempt_no" field. It is called by the builders before save.
+	usagecostsettlementallocation.AttemptNoValidator = usagecostsettlementallocationDescAttemptNo.Validators[0].(func(int) error)
+	// usagecostsettlementallocationDescRevision is the schema descriptor for revision field.
+	usagecostsettlementallocationDescRevision := usagecostsettlementallocationFields[3].Descriptor()
+	// usagecostsettlementallocation.RevisionValidator is a validator for the "revision" field. It is called by the builders before save.
+	usagecostsettlementallocation.RevisionValidator = usagecostsettlementallocationDescRevision.Validators[0].(func(int) error)
+	// usagecostsettlementallocationDescCreatedAt is the schema descriptor for created_at field.
+	usagecostsettlementallocationDescCreatedAt := usagecostsettlementallocationFields[8].Descriptor()
+	// usagecostsettlementallocation.DefaultCreatedAt holds the default value on creation for the created_at field.
+	usagecostsettlementallocation.DefaultCreatedAt = usagecostsettlementallocationDescCreatedAt.Default.(func() time.Time)
+	usagefinancecostsegmentFields := schema.UsageFinanceCostSegment{}.Fields()
+	_ = usagefinancecostsegmentFields
+	// usagefinancecostsegmentDescAttemptNo is the schema descriptor for attempt_no field.
+	usagefinancecostsegmentDescAttemptNo := usagefinancecostsegmentFields[1].Descriptor()
+	// usagefinancecostsegment.AttemptNoValidator is a validator for the "attempt_no" field. It is called by the builders before save.
+	usagefinancecostsegment.AttemptNoValidator = usagefinancecostsegmentDescAttemptNo.Validators[0].(func(int) error)
+	// usagefinancecostsegmentDescUpstreamModel is the schema descriptor for upstream_model field.
+	usagefinancecostsegmentDescUpstreamModel := usagefinancecostsegmentFields[6].Descriptor()
+	// usagefinancecostsegment.UpstreamModelValidator is a validator for the "upstream_model" field. It is called by the builders before save.
+	usagefinancecostsegment.UpstreamModelValidator = usagefinancecostsegmentDescUpstreamModel.Validators[0].(func(string) error)
+	// usagefinancecostsegmentDescServiceTier is the schema descriptor for service_tier field.
+	usagefinancecostsegmentDescServiceTier := usagefinancecostsegmentFields[7].Descriptor()
+	// usagefinancecostsegment.ServiceTierValidator is a validator for the "service_tier" field. It is called by the builders before save.
+	usagefinancecostsegment.ServiceTierValidator = usagefinancecostsegmentDescServiceTier.Validators[0].(func(string) error)
+	// usagefinancecostsegmentDescUpstreamMultiplierSource is the schema descriptor for upstream_multiplier_source field.
+	usagefinancecostsegmentDescUpstreamMultiplierSource := usagefinancecostsegmentFields[11].Descriptor()
+	// usagefinancecostsegment.UpstreamMultiplierSourceValidator is a validator for the "upstream_multiplier_source" field. It is called by the builders before save.
+	usagefinancecostsegment.UpstreamMultiplierSourceValidator = usagefinancecostsegmentDescUpstreamMultiplierSource.Validators[0].(func(string) error)
+	// usagefinancecostsegmentDescSourceCurrency is the schema descriptor for source_currency field.
+	usagefinancecostsegmentDescSourceCurrency := usagefinancecostsegmentFields[15].Descriptor()
+	// usagefinancecostsegment.SourceCurrencyValidator is a validator for the "source_currency" field. It is called by the builders before save.
+	usagefinancecostsegment.SourceCurrencyValidator = usagefinancecostsegmentDescSourceCurrency.Validators[0].(func(string) error)
+	// usagefinancecostsegmentDescFxSource is the schema descriptor for fx_source field.
+	usagefinancecostsegmentDescFxSource := usagefinancecostsegmentFields[17].Descriptor()
+	// usagefinancecostsegment.FxSourceValidator is a validator for the "fx_source" field. It is called by the builders before save.
+	usagefinancecostsegment.FxSourceValidator = usagefinancecostsegmentDescFxSource.Validators[0].(func(string) error)
+	// usagefinancecostsegmentDescPricingSource is the schema descriptor for pricing_source field.
+	usagefinancecostsegmentDescPricingSource := usagefinancecostsegmentFields[20].Descriptor()
+	// usagefinancecostsegment.PricingSourceValidator is a validator for the "pricing_source" field. It is called by the builders before save.
+	usagefinancecostsegment.PricingSourceValidator = usagefinancecostsegmentDescPricingSource.Validators[0].(func(string) error)
+	// usagefinancecostsegmentDescCostStatus is the schema descriptor for cost_status field.
+	usagefinancecostsegmentDescCostStatus := usagefinancecostsegmentFields[21].Descriptor()
+	// usagefinancecostsegment.CostStatusValidator is a validator for the "cost_status" field. It is called by the builders before save.
+	usagefinancecostsegment.CostStatusValidator = usagefinancecostsegmentDescCostStatus.Validators[0].(func(string) error)
+	// usagefinancecostsegmentDescCalculationDetail is the schema descriptor for calculation_detail field.
+	usagefinancecostsegmentDescCalculationDetail := usagefinancecostsegmentFields[23].Descriptor()
+	// usagefinancecostsegment.DefaultCalculationDetail holds the default value on creation for the calculation_detail field.
+	usagefinancecostsegment.DefaultCalculationDetail = usagefinancecostsegmentDescCalculationDetail.Default.(func() map[string]interface{})
+	// usagefinancecostsegmentDescCreatedAt is the schema descriptor for created_at field.
+	usagefinancecostsegmentDescCreatedAt := usagefinancecostsegmentFields[24].Descriptor()
+	// usagefinancecostsegment.DefaultCreatedAt holds the default value on creation for the created_at field.
+	usagefinancecostsegment.DefaultCreatedAt = usagefinancecostsegmentDescCreatedAt.Default.(func() time.Time)
+	usagefinancerecordFields := schema.UsageFinanceRecord{}.Fields()
+	_ = usagefinancerecordFields
+	// usagefinancerecordDescRequestedModel is the schema descriptor for requested_model field.
+	usagefinancerecordDescRequestedModel := usagefinancerecordFields[8].Descriptor()
+	// usagefinancerecord.RequestedModelValidator is a validator for the "requested_model" field. It is called by the builders before save.
+	usagefinancerecord.RequestedModelValidator = usagefinancerecordDescRequestedModel.Validators[0].(func(string) error)
+	// usagefinancerecordDescUpstreamModel is the schema descriptor for upstream_model field.
+	usagefinancerecordDescUpstreamModel := usagefinancerecordFields[9].Descriptor()
+	// usagefinancerecord.UpstreamModelValidator is a validator for the "upstream_model" field. It is called by the builders before save.
+	usagefinancerecord.UpstreamModelValidator = usagefinancerecordDescUpstreamModel.Validators[0].(func(string) error)
+	// usagefinancerecordDescServiceTier is the schema descriptor for service_tier field.
+	usagefinancerecordDescServiceTier := usagefinancerecordFields[10].Descriptor()
+	// usagefinancerecord.ServiceTierValidator is a validator for the "service_tier" field. It is called by the builders before save.
+	usagefinancerecord.ServiceTierValidator = usagefinancerecordDescServiceTier.Validators[0].(func(string) error)
+	// usagefinancerecordDescBillingType is the schema descriptor for billing_type field.
+	usagefinancerecordDescBillingType := usagefinancerecordFields[11].Descriptor()
+	// usagefinancerecord.BillingTypeValidator is a validator for the "billing_type" field. It is called by the builders before save.
+	usagefinancerecord.BillingTypeValidator = usagefinancerecordDescBillingType.Validators[0].(func(string) error)
+	// usagefinancerecordDescBusinessType is the schema descriptor for business_type field.
+	usagefinancerecordDescBusinessType := usagefinancerecordFields[12].Descriptor()
+	// usagefinancerecord.BusinessTypeValidator is a validator for the "business_type" field. It is called by the builders before save.
+	usagefinancerecord.BusinessTypeValidator = usagefinancerecordDescBusinessType.Validators[0].(func(string) error)
+	// usagefinancerecordDescCostStatus is the schema descriptor for cost_status field.
+	usagefinancerecordDescCostStatus := usagefinancerecordFields[15].Descriptor()
+	// usagefinancerecord.CostStatusValidator is a validator for the "cost_status" field. It is called by the builders before save.
+	usagefinancerecord.CostStatusValidator = usagefinancerecordDescCostStatus.Validators[0].(func(string) error)
+	// usagefinancerecordDescPricingSource is the schema descriptor for pricing_source field.
+	usagefinancerecordDescPricingSource := usagefinancerecordFields[16].Descriptor()
+	// usagefinancerecord.PricingSourceValidator is a validator for the "pricing_source" field. It is called by the builders before save.
+	usagefinancerecord.PricingSourceValidator = usagefinancerecordDescPricingSource.Validators[0].(func(string) error)
+	// usagefinancerecordDescUpstreamMultiplierSource is the schema descriptor for upstream_multiplier_source field.
+	usagefinancerecordDescUpstreamMultiplierSource := usagefinancerecordFields[20].Descriptor()
+	// usagefinancerecord.UpstreamMultiplierSourceValidator is a validator for the "upstream_multiplier_source" field. It is called by the builders before save.
+	usagefinancerecord.UpstreamMultiplierSourceValidator = usagefinancerecordDescUpstreamMultiplierSource.Validators[0].(func(string) error)
+	// usagefinancerecordDescSourceCurrency is the schema descriptor for source_currency field.
+	usagefinancerecordDescSourceCurrency := usagefinancerecordFields[24].Descriptor()
+	// usagefinancerecord.SourceCurrencyValidator is a validator for the "source_currency" field. It is called by the builders before save.
+	usagefinancerecord.SourceCurrencyValidator = usagefinancerecordDescSourceCurrency.Validators[0].(func(string) error)
+	// usagefinancerecordDescFxSource is the schema descriptor for fx_source field.
+	usagefinancerecordDescFxSource := usagefinancerecordFields[26].Descriptor()
+	// usagefinancerecord.FxSourceValidator is a validator for the "fx_source" field. It is called by the builders before save.
+	usagefinancerecord.FxSourceValidator = usagefinancerecordDescFxSource.Validators[0].(func(string) error)
+	// usagefinancerecordDescCurrentRevision is the schema descriptor for current_revision field.
+	usagefinancerecordDescCurrentRevision := usagefinancerecordFields[28].Descriptor()
+	// usagefinancerecord.DefaultCurrentRevision holds the default value on creation for the current_revision field.
+	usagefinancerecord.DefaultCurrentRevision = usagefinancerecordDescCurrentRevision.Default.(int)
+	// usagefinancerecord.CurrentRevisionValidator is a validator for the "current_revision" field. It is called by the builders before save.
+	usagefinancerecord.CurrentRevisionValidator = usagefinancerecordDescCurrentRevision.Validators[0].(func(int) error)
+	// usagefinancerecordDescCalculationDetail is the schema descriptor for calculation_detail field.
+	usagefinancerecordDescCalculationDetail := usagefinancerecordFields[29].Descriptor()
+	// usagefinancerecord.DefaultCalculationDetail holds the default value on creation for the calculation_detail field.
+	usagefinancerecord.DefaultCalculationDetail = usagefinancerecordDescCalculationDetail.Default.(func() map[string]interface{})
+	// usagefinancerecordDescCreatedAt is the schema descriptor for created_at field.
+	usagefinancerecordDescCreatedAt := usagefinancerecordFields[31].Descriptor()
+	// usagefinancerecord.DefaultCreatedAt holds the default value on creation for the created_at field.
+	usagefinancerecord.DefaultCreatedAt = usagefinancerecordDescCreatedAt.Default.(func() time.Time)
+	// usagefinancerecordDescUpdatedAt is the schema descriptor for updated_at field.
+	usagefinancerecordDescUpdatedAt := usagefinancerecordFields[32].Descriptor()
+	// usagefinancerecord.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	usagefinancerecord.DefaultUpdatedAt = usagefinancerecordDescUpdatedAt.Default.(func() time.Time)
+	// usagefinancerecord.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	usagefinancerecord.UpdateDefaultUpdatedAt = usagefinancerecordDescUpdatedAt.UpdateDefault.(func() time.Time)
 	usagelogFields := schema.UsageLog{}.Fields()
 	_ = usagelogFields
 	// usagelogDescRequestID is the schema descriptor for request_id field.
@@ -1737,62 +2637,208 @@ func init() {
 	usagelogDescRateMultiplier := usagelogFields[25].Descriptor()
 	// usagelog.DefaultRateMultiplier holds the default value on creation for the rate_multiplier field.
 	usagelog.DefaultRateMultiplier = usagelogDescRateMultiplier.Default.(float64)
+	// usagelogDescUpstreamMultiplierSource is the schema descriptor for upstream_multiplier_source field.
+	usagelogDescUpstreamMultiplierSource := usagelogFields[29].Descriptor()
+	// usagelog.UpstreamMultiplierSourceValidator is a validator for the "upstream_multiplier_source" field. It is called by the builders before save.
+	usagelog.UpstreamMultiplierSourceValidator = usagelogDescUpstreamMultiplierSource.Validators[0].(func(string) error)
+	// usagelogDescSalesModel is the schema descriptor for sales_model field.
+	usagelogDescSalesModel := usagelogFields[32].Descriptor()
+	// usagelog.SalesModelValidator is a validator for the "sales_model" field. It is called by the builders before save.
+	usagelog.SalesModelValidator = usagelogDescSalesModel.Validators[0].(func(string) error)
+	// usagelogDescSalesPricingEffectiveModel is the schema descriptor for sales_pricing_effective_model field.
+	usagelogDescSalesPricingEffectiveModel := usagelogFields[33].Descriptor()
+	// usagelog.SalesPricingEffectiveModelValidator is a validator for the "sales_pricing_effective_model" field. It is called by the builders before save.
+	usagelog.SalesPricingEffectiveModelValidator = usagelogDescSalesPricingEffectiveModel.Validators[0].(func(string) error)
+	// usagelogDescSalesPricingLegacySource is the schema descriptor for sales_pricing_legacy_source field.
+	usagelogDescSalesPricingLegacySource := usagelogFields[34].Descriptor()
+	// usagelog.SalesPricingLegacySourceValidator is a validator for the "sales_pricing_legacy_source" field. It is called by the builders before save.
+	usagelog.SalesPricingLegacySourceValidator = usagelogDescSalesPricingLegacySource.Validators[0].(func(string) error)
+	// usagelogDescSalesPricingVersion is the schema descriptor for sales_pricing_version field.
+	usagelogDescSalesPricingVersion := usagelogFields[35].Descriptor()
+	// usagelog.SalesPricingVersionValidator is a validator for the "sales_pricing_version" field. It is called by the builders before save.
+	usagelog.SalesPricingVersionValidator = usagelogDescSalesPricingVersion.Validators[0].(func(string) error)
+	// usagelogDescSalesPricingSource is the schema descriptor for sales_pricing_source field.
+	usagelogDescSalesPricingSource := usagelogFields[36].Descriptor()
+	// usagelog.SalesPricingSourceValidator is a validator for the "sales_pricing_source" field. It is called by the builders before save.
+	usagelog.SalesPricingSourceValidator = usagelogDescSalesPricingSource.Validators[0].(func(string) error)
+	// usagelogDescSalesPricingChecksum is the schema descriptor for sales_pricing_checksum field.
+	usagelogDescSalesPricingChecksum := usagelogFields[37].Descriptor()
+	// usagelog.SalesPricingChecksumValidator is a validator for the "sales_pricing_checksum" field. It is called by the builders before save.
+	usagelog.SalesPricingChecksumValidator = usagelogDescSalesPricingChecksum.Validators[0].(func(string) error)
 	// usagelogDescBillingType is the schema descriptor for billing_type field.
-	usagelogDescBillingType := usagelogFields[27].Descriptor()
+	usagelogDescBillingType := usagelogFields[42].Descriptor()
 	// usagelog.DefaultBillingType holds the default value on creation for the billing_type field.
 	usagelog.DefaultBillingType = usagelogDescBillingType.Default.(int8)
 	// usagelogDescStream is the schema descriptor for stream field.
-	usagelogDescStream := usagelogFields[28].Descriptor()
+	usagelogDescStream := usagelogFields[43].Descriptor()
 	// usagelog.DefaultStream holds the default value on creation for the stream field.
 	usagelog.DefaultStream = usagelogDescStream.Default.(bool)
 	// usagelogDescUserAgent is the schema descriptor for user_agent field.
-	usagelogDescUserAgent := usagelogFields[31].Descriptor()
+	usagelogDescUserAgent := usagelogFields[46].Descriptor()
 	// usagelog.UserAgentValidator is a validator for the "user_agent" field. It is called by the builders before save.
 	usagelog.UserAgentValidator = usagelogDescUserAgent.Validators[0].(func(string) error)
 	// usagelogDescIPAddress is the schema descriptor for ip_address field.
-	usagelogDescIPAddress := usagelogFields[32].Descriptor()
+	usagelogDescIPAddress := usagelogFields[47].Descriptor()
 	// usagelog.IPAddressValidator is a validator for the "ip_address" field. It is called by the builders before save.
 	usagelog.IPAddressValidator = usagelogDescIPAddress.Validators[0].(func(string) error)
 	// usagelogDescImageCount is the schema descriptor for image_count field.
-	usagelogDescImageCount := usagelogFields[33].Descriptor()
+	usagelogDescImageCount := usagelogFields[48].Descriptor()
 	// usagelog.DefaultImageCount holds the default value on creation for the image_count field.
 	usagelog.DefaultImageCount = usagelogDescImageCount.Default.(int)
 	// usagelogDescImageSize is the schema descriptor for image_size field.
-	usagelogDescImageSize := usagelogFields[34].Descriptor()
+	usagelogDescImageSize := usagelogFields[49].Descriptor()
 	// usagelog.ImageSizeValidator is a validator for the "image_size" field. It is called by the builders before save.
 	usagelog.ImageSizeValidator = usagelogDescImageSize.Validators[0].(func(string) error)
 	// usagelogDescImageInputSize is the schema descriptor for image_input_size field.
-	usagelogDescImageInputSize := usagelogFields[35].Descriptor()
+	usagelogDescImageInputSize := usagelogFields[50].Descriptor()
 	// usagelog.ImageInputSizeValidator is a validator for the "image_input_size" field. It is called by the builders before save.
 	usagelog.ImageInputSizeValidator = usagelogDescImageInputSize.Validators[0].(func(string) error)
 	// usagelogDescImageOutputSize is the schema descriptor for image_output_size field.
-	usagelogDescImageOutputSize := usagelogFields[36].Descriptor()
+	usagelogDescImageOutputSize := usagelogFields[51].Descriptor()
 	// usagelog.ImageOutputSizeValidator is a validator for the "image_output_size" field. It is called by the builders before save.
 	usagelog.ImageOutputSizeValidator = usagelogDescImageOutputSize.Validators[0].(func(string) error)
 	// usagelogDescImageSizeSource is the schema descriptor for image_size_source field.
-	usagelogDescImageSizeSource := usagelogFields[37].Descriptor()
+	usagelogDescImageSizeSource := usagelogFields[52].Descriptor()
 	// usagelog.ImageSizeSourceValidator is a validator for the "image_size_source" field. It is called by the builders before save.
 	usagelog.ImageSizeSourceValidator = usagelogDescImageSizeSource.Validators[0].(func(string) error)
 	// usagelogDescVideoCount is the schema descriptor for video_count field.
-	usagelogDescVideoCount := usagelogFields[40].Descriptor()
+	usagelogDescVideoCount := usagelogFields[55].Descriptor()
 	// usagelog.DefaultVideoCount holds the default value on creation for the video_count field.
 	usagelog.DefaultVideoCount = usagelogDescVideoCount.Default.(int)
 	// usagelogDescVideoResolution is the schema descriptor for video_resolution field.
-	usagelogDescVideoResolution := usagelogFields[41].Descriptor()
+	usagelogDescVideoResolution := usagelogFields[56].Descriptor()
 	// usagelog.VideoResolutionValidator is a validator for the "video_resolution" field. It is called by the builders before save.
 	usagelog.VideoResolutionValidator = usagelogDescVideoResolution.Validators[0].(func(string) error)
 	// usagelogDescVideoTaskID is the schema descriptor for video_task_id field.
-	usagelogDescVideoTaskID := usagelogFields[42].Descriptor()
+	usagelogDescVideoTaskID := usagelogFields[57].Descriptor()
 	// usagelog.VideoTaskIDValidator is a validator for the "video_task_id" field. It is called by the builders before save.
 	usagelog.VideoTaskIDValidator = usagelogDescVideoTaskID.Validators[0].(func(string) error)
 	// usagelogDescCacheTTLOverridden is the schema descriptor for cache_ttl_overridden field.
-	usagelogDescCacheTTLOverridden := usagelogFields[43].Descriptor()
+	usagelogDescCacheTTLOverridden := usagelogFields[58].Descriptor()
 	// usagelog.DefaultCacheTTLOverridden holds the default value on creation for the cache_ttl_overridden field.
 	usagelog.DefaultCacheTTLOverridden = usagelogDescCacheTTLOverridden.Default.(bool)
 	// usagelogDescCreatedAt is the schema descriptor for created_at field.
-	usagelogDescCreatedAt := usagelogFields[44].Descriptor()
+	usagelogDescCreatedAt := usagelogFields[59].Descriptor()
 	// usagelog.DefaultCreatedAt holds the default value on creation for the created_at field.
 	usagelog.DefaultCreatedAt = usagelogDescCreatedAt.Default.(func() time.Time)
+	usagerevenueallocationFields := schema.UsageRevenueAllocation{}.Fields()
+	_ = usagerevenueallocationFields
+	// usagerevenueallocationDescSourceType is the schema descriptor for source_type field.
+	usagerevenueallocationDescSourceType := usagerevenueallocationFields[1].Descriptor()
+	// usagerevenueallocation.SourceTypeValidator is a validator for the "source_type" field. It is called by the builders before save.
+	usagerevenueallocation.SourceTypeValidator = usagerevenueallocationDescSourceType.Validators[0].(func(string) error)
+	// usagerevenueallocationDescAllocationMethod is the schema descriptor for allocation_method field.
+	usagerevenueallocationDescAllocationMethod := usagerevenueallocationFields[4].Descriptor()
+	// usagerevenueallocation.AllocationMethodValidator is a validator for the "allocation_method" field. It is called by the builders before save.
+	usagerevenueallocation.AllocationMethodValidator = usagerevenueallocationDescAllocationMethod.Validators[0].(func(string) error)
+	// usagerevenueallocationDescRevision is the schema descriptor for revision field.
+	usagerevenueallocationDescRevision := usagerevenueallocationFields[6].Descriptor()
+	// usagerevenueallocation.DefaultRevision holds the default value on creation for the revision field.
+	usagerevenueallocation.DefaultRevision = usagerevenueallocationDescRevision.Default.(int)
+	// usagerevenueallocation.RevisionValidator is a validator for the "revision" field. It is called by the builders before save.
+	usagerevenueallocation.RevisionValidator = usagerevenueallocationDescRevision.Validators[0].(func(int) error)
+	// usagerevenueallocationDescAuditDetail is the schema descriptor for audit_detail field.
+	usagerevenueallocationDescAuditDetail := usagerevenueallocationFields[8].Descriptor()
+	// usagerevenueallocation.DefaultAuditDetail holds the default value on creation for the audit_detail field.
+	usagerevenueallocation.DefaultAuditDetail = usagerevenueallocationDescAuditDetail.Default.(func() map[string]interface{})
+	// usagerevenueallocationDescCreatedAt is the schema descriptor for created_at field.
+	usagerevenueallocationDescCreatedAt := usagerevenueallocationFields[9].Descriptor()
+	// usagerevenueallocation.DefaultCreatedAt holds the default value on creation for the created_at field.
+	usagerevenueallocation.DefaultCreatedAt = usagerevenueallocationDescCreatedAt.Default.(func() time.Time)
+	usageupstreamattemptFields := schema.UsageUpstreamAttempt{}.Fields()
+	_ = usageupstreamattemptFields
+	// usageupstreamattemptDescRequestID is the schema descriptor for request_id field.
+	usageupstreamattemptDescRequestID := usageupstreamattemptFields[1].Descriptor()
+	// usageupstreamattempt.RequestIDValidator is a validator for the "request_id" field. It is called by the builders before save.
+	usageupstreamattempt.RequestIDValidator = usageupstreamattemptDescRequestID.Validators[0].(func(string) error)
+	// usageupstreamattemptDescAttemptNo is the schema descriptor for attempt_no field.
+	usageupstreamattemptDescAttemptNo := usageupstreamattemptFields[2].Descriptor()
+	// usageupstreamattempt.AttemptNoValidator is a validator for the "attempt_no" field. It is called by the builders before save.
+	usageupstreamattempt.AttemptNoValidator = usageupstreamattemptDescAttemptNo.Validators[0].(func(int) error)
+	// usageupstreamattemptDescUpstreamModel is the schema descriptor for upstream_model field.
+	usageupstreamattemptDescUpstreamModel := usageupstreamattemptFields[5].Descriptor()
+	// usageupstreamattempt.UpstreamModelValidator is a validator for the "upstream_model" field. It is called by the builders before save.
+	usageupstreamattempt.UpstreamModelValidator = usageupstreamattemptDescUpstreamModel.Validators[0].(func(string) error)
+	// usageupstreamattemptDescServiceTier is the schema descriptor for service_tier field.
+	usageupstreamattemptDescServiceTier := usageupstreamattemptFields[6].Descriptor()
+	// usageupstreamattempt.ServiceTierValidator is a validator for the "service_tier" field. It is called by the builders before save.
+	usageupstreamattempt.ServiceTierValidator = usageupstreamattemptDescServiceTier.Validators[0].(func(string) error)
+	// usageupstreamattemptDescInputTokens is the schema descriptor for input_tokens field.
+	usageupstreamattemptDescInputTokens := usageupstreamattemptFields[7].Descriptor()
+	// usageupstreamattempt.DefaultInputTokens holds the default value on creation for the input_tokens field.
+	usageupstreamattempt.DefaultInputTokens = usageupstreamattemptDescInputTokens.Default.(int64)
+	// usageupstreamattempt.InputTokensValidator is a validator for the "input_tokens" field. It is called by the builders before save.
+	usageupstreamattempt.InputTokensValidator = usageupstreamattemptDescInputTokens.Validators[0].(func(int64) error)
+	// usageupstreamattemptDescOutputTokens is the schema descriptor for output_tokens field.
+	usageupstreamattemptDescOutputTokens := usageupstreamattemptFields[8].Descriptor()
+	// usageupstreamattempt.DefaultOutputTokens holds the default value on creation for the output_tokens field.
+	usageupstreamattempt.DefaultOutputTokens = usageupstreamattemptDescOutputTokens.Default.(int64)
+	// usageupstreamattempt.OutputTokensValidator is a validator for the "output_tokens" field. It is called by the builders before save.
+	usageupstreamattempt.OutputTokensValidator = usageupstreamattemptDescOutputTokens.Validators[0].(func(int64) error)
+	// usageupstreamattemptDescCacheReadTokens is the schema descriptor for cache_read_tokens field.
+	usageupstreamattemptDescCacheReadTokens := usageupstreamattemptFields[9].Descriptor()
+	// usageupstreamattempt.DefaultCacheReadTokens holds the default value on creation for the cache_read_tokens field.
+	usageupstreamattempt.DefaultCacheReadTokens = usageupstreamattemptDescCacheReadTokens.Default.(int64)
+	// usageupstreamattempt.CacheReadTokensValidator is a validator for the "cache_read_tokens" field. It is called by the builders before save.
+	usageupstreamattempt.CacheReadTokensValidator = usageupstreamattemptDescCacheReadTokens.Validators[0].(func(int64) error)
+	// usageupstreamattemptDescCacheCreation5mTokens is the schema descriptor for cache_creation_5m_tokens field.
+	usageupstreamattemptDescCacheCreation5mTokens := usageupstreamattemptFields[10].Descriptor()
+	// usageupstreamattempt.DefaultCacheCreation5mTokens holds the default value on creation for the cache_creation_5m_tokens field.
+	usageupstreamattempt.DefaultCacheCreation5mTokens = usageupstreamattemptDescCacheCreation5mTokens.Default.(int64)
+	// usageupstreamattempt.CacheCreation5mTokensValidator is a validator for the "cache_creation_5m_tokens" field. It is called by the builders before save.
+	usageupstreamattempt.CacheCreation5mTokensValidator = usageupstreamattemptDescCacheCreation5mTokens.Validators[0].(func(int64) error)
+	// usageupstreamattemptDescCacheCreation1hTokens is the schema descriptor for cache_creation_1h_tokens field.
+	usageupstreamattemptDescCacheCreation1hTokens := usageupstreamattemptFields[11].Descriptor()
+	// usageupstreamattempt.DefaultCacheCreation1hTokens holds the default value on creation for the cache_creation_1h_tokens field.
+	usageupstreamattempt.DefaultCacheCreation1hTokens = usageupstreamattemptDescCacheCreation1hTokens.Default.(int64)
+	// usageupstreamattempt.CacheCreation1hTokensValidator is a validator for the "cache_creation_1h_tokens" field. It is called by the builders before save.
+	usageupstreamattempt.CacheCreation1hTokensValidator = usageupstreamattemptDescCacheCreation1hTokens.Validators[0].(func(int64) error)
+	// usageupstreamattemptDescRequestCount is the schema descriptor for request_count field.
+	usageupstreamattemptDescRequestCount := usageupstreamattemptFields[12].Descriptor()
+	// usageupstreamattempt.DefaultRequestCount holds the default value on creation for the request_count field.
+	usageupstreamattempt.DefaultRequestCount = usageupstreamattemptDescRequestCount.Default.(int64)
+	// usageupstreamattempt.RequestCountValidator is a validator for the "request_count" field. It is called by the builders before save.
+	usageupstreamattempt.RequestCountValidator = usageupstreamattemptDescRequestCount.Validators[0].(func(int64) error)
+	// usageupstreamattemptDescImageCount is the schema descriptor for image_count field.
+	usageupstreamattemptDescImageCount := usageupstreamattemptFields[13].Descriptor()
+	// usageupstreamattempt.DefaultImageCount holds the default value on creation for the image_count field.
+	usageupstreamattempt.DefaultImageCount = usageupstreamattemptDescImageCount.Default.(int64)
+	// usageupstreamattempt.ImageCountValidator is a validator for the "image_count" field. It is called by the builders before save.
+	usageupstreamattempt.ImageCountValidator = usageupstreamattemptDescImageCount.Validators[0].(func(int64) error)
+	// usageupstreamattemptDescVideoSeconds is the schema descriptor for video_seconds field.
+	usageupstreamattemptDescVideoSeconds := usageupstreamattemptFields[14].Descriptor()
+	// usageupstreamattempt.DefaultVideoSeconds holds the default value on creation for the video_seconds field.
+	usageupstreamattempt.DefaultVideoSeconds = usageupstreamattemptDescVideoSeconds.Default.(int64)
+	// usageupstreamattempt.VideoSecondsValidator is a validator for the "video_seconds" field. It is called by the builders before save.
+	usageupstreamattempt.VideoSecondsValidator = usageupstreamattemptDescVideoSeconds.Validators[0].(func(int64) error)
+	// usageupstreamattemptDescUpstreamMultiplierSource is the schema descriptor for upstream_multiplier_source field.
+	usageupstreamattemptDescUpstreamMultiplierSource := usageupstreamattemptFields[17].Descriptor()
+	// usageupstreamattempt.UpstreamMultiplierSourceValidator is a validator for the "upstream_multiplier_source" field. It is called by the builders before save.
+	usageupstreamattempt.UpstreamMultiplierSourceValidator = usageupstreamattemptDescUpstreamMultiplierSource.Validators[0].(func(string) error)
+	// usageupstreamattemptDescBillable is the schema descriptor for billable field.
+	usageupstreamattemptDescBillable := usageupstreamattemptFields[20].Descriptor()
+	// usageupstreamattempt.DefaultBillable holds the default value on creation for the billable field.
+	usageupstreamattempt.DefaultBillable = usageupstreamattemptDescBillable.Default.(bool)
+	// usageupstreamattemptDescUpstreamChargeCurrency is the schema descriptor for upstream_charge_currency field.
+	usageupstreamattemptDescUpstreamChargeCurrency := usageupstreamattemptFields[25].Descriptor()
+	// usageupstreamattempt.UpstreamChargeCurrencyValidator is a validator for the "upstream_charge_currency" field. It is called by the builders before save.
+	usageupstreamattempt.UpstreamChargeCurrencyValidator = usageupstreamattemptDescUpstreamChargeCurrency.Validators[0].(func(string) error)
+	// usageupstreamattemptDescUpstreamChargeUnitSemantics is the schema descriptor for upstream_charge_unit_semantics field.
+	usageupstreamattemptDescUpstreamChargeUnitSemantics := usageupstreamattemptFields[26].Descriptor()
+	// usageupstreamattempt.UpstreamChargeUnitSemanticsValidator is a validator for the "upstream_charge_unit_semantics" field. It is called by the builders before save.
+	usageupstreamattempt.UpstreamChargeUnitSemanticsValidator = usageupstreamattemptDescUpstreamChargeUnitSemantics.Validators[0].(func(string) error)
+	// usageupstreamattemptDescUpstreamBillingRequestID is the schema descriptor for upstream_billing_request_id field.
+	usageupstreamattemptDescUpstreamBillingRequestID := usageupstreamattemptFields[27].Descriptor()
+	// usageupstreamattempt.UpstreamBillingRequestIDValidator is a validator for the "upstream_billing_request_id" field. It is called by the builders before save.
+	usageupstreamattempt.UpstreamBillingRequestIDValidator = usageupstreamattemptDescUpstreamBillingRequestID.Validators[0].(func(string) error)
+	// usageupstreamattemptDescCompletedAt is the schema descriptor for completed_at field.
+	usageupstreamattemptDescCompletedAt := usageupstreamattemptFields[29].Descriptor()
+	// usageupstreamattempt.DefaultCompletedAt holds the default value on creation for the completed_at field.
+	usageupstreamattempt.DefaultCompletedAt = usageupstreamattemptDescCompletedAt.Default.(func() time.Time)
+	// usageupstreamattemptDescCreatedAt is the schema descriptor for created_at field.
+	usageupstreamattemptDescCreatedAt := usageupstreamattemptFields[30].Descriptor()
+	// usageupstreamattempt.DefaultCreatedAt holds the default value on creation for the created_at field.
+	usageupstreamattempt.DefaultCreatedAt = usageupstreamattemptDescCreatedAt.Default.(func() time.Time)
 	userMixin := schema.User{}.Mixin()
 	userMixinHooks1 := userMixin[1].Hooks()
 	user.Hooks[0] = userMixinHooks1[0]

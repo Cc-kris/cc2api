@@ -29,6 +29,12 @@ func RegisterUserRoutes(
 	authenticated.Use(gin.HandlerFunc(jwtAuth))
 	authenticated.Use(middleware.BackendModeUserGuard(settingService))
 	{
+		modelSquare := authenticated.Group("/model-square")
+		{
+			modelSquare.GET("/groups", h.ModelSquare.ListGroups)
+			modelSquare.GET("/groups/:group_id/models", h.ModelSquare.ListModels)
+		}
+
 		// 用户接口
 		user := authenticated.Group("/user")
 		{

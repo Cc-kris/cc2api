@@ -259,6 +259,7 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		if err != nil {
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
+				appendBillableUsageAttemptFromFailover(c, account, reqModel, failoverErr)
 				if c.Writer.Size() != writerSizeBeforeForward {
 					h.handleCCFailoverExhausted(c, failoverErr, true)
 					return
@@ -290,21 +291,24 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
 
 		quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
+		upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
 		h.submitUsageRecordTask(func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
-				Result:             result,
-				QuotaPlatform:      quotaPlatform,
-				APIKey:             apiKey,
-				User:               apiKey.User,
-				Account:            account,
-				Subscription:       subscription,
-				InboundEndpoint:    inboundEndpoint,
-				UpstreamEndpoint:   upstreamEndpoint,
-				UserAgent:          userAgent,
-				IPAddress:          clientIP,
-				RequestPayloadHash: requestPayloadHash,
-				APIKeyService:      h.apiKeyService,
-				ChannelUsageFields: channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+				Result:                 result,
+				QuotaPlatform:          quotaPlatform,
+				APIKey:                 apiKey,
+				User:                   apiKey.User,
+				Account:                account,
+				UpstreamCostMultiplier: service.CloneDecimalSnapshot(account.UpstreamCostMultiplier),
+				Subscription:           subscription,
+				InboundEndpoint:        inboundEndpoint,
+				UpstreamEndpoint:       upstreamEndpoint,
+				UserAgent:              userAgent,
+				IPAddress:              clientIP,
+				RequestPayloadHash:     requestPayloadHash,
+				APIKeyService:          h.apiKeyService,
+				ChannelUsageFields:     channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+				UpstreamAttempts:       service.CloneUsageUpstreamAttempts(upstreamAttempts),
 			}); err != nil {
 				reqLog.Error("gateway.cc.record_usage_failed",
 					zap.Int64("account_id", account.ID),

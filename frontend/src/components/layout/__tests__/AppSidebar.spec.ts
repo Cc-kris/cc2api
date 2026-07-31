@@ -60,3 +60,13 @@ describe('AppSidebar video generation navigation', () => {
     expect(componentSource.indexOf("path: '/video-generation'")).toBeLessThan(componentSource.indexOf("path: '/usage'"))
   })
 })
+
+describe('AppSidebar model square navigation', () => {
+  it('replaces the legacy available channels entry with Model Square', () => {
+    expect(componentSource).toContain("path: '/model-square'")
+    expect(componentSource).toContain("label: t('nav.modelSquare')")
+    expect(componentSource).toContain('featureFlag: flagModelSquare')
+    expect(componentSource).toContain('FeatureFlags.modelSquare')
+    expect(componentSource).not.toContain("path: '/available-channels'")
+  })
+})

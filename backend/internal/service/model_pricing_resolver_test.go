@@ -244,6 +244,19 @@ func TestResolve_WithChannelOverride_TokenPartialOverride(t *testing.T) {
 	require.InDelta(t, 15e-6, resolved.BasePricing.OutputPricePerToken, 1e-12)
 }
 
+func TestResolveUnifiedSalesPricingIgnoresPartialChannelOverride(t *testing.T) {
+	r := newResolverWithChannel(t, []ChannelModelPricing{{
+		Platform: "anthropic", Models: []string{"claude-sonnet-4"}, BillingMode: BillingModeToken,
+		InputPrice: testPtrFloat64(20e-6),
+	}})
+	resolved, err := ResolveUnifiedSalesPricing(context.Background(), r, r.channelService, groupIDPtr(), "claude-sonnet-4")
+	require.NoError(t, err)
+	require.Equal(t, FinancePricingSourceSystem, resolved.Source)
+	require.InDelta(t, 3e-6, resolved.BasePricing.InputPricePerToken, 1e-12)
+	require.InDelta(t, 15e-6, resolved.BasePricing.OutputPricePerToken, 1e-12)
+	require.Equal(t, FinancePricingSourceSystem, normalizeSalesPricingSource(resolved.Source))
+}
+
 func TestResolve_WithChannelOverride_TokenWithIntervals(t *testing.T) {
 	r := newResolverWithChannel(t, []ChannelModelPricing{{
 		Platform:    "anthropic",

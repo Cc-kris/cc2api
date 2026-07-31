@@ -17,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
+	"github.com/shopspring/decimal"
 )
 
 // UsageLogCreate is the builder for creating a UsageLog entity.
@@ -361,6 +362,200 @@ func (_c *UsageLogCreate) SetAccountRateMultiplier(v float64) *UsageLogCreate {
 func (_c *UsageLogCreate) SetNillableAccountRateMultiplier(v *float64) *UsageLogCreate {
 	if v != nil {
 		_c.SetAccountRateMultiplier(*v)
+	}
+	return _c
+}
+
+// SetUpstreamCostMultiplier sets the "upstream_cost_multiplier" field.
+func (_c *UsageLogCreate) SetUpstreamCostMultiplier(v decimal.Decimal) *UsageLogCreate {
+	_c.mutation.SetUpstreamCostMultiplier(v)
+	return _c
+}
+
+// SetNillableUpstreamCostMultiplier sets the "upstream_cost_multiplier" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableUpstreamCostMultiplier(v *decimal.Decimal) *UsageLogCreate {
+	if v != nil {
+		_c.SetUpstreamCostMultiplier(*v)
+	}
+	return _c
+}
+
+// SetUpstreamMultiplierChangeID sets the "upstream_multiplier_change_id" field.
+func (_c *UsageLogCreate) SetUpstreamMultiplierChangeID(v int64) *UsageLogCreate {
+	_c.mutation.SetUpstreamMultiplierChangeID(v)
+	return _c
+}
+
+// SetNillableUpstreamMultiplierChangeID sets the "upstream_multiplier_change_id" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableUpstreamMultiplierChangeID(v *int64) *UsageLogCreate {
+	if v != nil {
+		_c.SetUpstreamMultiplierChangeID(*v)
+	}
+	return _c
+}
+
+// SetUpstreamMultiplierSource sets the "upstream_multiplier_source" field.
+func (_c *UsageLogCreate) SetUpstreamMultiplierSource(v string) *UsageLogCreate {
+	_c.mutation.SetUpstreamMultiplierSource(v)
+	return _c
+}
+
+// SetNillableUpstreamMultiplierSource sets the "upstream_multiplier_source" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableUpstreamMultiplierSource(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetUpstreamMultiplierSource(*v)
+	}
+	return _c
+}
+
+// SetUpstreamMultiplierEffectiveAt sets the "upstream_multiplier_effective_at" field.
+func (_c *UsageLogCreate) SetUpstreamMultiplierEffectiveAt(v time.Time) *UsageLogCreate {
+	_c.mutation.SetUpstreamMultiplierEffectiveAt(v)
+	return _c
+}
+
+// SetNillableUpstreamMultiplierEffectiveAt sets the "upstream_multiplier_effective_at" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableUpstreamMultiplierEffectiveAt(v *time.Time) *UsageLogCreate {
+	if v != nil {
+		_c.SetUpstreamMultiplierEffectiveAt(*v)
+	}
+	return _c
+}
+
+// SetAccountFinanceProfileID sets the "account_finance_profile_id" field.
+func (_c *UsageLogCreate) SetAccountFinanceProfileID(v int64) *UsageLogCreate {
+	_c.mutation.SetAccountFinanceProfileID(v)
+	return _c
+}
+
+// SetNillableAccountFinanceProfileID sets the "account_finance_profile_id" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableAccountFinanceProfileID(v *int64) *UsageLogCreate {
+	if v != nil {
+		_c.SetAccountFinanceProfileID(*v)
+	}
+	return _c
+}
+
+// SetSalesModel sets the "sales_model" field.
+func (_c *UsageLogCreate) SetSalesModel(v string) *UsageLogCreate {
+	_c.mutation.SetSalesModel(v)
+	return _c
+}
+
+// SetNillableSalesModel sets the "sales_model" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableSalesModel(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetSalesModel(*v)
+	}
+	return _c
+}
+
+// SetSalesPricingEffectiveModel sets the "sales_pricing_effective_model" field.
+func (_c *UsageLogCreate) SetSalesPricingEffectiveModel(v string) *UsageLogCreate {
+	_c.mutation.SetSalesPricingEffectiveModel(v)
+	return _c
+}
+
+// SetNillableSalesPricingEffectiveModel sets the "sales_pricing_effective_model" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableSalesPricingEffectiveModel(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetSalesPricingEffectiveModel(*v)
+	}
+	return _c
+}
+
+// SetSalesPricingLegacySource sets the "sales_pricing_legacy_source" field.
+func (_c *UsageLogCreate) SetSalesPricingLegacySource(v string) *UsageLogCreate {
+	_c.mutation.SetSalesPricingLegacySource(v)
+	return _c
+}
+
+// SetNillableSalesPricingLegacySource sets the "sales_pricing_legacy_source" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableSalesPricingLegacySource(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetSalesPricingLegacySource(*v)
+	}
+	return _c
+}
+
+// SetSalesPricingVersion sets the "sales_pricing_version" field.
+func (_c *UsageLogCreate) SetSalesPricingVersion(v string) *UsageLogCreate {
+	_c.mutation.SetSalesPricingVersion(v)
+	return _c
+}
+
+// SetNillableSalesPricingVersion sets the "sales_pricing_version" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableSalesPricingVersion(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetSalesPricingVersion(*v)
+	}
+	return _c
+}
+
+// SetSalesPricingSource sets the "sales_pricing_source" field.
+func (_c *UsageLogCreate) SetSalesPricingSource(v string) *UsageLogCreate {
+	_c.mutation.SetSalesPricingSource(v)
+	return _c
+}
+
+// SetNillableSalesPricingSource sets the "sales_pricing_source" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableSalesPricingSource(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetSalesPricingSource(*v)
+	}
+	return _c
+}
+
+// SetSalesPricingChecksum sets the "sales_pricing_checksum" field.
+func (_c *UsageLogCreate) SetSalesPricingChecksum(v string) *UsageLogCreate {
+	_c.mutation.SetSalesPricingChecksum(v)
+	return _c
+}
+
+// SetNillableSalesPricingChecksum sets the "sales_pricing_checksum" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableSalesPricingChecksum(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetSalesPricingChecksum(*v)
+	}
+	return _c
+}
+
+// SetSalesPricingSnapshot sets the "sales_pricing_snapshot" field.
+func (_c *UsageLogCreate) SetSalesPricingSnapshot(v map[string]interface{}) *UsageLogCreate {
+	_c.mutation.SetSalesPricingSnapshot(v)
+	return _c
+}
+
+// SetSalesPricingShadowSnapshot sets the "sales_pricing_shadow_snapshot" field.
+func (_c *UsageLogCreate) SetSalesPricingShadowSnapshot(v map[string]interface{}) *UsageLogCreate {
+	_c.mutation.SetSalesPricingShadowSnapshot(v)
+	return _c
+}
+
+// SetSalesPricingShadowDelta sets the "sales_pricing_shadow_delta" field.
+func (_c *UsageLogCreate) SetSalesPricingShadowDelta(v decimal.Decimal) *UsageLogCreate {
+	_c.mutation.SetSalesPricingShadowDelta(v)
+	return _c
+}
+
+// SetNillableSalesPricingShadowDelta sets the "sales_pricing_shadow_delta" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableSalesPricingShadowDelta(v *decimal.Decimal) *UsageLogCreate {
+	if v != nil {
+		_c.SetSalesPricingShadowDelta(*v)
+	}
+	return _c
+}
+
+// SetUsageListValue sets the "usage_list_value" field.
+func (_c *UsageLogCreate) SetUsageListValue(v decimal.Decimal) *UsageLogCreate {
+	_c.mutation.SetUsageListValue(v)
+	return _c
+}
+
+// SetNillableUsageListValue sets the "usage_list_value" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableUsageListValue(v *decimal.Decimal) *UsageLogCreate {
+	if v != nil {
+		_c.SetUsageListValue(*v)
 	}
 	return _c
 }
@@ -838,6 +1033,41 @@ func (_c *UsageLogCreate) check() error {
 	if _, ok := _c.mutation.RateMultiplier(); !ok {
 		return &ValidationError{Name: "rate_multiplier", err: errors.New(`ent: missing required field "UsageLog.rate_multiplier"`)}
 	}
+	if v, ok := _c.mutation.UpstreamMultiplierSource(); ok {
+		if err := usagelog.UpstreamMultiplierSourceValidator(v); err != nil {
+			return &ValidationError{Name: "upstream_multiplier_source", err: fmt.Errorf(`ent: validator failed for field "UsageLog.upstream_multiplier_source": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.SalesModel(); ok {
+		if err := usagelog.SalesModelValidator(v); err != nil {
+			return &ValidationError{Name: "sales_model", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_model": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.SalesPricingEffectiveModel(); ok {
+		if err := usagelog.SalesPricingEffectiveModelValidator(v); err != nil {
+			return &ValidationError{Name: "sales_pricing_effective_model", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_pricing_effective_model": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.SalesPricingLegacySource(); ok {
+		if err := usagelog.SalesPricingLegacySourceValidator(v); err != nil {
+			return &ValidationError{Name: "sales_pricing_legacy_source", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_pricing_legacy_source": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.SalesPricingVersion(); ok {
+		if err := usagelog.SalesPricingVersionValidator(v); err != nil {
+			return &ValidationError{Name: "sales_pricing_version", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_pricing_version": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.SalesPricingSource(); ok {
+		if err := usagelog.SalesPricingSourceValidator(v); err != nil {
+			return &ValidationError{Name: "sales_pricing_source", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_pricing_source": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.SalesPricingChecksum(); ok {
+		if err := usagelog.SalesPricingChecksumValidator(v); err != nil {
+			return &ValidationError{Name: "sales_pricing_checksum", err: fmt.Errorf(`ent: validator failed for field "UsageLog.sales_pricing_checksum": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.BillingType(); !ok {
 		return &ValidationError{Name: "billing_type", err: errors.New(`ent: missing required field "UsageLog.billing_type"`)}
 	}
@@ -1019,6 +1249,66 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.AccountRateMultiplier(); ok {
 		_spec.SetField(usagelog.FieldAccountRateMultiplier, field.TypeFloat64, value)
 		_node.AccountRateMultiplier = &value
+	}
+	if value, ok := _c.mutation.UpstreamCostMultiplier(); ok {
+		_spec.SetField(usagelog.FieldUpstreamCostMultiplier, field.TypeFloat64, value)
+		_node.UpstreamCostMultiplier = &value
+	}
+	if value, ok := _c.mutation.UpstreamMultiplierChangeID(); ok {
+		_spec.SetField(usagelog.FieldUpstreamMultiplierChangeID, field.TypeInt64, value)
+		_node.UpstreamMultiplierChangeID = &value
+	}
+	if value, ok := _c.mutation.UpstreamMultiplierSource(); ok {
+		_spec.SetField(usagelog.FieldUpstreamMultiplierSource, field.TypeString, value)
+		_node.UpstreamMultiplierSource = &value
+	}
+	if value, ok := _c.mutation.UpstreamMultiplierEffectiveAt(); ok {
+		_spec.SetField(usagelog.FieldUpstreamMultiplierEffectiveAt, field.TypeTime, value)
+		_node.UpstreamMultiplierEffectiveAt = &value
+	}
+	if value, ok := _c.mutation.AccountFinanceProfileID(); ok {
+		_spec.SetField(usagelog.FieldAccountFinanceProfileID, field.TypeInt64, value)
+		_node.AccountFinanceProfileID = &value
+	}
+	if value, ok := _c.mutation.SalesModel(); ok {
+		_spec.SetField(usagelog.FieldSalesModel, field.TypeString, value)
+		_node.SalesModel = &value
+	}
+	if value, ok := _c.mutation.SalesPricingEffectiveModel(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingEffectiveModel, field.TypeString, value)
+		_node.SalesPricingEffectiveModel = &value
+	}
+	if value, ok := _c.mutation.SalesPricingLegacySource(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingLegacySource, field.TypeString, value)
+		_node.SalesPricingLegacySource = &value
+	}
+	if value, ok := _c.mutation.SalesPricingVersion(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingVersion, field.TypeString, value)
+		_node.SalesPricingVersion = &value
+	}
+	if value, ok := _c.mutation.SalesPricingSource(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingSource, field.TypeString, value)
+		_node.SalesPricingSource = &value
+	}
+	if value, ok := _c.mutation.SalesPricingChecksum(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingChecksum, field.TypeString, value)
+		_node.SalesPricingChecksum = &value
+	}
+	if value, ok := _c.mutation.SalesPricingSnapshot(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingSnapshot, field.TypeJSON, value)
+		_node.SalesPricingSnapshot = value
+	}
+	if value, ok := _c.mutation.SalesPricingShadowSnapshot(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingShadowSnapshot, field.TypeJSON, value)
+		_node.SalesPricingShadowSnapshot = value
+	}
+	if value, ok := _c.mutation.SalesPricingShadowDelta(); ok {
+		_spec.SetField(usagelog.FieldSalesPricingShadowDelta, field.TypeFloat64, value)
+		_node.SalesPricingShadowDelta = &value
+	}
+	if value, ok := _c.mutation.UsageListValue(); ok {
+		_spec.SetField(usagelog.FieldUsageListValue, field.TypeFloat64, value)
+		_node.UsageListValue = &value
 	}
 	if value, ok := _c.mutation.BillingType(); ok {
 		_spec.SetField(usagelog.FieldBillingType, field.TypeInt8, value)
@@ -1694,6 +1984,306 @@ func (u *UsageLogUpsert) AddAccountRateMultiplier(v float64) *UsageLogUpsert {
 // ClearAccountRateMultiplier clears the value of the "account_rate_multiplier" field.
 func (u *UsageLogUpsert) ClearAccountRateMultiplier() *UsageLogUpsert {
 	u.SetNull(usagelog.FieldAccountRateMultiplier)
+	return u
+}
+
+// SetUpstreamCostMultiplier sets the "upstream_cost_multiplier" field.
+func (u *UsageLogUpsert) SetUpstreamCostMultiplier(v decimal.Decimal) *UsageLogUpsert {
+	u.Set(usagelog.FieldUpstreamCostMultiplier, v)
+	return u
+}
+
+// UpdateUpstreamCostMultiplier sets the "upstream_cost_multiplier" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateUpstreamCostMultiplier() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldUpstreamCostMultiplier)
+	return u
+}
+
+// AddUpstreamCostMultiplier adds v to the "upstream_cost_multiplier" field.
+func (u *UsageLogUpsert) AddUpstreamCostMultiplier(v decimal.Decimal) *UsageLogUpsert {
+	u.Add(usagelog.FieldUpstreamCostMultiplier, v)
+	return u
+}
+
+// ClearUpstreamCostMultiplier clears the value of the "upstream_cost_multiplier" field.
+func (u *UsageLogUpsert) ClearUpstreamCostMultiplier() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldUpstreamCostMultiplier)
+	return u
+}
+
+// SetUpstreamMultiplierChangeID sets the "upstream_multiplier_change_id" field.
+func (u *UsageLogUpsert) SetUpstreamMultiplierChangeID(v int64) *UsageLogUpsert {
+	u.Set(usagelog.FieldUpstreamMultiplierChangeID, v)
+	return u
+}
+
+// UpdateUpstreamMultiplierChangeID sets the "upstream_multiplier_change_id" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateUpstreamMultiplierChangeID() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldUpstreamMultiplierChangeID)
+	return u
+}
+
+// AddUpstreamMultiplierChangeID adds v to the "upstream_multiplier_change_id" field.
+func (u *UsageLogUpsert) AddUpstreamMultiplierChangeID(v int64) *UsageLogUpsert {
+	u.Add(usagelog.FieldUpstreamMultiplierChangeID, v)
+	return u
+}
+
+// ClearUpstreamMultiplierChangeID clears the value of the "upstream_multiplier_change_id" field.
+func (u *UsageLogUpsert) ClearUpstreamMultiplierChangeID() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldUpstreamMultiplierChangeID)
+	return u
+}
+
+// SetUpstreamMultiplierSource sets the "upstream_multiplier_source" field.
+func (u *UsageLogUpsert) SetUpstreamMultiplierSource(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldUpstreamMultiplierSource, v)
+	return u
+}
+
+// UpdateUpstreamMultiplierSource sets the "upstream_multiplier_source" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateUpstreamMultiplierSource() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldUpstreamMultiplierSource)
+	return u
+}
+
+// ClearUpstreamMultiplierSource clears the value of the "upstream_multiplier_source" field.
+func (u *UsageLogUpsert) ClearUpstreamMultiplierSource() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldUpstreamMultiplierSource)
+	return u
+}
+
+// SetUpstreamMultiplierEffectiveAt sets the "upstream_multiplier_effective_at" field.
+func (u *UsageLogUpsert) SetUpstreamMultiplierEffectiveAt(v time.Time) *UsageLogUpsert {
+	u.Set(usagelog.FieldUpstreamMultiplierEffectiveAt, v)
+	return u
+}
+
+// UpdateUpstreamMultiplierEffectiveAt sets the "upstream_multiplier_effective_at" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateUpstreamMultiplierEffectiveAt() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldUpstreamMultiplierEffectiveAt)
+	return u
+}
+
+// ClearUpstreamMultiplierEffectiveAt clears the value of the "upstream_multiplier_effective_at" field.
+func (u *UsageLogUpsert) ClearUpstreamMultiplierEffectiveAt() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldUpstreamMultiplierEffectiveAt)
+	return u
+}
+
+// SetAccountFinanceProfileID sets the "account_finance_profile_id" field.
+func (u *UsageLogUpsert) SetAccountFinanceProfileID(v int64) *UsageLogUpsert {
+	u.Set(usagelog.FieldAccountFinanceProfileID, v)
+	return u
+}
+
+// UpdateAccountFinanceProfileID sets the "account_finance_profile_id" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateAccountFinanceProfileID() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldAccountFinanceProfileID)
+	return u
+}
+
+// AddAccountFinanceProfileID adds v to the "account_finance_profile_id" field.
+func (u *UsageLogUpsert) AddAccountFinanceProfileID(v int64) *UsageLogUpsert {
+	u.Add(usagelog.FieldAccountFinanceProfileID, v)
+	return u
+}
+
+// ClearAccountFinanceProfileID clears the value of the "account_finance_profile_id" field.
+func (u *UsageLogUpsert) ClearAccountFinanceProfileID() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldAccountFinanceProfileID)
+	return u
+}
+
+// SetSalesModel sets the "sales_model" field.
+func (u *UsageLogUpsert) SetSalesModel(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldSalesModel, v)
+	return u
+}
+
+// UpdateSalesModel sets the "sales_model" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateSalesModel() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldSalesModel)
+	return u
+}
+
+// ClearSalesModel clears the value of the "sales_model" field.
+func (u *UsageLogUpsert) ClearSalesModel() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldSalesModel)
+	return u
+}
+
+// SetSalesPricingEffectiveModel sets the "sales_pricing_effective_model" field.
+func (u *UsageLogUpsert) SetSalesPricingEffectiveModel(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldSalesPricingEffectiveModel, v)
+	return u
+}
+
+// UpdateSalesPricingEffectiveModel sets the "sales_pricing_effective_model" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateSalesPricingEffectiveModel() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldSalesPricingEffectiveModel)
+	return u
+}
+
+// ClearSalesPricingEffectiveModel clears the value of the "sales_pricing_effective_model" field.
+func (u *UsageLogUpsert) ClearSalesPricingEffectiveModel() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldSalesPricingEffectiveModel)
+	return u
+}
+
+// SetSalesPricingLegacySource sets the "sales_pricing_legacy_source" field.
+func (u *UsageLogUpsert) SetSalesPricingLegacySource(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldSalesPricingLegacySource, v)
+	return u
+}
+
+// UpdateSalesPricingLegacySource sets the "sales_pricing_legacy_source" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateSalesPricingLegacySource() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldSalesPricingLegacySource)
+	return u
+}
+
+// ClearSalesPricingLegacySource clears the value of the "sales_pricing_legacy_source" field.
+func (u *UsageLogUpsert) ClearSalesPricingLegacySource() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldSalesPricingLegacySource)
+	return u
+}
+
+// SetSalesPricingVersion sets the "sales_pricing_version" field.
+func (u *UsageLogUpsert) SetSalesPricingVersion(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldSalesPricingVersion, v)
+	return u
+}
+
+// UpdateSalesPricingVersion sets the "sales_pricing_version" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateSalesPricingVersion() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldSalesPricingVersion)
+	return u
+}
+
+// ClearSalesPricingVersion clears the value of the "sales_pricing_version" field.
+func (u *UsageLogUpsert) ClearSalesPricingVersion() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldSalesPricingVersion)
+	return u
+}
+
+// SetSalesPricingSource sets the "sales_pricing_source" field.
+func (u *UsageLogUpsert) SetSalesPricingSource(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldSalesPricingSource, v)
+	return u
+}
+
+// UpdateSalesPricingSource sets the "sales_pricing_source" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateSalesPricingSource() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldSalesPricingSource)
+	return u
+}
+
+// ClearSalesPricingSource clears the value of the "sales_pricing_source" field.
+func (u *UsageLogUpsert) ClearSalesPricingSource() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldSalesPricingSource)
+	return u
+}
+
+// SetSalesPricingChecksum sets the "sales_pricing_checksum" field.
+func (u *UsageLogUpsert) SetSalesPricingChecksum(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldSalesPricingChecksum, v)
+	return u
+}
+
+// UpdateSalesPricingChecksum sets the "sales_pricing_checksum" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateSalesPricingChecksum() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldSalesPricingChecksum)
+	return u
+}
+
+// ClearSalesPricingChecksum clears the value of the "sales_pricing_checksum" field.
+func (u *UsageLogUpsert) ClearSalesPricingChecksum() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldSalesPricingChecksum)
+	return u
+}
+
+// SetSalesPricingSnapshot sets the "sales_pricing_snapshot" field.
+func (u *UsageLogUpsert) SetSalesPricingSnapshot(v map[string]interface{}) *UsageLogUpsert {
+	u.Set(usagelog.FieldSalesPricingSnapshot, v)
+	return u
+}
+
+// UpdateSalesPricingSnapshot sets the "sales_pricing_snapshot" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateSalesPricingSnapshot() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldSalesPricingSnapshot)
+	return u
+}
+
+// ClearSalesPricingSnapshot clears the value of the "sales_pricing_snapshot" field.
+func (u *UsageLogUpsert) ClearSalesPricingSnapshot() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldSalesPricingSnapshot)
+	return u
+}
+
+// SetSalesPricingShadowSnapshot sets the "sales_pricing_shadow_snapshot" field.
+func (u *UsageLogUpsert) SetSalesPricingShadowSnapshot(v map[string]interface{}) *UsageLogUpsert {
+	u.Set(usagelog.FieldSalesPricingShadowSnapshot, v)
+	return u
+}
+
+// UpdateSalesPricingShadowSnapshot sets the "sales_pricing_shadow_snapshot" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateSalesPricingShadowSnapshot() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldSalesPricingShadowSnapshot)
+	return u
+}
+
+// ClearSalesPricingShadowSnapshot clears the value of the "sales_pricing_shadow_snapshot" field.
+func (u *UsageLogUpsert) ClearSalesPricingShadowSnapshot() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldSalesPricingShadowSnapshot)
+	return u
+}
+
+// SetSalesPricingShadowDelta sets the "sales_pricing_shadow_delta" field.
+func (u *UsageLogUpsert) SetSalesPricingShadowDelta(v decimal.Decimal) *UsageLogUpsert {
+	u.Set(usagelog.FieldSalesPricingShadowDelta, v)
+	return u
+}
+
+// UpdateSalesPricingShadowDelta sets the "sales_pricing_shadow_delta" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateSalesPricingShadowDelta() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldSalesPricingShadowDelta)
+	return u
+}
+
+// AddSalesPricingShadowDelta adds v to the "sales_pricing_shadow_delta" field.
+func (u *UsageLogUpsert) AddSalesPricingShadowDelta(v decimal.Decimal) *UsageLogUpsert {
+	u.Add(usagelog.FieldSalesPricingShadowDelta, v)
+	return u
+}
+
+// ClearSalesPricingShadowDelta clears the value of the "sales_pricing_shadow_delta" field.
+func (u *UsageLogUpsert) ClearSalesPricingShadowDelta() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldSalesPricingShadowDelta)
+	return u
+}
+
+// SetUsageListValue sets the "usage_list_value" field.
+func (u *UsageLogUpsert) SetUsageListValue(v decimal.Decimal) *UsageLogUpsert {
+	u.Set(usagelog.FieldUsageListValue, v)
+	return u
+}
+
+// UpdateUsageListValue sets the "usage_list_value" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateUsageListValue() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldUsageListValue)
+	return u
+}
+
+// AddUsageListValue adds v to the "usage_list_value" field.
+func (u *UsageLogUpsert) AddUsageListValue(v decimal.Decimal) *UsageLogUpsert {
+	u.Add(usagelog.FieldUsageListValue, v)
+	return u
+}
+
+// ClearUsageListValue clears the value of the "usage_list_value" field.
+func (u *UsageLogUpsert) ClearUsageListValue() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldUsageListValue)
 	return u
 }
 
@@ -2597,6 +3187,356 @@ func (u *UsageLogUpsertOne) UpdateAccountRateMultiplier() *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) ClearAccountRateMultiplier() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearAccountRateMultiplier()
+	})
+}
+
+// SetUpstreamCostMultiplier sets the "upstream_cost_multiplier" field.
+func (u *UsageLogUpsertOne) SetUpstreamCostMultiplier(v decimal.Decimal) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamCostMultiplier(v)
+	})
+}
+
+// AddUpstreamCostMultiplier adds v to the "upstream_cost_multiplier" field.
+func (u *UsageLogUpsertOne) AddUpstreamCostMultiplier(v decimal.Decimal) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddUpstreamCostMultiplier(v)
+	})
+}
+
+// UpdateUpstreamCostMultiplier sets the "upstream_cost_multiplier" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateUpstreamCostMultiplier() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamCostMultiplier()
+	})
+}
+
+// ClearUpstreamCostMultiplier clears the value of the "upstream_cost_multiplier" field.
+func (u *UsageLogUpsertOne) ClearUpstreamCostMultiplier() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamCostMultiplier()
+	})
+}
+
+// SetUpstreamMultiplierChangeID sets the "upstream_multiplier_change_id" field.
+func (u *UsageLogUpsertOne) SetUpstreamMultiplierChangeID(v int64) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamMultiplierChangeID(v)
+	})
+}
+
+// AddUpstreamMultiplierChangeID adds v to the "upstream_multiplier_change_id" field.
+func (u *UsageLogUpsertOne) AddUpstreamMultiplierChangeID(v int64) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddUpstreamMultiplierChangeID(v)
+	})
+}
+
+// UpdateUpstreamMultiplierChangeID sets the "upstream_multiplier_change_id" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateUpstreamMultiplierChangeID() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamMultiplierChangeID()
+	})
+}
+
+// ClearUpstreamMultiplierChangeID clears the value of the "upstream_multiplier_change_id" field.
+func (u *UsageLogUpsertOne) ClearUpstreamMultiplierChangeID() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamMultiplierChangeID()
+	})
+}
+
+// SetUpstreamMultiplierSource sets the "upstream_multiplier_source" field.
+func (u *UsageLogUpsertOne) SetUpstreamMultiplierSource(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamMultiplierSource(v)
+	})
+}
+
+// UpdateUpstreamMultiplierSource sets the "upstream_multiplier_source" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateUpstreamMultiplierSource() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamMultiplierSource()
+	})
+}
+
+// ClearUpstreamMultiplierSource clears the value of the "upstream_multiplier_source" field.
+func (u *UsageLogUpsertOne) ClearUpstreamMultiplierSource() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamMultiplierSource()
+	})
+}
+
+// SetUpstreamMultiplierEffectiveAt sets the "upstream_multiplier_effective_at" field.
+func (u *UsageLogUpsertOne) SetUpstreamMultiplierEffectiveAt(v time.Time) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamMultiplierEffectiveAt(v)
+	})
+}
+
+// UpdateUpstreamMultiplierEffectiveAt sets the "upstream_multiplier_effective_at" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateUpstreamMultiplierEffectiveAt() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamMultiplierEffectiveAt()
+	})
+}
+
+// ClearUpstreamMultiplierEffectiveAt clears the value of the "upstream_multiplier_effective_at" field.
+func (u *UsageLogUpsertOne) ClearUpstreamMultiplierEffectiveAt() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamMultiplierEffectiveAt()
+	})
+}
+
+// SetAccountFinanceProfileID sets the "account_finance_profile_id" field.
+func (u *UsageLogUpsertOne) SetAccountFinanceProfileID(v int64) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetAccountFinanceProfileID(v)
+	})
+}
+
+// AddAccountFinanceProfileID adds v to the "account_finance_profile_id" field.
+func (u *UsageLogUpsertOne) AddAccountFinanceProfileID(v int64) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddAccountFinanceProfileID(v)
+	})
+}
+
+// UpdateAccountFinanceProfileID sets the "account_finance_profile_id" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateAccountFinanceProfileID() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateAccountFinanceProfileID()
+	})
+}
+
+// ClearAccountFinanceProfileID clears the value of the "account_finance_profile_id" field.
+func (u *UsageLogUpsertOne) ClearAccountFinanceProfileID() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearAccountFinanceProfileID()
+	})
+}
+
+// SetSalesModel sets the "sales_model" field.
+func (u *UsageLogUpsertOne) SetSalesModel(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesModel(v)
+	})
+}
+
+// UpdateSalesModel sets the "sales_model" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateSalesModel() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesModel()
+	})
+}
+
+// ClearSalesModel clears the value of the "sales_model" field.
+func (u *UsageLogUpsertOne) ClearSalesModel() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesModel()
+	})
+}
+
+// SetSalesPricingEffectiveModel sets the "sales_pricing_effective_model" field.
+func (u *UsageLogUpsertOne) SetSalesPricingEffectiveModel(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesPricingEffectiveModel(v)
+	})
+}
+
+// UpdateSalesPricingEffectiveModel sets the "sales_pricing_effective_model" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateSalesPricingEffectiveModel() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesPricingEffectiveModel()
+	})
+}
+
+// ClearSalesPricingEffectiveModel clears the value of the "sales_pricing_effective_model" field.
+func (u *UsageLogUpsertOne) ClearSalesPricingEffectiveModel() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesPricingEffectiveModel()
+	})
+}
+
+// SetSalesPricingLegacySource sets the "sales_pricing_legacy_source" field.
+func (u *UsageLogUpsertOne) SetSalesPricingLegacySource(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesPricingLegacySource(v)
+	})
+}
+
+// UpdateSalesPricingLegacySource sets the "sales_pricing_legacy_source" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateSalesPricingLegacySource() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesPricingLegacySource()
+	})
+}
+
+// ClearSalesPricingLegacySource clears the value of the "sales_pricing_legacy_source" field.
+func (u *UsageLogUpsertOne) ClearSalesPricingLegacySource() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesPricingLegacySource()
+	})
+}
+
+// SetSalesPricingVersion sets the "sales_pricing_version" field.
+func (u *UsageLogUpsertOne) SetSalesPricingVersion(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesPricingVersion(v)
+	})
+}
+
+// UpdateSalesPricingVersion sets the "sales_pricing_version" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateSalesPricingVersion() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesPricingVersion()
+	})
+}
+
+// ClearSalesPricingVersion clears the value of the "sales_pricing_version" field.
+func (u *UsageLogUpsertOne) ClearSalesPricingVersion() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesPricingVersion()
+	})
+}
+
+// SetSalesPricingSource sets the "sales_pricing_source" field.
+func (u *UsageLogUpsertOne) SetSalesPricingSource(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesPricingSource(v)
+	})
+}
+
+// UpdateSalesPricingSource sets the "sales_pricing_source" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateSalesPricingSource() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesPricingSource()
+	})
+}
+
+// ClearSalesPricingSource clears the value of the "sales_pricing_source" field.
+func (u *UsageLogUpsertOne) ClearSalesPricingSource() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesPricingSource()
+	})
+}
+
+// SetSalesPricingChecksum sets the "sales_pricing_checksum" field.
+func (u *UsageLogUpsertOne) SetSalesPricingChecksum(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesPricingChecksum(v)
+	})
+}
+
+// UpdateSalesPricingChecksum sets the "sales_pricing_checksum" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateSalesPricingChecksum() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesPricingChecksum()
+	})
+}
+
+// ClearSalesPricingChecksum clears the value of the "sales_pricing_checksum" field.
+func (u *UsageLogUpsertOne) ClearSalesPricingChecksum() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesPricingChecksum()
+	})
+}
+
+// SetSalesPricingSnapshot sets the "sales_pricing_snapshot" field.
+func (u *UsageLogUpsertOne) SetSalesPricingSnapshot(v map[string]interface{}) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesPricingSnapshot(v)
+	})
+}
+
+// UpdateSalesPricingSnapshot sets the "sales_pricing_snapshot" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateSalesPricingSnapshot() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesPricingSnapshot()
+	})
+}
+
+// ClearSalesPricingSnapshot clears the value of the "sales_pricing_snapshot" field.
+func (u *UsageLogUpsertOne) ClearSalesPricingSnapshot() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesPricingSnapshot()
+	})
+}
+
+// SetSalesPricingShadowSnapshot sets the "sales_pricing_shadow_snapshot" field.
+func (u *UsageLogUpsertOne) SetSalesPricingShadowSnapshot(v map[string]interface{}) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesPricingShadowSnapshot(v)
+	})
+}
+
+// UpdateSalesPricingShadowSnapshot sets the "sales_pricing_shadow_snapshot" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateSalesPricingShadowSnapshot() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesPricingShadowSnapshot()
+	})
+}
+
+// ClearSalesPricingShadowSnapshot clears the value of the "sales_pricing_shadow_snapshot" field.
+func (u *UsageLogUpsertOne) ClearSalesPricingShadowSnapshot() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesPricingShadowSnapshot()
+	})
+}
+
+// SetSalesPricingShadowDelta sets the "sales_pricing_shadow_delta" field.
+func (u *UsageLogUpsertOne) SetSalesPricingShadowDelta(v decimal.Decimal) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesPricingShadowDelta(v)
+	})
+}
+
+// AddSalesPricingShadowDelta adds v to the "sales_pricing_shadow_delta" field.
+func (u *UsageLogUpsertOne) AddSalesPricingShadowDelta(v decimal.Decimal) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddSalesPricingShadowDelta(v)
+	})
+}
+
+// UpdateSalesPricingShadowDelta sets the "sales_pricing_shadow_delta" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateSalesPricingShadowDelta() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesPricingShadowDelta()
+	})
+}
+
+// ClearSalesPricingShadowDelta clears the value of the "sales_pricing_shadow_delta" field.
+func (u *UsageLogUpsertOne) ClearSalesPricingShadowDelta() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesPricingShadowDelta()
+	})
+}
+
+// SetUsageListValue sets the "usage_list_value" field.
+func (u *UsageLogUpsertOne) SetUsageListValue(v decimal.Decimal) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUsageListValue(v)
+	})
+}
+
+// AddUsageListValue adds v to the "usage_list_value" field.
+func (u *UsageLogUpsertOne) AddUsageListValue(v decimal.Decimal) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddUsageListValue(v)
+	})
+}
+
+// UpdateUsageListValue sets the "usage_list_value" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateUsageListValue() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUsageListValue()
+	})
+}
+
+// ClearUsageListValue clears the value of the "usage_list_value" field.
+func (u *UsageLogUpsertOne) ClearUsageListValue() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUsageListValue()
 	})
 }
 
@@ -3718,6 +4658,356 @@ func (u *UsageLogUpsertBulk) UpdateAccountRateMultiplier() *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) ClearAccountRateMultiplier() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.ClearAccountRateMultiplier()
+	})
+}
+
+// SetUpstreamCostMultiplier sets the "upstream_cost_multiplier" field.
+func (u *UsageLogUpsertBulk) SetUpstreamCostMultiplier(v decimal.Decimal) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamCostMultiplier(v)
+	})
+}
+
+// AddUpstreamCostMultiplier adds v to the "upstream_cost_multiplier" field.
+func (u *UsageLogUpsertBulk) AddUpstreamCostMultiplier(v decimal.Decimal) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddUpstreamCostMultiplier(v)
+	})
+}
+
+// UpdateUpstreamCostMultiplier sets the "upstream_cost_multiplier" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateUpstreamCostMultiplier() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamCostMultiplier()
+	})
+}
+
+// ClearUpstreamCostMultiplier clears the value of the "upstream_cost_multiplier" field.
+func (u *UsageLogUpsertBulk) ClearUpstreamCostMultiplier() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamCostMultiplier()
+	})
+}
+
+// SetUpstreamMultiplierChangeID sets the "upstream_multiplier_change_id" field.
+func (u *UsageLogUpsertBulk) SetUpstreamMultiplierChangeID(v int64) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamMultiplierChangeID(v)
+	})
+}
+
+// AddUpstreamMultiplierChangeID adds v to the "upstream_multiplier_change_id" field.
+func (u *UsageLogUpsertBulk) AddUpstreamMultiplierChangeID(v int64) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddUpstreamMultiplierChangeID(v)
+	})
+}
+
+// UpdateUpstreamMultiplierChangeID sets the "upstream_multiplier_change_id" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateUpstreamMultiplierChangeID() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamMultiplierChangeID()
+	})
+}
+
+// ClearUpstreamMultiplierChangeID clears the value of the "upstream_multiplier_change_id" field.
+func (u *UsageLogUpsertBulk) ClearUpstreamMultiplierChangeID() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamMultiplierChangeID()
+	})
+}
+
+// SetUpstreamMultiplierSource sets the "upstream_multiplier_source" field.
+func (u *UsageLogUpsertBulk) SetUpstreamMultiplierSource(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamMultiplierSource(v)
+	})
+}
+
+// UpdateUpstreamMultiplierSource sets the "upstream_multiplier_source" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateUpstreamMultiplierSource() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamMultiplierSource()
+	})
+}
+
+// ClearUpstreamMultiplierSource clears the value of the "upstream_multiplier_source" field.
+func (u *UsageLogUpsertBulk) ClearUpstreamMultiplierSource() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamMultiplierSource()
+	})
+}
+
+// SetUpstreamMultiplierEffectiveAt sets the "upstream_multiplier_effective_at" field.
+func (u *UsageLogUpsertBulk) SetUpstreamMultiplierEffectiveAt(v time.Time) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamMultiplierEffectiveAt(v)
+	})
+}
+
+// UpdateUpstreamMultiplierEffectiveAt sets the "upstream_multiplier_effective_at" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateUpstreamMultiplierEffectiveAt() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamMultiplierEffectiveAt()
+	})
+}
+
+// ClearUpstreamMultiplierEffectiveAt clears the value of the "upstream_multiplier_effective_at" field.
+func (u *UsageLogUpsertBulk) ClearUpstreamMultiplierEffectiveAt() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamMultiplierEffectiveAt()
+	})
+}
+
+// SetAccountFinanceProfileID sets the "account_finance_profile_id" field.
+func (u *UsageLogUpsertBulk) SetAccountFinanceProfileID(v int64) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetAccountFinanceProfileID(v)
+	})
+}
+
+// AddAccountFinanceProfileID adds v to the "account_finance_profile_id" field.
+func (u *UsageLogUpsertBulk) AddAccountFinanceProfileID(v int64) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddAccountFinanceProfileID(v)
+	})
+}
+
+// UpdateAccountFinanceProfileID sets the "account_finance_profile_id" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateAccountFinanceProfileID() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateAccountFinanceProfileID()
+	})
+}
+
+// ClearAccountFinanceProfileID clears the value of the "account_finance_profile_id" field.
+func (u *UsageLogUpsertBulk) ClearAccountFinanceProfileID() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearAccountFinanceProfileID()
+	})
+}
+
+// SetSalesModel sets the "sales_model" field.
+func (u *UsageLogUpsertBulk) SetSalesModel(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesModel(v)
+	})
+}
+
+// UpdateSalesModel sets the "sales_model" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateSalesModel() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesModel()
+	})
+}
+
+// ClearSalesModel clears the value of the "sales_model" field.
+func (u *UsageLogUpsertBulk) ClearSalesModel() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesModel()
+	})
+}
+
+// SetSalesPricingEffectiveModel sets the "sales_pricing_effective_model" field.
+func (u *UsageLogUpsertBulk) SetSalesPricingEffectiveModel(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesPricingEffectiveModel(v)
+	})
+}
+
+// UpdateSalesPricingEffectiveModel sets the "sales_pricing_effective_model" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateSalesPricingEffectiveModel() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesPricingEffectiveModel()
+	})
+}
+
+// ClearSalesPricingEffectiveModel clears the value of the "sales_pricing_effective_model" field.
+func (u *UsageLogUpsertBulk) ClearSalesPricingEffectiveModel() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesPricingEffectiveModel()
+	})
+}
+
+// SetSalesPricingLegacySource sets the "sales_pricing_legacy_source" field.
+func (u *UsageLogUpsertBulk) SetSalesPricingLegacySource(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesPricingLegacySource(v)
+	})
+}
+
+// UpdateSalesPricingLegacySource sets the "sales_pricing_legacy_source" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateSalesPricingLegacySource() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesPricingLegacySource()
+	})
+}
+
+// ClearSalesPricingLegacySource clears the value of the "sales_pricing_legacy_source" field.
+func (u *UsageLogUpsertBulk) ClearSalesPricingLegacySource() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesPricingLegacySource()
+	})
+}
+
+// SetSalesPricingVersion sets the "sales_pricing_version" field.
+func (u *UsageLogUpsertBulk) SetSalesPricingVersion(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesPricingVersion(v)
+	})
+}
+
+// UpdateSalesPricingVersion sets the "sales_pricing_version" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateSalesPricingVersion() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesPricingVersion()
+	})
+}
+
+// ClearSalesPricingVersion clears the value of the "sales_pricing_version" field.
+func (u *UsageLogUpsertBulk) ClearSalesPricingVersion() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesPricingVersion()
+	})
+}
+
+// SetSalesPricingSource sets the "sales_pricing_source" field.
+func (u *UsageLogUpsertBulk) SetSalesPricingSource(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesPricingSource(v)
+	})
+}
+
+// UpdateSalesPricingSource sets the "sales_pricing_source" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateSalesPricingSource() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesPricingSource()
+	})
+}
+
+// ClearSalesPricingSource clears the value of the "sales_pricing_source" field.
+func (u *UsageLogUpsertBulk) ClearSalesPricingSource() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesPricingSource()
+	})
+}
+
+// SetSalesPricingChecksum sets the "sales_pricing_checksum" field.
+func (u *UsageLogUpsertBulk) SetSalesPricingChecksum(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesPricingChecksum(v)
+	})
+}
+
+// UpdateSalesPricingChecksum sets the "sales_pricing_checksum" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateSalesPricingChecksum() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesPricingChecksum()
+	})
+}
+
+// ClearSalesPricingChecksum clears the value of the "sales_pricing_checksum" field.
+func (u *UsageLogUpsertBulk) ClearSalesPricingChecksum() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesPricingChecksum()
+	})
+}
+
+// SetSalesPricingSnapshot sets the "sales_pricing_snapshot" field.
+func (u *UsageLogUpsertBulk) SetSalesPricingSnapshot(v map[string]interface{}) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesPricingSnapshot(v)
+	})
+}
+
+// UpdateSalesPricingSnapshot sets the "sales_pricing_snapshot" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateSalesPricingSnapshot() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesPricingSnapshot()
+	})
+}
+
+// ClearSalesPricingSnapshot clears the value of the "sales_pricing_snapshot" field.
+func (u *UsageLogUpsertBulk) ClearSalesPricingSnapshot() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesPricingSnapshot()
+	})
+}
+
+// SetSalesPricingShadowSnapshot sets the "sales_pricing_shadow_snapshot" field.
+func (u *UsageLogUpsertBulk) SetSalesPricingShadowSnapshot(v map[string]interface{}) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesPricingShadowSnapshot(v)
+	})
+}
+
+// UpdateSalesPricingShadowSnapshot sets the "sales_pricing_shadow_snapshot" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateSalesPricingShadowSnapshot() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesPricingShadowSnapshot()
+	})
+}
+
+// ClearSalesPricingShadowSnapshot clears the value of the "sales_pricing_shadow_snapshot" field.
+func (u *UsageLogUpsertBulk) ClearSalesPricingShadowSnapshot() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesPricingShadowSnapshot()
+	})
+}
+
+// SetSalesPricingShadowDelta sets the "sales_pricing_shadow_delta" field.
+func (u *UsageLogUpsertBulk) SetSalesPricingShadowDelta(v decimal.Decimal) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSalesPricingShadowDelta(v)
+	})
+}
+
+// AddSalesPricingShadowDelta adds v to the "sales_pricing_shadow_delta" field.
+func (u *UsageLogUpsertBulk) AddSalesPricingShadowDelta(v decimal.Decimal) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddSalesPricingShadowDelta(v)
+	})
+}
+
+// UpdateSalesPricingShadowDelta sets the "sales_pricing_shadow_delta" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateSalesPricingShadowDelta() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSalesPricingShadowDelta()
+	})
+}
+
+// ClearSalesPricingShadowDelta clears the value of the "sales_pricing_shadow_delta" field.
+func (u *UsageLogUpsertBulk) ClearSalesPricingShadowDelta() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSalesPricingShadowDelta()
+	})
+}
+
+// SetUsageListValue sets the "usage_list_value" field.
+func (u *UsageLogUpsertBulk) SetUsageListValue(v decimal.Decimal) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUsageListValue(v)
+	})
+}
+
+// AddUsageListValue adds v to the "usage_list_value" field.
+func (u *UsageLogUpsertBulk) AddUsageListValue(v decimal.Decimal) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddUsageListValue(v)
+	})
+}
+
+// UpdateUsageListValue sets the "usage_list_value" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateUsageListValue() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUsageListValue()
+	})
+}
+
+// ClearUsageListValue clears the value of the "usage_list_value" field.
+func (u *UsageLogUpsertBulk) ClearUsageListValue() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUsageListValue()
 	})
 }
 

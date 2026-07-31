@@ -32,6 +32,7 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 	requireColumn(t, tx, "accounts", "rate_limit_reset_at", "timestamp with time zone", 0, true)
 	requireColumn(t, tx, "accounts", "overload_until", "timestamp with time zone", 0, true)
 	requireColumn(t, tx, "accounts", "session_window_status", "character varying", 20, true)
+	requireColumn(t, tx, "accounts", "upstream_cost_multiplier", "numeric", 0, true)
 
 	// api_keys: key length should be 128
 	requireColumn(t, tx, "api_keys", "key", "character varying", 128, false)
@@ -48,6 +49,10 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 	requireColumn(t, tx, "usage_logs", "image_output_size", "character varying", 32, true)
 	requireColumn(t, tx, "usage_logs", "image_size_source", "character varying", 16, true)
 	requireColumn(t, tx, "usage_logs", "image_size_breakdown", "jsonb", 0, true)
+	requireColumn(t, tx, "usage_logs", "upstream_cost_multiplier", "numeric", 0, true)
+	requireColumn(t, tx, "usage_logs", "sales_pricing_version", "character varying", 10, true)
+	requireColumn(t, tx, "usage_logs", "sales_pricing_snapshot", "jsonb", 0, true)
+	requireColumn(t, tx, "usage_logs", "usage_list_value", "numeric", 0, true)
 	requireConstraintDefinitionContains(
 		t,
 		tx,
@@ -114,6 +119,36 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 
 	// user_allowed_groups: created_at should be timestamptz
 	requireColumn(t, tx, "user_allowed_groups", "created_at", "timestamp with time zone", 0, false)
+
+	for _, table := range []string{
+		"system_model_price_versions",
+		"upstream_wallets",
+		"upstream_wallet_accounts",
+		"upstream_model_price_versions",
+		"usage_upstream_attempts",
+		"usage_finance_records",
+		"usage_finance_cost_segments",
+		"finance_calculation_revisions",
+		"subscription_revenue_recognitions",
+		"usage_revenue_allocations",
+		"finance_daily_aggregates",
+		"upstream_balance_snapshots",
+		"upstream_fund_events",
+		"payment_provider_fee_events",
+		"account_upstream_multiplier_changes",
+		"finance_alerts",
+		"finance_alert_status_audits",
+		"upstream_bill_reconciliations",
+		"finance_async_jobs",
+		"finance_backfill_jobs",
+		"finance_export_jobs",
+		"upstream_finance_sync_runs",
+	} {
+		requireTable(t, tx, table)
+	}
+
+	requireIndex(t, tx, "usage_finance_records", "idx_usage_finance_records_status_created")
+	requireIndex(t, tx, "account_upstream_multiplier_changes", "idx_account_upstream_multiplier_changes_history")
 }
 
 func TestMigrationsRunner_AuthIdentityAndPaymentSchemaStayAligned(t *testing.T) {
@@ -160,6 +195,17 @@ SELECT EXISTS (
 `, table, index).Scan(&exists)
 	require.NoError(t, err, "query pg_indexes for %s.%s", table, index)
 	require.True(t, exists, "expected index %s on %s", index, table)
+}
+
+func requireTable(t *testing.T, tx *sql.Tx, table string) {
+	t.Helper()
+
+	var regclass sql.NullString
+	require.NoError(
+		t,
+		tx.QueryRowContext(context.Background(), "SELECT to_regclass($1)", "public."+table).Scan(&regclass),
+	)
+	require.True(t, regclass.Valid, "expected table %s to exist", table)
 }
 
 func requireIndexAbsent(t *testing.T, tx *sql.Tx, table, index string) {

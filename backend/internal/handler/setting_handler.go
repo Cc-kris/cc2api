@@ -41,6 +41,7 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	modelSquareEnabled := h.settingService.GetModelSquareRuntime(c.Request.Context()).Enabled
 
 	response.Success(c, dto.PublicSettings{
 		RegistrationEnabled:              settings.RegistrationEnabled,
@@ -95,6 +96,7 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		ChannelMonitorDefaultIntervalSeconds: settings.ChannelMonitorDefaultIntervalSeconds,
 
 		AvailableChannelsEnabled: settings.AvailableChannelsEnabled,
+		ModelSquareEnabled:       modelSquareEnabled,
 
 		AffiliateEnabled: settings.AffiliateEnabled,
 

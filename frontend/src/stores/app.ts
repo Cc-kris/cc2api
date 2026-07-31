@@ -32,6 +32,7 @@ export const useAppStore = defineStore('app', () => {
   const apiBaseUrl = ref<string>('')
   const docUrl = ref<string>('')
   const cachedPublicSettings = ref<PublicSettings | null>(null)
+  let publicSettingsRequest: Promise<PublicSettings | null> | null = null
 
   // Version cache state
   const versionLoaded = ref<boolean>(false)
@@ -358,27 +359,33 @@ export const useAppStore = defineStore('app', () => {
         channel_monitor_public_enabled: false,
         channel_monitor_default_interval_seconds: 60,
         available_channels_enabled: false,
+        model_square_enabled: false,
         risk_control_enabled: false,
         affiliate_enabled: false,
       }
     }
 
-    // Prevent duplicate requests
-    if (publicSettingsLoading.value) {
-      return null
+    // Concurrent callers must await the same request so route guards never
+    // decide an opt-in feature before public settings have finished loading.
+    if (publicSettingsRequest) {
+      return publicSettingsRequest
     }
 
     publicSettingsLoading.value = true
-    try {
-      const data = await fetchPublicSettingsAPI()
-      applySettings(data)
-      return data
-    } catch (error) {
-      console.error('Failed to fetch public settings:', error)
-      return null
-    } finally {
-      publicSettingsLoading.value = false
-    }
+    publicSettingsRequest = (async () => {
+      try {
+        const data = await fetchPublicSettingsAPI()
+        applySettings(data)
+        return data
+      } catch (error) {
+        console.error('Failed to fetch public settings:', error)
+        return null
+      } finally {
+        publicSettingsLoading.value = false
+        publicSettingsRequest = null
+      }
+    })()
+    return publicSettingsRequest
   }
 
   /**

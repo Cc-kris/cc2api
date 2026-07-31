@@ -373,6 +373,7 @@
       :account-ids="selIds"
       :selected-platforms="selPlatforms"
       :selected-types="selTypes"
+      :selected-accounts="selAccounts"
       :target="bulkEditTarget ?? undefined"
       :proxies="proxies"
       :groups="groups"
@@ -479,6 +480,7 @@ const selTypes = computed<AccountType[]>(() => {
   )
   return [...types]
 })
+const selAccounts = computed(() => accounts.value.filter(account => isSelected(account.id)))
 const showCreate = ref(false)
 const showEdit = ref(false)
 const showSync = ref(false)

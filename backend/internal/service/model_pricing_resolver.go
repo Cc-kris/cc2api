@@ -8,6 +8,7 @@ import (
 // PricingSource 定价来源标识
 const (
 	PricingSourceChannel  = "channel"
+	PricingSourceMixed    = "mixed"
 	PricingSourceLiteLLM  = "litellm"
 	PricingSourceFallback = "fallback"
 )
@@ -28,9 +29,12 @@ type ResolvedPricing struct {
 
 	// 按次/图片模式：默认价格（未命中层级时使用）
 	DefaultPerRequestPrice float64
+	// DefaultPerRequestPricePresent distinguishes an explicit free price from an
+	// absent default price.
+	DefaultPerRequestPricePresent bool
 
 	// 来源标识
-	Source string // "channel", "litellm", "fallback"
+	Source string // "channel", "mixed", "litellm", "fallback"
 
 	// 是否支持缓存细分
 	SupportsCacheBreakdown bool
@@ -69,7 +73,7 @@ func (r *ModelPricingResolver) Resolve(ctx context.Context, input PricingInput) 
 			if mode == "" {
 				mode = BillingModeToken
 			}
-			if mode == BillingModePerRequest || mode == BillingModeImage || mode == BillingModePerSecond {
+			if mode == BillingModePerRequest || mode == BillingModeImage || mode == BillingModeVideo || mode == BillingModePerSecond {
 				resolved := &ResolvedPricing{
 					Mode:   mode,
 					Source: PricingSourceChannel,
@@ -128,7 +132,7 @@ func (r *ModelPricingResolver) applyChannelOverrides(ctx context.Context, groupI
 	switch resolved.Mode {
 	case BillingModeToken:
 		r.applyTokenOverrides(chPricing, resolved)
-	case BillingModePerRequest, BillingModeImage, BillingModePerSecond:
+	case BillingModePerRequest, BillingModeImage, BillingModeVideo, BillingModePerSecond:
 		r.applyRequestTierOverrides(chPricing, resolved)
 	}
 }
@@ -148,26 +152,37 @@ func (r *ModelPricingResolver) applyTokenOverrides(chPricing *ChannelModelPricin
 	if resolved.BasePricing == nil {
 		resolved.BasePricing = &ModelPricing{}
 	}
+	resolved.BasePricing.ensurePresence()
 
 	if chPricing.InputPrice != nil {
 		resolved.BasePricing.InputPricePerToken = *chPricing.InputPrice
 		resolved.BasePricing.InputPricePerTokenPriority = *chPricing.InputPrice
+		resolved.BasePricing.Presence.Input = true
+		resolved.BasePricing.Presence.FastInput = false
 	}
 	if chPricing.OutputPrice != nil {
 		resolved.BasePricing.OutputPricePerToken = *chPricing.OutputPrice
 		resolved.BasePricing.OutputPricePerTokenPriority = *chPricing.OutputPrice
+		resolved.BasePricing.Presence.Output = true
+		resolved.BasePricing.Presence.FastOutput = false
 	}
 	if chPricing.CacheWritePrice != nil {
 		resolved.BasePricing.CacheCreationPricePerToken = *chPricing.CacheWritePrice
 		resolved.BasePricing.CacheCreation5mPrice = *chPricing.CacheWritePrice
 		resolved.BasePricing.CacheCreation1hPrice = *chPricing.CacheWritePrice
+		resolved.BasePricing.Presence.CacheWrite = true
+		resolved.BasePricing.Presence.CacheWrite5m = true
+		resolved.BasePricing.Presence.CacheWrite1h = true
 	}
 	if chPricing.CacheReadPrice != nil {
 		resolved.BasePricing.CacheReadPricePerToken = *chPricing.CacheReadPrice
 		resolved.BasePricing.CacheReadPricePerTokenPriority = *chPricing.CacheReadPrice
+		resolved.BasePricing.Presence.CacheRead = true
+		resolved.BasePricing.Presence.FastCacheRead = false
 	}
 	if chPricing.ImageOutputPrice != nil {
 		resolved.BasePricing.ImageOutputPricePerToken = *chPricing.ImageOutputPrice
+		resolved.BasePricing.Presence.ImageOutput = true
 	}
 }
 
@@ -176,6 +191,7 @@ func (r *ModelPricingResolver) applyRequestTierOverrides(chPricing *ChannelModel
 	resolved.RequestTiers = filterValidIntervals(chPricing.Intervals)
 	if chPricing.PerRequestPrice != nil {
 		resolved.DefaultPerRequestPrice = *chPricing.PerRequestPrice
+		resolved.DefaultPerRequestPricePresent = true
 	}
 }
 
@@ -212,23 +228,30 @@ func (r *ModelPricingResolver) GetIntervalPricing(resolved *ResolvedPricing, tot
 func intervalToModelPricing(iv *PricingInterval, supportsCacheBreakdown bool) *ModelPricing {
 	pricing := &ModelPricing{
 		SupportsCacheBreakdown: supportsCacheBreakdown,
+		Presence:               &ModelPricingPresence{},
 	}
 	if iv.InputPrice != nil {
 		pricing.InputPricePerToken = *iv.InputPrice
 		pricing.InputPricePerTokenPriority = *iv.InputPrice
+		pricing.Presence.Input = true
 	}
 	if iv.OutputPrice != nil {
 		pricing.OutputPricePerToken = *iv.OutputPrice
 		pricing.OutputPricePerTokenPriority = *iv.OutputPrice
+		pricing.Presence.Output = true
 	}
 	if iv.CacheWritePrice != nil {
 		pricing.CacheCreationPricePerToken = *iv.CacheWritePrice
 		pricing.CacheCreation5mPrice = *iv.CacheWritePrice
 		pricing.CacheCreation1hPrice = *iv.CacheWritePrice
+		pricing.Presence.CacheWrite = true
+		pricing.Presence.CacheWrite5m = true
+		pricing.Presence.CacheWrite1h = true
 	}
 	if iv.CacheReadPrice != nil {
 		pricing.CacheReadPricePerToken = *iv.CacheReadPrice
 		pricing.CacheReadPricePerTokenPriority = *iv.CacheReadPrice
+		pricing.Presence.CacheRead = true
 	}
 	return pricing
 }

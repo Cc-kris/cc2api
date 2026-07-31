@@ -12,3 +12,7 @@ dist/
 # 忽略缓存
 .cache/
 .vite/
+
+# Playwright generated artifacts
+playwright-report/
+test-results/

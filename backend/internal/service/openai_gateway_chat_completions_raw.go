@@ -542,15 +542,16 @@ func (s *OpenAIGatewayService) bufferRawChatCompletions(
 	_, _ = c.Writer.Write(respBody)
 
 	return &OpenAIForwardResult{
-		RequestID:       requestID,
-		Usage:           usage,
-		Model:           originalModel,
-		BillingModel:    billingModel,
-		UpstreamModel:   upstreamModel,
-		ReasoningEffort: reasoningEffort,
-		ServiceTier:     serviceTier,
-		Stream:          false,
-		Duration:        time.Since(startTime),
+		RequestID:              requestID,
+		Usage:                  usage,
+		Model:                  originalModel,
+		BillingModel:           billingModel,
+		UpstreamModel:          upstreamModel,
+		ReasoningEffort:        reasoningEffort,
+		ServiceTier:            serviceTier,
+		Stream:                 false,
+		Duration:               time.Since(startTime),
+		UpstreamBillingPayload: append([]byte(nil), respBody...),
 	}, nil
 }
 

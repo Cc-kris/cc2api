@@ -16,7 +16,10 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/Wei-Shaw/sub2api/ent/account"
+	"github.com/Wei-Shaw/sub2api/ent/accountfinancecountersnapshot"
+	"github.com/Wei-Shaw/sub2api/ent/accountfinanceprofile"
 	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
+	"github.com/Wei-Shaw/sub2api/ent/accountupstreammultiplierchange"
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
@@ -27,11 +30,19 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorhistory"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorrequesttemplate"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
+	"github.com/Wei-Shaw/sub2api/ent/financealert"
+	"github.com/Wei-Shaw/sub2api/ent/financeasyncjob"
+	"github.com/Wei-Shaw/sub2api/ent/financebackfilljob"
+	"github.com/Wei-Shaw/sub2api/ent/financecalculationrevision"
+	"github.com/Wei-Shaw/sub2api/ent/financedailyaggregate"
+	"github.com/Wei-Shaw/sub2api/ent/financeexportjob"
+	"github.com/Wei-Shaw/sub2api/ent/financefxrateversion"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
 	"github.com/Wei-Shaw/sub2api/ent/identityadoptiondecision"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
+	"github.com/Wei-Shaw/sub2api/ent/paymentproviderfeeevent"
 	"github.com/Wei-Shaw/sub2api/ent/paymentproviderinstance"
 	"github.com/Wei-Shaw/sub2api/ent/pendingauthsession"
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
@@ -41,9 +52,26 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
+	"github.com/Wei-Shaw/sub2api/ent/subscriptionrevenuerecognition"
+	"github.com/Wei-Shaw/sub2api/ent/systemmodelpriceversion"
 	"github.com/Wei-Shaw/sub2api/ent/tlsfingerprintprofile"
+	"github.com/Wei-Shaw/sub2api/ent/upstreambalancesnapshot"
+	"github.com/Wei-Shaw/sub2api/ent/upstreambillreconciliation"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamcostsettlementinterval"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamfinanceprotocol"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamfinanceprotocolversion"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamfinancesyncrun"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamfundevent"
+	"github.com/Wei-Shaw/sub2api/ent/upstreammodelpriceversion"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamwallet"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamwalletaccount"
 	"github.com/Wei-Shaw/sub2api/ent/usagecleanuptask"
+	"github.com/Wei-Shaw/sub2api/ent/usagecostsettlementallocation"
+	"github.com/Wei-Shaw/sub2api/ent/usagefinancecostsegment"
+	"github.com/Wei-Shaw/sub2api/ent/usagefinancerecord"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
+	"github.com/Wei-Shaw/sub2api/ent/usagerevenueallocation"
+	"github.com/Wei-Shaw/sub2api/ent/usageupstreamattempt"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
@@ -63,8 +91,14 @@ type Client struct {
 	APIKey *APIKeyClient
 	// Account is the client for interacting with the Account builders.
 	Account *AccountClient
+	// AccountFinanceCounterSnapshot is the client for interacting with the AccountFinanceCounterSnapshot builders.
+	AccountFinanceCounterSnapshot *AccountFinanceCounterSnapshotClient
+	// AccountFinanceProfile is the client for interacting with the AccountFinanceProfile builders.
+	AccountFinanceProfile *AccountFinanceProfileClient
 	// AccountGroup is the client for interacting with the AccountGroup builders.
 	AccountGroup *AccountGroupClient
+	// AccountUpstreamMultiplierChange is the client for interacting with the AccountUpstreamMultiplierChange builders.
+	AccountUpstreamMultiplierChange *AccountUpstreamMultiplierChangeClient
 	// Announcement is the client for interacting with the Announcement builders.
 	Announcement *AnnouncementClient
 	// AnnouncementRead is the client for interacting with the AnnouncementRead builders.
@@ -83,6 +117,20 @@ type Client struct {
 	ChannelMonitorRequestTemplate *ChannelMonitorRequestTemplateClient
 	// ErrorPassthroughRule is the client for interacting with the ErrorPassthroughRule builders.
 	ErrorPassthroughRule *ErrorPassthroughRuleClient
+	// FinanceAlert is the client for interacting with the FinanceAlert builders.
+	FinanceAlert *FinanceAlertClient
+	// FinanceAsyncJob is the client for interacting with the FinanceAsyncJob builders.
+	FinanceAsyncJob *FinanceAsyncJobClient
+	// FinanceBackfillJob is the client for interacting with the FinanceBackfillJob builders.
+	FinanceBackfillJob *FinanceBackfillJobClient
+	// FinanceCalculationRevision is the client for interacting with the FinanceCalculationRevision builders.
+	FinanceCalculationRevision *FinanceCalculationRevisionClient
+	// FinanceDailyAggregate is the client for interacting with the FinanceDailyAggregate builders.
+	FinanceDailyAggregate *FinanceDailyAggregateClient
+	// FinanceExportJob is the client for interacting with the FinanceExportJob builders.
+	FinanceExportJob *FinanceExportJobClient
+	// FinanceFXRateVersion is the client for interacting with the FinanceFXRateVersion builders.
+	FinanceFXRateVersion *FinanceFXRateVersionClient
 	// Group is the client for interacting with the Group builders.
 	Group *GroupClient
 	// IdempotencyRecord is the client for interacting with the IdempotencyRecord builders.
@@ -93,6 +141,8 @@ type Client struct {
 	PaymentAuditLog *PaymentAuditLogClient
 	// PaymentOrder is the client for interacting with the PaymentOrder builders.
 	PaymentOrder *PaymentOrderClient
+	// PaymentProviderFeeEvent is the client for interacting with the PaymentProviderFeeEvent builders.
+	PaymentProviderFeeEvent *PaymentProviderFeeEventClient
 	// PaymentProviderInstance is the client for interacting with the PaymentProviderInstance builders.
 	PaymentProviderInstance *PaymentProviderInstanceClient
 	// PendingAuthSession is the client for interacting with the PendingAuthSession builders.
@@ -111,12 +161,46 @@ type Client struct {
 	Setting *SettingClient
 	// SubscriptionPlan is the client for interacting with the SubscriptionPlan builders.
 	SubscriptionPlan *SubscriptionPlanClient
+	// SubscriptionRevenueRecognition is the client for interacting with the SubscriptionRevenueRecognition builders.
+	SubscriptionRevenueRecognition *SubscriptionRevenueRecognitionClient
+	// SystemModelPriceVersion is the client for interacting with the SystemModelPriceVersion builders.
+	SystemModelPriceVersion *SystemModelPriceVersionClient
 	// TLSFingerprintProfile is the client for interacting with the TLSFingerprintProfile builders.
 	TLSFingerprintProfile *TLSFingerprintProfileClient
+	// UpstreamBalanceSnapshot is the client for interacting with the UpstreamBalanceSnapshot builders.
+	UpstreamBalanceSnapshot *UpstreamBalanceSnapshotClient
+	// UpstreamBillReconciliation is the client for interacting with the UpstreamBillReconciliation builders.
+	UpstreamBillReconciliation *UpstreamBillReconciliationClient
+	// UpstreamCostSettlementInterval is the client for interacting with the UpstreamCostSettlementInterval builders.
+	UpstreamCostSettlementInterval *UpstreamCostSettlementIntervalClient
+	// UpstreamFinanceProtocol is the client for interacting with the UpstreamFinanceProtocol builders.
+	UpstreamFinanceProtocol *UpstreamFinanceProtocolClient
+	// UpstreamFinanceProtocolVersion is the client for interacting with the UpstreamFinanceProtocolVersion builders.
+	UpstreamFinanceProtocolVersion *UpstreamFinanceProtocolVersionClient
+	// UpstreamFinanceSyncRun is the client for interacting with the UpstreamFinanceSyncRun builders.
+	UpstreamFinanceSyncRun *UpstreamFinanceSyncRunClient
+	// UpstreamFundEvent is the client for interacting with the UpstreamFundEvent builders.
+	UpstreamFundEvent *UpstreamFundEventClient
+	// UpstreamModelPriceVersion is the client for interacting with the UpstreamModelPriceVersion builders.
+	UpstreamModelPriceVersion *UpstreamModelPriceVersionClient
+	// UpstreamWallet is the client for interacting with the UpstreamWallet builders.
+	UpstreamWallet *UpstreamWalletClient
+	// UpstreamWalletAccount is the client for interacting with the UpstreamWalletAccount builders.
+	UpstreamWalletAccount *UpstreamWalletAccountClient
 	// UsageCleanupTask is the client for interacting with the UsageCleanupTask builders.
 	UsageCleanupTask *UsageCleanupTaskClient
+	// UsageCostSettlementAllocation is the client for interacting with the UsageCostSettlementAllocation builders.
+	UsageCostSettlementAllocation *UsageCostSettlementAllocationClient
+	// UsageFinanceCostSegment is the client for interacting with the UsageFinanceCostSegment builders.
+	UsageFinanceCostSegment *UsageFinanceCostSegmentClient
+	// UsageFinanceRecord is the client for interacting with the UsageFinanceRecord builders.
+	UsageFinanceRecord *UsageFinanceRecordClient
 	// UsageLog is the client for interacting with the UsageLog builders.
 	UsageLog *UsageLogClient
+	// UsageRevenueAllocation is the client for interacting with the UsageRevenueAllocation builders.
+	UsageRevenueAllocation *UsageRevenueAllocationClient
+	// UsageUpstreamAttempt is the client for interacting with the UsageUpstreamAttempt builders.
+	UsageUpstreamAttempt *UsageUpstreamAttemptClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 	// UserAllowedGroup is the client for interacting with the UserAllowedGroup builders.
@@ -142,7 +226,10 @@ func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.APIKey = NewAPIKeyClient(c.config)
 	c.Account = NewAccountClient(c.config)
+	c.AccountFinanceCounterSnapshot = NewAccountFinanceCounterSnapshotClient(c.config)
+	c.AccountFinanceProfile = NewAccountFinanceProfileClient(c.config)
 	c.AccountGroup = NewAccountGroupClient(c.config)
+	c.AccountUpstreamMultiplierChange = NewAccountUpstreamMultiplierChangeClient(c.config)
 	c.Announcement = NewAnnouncementClient(c.config)
 	c.AnnouncementRead = NewAnnouncementReadClient(c.config)
 	c.AuthIdentity = NewAuthIdentityClient(c.config)
@@ -152,11 +239,19 @@ func (c *Client) init() {
 	c.ChannelMonitorHistory = NewChannelMonitorHistoryClient(c.config)
 	c.ChannelMonitorRequestTemplate = NewChannelMonitorRequestTemplateClient(c.config)
 	c.ErrorPassthroughRule = NewErrorPassthroughRuleClient(c.config)
+	c.FinanceAlert = NewFinanceAlertClient(c.config)
+	c.FinanceAsyncJob = NewFinanceAsyncJobClient(c.config)
+	c.FinanceBackfillJob = NewFinanceBackfillJobClient(c.config)
+	c.FinanceCalculationRevision = NewFinanceCalculationRevisionClient(c.config)
+	c.FinanceDailyAggregate = NewFinanceDailyAggregateClient(c.config)
+	c.FinanceExportJob = NewFinanceExportJobClient(c.config)
+	c.FinanceFXRateVersion = NewFinanceFXRateVersionClient(c.config)
 	c.Group = NewGroupClient(c.config)
 	c.IdempotencyRecord = NewIdempotencyRecordClient(c.config)
 	c.IdentityAdoptionDecision = NewIdentityAdoptionDecisionClient(c.config)
 	c.PaymentAuditLog = NewPaymentAuditLogClient(c.config)
 	c.PaymentOrder = NewPaymentOrderClient(c.config)
+	c.PaymentProviderFeeEvent = NewPaymentProviderFeeEventClient(c.config)
 	c.PaymentProviderInstance = NewPaymentProviderInstanceClient(c.config)
 	c.PendingAuthSession = NewPendingAuthSessionClient(c.config)
 	c.PromoCode = NewPromoCodeClient(c.config)
@@ -166,9 +261,26 @@ func (c *Client) init() {
 	c.SecuritySecret = NewSecuritySecretClient(c.config)
 	c.Setting = NewSettingClient(c.config)
 	c.SubscriptionPlan = NewSubscriptionPlanClient(c.config)
+	c.SubscriptionRevenueRecognition = NewSubscriptionRevenueRecognitionClient(c.config)
+	c.SystemModelPriceVersion = NewSystemModelPriceVersionClient(c.config)
 	c.TLSFingerprintProfile = NewTLSFingerprintProfileClient(c.config)
+	c.UpstreamBalanceSnapshot = NewUpstreamBalanceSnapshotClient(c.config)
+	c.UpstreamBillReconciliation = NewUpstreamBillReconciliationClient(c.config)
+	c.UpstreamCostSettlementInterval = NewUpstreamCostSettlementIntervalClient(c.config)
+	c.UpstreamFinanceProtocol = NewUpstreamFinanceProtocolClient(c.config)
+	c.UpstreamFinanceProtocolVersion = NewUpstreamFinanceProtocolVersionClient(c.config)
+	c.UpstreamFinanceSyncRun = NewUpstreamFinanceSyncRunClient(c.config)
+	c.UpstreamFundEvent = NewUpstreamFundEventClient(c.config)
+	c.UpstreamModelPriceVersion = NewUpstreamModelPriceVersionClient(c.config)
+	c.UpstreamWallet = NewUpstreamWalletClient(c.config)
+	c.UpstreamWalletAccount = NewUpstreamWalletAccountClient(c.config)
 	c.UsageCleanupTask = NewUsageCleanupTaskClient(c.config)
+	c.UsageCostSettlementAllocation = NewUsageCostSettlementAllocationClient(c.config)
+	c.UsageFinanceCostSegment = NewUsageFinanceCostSegmentClient(c.config)
+	c.UsageFinanceRecord = NewUsageFinanceRecordClient(c.config)
 	c.UsageLog = NewUsageLogClient(c.config)
+	c.UsageRevenueAllocation = NewUsageRevenueAllocationClient(c.config)
+	c.UsageUpstreamAttempt = NewUsageUpstreamAttemptClient(c.config)
 	c.User = NewUserClient(c.config)
 	c.UserAllowedGroup = NewUserAllowedGroupClient(c.config)
 	c.UserAttributeDefinition = NewUserAttributeDefinitionClient(c.config)
@@ -265,43 +377,71 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:                           ctx,
-		config:                        cfg,
-		APIKey:                        NewAPIKeyClient(cfg),
-		Account:                       NewAccountClient(cfg),
-		AccountGroup:                  NewAccountGroupClient(cfg),
-		Announcement:                  NewAnnouncementClient(cfg),
-		AnnouncementRead:              NewAnnouncementReadClient(cfg),
-		AuthIdentity:                  NewAuthIdentityClient(cfg),
-		AuthIdentityChannel:           NewAuthIdentityChannelClient(cfg),
-		ChannelMonitor:                NewChannelMonitorClient(cfg),
-		ChannelMonitorDailyRollup:     NewChannelMonitorDailyRollupClient(cfg),
-		ChannelMonitorHistory:         NewChannelMonitorHistoryClient(cfg),
-		ChannelMonitorRequestTemplate: NewChannelMonitorRequestTemplateClient(cfg),
-		ErrorPassthroughRule:          NewErrorPassthroughRuleClient(cfg),
-		Group:                         NewGroupClient(cfg),
-		IdempotencyRecord:             NewIdempotencyRecordClient(cfg),
-		IdentityAdoptionDecision:      NewIdentityAdoptionDecisionClient(cfg),
-		PaymentAuditLog:               NewPaymentAuditLogClient(cfg),
-		PaymentOrder:                  NewPaymentOrderClient(cfg),
-		PaymentProviderInstance:       NewPaymentProviderInstanceClient(cfg),
-		PendingAuthSession:            NewPendingAuthSessionClient(cfg),
-		PromoCode:                     NewPromoCodeClient(cfg),
-		PromoCodeUsage:                NewPromoCodeUsageClient(cfg),
-		Proxy:                         NewProxyClient(cfg),
-		RedeemCode:                    NewRedeemCodeClient(cfg),
-		SecuritySecret:                NewSecuritySecretClient(cfg),
-		Setting:                       NewSettingClient(cfg),
-		SubscriptionPlan:              NewSubscriptionPlanClient(cfg),
-		TLSFingerprintProfile:         NewTLSFingerprintProfileClient(cfg),
-		UsageCleanupTask:              NewUsageCleanupTaskClient(cfg),
-		UsageLog:                      NewUsageLogClient(cfg),
-		User:                          NewUserClient(cfg),
-		UserAllowedGroup:              NewUserAllowedGroupClient(cfg),
-		UserAttributeDefinition:       NewUserAttributeDefinitionClient(cfg),
-		UserAttributeValue:            NewUserAttributeValueClient(cfg),
-		UserPlatformQuota:             NewUserPlatformQuotaClient(cfg),
-		UserSubscription:              NewUserSubscriptionClient(cfg),
+		ctx:                             ctx,
+		config:                          cfg,
+		APIKey:                          NewAPIKeyClient(cfg),
+		Account:                         NewAccountClient(cfg),
+		AccountFinanceCounterSnapshot:   NewAccountFinanceCounterSnapshotClient(cfg),
+		AccountFinanceProfile:           NewAccountFinanceProfileClient(cfg),
+		AccountGroup:                    NewAccountGroupClient(cfg),
+		AccountUpstreamMultiplierChange: NewAccountUpstreamMultiplierChangeClient(cfg),
+		Announcement:                    NewAnnouncementClient(cfg),
+		AnnouncementRead:                NewAnnouncementReadClient(cfg),
+		AuthIdentity:                    NewAuthIdentityClient(cfg),
+		AuthIdentityChannel:             NewAuthIdentityChannelClient(cfg),
+		ChannelMonitor:                  NewChannelMonitorClient(cfg),
+		ChannelMonitorDailyRollup:       NewChannelMonitorDailyRollupClient(cfg),
+		ChannelMonitorHistory:           NewChannelMonitorHistoryClient(cfg),
+		ChannelMonitorRequestTemplate:   NewChannelMonitorRequestTemplateClient(cfg),
+		ErrorPassthroughRule:            NewErrorPassthroughRuleClient(cfg),
+		FinanceAlert:                    NewFinanceAlertClient(cfg),
+		FinanceAsyncJob:                 NewFinanceAsyncJobClient(cfg),
+		FinanceBackfillJob:              NewFinanceBackfillJobClient(cfg),
+		FinanceCalculationRevision:      NewFinanceCalculationRevisionClient(cfg),
+		FinanceDailyAggregate:           NewFinanceDailyAggregateClient(cfg),
+		FinanceExportJob:                NewFinanceExportJobClient(cfg),
+		FinanceFXRateVersion:            NewFinanceFXRateVersionClient(cfg),
+		Group:                           NewGroupClient(cfg),
+		IdempotencyRecord:               NewIdempotencyRecordClient(cfg),
+		IdentityAdoptionDecision:        NewIdentityAdoptionDecisionClient(cfg),
+		PaymentAuditLog:                 NewPaymentAuditLogClient(cfg),
+		PaymentOrder:                    NewPaymentOrderClient(cfg),
+		PaymentProviderFeeEvent:         NewPaymentProviderFeeEventClient(cfg),
+		PaymentProviderInstance:         NewPaymentProviderInstanceClient(cfg),
+		PendingAuthSession:              NewPendingAuthSessionClient(cfg),
+		PromoCode:                       NewPromoCodeClient(cfg),
+		PromoCodeUsage:                  NewPromoCodeUsageClient(cfg),
+		Proxy:                           NewProxyClient(cfg),
+		RedeemCode:                      NewRedeemCodeClient(cfg),
+		SecuritySecret:                  NewSecuritySecretClient(cfg),
+		Setting:                         NewSettingClient(cfg),
+		SubscriptionPlan:                NewSubscriptionPlanClient(cfg),
+		SubscriptionRevenueRecognition:  NewSubscriptionRevenueRecognitionClient(cfg),
+		SystemModelPriceVersion:         NewSystemModelPriceVersionClient(cfg),
+		TLSFingerprintProfile:           NewTLSFingerprintProfileClient(cfg),
+		UpstreamBalanceSnapshot:         NewUpstreamBalanceSnapshotClient(cfg),
+		UpstreamBillReconciliation:      NewUpstreamBillReconciliationClient(cfg),
+		UpstreamCostSettlementInterval:  NewUpstreamCostSettlementIntervalClient(cfg),
+		UpstreamFinanceProtocol:         NewUpstreamFinanceProtocolClient(cfg),
+		UpstreamFinanceProtocolVersion:  NewUpstreamFinanceProtocolVersionClient(cfg),
+		UpstreamFinanceSyncRun:          NewUpstreamFinanceSyncRunClient(cfg),
+		UpstreamFundEvent:               NewUpstreamFundEventClient(cfg),
+		UpstreamModelPriceVersion:       NewUpstreamModelPriceVersionClient(cfg),
+		UpstreamWallet:                  NewUpstreamWalletClient(cfg),
+		UpstreamWalletAccount:           NewUpstreamWalletAccountClient(cfg),
+		UsageCleanupTask:                NewUsageCleanupTaskClient(cfg),
+		UsageCostSettlementAllocation:   NewUsageCostSettlementAllocationClient(cfg),
+		UsageFinanceCostSegment:         NewUsageFinanceCostSegmentClient(cfg),
+		UsageFinanceRecord:              NewUsageFinanceRecordClient(cfg),
+		UsageLog:                        NewUsageLogClient(cfg),
+		UsageRevenueAllocation:          NewUsageRevenueAllocationClient(cfg),
+		UsageUpstreamAttempt:            NewUsageUpstreamAttemptClient(cfg),
+		User:                            NewUserClient(cfg),
+		UserAllowedGroup:                NewUserAllowedGroupClient(cfg),
+		UserAttributeDefinition:         NewUserAttributeDefinitionClient(cfg),
+		UserAttributeValue:              NewUserAttributeValueClient(cfg),
+		UserPlatformQuota:               NewUserPlatformQuotaClient(cfg),
+		UserSubscription:                NewUserSubscriptionClient(cfg),
 	}, nil
 }
 
@@ -319,43 +459,71 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:                           ctx,
-		config:                        cfg,
-		APIKey:                        NewAPIKeyClient(cfg),
-		Account:                       NewAccountClient(cfg),
-		AccountGroup:                  NewAccountGroupClient(cfg),
-		Announcement:                  NewAnnouncementClient(cfg),
-		AnnouncementRead:              NewAnnouncementReadClient(cfg),
-		AuthIdentity:                  NewAuthIdentityClient(cfg),
-		AuthIdentityChannel:           NewAuthIdentityChannelClient(cfg),
-		ChannelMonitor:                NewChannelMonitorClient(cfg),
-		ChannelMonitorDailyRollup:     NewChannelMonitorDailyRollupClient(cfg),
-		ChannelMonitorHistory:         NewChannelMonitorHistoryClient(cfg),
-		ChannelMonitorRequestTemplate: NewChannelMonitorRequestTemplateClient(cfg),
-		ErrorPassthroughRule:          NewErrorPassthroughRuleClient(cfg),
-		Group:                         NewGroupClient(cfg),
-		IdempotencyRecord:             NewIdempotencyRecordClient(cfg),
-		IdentityAdoptionDecision:      NewIdentityAdoptionDecisionClient(cfg),
-		PaymentAuditLog:               NewPaymentAuditLogClient(cfg),
-		PaymentOrder:                  NewPaymentOrderClient(cfg),
-		PaymentProviderInstance:       NewPaymentProviderInstanceClient(cfg),
-		PendingAuthSession:            NewPendingAuthSessionClient(cfg),
-		PromoCode:                     NewPromoCodeClient(cfg),
-		PromoCodeUsage:                NewPromoCodeUsageClient(cfg),
-		Proxy:                         NewProxyClient(cfg),
-		RedeemCode:                    NewRedeemCodeClient(cfg),
-		SecuritySecret:                NewSecuritySecretClient(cfg),
-		Setting:                       NewSettingClient(cfg),
-		SubscriptionPlan:              NewSubscriptionPlanClient(cfg),
-		TLSFingerprintProfile:         NewTLSFingerprintProfileClient(cfg),
-		UsageCleanupTask:              NewUsageCleanupTaskClient(cfg),
-		UsageLog:                      NewUsageLogClient(cfg),
-		User:                          NewUserClient(cfg),
-		UserAllowedGroup:              NewUserAllowedGroupClient(cfg),
-		UserAttributeDefinition:       NewUserAttributeDefinitionClient(cfg),
-		UserAttributeValue:            NewUserAttributeValueClient(cfg),
-		UserPlatformQuota:             NewUserPlatformQuotaClient(cfg),
-		UserSubscription:              NewUserSubscriptionClient(cfg),
+		ctx:                             ctx,
+		config:                          cfg,
+		APIKey:                          NewAPIKeyClient(cfg),
+		Account:                         NewAccountClient(cfg),
+		AccountFinanceCounterSnapshot:   NewAccountFinanceCounterSnapshotClient(cfg),
+		AccountFinanceProfile:           NewAccountFinanceProfileClient(cfg),
+		AccountGroup:                    NewAccountGroupClient(cfg),
+		AccountUpstreamMultiplierChange: NewAccountUpstreamMultiplierChangeClient(cfg),
+		Announcement:                    NewAnnouncementClient(cfg),
+		AnnouncementRead:                NewAnnouncementReadClient(cfg),
+		AuthIdentity:                    NewAuthIdentityClient(cfg),
+		AuthIdentityChannel:             NewAuthIdentityChannelClient(cfg),
+		ChannelMonitor:                  NewChannelMonitorClient(cfg),
+		ChannelMonitorDailyRollup:       NewChannelMonitorDailyRollupClient(cfg),
+		ChannelMonitorHistory:           NewChannelMonitorHistoryClient(cfg),
+		ChannelMonitorRequestTemplate:   NewChannelMonitorRequestTemplateClient(cfg),
+		ErrorPassthroughRule:            NewErrorPassthroughRuleClient(cfg),
+		FinanceAlert:                    NewFinanceAlertClient(cfg),
+		FinanceAsyncJob:                 NewFinanceAsyncJobClient(cfg),
+		FinanceBackfillJob:              NewFinanceBackfillJobClient(cfg),
+		FinanceCalculationRevision:      NewFinanceCalculationRevisionClient(cfg),
+		FinanceDailyAggregate:           NewFinanceDailyAggregateClient(cfg),
+		FinanceExportJob:                NewFinanceExportJobClient(cfg),
+		FinanceFXRateVersion:            NewFinanceFXRateVersionClient(cfg),
+		Group:                           NewGroupClient(cfg),
+		IdempotencyRecord:               NewIdempotencyRecordClient(cfg),
+		IdentityAdoptionDecision:        NewIdentityAdoptionDecisionClient(cfg),
+		PaymentAuditLog:                 NewPaymentAuditLogClient(cfg),
+		PaymentOrder:                    NewPaymentOrderClient(cfg),
+		PaymentProviderFeeEvent:         NewPaymentProviderFeeEventClient(cfg),
+		PaymentProviderInstance:         NewPaymentProviderInstanceClient(cfg),
+		PendingAuthSession:              NewPendingAuthSessionClient(cfg),
+		PromoCode:                       NewPromoCodeClient(cfg),
+		PromoCodeUsage:                  NewPromoCodeUsageClient(cfg),
+		Proxy:                           NewProxyClient(cfg),
+		RedeemCode:                      NewRedeemCodeClient(cfg),
+		SecuritySecret:                  NewSecuritySecretClient(cfg),
+		Setting:                         NewSettingClient(cfg),
+		SubscriptionPlan:                NewSubscriptionPlanClient(cfg),
+		SubscriptionRevenueRecognition:  NewSubscriptionRevenueRecognitionClient(cfg),
+		SystemModelPriceVersion:         NewSystemModelPriceVersionClient(cfg),
+		TLSFingerprintProfile:           NewTLSFingerprintProfileClient(cfg),
+		UpstreamBalanceSnapshot:         NewUpstreamBalanceSnapshotClient(cfg),
+		UpstreamBillReconciliation:      NewUpstreamBillReconciliationClient(cfg),
+		UpstreamCostSettlementInterval:  NewUpstreamCostSettlementIntervalClient(cfg),
+		UpstreamFinanceProtocol:         NewUpstreamFinanceProtocolClient(cfg),
+		UpstreamFinanceProtocolVersion:  NewUpstreamFinanceProtocolVersionClient(cfg),
+		UpstreamFinanceSyncRun:          NewUpstreamFinanceSyncRunClient(cfg),
+		UpstreamFundEvent:               NewUpstreamFundEventClient(cfg),
+		UpstreamModelPriceVersion:       NewUpstreamModelPriceVersionClient(cfg),
+		UpstreamWallet:                  NewUpstreamWalletClient(cfg),
+		UpstreamWalletAccount:           NewUpstreamWalletAccountClient(cfg),
+		UsageCleanupTask:                NewUsageCleanupTaskClient(cfg),
+		UsageCostSettlementAllocation:   NewUsageCostSettlementAllocationClient(cfg),
+		UsageFinanceCostSegment:         NewUsageFinanceCostSegmentClient(cfg),
+		UsageFinanceRecord:              NewUsageFinanceRecordClient(cfg),
+		UsageLog:                        NewUsageLogClient(cfg),
+		UsageRevenueAllocation:          NewUsageRevenueAllocationClient(cfg),
+		UsageUpstreamAttempt:            NewUsageUpstreamAttemptClient(cfg),
+		User:                            NewUserClient(cfg),
+		UserAllowedGroup:                NewUserAllowedGroupClient(cfg),
+		UserAttributeDefinition:         NewUserAttributeDefinitionClient(cfg),
+		UserAttributeValue:              NewUserAttributeValueClient(cfg),
+		UserPlatformQuota:               NewUserPlatformQuotaClient(cfg),
+		UserSubscription:                NewUserSubscriptionClient(cfg),
 	}, nil
 }
 
@@ -385,16 +553,27 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.APIKey, c.Account, c.AccountGroup, c.Announcement, c.AnnouncementRead,
-		c.AuthIdentity, c.AuthIdentityChannel, c.ChannelMonitor,
+		c.APIKey, c.Account, c.AccountFinanceCounterSnapshot, c.AccountFinanceProfile,
+		c.AccountGroup, c.AccountUpstreamMultiplierChange, c.Announcement,
+		c.AnnouncementRead, c.AuthIdentity, c.AuthIdentityChannel, c.ChannelMonitor,
 		c.ChannelMonitorDailyRollup, c.ChannelMonitorHistory,
-		c.ChannelMonitorRequestTemplate, c.ErrorPassthroughRule, c.Group,
+		c.ChannelMonitorRequestTemplate, c.ErrorPassthroughRule, c.FinanceAlert,
+		c.FinanceAsyncJob, c.FinanceBackfillJob, c.FinanceCalculationRevision,
+		c.FinanceDailyAggregate, c.FinanceExportJob, c.FinanceFXRateVersion, c.Group,
 		c.IdempotencyRecord, c.IdentityAdoptionDecision, c.PaymentAuditLog,
-		c.PaymentOrder, c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode,
-		c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting,
-		c.SubscriptionPlan, c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog,
-		c.User, c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
-		c.UserPlatformQuota, c.UserSubscription,
+		c.PaymentOrder, c.PaymentProviderFeeEvent, c.PaymentProviderInstance,
+		c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage, c.Proxy, c.RedeemCode,
+		c.SecuritySecret, c.Setting, c.SubscriptionPlan,
+		c.SubscriptionRevenueRecognition, c.SystemModelPriceVersion,
+		c.TLSFingerprintProfile, c.UpstreamBalanceSnapshot,
+		c.UpstreamBillReconciliation, c.UpstreamCostSettlementInterval,
+		c.UpstreamFinanceProtocol, c.UpstreamFinanceProtocolVersion,
+		c.UpstreamFinanceSyncRun, c.UpstreamFundEvent, c.UpstreamModelPriceVersion,
+		c.UpstreamWallet, c.UpstreamWalletAccount, c.UsageCleanupTask,
+		c.UsageCostSettlementAllocation, c.UsageFinanceCostSegment,
+		c.UsageFinanceRecord, c.UsageLog, c.UsageRevenueAllocation,
+		c.UsageUpstreamAttempt, c.User, c.UserAllowedGroup, c.UserAttributeDefinition,
+		c.UserAttributeValue, c.UserPlatformQuota, c.UserSubscription,
 	} {
 		n.Use(hooks...)
 	}
@@ -404,16 +583,27 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.APIKey, c.Account, c.AccountGroup, c.Announcement, c.AnnouncementRead,
-		c.AuthIdentity, c.AuthIdentityChannel, c.ChannelMonitor,
+		c.APIKey, c.Account, c.AccountFinanceCounterSnapshot, c.AccountFinanceProfile,
+		c.AccountGroup, c.AccountUpstreamMultiplierChange, c.Announcement,
+		c.AnnouncementRead, c.AuthIdentity, c.AuthIdentityChannel, c.ChannelMonitor,
 		c.ChannelMonitorDailyRollup, c.ChannelMonitorHistory,
-		c.ChannelMonitorRequestTemplate, c.ErrorPassthroughRule, c.Group,
+		c.ChannelMonitorRequestTemplate, c.ErrorPassthroughRule, c.FinanceAlert,
+		c.FinanceAsyncJob, c.FinanceBackfillJob, c.FinanceCalculationRevision,
+		c.FinanceDailyAggregate, c.FinanceExportJob, c.FinanceFXRateVersion, c.Group,
 		c.IdempotencyRecord, c.IdentityAdoptionDecision, c.PaymentAuditLog,
-		c.PaymentOrder, c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode,
-		c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting,
-		c.SubscriptionPlan, c.TLSFingerprintProfile, c.UsageCleanupTask, c.UsageLog,
-		c.User, c.UserAllowedGroup, c.UserAttributeDefinition, c.UserAttributeValue,
-		c.UserPlatformQuota, c.UserSubscription,
+		c.PaymentOrder, c.PaymentProviderFeeEvent, c.PaymentProviderInstance,
+		c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage, c.Proxy, c.RedeemCode,
+		c.SecuritySecret, c.Setting, c.SubscriptionPlan,
+		c.SubscriptionRevenueRecognition, c.SystemModelPriceVersion,
+		c.TLSFingerprintProfile, c.UpstreamBalanceSnapshot,
+		c.UpstreamBillReconciliation, c.UpstreamCostSettlementInterval,
+		c.UpstreamFinanceProtocol, c.UpstreamFinanceProtocolVersion,
+		c.UpstreamFinanceSyncRun, c.UpstreamFundEvent, c.UpstreamModelPriceVersion,
+		c.UpstreamWallet, c.UpstreamWalletAccount, c.UsageCleanupTask,
+		c.UsageCostSettlementAllocation, c.UsageFinanceCostSegment,
+		c.UsageFinanceRecord, c.UsageLog, c.UsageRevenueAllocation,
+		c.UsageUpstreamAttempt, c.User, c.UserAllowedGroup, c.UserAttributeDefinition,
+		c.UserAttributeValue, c.UserPlatformQuota, c.UserSubscription,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -426,8 +616,14 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.APIKey.mutate(ctx, m)
 	case *AccountMutation:
 		return c.Account.mutate(ctx, m)
+	case *AccountFinanceCounterSnapshotMutation:
+		return c.AccountFinanceCounterSnapshot.mutate(ctx, m)
+	case *AccountFinanceProfileMutation:
+		return c.AccountFinanceProfile.mutate(ctx, m)
 	case *AccountGroupMutation:
 		return c.AccountGroup.mutate(ctx, m)
+	case *AccountUpstreamMultiplierChangeMutation:
+		return c.AccountUpstreamMultiplierChange.mutate(ctx, m)
 	case *AnnouncementMutation:
 		return c.Announcement.mutate(ctx, m)
 	case *AnnouncementReadMutation:
@@ -446,6 +642,20 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ChannelMonitorRequestTemplate.mutate(ctx, m)
 	case *ErrorPassthroughRuleMutation:
 		return c.ErrorPassthroughRule.mutate(ctx, m)
+	case *FinanceAlertMutation:
+		return c.FinanceAlert.mutate(ctx, m)
+	case *FinanceAsyncJobMutation:
+		return c.FinanceAsyncJob.mutate(ctx, m)
+	case *FinanceBackfillJobMutation:
+		return c.FinanceBackfillJob.mutate(ctx, m)
+	case *FinanceCalculationRevisionMutation:
+		return c.FinanceCalculationRevision.mutate(ctx, m)
+	case *FinanceDailyAggregateMutation:
+		return c.FinanceDailyAggregate.mutate(ctx, m)
+	case *FinanceExportJobMutation:
+		return c.FinanceExportJob.mutate(ctx, m)
+	case *FinanceFXRateVersionMutation:
+		return c.FinanceFXRateVersion.mutate(ctx, m)
 	case *GroupMutation:
 		return c.Group.mutate(ctx, m)
 	case *IdempotencyRecordMutation:
@@ -456,6 +666,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.PaymentAuditLog.mutate(ctx, m)
 	case *PaymentOrderMutation:
 		return c.PaymentOrder.mutate(ctx, m)
+	case *PaymentProviderFeeEventMutation:
+		return c.PaymentProviderFeeEvent.mutate(ctx, m)
 	case *PaymentProviderInstanceMutation:
 		return c.PaymentProviderInstance.mutate(ctx, m)
 	case *PendingAuthSessionMutation:
@@ -474,12 +686,46 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Setting.mutate(ctx, m)
 	case *SubscriptionPlanMutation:
 		return c.SubscriptionPlan.mutate(ctx, m)
+	case *SubscriptionRevenueRecognitionMutation:
+		return c.SubscriptionRevenueRecognition.mutate(ctx, m)
+	case *SystemModelPriceVersionMutation:
+		return c.SystemModelPriceVersion.mutate(ctx, m)
 	case *TLSFingerprintProfileMutation:
 		return c.TLSFingerprintProfile.mutate(ctx, m)
+	case *UpstreamBalanceSnapshotMutation:
+		return c.UpstreamBalanceSnapshot.mutate(ctx, m)
+	case *UpstreamBillReconciliationMutation:
+		return c.UpstreamBillReconciliation.mutate(ctx, m)
+	case *UpstreamCostSettlementIntervalMutation:
+		return c.UpstreamCostSettlementInterval.mutate(ctx, m)
+	case *UpstreamFinanceProtocolMutation:
+		return c.UpstreamFinanceProtocol.mutate(ctx, m)
+	case *UpstreamFinanceProtocolVersionMutation:
+		return c.UpstreamFinanceProtocolVersion.mutate(ctx, m)
+	case *UpstreamFinanceSyncRunMutation:
+		return c.UpstreamFinanceSyncRun.mutate(ctx, m)
+	case *UpstreamFundEventMutation:
+		return c.UpstreamFundEvent.mutate(ctx, m)
+	case *UpstreamModelPriceVersionMutation:
+		return c.UpstreamModelPriceVersion.mutate(ctx, m)
+	case *UpstreamWalletMutation:
+		return c.UpstreamWallet.mutate(ctx, m)
+	case *UpstreamWalletAccountMutation:
+		return c.UpstreamWalletAccount.mutate(ctx, m)
 	case *UsageCleanupTaskMutation:
 		return c.UsageCleanupTask.mutate(ctx, m)
+	case *UsageCostSettlementAllocationMutation:
+		return c.UsageCostSettlementAllocation.mutate(ctx, m)
+	case *UsageFinanceCostSegmentMutation:
+		return c.UsageFinanceCostSegment.mutate(ctx, m)
+	case *UsageFinanceRecordMutation:
+		return c.UsageFinanceRecord.mutate(ctx, m)
 	case *UsageLogMutation:
 		return c.UsageLog.mutate(ctx, m)
+	case *UsageRevenueAllocationMutation:
+		return c.UsageRevenueAllocation.mutate(ctx, m)
+	case *UsageUpstreamAttemptMutation:
+		return c.UsageUpstreamAttempt.mutate(ctx, m)
 	case *UserMutation:
 		return c.User.mutate(ctx, m)
 	case *UserAllowedGroupMutation:
@@ -879,6 +1125,272 @@ func (c *AccountClient) mutate(ctx context.Context, m *AccountMutation) (Value, 
 	}
 }
 
+// AccountFinanceCounterSnapshotClient is a client for the AccountFinanceCounterSnapshot schema.
+type AccountFinanceCounterSnapshotClient struct {
+	config
+}
+
+// NewAccountFinanceCounterSnapshotClient returns a client for the AccountFinanceCounterSnapshot from the given config.
+func NewAccountFinanceCounterSnapshotClient(c config) *AccountFinanceCounterSnapshotClient {
+	return &AccountFinanceCounterSnapshotClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `accountfinancecountersnapshot.Hooks(f(g(h())))`.
+func (c *AccountFinanceCounterSnapshotClient) Use(hooks ...Hook) {
+	c.hooks.AccountFinanceCounterSnapshot = append(c.hooks.AccountFinanceCounterSnapshot, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `accountfinancecountersnapshot.Intercept(f(g(h())))`.
+func (c *AccountFinanceCounterSnapshotClient) Intercept(interceptors ...Interceptor) {
+	c.inters.AccountFinanceCounterSnapshot = append(c.inters.AccountFinanceCounterSnapshot, interceptors...)
+}
+
+// Create returns a builder for creating a AccountFinanceCounterSnapshot entity.
+func (c *AccountFinanceCounterSnapshotClient) Create() *AccountFinanceCounterSnapshotCreate {
+	mutation := newAccountFinanceCounterSnapshotMutation(c.config, OpCreate)
+	return &AccountFinanceCounterSnapshotCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of AccountFinanceCounterSnapshot entities.
+func (c *AccountFinanceCounterSnapshotClient) CreateBulk(builders ...*AccountFinanceCounterSnapshotCreate) *AccountFinanceCounterSnapshotCreateBulk {
+	return &AccountFinanceCounterSnapshotCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *AccountFinanceCounterSnapshotClient) MapCreateBulk(slice any, setFunc func(*AccountFinanceCounterSnapshotCreate, int)) *AccountFinanceCounterSnapshotCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &AccountFinanceCounterSnapshotCreateBulk{err: fmt.Errorf("calling to AccountFinanceCounterSnapshotClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*AccountFinanceCounterSnapshotCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &AccountFinanceCounterSnapshotCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for AccountFinanceCounterSnapshot.
+func (c *AccountFinanceCounterSnapshotClient) Update() *AccountFinanceCounterSnapshotUpdate {
+	mutation := newAccountFinanceCounterSnapshotMutation(c.config, OpUpdate)
+	return &AccountFinanceCounterSnapshotUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *AccountFinanceCounterSnapshotClient) UpdateOne(_m *AccountFinanceCounterSnapshot) *AccountFinanceCounterSnapshotUpdateOne {
+	mutation := newAccountFinanceCounterSnapshotMutation(c.config, OpUpdateOne, withAccountFinanceCounterSnapshot(_m))
+	return &AccountFinanceCounterSnapshotUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *AccountFinanceCounterSnapshotClient) UpdateOneID(id int64) *AccountFinanceCounterSnapshotUpdateOne {
+	mutation := newAccountFinanceCounterSnapshotMutation(c.config, OpUpdateOne, withAccountFinanceCounterSnapshotID(id))
+	return &AccountFinanceCounterSnapshotUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for AccountFinanceCounterSnapshot.
+func (c *AccountFinanceCounterSnapshotClient) Delete() *AccountFinanceCounterSnapshotDelete {
+	mutation := newAccountFinanceCounterSnapshotMutation(c.config, OpDelete)
+	return &AccountFinanceCounterSnapshotDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *AccountFinanceCounterSnapshotClient) DeleteOne(_m *AccountFinanceCounterSnapshot) *AccountFinanceCounterSnapshotDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *AccountFinanceCounterSnapshotClient) DeleteOneID(id int64) *AccountFinanceCounterSnapshotDeleteOne {
+	builder := c.Delete().Where(accountfinancecountersnapshot.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &AccountFinanceCounterSnapshotDeleteOne{builder}
+}
+
+// Query returns a query builder for AccountFinanceCounterSnapshot.
+func (c *AccountFinanceCounterSnapshotClient) Query() *AccountFinanceCounterSnapshotQuery {
+	return &AccountFinanceCounterSnapshotQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeAccountFinanceCounterSnapshot},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a AccountFinanceCounterSnapshot entity by its id.
+func (c *AccountFinanceCounterSnapshotClient) Get(ctx context.Context, id int64) (*AccountFinanceCounterSnapshot, error) {
+	return c.Query().Where(accountfinancecountersnapshot.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *AccountFinanceCounterSnapshotClient) GetX(ctx context.Context, id int64) *AccountFinanceCounterSnapshot {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *AccountFinanceCounterSnapshotClient) Hooks() []Hook {
+	return c.hooks.AccountFinanceCounterSnapshot
+}
+
+// Interceptors returns the client interceptors.
+func (c *AccountFinanceCounterSnapshotClient) Interceptors() []Interceptor {
+	return c.inters.AccountFinanceCounterSnapshot
+}
+
+func (c *AccountFinanceCounterSnapshotClient) mutate(ctx context.Context, m *AccountFinanceCounterSnapshotMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&AccountFinanceCounterSnapshotCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&AccountFinanceCounterSnapshotUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&AccountFinanceCounterSnapshotUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&AccountFinanceCounterSnapshotDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown AccountFinanceCounterSnapshot mutation op: %q", m.Op())
+	}
+}
+
+// AccountFinanceProfileClient is a client for the AccountFinanceProfile schema.
+type AccountFinanceProfileClient struct {
+	config
+}
+
+// NewAccountFinanceProfileClient returns a client for the AccountFinanceProfile from the given config.
+func NewAccountFinanceProfileClient(c config) *AccountFinanceProfileClient {
+	return &AccountFinanceProfileClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `accountfinanceprofile.Hooks(f(g(h())))`.
+func (c *AccountFinanceProfileClient) Use(hooks ...Hook) {
+	c.hooks.AccountFinanceProfile = append(c.hooks.AccountFinanceProfile, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `accountfinanceprofile.Intercept(f(g(h())))`.
+func (c *AccountFinanceProfileClient) Intercept(interceptors ...Interceptor) {
+	c.inters.AccountFinanceProfile = append(c.inters.AccountFinanceProfile, interceptors...)
+}
+
+// Create returns a builder for creating a AccountFinanceProfile entity.
+func (c *AccountFinanceProfileClient) Create() *AccountFinanceProfileCreate {
+	mutation := newAccountFinanceProfileMutation(c.config, OpCreate)
+	return &AccountFinanceProfileCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of AccountFinanceProfile entities.
+func (c *AccountFinanceProfileClient) CreateBulk(builders ...*AccountFinanceProfileCreate) *AccountFinanceProfileCreateBulk {
+	return &AccountFinanceProfileCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *AccountFinanceProfileClient) MapCreateBulk(slice any, setFunc func(*AccountFinanceProfileCreate, int)) *AccountFinanceProfileCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &AccountFinanceProfileCreateBulk{err: fmt.Errorf("calling to AccountFinanceProfileClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*AccountFinanceProfileCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &AccountFinanceProfileCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for AccountFinanceProfile.
+func (c *AccountFinanceProfileClient) Update() *AccountFinanceProfileUpdate {
+	mutation := newAccountFinanceProfileMutation(c.config, OpUpdate)
+	return &AccountFinanceProfileUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *AccountFinanceProfileClient) UpdateOne(_m *AccountFinanceProfile) *AccountFinanceProfileUpdateOne {
+	mutation := newAccountFinanceProfileMutation(c.config, OpUpdateOne, withAccountFinanceProfile(_m))
+	return &AccountFinanceProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *AccountFinanceProfileClient) UpdateOneID(id int64) *AccountFinanceProfileUpdateOne {
+	mutation := newAccountFinanceProfileMutation(c.config, OpUpdateOne, withAccountFinanceProfileID(id))
+	return &AccountFinanceProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for AccountFinanceProfile.
+func (c *AccountFinanceProfileClient) Delete() *AccountFinanceProfileDelete {
+	mutation := newAccountFinanceProfileMutation(c.config, OpDelete)
+	return &AccountFinanceProfileDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *AccountFinanceProfileClient) DeleteOne(_m *AccountFinanceProfile) *AccountFinanceProfileDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *AccountFinanceProfileClient) DeleteOneID(id int64) *AccountFinanceProfileDeleteOne {
+	builder := c.Delete().Where(accountfinanceprofile.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &AccountFinanceProfileDeleteOne{builder}
+}
+
+// Query returns a query builder for AccountFinanceProfile.
+func (c *AccountFinanceProfileClient) Query() *AccountFinanceProfileQuery {
+	return &AccountFinanceProfileQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeAccountFinanceProfile},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a AccountFinanceProfile entity by its id.
+func (c *AccountFinanceProfileClient) Get(ctx context.Context, id int64) (*AccountFinanceProfile, error) {
+	return c.Query().Where(accountfinanceprofile.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *AccountFinanceProfileClient) GetX(ctx context.Context, id int64) *AccountFinanceProfile {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *AccountFinanceProfileClient) Hooks() []Hook {
+	return c.hooks.AccountFinanceProfile
+}
+
+// Interceptors returns the client interceptors.
+func (c *AccountFinanceProfileClient) Interceptors() []Interceptor {
+	return c.inters.AccountFinanceProfile
+}
+
+func (c *AccountFinanceProfileClient) mutate(ctx context.Context, m *AccountFinanceProfileMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&AccountFinanceProfileCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&AccountFinanceProfileUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&AccountFinanceProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&AccountFinanceProfileDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown AccountFinanceProfile mutation op: %q", m.Op())
+	}
+}
+
 // AccountGroupClient is a client for the AccountGroup schema.
 type AccountGroupClient struct {
 	config
@@ -992,6 +1504,139 @@ func (c *AccountGroupClient) mutate(ctx context.Context, m *AccountGroupMutation
 		return (&AccountGroupDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown AccountGroup mutation op: %q", m.Op())
+	}
+}
+
+// AccountUpstreamMultiplierChangeClient is a client for the AccountUpstreamMultiplierChange schema.
+type AccountUpstreamMultiplierChangeClient struct {
+	config
+}
+
+// NewAccountUpstreamMultiplierChangeClient returns a client for the AccountUpstreamMultiplierChange from the given config.
+func NewAccountUpstreamMultiplierChangeClient(c config) *AccountUpstreamMultiplierChangeClient {
+	return &AccountUpstreamMultiplierChangeClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `accountupstreammultiplierchange.Hooks(f(g(h())))`.
+func (c *AccountUpstreamMultiplierChangeClient) Use(hooks ...Hook) {
+	c.hooks.AccountUpstreamMultiplierChange = append(c.hooks.AccountUpstreamMultiplierChange, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `accountupstreammultiplierchange.Intercept(f(g(h())))`.
+func (c *AccountUpstreamMultiplierChangeClient) Intercept(interceptors ...Interceptor) {
+	c.inters.AccountUpstreamMultiplierChange = append(c.inters.AccountUpstreamMultiplierChange, interceptors...)
+}
+
+// Create returns a builder for creating a AccountUpstreamMultiplierChange entity.
+func (c *AccountUpstreamMultiplierChangeClient) Create() *AccountUpstreamMultiplierChangeCreate {
+	mutation := newAccountUpstreamMultiplierChangeMutation(c.config, OpCreate)
+	return &AccountUpstreamMultiplierChangeCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of AccountUpstreamMultiplierChange entities.
+func (c *AccountUpstreamMultiplierChangeClient) CreateBulk(builders ...*AccountUpstreamMultiplierChangeCreate) *AccountUpstreamMultiplierChangeCreateBulk {
+	return &AccountUpstreamMultiplierChangeCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *AccountUpstreamMultiplierChangeClient) MapCreateBulk(slice any, setFunc func(*AccountUpstreamMultiplierChangeCreate, int)) *AccountUpstreamMultiplierChangeCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &AccountUpstreamMultiplierChangeCreateBulk{err: fmt.Errorf("calling to AccountUpstreamMultiplierChangeClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*AccountUpstreamMultiplierChangeCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &AccountUpstreamMultiplierChangeCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for AccountUpstreamMultiplierChange.
+func (c *AccountUpstreamMultiplierChangeClient) Update() *AccountUpstreamMultiplierChangeUpdate {
+	mutation := newAccountUpstreamMultiplierChangeMutation(c.config, OpUpdate)
+	return &AccountUpstreamMultiplierChangeUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *AccountUpstreamMultiplierChangeClient) UpdateOne(_m *AccountUpstreamMultiplierChange) *AccountUpstreamMultiplierChangeUpdateOne {
+	mutation := newAccountUpstreamMultiplierChangeMutation(c.config, OpUpdateOne, withAccountUpstreamMultiplierChange(_m))
+	return &AccountUpstreamMultiplierChangeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *AccountUpstreamMultiplierChangeClient) UpdateOneID(id int64) *AccountUpstreamMultiplierChangeUpdateOne {
+	mutation := newAccountUpstreamMultiplierChangeMutation(c.config, OpUpdateOne, withAccountUpstreamMultiplierChangeID(id))
+	return &AccountUpstreamMultiplierChangeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for AccountUpstreamMultiplierChange.
+func (c *AccountUpstreamMultiplierChangeClient) Delete() *AccountUpstreamMultiplierChangeDelete {
+	mutation := newAccountUpstreamMultiplierChangeMutation(c.config, OpDelete)
+	return &AccountUpstreamMultiplierChangeDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *AccountUpstreamMultiplierChangeClient) DeleteOne(_m *AccountUpstreamMultiplierChange) *AccountUpstreamMultiplierChangeDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *AccountUpstreamMultiplierChangeClient) DeleteOneID(id int64) *AccountUpstreamMultiplierChangeDeleteOne {
+	builder := c.Delete().Where(accountupstreammultiplierchange.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &AccountUpstreamMultiplierChangeDeleteOne{builder}
+}
+
+// Query returns a query builder for AccountUpstreamMultiplierChange.
+func (c *AccountUpstreamMultiplierChangeClient) Query() *AccountUpstreamMultiplierChangeQuery {
+	return &AccountUpstreamMultiplierChangeQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeAccountUpstreamMultiplierChange},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a AccountUpstreamMultiplierChange entity by its id.
+func (c *AccountUpstreamMultiplierChangeClient) Get(ctx context.Context, id int64) (*AccountUpstreamMultiplierChange, error) {
+	return c.Query().Where(accountupstreammultiplierchange.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *AccountUpstreamMultiplierChangeClient) GetX(ctx context.Context, id int64) *AccountUpstreamMultiplierChange {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *AccountUpstreamMultiplierChangeClient) Hooks() []Hook {
+	return c.hooks.AccountUpstreamMultiplierChange
+}
+
+// Interceptors returns the client interceptors.
+func (c *AccountUpstreamMultiplierChangeClient) Interceptors() []Interceptor {
+	return c.inters.AccountUpstreamMultiplierChange
+}
+
+func (c *AccountUpstreamMultiplierChangeClient) mutate(ctx context.Context, m *AccountUpstreamMultiplierChangeMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&AccountUpstreamMultiplierChangeCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&AccountUpstreamMultiplierChangeUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&AccountUpstreamMultiplierChangeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&AccountUpstreamMultiplierChangeDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown AccountUpstreamMultiplierChange mutation op: %q", m.Op())
 	}
 }
 
@@ -2400,6 +3045,937 @@ func (c *ErrorPassthroughRuleClient) mutate(ctx context.Context, m *ErrorPassthr
 	}
 }
 
+// FinanceAlertClient is a client for the FinanceAlert schema.
+type FinanceAlertClient struct {
+	config
+}
+
+// NewFinanceAlertClient returns a client for the FinanceAlert from the given config.
+func NewFinanceAlertClient(c config) *FinanceAlertClient {
+	return &FinanceAlertClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `financealert.Hooks(f(g(h())))`.
+func (c *FinanceAlertClient) Use(hooks ...Hook) {
+	c.hooks.FinanceAlert = append(c.hooks.FinanceAlert, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `financealert.Intercept(f(g(h())))`.
+func (c *FinanceAlertClient) Intercept(interceptors ...Interceptor) {
+	c.inters.FinanceAlert = append(c.inters.FinanceAlert, interceptors...)
+}
+
+// Create returns a builder for creating a FinanceAlert entity.
+func (c *FinanceAlertClient) Create() *FinanceAlertCreate {
+	mutation := newFinanceAlertMutation(c.config, OpCreate)
+	return &FinanceAlertCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of FinanceAlert entities.
+func (c *FinanceAlertClient) CreateBulk(builders ...*FinanceAlertCreate) *FinanceAlertCreateBulk {
+	return &FinanceAlertCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *FinanceAlertClient) MapCreateBulk(slice any, setFunc func(*FinanceAlertCreate, int)) *FinanceAlertCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &FinanceAlertCreateBulk{err: fmt.Errorf("calling to FinanceAlertClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*FinanceAlertCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &FinanceAlertCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for FinanceAlert.
+func (c *FinanceAlertClient) Update() *FinanceAlertUpdate {
+	mutation := newFinanceAlertMutation(c.config, OpUpdate)
+	return &FinanceAlertUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *FinanceAlertClient) UpdateOne(_m *FinanceAlert) *FinanceAlertUpdateOne {
+	mutation := newFinanceAlertMutation(c.config, OpUpdateOne, withFinanceAlert(_m))
+	return &FinanceAlertUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *FinanceAlertClient) UpdateOneID(id int64) *FinanceAlertUpdateOne {
+	mutation := newFinanceAlertMutation(c.config, OpUpdateOne, withFinanceAlertID(id))
+	return &FinanceAlertUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for FinanceAlert.
+func (c *FinanceAlertClient) Delete() *FinanceAlertDelete {
+	mutation := newFinanceAlertMutation(c.config, OpDelete)
+	return &FinanceAlertDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *FinanceAlertClient) DeleteOne(_m *FinanceAlert) *FinanceAlertDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *FinanceAlertClient) DeleteOneID(id int64) *FinanceAlertDeleteOne {
+	builder := c.Delete().Where(financealert.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &FinanceAlertDeleteOne{builder}
+}
+
+// Query returns a query builder for FinanceAlert.
+func (c *FinanceAlertClient) Query() *FinanceAlertQuery {
+	return &FinanceAlertQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeFinanceAlert},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a FinanceAlert entity by its id.
+func (c *FinanceAlertClient) Get(ctx context.Context, id int64) (*FinanceAlert, error) {
+	return c.Query().Where(financealert.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *FinanceAlertClient) GetX(ctx context.Context, id int64) *FinanceAlert {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *FinanceAlertClient) Hooks() []Hook {
+	return c.hooks.FinanceAlert
+}
+
+// Interceptors returns the client interceptors.
+func (c *FinanceAlertClient) Interceptors() []Interceptor {
+	return c.inters.FinanceAlert
+}
+
+func (c *FinanceAlertClient) mutate(ctx context.Context, m *FinanceAlertMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&FinanceAlertCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&FinanceAlertUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&FinanceAlertUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&FinanceAlertDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown FinanceAlert mutation op: %q", m.Op())
+	}
+}
+
+// FinanceAsyncJobClient is a client for the FinanceAsyncJob schema.
+type FinanceAsyncJobClient struct {
+	config
+}
+
+// NewFinanceAsyncJobClient returns a client for the FinanceAsyncJob from the given config.
+func NewFinanceAsyncJobClient(c config) *FinanceAsyncJobClient {
+	return &FinanceAsyncJobClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `financeasyncjob.Hooks(f(g(h())))`.
+func (c *FinanceAsyncJobClient) Use(hooks ...Hook) {
+	c.hooks.FinanceAsyncJob = append(c.hooks.FinanceAsyncJob, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `financeasyncjob.Intercept(f(g(h())))`.
+func (c *FinanceAsyncJobClient) Intercept(interceptors ...Interceptor) {
+	c.inters.FinanceAsyncJob = append(c.inters.FinanceAsyncJob, interceptors...)
+}
+
+// Create returns a builder for creating a FinanceAsyncJob entity.
+func (c *FinanceAsyncJobClient) Create() *FinanceAsyncJobCreate {
+	mutation := newFinanceAsyncJobMutation(c.config, OpCreate)
+	return &FinanceAsyncJobCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of FinanceAsyncJob entities.
+func (c *FinanceAsyncJobClient) CreateBulk(builders ...*FinanceAsyncJobCreate) *FinanceAsyncJobCreateBulk {
+	return &FinanceAsyncJobCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *FinanceAsyncJobClient) MapCreateBulk(slice any, setFunc func(*FinanceAsyncJobCreate, int)) *FinanceAsyncJobCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &FinanceAsyncJobCreateBulk{err: fmt.Errorf("calling to FinanceAsyncJobClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*FinanceAsyncJobCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &FinanceAsyncJobCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for FinanceAsyncJob.
+func (c *FinanceAsyncJobClient) Update() *FinanceAsyncJobUpdate {
+	mutation := newFinanceAsyncJobMutation(c.config, OpUpdate)
+	return &FinanceAsyncJobUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *FinanceAsyncJobClient) UpdateOne(_m *FinanceAsyncJob) *FinanceAsyncJobUpdateOne {
+	mutation := newFinanceAsyncJobMutation(c.config, OpUpdateOne, withFinanceAsyncJob(_m))
+	return &FinanceAsyncJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *FinanceAsyncJobClient) UpdateOneID(id int64) *FinanceAsyncJobUpdateOne {
+	mutation := newFinanceAsyncJobMutation(c.config, OpUpdateOne, withFinanceAsyncJobID(id))
+	return &FinanceAsyncJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for FinanceAsyncJob.
+func (c *FinanceAsyncJobClient) Delete() *FinanceAsyncJobDelete {
+	mutation := newFinanceAsyncJobMutation(c.config, OpDelete)
+	return &FinanceAsyncJobDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *FinanceAsyncJobClient) DeleteOne(_m *FinanceAsyncJob) *FinanceAsyncJobDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *FinanceAsyncJobClient) DeleteOneID(id int64) *FinanceAsyncJobDeleteOne {
+	builder := c.Delete().Where(financeasyncjob.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &FinanceAsyncJobDeleteOne{builder}
+}
+
+// Query returns a query builder for FinanceAsyncJob.
+func (c *FinanceAsyncJobClient) Query() *FinanceAsyncJobQuery {
+	return &FinanceAsyncJobQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeFinanceAsyncJob},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a FinanceAsyncJob entity by its id.
+func (c *FinanceAsyncJobClient) Get(ctx context.Context, id int64) (*FinanceAsyncJob, error) {
+	return c.Query().Where(financeasyncjob.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *FinanceAsyncJobClient) GetX(ctx context.Context, id int64) *FinanceAsyncJob {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *FinanceAsyncJobClient) Hooks() []Hook {
+	return c.hooks.FinanceAsyncJob
+}
+
+// Interceptors returns the client interceptors.
+func (c *FinanceAsyncJobClient) Interceptors() []Interceptor {
+	return c.inters.FinanceAsyncJob
+}
+
+func (c *FinanceAsyncJobClient) mutate(ctx context.Context, m *FinanceAsyncJobMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&FinanceAsyncJobCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&FinanceAsyncJobUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&FinanceAsyncJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&FinanceAsyncJobDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown FinanceAsyncJob mutation op: %q", m.Op())
+	}
+}
+
+// FinanceBackfillJobClient is a client for the FinanceBackfillJob schema.
+type FinanceBackfillJobClient struct {
+	config
+}
+
+// NewFinanceBackfillJobClient returns a client for the FinanceBackfillJob from the given config.
+func NewFinanceBackfillJobClient(c config) *FinanceBackfillJobClient {
+	return &FinanceBackfillJobClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `financebackfilljob.Hooks(f(g(h())))`.
+func (c *FinanceBackfillJobClient) Use(hooks ...Hook) {
+	c.hooks.FinanceBackfillJob = append(c.hooks.FinanceBackfillJob, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `financebackfilljob.Intercept(f(g(h())))`.
+func (c *FinanceBackfillJobClient) Intercept(interceptors ...Interceptor) {
+	c.inters.FinanceBackfillJob = append(c.inters.FinanceBackfillJob, interceptors...)
+}
+
+// Create returns a builder for creating a FinanceBackfillJob entity.
+func (c *FinanceBackfillJobClient) Create() *FinanceBackfillJobCreate {
+	mutation := newFinanceBackfillJobMutation(c.config, OpCreate)
+	return &FinanceBackfillJobCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of FinanceBackfillJob entities.
+func (c *FinanceBackfillJobClient) CreateBulk(builders ...*FinanceBackfillJobCreate) *FinanceBackfillJobCreateBulk {
+	return &FinanceBackfillJobCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *FinanceBackfillJobClient) MapCreateBulk(slice any, setFunc func(*FinanceBackfillJobCreate, int)) *FinanceBackfillJobCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &FinanceBackfillJobCreateBulk{err: fmt.Errorf("calling to FinanceBackfillJobClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*FinanceBackfillJobCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &FinanceBackfillJobCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for FinanceBackfillJob.
+func (c *FinanceBackfillJobClient) Update() *FinanceBackfillJobUpdate {
+	mutation := newFinanceBackfillJobMutation(c.config, OpUpdate)
+	return &FinanceBackfillJobUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *FinanceBackfillJobClient) UpdateOne(_m *FinanceBackfillJob) *FinanceBackfillJobUpdateOne {
+	mutation := newFinanceBackfillJobMutation(c.config, OpUpdateOne, withFinanceBackfillJob(_m))
+	return &FinanceBackfillJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *FinanceBackfillJobClient) UpdateOneID(id int64) *FinanceBackfillJobUpdateOne {
+	mutation := newFinanceBackfillJobMutation(c.config, OpUpdateOne, withFinanceBackfillJobID(id))
+	return &FinanceBackfillJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for FinanceBackfillJob.
+func (c *FinanceBackfillJobClient) Delete() *FinanceBackfillJobDelete {
+	mutation := newFinanceBackfillJobMutation(c.config, OpDelete)
+	return &FinanceBackfillJobDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *FinanceBackfillJobClient) DeleteOne(_m *FinanceBackfillJob) *FinanceBackfillJobDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *FinanceBackfillJobClient) DeleteOneID(id int64) *FinanceBackfillJobDeleteOne {
+	builder := c.Delete().Where(financebackfilljob.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &FinanceBackfillJobDeleteOne{builder}
+}
+
+// Query returns a query builder for FinanceBackfillJob.
+func (c *FinanceBackfillJobClient) Query() *FinanceBackfillJobQuery {
+	return &FinanceBackfillJobQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeFinanceBackfillJob},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a FinanceBackfillJob entity by its id.
+func (c *FinanceBackfillJobClient) Get(ctx context.Context, id int64) (*FinanceBackfillJob, error) {
+	return c.Query().Where(financebackfilljob.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *FinanceBackfillJobClient) GetX(ctx context.Context, id int64) *FinanceBackfillJob {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *FinanceBackfillJobClient) Hooks() []Hook {
+	return c.hooks.FinanceBackfillJob
+}
+
+// Interceptors returns the client interceptors.
+func (c *FinanceBackfillJobClient) Interceptors() []Interceptor {
+	return c.inters.FinanceBackfillJob
+}
+
+func (c *FinanceBackfillJobClient) mutate(ctx context.Context, m *FinanceBackfillJobMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&FinanceBackfillJobCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&FinanceBackfillJobUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&FinanceBackfillJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&FinanceBackfillJobDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown FinanceBackfillJob mutation op: %q", m.Op())
+	}
+}
+
+// FinanceCalculationRevisionClient is a client for the FinanceCalculationRevision schema.
+type FinanceCalculationRevisionClient struct {
+	config
+}
+
+// NewFinanceCalculationRevisionClient returns a client for the FinanceCalculationRevision from the given config.
+func NewFinanceCalculationRevisionClient(c config) *FinanceCalculationRevisionClient {
+	return &FinanceCalculationRevisionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `financecalculationrevision.Hooks(f(g(h())))`.
+func (c *FinanceCalculationRevisionClient) Use(hooks ...Hook) {
+	c.hooks.FinanceCalculationRevision = append(c.hooks.FinanceCalculationRevision, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `financecalculationrevision.Intercept(f(g(h())))`.
+func (c *FinanceCalculationRevisionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.FinanceCalculationRevision = append(c.inters.FinanceCalculationRevision, interceptors...)
+}
+
+// Create returns a builder for creating a FinanceCalculationRevision entity.
+func (c *FinanceCalculationRevisionClient) Create() *FinanceCalculationRevisionCreate {
+	mutation := newFinanceCalculationRevisionMutation(c.config, OpCreate)
+	return &FinanceCalculationRevisionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of FinanceCalculationRevision entities.
+func (c *FinanceCalculationRevisionClient) CreateBulk(builders ...*FinanceCalculationRevisionCreate) *FinanceCalculationRevisionCreateBulk {
+	return &FinanceCalculationRevisionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *FinanceCalculationRevisionClient) MapCreateBulk(slice any, setFunc func(*FinanceCalculationRevisionCreate, int)) *FinanceCalculationRevisionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &FinanceCalculationRevisionCreateBulk{err: fmt.Errorf("calling to FinanceCalculationRevisionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*FinanceCalculationRevisionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &FinanceCalculationRevisionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for FinanceCalculationRevision.
+func (c *FinanceCalculationRevisionClient) Update() *FinanceCalculationRevisionUpdate {
+	mutation := newFinanceCalculationRevisionMutation(c.config, OpUpdate)
+	return &FinanceCalculationRevisionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *FinanceCalculationRevisionClient) UpdateOne(_m *FinanceCalculationRevision) *FinanceCalculationRevisionUpdateOne {
+	mutation := newFinanceCalculationRevisionMutation(c.config, OpUpdateOne, withFinanceCalculationRevision(_m))
+	return &FinanceCalculationRevisionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *FinanceCalculationRevisionClient) UpdateOneID(id int64) *FinanceCalculationRevisionUpdateOne {
+	mutation := newFinanceCalculationRevisionMutation(c.config, OpUpdateOne, withFinanceCalculationRevisionID(id))
+	return &FinanceCalculationRevisionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for FinanceCalculationRevision.
+func (c *FinanceCalculationRevisionClient) Delete() *FinanceCalculationRevisionDelete {
+	mutation := newFinanceCalculationRevisionMutation(c.config, OpDelete)
+	return &FinanceCalculationRevisionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *FinanceCalculationRevisionClient) DeleteOne(_m *FinanceCalculationRevision) *FinanceCalculationRevisionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *FinanceCalculationRevisionClient) DeleteOneID(id int64) *FinanceCalculationRevisionDeleteOne {
+	builder := c.Delete().Where(financecalculationrevision.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &FinanceCalculationRevisionDeleteOne{builder}
+}
+
+// Query returns a query builder for FinanceCalculationRevision.
+func (c *FinanceCalculationRevisionClient) Query() *FinanceCalculationRevisionQuery {
+	return &FinanceCalculationRevisionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeFinanceCalculationRevision},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a FinanceCalculationRevision entity by its id.
+func (c *FinanceCalculationRevisionClient) Get(ctx context.Context, id int64) (*FinanceCalculationRevision, error) {
+	return c.Query().Where(financecalculationrevision.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *FinanceCalculationRevisionClient) GetX(ctx context.Context, id int64) *FinanceCalculationRevision {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *FinanceCalculationRevisionClient) Hooks() []Hook {
+	return c.hooks.FinanceCalculationRevision
+}
+
+// Interceptors returns the client interceptors.
+func (c *FinanceCalculationRevisionClient) Interceptors() []Interceptor {
+	return c.inters.FinanceCalculationRevision
+}
+
+func (c *FinanceCalculationRevisionClient) mutate(ctx context.Context, m *FinanceCalculationRevisionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&FinanceCalculationRevisionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&FinanceCalculationRevisionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&FinanceCalculationRevisionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&FinanceCalculationRevisionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown FinanceCalculationRevision mutation op: %q", m.Op())
+	}
+}
+
+// FinanceDailyAggregateClient is a client for the FinanceDailyAggregate schema.
+type FinanceDailyAggregateClient struct {
+	config
+}
+
+// NewFinanceDailyAggregateClient returns a client for the FinanceDailyAggregate from the given config.
+func NewFinanceDailyAggregateClient(c config) *FinanceDailyAggregateClient {
+	return &FinanceDailyAggregateClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `financedailyaggregate.Hooks(f(g(h())))`.
+func (c *FinanceDailyAggregateClient) Use(hooks ...Hook) {
+	c.hooks.FinanceDailyAggregate = append(c.hooks.FinanceDailyAggregate, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `financedailyaggregate.Intercept(f(g(h())))`.
+func (c *FinanceDailyAggregateClient) Intercept(interceptors ...Interceptor) {
+	c.inters.FinanceDailyAggregate = append(c.inters.FinanceDailyAggregate, interceptors...)
+}
+
+// Create returns a builder for creating a FinanceDailyAggregate entity.
+func (c *FinanceDailyAggregateClient) Create() *FinanceDailyAggregateCreate {
+	mutation := newFinanceDailyAggregateMutation(c.config, OpCreate)
+	return &FinanceDailyAggregateCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of FinanceDailyAggregate entities.
+func (c *FinanceDailyAggregateClient) CreateBulk(builders ...*FinanceDailyAggregateCreate) *FinanceDailyAggregateCreateBulk {
+	return &FinanceDailyAggregateCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *FinanceDailyAggregateClient) MapCreateBulk(slice any, setFunc func(*FinanceDailyAggregateCreate, int)) *FinanceDailyAggregateCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &FinanceDailyAggregateCreateBulk{err: fmt.Errorf("calling to FinanceDailyAggregateClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*FinanceDailyAggregateCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &FinanceDailyAggregateCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for FinanceDailyAggregate.
+func (c *FinanceDailyAggregateClient) Update() *FinanceDailyAggregateUpdate {
+	mutation := newFinanceDailyAggregateMutation(c.config, OpUpdate)
+	return &FinanceDailyAggregateUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *FinanceDailyAggregateClient) UpdateOne(_m *FinanceDailyAggregate) *FinanceDailyAggregateUpdateOne {
+	mutation := newFinanceDailyAggregateMutation(c.config, OpUpdateOne, withFinanceDailyAggregate(_m))
+	return &FinanceDailyAggregateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *FinanceDailyAggregateClient) UpdateOneID(id int64) *FinanceDailyAggregateUpdateOne {
+	mutation := newFinanceDailyAggregateMutation(c.config, OpUpdateOne, withFinanceDailyAggregateID(id))
+	return &FinanceDailyAggregateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for FinanceDailyAggregate.
+func (c *FinanceDailyAggregateClient) Delete() *FinanceDailyAggregateDelete {
+	mutation := newFinanceDailyAggregateMutation(c.config, OpDelete)
+	return &FinanceDailyAggregateDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *FinanceDailyAggregateClient) DeleteOne(_m *FinanceDailyAggregate) *FinanceDailyAggregateDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *FinanceDailyAggregateClient) DeleteOneID(id int64) *FinanceDailyAggregateDeleteOne {
+	builder := c.Delete().Where(financedailyaggregate.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &FinanceDailyAggregateDeleteOne{builder}
+}
+
+// Query returns a query builder for FinanceDailyAggregate.
+func (c *FinanceDailyAggregateClient) Query() *FinanceDailyAggregateQuery {
+	return &FinanceDailyAggregateQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeFinanceDailyAggregate},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a FinanceDailyAggregate entity by its id.
+func (c *FinanceDailyAggregateClient) Get(ctx context.Context, id int64) (*FinanceDailyAggregate, error) {
+	return c.Query().Where(financedailyaggregate.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *FinanceDailyAggregateClient) GetX(ctx context.Context, id int64) *FinanceDailyAggregate {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *FinanceDailyAggregateClient) Hooks() []Hook {
+	return c.hooks.FinanceDailyAggregate
+}
+
+// Interceptors returns the client interceptors.
+func (c *FinanceDailyAggregateClient) Interceptors() []Interceptor {
+	return c.inters.FinanceDailyAggregate
+}
+
+func (c *FinanceDailyAggregateClient) mutate(ctx context.Context, m *FinanceDailyAggregateMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&FinanceDailyAggregateCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&FinanceDailyAggregateUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&FinanceDailyAggregateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&FinanceDailyAggregateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown FinanceDailyAggregate mutation op: %q", m.Op())
+	}
+}
+
+// FinanceExportJobClient is a client for the FinanceExportJob schema.
+type FinanceExportJobClient struct {
+	config
+}
+
+// NewFinanceExportJobClient returns a client for the FinanceExportJob from the given config.
+func NewFinanceExportJobClient(c config) *FinanceExportJobClient {
+	return &FinanceExportJobClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `financeexportjob.Hooks(f(g(h())))`.
+func (c *FinanceExportJobClient) Use(hooks ...Hook) {
+	c.hooks.FinanceExportJob = append(c.hooks.FinanceExportJob, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `financeexportjob.Intercept(f(g(h())))`.
+func (c *FinanceExportJobClient) Intercept(interceptors ...Interceptor) {
+	c.inters.FinanceExportJob = append(c.inters.FinanceExportJob, interceptors...)
+}
+
+// Create returns a builder for creating a FinanceExportJob entity.
+func (c *FinanceExportJobClient) Create() *FinanceExportJobCreate {
+	mutation := newFinanceExportJobMutation(c.config, OpCreate)
+	return &FinanceExportJobCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of FinanceExportJob entities.
+func (c *FinanceExportJobClient) CreateBulk(builders ...*FinanceExportJobCreate) *FinanceExportJobCreateBulk {
+	return &FinanceExportJobCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *FinanceExportJobClient) MapCreateBulk(slice any, setFunc func(*FinanceExportJobCreate, int)) *FinanceExportJobCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &FinanceExportJobCreateBulk{err: fmt.Errorf("calling to FinanceExportJobClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*FinanceExportJobCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &FinanceExportJobCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for FinanceExportJob.
+func (c *FinanceExportJobClient) Update() *FinanceExportJobUpdate {
+	mutation := newFinanceExportJobMutation(c.config, OpUpdate)
+	return &FinanceExportJobUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *FinanceExportJobClient) UpdateOne(_m *FinanceExportJob) *FinanceExportJobUpdateOne {
+	mutation := newFinanceExportJobMutation(c.config, OpUpdateOne, withFinanceExportJob(_m))
+	return &FinanceExportJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *FinanceExportJobClient) UpdateOneID(id int64) *FinanceExportJobUpdateOne {
+	mutation := newFinanceExportJobMutation(c.config, OpUpdateOne, withFinanceExportJobID(id))
+	return &FinanceExportJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for FinanceExportJob.
+func (c *FinanceExportJobClient) Delete() *FinanceExportJobDelete {
+	mutation := newFinanceExportJobMutation(c.config, OpDelete)
+	return &FinanceExportJobDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *FinanceExportJobClient) DeleteOne(_m *FinanceExportJob) *FinanceExportJobDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *FinanceExportJobClient) DeleteOneID(id int64) *FinanceExportJobDeleteOne {
+	builder := c.Delete().Where(financeexportjob.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &FinanceExportJobDeleteOne{builder}
+}
+
+// Query returns a query builder for FinanceExportJob.
+func (c *FinanceExportJobClient) Query() *FinanceExportJobQuery {
+	return &FinanceExportJobQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeFinanceExportJob},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a FinanceExportJob entity by its id.
+func (c *FinanceExportJobClient) Get(ctx context.Context, id int64) (*FinanceExportJob, error) {
+	return c.Query().Where(financeexportjob.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *FinanceExportJobClient) GetX(ctx context.Context, id int64) *FinanceExportJob {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *FinanceExportJobClient) Hooks() []Hook {
+	return c.hooks.FinanceExportJob
+}
+
+// Interceptors returns the client interceptors.
+func (c *FinanceExportJobClient) Interceptors() []Interceptor {
+	return c.inters.FinanceExportJob
+}
+
+func (c *FinanceExportJobClient) mutate(ctx context.Context, m *FinanceExportJobMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&FinanceExportJobCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&FinanceExportJobUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&FinanceExportJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&FinanceExportJobDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown FinanceExportJob mutation op: %q", m.Op())
+	}
+}
+
+// FinanceFXRateVersionClient is a client for the FinanceFXRateVersion schema.
+type FinanceFXRateVersionClient struct {
+	config
+}
+
+// NewFinanceFXRateVersionClient returns a client for the FinanceFXRateVersion from the given config.
+func NewFinanceFXRateVersionClient(c config) *FinanceFXRateVersionClient {
+	return &FinanceFXRateVersionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `financefxrateversion.Hooks(f(g(h())))`.
+func (c *FinanceFXRateVersionClient) Use(hooks ...Hook) {
+	c.hooks.FinanceFXRateVersion = append(c.hooks.FinanceFXRateVersion, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `financefxrateversion.Intercept(f(g(h())))`.
+func (c *FinanceFXRateVersionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.FinanceFXRateVersion = append(c.inters.FinanceFXRateVersion, interceptors...)
+}
+
+// Create returns a builder for creating a FinanceFXRateVersion entity.
+func (c *FinanceFXRateVersionClient) Create() *FinanceFXRateVersionCreate {
+	mutation := newFinanceFXRateVersionMutation(c.config, OpCreate)
+	return &FinanceFXRateVersionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of FinanceFXRateVersion entities.
+func (c *FinanceFXRateVersionClient) CreateBulk(builders ...*FinanceFXRateVersionCreate) *FinanceFXRateVersionCreateBulk {
+	return &FinanceFXRateVersionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *FinanceFXRateVersionClient) MapCreateBulk(slice any, setFunc func(*FinanceFXRateVersionCreate, int)) *FinanceFXRateVersionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &FinanceFXRateVersionCreateBulk{err: fmt.Errorf("calling to FinanceFXRateVersionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*FinanceFXRateVersionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &FinanceFXRateVersionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for FinanceFXRateVersion.
+func (c *FinanceFXRateVersionClient) Update() *FinanceFXRateVersionUpdate {
+	mutation := newFinanceFXRateVersionMutation(c.config, OpUpdate)
+	return &FinanceFXRateVersionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *FinanceFXRateVersionClient) UpdateOne(_m *FinanceFXRateVersion) *FinanceFXRateVersionUpdateOne {
+	mutation := newFinanceFXRateVersionMutation(c.config, OpUpdateOne, withFinanceFXRateVersion(_m))
+	return &FinanceFXRateVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *FinanceFXRateVersionClient) UpdateOneID(id int64) *FinanceFXRateVersionUpdateOne {
+	mutation := newFinanceFXRateVersionMutation(c.config, OpUpdateOne, withFinanceFXRateVersionID(id))
+	return &FinanceFXRateVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for FinanceFXRateVersion.
+func (c *FinanceFXRateVersionClient) Delete() *FinanceFXRateVersionDelete {
+	mutation := newFinanceFXRateVersionMutation(c.config, OpDelete)
+	return &FinanceFXRateVersionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *FinanceFXRateVersionClient) DeleteOne(_m *FinanceFXRateVersion) *FinanceFXRateVersionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *FinanceFXRateVersionClient) DeleteOneID(id int64) *FinanceFXRateVersionDeleteOne {
+	builder := c.Delete().Where(financefxrateversion.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &FinanceFXRateVersionDeleteOne{builder}
+}
+
+// Query returns a query builder for FinanceFXRateVersion.
+func (c *FinanceFXRateVersionClient) Query() *FinanceFXRateVersionQuery {
+	return &FinanceFXRateVersionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeFinanceFXRateVersion},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a FinanceFXRateVersion entity by its id.
+func (c *FinanceFXRateVersionClient) Get(ctx context.Context, id int64) (*FinanceFXRateVersion, error) {
+	return c.Query().Where(financefxrateversion.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *FinanceFXRateVersionClient) GetX(ctx context.Context, id int64) *FinanceFXRateVersion {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *FinanceFXRateVersionClient) Hooks() []Hook {
+	return c.hooks.FinanceFXRateVersion
+}
+
+// Interceptors returns the client interceptors.
+func (c *FinanceFXRateVersionClient) Interceptors() []Interceptor {
+	return c.inters.FinanceFXRateVersion
+}
+
+func (c *FinanceFXRateVersionClient) mutate(ctx context.Context, m *FinanceFXRateVersionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&FinanceFXRateVersionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&FinanceFXRateVersionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&FinanceFXRateVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&FinanceFXRateVersionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown FinanceFXRateVersion mutation op: %q", m.Op())
+	}
+}
+
 // GroupClient is a client for the Group schema.
 type GroupClient struct {
 	config
@@ -3240,6 +4816,139 @@ func (c *PaymentOrderClient) mutate(ctx context.Context, m *PaymentOrderMutation
 		return (&PaymentOrderDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown PaymentOrder mutation op: %q", m.Op())
+	}
+}
+
+// PaymentProviderFeeEventClient is a client for the PaymentProviderFeeEvent schema.
+type PaymentProviderFeeEventClient struct {
+	config
+}
+
+// NewPaymentProviderFeeEventClient returns a client for the PaymentProviderFeeEvent from the given config.
+func NewPaymentProviderFeeEventClient(c config) *PaymentProviderFeeEventClient {
+	return &PaymentProviderFeeEventClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `paymentproviderfeeevent.Hooks(f(g(h())))`.
+func (c *PaymentProviderFeeEventClient) Use(hooks ...Hook) {
+	c.hooks.PaymentProviderFeeEvent = append(c.hooks.PaymentProviderFeeEvent, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `paymentproviderfeeevent.Intercept(f(g(h())))`.
+func (c *PaymentProviderFeeEventClient) Intercept(interceptors ...Interceptor) {
+	c.inters.PaymentProviderFeeEvent = append(c.inters.PaymentProviderFeeEvent, interceptors...)
+}
+
+// Create returns a builder for creating a PaymentProviderFeeEvent entity.
+func (c *PaymentProviderFeeEventClient) Create() *PaymentProviderFeeEventCreate {
+	mutation := newPaymentProviderFeeEventMutation(c.config, OpCreate)
+	return &PaymentProviderFeeEventCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of PaymentProviderFeeEvent entities.
+func (c *PaymentProviderFeeEventClient) CreateBulk(builders ...*PaymentProviderFeeEventCreate) *PaymentProviderFeeEventCreateBulk {
+	return &PaymentProviderFeeEventCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PaymentProviderFeeEventClient) MapCreateBulk(slice any, setFunc func(*PaymentProviderFeeEventCreate, int)) *PaymentProviderFeeEventCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PaymentProviderFeeEventCreateBulk{err: fmt.Errorf("calling to PaymentProviderFeeEventClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PaymentProviderFeeEventCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PaymentProviderFeeEventCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for PaymentProviderFeeEvent.
+func (c *PaymentProviderFeeEventClient) Update() *PaymentProviderFeeEventUpdate {
+	mutation := newPaymentProviderFeeEventMutation(c.config, OpUpdate)
+	return &PaymentProviderFeeEventUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PaymentProviderFeeEventClient) UpdateOne(_m *PaymentProviderFeeEvent) *PaymentProviderFeeEventUpdateOne {
+	mutation := newPaymentProviderFeeEventMutation(c.config, OpUpdateOne, withPaymentProviderFeeEvent(_m))
+	return &PaymentProviderFeeEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PaymentProviderFeeEventClient) UpdateOneID(id int64) *PaymentProviderFeeEventUpdateOne {
+	mutation := newPaymentProviderFeeEventMutation(c.config, OpUpdateOne, withPaymentProviderFeeEventID(id))
+	return &PaymentProviderFeeEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for PaymentProviderFeeEvent.
+func (c *PaymentProviderFeeEventClient) Delete() *PaymentProviderFeeEventDelete {
+	mutation := newPaymentProviderFeeEventMutation(c.config, OpDelete)
+	return &PaymentProviderFeeEventDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *PaymentProviderFeeEventClient) DeleteOne(_m *PaymentProviderFeeEvent) *PaymentProviderFeeEventDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *PaymentProviderFeeEventClient) DeleteOneID(id int64) *PaymentProviderFeeEventDeleteOne {
+	builder := c.Delete().Where(paymentproviderfeeevent.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &PaymentProviderFeeEventDeleteOne{builder}
+}
+
+// Query returns a query builder for PaymentProviderFeeEvent.
+func (c *PaymentProviderFeeEventClient) Query() *PaymentProviderFeeEventQuery {
+	return &PaymentProviderFeeEventQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypePaymentProviderFeeEvent},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a PaymentProviderFeeEvent entity by its id.
+func (c *PaymentProviderFeeEventClient) Get(ctx context.Context, id int64) (*PaymentProviderFeeEvent, error) {
+	return c.Query().Where(paymentproviderfeeevent.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PaymentProviderFeeEventClient) GetX(ctx context.Context, id int64) *PaymentProviderFeeEvent {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *PaymentProviderFeeEventClient) Hooks() []Hook {
+	return c.hooks.PaymentProviderFeeEvent
+}
+
+// Interceptors returns the client interceptors.
+func (c *PaymentProviderFeeEventClient) Interceptors() []Interceptor {
+	return c.inters.PaymentProviderFeeEvent
+}
+
+func (c *PaymentProviderFeeEventClient) mutate(ctx context.Context, m *PaymentProviderFeeEventMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&PaymentProviderFeeEventCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&PaymentProviderFeeEventUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&PaymentProviderFeeEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&PaymentProviderFeeEventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown PaymentProviderFeeEvent mutation op: %q", m.Op())
 	}
 }
 
@@ -4570,6 +6279,272 @@ func (c *SubscriptionPlanClient) mutate(ctx context.Context, m *SubscriptionPlan
 	}
 }
 
+// SubscriptionRevenueRecognitionClient is a client for the SubscriptionRevenueRecognition schema.
+type SubscriptionRevenueRecognitionClient struct {
+	config
+}
+
+// NewSubscriptionRevenueRecognitionClient returns a client for the SubscriptionRevenueRecognition from the given config.
+func NewSubscriptionRevenueRecognitionClient(c config) *SubscriptionRevenueRecognitionClient {
+	return &SubscriptionRevenueRecognitionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `subscriptionrevenuerecognition.Hooks(f(g(h())))`.
+func (c *SubscriptionRevenueRecognitionClient) Use(hooks ...Hook) {
+	c.hooks.SubscriptionRevenueRecognition = append(c.hooks.SubscriptionRevenueRecognition, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `subscriptionrevenuerecognition.Intercept(f(g(h())))`.
+func (c *SubscriptionRevenueRecognitionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SubscriptionRevenueRecognition = append(c.inters.SubscriptionRevenueRecognition, interceptors...)
+}
+
+// Create returns a builder for creating a SubscriptionRevenueRecognition entity.
+func (c *SubscriptionRevenueRecognitionClient) Create() *SubscriptionRevenueRecognitionCreate {
+	mutation := newSubscriptionRevenueRecognitionMutation(c.config, OpCreate)
+	return &SubscriptionRevenueRecognitionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SubscriptionRevenueRecognition entities.
+func (c *SubscriptionRevenueRecognitionClient) CreateBulk(builders ...*SubscriptionRevenueRecognitionCreate) *SubscriptionRevenueRecognitionCreateBulk {
+	return &SubscriptionRevenueRecognitionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SubscriptionRevenueRecognitionClient) MapCreateBulk(slice any, setFunc func(*SubscriptionRevenueRecognitionCreate, int)) *SubscriptionRevenueRecognitionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SubscriptionRevenueRecognitionCreateBulk{err: fmt.Errorf("calling to SubscriptionRevenueRecognitionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SubscriptionRevenueRecognitionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SubscriptionRevenueRecognitionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SubscriptionRevenueRecognition.
+func (c *SubscriptionRevenueRecognitionClient) Update() *SubscriptionRevenueRecognitionUpdate {
+	mutation := newSubscriptionRevenueRecognitionMutation(c.config, OpUpdate)
+	return &SubscriptionRevenueRecognitionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SubscriptionRevenueRecognitionClient) UpdateOne(_m *SubscriptionRevenueRecognition) *SubscriptionRevenueRecognitionUpdateOne {
+	mutation := newSubscriptionRevenueRecognitionMutation(c.config, OpUpdateOne, withSubscriptionRevenueRecognition(_m))
+	return &SubscriptionRevenueRecognitionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SubscriptionRevenueRecognitionClient) UpdateOneID(id int64) *SubscriptionRevenueRecognitionUpdateOne {
+	mutation := newSubscriptionRevenueRecognitionMutation(c.config, OpUpdateOne, withSubscriptionRevenueRecognitionID(id))
+	return &SubscriptionRevenueRecognitionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SubscriptionRevenueRecognition.
+func (c *SubscriptionRevenueRecognitionClient) Delete() *SubscriptionRevenueRecognitionDelete {
+	mutation := newSubscriptionRevenueRecognitionMutation(c.config, OpDelete)
+	return &SubscriptionRevenueRecognitionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SubscriptionRevenueRecognitionClient) DeleteOne(_m *SubscriptionRevenueRecognition) *SubscriptionRevenueRecognitionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SubscriptionRevenueRecognitionClient) DeleteOneID(id int64) *SubscriptionRevenueRecognitionDeleteOne {
+	builder := c.Delete().Where(subscriptionrevenuerecognition.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SubscriptionRevenueRecognitionDeleteOne{builder}
+}
+
+// Query returns a query builder for SubscriptionRevenueRecognition.
+func (c *SubscriptionRevenueRecognitionClient) Query() *SubscriptionRevenueRecognitionQuery {
+	return &SubscriptionRevenueRecognitionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSubscriptionRevenueRecognition},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SubscriptionRevenueRecognition entity by its id.
+func (c *SubscriptionRevenueRecognitionClient) Get(ctx context.Context, id int64) (*SubscriptionRevenueRecognition, error) {
+	return c.Query().Where(subscriptionrevenuerecognition.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SubscriptionRevenueRecognitionClient) GetX(ctx context.Context, id int64) *SubscriptionRevenueRecognition {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SubscriptionRevenueRecognitionClient) Hooks() []Hook {
+	return c.hooks.SubscriptionRevenueRecognition
+}
+
+// Interceptors returns the client interceptors.
+func (c *SubscriptionRevenueRecognitionClient) Interceptors() []Interceptor {
+	return c.inters.SubscriptionRevenueRecognition
+}
+
+func (c *SubscriptionRevenueRecognitionClient) mutate(ctx context.Context, m *SubscriptionRevenueRecognitionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SubscriptionRevenueRecognitionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SubscriptionRevenueRecognitionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SubscriptionRevenueRecognitionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SubscriptionRevenueRecognitionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SubscriptionRevenueRecognition mutation op: %q", m.Op())
+	}
+}
+
+// SystemModelPriceVersionClient is a client for the SystemModelPriceVersion schema.
+type SystemModelPriceVersionClient struct {
+	config
+}
+
+// NewSystemModelPriceVersionClient returns a client for the SystemModelPriceVersion from the given config.
+func NewSystemModelPriceVersionClient(c config) *SystemModelPriceVersionClient {
+	return &SystemModelPriceVersionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `systemmodelpriceversion.Hooks(f(g(h())))`.
+func (c *SystemModelPriceVersionClient) Use(hooks ...Hook) {
+	c.hooks.SystemModelPriceVersion = append(c.hooks.SystemModelPriceVersion, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `systemmodelpriceversion.Intercept(f(g(h())))`.
+func (c *SystemModelPriceVersionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SystemModelPriceVersion = append(c.inters.SystemModelPriceVersion, interceptors...)
+}
+
+// Create returns a builder for creating a SystemModelPriceVersion entity.
+func (c *SystemModelPriceVersionClient) Create() *SystemModelPriceVersionCreate {
+	mutation := newSystemModelPriceVersionMutation(c.config, OpCreate)
+	return &SystemModelPriceVersionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SystemModelPriceVersion entities.
+func (c *SystemModelPriceVersionClient) CreateBulk(builders ...*SystemModelPriceVersionCreate) *SystemModelPriceVersionCreateBulk {
+	return &SystemModelPriceVersionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SystemModelPriceVersionClient) MapCreateBulk(slice any, setFunc func(*SystemModelPriceVersionCreate, int)) *SystemModelPriceVersionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SystemModelPriceVersionCreateBulk{err: fmt.Errorf("calling to SystemModelPriceVersionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SystemModelPriceVersionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SystemModelPriceVersionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SystemModelPriceVersion.
+func (c *SystemModelPriceVersionClient) Update() *SystemModelPriceVersionUpdate {
+	mutation := newSystemModelPriceVersionMutation(c.config, OpUpdate)
+	return &SystemModelPriceVersionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SystemModelPriceVersionClient) UpdateOne(_m *SystemModelPriceVersion) *SystemModelPriceVersionUpdateOne {
+	mutation := newSystemModelPriceVersionMutation(c.config, OpUpdateOne, withSystemModelPriceVersion(_m))
+	return &SystemModelPriceVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SystemModelPriceVersionClient) UpdateOneID(id int64) *SystemModelPriceVersionUpdateOne {
+	mutation := newSystemModelPriceVersionMutation(c.config, OpUpdateOne, withSystemModelPriceVersionID(id))
+	return &SystemModelPriceVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SystemModelPriceVersion.
+func (c *SystemModelPriceVersionClient) Delete() *SystemModelPriceVersionDelete {
+	mutation := newSystemModelPriceVersionMutation(c.config, OpDelete)
+	return &SystemModelPriceVersionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SystemModelPriceVersionClient) DeleteOne(_m *SystemModelPriceVersion) *SystemModelPriceVersionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SystemModelPriceVersionClient) DeleteOneID(id int64) *SystemModelPriceVersionDeleteOne {
+	builder := c.Delete().Where(systemmodelpriceversion.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SystemModelPriceVersionDeleteOne{builder}
+}
+
+// Query returns a query builder for SystemModelPriceVersion.
+func (c *SystemModelPriceVersionClient) Query() *SystemModelPriceVersionQuery {
+	return &SystemModelPriceVersionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSystemModelPriceVersion},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SystemModelPriceVersion entity by its id.
+func (c *SystemModelPriceVersionClient) Get(ctx context.Context, id int64) (*SystemModelPriceVersion, error) {
+	return c.Query().Where(systemmodelpriceversion.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SystemModelPriceVersionClient) GetX(ctx context.Context, id int64) *SystemModelPriceVersion {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *SystemModelPriceVersionClient) Hooks() []Hook {
+	return c.hooks.SystemModelPriceVersion
+}
+
+// Interceptors returns the client interceptors.
+func (c *SystemModelPriceVersionClient) Interceptors() []Interceptor {
+	return c.inters.SystemModelPriceVersion
+}
+
+func (c *SystemModelPriceVersionClient) mutate(ctx context.Context, m *SystemModelPriceVersionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SystemModelPriceVersionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SystemModelPriceVersionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SystemModelPriceVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SystemModelPriceVersionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SystemModelPriceVersion mutation op: %q", m.Op())
+	}
+}
+
 // TLSFingerprintProfileClient is a client for the TLSFingerprintProfile schema.
 type TLSFingerprintProfileClient struct {
 	config
@@ -4703,6 +6678,1336 @@ func (c *TLSFingerprintProfileClient) mutate(ctx context.Context, m *TLSFingerpr
 	}
 }
 
+// UpstreamBalanceSnapshotClient is a client for the UpstreamBalanceSnapshot schema.
+type UpstreamBalanceSnapshotClient struct {
+	config
+}
+
+// NewUpstreamBalanceSnapshotClient returns a client for the UpstreamBalanceSnapshot from the given config.
+func NewUpstreamBalanceSnapshotClient(c config) *UpstreamBalanceSnapshotClient {
+	return &UpstreamBalanceSnapshotClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `upstreambalancesnapshot.Hooks(f(g(h())))`.
+func (c *UpstreamBalanceSnapshotClient) Use(hooks ...Hook) {
+	c.hooks.UpstreamBalanceSnapshot = append(c.hooks.UpstreamBalanceSnapshot, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `upstreambalancesnapshot.Intercept(f(g(h())))`.
+func (c *UpstreamBalanceSnapshotClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UpstreamBalanceSnapshot = append(c.inters.UpstreamBalanceSnapshot, interceptors...)
+}
+
+// Create returns a builder for creating a UpstreamBalanceSnapshot entity.
+func (c *UpstreamBalanceSnapshotClient) Create() *UpstreamBalanceSnapshotCreate {
+	mutation := newUpstreamBalanceSnapshotMutation(c.config, OpCreate)
+	return &UpstreamBalanceSnapshotCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UpstreamBalanceSnapshot entities.
+func (c *UpstreamBalanceSnapshotClient) CreateBulk(builders ...*UpstreamBalanceSnapshotCreate) *UpstreamBalanceSnapshotCreateBulk {
+	return &UpstreamBalanceSnapshotCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UpstreamBalanceSnapshotClient) MapCreateBulk(slice any, setFunc func(*UpstreamBalanceSnapshotCreate, int)) *UpstreamBalanceSnapshotCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UpstreamBalanceSnapshotCreateBulk{err: fmt.Errorf("calling to UpstreamBalanceSnapshotClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UpstreamBalanceSnapshotCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UpstreamBalanceSnapshotCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UpstreamBalanceSnapshot.
+func (c *UpstreamBalanceSnapshotClient) Update() *UpstreamBalanceSnapshotUpdate {
+	mutation := newUpstreamBalanceSnapshotMutation(c.config, OpUpdate)
+	return &UpstreamBalanceSnapshotUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UpstreamBalanceSnapshotClient) UpdateOne(_m *UpstreamBalanceSnapshot) *UpstreamBalanceSnapshotUpdateOne {
+	mutation := newUpstreamBalanceSnapshotMutation(c.config, OpUpdateOne, withUpstreamBalanceSnapshot(_m))
+	return &UpstreamBalanceSnapshotUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UpstreamBalanceSnapshotClient) UpdateOneID(id int64) *UpstreamBalanceSnapshotUpdateOne {
+	mutation := newUpstreamBalanceSnapshotMutation(c.config, OpUpdateOne, withUpstreamBalanceSnapshotID(id))
+	return &UpstreamBalanceSnapshotUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UpstreamBalanceSnapshot.
+func (c *UpstreamBalanceSnapshotClient) Delete() *UpstreamBalanceSnapshotDelete {
+	mutation := newUpstreamBalanceSnapshotMutation(c.config, OpDelete)
+	return &UpstreamBalanceSnapshotDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UpstreamBalanceSnapshotClient) DeleteOne(_m *UpstreamBalanceSnapshot) *UpstreamBalanceSnapshotDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UpstreamBalanceSnapshotClient) DeleteOneID(id int64) *UpstreamBalanceSnapshotDeleteOne {
+	builder := c.Delete().Where(upstreambalancesnapshot.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UpstreamBalanceSnapshotDeleteOne{builder}
+}
+
+// Query returns a query builder for UpstreamBalanceSnapshot.
+func (c *UpstreamBalanceSnapshotClient) Query() *UpstreamBalanceSnapshotQuery {
+	return &UpstreamBalanceSnapshotQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUpstreamBalanceSnapshot},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UpstreamBalanceSnapshot entity by its id.
+func (c *UpstreamBalanceSnapshotClient) Get(ctx context.Context, id int64) (*UpstreamBalanceSnapshot, error) {
+	return c.Query().Where(upstreambalancesnapshot.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UpstreamBalanceSnapshotClient) GetX(ctx context.Context, id int64) *UpstreamBalanceSnapshot {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UpstreamBalanceSnapshotClient) Hooks() []Hook {
+	return c.hooks.UpstreamBalanceSnapshot
+}
+
+// Interceptors returns the client interceptors.
+func (c *UpstreamBalanceSnapshotClient) Interceptors() []Interceptor {
+	return c.inters.UpstreamBalanceSnapshot
+}
+
+func (c *UpstreamBalanceSnapshotClient) mutate(ctx context.Context, m *UpstreamBalanceSnapshotMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UpstreamBalanceSnapshotCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UpstreamBalanceSnapshotUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UpstreamBalanceSnapshotUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UpstreamBalanceSnapshotDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UpstreamBalanceSnapshot mutation op: %q", m.Op())
+	}
+}
+
+// UpstreamBillReconciliationClient is a client for the UpstreamBillReconciliation schema.
+type UpstreamBillReconciliationClient struct {
+	config
+}
+
+// NewUpstreamBillReconciliationClient returns a client for the UpstreamBillReconciliation from the given config.
+func NewUpstreamBillReconciliationClient(c config) *UpstreamBillReconciliationClient {
+	return &UpstreamBillReconciliationClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `upstreambillreconciliation.Hooks(f(g(h())))`.
+func (c *UpstreamBillReconciliationClient) Use(hooks ...Hook) {
+	c.hooks.UpstreamBillReconciliation = append(c.hooks.UpstreamBillReconciliation, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `upstreambillreconciliation.Intercept(f(g(h())))`.
+func (c *UpstreamBillReconciliationClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UpstreamBillReconciliation = append(c.inters.UpstreamBillReconciliation, interceptors...)
+}
+
+// Create returns a builder for creating a UpstreamBillReconciliation entity.
+func (c *UpstreamBillReconciliationClient) Create() *UpstreamBillReconciliationCreate {
+	mutation := newUpstreamBillReconciliationMutation(c.config, OpCreate)
+	return &UpstreamBillReconciliationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UpstreamBillReconciliation entities.
+func (c *UpstreamBillReconciliationClient) CreateBulk(builders ...*UpstreamBillReconciliationCreate) *UpstreamBillReconciliationCreateBulk {
+	return &UpstreamBillReconciliationCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UpstreamBillReconciliationClient) MapCreateBulk(slice any, setFunc func(*UpstreamBillReconciliationCreate, int)) *UpstreamBillReconciliationCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UpstreamBillReconciliationCreateBulk{err: fmt.Errorf("calling to UpstreamBillReconciliationClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UpstreamBillReconciliationCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UpstreamBillReconciliationCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UpstreamBillReconciliation.
+func (c *UpstreamBillReconciliationClient) Update() *UpstreamBillReconciliationUpdate {
+	mutation := newUpstreamBillReconciliationMutation(c.config, OpUpdate)
+	return &UpstreamBillReconciliationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UpstreamBillReconciliationClient) UpdateOne(_m *UpstreamBillReconciliation) *UpstreamBillReconciliationUpdateOne {
+	mutation := newUpstreamBillReconciliationMutation(c.config, OpUpdateOne, withUpstreamBillReconciliation(_m))
+	return &UpstreamBillReconciliationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UpstreamBillReconciliationClient) UpdateOneID(id int64) *UpstreamBillReconciliationUpdateOne {
+	mutation := newUpstreamBillReconciliationMutation(c.config, OpUpdateOne, withUpstreamBillReconciliationID(id))
+	return &UpstreamBillReconciliationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UpstreamBillReconciliation.
+func (c *UpstreamBillReconciliationClient) Delete() *UpstreamBillReconciliationDelete {
+	mutation := newUpstreamBillReconciliationMutation(c.config, OpDelete)
+	return &UpstreamBillReconciliationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UpstreamBillReconciliationClient) DeleteOne(_m *UpstreamBillReconciliation) *UpstreamBillReconciliationDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UpstreamBillReconciliationClient) DeleteOneID(id int64) *UpstreamBillReconciliationDeleteOne {
+	builder := c.Delete().Where(upstreambillreconciliation.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UpstreamBillReconciliationDeleteOne{builder}
+}
+
+// Query returns a query builder for UpstreamBillReconciliation.
+func (c *UpstreamBillReconciliationClient) Query() *UpstreamBillReconciliationQuery {
+	return &UpstreamBillReconciliationQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUpstreamBillReconciliation},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UpstreamBillReconciliation entity by its id.
+func (c *UpstreamBillReconciliationClient) Get(ctx context.Context, id int64) (*UpstreamBillReconciliation, error) {
+	return c.Query().Where(upstreambillreconciliation.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UpstreamBillReconciliationClient) GetX(ctx context.Context, id int64) *UpstreamBillReconciliation {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UpstreamBillReconciliationClient) Hooks() []Hook {
+	return c.hooks.UpstreamBillReconciliation
+}
+
+// Interceptors returns the client interceptors.
+func (c *UpstreamBillReconciliationClient) Interceptors() []Interceptor {
+	return c.inters.UpstreamBillReconciliation
+}
+
+func (c *UpstreamBillReconciliationClient) mutate(ctx context.Context, m *UpstreamBillReconciliationMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UpstreamBillReconciliationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UpstreamBillReconciliationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UpstreamBillReconciliationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UpstreamBillReconciliationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UpstreamBillReconciliation mutation op: %q", m.Op())
+	}
+}
+
+// UpstreamCostSettlementIntervalClient is a client for the UpstreamCostSettlementInterval schema.
+type UpstreamCostSettlementIntervalClient struct {
+	config
+}
+
+// NewUpstreamCostSettlementIntervalClient returns a client for the UpstreamCostSettlementInterval from the given config.
+func NewUpstreamCostSettlementIntervalClient(c config) *UpstreamCostSettlementIntervalClient {
+	return &UpstreamCostSettlementIntervalClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `upstreamcostsettlementinterval.Hooks(f(g(h())))`.
+func (c *UpstreamCostSettlementIntervalClient) Use(hooks ...Hook) {
+	c.hooks.UpstreamCostSettlementInterval = append(c.hooks.UpstreamCostSettlementInterval, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `upstreamcostsettlementinterval.Intercept(f(g(h())))`.
+func (c *UpstreamCostSettlementIntervalClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UpstreamCostSettlementInterval = append(c.inters.UpstreamCostSettlementInterval, interceptors...)
+}
+
+// Create returns a builder for creating a UpstreamCostSettlementInterval entity.
+func (c *UpstreamCostSettlementIntervalClient) Create() *UpstreamCostSettlementIntervalCreate {
+	mutation := newUpstreamCostSettlementIntervalMutation(c.config, OpCreate)
+	return &UpstreamCostSettlementIntervalCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UpstreamCostSettlementInterval entities.
+func (c *UpstreamCostSettlementIntervalClient) CreateBulk(builders ...*UpstreamCostSettlementIntervalCreate) *UpstreamCostSettlementIntervalCreateBulk {
+	return &UpstreamCostSettlementIntervalCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UpstreamCostSettlementIntervalClient) MapCreateBulk(slice any, setFunc func(*UpstreamCostSettlementIntervalCreate, int)) *UpstreamCostSettlementIntervalCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UpstreamCostSettlementIntervalCreateBulk{err: fmt.Errorf("calling to UpstreamCostSettlementIntervalClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UpstreamCostSettlementIntervalCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UpstreamCostSettlementIntervalCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UpstreamCostSettlementInterval.
+func (c *UpstreamCostSettlementIntervalClient) Update() *UpstreamCostSettlementIntervalUpdate {
+	mutation := newUpstreamCostSettlementIntervalMutation(c.config, OpUpdate)
+	return &UpstreamCostSettlementIntervalUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UpstreamCostSettlementIntervalClient) UpdateOne(_m *UpstreamCostSettlementInterval) *UpstreamCostSettlementIntervalUpdateOne {
+	mutation := newUpstreamCostSettlementIntervalMutation(c.config, OpUpdateOne, withUpstreamCostSettlementInterval(_m))
+	return &UpstreamCostSettlementIntervalUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UpstreamCostSettlementIntervalClient) UpdateOneID(id int64) *UpstreamCostSettlementIntervalUpdateOne {
+	mutation := newUpstreamCostSettlementIntervalMutation(c.config, OpUpdateOne, withUpstreamCostSettlementIntervalID(id))
+	return &UpstreamCostSettlementIntervalUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UpstreamCostSettlementInterval.
+func (c *UpstreamCostSettlementIntervalClient) Delete() *UpstreamCostSettlementIntervalDelete {
+	mutation := newUpstreamCostSettlementIntervalMutation(c.config, OpDelete)
+	return &UpstreamCostSettlementIntervalDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UpstreamCostSettlementIntervalClient) DeleteOne(_m *UpstreamCostSettlementInterval) *UpstreamCostSettlementIntervalDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UpstreamCostSettlementIntervalClient) DeleteOneID(id int64) *UpstreamCostSettlementIntervalDeleteOne {
+	builder := c.Delete().Where(upstreamcostsettlementinterval.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UpstreamCostSettlementIntervalDeleteOne{builder}
+}
+
+// Query returns a query builder for UpstreamCostSettlementInterval.
+func (c *UpstreamCostSettlementIntervalClient) Query() *UpstreamCostSettlementIntervalQuery {
+	return &UpstreamCostSettlementIntervalQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUpstreamCostSettlementInterval},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UpstreamCostSettlementInterval entity by its id.
+func (c *UpstreamCostSettlementIntervalClient) Get(ctx context.Context, id int64) (*UpstreamCostSettlementInterval, error) {
+	return c.Query().Where(upstreamcostsettlementinterval.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UpstreamCostSettlementIntervalClient) GetX(ctx context.Context, id int64) *UpstreamCostSettlementInterval {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UpstreamCostSettlementIntervalClient) Hooks() []Hook {
+	return c.hooks.UpstreamCostSettlementInterval
+}
+
+// Interceptors returns the client interceptors.
+func (c *UpstreamCostSettlementIntervalClient) Interceptors() []Interceptor {
+	return c.inters.UpstreamCostSettlementInterval
+}
+
+func (c *UpstreamCostSettlementIntervalClient) mutate(ctx context.Context, m *UpstreamCostSettlementIntervalMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UpstreamCostSettlementIntervalCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UpstreamCostSettlementIntervalUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UpstreamCostSettlementIntervalUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UpstreamCostSettlementIntervalDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UpstreamCostSettlementInterval mutation op: %q", m.Op())
+	}
+}
+
+// UpstreamFinanceProtocolClient is a client for the UpstreamFinanceProtocol schema.
+type UpstreamFinanceProtocolClient struct {
+	config
+}
+
+// NewUpstreamFinanceProtocolClient returns a client for the UpstreamFinanceProtocol from the given config.
+func NewUpstreamFinanceProtocolClient(c config) *UpstreamFinanceProtocolClient {
+	return &UpstreamFinanceProtocolClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `upstreamfinanceprotocol.Hooks(f(g(h())))`.
+func (c *UpstreamFinanceProtocolClient) Use(hooks ...Hook) {
+	c.hooks.UpstreamFinanceProtocol = append(c.hooks.UpstreamFinanceProtocol, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `upstreamfinanceprotocol.Intercept(f(g(h())))`.
+func (c *UpstreamFinanceProtocolClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UpstreamFinanceProtocol = append(c.inters.UpstreamFinanceProtocol, interceptors...)
+}
+
+// Create returns a builder for creating a UpstreamFinanceProtocol entity.
+func (c *UpstreamFinanceProtocolClient) Create() *UpstreamFinanceProtocolCreate {
+	mutation := newUpstreamFinanceProtocolMutation(c.config, OpCreate)
+	return &UpstreamFinanceProtocolCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UpstreamFinanceProtocol entities.
+func (c *UpstreamFinanceProtocolClient) CreateBulk(builders ...*UpstreamFinanceProtocolCreate) *UpstreamFinanceProtocolCreateBulk {
+	return &UpstreamFinanceProtocolCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UpstreamFinanceProtocolClient) MapCreateBulk(slice any, setFunc func(*UpstreamFinanceProtocolCreate, int)) *UpstreamFinanceProtocolCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UpstreamFinanceProtocolCreateBulk{err: fmt.Errorf("calling to UpstreamFinanceProtocolClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UpstreamFinanceProtocolCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UpstreamFinanceProtocolCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UpstreamFinanceProtocol.
+func (c *UpstreamFinanceProtocolClient) Update() *UpstreamFinanceProtocolUpdate {
+	mutation := newUpstreamFinanceProtocolMutation(c.config, OpUpdate)
+	return &UpstreamFinanceProtocolUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UpstreamFinanceProtocolClient) UpdateOne(_m *UpstreamFinanceProtocol) *UpstreamFinanceProtocolUpdateOne {
+	mutation := newUpstreamFinanceProtocolMutation(c.config, OpUpdateOne, withUpstreamFinanceProtocol(_m))
+	return &UpstreamFinanceProtocolUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UpstreamFinanceProtocolClient) UpdateOneID(id int64) *UpstreamFinanceProtocolUpdateOne {
+	mutation := newUpstreamFinanceProtocolMutation(c.config, OpUpdateOne, withUpstreamFinanceProtocolID(id))
+	return &UpstreamFinanceProtocolUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UpstreamFinanceProtocol.
+func (c *UpstreamFinanceProtocolClient) Delete() *UpstreamFinanceProtocolDelete {
+	mutation := newUpstreamFinanceProtocolMutation(c.config, OpDelete)
+	return &UpstreamFinanceProtocolDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UpstreamFinanceProtocolClient) DeleteOne(_m *UpstreamFinanceProtocol) *UpstreamFinanceProtocolDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UpstreamFinanceProtocolClient) DeleteOneID(id int64) *UpstreamFinanceProtocolDeleteOne {
+	builder := c.Delete().Where(upstreamfinanceprotocol.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UpstreamFinanceProtocolDeleteOne{builder}
+}
+
+// Query returns a query builder for UpstreamFinanceProtocol.
+func (c *UpstreamFinanceProtocolClient) Query() *UpstreamFinanceProtocolQuery {
+	return &UpstreamFinanceProtocolQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUpstreamFinanceProtocol},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UpstreamFinanceProtocol entity by its id.
+func (c *UpstreamFinanceProtocolClient) Get(ctx context.Context, id int64) (*UpstreamFinanceProtocol, error) {
+	return c.Query().Where(upstreamfinanceprotocol.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UpstreamFinanceProtocolClient) GetX(ctx context.Context, id int64) *UpstreamFinanceProtocol {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UpstreamFinanceProtocolClient) Hooks() []Hook {
+	return c.hooks.UpstreamFinanceProtocol
+}
+
+// Interceptors returns the client interceptors.
+func (c *UpstreamFinanceProtocolClient) Interceptors() []Interceptor {
+	return c.inters.UpstreamFinanceProtocol
+}
+
+func (c *UpstreamFinanceProtocolClient) mutate(ctx context.Context, m *UpstreamFinanceProtocolMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UpstreamFinanceProtocolCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UpstreamFinanceProtocolUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UpstreamFinanceProtocolUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UpstreamFinanceProtocolDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UpstreamFinanceProtocol mutation op: %q", m.Op())
+	}
+}
+
+// UpstreamFinanceProtocolVersionClient is a client for the UpstreamFinanceProtocolVersion schema.
+type UpstreamFinanceProtocolVersionClient struct {
+	config
+}
+
+// NewUpstreamFinanceProtocolVersionClient returns a client for the UpstreamFinanceProtocolVersion from the given config.
+func NewUpstreamFinanceProtocolVersionClient(c config) *UpstreamFinanceProtocolVersionClient {
+	return &UpstreamFinanceProtocolVersionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `upstreamfinanceprotocolversion.Hooks(f(g(h())))`.
+func (c *UpstreamFinanceProtocolVersionClient) Use(hooks ...Hook) {
+	c.hooks.UpstreamFinanceProtocolVersion = append(c.hooks.UpstreamFinanceProtocolVersion, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `upstreamfinanceprotocolversion.Intercept(f(g(h())))`.
+func (c *UpstreamFinanceProtocolVersionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UpstreamFinanceProtocolVersion = append(c.inters.UpstreamFinanceProtocolVersion, interceptors...)
+}
+
+// Create returns a builder for creating a UpstreamFinanceProtocolVersion entity.
+func (c *UpstreamFinanceProtocolVersionClient) Create() *UpstreamFinanceProtocolVersionCreate {
+	mutation := newUpstreamFinanceProtocolVersionMutation(c.config, OpCreate)
+	return &UpstreamFinanceProtocolVersionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UpstreamFinanceProtocolVersion entities.
+func (c *UpstreamFinanceProtocolVersionClient) CreateBulk(builders ...*UpstreamFinanceProtocolVersionCreate) *UpstreamFinanceProtocolVersionCreateBulk {
+	return &UpstreamFinanceProtocolVersionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UpstreamFinanceProtocolVersionClient) MapCreateBulk(slice any, setFunc func(*UpstreamFinanceProtocolVersionCreate, int)) *UpstreamFinanceProtocolVersionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UpstreamFinanceProtocolVersionCreateBulk{err: fmt.Errorf("calling to UpstreamFinanceProtocolVersionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UpstreamFinanceProtocolVersionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UpstreamFinanceProtocolVersionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UpstreamFinanceProtocolVersion.
+func (c *UpstreamFinanceProtocolVersionClient) Update() *UpstreamFinanceProtocolVersionUpdate {
+	mutation := newUpstreamFinanceProtocolVersionMutation(c.config, OpUpdate)
+	return &UpstreamFinanceProtocolVersionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UpstreamFinanceProtocolVersionClient) UpdateOne(_m *UpstreamFinanceProtocolVersion) *UpstreamFinanceProtocolVersionUpdateOne {
+	mutation := newUpstreamFinanceProtocolVersionMutation(c.config, OpUpdateOne, withUpstreamFinanceProtocolVersion(_m))
+	return &UpstreamFinanceProtocolVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UpstreamFinanceProtocolVersionClient) UpdateOneID(id int64) *UpstreamFinanceProtocolVersionUpdateOne {
+	mutation := newUpstreamFinanceProtocolVersionMutation(c.config, OpUpdateOne, withUpstreamFinanceProtocolVersionID(id))
+	return &UpstreamFinanceProtocolVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UpstreamFinanceProtocolVersion.
+func (c *UpstreamFinanceProtocolVersionClient) Delete() *UpstreamFinanceProtocolVersionDelete {
+	mutation := newUpstreamFinanceProtocolVersionMutation(c.config, OpDelete)
+	return &UpstreamFinanceProtocolVersionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UpstreamFinanceProtocolVersionClient) DeleteOne(_m *UpstreamFinanceProtocolVersion) *UpstreamFinanceProtocolVersionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UpstreamFinanceProtocolVersionClient) DeleteOneID(id int64) *UpstreamFinanceProtocolVersionDeleteOne {
+	builder := c.Delete().Where(upstreamfinanceprotocolversion.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UpstreamFinanceProtocolVersionDeleteOne{builder}
+}
+
+// Query returns a query builder for UpstreamFinanceProtocolVersion.
+func (c *UpstreamFinanceProtocolVersionClient) Query() *UpstreamFinanceProtocolVersionQuery {
+	return &UpstreamFinanceProtocolVersionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUpstreamFinanceProtocolVersion},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UpstreamFinanceProtocolVersion entity by its id.
+func (c *UpstreamFinanceProtocolVersionClient) Get(ctx context.Context, id int64) (*UpstreamFinanceProtocolVersion, error) {
+	return c.Query().Where(upstreamfinanceprotocolversion.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UpstreamFinanceProtocolVersionClient) GetX(ctx context.Context, id int64) *UpstreamFinanceProtocolVersion {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UpstreamFinanceProtocolVersionClient) Hooks() []Hook {
+	return c.hooks.UpstreamFinanceProtocolVersion
+}
+
+// Interceptors returns the client interceptors.
+func (c *UpstreamFinanceProtocolVersionClient) Interceptors() []Interceptor {
+	return c.inters.UpstreamFinanceProtocolVersion
+}
+
+func (c *UpstreamFinanceProtocolVersionClient) mutate(ctx context.Context, m *UpstreamFinanceProtocolVersionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UpstreamFinanceProtocolVersionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UpstreamFinanceProtocolVersionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UpstreamFinanceProtocolVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UpstreamFinanceProtocolVersionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UpstreamFinanceProtocolVersion mutation op: %q", m.Op())
+	}
+}
+
+// UpstreamFinanceSyncRunClient is a client for the UpstreamFinanceSyncRun schema.
+type UpstreamFinanceSyncRunClient struct {
+	config
+}
+
+// NewUpstreamFinanceSyncRunClient returns a client for the UpstreamFinanceSyncRun from the given config.
+func NewUpstreamFinanceSyncRunClient(c config) *UpstreamFinanceSyncRunClient {
+	return &UpstreamFinanceSyncRunClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `upstreamfinancesyncrun.Hooks(f(g(h())))`.
+func (c *UpstreamFinanceSyncRunClient) Use(hooks ...Hook) {
+	c.hooks.UpstreamFinanceSyncRun = append(c.hooks.UpstreamFinanceSyncRun, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `upstreamfinancesyncrun.Intercept(f(g(h())))`.
+func (c *UpstreamFinanceSyncRunClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UpstreamFinanceSyncRun = append(c.inters.UpstreamFinanceSyncRun, interceptors...)
+}
+
+// Create returns a builder for creating a UpstreamFinanceSyncRun entity.
+func (c *UpstreamFinanceSyncRunClient) Create() *UpstreamFinanceSyncRunCreate {
+	mutation := newUpstreamFinanceSyncRunMutation(c.config, OpCreate)
+	return &UpstreamFinanceSyncRunCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UpstreamFinanceSyncRun entities.
+func (c *UpstreamFinanceSyncRunClient) CreateBulk(builders ...*UpstreamFinanceSyncRunCreate) *UpstreamFinanceSyncRunCreateBulk {
+	return &UpstreamFinanceSyncRunCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UpstreamFinanceSyncRunClient) MapCreateBulk(slice any, setFunc func(*UpstreamFinanceSyncRunCreate, int)) *UpstreamFinanceSyncRunCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UpstreamFinanceSyncRunCreateBulk{err: fmt.Errorf("calling to UpstreamFinanceSyncRunClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UpstreamFinanceSyncRunCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UpstreamFinanceSyncRunCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UpstreamFinanceSyncRun.
+func (c *UpstreamFinanceSyncRunClient) Update() *UpstreamFinanceSyncRunUpdate {
+	mutation := newUpstreamFinanceSyncRunMutation(c.config, OpUpdate)
+	return &UpstreamFinanceSyncRunUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UpstreamFinanceSyncRunClient) UpdateOne(_m *UpstreamFinanceSyncRun) *UpstreamFinanceSyncRunUpdateOne {
+	mutation := newUpstreamFinanceSyncRunMutation(c.config, OpUpdateOne, withUpstreamFinanceSyncRun(_m))
+	return &UpstreamFinanceSyncRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UpstreamFinanceSyncRunClient) UpdateOneID(id int64) *UpstreamFinanceSyncRunUpdateOne {
+	mutation := newUpstreamFinanceSyncRunMutation(c.config, OpUpdateOne, withUpstreamFinanceSyncRunID(id))
+	return &UpstreamFinanceSyncRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UpstreamFinanceSyncRun.
+func (c *UpstreamFinanceSyncRunClient) Delete() *UpstreamFinanceSyncRunDelete {
+	mutation := newUpstreamFinanceSyncRunMutation(c.config, OpDelete)
+	return &UpstreamFinanceSyncRunDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UpstreamFinanceSyncRunClient) DeleteOne(_m *UpstreamFinanceSyncRun) *UpstreamFinanceSyncRunDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UpstreamFinanceSyncRunClient) DeleteOneID(id int64) *UpstreamFinanceSyncRunDeleteOne {
+	builder := c.Delete().Where(upstreamfinancesyncrun.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UpstreamFinanceSyncRunDeleteOne{builder}
+}
+
+// Query returns a query builder for UpstreamFinanceSyncRun.
+func (c *UpstreamFinanceSyncRunClient) Query() *UpstreamFinanceSyncRunQuery {
+	return &UpstreamFinanceSyncRunQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUpstreamFinanceSyncRun},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UpstreamFinanceSyncRun entity by its id.
+func (c *UpstreamFinanceSyncRunClient) Get(ctx context.Context, id int64) (*UpstreamFinanceSyncRun, error) {
+	return c.Query().Where(upstreamfinancesyncrun.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UpstreamFinanceSyncRunClient) GetX(ctx context.Context, id int64) *UpstreamFinanceSyncRun {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UpstreamFinanceSyncRunClient) Hooks() []Hook {
+	return c.hooks.UpstreamFinanceSyncRun
+}
+
+// Interceptors returns the client interceptors.
+func (c *UpstreamFinanceSyncRunClient) Interceptors() []Interceptor {
+	return c.inters.UpstreamFinanceSyncRun
+}
+
+func (c *UpstreamFinanceSyncRunClient) mutate(ctx context.Context, m *UpstreamFinanceSyncRunMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UpstreamFinanceSyncRunCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UpstreamFinanceSyncRunUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UpstreamFinanceSyncRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UpstreamFinanceSyncRunDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UpstreamFinanceSyncRun mutation op: %q", m.Op())
+	}
+}
+
+// UpstreamFundEventClient is a client for the UpstreamFundEvent schema.
+type UpstreamFundEventClient struct {
+	config
+}
+
+// NewUpstreamFundEventClient returns a client for the UpstreamFundEvent from the given config.
+func NewUpstreamFundEventClient(c config) *UpstreamFundEventClient {
+	return &UpstreamFundEventClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `upstreamfundevent.Hooks(f(g(h())))`.
+func (c *UpstreamFundEventClient) Use(hooks ...Hook) {
+	c.hooks.UpstreamFundEvent = append(c.hooks.UpstreamFundEvent, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `upstreamfundevent.Intercept(f(g(h())))`.
+func (c *UpstreamFundEventClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UpstreamFundEvent = append(c.inters.UpstreamFundEvent, interceptors...)
+}
+
+// Create returns a builder for creating a UpstreamFundEvent entity.
+func (c *UpstreamFundEventClient) Create() *UpstreamFundEventCreate {
+	mutation := newUpstreamFundEventMutation(c.config, OpCreate)
+	return &UpstreamFundEventCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UpstreamFundEvent entities.
+func (c *UpstreamFundEventClient) CreateBulk(builders ...*UpstreamFundEventCreate) *UpstreamFundEventCreateBulk {
+	return &UpstreamFundEventCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UpstreamFundEventClient) MapCreateBulk(slice any, setFunc func(*UpstreamFundEventCreate, int)) *UpstreamFundEventCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UpstreamFundEventCreateBulk{err: fmt.Errorf("calling to UpstreamFundEventClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UpstreamFundEventCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UpstreamFundEventCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UpstreamFundEvent.
+func (c *UpstreamFundEventClient) Update() *UpstreamFundEventUpdate {
+	mutation := newUpstreamFundEventMutation(c.config, OpUpdate)
+	return &UpstreamFundEventUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UpstreamFundEventClient) UpdateOne(_m *UpstreamFundEvent) *UpstreamFundEventUpdateOne {
+	mutation := newUpstreamFundEventMutation(c.config, OpUpdateOne, withUpstreamFundEvent(_m))
+	return &UpstreamFundEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UpstreamFundEventClient) UpdateOneID(id int64) *UpstreamFundEventUpdateOne {
+	mutation := newUpstreamFundEventMutation(c.config, OpUpdateOne, withUpstreamFundEventID(id))
+	return &UpstreamFundEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UpstreamFundEvent.
+func (c *UpstreamFundEventClient) Delete() *UpstreamFundEventDelete {
+	mutation := newUpstreamFundEventMutation(c.config, OpDelete)
+	return &UpstreamFundEventDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UpstreamFundEventClient) DeleteOne(_m *UpstreamFundEvent) *UpstreamFundEventDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UpstreamFundEventClient) DeleteOneID(id int64) *UpstreamFundEventDeleteOne {
+	builder := c.Delete().Where(upstreamfundevent.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UpstreamFundEventDeleteOne{builder}
+}
+
+// Query returns a query builder for UpstreamFundEvent.
+func (c *UpstreamFundEventClient) Query() *UpstreamFundEventQuery {
+	return &UpstreamFundEventQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUpstreamFundEvent},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UpstreamFundEvent entity by its id.
+func (c *UpstreamFundEventClient) Get(ctx context.Context, id int64) (*UpstreamFundEvent, error) {
+	return c.Query().Where(upstreamfundevent.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UpstreamFundEventClient) GetX(ctx context.Context, id int64) *UpstreamFundEvent {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UpstreamFundEventClient) Hooks() []Hook {
+	return c.hooks.UpstreamFundEvent
+}
+
+// Interceptors returns the client interceptors.
+func (c *UpstreamFundEventClient) Interceptors() []Interceptor {
+	return c.inters.UpstreamFundEvent
+}
+
+func (c *UpstreamFundEventClient) mutate(ctx context.Context, m *UpstreamFundEventMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UpstreamFundEventCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UpstreamFundEventUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UpstreamFundEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UpstreamFundEventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UpstreamFundEvent mutation op: %q", m.Op())
+	}
+}
+
+// UpstreamModelPriceVersionClient is a client for the UpstreamModelPriceVersion schema.
+type UpstreamModelPriceVersionClient struct {
+	config
+}
+
+// NewUpstreamModelPriceVersionClient returns a client for the UpstreamModelPriceVersion from the given config.
+func NewUpstreamModelPriceVersionClient(c config) *UpstreamModelPriceVersionClient {
+	return &UpstreamModelPriceVersionClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `upstreammodelpriceversion.Hooks(f(g(h())))`.
+func (c *UpstreamModelPriceVersionClient) Use(hooks ...Hook) {
+	c.hooks.UpstreamModelPriceVersion = append(c.hooks.UpstreamModelPriceVersion, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `upstreammodelpriceversion.Intercept(f(g(h())))`.
+func (c *UpstreamModelPriceVersionClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UpstreamModelPriceVersion = append(c.inters.UpstreamModelPriceVersion, interceptors...)
+}
+
+// Create returns a builder for creating a UpstreamModelPriceVersion entity.
+func (c *UpstreamModelPriceVersionClient) Create() *UpstreamModelPriceVersionCreate {
+	mutation := newUpstreamModelPriceVersionMutation(c.config, OpCreate)
+	return &UpstreamModelPriceVersionCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UpstreamModelPriceVersion entities.
+func (c *UpstreamModelPriceVersionClient) CreateBulk(builders ...*UpstreamModelPriceVersionCreate) *UpstreamModelPriceVersionCreateBulk {
+	return &UpstreamModelPriceVersionCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UpstreamModelPriceVersionClient) MapCreateBulk(slice any, setFunc func(*UpstreamModelPriceVersionCreate, int)) *UpstreamModelPriceVersionCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UpstreamModelPriceVersionCreateBulk{err: fmt.Errorf("calling to UpstreamModelPriceVersionClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UpstreamModelPriceVersionCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UpstreamModelPriceVersionCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UpstreamModelPriceVersion.
+func (c *UpstreamModelPriceVersionClient) Update() *UpstreamModelPriceVersionUpdate {
+	mutation := newUpstreamModelPriceVersionMutation(c.config, OpUpdate)
+	return &UpstreamModelPriceVersionUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UpstreamModelPriceVersionClient) UpdateOne(_m *UpstreamModelPriceVersion) *UpstreamModelPriceVersionUpdateOne {
+	mutation := newUpstreamModelPriceVersionMutation(c.config, OpUpdateOne, withUpstreamModelPriceVersion(_m))
+	return &UpstreamModelPriceVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UpstreamModelPriceVersionClient) UpdateOneID(id int64) *UpstreamModelPriceVersionUpdateOne {
+	mutation := newUpstreamModelPriceVersionMutation(c.config, OpUpdateOne, withUpstreamModelPriceVersionID(id))
+	return &UpstreamModelPriceVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UpstreamModelPriceVersion.
+func (c *UpstreamModelPriceVersionClient) Delete() *UpstreamModelPriceVersionDelete {
+	mutation := newUpstreamModelPriceVersionMutation(c.config, OpDelete)
+	return &UpstreamModelPriceVersionDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UpstreamModelPriceVersionClient) DeleteOne(_m *UpstreamModelPriceVersion) *UpstreamModelPriceVersionDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UpstreamModelPriceVersionClient) DeleteOneID(id int64) *UpstreamModelPriceVersionDeleteOne {
+	builder := c.Delete().Where(upstreammodelpriceversion.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UpstreamModelPriceVersionDeleteOne{builder}
+}
+
+// Query returns a query builder for UpstreamModelPriceVersion.
+func (c *UpstreamModelPriceVersionClient) Query() *UpstreamModelPriceVersionQuery {
+	return &UpstreamModelPriceVersionQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUpstreamModelPriceVersion},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UpstreamModelPriceVersion entity by its id.
+func (c *UpstreamModelPriceVersionClient) Get(ctx context.Context, id int64) (*UpstreamModelPriceVersion, error) {
+	return c.Query().Where(upstreammodelpriceversion.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UpstreamModelPriceVersionClient) GetX(ctx context.Context, id int64) *UpstreamModelPriceVersion {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UpstreamModelPriceVersionClient) Hooks() []Hook {
+	return c.hooks.UpstreamModelPriceVersion
+}
+
+// Interceptors returns the client interceptors.
+func (c *UpstreamModelPriceVersionClient) Interceptors() []Interceptor {
+	return c.inters.UpstreamModelPriceVersion
+}
+
+func (c *UpstreamModelPriceVersionClient) mutate(ctx context.Context, m *UpstreamModelPriceVersionMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UpstreamModelPriceVersionCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UpstreamModelPriceVersionUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UpstreamModelPriceVersionUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UpstreamModelPriceVersionDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UpstreamModelPriceVersion mutation op: %q", m.Op())
+	}
+}
+
+// UpstreamWalletClient is a client for the UpstreamWallet schema.
+type UpstreamWalletClient struct {
+	config
+}
+
+// NewUpstreamWalletClient returns a client for the UpstreamWallet from the given config.
+func NewUpstreamWalletClient(c config) *UpstreamWalletClient {
+	return &UpstreamWalletClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `upstreamwallet.Hooks(f(g(h())))`.
+func (c *UpstreamWalletClient) Use(hooks ...Hook) {
+	c.hooks.UpstreamWallet = append(c.hooks.UpstreamWallet, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `upstreamwallet.Intercept(f(g(h())))`.
+func (c *UpstreamWalletClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UpstreamWallet = append(c.inters.UpstreamWallet, interceptors...)
+}
+
+// Create returns a builder for creating a UpstreamWallet entity.
+func (c *UpstreamWalletClient) Create() *UpstreamWalletCreate {
+	mutation := newUpstreamWalletMutation(c.config, OpCreate)
+	return &UpstreamWalletCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UpstreamWallet entities.
+func (c *UpstreamWalletClient) CreateBulk(builders ...*UpstreamWalletCreate) *UpstreamWalletCreateBulk {
+	return &UpstreamWalletCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UpstreamWalletClient) MapCreateBulk(slice any, setFunc func(*UpstreamWalletCreate, int)) *UpstreamWalletCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UpstreamWalletCreateBulk{err: fmt.Errorf("calling to UpstreamWalletClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UpstreamWalletCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UpstreamWalletCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UpstreamWallet.
+func (c *UpstreamWalletClient) Update() *UpstreamWalletUpdate {
+	mutation := newUpstreamWalletMutation(c.config, OpUpdate)
+	return &UpstreamWalletUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UpstreamWalletClient) UpdateOne(_m *UpstreamWallet) *UpstreamWalletUpdateOne {
+	mutation := newUpstreamWalletMutation(c.config, OpUpdateOne, withUpstreamWallet(_m))
+	return &UpstreamWalletUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UpstreamWalletClient) UpdateOneID(id int64) *UpstreamWalletUpdateOne {
+	mutation := newUpstreamWalletMutation(c.config, OpUpdateOne, withUpstreamWalletID(id))
+	return &UpstreamWalletUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UpstreamWallet.
+func (c *UpstreamWalletClient) Delete() *UpstreamWalletDelete {
+	mutation := newUpstreamWalletMutation(c.config, OpDelete)
+	return &UpstreamWalletDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UpstreamWalletClient) DeleteOne(_m *UpstreamWallet) *UpstreamWalletDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UpstreamWalletClient) DeleteOneID(id int64) *UpstreamWalletDeleteOne {
+	builder := c.Delete().Where(upstreamwallet.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UpstreamWalletDeleteOne{builder}
+}
+
+// Query returns a query builder for UpstreamWallet.
+func (c *UpstreamWalletClient) Query() *UpstreamWalletQuery {
+	return &UpstreamWalletQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUpstreamWallet},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UpstreamWallet entity by its id.
+func (c *UpstreamWalletClient) Get(ctx context.Context, id int64) (*UpstreamWallet, error) {
+	return c.Query().Where(upstreamwallet.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UpstreamWalletClient) GetX(ctx context.Context, id int64) *UpstreamWallet {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UpstreamWalletClient) Hooks() []Hook {
+	return c.hooks.UpstreamWallet
+}
+
+// Interceptors returns the client interceptors.
+func (c *UpstreamWalletClient) Interceptors() []Interceptor {
+	return c.inters.UpstreamWallet
+}
+
+func (c *UpstreamWalletClient) mutate(ctx context.Context, m *UpstreamWalletMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UpstreamWalletCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UpstreamWalletUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UpstreamWalletUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UpstreamWalletDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UpstreamWallet mutation op: %q", m.Op())
+	}
+}
+
+// UpstreamWalletAccountClient is a client for the UpstreamWalletAccount schema.
+type UpstreamWalletAccountClient struct {
+	config
+}
+
+// NewUpstreamWalletAccountClient returns a client for the UpstreamWalletAccount from the given config.
+func NewUpstreamWalletAccountClient(c config) *UpstreamWalletAccountClient {
+	return &UpstreamWalletAccountClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `upstreamwalletaccount.Hooks(f(g(h())))`.
+func (c *UpstreamWalletAccountClient) Use(hooks ...Hook) {
+	c.hooks.UpstreamWalletAccount = append(c.hooks.UpstreamWalletAccount, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `upstreamwalletaccount.Intercept(f(g(h())))`.
+func (c *UpstreamWalletAccountClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UpstreamWalletAccount = append(c.inters.UpstreamWalletAccount, interceptors...)
+}
+
+// Create returns a builder for creating a UpstreamWalletAccount entity.
+func (c *UpstreamWalletAccountClient) Create() *UpstreamWalletAccountCreate {
+	mutation := newUpstreamWalletAccountMutation(c.config, OpCreate)
+	return &UpstreamWalletAccountCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UpstreamWalletAccount entities.
+func (c *UpstreamWalletAccountClient) CreateBulk(builders ...*UpstreamWalletAccountCreate) *UpstreamWalletAccountCreateBulk {
+	return &UpstreamWalletAccountCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UpstreamWalletAccountClient) MapCreateBulk(slice any, setFunc func(*UpstreamWalletAccountCreate, int)) *UpstreamWalletAccountCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UpstreamWalletAccountCreateBulk{err: fmt.Errorf("calling to UpstreamWalletAccountClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UpstreamWalletAccountCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UpstreamWalletAccountCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UpstreamWalletAccount.
+func (c *UpstreamWalletAccountClient) Update() *UpstreamWalletAccountUpdate {
+	mutation := newUpstreamWalletAccountMutation(c.config, OpUpdate)
+	return &UpstreamWalletAccountUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UpstreamWalletAccountClient) UpdateOne(_m *UpstreamWalletAccount) *UpstreamWalletAccountUpdateOne {
+	mutation := newUpstreamWalletAccountMutation(c.config, OpUpdateOne, withUpstreamWalletAccount(_m))
+	return &UpstreamWalletAccountUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UpstreamWalletAccountClient) UpdateOneID(id int64) *UpstreamWalletAccountUpdateOne {
+	mutation := newUpstreamWalletAccountMutation(c.config, OpUpdateOne, withUpstreamWalletAccountID(id))
+	return &UpstreamWalletAccountUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UpstreamWalletAccount.
+func (c *UpstreamWalletAccountClient) Delete() *UpstreamWalletAccountDelete {
+	mutation := newUpstreamWalletAccountMutation(c.config, OpDelete)
+	return &UpstreamWalletAccountDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UpstreamWalletAccountClient) DeleteOne(_m *UpstreamWalletAccount) *UpstreamWalletAccountDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UpstreamWalletAccountClient) DeleteOneID(id int64) *UpstreamWalletAccountDeleteOne {
+	builder := c.Delete().Where(upstreamwalletaccount.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UpstreamWalletAccountDeleteOne{builder}
+}
+
+// Query returns a query builder for UpstreamWalletAccount.
+func (c *UpstreamWalletAccountClient) Query() *UpstreamWalletAccountQuery {
+	return &UpstreamWalletAccountQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUpstreamWalletAccount},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UpstreamWalletAccount entity by its id.
+func (c *UpstreamWalletAccountClient) Get(ctx context.Context, id int64) (*UpstreamWalletAccount, error) {
+	return c.Query().Where(upstreamwalletaccount.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UpstreamWalletAccountClient) GetX(ctx context.Context, id int64) *UpstreamWalletAccount {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UpstreamWalletAccountClient) Hooks() []Hook {
+	return c.hooks.UpstreamWalletAccount
+}
+
+// Interceptors returns the client interceptors.
+func (c *UpstreamWalletAccountClient) Interceptors() []Interceptor {
+	return c.inters.UpstreamWalletAccount
+}
+
+func (c *UpstreamWalletAccountClient) mutate(ctx context.Context, m *UpstreamWalletAccountMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UpstreamWalletAccountCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UpstreamWalletAccountUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UpstreamWalletAccountUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UpstreamWalletAccountDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UpstreamWalletAccount mutation op: %q", m.Op())
+	}
+}
+
 // UsageCleanupTaskClient is a client for the UsageCleanupTask schema.
 type UsageCleanupTaskClient struct {
 	config
@@ -4833,6 +8138,405 @@ func (c *UsageCleanupTaskClient) mutate(ctx context.Context, m *UsageCleanupTask
 		return (&UsageCleanupTaskDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown UsageCleanupTask mutation op: %q", m.Op())
+	}
+}
+
+// UsageCostSettlementAllocationClient is a client for the UsageCostSettlementAllocation schema.
+type UsageCostSettlementAllocationClient struct {
+	config
+}
+
+// NewUsageCostSettlementAllocationClient returns a client for the UsageCostSettlementAllocation from the given config.
+func NewUsageCostSettlementAllocationClient(c config) *UsageCostSettlementAllocationClient {
+	return &UsageCostSettlementAllocationClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `usagecostsettlementallocation.Hooks(f(g(h())))`.
+func (c *UsageCostSettlementAllocationClient) Use(hooks ...Hook) {
+	c.hooks.UsageCostSettlementAllocation = append(c.hooks.UsageCostSettlementAllocation, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `usagecostsettlementallocation.Intercept(f(g(h())))`.
+func (c *UsageCostSettlementAllocationClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UsageCostSettlementAllocation = append(c.inters.UsageCostSettlementAllocation, interceptors...)
+}
+
+// Create returns a builder for creating a UsageCostSettlementAllocation entity.
+func (c *UsageCostSettlementAllocationClient) Create() *UsageCostSettlementAllocationCreate {
+	mutation := newUsageCostSettlementAllocationMutation(c.config, OpCreate)
+	return &UsageCostSettlementAllocationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UsageCostSettlementAllocation entities.
+func (c *UsageCostSettlementAllocationClient) CreateBulk(builders ...*UsageCostSettlementAllocationCreate) *UsageCostSettlementAllocationCreateBulk {
+	return &UsageCostSettlementAllocationCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UsageCostSettlementAllocationClient) MapCreateBulk(slice any, setFunc func(*UsageCostSettlementAllocationCreate, int)) *UsageCostSettlementAllocationCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UsageCostSettlementAllocationCreateBulk{err: fmt.Errorf("calling to UsageCostSettlementAllocationClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UsageCostSettlementAllocationCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UsageCostSettlementAllocationCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UsageCostSettlementAllocation.
+func (c *UsageCostSettlementAllocationClient) Update() *UsageCostSettlementAllocationUpdate {
+	mutation := newUsageCostSettlementAllocationMutation(c.config, OpUpdate)
+	return &UsageCostSettlementAllocationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UsageCostSettlementAllocationClient) UpdateOne(_m *UsageCostSettlementAllocation) *UsageCostSettlementAllocationUpdateOne {
+	mutation := newUsageCostSettlementAllocationMutation(c.config, OpUpdateOne, withUsageCostSettlementAllocation(_m))
+	return &UsageCostSettlementAllocationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UsageCostSettlementAllocationClient) UpdateOneID(id int64) *UsageCostSettlementAllocationUpdateOne {
+	mutation := newUsageCostSettlementAllocationMutation(c.config, OpUpdateOne, withUsageCostSettlementAllocationID(id))
+	return &UsageCostSettlementAllocationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UsageCostSettlementAllocation.
+func (c *UsageCostSettlementAllocationClient) Delete() *UsageCostSettlementAllocationDelete {
+	mutation := newUsageCostSettlementAllocationMutation(c.config, OpDelete)
+	return &UsageCostSettlementAllocationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UsageCostSettlementAllocationClient) DeleteOne(_m *UsageCostSettlementAllocation) *UsageCostSettlementAllocationDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UsageCostSettlementAllocationClient) DeleteOneID(id int64) *UsageCostSettlementAllocationDeleteOne {
+	builder := c.Delete().Where(usagecostsettlementallocation.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UsageCostSettlementAllocationDeleteOne{builder}
+}
+
+// Query returns a query builder for UsageCostSettlementAllocation.
+func (c *UsageCostSettlementAllocationClient) Query() *UsageCostSettlementAllocationQuery {
+	return &UsageCostSettlementAllocationQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUsageCostSettlementAllocation},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UsageCostSettlementAllocation entity by its id.
+func (c *UsageCostSettlementAllocationClient) Get(ctx context.Context, id int64) (*UsageCostSettlementAllocation, error) {
+	return c.Query().Where(usagecostsettlementallocation.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UsageCostSettlementAllocationClient) GetX(ctx context.Context, id int64) *UsageCostSettlementAllocation {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UsageCostSettlementAllocationClient) Hooks() []Hook {
+	return c.hooks.UsageCostSettlementAllocation
+}
+
+// Interceptors returns the client interceptors.
+func (c *UsageCostSettlementAllocationClient) Interceptors() []Interceptor {
+	return c.inters.UsageCostSettlementAllocation
+}
+
+func (c *UsageCostSettlementAllocationClient) mutate(ctx context.Context, m *UsageCostSettlementAllocationMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UsageCostSettlementAllocationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UsageCostSettlementAllocationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UsageCostSettlementAllocationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UsageCostSettlementAllocationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UsageCostSettlementAllocation mutation op: %q", m.Op())
+	}
+}
+
+// UsageFinanceCostSegmentClient is a client for the UsageFinanceCostSegment schema.
+type UsageFinanceCostSegmentClient struct {
+	config
+}
+
+// NewUsageFinanceCostSegmentClient returns a client for the UsageFinanceCostSegment from the given config.
+func NewUsageFinanceCostSegmentClient(c config) *UsageFinanceCostSegmentClient {
+	return &UsageFinanceCostSegmentClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `usagefinancecostsegment.Hooks(f(g(h())))`.
+func (c *UsageFinanceCostSegmentClient) Use(hooks ...Hook) {
+	c.hooks.UsageFinanceCostSegment = append(c.hooks.UsageFinanceCostSegment, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `usagefinancecostsegment.Intercept(f(g(h())))`.
+func (c *UsageFinanceCostSegmentClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UsageFinanceCostSegment = append(c.inters.UsageFinanceCostSegment, interceptors...)
+}
+
+// Create returns a builder for creating a UsageFinanceCostSegment entity.
+func (c *UsageFinanceCostSegmentClient) Create() *UsageFinanceCostSegmentCreate {
+	mutation := newUsageFinanceCostSegmentMutation(c.config, OpCreate)
+	return &UsageFinanceCostSegmentCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UsageFinanceCostSegment entities.
+func (c *UsageFinanceCostSegmentClient) CreateBulk(builders ...*UsageFinanceCostSegmentCreate) *UsageFinanceCostSegmentCreateBulk {
+	return &UsageFinanceCostSegmentCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UsageFinanceCostSegmentClient) MapCreateBulk(slice any, setFunc func(*UsageFinanceCostSegmentCreate, int)) *UsageFinanceCostSegmentCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UsageFinanceCostSegmentCreateBulk{err: fmt.Errorf("calling to UsageFinanceCostSegmentClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UsageFinanceCostSegmentCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UsageFinanceCostSegmentCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UsageFinanceCostSegment.
+func (c *UsageFinanceCostSegmentClient) Update() *UsageFinanceCostSegmentUpdate {
+	mutation := newUsageFinanceCostSegmentMutation(c.config, OpUpdate)
+	return &UsageFinanceCostSegmentUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UsageFinanceCostSegmentClient) UpdateOne(_m *UsageFinanceCostSegment) *UsageFinanceCostSegmentUpdateOne {
+	mutation := newUsageFinanceCostSegmentMutation(c.config, OpUpdateOne, withUsageFinanceCostSegment(_m))
+	return &UsageFinanceCostSegmentUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UsageFinanceCostSegmentClient) UpdateOneID(id int64) *UsageFinanceCostSegmentUpdateOne {
+	mutation := newUsageFinanceCostSegmentMutation(c.config, OpUpdateOne, withUsageFinanceCostSegmentID(id))
+	return &UsageFinanceCostSegmentUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UsageFinanceCostSegment.
+func (c *UsageFinanceCostSegmentClient) Delete() *UsageFinanceCostSegmentDelete {
+	mutation := newUsageFinanceCostSegmentMutation(c.config, OpDelete)
+	return &UsageFinanceCostSegmentDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UsageFinanceCostSegmentClient) DeleteOne(_m *UsageFinanceCostSegment) *UsageFinanceCostSegmentDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UsageFinanceCostSegmentClient) DeleteOneID(id int64) *UsageFinanceCostSegmentDeleteOne {
+	builder := c.Delete().Where(usagefinancecostsegment.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UsageFinanceCostSegmentDeleteOne{builder}
+}
+
+// Query returns a query builder for UsageFinanceCostSegment.
+func (c *UsageFinanceCostSegmentClient) Query() *UsageFinanceCostSegmentQuery {
+	return &UsageFinanceCostSegmentQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUsageFinanceCostSegment},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UsageFinanceCostSegment entity by its id.
+func (c *UsageFinanceCostSegmentClient) Get(ctx context.Context, id int64) (*UsageFinanceCostSegment, error) {
+	return c.Query().Where(usagefinancecostsegment.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UsageFinanceCostSegmentClient) GetX(ctx context.Context, id int64) *UsageFinanceCostSegment {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UsageFinanceCostSegmentClient) Hooks() []Hook {
+	return c.hooks.UsageFinanceCostSegment
+}
+
+// Interceptors returns the client interceptors.
+func (c *UsageFinanceCostSegmentClient) Interceptors() []Interceptor {
+	return c.inters.UsageFinanceCostSegment
+}
+
+func (c *UsageFinanceCostSegmentClient) mutate(ctx context.Context, m *UsageFinanceCostSegmentMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UsageFinanceCostSegmentCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UsageFinanceCostSegmentUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UsageFinanceCostSegmentUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UsageFinanceCostSegmentDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UsageFinanceCostSegment mutation op: %q", m.Op())
+	}
+}
+
+// UsageFinanceRecordClient is a client for the UsageFinanceRecord schema.
+type UsageFinanceRecordClient struct {
+	config
+}
+
+// NewUsageFinanceRecordClient returns a client for the UsageFinanceRecord from the given config.
+func NewUsageFinanceRecordClient(c config) *UsageFinanceRecordClient {
+	return &UsageFinanceRecordClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `usagefinancerecord.Hooks(f(g(h())))`.
+func (c *UsageFinanceRecordClient) Use(hooks ...Hook) {
+	c.hooks.UsageFinanceRecord = append(c.hooks.UsageFinanceRecord, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `usagefinancerecord.Intercept(f(g(h())))`.
+func (c *UsageFinanceRecordClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UsageFinanceRecord = append(c.inters.UsageFinanceRecord, interceptors...)
+}
+
+// Create returns a builder for creating a UsageFinanceRecord entity.
+func (c *UsageFinanceRecordClient) Create() *UsageFinanceRecordCreate {
+	mutation := newUsageFinanceRecordMutation(c.config, OpCreate)
+	return &UsageFinanceRecordCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UsageFinanceRecord entities.
+func (c *UsageFinanceRecordClient) CreateBulk(builders ...*UsageFinanceRecordCreate) *UsageFinanceRecordCreateBulk {
+	return &UsageFinanceRecordCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UsageFinanceRecordClient) MapCreateBulk(slice any, setFunc func(*UsageFinanceRecordCreate, int)) *UsageFinanceRecordCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UsageFinanceRecordCreateBulk{err: fmt.Errorf("calling to UsageFinanceRecordClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UsageFinanceRecordCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UsageFinanceRecordCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UsageFinanceRecord.
+func (c *UsageFinanceRecordClient) Update() *UsageFinanceRecordUpdate {
+	mutation := newUsageFinanceRecordMutation(c.config, OpUpdate)
+	return &UsageFinanceRecordUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UsageFinanceRecordClient) UpdateOne(_m *UsageFinanceRecord) *UsageFinanceRecordUpdateOne {
+	mutation := newUsageFinanceRecordMutation(c.config, OpUpdateOne, withUsageFinanceRecord(_m))
+	return &UsageFinanceRecordUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UsageFinanceRecordClient) UpdateOneID(id int64) *UsageFinanceRecordUpdateOne {
+	mutation := newUsageFinanceRecordMutation(c.config, OpUpdateOne, withUsageFinanceRecordID(id))
+	return &UsageFinanceRecordUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UsageFinanceRecord.
+func (c *UsageFinanceRecordClient) Delete() *UsageFinanceRecordDelete {
+	mutation := newUsageFinanceRecordMutation(c.config, OpDelete)
+	return &UsageFinanceRecordDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UsageFinanceRecordClient) DeleteOne(_m *UsageFinanceRecord) *UsageFinanceRecordDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UsageFinanceRecordClient) DeleteOneID(id int64) *UsageFinanceRecordDeleteOne {
+	builder := c.Delete().Where(usagefinancerecord.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UsageFinanceRecordDeleteOne{builder}
+}
+
+// Query returns a query builder for UsageFinanceRecord.
+func (c *UsageFinanceRecordClient) Query() *UsageFinanceRecordQuery {
+	return &UsageFinanceRecordQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUsageFinanceRecord},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UsageFinanceRecord entity by its id.
+func (c *UsageFinanceRecordClient) Get(ctx context.Context, id int64) (*UsageFinanceRecord, error) {
+	return c.Query().Where(usagefinancerecord.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UsageFinanceRecordClient) GetX(ctx context.Context, id int64) *UsageFinanceRecord {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UsageFinanceRecordClient) Hooks() []Hook {
+	return c.hooks.UsageFinanceRecord
+}
+
+// Interceptors returns the client interceptors.
+func (c *UsageFinanceRecordClient) Interceptors() []Interceptor {
+	return c.inters.UsageFinanceRecord
+}
+
+func (c *UsageFinanceRecordClient) mutate(ctx context.Context, m *UsageFinanceRecordMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UsageFinanceRecordCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UsageFinanceRecordUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UsageFinanceRecordUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UsageFinanceRecordDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UsageFinanceRecord mutation op: %q", m.Op())
 	}
 }
 
@@ -5046,6 +8750,272 @@ func (c *UsageLogClient) mutate(ctx context.Context, m *UsageLogMutation) (Value
 		return (&UsageLogDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown UsageLog mutation op: %q", m.Op())
+	}
+}
+
+// UsageRevenueAllocationClient is a client for the UsageRevenueAllocation schema.
+type UsageRevenueAllocationClient struct {
+	config
+}
+
+// NewUsageRevenueAllocationClient returns a client for the UsageRevenueAllocation from the given config.
+func NewUsageRevenueAllocationClient(c config) *UsageRevenueAllocationClient {
+	return &UsageRevenueAllocationClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `usagerevenueallocation.Hooks(f(g(h())))`.
+func (c *UsageRevenueAllocationClient) Use(hooks ...Hook) {
+	c.hooks.UsageRevenueAllocation = append(c.hooks.UsageRevenueAllocation, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `usagerevenueallocation.Intercept(f(g(h())))`.
+func (c *UsageRevenueAllocationClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UsageRevenueAllocation = append(c.inters.UsageRevenueAllocation, interceptors...)
+}
+
+// Create returns a builder for creating a UsageRevenueAllocation entity.
+func (c *UsageRevenueAllocationClient) Create() *UsageRevenueAllocationCreate {
+	mutation := newUsageRevenueAllocationMutation(c.config, OpCreate)
+	return &UsageRevenueAllocationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UsageRevenueAllocation entities.
+func (c *UsageRevenueAllocationClient) CreateBulk(builders ...*UsageRevenueAllocationCreate) *UsageRevenueAllocationCreateBulk {
+	return &UsageRevenueAllocationCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UsageRevenueAllocationClient) MapCreateBulk(slice any, setFunc func(*UsageRevenueAllocationCreate, int)) *UsageRevenueAllocationCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UsageRevenueAllocationCreateBulk{err: fmt.Errorf("calling to UsageRevenueAllocationClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UsageRevenueAllocationCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UsageRevenueAllocationCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UsageRevenueAllocation.
+func (c *UsageRevenueAllocationClient) Update() *UsageRevenueAllocationUpdate {
+	mutation := newUsageRevenueAllocationMutation(c.config, OpUpdate)
+	return &UsageRevenueAllocationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UsageRevenueAllocationClient) UpdateOne(_m *UsageRevenueAllocation) *UsageRevenueAllocationUpdateOne {
+	mutation := newUsageRevenueAllocationMutation(c.config, OpUpdateOne, withUsageRevenueAllocation(_m))
+	return &UsageRevenueAllocationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UsageRevenueAllocationClient) UpdateOneID(id int64) *UsageRevenueAllocationUpdateOne {
+	mutation := newUsageRevenueAllocationMutation(c.config, OpUpdateOne, withUsageRevenueAllocationID(id))
+	return &UsageRevenueAllocationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UsageRevenueAllocation.
+func (c *UsageRevenueAllocationClient) Delete() *UsageRevenueAllocationDelete {
+	mutation := newUsageRevenueAllocationMutation(c.config, OpDelete)
+	return &UsageRevenueAllocationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UsageRevenueAllocationClient) DeleteOne(_m *UsageRevenueAllocation) *UsageRevenueAllocationDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UsageRevenueAllocationClient) DeleteOneID(id int64) *UsageRevenueAllocationDeleteOne {
+	builder := c.Delete().Where(usagerevenueallocation.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UsageRevenueAllocationDeleteOne{builder}
+}
+
+// Query returns a query builder for UsageRevenueAllocation.
+func (c *UsageRevenueAllocationClient) Query() *UsageRevenueAllocationQuery {
+	return &UsageRevenueAllocationQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUsageRevenueAllocation},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UsageRevenueAllocation entity by its id.
+func (c *UsageRevenueAllocationClient) Get(ctx context.Context, id int64) (*UsageRevenueAllocation, error) {
+	return c.Query().Where(usagerevenueallocation.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UsageRevenueAllocationClient) GetX(ctx context.Context, id int64) *UsageRevenueAllocation {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UsageRevenueAllocationClient) Hooks() []Hook {
+	return c.hooks.UsageRevenueAllocation
+}
+
+// Interceptors returns the client interceptors.
+func (c *UsageRevenueAllocationClient) Interceptors() []Interceptor {
+	return c.inters.UsageRevenueAllocation
+}
+
+func (c *UsageRevenueAllocationClient) mutate(ctx context.Context, m *UsageRevenueAllocationMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UsageRevenueAllocationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UsageRevenueAllocationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UsageRevenueAllocationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UsageRevenueAllocationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UsageRevenueAllocation mutation op: %q", m.Op())
+	}
+}
+
+// UsageUpstreamAttemptClient is a client for the UsageUpstreamAttempt schema.
+type UsageUpstreamAttemptClient struct {
+	config
+}
+
+// NewUsageUpstreamAttemptClient returns a client for the UsageUpstreamAttempt from the given config.
+func NewUsageUpstreamAttemptClient(c config) *UsageUpstreamAttemptClient {
+	return &UsageUpstreamAttemptClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `usageupstreamattempt.Hooks(f(g(h())))`.
+func (c *UsageUpstreamAttemptClient) Use(hooks ...Hook) {
+	c.hooks.UsageUpstreamAttempt = append(c.hooks.UsageUpstreamAttempt, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `usageupstreamattempt.Intercept(f(g(h())))`.
+func (c *UsageUpstreamAttemptClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UsageUpstreamAttempt = append(c.inters.UsageUpstreamAttempt, interceptors...)
+}
+
+// Create returns a builder for creating a UsageUpstreamAttempt entity.
+func (c *UsageUpstreamAttemptClient) Create() *UsageUpstreamAttemptCreate {
+	mutation := newUsageUpstreamAttemptMutation(c.config, OpCreate)
+	return &UsageUpstreamAttemptCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UsageUpstreamAttempt entities.
+func (c *UsageUpstreamAttemptClient) CreateBulk(builders ...*UsageUpstreamAttemptCreate) *UsageUpstreamAttemptCreateBulk {
+	return &UsageUpstreamAttemptCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UsageUpstreamAttemptClient) MapCreateBulk(slice any, setFunc func(*UsageUpstreamAttemptCreate, int)) *UsageUpstreamAttemptCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UsageUpstreamAttemptCreateBulk{err: fmt.Errorf("calling to UsageUpstreamAttemptClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UsageUpstreamAttemptCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UsageUpstreamAttemptCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UsageUpstreamAttempt.
+func (c *UsageUpstreamAttemptClient) Update() *UsageUpstreamAttemptUpdate {
+	mutation := newUsageUpstreamAttemptMutation(c.config, OpUpdate)
+	return &UsageUpstreamAttemptUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UsageUpstreamAttemptClient) UpdateOne(_m *UsageUpstreamAttempt) *UsageUpstreamAttemptUpdateOne {
+	mutation := newUsageUpstreamAttemptMutation(c.config, OpUpdateOne, withUsageUpstreamAttempt(_m))
+	return &UsageUpstreamAttemptUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UsageUpstreamAttemptClient) UpdateOneID(id int64) *UsageUpstreamAttemptUpdateOne {
+	mutation := newUsageUpstreamAttemptMutation(c.config, OpUpdateOne, withUsageUpstreamAttemptID(id))
+	return &UsageUpstreamAttemptUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UsageUpstreamAttempt.
+func (c *UsageUpstreamAttemptClient) Delete() *UsageUpstreamAttemptDelete {
+	mutation := newUsageUpstreamAttemptMutation(c.config, OpDelete)
+	return &UsageUpstreamAttemptDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UsageUpstreamAttemptClient) DeleteOne(_m *UsageUpstreamAttempt) *UsageUpstreamAttemptDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UsageUpstreamAttemptClient) DeleteOneID(id int64) *UsageUpstreamAttemptDeleteOne {
+	builder := c.Delete().Where(usageupstreamattempt.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UsageUpstreamAttemptDeleteOne{builder}
+}
+
+// Query returns a query builder for UsageUpstreamAttempt.
+func (c *UsageUpstreamAttemptClient) Query() *UsageUpstreamAttemptQuery {
+	return &UsageUpstreamAttemptQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUsageUpstreamAttempt},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UsageUpstreamAttempt entity by its id.
+func (c *UsageUpstreamAttemptClient) Get(ctx context.Context, id int64) (*UsageUpstreamAttempt, error) {
+	return c.Query().Where(usageupstreamattempt.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UsageUpstreamAttemptClient) GetX(ctx context.Context, id int64) *UsageUpstreamAttempt {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *UsageUpstreamAttemptClient) Hooks() []Hook {
+	return c.hooks.UsageUpstreamAttempt
+}
+
+// Interceptors returns the client interceptors.
+func (c *UsageUpstreamAttemptClient) Interceptors() []Interceptor {
+	return c.inters.UsageUpstreamAttempt
+}
+
+func (c *UsageUpstreamAttemptClient) mutate(ctx context.Context, m *UsageUpstreamAttemptMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UsageUpstreamAttemptCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UsageUpstreamAttemptUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UsageUpstreamAttemptUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UsageUpstreamAttemptDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UsageUpstreamAttempt mutation op: %q", m.Op())
 	}
 }
 
@@ -6193,26 +10163,44 @@ func (c *UserSubscriptionClient) mutate(ctx context.Context, m *UserSubscription
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		APIKey, Account, AccountGroup, Announcement, AnnouncementRead, AuthIdentity,
-		AuthIdentityChannel, ChannelMonitor, ChannelMonitorDailyRollup,
+		APIKey, Account, AccountFinanceCounterSnapshot, AccountFinanceProfile,
+		AccountGroup, AccountUpstreamMultiplierChange, Announcement, AnnouncementRead,
+		AuthIdentity, AuthIdentityChannel, ChannelMonitor, ChannelMonitorDailyRollup,
 		ChannelMonitorHistory, ChannelMonitorRequestTemplate, ErrorPassthroughRule,
-		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
-		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
-		PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting, SubscriptionPlan,
-		TLSFingerprintProfile, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
-		UserAttributeDefinition, UserAttributeValue, UserPlatformQuota,
-		UserSubscription []ent.Hook
+		FinanceAlert, FinanceAsyncJob, FinanceBackfillJob, FinanceCalculationRevision,
+		FinanceDailyAggregate, FinanceExportJob, FinanceFXRateVersion, Group,
+		IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog, PaymentOrder,
+		PaymentProviderFeeEvent, PaymentProviderInstance, PendingAuthSession,
+		PromoCode, PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting,
+		SubscriptionPlan, SubscriptionRevenueRecognition, SystemModelPriceVersion,
+		TLSFingerprintProfile, UpstreamBalanceSnapshot, UpstreamBillReconciliation,
+		UpstreamCostSettlementInterval, UpstreamFinanceProtocol,
+		UpstreamFinanceProtocolVersion, UpstreamFinanceSyncRun, UpstreamFundEvent,
+		UpstreamModelPriceVersion, UpstreamWallet, UpstreamWalletAccount,
+		UsageCleanupTask, UsageCostSettlementAllocation, UsageFinanceCostSegment,
+		UsageFinanceRecord, UsageLog, UsageRevenueAllocation, UsageUpstreamAttempt,
+		User, UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
+		UserPlatformQuota, UserSubscription []ent.Hook
 	}
 	inters struct {
-		APIKey, Account, AccountGroup, Announcement, AnnouncementRead, AuthIdentity,
-		AuthIdentityChannel, ChannelMonitor, ChannelMonitorDailyRollup,
+		APIKey, Account, AccountFinanceCounterSnapshot, AccountFinanceProfile,
+		AccountGroup, AccountUpstreamMultiplierChange, Announcement, AnnouncementRead,
+		AuthIdentity, AuthIdentityChannel, ChannelMonitor, ChannelMonitorDailyRollup,
 		ChannelMonitorHistory, ChannelMonitorRequestTemplate, ErrorPassthroughRule,
-		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
-		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
-		PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting, SubscriptionPlan,
-		TLSFingerprintProfile, UsageCleanupTask, UsageLog, User, UserAllowedGroup,
-		UserAttributeDefinition, UserAttributeValue, UserPlatformQuota,
-		UserSubscription []ent.Interceptor
+		FinanceAlert, FinanceAsyncJob, FinanceBackfillJob, FinanceCalculationRevision,
+		FinanceDailyAggregate, FinanceExportJob, FinanceFXRateVersion, Group,
+		IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog, PaymentOrder,
+		PaymentProviderFeeEvent, PaymentProviderInstance, PendingAuthSession,
+		PromoCode, PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting,
+		SubscriptionPlan, SubscriptionRevenueRecognition, SystemModelPriceVersion,
+		TLSFingerprintProfile, UpstreamBalanceSnapshot, UpstreamBillReconciliation,
+		UpstreamCostSettlementInterval, UpstreamFinanceProtocol,
+		UpstreamFinanceProtocolVersion, UpstreamFinanceSyncRun, UpstreamFundEvent,
+		UpstreamModelPriceVersion, UpstreamWallet, UpstreamWalletAccount,
+		UsageCleanupTask, UsageCostSettlementAllocation, UsageFinanceCostSegment,
+		UsageFinanceRecord, UsageLog, UsageRevenueAllocation, UsageUpstreamAttempt,
+		User, UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
+		UserPlatformQuota, UserSubscription []ent.Interceptor
 	}
 )
 

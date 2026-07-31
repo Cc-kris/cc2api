@@ -608,6 +608,7 @@ export interface SystemSettings {
 
   // Available Channels feature switch
   available_channels_enabled: boolean;
+  model_square_enabled: boolean;
 
   // Affiliate (邀请返利) feature switch
   affiliate_enabled: boolean;
@@ -857,6 +858,7 @@ export interface UpdateSettingsRequest {
 
   // Available Channels feature switch
   available_channels_enabled?: boolean;
+  model_square_enabled?: boolean;
 
   // Affiliate (邀请返利) feature switch
   affiliate_enabled?: boolean;

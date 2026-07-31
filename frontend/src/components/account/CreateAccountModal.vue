@@ -2687,7 +2687,7 @@
         <ProxySelector v-model="form.proxy_id" :proxies="proxies" />
       </div>
 
-      <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div class="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <div>
           <label class="input-label">{{ t('admin.accounts.concurrency') }}</label>
           <input v-model.number="form.concurrency" type="number" min="1" class="input"
@@ -2711,10 +2711,27 @@
           />
           <p class="input-hint">{{ t('admin.accounts.priorityHint') }}</p>
         </div>
+      </div>
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
           <label class="input-label">{{ t('admin.accounts.billingRateMultiplier') }}</label>
-          <input v-model.number="form.rate_multiplier" type="number" min="0" step="0.001" class="input" />
+          <input v-model.number="form.rate_multiplier" type="number" min="0" step="0.0001" inputmode="decimal" class="input" />
           <p class="input-hint">{{ t('admin.accounts.billingRateMultiplierHint') }}</p>
+        </div>
+        <div>
+          <label class="input-label">{{ t('admin.accounts.upstreamCostMultiplier') }}</label>
+          <input
+            v-model="form.upstream_cost_multiplier"
+            type="number"
+            min="0"
+            max="9999.9999"
+            step="0.0001"
+            inputmode="decimal"
+            required
+            class="input"
+            data-testid="upstream-cost-multiplier"
+          />
+          <p class="input-hint">{{ t('admin.accounts.upstreamCostMultiplierHint') }}</p>
         </div>
       </div>
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
@@ -3827,6 +3844,7 @@ const form = reactive({
   load_factor: null as number | null,
   priority: 1,
   rate_multiplier: 1,
+  upstream_cost_multiplier: '1.0000',
   group_ids: [] as number[],
   expires_at: null as number | null
 })
@@ -3873,6 +3891,18 @@ const canExchangeCode = computed(() => {
   }
   return authCode.trim() && oauth.sessionId.value && !oauth.loading.value
 })
+
+const upstreamMultiplierText = () => {
+  const numeric = Number(form.upstream_cost_multiplier)
+  return Number.isFinite(numeric) ? numeric.toFixed(4) : String(form.upstream_cost_multiplier ?? '').trim()
+}
+
+const isValidUpstreamMultiplier = (value: unknown) => {
+  const trimmed = String(value ?? '').trim()
+  if (!/^\d+(?:\.\d{1,4})?$/.test(trimmed)) return false
+  const numeric = Number(trimmed)
+  return numeric >= 0 && numeric <= 9999.9999
+}
 
 // Watchers
 watch(
@@ -4333,7 +4363,10 @@ const ensureAntigravityMixedChannelConfirmed = async (onConfirm: () => Promise<v
 const submitCreateAccount = async (payload: CreateAccountRequest) => {
   submitting.value = true
   try {
-    await adminAPI.accounts.create(withAntigravityConfirmFlag(payload))
+    await adminAPI.accounts.create(withAntigravityConfirmFlag({
+      ...payload,
+      upstream_cost_multiplier: upstreamMultiplierText()
+    }))
     appStore.showSuccess(t('admin.accounts.accountCreated'))
     emit('created')
     handleClose()
@@ -4367,6 +4400,7 @@ const resetForm = () => {
   form.load_factor = null
   form.priority = 1
   form.rate_multiplier = 1
+  form.upstream_cost_multiplier = '1.0000'
   form.group_ids = []
   form.expires_at = null
   accountCategory.value = 'oauth-based'
@@ -4621,6 +4655,11 @@ const handleVertexServiceAccountDrop = async (event: DragEvent) => {
 }
 
 const handleSubmit = async () => {
+  if (!isValidUpstreamMultiplier(form.upstream_cost_multiplier)) {
+    appStore.showError(t('admin.accounts.upstreamCostMultiplierInvalid'))
+    return
+  }
+
   // For OAuth-based type, handle OAuth flow (goes to step 2)
   if (isOAuthFlow.value) {
     if (!isGrokSSOInputMethod.value && !form.name.trim()) {
@@ -4955,6 +4994,7 @@ const createAccountAndFinish = async (
     load_factor: form.load_factor ?? undefined,
     priority: form.priority,
     rate_multiplier: form.rate_multiplier,
+    upstream_cost_multiplier: upstreamMultiplierText(),
     group_ids: form.group_ids,
     expires_at: form.expires_at,
     auto_pause_on_expired: autoPauseOnExpired.value
@@ -5019,6 +5059,7 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
           load_factor: form.load_factor ?? undefined,
           priority: form.priority,
           rate_multiplier: form.rate_multiplier,
+          upstream_cost_multiplier: upstreamMultiplierText(),
           group_ids: form.group_ids,
           expires_at: form.expires_at,
           auto_pause_on_expired: autoPauseOnExpired.value
@@ -5087,6 +5128,7 @@ const handleGrokImportSSO = async (ssoInput: string) => {
       load_factor: form.load_factor ?? undefined,
       priority: form.priority,
       rate_multiplier: form.rate_multiplier,
+      upstream_cost_multiplier: upstreamMultiplierText(),
       expires_at: form.expires_at,
       auto_pause_on_expired: autoPauseOnExpired.value
     })
@@ -5185,6 +5227,7 @@ const handleOpenAIExchange = async (authCode: string) => {
         load_factor: form.load_factor ?? undefined,
         priority: form.priority,
         rate_multiplier: form.rate_multiplier,
+        upstream_cost_multiplier: upstreamMultiplierText(),
         group_ids: form.group_ids,
         expires_at: form.expires_at,
         auto_pause_on_expired: autoPauseOnExpired.value
@@ -5262,6 +5305,7 @@ const handleOpenAIImportCodexSession = async (content: string) => {
       load_factor: form.load_factor ?? undefined,
       priority: form.priority,
       rate_multiplier: form.rate_multiplier,
+      upstream_cost_multiplier: upstreamMultiplierText(),
       group_ids: form.group_ids,
       expires_at: form.expires_at,
       auto_pause_on_expired: autoPauseOnExpired.value,
@@ -5389,6 +5433,7 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
             load_factor: form.load_factor ?? undefined,
             priority: form.priority,
             rate_multiplier: form.rate_multiplier,
+            upstream_cost_multiplier: upstreamMultiplierText(),
             group_ids: form.group_ids,
             expires_at: form.expires_at,
             auto_pause_on_expired: autoPauseOnExpired.value
@@ -5487,6 +5532,7 @@ const handleAntigravityValidateRT = async (refreshTokenInput: string) => {
           load_factor: form.load_factor ?? undefined,
           priority: form.priority,
           rate_multiplier: form.rate_multiplier,
+          upstream_cost_multiplier: upstreamMultiplierText(),
           group_ids: form.group_ids,
           expires_at: form.expires_at,
           auto_pause_on_expired: autoPauseOnExpired.value
@@ -5867,6 +5913,7 @@ const handleCookieAuth = async (sessionKey: string) => {
           load_factor: form.load_factor ?? undefined,
           priority: form.priority,
           rate_multiplier: form.rate_multiplier,
+          upstream_cost_multiplier: upstreamMultiplierText(),
           group_ids: form.group_ids,
           expires_at: form.expires_at,
           auto_pause_on_expired: autoPauseOnExpired.value

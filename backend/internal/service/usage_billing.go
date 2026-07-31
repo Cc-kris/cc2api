@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/shopspring/decimal"
 )
 
 var ErrUsageBillingRequestIDRequired = errors.New("usage billing request_id is required")
@@ -34,11 +36,14 @@ type UsageBillingCommand struct {
 	ImageCount          int
 	MediaType           string
 
-	BalanceCost         float64
-	SubscriptionCost    float64
-	APIKeyQuotaCost     float64
-	APIKeyRateLimitCost float64
-	AccountQuotaCost    float64
+	BalanceCost            float64
+	SubscriptionCost       float64
+	APIKeyQuotaCost        float64
+	APIKeyRateLimitCost    float64
+	AccountQuotaCost       float64
+	FinanceBusinessType    string
+	FinanceExcluded        bool
+	FinanceExclusionReason string
 }
 
 func (c *UsageBillingCommand) Normalize() {
@@ -116,10 +121,14 @@ type AccountQuotaState struct {
 }
 
 type UsageBillingApplyResult struct {
-	Applied              bool
-	APIKeyQuotaExhausted bool
-	NewBalance           *float64           // post-deduction balance (nil = no balance deduction)
-	QuotaState           *AccountQuotaState // post-increment quota state (nil = no quota increment)
+	Applied                bool
+	APIKeyQuotaExhausted   bool
+	NewBalance             *float64           // post-deduction balance (nil = no balance deduction)
+	QuotaState             *AccountQuotaState // post-increment quota state (nil = no quota increment)
+	FinanceBusinessType    string
+	PromotionCreditUsed    *decimal.Decimal
+	FinanceExcluded        bool
+	FinanceExclusionReason string
 }
 
 type UsageBillingRepository interface {

@@ -9,6 +9,7 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/shopspring/decimal"
 )
 
 type usageBillingRepository struct {
@@ -106,6 +107,16 @@ func (r *usageBillingRepository) claimUsageBillingKey(ctx context.Context, tx *s
 }
 
 func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, tx *sql.Tx, cmd *service.UsageBillingCommand, result *service.UsageBillingApplyResult) error {
+	result.FinanceBusinessType = strings.ToLower(strings.TrimSpace(cmd.FinanceBusinessType))
+	if result.FinanceBusinessType == "" {
+		if cmd.BillingType == service.BillingTypeSubscription || cmd.SubscriptionID != nil {
+			result.FinanceBusinessType = "subscription"
+		} else {
+			result.FinanceBusinessType = "balance"
+		}
+	}
+	result.FinanceExcluded = cmd.FinanceExcluded
+	result.FinanceExclusionReason = strings.TrimSpace(cmd.FinanceExclusionReason)
 	if cmd.SubscriptionCost > 0 && cmd.SubscriptionID != nil {
 		if err := incrementUsageBillingSubscription(ctx, tx, *cmd.SubscriptionID, cmd.SubscriptionCost); err != nil {
 			return err
@@ -113,6 +124,16 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 	}
 
 	if cmd.BalanceCost > 0 {
+		promotionUsed, err := consumeUsageBillingPromotionCredit(ctx, tx, cmd.UserID, cmd.BalanceCost)
+		if err != nil {
+			return err
+		}
+		if promotionUsed.IsPositive() {
+			result.PromotionCreditUsed = &promotionUsed
+			if result.FinanceBusinessType == "balance" && !result.FinanceExcluded {
+				result.FinanceBusinessType = "promotion"
+			}
+		}
 		newBalance, err := deductUsageBillingBalance(ctx, tx, cmd.UserID, cmd.BalanceCost)
 		if err != nil {
 			return err
@@ -141,8 +162,55 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 		}
 		result.QuotaState = quotaState
 	}
+	promotionUsed := decimal.Zero
+	if result.PromotionCreditUsed != nil {
+		promotionUsed = *result.PromotionCreditUsed
+	}
+	_, err := tx.ExecContext(ctx, `
+		UPDATE usage_billing_dedup
+		SET finance_business_type=$3,promotion_credit_used=COALESCE($4,0),finance_excluded=$5,
+		    finance_exclusion_reason=NULLIF($6,''),finance_classification_recorded=TRUE
+		WHERE request_id=$1 AND api_key_id=$2`,
+		cmd.RequestID, cmd.APIKeyID, result.FinanceBusinessType, promotionUsed, result.FinanceExcluded, result.FinanceExclusionReason)
+	if err != nil {
+		return err
+	}
 
 	return nil
+}
+
+func consumeUsageBillingPromotionCredit(ctx context.Context, tx *sql.Tx, userID int64, amount float64) (decimal.Decimal, error) {
+	if amount <= 0 {
+		return decimal.Zero, nil
+	}
+	var remainingRaw string
+	err := tx.QueryRowContext(ctx, `
+		SELECT remaining_amount::text FROM user_promotion_credit_balances WHERE user_id=$1 FOR UPDATE
+	`, userID).Scan(&remainingRaw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return decimal.Zero, nil
+	}
+	if err != nil {
+		return decimal.Zero, err
+	}
+	remaining, err := decimal.NewFromString(remainingRaw)
+	if err != nil {
+		return decimal.Zero, err
+	}
+	used := decimal.NewFromFloat(amount)
+	if used.GreaterThan(remaining) {
+		used = remaining
+	}
+	if !used.IsPositive() {
+		return decimal.Zero, nil
+	}
+	_, err = tx.ExecContext(ctx, `
+		UPDATE user_promotion_credit_balances SET remaining_amount=remaining_amount-$2,updated_at=NOW() WHERE user_id=$1
+	`, userID, used)
+	if err != nil {
+		return decimal.Zero, err
+	}
+	return used, nil
 }
 
 func incrementUsageBillingSubscription(ctx context.Context, tx *sql.Tx, subscriptionID int64, costUSD float64) error {

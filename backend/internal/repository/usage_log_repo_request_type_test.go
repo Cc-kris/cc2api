@@ -13,6 +13,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
 
@@ -95,6 +96,21 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // billing_mode
 			sqlmock.AnyArg(), // account_stats_cost
 			createdAt,
+			sqlmock.AnyArg(), // upstream_cost_multiplier
+			sqlmock.AnyArg(), // sales_model
+			sqlmock.AnyArg(), // sales_pricing_effective_model
+			sqlmock.AnyArg(), // sales_pricing_legacy_source
+			sqlmock.AnyArg(), // sales_pricing_version
+			sqlmock.AnyArg(), // sales_pricing_source
+			sqlmock.AnyArg(), // sales_pricing_checksum
+			sqlmock.AnyArg(), // sales_pricing_snapshot
+			sqlmock.AnyArg(), // sales_pricing_shadow_snapshot
+			sqlmock.AnyArg(), // sales_pricing_shadow_delta
+			sqlmock.AnyArg(), // usage_list_value
+			sqlmock.AnyArg(), // upstream_multiplier_change_id
+			sqlmock.AnyArg(), // upstream_multiplier_source
+			sqlmock.AnyArg(), // upstream_multiplier_effective_at
+			sqlmock.AnyArg(), // account_finance_profile_id
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(99), createdAt))
 
@@ -182,6 +198,21 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // billing_mode
 			sqlmock.AnyArg(), // account_stats_cost
 			createdAt,
+			sqlmock.AnyArg(), // upstream_cost_multiplier
+			sqlmock.AnyArg(), // sales_model
+			sqlmock.AnyArg(), // sales_pricing_effective_model
+			sqlmock.AnyArg(), // sales_pricing_legacy_source
+			sqlmock.AnyArg(), // sales_pricing_version
+			sqlmock.AnyArg(), // sales_pricing_source
+			sqlmock.AnyArg(), // sales_pricing_checksum
+			sqlmock.AnyArg(), // sales_pricing_snapshot
+			sqlmock.AnyArg(), // sales_pricing_shadow_snapshot
+			sqlmock.AnyArg(), // sales_pricing_shadow_delta
+			sqlmock.AnyArg(), // usage_list_value
+			sqlmock.AnyArg(), // upstream_multiplier_change_id
+			sqlmock.AnyArg(), // upstream_multiplier_source
+			sqlmock.AnyArg(), // upstream_multiplier_effective_at
+			sqlmock.AnyArg(), // account_finance_profile_id
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(100), createdAt))
 
@@ -244,6 +275,57 @@ func TestPrepareUsageLogInsert_ArgCountMatchesTypes(t *testing.T) {
 	})
 
 	require.Len(t, prepared.args, len(usageLogInsertArgTypes))
+}
+
+func TestPrepareUsageLogInsert_PersistsImmutableFinanceSnapshots(t *testing.T) {
+	upstreamMultiplier := decimal.RequireFromString("0.7250")
+	shadowDelta := decimal.RequireFromString("-0.0012500000")
+	listValue := decimal.RequireFromString("0.0125000000")
+	salesModel := "gpt-5.4"
+	effectiveModel := "gpt-5.4-2026-07-01"
+	legacySource := "billing_model"
+	version := string(service.SalesPricingVersionShadow)
+	pricingSource := "channel"
+	checksum := "sha256:test"
+
+	prepared := prepareUsageLogInsert(&service.UsageLog{
+		UserID:                     1,
+		APIKeyID:                   2,
+		AccountID:                  3,
+		RequestID:                  "req-finance-snapshot",
+		Model:                      salesModel,
+		RequestedModel:             salesModel,
+		UpstreamCostMultiplier:     &upstreamMultiplier,
+		SalesModel:                 &salesModel,
+		SalesPricingEffectiveModel: &effectiveModel,
+		SalesPricingLegacySource:   &legacySource,
+		SalesPricingVersion:        &version,
+		SalesPricingSource:         &pricingSource,
+		SalesPricingChecksum:       &checksum,
+		SalesPricingSnapshot: map[string]any{
+			"version": "legacy",
+			"prices":  map[string]any{"input": "1.25000000"},
+		},
+		SalesPricingShadowSnapshot: map[string]any{
+			"version": "v2",
+		},
+		SalesPricingShadowDelta: &shadowDelta,
+		UsageListValue:          &listValue,
+		CreatedAt:               time.Date(2025, 1, 5, 12, 0, 0, 0, time.UTC),
+	})
+
+	require.Len(t, prepared.args, len(usageLogInsertArgTypes))
+	require.Equal(t, &upstreamMultiplier, prepared.args[54])
+	require.Equal(t, sql.NullString{String: salesModel, Valid: true}, prepared.args[55])
+	require.Equal(t, sql.NullString{String: effectiveModel, Valid: true}, prepared.args[56])
+	require.Equal(t, sql.NullString{String: legacySource, Valid: true}, prepared.args[57])
+	require.Equal(t, sql.NullString{String: version, Valid: true}, prepared.args[58])
+	require.Equal(t, sql.NullString{String: pricingSource, Valid: true}, prepared.args[59])
+	require.Equal(t, sql.NullString{String: checksum, Valid: true}, prepared.args[60])
+	require.JSONEq(t, `{"version":"legacy","prices":{"input":"1.25000000"}}`, prepared.args[61].(string))
+	require.JSONEq(t, `{"version":"v2"}`, prepared.args[62].(string))
+	require.Equal(t, &shadowDelta, prepared.args[63])
+	require.Equal(t, &listValue, prepared.args[64])
 }
 
 func TestPrepareUsageLogInsert_PersistsImageSizeMetadata(t *testing.T) {
@@ -653,6 +735,11 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},
 			sql.NullFloat64{},
 			now,
+			decimal.NullDecimal{},
+			sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{},
+			sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{},
+			decimal.NullDecimal{}, decimal.NullDecimal{},
+			sql.NullInt64{}, sql.NullString{}, sql.NullTime{}, sql.NullInt64{},
 		}})
 		require.NoError(t, err)
 		require.Equal(t, 2, log.ImageCount)
@@ -732,6 +819,11 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
 			now,
+			decimal.NullDecimal{},
+			sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{},
+			sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{},
+			decimal.NullDecimal{}, decimal.NullDecimal{},
+			sql.NullInt64{}, sql.NullString{}, sql.NullTime{}, sql.NullInt64{},
 		}})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
@@ -788,6 +880,11 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
 			now,
+			decimal.NullDecimal{},
+			sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{},
+			sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{},
+			decimal.NullDecimal{}, decimal.NullDecimal{},
+			sql.NullInt64{}, sql.NullString{}, sql.NullTime{}, sql.NullInt64{},
 		}})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
@@ -844,6 +941,11 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
 			now,
+			decimal.NullDecimal{},
+			sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{},
+			sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{},
+			decimal.NullDecimal{}, decimal.NullDecimal{},
+			sql.NullInt64{}, sql.NullString{}, sql.NullTime{}, sql.NullInt64{},
 		}})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)

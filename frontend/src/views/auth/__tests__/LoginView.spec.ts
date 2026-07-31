@@ -60,6 +60,7 @@ const {
     channel_monitor_public_enabled: false,
     channel_monitor_default_interval_seconds: 60,
     available_channels_enabled: false,
+    model_square_enabled: false,
     affiliate_enabled: false,
   } satisfies PublicSettings,
 }))

@@ -15,30 +15,35 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 const codexImportClockSkewSeconds int64 = 120
 
 type CodexSessionImportRequest struct {
-	Content                 string         `json:"content"`
-	Contents                []string       `json:"contents"`
-	Name                    string         `json:"name"`
-	Notes                   *string        `json:"notes"`
-	GroupIDs                []int64        `json:"group_ids"`
-	ProxyID                 *int64         `json:"proxy_id"`
-	Concurrency             *int           `json:"concurrency"`
-	Priority                *int           `json:"priority"`
-	RateMultiplier          *float64       `json:"rate_multiplier"`
-	LoadFactor              *int           `json:"load_factor"`
-	ExpiresAt               *int64         `json:"expires_at"`
-	AutoPauseOnExpired      *bool          `json:"auto_pause_on_expired"`
-	CredentialExtras        map[string]any `json:"credential_extras"`
-	Extra                   map[string]any `json:"extra"`
-	UpdateExisting          *bool          `json:"update_existing"`
-	SkipDefaultGroupBind    *bool          `json:"skip_default_group_bind"`
-	ConfirmMixedChannelRisk *bool          `json:"confirm_mixed_channel_risk"`
+	Content                      string         `json:"content"`
+	Contents                     []string       `json:"contents"`
+	Name                         string         `json:"name"`
+	Notes                        *string        `json:"notes"`
+	GroupIDs                     []int64        `json:"group_ids"`
+	ProxyID                      *int64         `json:"proxy_id"`
+	Concurrency                  *int           `json:"concurrency"`
+	Priority                     *int           `json:"priority"`
+	RateMultiplier               *float64       `json:"rate_multiplier"`
+	UpstreamCostMultiplier       *string        `json:"upstream_cost_multiplier"`
+	LoadFactor                   *int           `json:"load_factor"`
+	ExpiresAt                    *int64         `json:"expires_at"`
+	AutoPauseOnExpired           *bool          `json:"auto_pause_on_expired"`
+	CredentialExtras             map[string]any `json:"credential_extras"`
+	Extra                        map[string]any `json:"extra"`
+	UpdateExisting               *bool          `json:"update_existing"`
+	SkipDefaultGroupBind         *bool          `json:"skip_default_group_bind"`
+	ConfirmMixedChannelRisk      *bool          `json:"confirm_mixed_channel_risk"`
+	parsedUpstreamCostMultiplier *decimal.Decimal
+	operatorID                   *int64
 }
 
 type CodexSessionImportResult struct {
@@ -126,6 +131,15 @@ func (h *AccountHandler) ImportCodexSession(c *gin.Context) {
 	if req.RateMultiplier != nil && *req.RateMultiplier < 0 {
 		response.BadRequest(c, "rate_multiplier must be >= 0")
 		return
+	}
+	upstreamCostMultiplier, err := parseUpstreamCostMultiplier(req.UpstreamCostMultiplier, false)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	req.parsedUpstreamCostMultiplier = upstreamCostMultiplier
+	if subject, ok := middleware2.GetAuthSubjectFromContext(c); ok && subject.UserID > 0 {
+		req.operatorID = &subject.UserID
 	}
 	if req.LoadFactor != nil && *req.LoadFactor > 10000 {
 		response.BadRequest(c, "load_factor must be <= 10000")
@@ -247,14 +261,17 @@ func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessi
 			mergedCredentials := mergeCodexImportCredentials(existing.Credentials, credentials, item)
 			mergedExtra := mergeCodexImportMap(existing.Extra, extra)
 			updateInput := &service.UpdateAccountInput{
-				Credentials:        mergedCredentials,
-				Extra:              mergedExtra,
-				Concurrency:        req.Concurrency,
-				Priority:           req.Priority,
-				RateMultiplier:     req.RateMultiplier,
-				LoadFactor:         req.LoadFactor,
-				ExpiresAt:          effectiveExpiresAt,
-				AutoPauseOnExpired: autoPauseOnExpired,
+				Credentials:                        mergedCredentials,
+				Extra:                              mergedExtra,
+				Concurrency:                        req.Concurrency,
+				Priority:                           req.Priority,
+				RateMultiplier:                     req.RateMultiplier,
+				UpstreamCostMultiplier:             req.parsedUpstreamCostMultiplier,
+				UpstreamCostMultiplierChangeReason: "Codex session import update",
+				OperatorID:                         req.operatorID,
+				LoadFactor:                         req.LoadFactor,
+				ExpiresAt:                          effectiveExpiresAt,
+				AutoPauseOnExpired:                 autoPauseOnExpired,
 			}
 			if req.ProxyID != nil {
 				updateInput.ProxyID = req.ProxyID
@@ -299,22 +316,24 @@ func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessi
 		}
 
 		account, createErr := h.adminService.CreateAccount(ctx, &service.CreateAccountInput{
-			Name:                  accountName,
-			Notes:                 req.Notes,
-			Platform:              service.PlatformOpenAI,
-			Type:                  service.AccountTypeOAuth,
-			Credentials:           credentials,
-			Extra:                 extra,
-			ProxyID:               req.ProxyID,
-			Concurrency:           concurrency,
-			Priority:              priority,
-			RateMultiplier:        req.RateMultiplier,
-			LoadFactor:            req.LoadFactor,
-			GroupIDs:              req.GroupIDs,
-			ExpiresAt:             effectiveExpiresAt,
-			AutoPauseOnExpired:    autoPauseOnExpired,
-			SkipDefaultGroupBind:  skipDefaultGroupBind,
-			SkipMixedChannelCheck: skipMixedChannelCheck,
+			Name:                   accountName,
+			Notes:                  req.Notes,
+			Platform:               service.PlatformOpenAI,
+			Type:                   service.AccountTypeOAuth,
+			Credentials:            credentials,
+			Extra:                  extra,
+			ProxyID:                req.ProxyID,
+			Concurrency:            concurrency,
+			Priority:               priority,
+			RateMultiplier:         req.RateMultiplier,
+			UpstreamCostMultiplier: req.parsedUpstreamCostMultiplier,
+			OperatorID:             req.operatorID,
+			LoadFactor:             req.LoadFactor,
+			GroupIDs:               req.GroupIDs,
+			ExpiresAt:              effectiveExpiresAt,
+			AutoPauseOnExpired:     autoPauseOnExpired,
+			SkipDefaultGroupBind:   skipDefaultGroupBind,
+			SkipMixedChannelCheck:  skipMixedChannelCheck,
 		})
 		if createErr != nil {
 			result.Failed++

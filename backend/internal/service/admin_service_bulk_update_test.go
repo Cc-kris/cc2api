@@ -7,33 +7,38 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
 
 type accountRepoStubForBulkUpdate struct {
 	accountRepoStub
-	bulkUpdateErr    error
-	bulkUpdateIDs    []int64
-	bindGroupErrByID map[int64]error
-	bindGroupsCalls  []int64
-	getByIDsAccounts []*Account
-	getByIDsErr      error
-	getByIDsCalled   bool
-	getByIDsIDs      []int64
-	getByIDAccounts  map[int64]*Account
-	getByIDErrByID   map[int64]error
-	getByIDCalled    []int64
-	listByGroupData  map[int64][]Account
-	listByGroupErr   map[int64]error
-	listData         []Account
-	listResult       *pagination.PaginationResult
-	listErr          error
-	listCalled       bool
-	lastListParams   pagination.PaginationParams
-	lastBulkUpdate   AccountBulkUpdate
-	lastListFilters  struct {
+	bulkUpdateErr     error
+	bulkUpdateIDs     []int64
+	bindGroupErrByID  map[int64]error
+	bindGroupsCalls   []int64
+	getByIDsAccounts  []*Account
+	getByIDsErr       error
+	getByIDsCalled    bool
+	getByIDsIDs       []int64
+	getByIDAccounts   map[int64]*Account
+	getByIDErrByID    map[int64]error
+	getByIDCalled     []int64
+	listByGroupData   map[int64][]Account
+	listByGroupErr    map[int64]error
+	listData          []Account
+	listResult        *pagination.PaginationResult
+	listErr           error
+	listCalled        bool
+	lastListParams    pagination.PaginationParams
+	lastBulkUpdate    AccountBulkUpdate
+	upstreamAuditIDs  []int64
+	updateCalls       int
+	atomicUpdateCalls int
+	lastListFilters   struct {
 		platform    string
 		accountType string
 		status      string
@@ -41,6 +46,37 @@ type accountRepoStubForBulkUpdate struct {
 		groupID     int64
 		privacyMode string
 	}
+}
+
+func (s *accountRepoStubForBulkUpdate) Update(_ context.Context, _ *Account) error {
+	s.updateCalls++
+	return nil
+}
+
+func (s *accountRepoStubForBulkUpdate) CreateWithUpstreamMultiplierAudit(_ context.Context, _ *Account, _ *int64, _ string) error {
+	return nil
+}
+
+func (s *accountRepoStubForBulkUpdate) UpdateAccountWithUpstreamMultiplierAudit(_ context.Context, account *Account, _ *decimal.Decimal, newMultiplier decimal.Decimal, effectiveAt time.Time, _ *int64, _ string) error {
+	if account == nil {
+		return ErrAccountNilInput
+	}
+	s.atomicUpdateCalls++
+	return s.UpdateUpstreamMultiplierWithAudit(context.Background(), account.ID, nil, newMultiplier, effectiveAt, nil, "")
+}
+
+func (s *accountRepoStubForBulkUpdate) UpdateUpstreamMultiplierWithAudit(_ context.Context, accountID int64, _ *decimal.Decimal, newMultiplier decimal.Decimal, effectiveAt time.Time, _ *int64, _ string) error {
+	s.upstreamAuditIDs = append(s.upstreamAuditIDs, accountID)
+	if account := s.getByIDAccounts[accountID]; account != nil {
+		value := newMultiplier
+		account.UpstreamCostMultiplier = &value
+		account.UpstreamCostMultiplierUpdatedAt = &effectiveAt
+	}
+	return nil
+}
+
+func (s *accountRepoStubForBulkUpdate) ListUpstreamMultiplierChanges(_ context.Context, _ int64, _ pagination.PaginationParams) ([]AccountUpstreamMultiplierChange, *pagination.PaginationResult, error) {
+	return nil, &pagination.PaginationResult{}, nil
 }
 
 func (s *accountRepoStubForBulkUpdate) BulkUpdate(_ context.Context, ids []int64, update AccountBulkUpdate) (int64, error) {
@@ -126,6 +162,60 @@ func TestAdminService_BulkUpdateAccounts_AllSuccessIDs(t *testing.T) {
 	require.ElementsMatch(t, []int64{1, 2, 3}, result.SuccessIDs)
 	require.Empty(t, result.FailedIDs)
 	require.Len(t, result.Results, 3)
+}
+
+func TestAdminService_BulkUpdateAccounts_UpstreamMultiplierReportsSuccessUnchangedAndFailure(t *testing.T) {
+	one := decimal.RequireFromString("1.0000")
+	oneTwo := decimal.RequireFromString("1.2000")
+	repo := &accountRepoStubForBulkUpdate{
+		getByIDAccounts: map[int64]*Account{
+			1: {ID: 1, UpstreamCostMultiplier: &one},
+			2: {ID: 2, UpstreamCostMultiplier: &oneTwo},
+		},
+		getByIDErrByID: map[int64]error{3: errors.New("read failed")},
+	}
+	svc := &adminServiceImpl{accountRepo: repo}
+	operatorID := int64(9)
+
+	result, err := svc.BulkUpdateAccounts(context.Background(), &BulkUpdateAccountsInput{
+		AccountIDs:                         []int64{1, 2, 3},
+		UpstreamCostMultiplier:             &oneTwo,
+		UpstreamCostMultiplierChangeReason: "supplier contract updated",
+		OperatorID:                         &operatorID,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Success)
+	require.Equal(t, 1, result.Unchanged)
+	require.Equal(t, 1, result.Failed)
+	require.Equal(t, []int64{1}, repo.upstreamAuditIDs)
+	require.Equal(t, []string{"success", "unchanged", "failed"}, []string{
+		result.Results[0].Status, result.Results[1].Status, result.Results[2].Status,
+	})
+}
+
+func TestAdminService_UpdateAccountPersistsAccountAndMultiplierAuditAtomically(t *testing.T) {
+	oldMultiplier := decimal.RequireFromString("1.0000")
+	newMultiplier := decimal.RequireFromString("1.2500")
+	account := &Account{
+		ID: 77, Name: "before", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+		Status: StatusActive, Credentials: map[string]any{}, Extra: map[string]any{},
+		UpstreamCostMultiplier: &oldMultiplier,
+	}
+	repo := &accountRepoStubForBulkUpdate{getByIDAccounts: map[int64]*Account{77: account}}
+	svc := &adminServiceImpl{accountRepo: repo}
+
+	updated, err := svc.UpdateAccount(context.Background(), 77, &UpdateAccountInput{
+		Name:                               "after",
+		UpstreamCostMultiplier:             &newMultiplier,
+		UpstreamCostMultiplierChangeReason: "上游采购倍率调整",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 1, repo.atomicUpdateCalls)
+	require.Equal(t, 0, repo.updateCalls, "must not persist the account before the audit transaction")
+	require.Equal(t, "after", updated.Name)
+	require.True(t, updated.UpstreamCostMultiplier.Equal(newMultiplier))
 }
 
 func TestAdminService_BulkUpdateAccounts_DropsDeprecatedUpstreamWarningExtra(t *testing.T) {

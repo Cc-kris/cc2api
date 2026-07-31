@@ -109,6 +109,11 @@ var (
 		{Name: "load_factor", Type: field.TypeInt, Nullable: true},
 		{Name: "priority", Type: field.TypeInt, Default: 50},
 		{Name: "rate_multiplier", Type: field.TypeFloat64, Default: 1, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
+		{Name: "upstream_cost_multiplier", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
+		{Name: "upstream_cost_multiplier_updated_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "upstream_cost_multiplier_change_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "upstream_cost_multiplier_source", Type: field.TypeString, Size: 30, Default: "account_config"},
+		{Name: "current_finance_profile_id", Type: field.TypeInt64, Nullable: true},
 		{Name: "status", Type: field.TypeString, Size: 20, Default: "active"},
 		{Name: "error_message", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "last_used_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
@@ -133,7 +138,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "accounts_proxies_proxy",
-				Columns:    []*schema.Column{AccountsColumns[28]},
+				Columns:    []*schema.Column{AccountsColumns[33]},
 				RefColumns: []*schema.Column{ProxiesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -152,12 +157,12 @@ var (
 			{
 				Name:    "account_status",
 				Unique:  false,
-				Columns: []*schema.Column{AccountsColumns[14]},
+				Columns: []*schema.Column{AccountsColumns[19]},
 			},
 			{
 				Name:    "account_proxy_id",
 				Unique:  false,
-				Columns: []*schema.Column{AccountsColumns[28]},
+				Columns: []*schema.Column{AccountsColumns[33]},
 			},
 			{
 				Name:    "account_priority",
@@ -167,27 +172,27 @@ var (
 			{
 				Name:    "account_last_used_at",
 				Unique:  false,
-				Columns: []*schema.Column{AccountsColumns[16]},
+				Columns: []*schema.Column{AccountsColumns[21]},
 			},
 			{
 				Name:    "account_schedulable",
 				Unique:  false,
-				Columns: []*schema.Column{AccountsColumns[19]},
+				Columns: []*schema.Column{AccountsColumns[24]},
 			},
 			{
 				Name:    "account_rate_limited_at",
 				Unique:  false,
-				Columns: []*schema.Column{AccountsColumns[20]},
+				Columns: []*schema.Column{AccountsColumns[25]},
 			},
 			{
 				Name:    "account_rate_limit_reset_at",
 				Unique:  false,
-				Columns: []*schema.Column{AccountsColumns[21]},
+				Columns: []*schema.Column{AccountsColumns[26]},
 			},
 			{
 				Name:    "account_overload_until",
 				Unique:  false,
-				Columns: []*schema.Column{AccountsColumns[22]},
+				Columns: []*schema.Column{AccountsColumns[27]},
 			},
 			{
 				Name:    "account_platform_priority",
@@ -197,12 +202,117 @@ var (
 			{
 				Name:    "account_priority_status",
 				Unique:  false,
-				Columns: []*schema.Column{AccountsColumns[12], AccountsColumns[14]},
+				Columns: []*schema.Column{AccountsColumns[12], AccountsColumns[19]},
 			},
 			{
 				Name:    "account_deleted_at",
 				Unique:  false,
 				Columns: []*schema.Column{AccountsColumns[3]},
+			},
+		},
+	}
+	// AccountFinanceCounterSnapshotsColumns holds the columns for the "account_finance_counter_snapshots" table.
+	AccountFinanceCounterSnapshotsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "account_id", Type: field.TypeInt64},
+		{Name: "account_finance_profile_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "scope_key", Type: field.TypeString, Size: 200},
+		{Name: "idempotency_key", Type: field.TypeString, Size: 200},
+		{Name: "upstream_counter_id", Type: field.TypeString, Nullable: true, Size: 200},
+		{Name: "counter_period", Type: field.TypeString, Nullable: true, Size: 100},
+		{Name: "list_cost_total", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "actual_cost_total", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "unit_code", Type: field.TypeString, Size: 30},
+		{Name: "unit_semantics", Type: field.TypeString, Size: 30},
+		{Name: "currency", Type: field.TypeString, Nullable: true, Size: 3},
+		{Name: "upstream_observed_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "collected_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "safe_snapshot", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "checksum", Type: field.TypeString, Size: 64},
+		{Name: "previous_snapshot_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "list_cost_delta", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "actual_cost_delta", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "observed_multiplier", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "derivation_status", Type: field.TypeString, Size: 40},
+		{Name: "anomaly_code", Type: field.TypeString, Nullable: true, Size: 40},
+		{Name: "multiplier_change_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "multiplier_effective_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// AccountFinanceCounterSnapshotsTable holds the schema information for the "account_finance_counter_snapshots" table.
+	AccountFinanceCounterSnapshotsTable = &schema.Table{
+		Name:       "account_finance_counter_snapshots",
+		Columns:    AccountFinanceCounterSnapshotsColumns,
+		PrimaryKey: []*schema.Column{AccountFinanceCounterSnapshotsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "accountfinancecountersnapshot_account_id_scope_key_idempotency_key",
+				Unique:  true,
+				Columns: []*schema.Column{AccountFinanceCounterSnapshotsColumns[1], AccountFinanceCounterSnapshotsColumns[3], AccountFinanceCounterSnapshotsColumns[4]},
+			},
+			{
+				Name:    "accountfinancecountersnapshot_account_id_scope_key_collected_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{AccountFinanceCounterSnapshotsColumns[1], AccountFinanceCounterSnapshotsColumns[3], AccountFinanceCounterSnapshotsColumns[13], AccountFinanceCounterSnapshotsColumns[0]},
+			},
+			{
+				Name:    "accountfinancecountersnapshot_account_finance_profile_id_collected_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{AccountFinanceCounterSnapshotsColumns[2], AccountFinanceCounterSnapshotsColumns[13], AccountFinanceCounterSnapshotsColumns[0]},
+			},
+			{
+				Name:    "accountfinancecountersnapshot_account_id_derivation_status_collected_at",
+				Unique:  false,
+				Columns: []*schema.Column{AccountFinanceCounterSnapshotsColumns[1], AccountFinanceCounterSnapshotsColumns[20], AccountFinanceCounterSnapshotsColumns[13]},
+			},
+		},
+	}
+	// AccountFinanceProfilesColumns holds the columns for the "account_finance_profiles" table.
+	AccountFinanceProfilesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "account_id", Type: field.TypeInt64},
+		{Name: "wallet_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "protocol_version_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "cost_mode", Type: field.TypeString, Size: 40},
+		{Name: "pricing_group", Type: field.TypeString, Nullable: true, Size: 100},
+		{Name: "endpoint_source", Type: field.TypeString, Size: 30, Default: "account_base_url"},
+		{Name: "endpoint_base_url_snapshot", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "credential_source", Type: field.TypeString, Size: 40, Default: "account_api_key"},
+		{Name: "counter_scope", Type: field.TypeString, Size: 30, Default: "account"},
+		{Name: "counter_scope_key", Type: field.TypeString, Nullable: true, Size: 200},
+		{Name: "balance_unit_semantics", Type: field.TypeString, Size: 30, Default: "none"},
+		{Name: "recharge_owner_type", Type: field.TypeString, Nullable: true, Size: 20},
+		{Name: "recharge_owner_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "account_multiplier_change_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "account_multiplier_snapshot", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "raw_upstream_multiplier", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "contract_type", Type: field.TypeString, Nullable: true, Size: 30},
+		{Name: "contract_multiplier", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "contract_multiplier_change_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "readiness_status", Type: field.TypeString, Size: 30},
+		{Name: "readiness_detail", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "version", Type: field.TypeInt, Default: 1},
+		{Name: "effective_from", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "effective_to", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "reason", Type: field.TypeString, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// AccountFinanceProfilesTable holds the schema information for the "account_finance_profiles" table.
+	AccountFinanceProfilesTable = &schema.Table{
+		Name:       "account_finance_profiles",
+		Columns:    AccountFinanceProfilesColumns,
+		PrimaryKey: []*schema.Column{AccountFinanceProfilesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "accountfinanceprofile_account_id_effective_from",
+				Unique:  false,
+				Columns: []*schema.Column{AccountFinanceProfilesColumns[1], AccountFinanceProfilesColumns[23]},
+			},
+			{
+				Name:    "accountfinanceprofile_account_id_version",
+				Unique:  true,
+				Columns: []*schema.Column{AccountFinanceProfilesColumns[1], AccountFinanceProfilesColumns[22]},
 			},
 		},
 	}
@@ -242,6 +352,31 @@ var (
 				Name:    "accountgroup_priority",
 				Unique:  false,
 				Columns: []*schema.Column{AccountGroupsColumns[0]},
+			},
+		},
+	}
+	// AccountUpstreamMultiplierChangesColumns holds the columns for the "account_upstream_multiplier_changes" table.
+	AccountUpstreamMultiplierChangesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "account_id", Type: field.TypeInt64},
+		{Name: "old_multiplier", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
+		{Name: "new_multiplier", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
+		{Name: "change_type", Type: field.TypeString, Size: 20},
+		{Name: "effective_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "operator_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "reason", Type: field.TypeString, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// AccountUpstreamMultiplierChangesTable holds the schema information for the "account_upstream_multiplier_changes" table.
+	AccountUpstreamMultiplierChangesTable = &schema.Table{
+		Name:       "account_upstream_multiplier_changes",
+		Columns:    AccountUpstreamMultiplierChangesColumns,
+		PrimaryKey: []*schema.Column{AccountUpstreamMultiplierChangesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "accountupstreammultiplierchange_account_id_effective_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{AccountUpstreamMultiplierChangesColumns[1], AccountUpstreamMultiplierChangesColumns[5], AccountUpstreamMultiplierChangesColumns[0]},
 			},
 		},
 	}
@@ -648,6 +783,216 @@ var (
 			},
 		},
 	}
+	// FinanceAlertsColumns holds the columns for the "finance_alerts" table.
+	FinanceAlertsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "alert_type", Type: field.TypeString, Size: 50},
+		{Name: "severity", Type: field.TypeString, Size: 20},
+		{Name: "aggregation_key", Type: field.TypeString, Size: 300},
+		{Name: "title", Type: field.TypeString, Size: 200},
+		{Name: "description", Type: field.TypeString, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "dimension_type", Type: field.TypeString, Nullable: true, Size: 50},
+		{Name: "dimension_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "impact_amount", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "request_count", Type: field.TypeInt64, Default: 0},
+		{Name: "occurrence_count", Type: field.TypeInt64, Default: 1},
+		{Name: "status", Type: field.TypeString, Size: 20, Default: "open"},
+		{Name: "first_occurred_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "last_occurred_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "assignee_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "handled_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "handled_note", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "handled_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// FinanceAlertsTable holds the schema information for the "finance_alerts" table.
+	FinanceAlertsTable = &schema.Table{
+		Name:       "finance_alerts",
+		Columns:    FinanceAlertsColumns,
+		PrimaryKey: []*schema.Column{FinanceAlertsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "financealert_status_severity_last_occurred_at",
+				Unique:  false,
+				Columns: []*schema.Column{FinanceAlertsColumns[11], FinanceAlertsColumns[2], FinanceAlertsColumns[13]},
+			},
+			{
+				Name:    "financealert_aggregation_key",
+				Unique:  false,
+				Columns: []*schema.Column{FinanceAlertsColumns[3]},
+			},
+		},
+	}
+	// FinanceAsyncJobsColumns holds the columns for the "finance_async_jobs" table.
+	FinanceAsyncJobsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "job_type", Type: field.TypeString, Size: 50},
+		{Name: "status", Type: field.TypeString, Size: 20},
+		{Name: "idempotency_key", Type: field.TypeString, Nullable: true, Size: 200},
+		{Name: "request_checksum", Type: field.TypeString, Nullable: true, Size: 128},
+		{Name: "parameters", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "cursor", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "progress", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
+		{Name: "processed_count", Type: field.TypeInt64, Default: 0},
+		{Name: "success_count", Type: field.TypeInt64, Default: 0},
+		{Name: "failed_count", Type: field.TypeInt64, Default: 0},
+		{Name: "lease_owner", Type: field.TypeString, Nullable: true, Size: 200},
+		{Name: "lease_expires_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "error_summary", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "operator_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "started_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "finished_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// FinanceAsyncJobsTable holds the schema information for the "finance_async_jobs" table.
+	FinanceAsyncJobsTable = &schema.Table{
+		Name:       "finance_async_jobs",
+		Columns:    FinanceAsyncJobsColumns,
+		PrimaryKey: []*schema.Column{FinanceAsyncJobsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "financeasyncjob_job_type_operator_id_idempotency_key",
+				Unique:  false,
+				Columns: []*schema.Column{FinanceAsyncJobsColumns[1], FinanceAsyncJobsColumns[14], FinanceAsyncJobsColumns[3]},
+			},
+			{
+				Name:    "financeasyncjob_job_type_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{FinanceAsyncJobsColumns[1], FinanceAsyncJobsColumns[2], FinanceAsyncJobsColumns[15]},
+			},
+		},
+	}
+	// FinanceBackfillJobsColumns holds the columns for the "finance_backfill_jobs" table.
+	FinanceBackfillJobsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "async_job_id", Type: field.TypeInt64, Unique: true},
+		{Name: "start_date", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "date"}},
+		{Name: "end_date", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "date"}},
+		{Name: "mode", Type: field.TypeString, Size: 30},
+		{Name: "pricing_policy", Type: field.TypeString, Size: 30},
+		{Name: "preview_token_hash", Type: field.TypeString, Size: 128},
+		{Name: "preview_expires_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "scope", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "reason", Type: field.TypeString, SchemaType: map[string]string{"postgres": "text"}},
+	}
+	// FinanceBackfillJobsTable holds the schema information for the "finance_backfill_jobs" table.
+	FinanceBackfillJobsTable = &schema.Table{
+		Name:       "finance_backfill_jobs",
+		Columns:    FinanceBackfillJobsColumns,
+		PrimaryKey: []*schema.Column{FinanceBackfillJobsColumns[0]},
+	}
+	// FinanceCalculationRevisionsColumns holds the columns for the "finance_calculation_revisions" table.
+	FinanceCalculationRevisionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "entity_type", Type: field.TypeString, Size: 50},
+		{Name: "entity_id", Type: field.TypeInt64},
+		{Name: "revision", Type: field.TypeInt},
+		{Name: "old_result", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "new_result", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "reason", Type: field.TypeString, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "job_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "operator_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// FinanceCalculationRevisionsTable holds the schema information for the "finance_calculation_revisions" table.
+	FinanceCalculationRevisionsTable = &schema.Table{
+		Name:       "finance_calculation_revisions",
+		Columns:    FinanceCalculationRevisionsColumns,
+		PrimaryKey: []*schema.Column{FinanceCalculationRevisionsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "financecalculationrevision_entity_type_entity_id_revision",
+				Unique:  true,
+				Columns: []*schema.Column{FinanceCalculationRevisionsColumns[1], FinanceCalculationRevisionsColumns[2], FinanceCalculationRevisionsColumns[3]},
+			},
+			{
+				Name:    "financecalculationrevision_job_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{FinanceCalculationRevisionsColumns[7], FinanceCalculationRevisionsColumns[9]},
+			},
+		},
+	}
+	// FinanceDailyAggregatesColumns holds the columns for the "finance_daily_aggregates" table.
+	FinanceDailyAggregatesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "aggregate_date", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "date"}},
+		{Name: "timezone", Type: field.TypeString, Size: 100},
+		{Name: "dimension_type", Type: field.TypeString, Size: 50},
+		{Name: "dimension_key", Type: field.TypeString, Size: 200},
+		{Name: "metric_detail", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "source_revision", Type: field.TypeInt64},
+		{Name: "generated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// FinanceDailyAggregatesTable holds the schema information for the "finance_daily_aggregates" table.
+	FinanceDailyAggregatesTable = &schema.Table{
+		Name:       "finance_daily_aggregates",
+		Columns:    FinanceDailyAggregatesColumns,
+		PrimaryKey: []*schema.Column{FinanceDailyAggregatesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "financedailyaggregate_aggregate_date_timezone_dimension_type_dimension_key",
+				Unique:  true,
+				Columns: []*schema.Column{FinanceDailyAggregatesColumns[1], FinanceDailyAggregatesColumns[2], FinanceDailyAggregatesColumns[3], FinanceDailyAggregatesColumns[4]},
+			},
+			{
+				Name:    "financedailyaggregate_dimension_type_dimension_key_aggregate_date",
+				Unique:  false,
+				Columns: []*schema.Column{FinanceDailyAggregatesColumns[3], FinanceDailyAggregatesColumns[4], FinanceDailyAggregatesColumns[1]},
+			},
+		},
+	}
+	// FinanceExportJobsColumns holds the columns for the "finance_export_jobs" table.
+	FinanceExportJobsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "async_job_id", Type: field.TypeInt64, Unique: true},
+		{Name: "report", Type: field.TypeString, Size: 50},
+		{Name: "format", Type: field.TypeString, Size: 20, Default: "csv"},
+		{Name: "filters", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "timezone", Type: field.TypeString, Size: 100},
+		{Name: "storage_key", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "file_size", Type: field.TypeInt64, Nullable: true},
+		{Name: "row_count", Type: field.TypeInt64, Nullable: true},
+		{Name: "expires_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// FinanceExportJobsTable holds the schema information for the "finance_export_jobs" table.
+	FinanceExportJobsTable = &schema.Table{
+		Name:       "finance_export_jobs",
+		Columns:    FinanceExportJobsColumns,
+		PrimaryKey: []*schema.Column{FinanceExportJobsColumns[0]},
+	}
+	// FinanceFxRateVersionsColumns holds the columns for the "finance_fx_rate_versions" table.
+	FinanceFxRateVersionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "currency", Type: field.TypeString, Size: 3},
+		{Name: "rate_to_usd", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "source", Type: field.TypeString, Size: 80},
+		{Name: "observed_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "effective_from", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "effective_to", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "checksum", Type: field.TypeString, Size: 128},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// FinanceFxRateVersionsTable holds the schema information for the "finance_fx_rate_versions" table.
+	FinanceFxRateVersionsTable = &schema.Table{
+		Name:       "finance_fx_rate_versions",
+		Columns:    FinanceFxRateVersionsColumns,
+		PrimaryKey: []*schema.Column{FinanceFxRateVersionsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "financefxrateversion_currency_rate_to_usd_source_effective_from",
+				Unique:  true,
+				Columns: []*schema.Column{FinanceFxRateVersionsColumns[1], FinanceFxRateVersionsColumns[2], FinanceFxRateVersionsColumns[3], FinanceFxRateVersionsColumns[5]},
+			},
+			{
+				Name:    "financefxrateversion_currency_effective_from_effective_to",
+				Unique:  false,
+				Columns: []*schema.Column{FinanceFxRateVersionsColumns[1], FinanceFxRateVersionsColumns[5], FinanceFxRateVersionsColumns[6]},
+			},
+		},
+	}
 	// GroupsColumns holds the columns for the "groups" table.
 	GroupsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -931,6 +1276,48 @@ var (
 				Name:    "paymentorder_order_type",
 				Unique:  false,
 				Columns: []*schema.Column{PaymentOrdersColumns[14]},
+			},
+		},
+	}
+	// PaymentProviderFeeEventsColumns holds the columns for the "payment_provider_fee_events" table.
+	PaymentProviderFeeEventsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "payment_order_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "provider", Type: field.TypeString, Size: 50},
+		{Name: "bill_event_id", Type: field.TypeString, Size: 200},
+		{Name: "gross_amount", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "fee_amount", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "net_amount", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "currency", Type: field.TypeString, Size: 3},
+		{Name: "fx_rate_to_usd", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "gross_usd_amount", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "fee_usd_amount", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "net_usd_amount", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "fee_status", Type: field.TypeString, Size: 20},
+		{Name: "source", Type: field.TypeString, Size: 30},
+		{Name: "occurred_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// PaymentProviderFeeEventsTable holds the schema information for the "payment_provider_fee_events" table.
+	PaymentProviderFeeEventsTable = &schema.Table{
+		Name:       "payment_provider_fee_events",
+		Columns:    PaymentProviderFeeEventsColumns,
+		PrimaryKey: []*schema.Column{PaymentProviderFeeEventsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "paymentproviderfeeevent_provider_bill_event_id",
+				Unique:  true,
+				Columns: []*schema.Column{PaymentProviderFeeEventsColumns[2], PaymentProviderFeeEventsColumns[3]},
+			},
+			{
+				Name:    "paymentproviderfeeevent_payment_order_id_occurred_at",
+				Unique:  false,
+				Columns: []*schema.Column{PaymentProviderFeeEventsColumns[1], PaymentProviderFeeEventsColumns[14]},
+			},
+			{
+				Name:    "paymentproviderfeeevent_fee_status_occurred_at",
+				Unique:  false,
+				Columns: []*schema.Column{PaymentProviderFeeEventsColumns[12], PaymentProviderFeeEventsColumns[14]},
 			},
 		},
 	}
@@ -1261,6 +1648,71 @@ var (
 			},
 		},
 	}
+	// SubscriptionRevenueRecognitionsColumns holds the columns for the "subscription_revenue_recognitions" table.
+	SubscriptionRevenueRecognitionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "payment_order_id", Type: field.TypeInt64},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "group_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "recognition_date", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "date"}},
+		{Name: "recognized_revenue", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "refund_reduction", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "allocated_revenue", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "unallocated_revenue", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "allocation_status", Type: field.TypeString, Size: 30},
+		{Name: "calculation_detail", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "current_revision", Type: field.TypeInt, Default: 1},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// SubscriptionRevenueRecognitionsTable holds the schema information for the "subscription_revenue_recognitions" table.
+	SubscriptionRevenueRecognitionsTable = &schema.Table{
+		Name:       "subscription_revenue_recognitions",
+		Columns:    SubscriptionRevenueRecognitionsColumns,
+		PrimaryKey: []*schema.Column{SubscriptionRevenueRecognitionsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "subscriptionrevenuerecognition_payment_order_id_recognition_date",
+				Unique:  true,
+				Columns: []*schema.Column{SubscriptionRevenueRecognitionsColumns[1], SubscriptionRevenueRecognitionsColumns[4]},
+			},
+			{
+				Name:    "subscriptionrevenuerecognition_recognition_date_user_id_group_id",
+				Unique:  false,
+				Columns: []*schema.Column{SubscriptionRevenueRecognitionsColumns[4], SubscriptionRevenueRecognitionsColumns[2], SubscriptionRevenueRecognitionsColumns[3]},
+			},
+		},
+	}
+	// SystemModelPriceVersionsColumns holds the columns for the "system_model_price_versions" table.
+	SystemModelPriceVersionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "catalog_checksum", Type: field.TypeString, Size: 128},
+		{Name: "provider", Type: field.TypeString, Size: 50},
+		{Name: "model_name", Type: field.TypeString, Size: 100},
+		{Name: "billing_mode", Type: field.TypeString, Size: 20},
+		{Name: "price_detail", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "effective_from", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "effective_to", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// SystemModelPriceVersionsTable holds the schema information for the "system_model_price_versions" table.
+	SystemModelPriceVersionsTable = &schema.Table{
+		Name:       "system_model_price_versions",
+		Columns:    SystemModelPriceVersionsColumns,
+		PrimaryKey: []*schema.Column{SystemModelPriceVersionsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "systemmodelpriceversion_catalog_checksum_provider_model_name_billing_mode_effective_from",
+				Unique:  true,
+				Columns: []*schema.Column{SystemModelPriceVersionsColumns[1], SystemModelPriceVersionsColumns[2], SystemModelPriceVersionsColumns[3], SystemModelPriceVersionsColumns[4], SystemModelPriceVersionsColumns[6]},
+			},
+			{
+				Name:    "systemmodelpriceversion_provider_model_name_effective_from_effective_to",
+				Unique:  false,
+				Columns: []*schema.Column{SystemModelPriceVersionsColumns[2], SystemModelPriceVersionsColumns[3], SystemModelPriceVersionsColumns[6], SystemModelPriceVersionsColumns[7]},
+			},
+		},
+	}
 	// TLSFingerprintProfilesColumns holds the columns for the "tls_fingerprint_profiles" table.
 	TLSFingerprintProfilesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -1284,6 +1736,403 @@ var (
 		Name:       "tls_fingerprint_profiles",
 		Columns:    TLSFingerprintProfilesColumns,
 		PrimaryKey: []*schema.Column{TLSFingerprintProfilesColumns[0]},
+	}
+	// UpstreamBalanceSnapshotsColumns holds the columns for the "upstream_balance_snapshots" table.
+	UpstreamBalanceSnapshotsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "wallet_id", Type: field.TypeInt64},
+		{Name: "dedupe_key", Type: field.TypeString, Size: 200},
+		{Name: "balance_kind", Type: field.TypeString, Size: 20},
+		{Name: "balance_amount", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "total_quota", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "used_quota", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "currency", Type: field.TypeString, Size: 3},
+		{Name: "source", Type: field.TypeString, Size: 30},
+		{Name: "collected_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "sync_status", Type: field.TypeString, Size: 20},
+		{Name: "safe_snapshot", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// UpstreamBalanceSnapshotsTable holds the schema information for the "upstream_balance_snapshots" table.
+	UpstreamBalanceSnapshotsTable = &schema.Table{
+		Name:       "upstream_balance_snapshots",
+		Columns:    UpstreamBalanceSnapshotsColumns,
+		PrimaryKey: []*schema.Column{UpstreamBalanceSnapshotsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "upstreambalancesnapshot_wallet_id_dedupe_key",
+				Unique:  true,
+				Columns: []*schema.Column{UpstreamBalanceSnapshotsColumns[1], UpstreamBalanceSnapshotsColumns[2]},
+			},
+			{
+				Name:    "upstreambalancesnapshot_wallet_id_balance_kind_collected_at",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamBalanceSnapshotsColumns[1], UpstreamBalanceSnapshotsColumns[3], UpstreamBalanceSnapshotsColumns[9]},
+			},
+		},
+	}
+	// UpstreamBillReconciliationsColumns holds the columns for the "upstream_bill_reconciliations" table.
+	UpstreamBillReconciliationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "wallet_id", Type: field.TypeInt64},
+		{Name: "period_start", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "period_end", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "upstream_bill_amount", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "system_cost_amount", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "difference_amount", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "difference_rate", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "currency", Type: field.TypeString, Size: 3},
+		{Name: "source_reference", Type: field.TypeString, Nullable: true, Size: 200},
+		{Name: "source_file_checksum", Type: field.TypeString, Size: 128},
+		{Name: "status", Type: field.TypeString, Size: 20},
+		{Name: "handled_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "handled_note", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "handled_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// UpstreamBillReconciliationsTable holds the schema information for the "upstream_bill_reconciliations" table.
+	UpstreamBillReconciliationsTable = &schema.Table{
+		Name:       "upstream_bill_reconciliations",
+		Columns:    UpstreamBillReconciliationsColumns,
+		PrimaryKey: []*schema.Column{UpstreamBillReconciliationsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "upstreambillreconciliation_wallet_id_period_start_period_end_source_file_checksum",
+				Unique:  true,
+				Columns: []*schema.Column{UpstreamBillReconciliationsColumns[1], UpstreamBillReconciliationsColumns[2], UpstreamBillReconciliationsColumns[3], UpstreamBillReconciliationsColumns[10]},
+			},
+			{
+				Name:    "upstreambillreconciliation_status_period_start",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamBillReconciliationsColumns[11], UpstreamBillReconciliationsColumns[2]},
+			},
+		},
+	}
+	// UpstreamCostSettlementIntervalsColumns holds the columns for the "upstream_cost_settlement_intervals" table.
+	UpstreamCostSettlementIntervalsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "owner_type", Type: field.TypeString, Size: 20},
+		{Name: "owner_id", Type: field.TypeInt64},
+		{Name: "account_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "account_finance_profile_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "wallet_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "scope_key", Type: field.TypeString, Size: 240},
+		{Name: "previous_snapshot_id", Type: field.TypeInt64},
+		{Name: "current_snapshot_id", Type: field.TypeInt64},
+		{Name: "period_start", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "period_end", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "unit_semantics", Type: field.TypeString, Size: 30},
+		{Name: "currency", Type: field.TypeString, Nullable: true, Size: 3},
+		{Name: "fx_rate_version_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "fx_rate_to_usd", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "fx_source", Type: field.TypeString, Nullable: true, Size: 80},
+		{Name: "fx_observed_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "list_cost_delta", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "actual_cost_delta", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "observed_multiplier", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "status", Type: field.TypeString, Size: 30, Default: "pending"},
+		{Name: "current_revision", Type: field.TypeInt, Default: 1},
+		{Name: "request_count", Type: field.TypeInt64, Default: 0},
+		{Name: "segment_count", Type: field.TypeInt64, Default: 0},
+		{Name: "standard_cost_total", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "allocated_cost_total", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "difference_amount", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "error_summary", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "settled_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// UpstreamCostSettlementIntervalsTable holds the schema information for the "upstream_cost_settlement_intervals" table.
+	UpstreamCostSettlementIntervalsTable = &schema.Table{
+		Name:       "upstream_cost_settlement_intervals",
+		Columns:    UpstreamCostSettlementIntervalsColumns,
+		PrimaryKey: []*schema.Column{UpstreamCostSettlementIntervalsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "upstreamcostsettlementinterval_scope_key_previous_snapshot_id_current_snapshot_id",
+				Unique:  true,
+				Columns: []*schema.Column{UpstreamCostSettlementIntervalsColumns[6], UpstreamCostSettlementIntervalsColumns[7], UpstreamCostSettlementIntervalsColumns[8]},
+			},
+			{
+				Name:    "upstreamcostsettlementinterval_owner_type_owner_id_period_end",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamCostSettlementIntervalsColumns[1], UpstreamCostSettlementIntervalsColumns[2], UpstreamCostSettlementIntervalsColumns[10]},
+			},
+			{
+				Name:    "upstreamcostsettlementinterval_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamCostSettlementIntervalsColumns[20], UpstreamCostSettlementIntervalsColumns[29]},
+			},
+		},
+	}
+	// UpstreamFinanceProtocolsColumns holds the columns for the "upstream_finance_protocols" table.
+	UpstreamFinanceProtocolsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "code", Type: field.TypeString, Unique: true, Size: 80},
+		{Name: "name", Type: field.TypeString, Size: 120},
+		{Name: "protocol_type", Type: field.TypeString, Size: 20},
+		{Name: "status", Type: field.TypeString, Size: 20, Default: "draft"},
+		{Name: "current_version_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// UpstreamFinanceProtocolsTable holds the schema information for the "upstream_finance_protocols" table.
+	UpstreamFinanceProtocolsTable = &schema.Table{
+		Name:       "upstream_finance_protocols",
+		Columns:    UpstreamFinanceProtocolsColumns,
+		PrimaryKey: []*schema.Column{UpstreamFinanceProtocolsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "upstreamfinanceprotocol_status_protocol_type",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamFinanceProtocolsColumns[4], UpstreamFinanceProtocolsColumns[3]},
+			},
+			{
+				Name:    "upstreamfinanceprotocol_updated_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamFinanceProtocolsColumns[9], UpstreamFinanceProtocolsColumns[0]},
+			},
+		},
+	}
+	// UpstreamFinanceProtocolVersionsColumns holds the columns for the "upstream_finance_protocol_versions" table.
+	UpstreamFinanceProtocolVersionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "protocol_id", Type: field.TypeInt64},
+		{Name: "version", Type: field.TypeInt},
+		{Name: "config", Type: field.TypeJSON},
+		{Name: "checksum", Type: field.TypeString, Size: 64},
+		{Name: "validation_status", Type: field.TypeString, Size: 20, Default: "pending"},
+		{Name: "validation_result", Type: field.TypeJSON, Nullable: true},
+		{Name: "published_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// UpstreamFinanceProtocolVersionsTable holds the schema information for the "upstream_finance_protocol_versions" table.
+	UpstreamFinanceProtocolVersionsTable = &schema.Table{
+		Name:       "upstream_finance_protocol_versions",
+		Columns:    UpstreamFinanceProtocolVersionsColumns,
+		PrimaryKey: []*schema.Column{UpstreamFinanceProtocolVersionsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "upstreamfinanceprotocolversion_protocol_id_version",
+				Unique:  true,
+				Columns: []*schema.Column{UpstreamFinanceProtocolVersionsColumns[1], UpstreamFinanceProtocolVersionsColumns[2]},
+			},
+			{
+				Name:    "upstreamfinanceprotocolversion_protocol_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamFinanceProtocolVersionsColumns[1], UpstreamFinanceProtocolVersionsColumns[9]},
+			},
+		},
+	}
+	// UpstreamFinanceSyncRunsColumns holds the columns for the "upstream_finance_sync_runs" table.
+	UpstreamFinanceSyncRunsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "async_job_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "wallet_id", Type: field.TypeInt64},
+		{Name: "sync_type", Type: field.TypeString, Size: 20},
+		{Name: "status", Type: field.TypeString, Size: 20},
+		{Name: "collected_count", Type: field.TypeInt64, Default: 0},
+		{Name: "skipped_count", Type: field.TypeInt64, Default: 0},
+		{Name: "upstream_status", Type: field.TypeInt, Nullable: true},
+		{Name: "duration_ms", Type: field.TypeInt64, Nullable: true},
+		{Name: "error_summary", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "started_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "finished_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// UpstreamFinanceSyncRunsTable holds the schema information for the "upstream_finance_sync_runs" table.
+	UpstreamFinanceSyncRunsTable = &schema.Table{
+		Name:       "upstream_finance_sync_runs",
+		Columns:    UpstreamFinanceSyncRunsColumns,
+		PrimaryKey: []*schema.Column{UpstreamFinanceSyncRunsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "upstreamfinancesyncrun_wallet_id_sync_type_status",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamFinanceSyncRunsColumns[2], UpstreamFinanceSyncRunsColumns[3], UpstreamFinanceSyncRunsColumns[4]},
+			},
+			{
+				Name:    "upstreamfinancesyncrun_wallet_id_sync_type_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamFinanceSyncRunsColumns[2], UpstreamFinanceSyncRunsColumns[3], UpstreamFinanceSyncRunsColumns[12]},
+			},
+		},
+	}
+	// UpstreamFundEventsColumns holds the columns for the "upstream_fund_events" table.
+	UpstreamFundEventsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "wallet_id", Type: field.TypeInt64},
+		{Name: "event_type", Type: field.TypeString, Size: 30},
+		{Name: "original_amount", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "currency", Type: field.TypeString, Size: 3},
+		{Name: "fx_rate_to_usd", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "fx_source", Type: field.TypeString, Size: 80, Default: "manual"},
+		{Name: "fx_observed_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "fx_rate_version_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "usd_amount", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "base_credit_units", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "bonus_credit_units", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "total_credit_units", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "base_recharge_ratio", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "effective_recharge_ratio", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "bonus_income_original", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "bonus_income_usd", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "bonus_status", Type: field.TypeString, Size: 30, Default: "not_applicable"},
+		{Name: "reversed_event_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "occurred_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "reference_no", Type: field.TypeString, Nullable: true, Size: 200},
+		{Name: "note", Type: field.TypeString, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "operator_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "idempotency_key", Type: field.TypeString, Size: 200},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// UpstreamFundEventsTable holds the schema information for the "upstream_fund_events" table.
+	UpstreamFundEventsTable = &schema.Table{
+		Name:       "upstream_fund_events",
+		Columns:    UpstreamFundEventsColumns,
+		PrimaryKey: []*schema.Column{UpstreamFundEventsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "upstreamfundevent_wallet_id_idempotency_key",
+				Unique:  true,
+				Columns: []*schema.Column{UpstreamFundEventsColumns[1], UpstreamFundEventsColumns[23]},
+			},
+			{
+				Name:    "upstreamfundevent_wallet_id_occurred_at",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamFundEventsColumns[1], UpstreamFundEventsColumns[19]},
+			},
+			{
+				Name:    "upstreamfundevent_wallet_id_reversed_event_id",
+				Unique:  true,
+				Columns: []*schema.Column{UpstreamFundEventsColumns[1], UpstreamFundEventsColumns[18]},
+			},
+			{
+				Name:    "upstreamfundevent_bonus_status_occurred_at",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamFundEventsColumns[17], UpstreamFundEventsColumns[19]},
+			},
+		},
+	}
+	// UpstreamModelPriceVersionsColumns holds the columns for the "upstream_model_price_versions" table.
+	UpstreamModelPriceVersionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "wallet_id", Type: field.TypeInt64},
+		{Name: "model_pattern", Type: field.TypeString, Size: 150},
+		{Name: "is_wildcard", Type: field.TypeBool, Default: false},
+		{Name: "billing_mode", Type: field.TypeString, Size: 20},
+		{Name: "service_tier", Type: field.TypeString, Nullable: true, Size: 50},
+		{Name: "price_detail", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "currency", Type: field.TypeString, Size: 3, Default: "USD"},
+		{Name: "source", Type: field.TypeString, Size: 30},
+		{Name: "source_snapshot", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "checksum", Type: field.TypeString, Size: 128},
+		{Name: "effective_from", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "effective_to", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// UpstreamModelPriceVersionsTable holds the schema information for the "upstream_model_price_versions" table.
+	UpstreamModelPriceVersionsTable = &schema.Table{
+		Name:       "upstream_model_price_versions",
+		Columns:    UpstreamModelPriceVersionsColumns,
+		PrimaryKey: []*schema.Column{UpstreamModelPriceVersionsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "upstreammodelpriceversion_wallet_id_model_pattern_effective_from_effective_to",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamModelPriceVersionsColumns[1], UpstreamModelPriceVersionsColumns[2], UpstreamModelPriceVersionsColumns[11], UpstreamModelPriceVersionsColumns[12]},
+			},
+			{
+				Name:    "upstreammodelpriceversion_wallet_id_model_pattern_billing_mode_service_tier_effective_from_checksum",
+				Unique:  true,
+				Columns: []*schema.Column{UpstreamModelPriceVersionsColumns[1], UpstreamModelPriceVersionsColumns[2], UpstreamModelPriceVersionsColumns[4], UpstreamModelPriceVersionsColumns[5], UpstreamModelPriceVersionsColumns[11], UpstreamModelPriceVersionsColumns[10]},
+			},
+		},
+	}
+	// UpstreamWalletsColumns holds the columns for the "upstream_wallets" table.
+	UpstreamWalletsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "upstream_id", Type: field.TypeInt64},
+		{Name: "name", Type: field.TypeString, Size: 120},
+		{Name: "base_url", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "pricing_adapter", Type: field.TypeString, Size: 30, Default: "manual"},
+		{Name: "pricing_group", Type: field.TypeString, Nullable: true, Size: 100},
+		{Name: "balance_adapter", Type: field.TypeString, Size: 30, Default: "manual"},
+		{Name: "quota_adapter", Type: field.TypeString, Size: 30, Default: "none"},
+		{Name: "balance_scope_key", Type: field.TypeString, Nullable: true, Size: 200},
+		{Name: "finance_access_token_encrypted", Type: field.TypeBytes, Nullable: true},
+		{Name: "protocol_version_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "currency", Type: field.TypeString, Size: 3, Default: "USD"},
+		{Name: "balance_kind", Type: field.TypeString, Size: 20, Default: "wallet_cash"},
+		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "last_pricing_sync_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "pricing_sync_status", Type: field.TypeString, Size: 20, Default: "idle"},
+		{Name: "pricing_sync_error", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "last_balance_sync_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "balance_sync_status", Type: field.TypeString, Size: 20, Default: "idle"},
+		{Name: "balance_sync_error", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "last_quota_sync_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "quota_sync_status", Type: field.TypeString, Size: 20, Default: "idle"},
+		{Name: "quota_sync_error", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// UpstreamWalletsTable holds the schema information for the "upstream_wallets" table.
+	UpstreamWalletsTable = &schema.Table{
+		Name:       "upstream_wallets",
+		Columns:    UpstreamWalletsColumns,
+		PrimaryKey: []*schema.Column{UpstreamWalletsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "upstreamwallet_upstream_id_enabled_deleted_at",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamWalletsColumns[1], UpstreamWalletsColumns[13], UpstreamWalletsColumns[25]},
+			},
+			{
+				Name:    "upstreamwallet_balance_scope_key_deleted_at",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamWalletsColumns[8], UpstreamWalletsColumns[25]},
+			},
+			{
+				Name:    "upstreamwallet_protocol_version_id",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamWalletsColumns[10]},
+			},
+		},
+	}
+	// UpstreamWalletAccountsColumns holds the columns for the "upstream_wallet_accounts" table.
+	UpstreamWalletAccountsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "wallet_id", Type: field.TypeInt64},
+		{Name: "account_id", Type: field.TypeInt64},
+		{Name: "effective_from", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "effective_to", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "reason", Type: field.TypeString, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "operator_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// UpstreamWalletAccountsTable holds the schema information for the "upstream_wallet_accounts" table.
+	UpstreamWalletAccountsTable = &schema.Table{
+		Name:       "upstream_wallet_accounts",
+		Columns:    UpstreamWalletAccountsColumns,
+		PrimaryKey: []*schema.Column{UpstreamWalletAccountsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "upstreamwalletaccount_wallet_id_effective_from_effective_to",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamWalletAccountsColumns[1], UpstreamWalletAccountsColumns[3], UpstreamWalletAccountsColumns[4]},
+			},
+			{
+				Name:    "upstreamwalletaccount_account_id_effective_from_effective_to",
+				Unique:  false,
+				Columns: []*schema.Column{UpstreamWalletAccountsColumns[2], UpstreamWalletAccountsColumns[3], UpstreamWalletAccountsColumns[4]},
+			},
+		},
 	}
 	// UsageCleanupTasksColumns holds the columns for the "usage_cleanup_tasks" table.
 	UsageCleanupTasksColumns = []*schema.Column{
@@ -1323,6 +2172,159 @@ var (
 			},
 		},
 	}
+	// UsageCostSettlementAllocationsColumns holds the columns for the "usage_cost_settlement_allocations" table.
+	UsageCostSettlementAllocationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "settlement_interval_id", Type: field.TypeInt64},
+		{Name: "usage_log_id", Type: field.TypeInt64},
+		{Name: "attempt_no", Type: field.TypeInt},
+		{Name: "revision", Type: field.TypeInt},
+		{Name: "standard_cost_weight", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "allocation_rate", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(24,16)"}},
+		{Name: "allocated_cost", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "invalidated_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// UsageCostSettlementAllocationsTable holds the schema information for the "usage_cost_settlement_allocations" table.
+	UsageCostSettlementAllocationsTable = &schema.Table{
+		Name:       "usage_cost_settlement_allocations",
+		Columns:    UsageCostSettlementAllocationsColumns,
+		PrimaryKey: []*schema.Column{UsageCostSettlementAllocationsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "usagecostsettlementallocation_settlement_interval_id_usage_log_id_attempt_no_revision",
+				Unique:  true,
+				Columns: []*schema.Column{UsageCostSettlementAllocationsColumns[1], UsageCostSettlementAllocationsColumns[2], UsageCostSettlementAllocationsColumns[3], UsageCostSettlementAllocationsColumns[4]},
+			},
+			{
+				Name:    "usagecostsettlementallocation_usage_log_id_attempt_no_invalidated_at",
+				Unique:  false,
+				Columns: []*schema.Column{UsageCostSettlementAllocationsColumns[2], UsageCostSettlementAllocationsColumns[3], UsageCostSettlementAllocationsColumns[8]},
+			},
+		},
+	}
+	// UsageFinanceCostSegmentsColumns holds the columns for the "usage_finance_cost_segments" table.
+	UsageFinanceCostSegmentsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "usage_finance_record_id", Type: field.TypeInt64},
+		{Name: "attempt_no", Type: field.TypeInt},
+		{Name: "account_id", Type: field.TypeInt64},
+		{Name: "wallet_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "upstream_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "channel_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "upstream_model", Type: field.TypeString, Size: 100},
+		{Name: "service_tier", Type: field.TypeString, Nullable: true, Size: 50},
+		{Name: "usage_detail", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "upstream_cost_multiplier_snapshot", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
+		{Name: "upstream_multiplier_change_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "upstream_multiplier_source", Type: field.TypeString, Nullable: true, Size: 30},
+		{Name: "upstream_multiplier_effective_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "account_finance_profile_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "fx_rate_version_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "source_currency", Type: field.TypeString, Nullable: true, Size: 3},
+		{Name: "fx_rate_to_usd", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "fx_source", Type: field.TypeString, Nullable: true, Size: 80},
+		{Name: "fx_observed_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "price_version_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "pricing_source", Type: field.TypeString, Nullable: true, Size: 30},
+		{Name: "cost_status", Type: field.TypeString, Size: 30},
+		{Name: "cost_amount", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "calculation_detail", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// UsageFinanceCostSegmentsTable holds the schema information for the "usage_finance_cost_segments" table.
+	UsageFinanceCostSegmentsTable = &schema.Table{
+		Name:       "usage_finance_cost_segments",
+		Columns:    UsageFinanceCostSegmentsColumns,
+		PrimaryKey: []*schema.Column{UsageFinanceCostSegmentsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "usagefinancecostsegment_usage_finance_record_id_attempt_no",
+				Unique:  true,
+				Columns: []*schema.Column{UsageFinanceCostSegmentsColumns[1], UsageFinanceCostSegmentsColumns[2]},
+			},
+			{
+				Name:    "usagefinancecostsegment_account_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{UsageFinanceCostSegmentsColumns[3], UsageFinanceCostSegmentsColumns[25]},
+			},
+			{
+				Name:    "usagefinancecostsegment_wallet_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{UsageFinanceCostSegmentsColumns[4], UsageFinanceCostSegmentsColumns[25]},
+			},
+		},
+	}
+	// UsageFinanceRecordsColumns holds the columns for the "usage_finance_records" table.
+	UsageFinanceRecordsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "usage_log_id", Type: field.TypeInt64, Unique: true},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "group_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "channel_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "account_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "wallet_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "upstream_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "usage_created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "requested_model", Type: field.TypeString, Size: 100},
+		{Name: "upstream_model", Type: field.TypeString, Nullable: true, Size: 100},
+		{Name: "service_tier", Type: field.TypeString, Nullable: true, Size: 50},
+		{Name: "billing_type", Type: field.TypeString, Size: 30},
+		{Name: "business_type", Type: field.TypeString, Size: 30},
+		{Name: "usage_list_value", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "upstream_cost", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "cost_status", Type: field.TypeString, Size: 30},
+		{Name: "pricing_source", Type: field.TypeString, Nullable: true, Size: 30},
+		{Name: "price_version_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "upstream_cost_multiplier_snapshot", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
+		{Name: "upstream_multiplier_change_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "upstream_multiplier_source", Type: field.TypeString, Nullable: true, Size: 30},
+		{Name: "upstream_multiplier_effective_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "account_finance_profile_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "fx_rate_version_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "source_currency", Type: field.TypeString, Nullable: true, Size: 3},
+		{Name: "fx_rate_to_usd", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "fx_source", Type: field.TypeString, Nullable: true, Size: 80},
+		{Name: "fx_observed_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "current_revision", Type: field.TypeInt, Default: 1},
+		{Name: "calculation_detail", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "calculated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// UsageFinanceRecordsTable holds the schema information for the "usage_finance_records" table.
+	UsageFinanceRecordsTable = &schema.Table{
+		Name:       "usage_finance_records",
+		Columns:    UsageFinanceRecordsColumns,
+		PrimaryKey: []*schema.Column{UsageFinanceRecordsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "usagefinancerecord_usage_created_at_id",
+				Unique:  false,
+				Columns: []*schema.Column{UsageFinanceRecordsColumns[8], UsageFinanceRecordsColumns[0]},
+			},
+			{
+				Name:    "usagefinancerecord_cost_status_usage_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{UsageFinanceRecordsColumns[16], UsageFinanceRecordsColumns[8]},
+			},
+			{
+				Name:    "usagefinancerecord_group_id_channel_id_upstream_id_wallet_id_account_id_usage_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{UsageFinanceRecordsColumns[3], UsageFinanceRecordsColumns[4], UsageFinanceRecordsColumns[7], UsageFinanceRecordsColumns[6], UsageFinanceRecordsColumns[5], UsageFinanceRecordsColumns[8]},
+			},
+			{
+				Name:    "usagefinancerecord_requested_model_usage_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{UsageFinanceRecordsColumns[9], UsageFinanceRecordsColumns[8]},
+			},
+			{
+				Name:    "usagefinancerecord_upstream_model_usage_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{UsageFinanceRecordsColumns[10], UsageFinanceRecordsColumns[8]},
+			},
+		},
+	}
 	// UsageLogsColumns holds the columns for the "usage_logs" table.
 	UsageLogsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -1348,6 +2350,21 @@ var (
 		{Name: "actual_cost", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
 		{Name: "rate_multiplier", Type: field.TypeFloat64, Default: 1, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
 		{Name: "account_rate_multiplier", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
+		{Name: "upstream_cost_multiplier", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
+		{Name: "upstream_multiplier_change_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "upstream_multiplier_source", Type: field.TypeString, Nullable: true, Size: 30},
+		{Name: "upstream_multiplier_effective_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "account_finance_profile_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "sales_model", Type: field.TypeString, Nullable: true, Size: 100},
+		{Name: "sales_pricing_effective_model", Type: field.TypeString, Nullable: true, Size: 100},
+		{Name: "sales_pricing_legacy_source", Type: field.TypeString, Nullable: true, Size: 20},
+		{Name: "sales_pricing_version", Type: field.TypeString, Nullable: true, Size: 10},
+		{Name: "sales_pricing_source", Type: field.TypeString, Nullable: true, Size: 30},
+		{Name: "sales_pricing_checksum", Type: field.TypeString, Nullable: true, Size: 128},
+		{Name: "sales_pricing_snapshot", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "sales_pricing_shadow_snapshot", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "sales_pricing_shadow_delta", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "usage_list_value", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
 		{Name: "billing_type", Type: field.TypeInt8, Default: 0},
 		{Name: "stream", Type: field.TypeBool, Default: false},
 		{Name: "duration_ms", Type: field.TypeInt, Nullable: true},
@@ -1380,31 +2397,31 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "usage_logs_api_keys_usage_logs",
-				Columns:    []*schema.Column{UsageLogsColumns[41]},
+				Columns:    []*schema.Column{UsageLogsColumns[56]},
 				RefColumns: []*schema.Column{APIKeysColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "usage_logs_accounts_usage_logs",
-				Columns:    []*schema.Column{UsageLogsColumns[42]},
+				Columns:    []*schema.Column{UsageLogsColumns[57]},
 				RefColumns: []*schema.Column{AccountsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "usage_logs_groups_usage_logs",
-				Columns:    []*schema.Column{UsageLogsColumns[43]},
+				Columns:    []*schema.Column{UsageLogsColumns[58]},
 				RefColumns: []*schema.Column{GroupsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "usage_logs_users_usage_logs",
-				Columns:    []*schema.Column{UsageLogsColumns[44]},
+				Columns:    []*schema.Column{UsageLogsColumns[59]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "usage_logs_user_subscriptions_usage_logs",
-				Columns:    []*schema.Column{UsageLogsColumns[45]},
+				Columns:    []*schema.Column{UsageLogsColumns[60]},
 				RefColumns: []*schema.Column{UserSubscriptionsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -1413,32 +2430,32 @@ var (
 			{
 				Name:    "usagelog_user_id",
 				Unique:  false,
-				Columns: []*schema.Column{UsageLogsColumns[44]},
+				Columns: []*schema.Column{UsageLogsColumns[59]},
 			},
 			{
 				Name:    "usagelog_api_key_id",
 				Unique:  false,
-				Columns: []*schema.Column{UsageLogsColumns[41]},
+				Columns: []*schema.Column{UsageLogsColumns[56]},
 			},
 			{
 				Name:    "usagelog_account_id",
 				Unique:  false,
-				Columns: []*schema.Column{UsageLogsColumns[42]},
+				Columns: []*schema.Column{UsageLogsColumns[57]},
 			},
 			{
 				Name:    "usagelog_group_id",
 				Unique:  false,
-				Columns: []*schema.Column{UsageLogsColumns[43]},
+				Columns: []*schema.Column{UsageLogsColumns[58]},
 			},
 			{
 				Name:    "usagelog_subscription_id",
 				Unique:  false,
-				Columns: []*schema.Column{UsageLogsColumns[45]},
+				Columns: []*schema.Column{UsageLogsColumns[60]},
 			},
 			{
 				Name:    "usagelog_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{UsageLogsColumns[40]},
+				Columns: []*schema.Column{UsageLogsColumns[55]},
 			},
 			{
 				Name:    "usagelog_model",
@@ -1458,17 +2475,107 @@ var (
 			{
 				Name:    "usagelog_user_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{UsageLogsColumns[44], UsageLogsColumns[40]},
+				Columns: []*schema.Column{UsageLogsColumns[59], UsageLogsColumns[55]},
 			},
 			{
 				Name:    "usagelog_api_key_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{UsageLogsColumns[41], UsageLogsColumns[40]},
+				Columns: []*schema.Column{UsageLogsColumns[56], UsageLogsColumns[55]},
 			},
 			{
 				Name:    "usagelog_group_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{UsageLogsColumns[43], UsageLogsColumns[40]},
+				Columns: []*schema.Column{UsageLogsColumns[58], UsageLogsColumns[55]},
+			},
+		},
+	}
+	// UsageRevenueAllocationsColumns holds the columns for the "usage_revenue_allocations" table.
+	UsageRevenueAllocationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "usage_log_id", Type: field.TypeInt64},
+		{Name: "source_type", Type: field.TypeString, Size: 40},
+		{Name: "source_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "allocated_amount", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "allocation_method", Type: field.TypeString, Size: 30},
+		{Name: "recognition_date", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "date"}},
+		{Name: "revision", Type: field.TypeInt, Default: 1},
+		{Name: "invalidated_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "audit_detail", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// UsageRevenueAllocationsTable holds the schema information for the "usage_revenue_allocations" table.
+	UsageRevenueAllocationsTable = &schema.Table{
+		Name:       "usage_revenue_allocations",
+		Columns:    UsageRevenueAllocationsColumns,
+		PrimaryKey: []*schema.Column{UsageRevenueAllocationsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "usagerevenueallocation_usage_log_id_source_type_source_id_revision",
+				Unique:  true,
+				Columns: []*schema.Column{UsageRevenueAllocationsColumns[1], UsageRevenueAllocationsColumns[2], UsageRevenueAllocationsColumns[3], UsageRevenueAllocationsColumns[7]},
+			},
+			{
+				Name:    "usagerevenueallocation_recognition_date_usage_log_id",
+				Unique:  false,
+				Columns: []*schema.Column{UsageRevenueAllocationsColumns[6], UsageRevenueAllocationsColumns[1]},
+			},
+		},
+	}
+	// UsageUpstreamAttemptsColumns holds the columns for the "usage_upstream_attempts" table.
+	UsageUpstreamAttemptsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "usage_log_id", Type: field.TypeInt64},
+		{Name: "request_id", Type: field.TypeString, Size: 64},
+		{Name: "attempt_no", Type: field.TypeInt},
+		{Name: "account_id", Type: field.TypeInt64},
+		{Name: "channel_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "upstream_model", Type: field.TypeString, Size: 100},
+		{Name: "service_tier", Type: field.TypeString, Nullable: true, Size: 50},
+		{Name: "input_tokens", Type: field.TypeInt64, Default: 0},
+		{Name: "output_tokens", Type: field.TypeInt64, Default: 0},
+		{Name: "cache_read_tokens", Type: field.TypeInt64, Default: 0},
+		{Name: "cache_creation_5m_tokens", Type: field.TypeInt64, Default: 0},
+		{Name: "cache_creation_1h_tokens", Type: field.TypeInt64, Default: 0},
+		{Name: "request_count", Type: field.TypeInt64, Default: 0},
+		{Name: "image_count", Type: field.TypeInt64, Default: 0},
+		{Name: "video_seconds", Type: field.TypeInt64, Default: 0},
+		{Name: "upstream_cost_multiplier", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
+		{Name: "upstream_multiplier_change_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "upstream_multiplier_source", Type: field.TypeString, Nullable: true, Size: 30},
+		{Name: "upstream_multiplier_effective_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "account_finance_profile_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "billable", Type: field.TypeBool, Default: false},
+		{Name: "billing_observed_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "upstream_actual_charge", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "upstream_actual_charge_usd", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "upstream_standard_charge", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
+		{Name: "upstream_charge_currency", Type: field.TypeString, Nullable: true, Size: 30},
+		{Name: "upstream_charge_unit_semantics", Type: field.TypeString, Nullable: true, Size: 30},
+		{Name: "upstream_billing_request_id", Type: field.TypeString, Nullable: true, Size: 200},
+		{Name: "upstream_charge_snapshot", Type: field.TypeJSON, Nullable: true},
+		{Name: "completed_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// UsageUpstreamAttemptsTable holds the schema information for the "usage_upstream_attempts" table.
+	UsageUpstreamAttemptsTable = &schema.Table{
+		Name:       "usage_upstream_attempts",
+		Columns:    UsageUpstreamAttemptsColumns,
+		PrimaryKey: []*schema.Column{UsageUpstreamAttemptsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "usageupstreamattempt_usage_log_id_attempt_no",
+				Unique:  true,
+				Columns: []*schema.Column{UsageUpstreamAttemptsColumns[1], UsageUpstreamAttemptsColumns[3]},
+			},
+			{
+				Name:    "usageupstreamattempt_request_id_attempt_no",
+				Unique:  false,
+				Columns: []*schema.Column{UsageUpstreamAttemptsColumns[2], UsageUpstreamAttemptsColumns[3]},
+			},
+			{
+				Name:    "usageupstreamattempt_account_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{UsageUpstreamAttemptsColumns[4], UsageUpstreamAttemptsColumns[31]},
 			},
 		},
 	}
@@ -1776,7 +2883,10 @@ var (
 	Tables = []*schema.Table{
 		APIKeysTable,
 		AccountsTable,
+		AccountFinanceCounterSnapshotsTable,
+		AccountFinanceProfilesTable,
 		AccountGroupsTable,
+		AccountUpstreamMultiplierChangesTable,
 		AnnouncementsTable,
 		AnnouncementReadsTable,
 		AuthIdentitiesTable,
@@ -1786,11 +2896,19 @@ var (
 		ChannelMonitorHistoriesTable,
 		ChannelMonitorRequestTemplatesTable,
 		ErrorPassthroughRulesTable,
+		FinanceAlertsTable,
+		FinanceAsyncJobsTable,
+		FinanceBackfillJobsTable,
+		FinanceCalculationRevisionsTable,
+		FinanceDailyAggregatesTable,
+		FinanceExportJobsTable,
+		FinanceFxRateVersionsTable,
 		GroupsTable,
 		IdempotencyRecordsTable,
 		IdentityAdoptionDecisionsTable,
 		PaymentAuditLogsTable,
 		PaymentOrdersTable,
+		PaymentProviderFeeEventsTable,
 		PaymentProviderInstancesTable,
 		PendingAuthSessionsTable,
 		PromoCodesTable,
@@ -1800,9 +2918,26 @@ var (
 		SecuritySecretsTable,
 		SettingsTable,
 		SubscriptionPlansTable,
+		SubscriptionRevenueRecognitionsTable,
+		SystemModelPriceVersionsTable,
 		TLSFingerprintProfilesTable,
+		UpstreamBalanceSnapshotsTable,
+		UpstreamBillReconciliationsTable,
+		UpstreamCostSettlementIntervalsTable,
+		UpstreamFinanceProtocolsTable,
+		UpstreamFinanceProtocolVersionsTable,
+		UpstreamFinanceSyncRunsTable,
+		UpstreamFundEventsTable,
+		UpstreamModelPriceVersionsTable,
+		UpstreamWalletsTable,
+		UpstreamWalletAccountsTable,
 		UsageCleanupTasksTable,
+		UsageCostSettlementAllocationsTable,
+		UsageFinanceCostSegmentsTable,
+		UsageFinanceRecordsTable,
 		UsageLogsTable,
+		UsageRevenueAllocationsTable,
+		UsageUpstreamAttemptsTable,
 		UsersTable,
 		UserAllowedGroupsTable,
 		UserAttributeDefinitionsTable,
@@ -1822,10 +2957,19 @@ func init() {
 	AccountsTable.Annotation = &entsql.Annotation{
 		Table: "accounts",
 	}
+	AccountFinanceCounterSnapshotsTable.Annotation = &entsql.Annotation{
+		Table: "account_finance_counter_snapshots",
+	}
+	AccountFinanceProfilesTable.Annotation = &entsql.Annotation{
+		Table: "account_finance_profiles",
+	}
 	AccountGroupsTable.ForeignKeys[0].RefTable = AccountsTable
 	AccountGroupsTable.ForeignKeys[1].RefTable = GroupsTable
 	AccountGroupsTable.Annotation = &entsql.Annotation{
 		Table: "account_groups",
+	}
+	AccountUpstreamMultiplierChangesTable.Annotation = &entsql.Annotation{
+		Table: "account_upstream_multiplier_changes",
 	}
 	AnnouncementsTable.Annotation = &entsql.Annotation{
 		Table: "announcements",
@@ -1861,6 +3005,27 @@ func init() {
 	ErrorPassthroughRulesTable.Annotation = &entsql.Annotation{
 		Table: "error_passthrough_rules",
 	}
+	FinanceAlertsTable.Annotation = &entsql.Annotation{
+		Table: "finance_alerts",
+	}
+	FinanceAsyncJobsTable.Annotation = &entsql.Annotation{
+		Table: "finance_async_jobs",
+	}
+	FinanceBackfillJobsTable.Annotation = &entsql.Annotation{
+		Table: "finance_backfill_jobs",
+	}
+	FinanceCalculationRevisionsTable.Annotation = &entsql.Annotation{
+		Table: "finance_calculation_revisions",
+	}
+	FinanceDailyAggregatesTable.Annotation = &entsql.Annotation{
+		Table: "finance_daily_aggregates",
+	}
+	FinanceExportJobsTable.Annotation = &entsql.Annotation{
+		Table: "finance_export_jobs",
+	}
+	FinanceFxRateVersionsTable.Annotation = &entsql.Annotation{
+		Table: "finance_fx_rate_versions",
+	}
 	GroupsTable.Annotation = &entsql.Annotation{
 		Table: "groups",
 	}
@@ -1878,6 +3043,9 @@ func init() {
 	PaymentOrdersTable.ForeignKeys[0].RefTable = UsersTable
 	PaymentOrdersTable.Annotation = &entsql.Annotation{
 		Table: "payment_orders",
+	}
+	PaymentProviderFeeEventsTable.Annotation = &entsql.Annotation{
+		Table: "payment_provider_fee_events",
 	}
 	PaymentProviderInstancesTable.Annotation = &entsql.Annotation{
 		Table: "payment_provider_instances",
@@ -1911,11 +3079,50 @@ func init() {
 	SubscriptionPlansTable.Annotation = &entsql.Annotation{
 		Table: "subscription_plans",
 	}
+	SubscriptionRevenueRecognitionsTable.Annotation = &entsql.Annotation{
+		Table: "subscription_revenue_recognitions",
+	}
+	SystemModelPriceVersionsTable.Annotation = &entsql.Annotation{
+		Table: "system_model_price_versions",
+	}
 	TLSFingerprintProfilesTable.Annotation = &entsql.Annotation{
 		Table: "tls_fingerprint_profiles",
 	}
+	UpstreamBalanceSnapshotsTable.Annotation = &entsql.Annotation{
+		Table: "upstream_balance_snapshots",
+	}
+	UpstreamBillReconciliationsTable.Annotation = &entsql.Annotation{
+		Table: "upstream_bill_reconciliations",
+	}
+	UpstreamFinanceProtocolsTable.Annotation = &entsql.Annotation{
+		Table: "upstream_finance_protocols",
+	}
+	UpstreamFinanceProtocolVersionsTable.Annotation = &entsql.Annotation{
+		Table: "upstream_finance_protocol_versions",
+	}
+	UpstreamFinanceSyncRunsTable.Annotation = &entsql.Annotation{
+		Table: "upstream_finance_sync_runs",
+	}
+	UpstreamFundEventsTable.Annotation = &entsql.Annotation{
+		Table: "upstream_fund_events",
+	}
+	UpstreamModelPriceVersionsTable.Annotation = &entsql.Annotation{
+		Table: "upstream_model_price_versions",
+	}
+	UpstreamWalletsTable.Annotation = &entsql.Annotation{
+		Table: "upstream_wallets",
+	}
+	UpstreamWalletAccountsTable.Annotation = &entsql.Annotation{
+		Table: "upstream_wallet_accounts",
+	}
 	UsageCleanupTasksTable.Annotation = &entsql.Annotation{
 		Table: "usage_cleanup_tasks",
+	}
+	UsageFinanceCostSegmentsTable.Annotation = &entsql.Annotation{
+		Table: "usage_finance_cost_segments",
+	}
+	UsageFinanceRecordsTable.Annotation = &entsql.Annotation{
+		Table: "usage_finance_records",
 	}
 	UsageLogsTable.ForeignKeys[0].RefTable = APIKeysTable
 	UsageLogsTable.ForeignKeys[1].RefTable = AccountsTable
@@ -1924,6 +3131,12 @@ func init() {
 	UsageLogsTable.ForeignKeys[4].RefTable = UserSubscriptionsTable
 	UsageLogsTable.Annotation = &entsql.Annotation{
 		Table: "usage_logs",
+	}
+	UsageRevenueAllocationsTable.Annotation = &entsql.Annotation{
+		Table: "usage_revenue_allocations",
+	}
+	UsageUpstreamAttemptsTable.Annotation = &entsql.Annotation{
+		Table: "usage_upstream_attempts",
 	}
 	UsersTable.Annotation = &entsql.Annotation{
 		Table: "users",

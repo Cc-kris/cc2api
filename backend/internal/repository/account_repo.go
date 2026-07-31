@@ -15,20 +15,25 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	dbaccount "github.com/Wei-Shaw/sub2api/ent/account"
+	dbaccountfinanceprofile "github.com/Wei-Shaw/sub2api/ent/accountfinanceprofile"
 	dbaccountgroup "github.com/Wei-Shaw/sub2api/ent/accountgroup"
+	dbaccountupstreammultiplierchange "github.com/Wei-Shaw/sub2api/ent/accountupstreammultiplierchange"
 	dbgroup "github.com/Wei-Shaw/sub2api/ent/group"
 	dbpredicate "github.com/Wei-Shaw/sub2api/ent/predicate"
 	dbproxy "github.com/Wei-Shaw/sub2api/ent/proxy"
+	dbuser "github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/lib/pq"
+	"github.com/shopspring/decimal"
 
 	entsql "entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqljson"
@@ -99,6 +104,8 @@ func (r *accountRepository) Create(ctx context.Context, account *service.Account
 	if account.RateMultiplier != nil {
 		builder.SetRateMultiplier(*account.RateMultiplier)
 	}
+	builder.SetNillableUpstreamCostMultiplier(account.UpstreamCostMultiplier)
+	builder.SetNillableUpstreamCostMultiplierUpdatedAt(account.UpstreamCostMultiplierUpdatedAt)
 	if account.LoadFactor != nil {
 		builder.SetLoadFactor(*account.LoadFactor)
 	}
@@ -145,6 +152,548 @@ func (r *accountRepository) Create(ctx context.Context, account *service.Account
 	return nil
 }
 
+func (r *accountRepository) CreateWithUpstreamMultiplierAudit(ctx context.Context, account *service.Account, operatorID *int64, reason string) error {
+	if account == nil {
+		return service.ErrAccountNilInput
+	}
+	if account.UpstreamCostMultiplier == nil || account.UpstreamCostMultiplierUpdatedAt == nil {
+		return errors.New("upstream cost multiplier and effective time are required")
+	}
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	builder := tx.Account.Create().
+		SetName(account.Name).
+		SetNillableNotes(account.Notes).
+		SetPlatform(account.Platform).
+		SetType(account.Type).
+		SetCredentials(normalizeJSONMap(account.Credentials)).
+		SetExtra(normalizeJSONMap(account.Extra)).
+		SetConcurrency(account.Concurrency).
+		SetPriority(account.Priority).
+		SetStatus(account.Status).
+		SetErrorMessage(account.ErrorMessage).
+		SetSchedulable(account.Schedulable).
+		SetAutoPauseOnExpired(account.AutoPauseOnExpired).
+		SetUpstreamCostMultiplier(*account.UpstreamCostMultiplier).
+		SetUpstreamCostMultiplierUpdatedAt(*account.UpstreamCostMultiplierUpdatedAt)
+	if account.RateMultiplier != nil {
+		builder.SetRateMultiplier(*account.RateMultiplier)
+	}
+	if account.LoadFactor != nil {
+		builder.SetLoadFactor(*account.LoadFactor)
+	}
+	if account.ProxyID != nil {
+		builder.SetProxyID(*account.ProxyID)
+	}
+	if account.LastUsedAt != nil {
+		builder.SetLastUsedAt(*account.LastUsedAt)
+	}
+	if account.ExpiresAt != nil {
+		builder.SetExpiresAt(*account.ExpiresAt)
+	}
+	if account.RateLimitedAt != nil {
+		builder.SetRateLimitedAt(*account.RateLimitedAt)
+	}
+	if account.RateLimitResetAt != nil {
+		builder.SetRateLimitResetAt(*account.RateLimitResetAt)
+	}
+	if account.OverloadUntil != nil {
+		builder.SetOverloadUntil(*account.OverloadUntil)
+	}
+	if account.SessionWindowStart != nil {
+		builder.SetSessionWindowStart(*account.SessionWindowStart)
+	}
+	if account.SessionWindowEnd != nil {
+		builder.SetSessionWindowEnd(*account.SessionWindowEnd)
+	}
+	if account.SessionWindowStatus != "" {
+		builder.SetSessionWindowStatus(account.SessionWindowStatus)
+	}
+
+	created, err := builder.Save(ctx)
+	if err != nil {
+		return translatePersistenceError(err, service.ErrAccountNotFound, nil)
+	}
+	audit := tx.AccountUpstreamMultiplierChange.Create().
+		SetAccountID(created.ID).
+		SetNewMultiplier(*account.UpstreamCostMultiplier).
+		SetChangeType("created").
+		SetEffectiveAt(*account.UpstreamCostMultiplierUpdatedAt).
+		SetReason(reason)
+	if operatorID != nil {
+		audit.SetOperatorID(*operatorID)
+	}
+	auditCreated, err := audit.Save(ctx)
+	if err != nil {
+		return err
+	}
+	profile := tx.AccountFinanceProfile.Create().
+		SetAccountID(created.ID).
+		SetCostMode(service.FinanceCostModeContractMultiplier).
+		SetEndpointSource("account_base_url").
+		SetEndpointBaseURLSnapshot("").
+		SetCredentialSource("account_api_key").
+		SetCounterScope(service.FinanceCounterScopeAccount).
+		SetBalanceUnitSemantics(service.FinanceUnitNone).
+		SetAccountMultiplierChangeID(auditCreated.ID).
+		SetAccountMultiplierSnapshot(*account.UpstreamCostMultiplier).
+		SetContractType("multiplier").
+		SetContractMultiplier(*account.UpstreamCostMultiplier).
+		SetContractMultiplierChangeID(auditCreated.ID).
+		SetReadinessStatus(service.AccountFinanceReadinessReadyContract).
+		SetReadinessDetail(map[string]any{"issues": []string{}, "actions": []string{}}).
+		SetVersion(1).
+		SetEffectiveFrom(*account.UpstreamCostMultiplierUpdatedAt).
+		SetReason("创建账号时初始化财务配置")
+	if operatorID != nil {
+		profile.SetCreatedBy(*operatorID)
+	}
+	profileCreated, err := profile.Save(ctx)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Account.UpdateOneID(created.ID).
+		SetUpstreamCostMultiplierChangeID(auditCreated.ID).
+		SetUpstreamCostMultiplierSource("account_config").
+		SetCurrentFinanceProfileID(profileCreated.ID).
+		Save(ctx); err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+
+	account.ID = created.ID
+	account.UpstreamCostMultiplierChangeID = &auditCreated.ID
+	account.UpstreamCostMultiplierSource = "account_config"
+	account.CurrentFinanceProfileID = &profileCreated.ID
+	account.CreatedAt = created.CreatedAt
+	account.UpdatedAt = created.UpdatedAt
+	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &account.ID, nil, buildSchedulerGroupPayload(account.GroupIDs)); err != nil {
+		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue audited account create failed: account=%d err=%v", account.ID, err)
+	}
+	return nil
+}
+
+func (r *accountRepository) UpdateUpstreamMultiplierWithAudit(
+	ctx context.Context,
+	accountID int64,
+	expectedOld *decimal.Decimal,
+	newMultiplier decimal.Decimal,
+	effectiveAt time.Time,
+	operatorID *int64,
+	reason string,
+) error {
+	_, err := r.updateUpstreamMultiplierWithAudit(ctx, accountID, expectedOld, newMultiplier, effectiveAt, operatorID, reason, "account_config")
+	return err
+}
+
+func (r *accountRepository) UpdateObservedUpstreamMultiplierWithAudit(
+	ctx context.Context,
+	accountID int64,
+	expectedOld *decimal.Decimal,
+	newMultiplier decimal.Decimal,
+	effectiveAt time.Time,
+	reason string,
+) (int64, error) {
+	changeID, err := r.updateUpstreamMultiplierWithAudit(
+		ctx,
+		accountID,
+		expectedOld,
+		newMultiplier,
+		effectiveAt,
+		nil,
+		reason,
+		service.AccountFinanceMultiplierSourceUpstreamUsage,
+	)
+	if err != nil {
+		return 0, err
+	}
+	if err = enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &accountID, nil, nil); err != nil {
+		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue observed multiplier update failed: account=%d err=%v", accountID, err)
+	}
+	r.syncSchedulerAccountSnapshot(ctx, accountID)
+	return changeID, nil
+}
+
+func (r *accountRepository) updateUpstreamMultiplierWithAudit(
+	ctx context.Context,
+	accountID int64,
+	expectedOld *decimal.Decimal,
+	newMultiplier decimal.Decimal,
+	effectiveAt time.Time,
+	operatorID *int64,
+	reason string,
+	source string,
+) (int64, error) {
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	current, err := tx.Account.Query().
+		Where(dbaccount.IDEQ(accountID)).
+		ForUpdate().
+		Only(ctx)
+	if err != nil {
+		return 0, translatePersistenceError(err, service.ErrAccountNotFound, nil)
+	}
+	if !decimalPointersEqual(current.UpstreamCostMultiplier, expectedOld) {
+		return 0, service.ErrAccountUpstreamMultiplierConflict
+	}
+	if _, err = tx.Account.UpdateOneID(accountID).
+		SetUpstreamCostMultiplier(newMultiplier).
+		SetUpstreamCostMultiplierUpdatedAt(effectiveAt).
+		Save(ctx); err != nil {
+		return 0, err
+	}
+	audit := tx.AccountUpstreamMultiplierChange.Create().
+		SetAccountID(accountID).
+		SetNillableOldMultiplier(expectedOld).
+		SetNewMultiplier(newMultiplier).
+		SetChangeType("updated").
+		SetEffectiveAt(effectiveAt).
+		SetReason(reason)
+	if operatorID != nil {
+		audit.SetOperatorID(*operatorID)
+	}
+	auditCreated, err := audit.Save(ctx)
+	if err != nil {
+		return 0, err
+	}
+	profileID, err := rolloverAccountFinanceProfileForMultiplierChange(ctx, tx, current, auditCreated.ID, newMultiplier, effectiveAt, operatorID, reason)
+	if err != nil {
+		return 0, err
+	}
+	if _, err = tx.Account.UpdateOneID(accountID).
+		SetUpstreamCostMultiplierChangeID(auditCreated.ID).
+		SetUpstreamCostMultiplierSource(source).
+		SetCurrentFinanceProfileID(profileID).
+		Save(ctx); err != nil {
+		return 0, err
+	}
+	if err = tx.Commit(); err != nil {
+		return 0, err
+	}
+	return auditCreated.ID, nil
+}
+
+func (r *accountRepository) UpdateAccountWithUpstreamMultiplierAudit(
+	ctx context.Context,
+	account *service.Account,
+	expectedOld *decimal.Decimal,
+	newMultiplier decimal.Decimal,
+	effectiveAt time.Time,
+	operatorID *int64,
+	reason string,
+) error {
+	if account == nil {
+		return service.ErrAccountNilInput
+	}
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	current, err := tx.Account.Query().
+		Where(dbaccount.IDEQ(account.ID)).
+		ForUpdate().
+		Only(ctx)
+	if err != nil {
+		return translatePersistenceError(err, service.ErrAccountNotFound, nil)
+	}
+	if !decimalPointersEqual(current.UpstreamCostMultiplier, expectedOld) {
+		return service.ErrAccountUpstreamMultiplierConflict
+	}
+
+	schedulable := account.Schedulable
+	if account.Status == service.StatusError {
+		schedulable = false
+	}
+	builder := tx.Account.UpdateOneID(account.ID).
+		SetName(account.Name).
+		SetNillableNotes(account.Notes).
+		SetPlatform(account.Platform).
+		SetType(account.Type).
+		SetCredentials(normalizeJSONMap(account.Credentials)).
+		SetExtra(normalizeJSONMap(account.Extra)).
+		SetConcurrency(account.Concurrency).
+		SetPriority(account.Priority).
+		SetStatus(account.Status).
+		SetErrorMessage(account.ErrorMessage).
+		SetSchedulable(schedulable).
+		SetAutoPauseOnExpired(account.AutoPauseOnExpired).
+		SetUpstreamCostMultiplier(newMultiplier).
+		SetUpstreamCostMultiplierUpdatedAt(effectiveAt)
+	if account.RateMultiplier != nil {
+		builder.SetRateMultiplier(*account.RateMultiplier)
+	}
+	if account.LoadFactor != nil {
+		builder.SetLoadFactor(*account.LoadFactor)
+	} else {
+		builder.ClearLoadFactor()
+	}
+	if account.ProxyID != nil {
+		builder.SetProxyID(*account.ProxyID)
+	} else {
+		builder.ClearProxyID()
+	}
+	if account.LastUsedAt != nil {
+		builder.SetLastUsedAt(*account.LastUsedAt)
+	} else {
+		builder.ClearLastUsedAt()
+	}
+	if account.ExpiresAt != nil {
+		builder.SetExpiresAt(*account.ExpiresAt)
+	} else {
+		builder.ClearExpiresAt()
+	}
+	if account.RateLimitedAt != nil {
+		builder.SetRateLimitedAt(*account.RateLimitedAt)
+	} else {
+		builder.ClearRateLimitedAt()
+	}
+	if account.RateLimitResetAt != nil {
+		builder.SetRateLimitResetAt(*account.RateLimitResetAt)
+	} else {
+		builder.ClearRateLimitResetAt()
+	}
+	if account.OverloadUntil != nil {
+		builder.SetOverloadUntil(*account.OverloadUntil)
+	} else {
+		builder.ClearOverloadUntil()
+	}
+	if account.SessionWindowStart != nil {
+		builder.SetSessionWindowStart(*account.SessionWindowStart)
+	} else {
+		builder.ClearSessionWindowStart()
+	}
+	if account.SessionWindowEnd != nil {
+		builder.SetSessionWindowEnd(*account.SessionWindowEnd)
+	} else {
+		builder.ClearSessionWindowEnd()
+	}
+	if account.SessionWindowStatus != "" {
+		builder.SetSessionWindowStatus(account.SessionWindowStatus)
+	} else {
+		builder.ClearSessionWindowStatus()
+	}
+	if account.Notes == nil {
+		builder.ClearNotes()
+	}
+	updated, err := builder.Save(ctx)
+	if err != nil {
+		return translatePersistenceError(err, service.ErrAccountNotFound, nil)
+	}
+	audit := tx.AccountUpstreamMultiplierChange.Create().
+		SetAccountID(account.ID).
+		SetNillableOldMultiplier(expectedOld).
+		SetNewMultiplier(newMultiplier).
+		SetChangeType("updated").
+		SetEffectiveAt(effectiveAt).
+		SetReason(reason)
+	if operatorID != nil {
+		audit.SetOperatorID(*operatorID)
+	}
+	auditCreated, err := audit.Save(ctx)
+	if err != nil {
+		return err
+	}
+	profileID, err := rolloverAccountFinanceProfileForMultiplierChange(ctx, tx, current, auditCreated.ID, newMultiplier, effectiveAt, operatorID, reason)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Account.UpdateOneID(account.ID).
+		SetUpstreamCostMultiplierChangeID(auditCreated.ID).
+		SetUpstreamCostMultiplierSource("account_config").
+		SetCurrentFinanceProfileID(profileID).
+		Save(ctx); err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	account.UpstreamCostMultiplier = &newMultiplier
+	account.UpstreamCostMultiplierUpdatedAt = &effectiveAt
+	account.UpstreamCostMultiplierChangeID = &auditCreated.ID
+	account.UpstreamCostMultiplierSource = "account_config"
+	account.CurrentFinanceProfileID = &profileID
+	account.UpdatedAt = updated.UpdatedAt
+	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventAccountChanged, &account.ID, nil, buildSchedulerGroupPayload(account.GroupIDs)); err != nil {
+		logger.LegacyPrintf("repository.account", "[SchedulerOutbox] enqueue audited account update failed: account=%d err=%v", account.ID, err)
+	}
+	r.syncSchedulerAccountSnapshot(ctx, account.ID)
+	return nil
+}
+
+func decimalPointersEqual(left, right *decimal.Decimal) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return left.Equal(*right)
+}
+
+func rolloverAccountFinanceProfileForMultiplierChange(
+	ctx context.Context,
+	tx *dbent.Tx,
+	account *dbent.Account,
+	multiplierChangeID int64,
+	newMultiplier decimal.Decimal,
+	effectiveAt time.Time,
+	operatorID *int64,
+	reason string,
+) (int64, error) {
+	if tx == nil || account == nil {
+		return 0, service.ErrAccountNilInput
+	}
+	current, err := tx.AccountFinanceProfile.Query().
+		Where(
+			dbaccountfinanceprofile.AccountIDEQ(account.ID),
+			dbaccountfinanceprofile.EffectiveToIsNil(),
+		).
+		ForUpdate().
+		Only(ctx)
+	if dbent.IsNotFound(err) {
+		builder := tx.AccountFinanceProfile.Create().
+			SetAccountID(account.ID).
+			SetCostMode(service.FinanceCostModeContractMultiplier).
+			SetEndpointSource("account_base_url").
+			SetEndpointBaseURLSnapshot("").
+			SetCredentialSource("account_api_key").
+			SetCounterScope(service.FinanceCounterScopeAccount).
+			SetBalanceUnitSemantics(service.FinanceUnitNone).
+			SetAccountMultiplierChangeID(multiplierChangeID).
+			SetAccountMultiplierSnapshot(newMultiplier).
+			SetContractType("multiplier").
+			SetContractMultiplier(newMultiplier).
+			SetContractMultiplierChangeID(multiplierChangeID).
+			SetReadinessStatus(service.AccountFinanceReadinessReadyContract).
+			SetReadinessDetail(map[string]any{"issues": []string{}, "actions": []string{}}).
+			SetVersion(1).
+			SetEffectiveFrom(effectiveAt).
+			SetReason("账号倍率变更时初始化财务配置：" + strings.TrimSpace(reason)).
+			SetNillableCreatedBy(operatorID)
+		created, createErr := builder.Save(ctx)
+		if createErr != nil {
+			return 0, createErr
+		}
+		return created.ID, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	if !effectiveAt.After(current.EffectiveFrom) {
+		return 0, service.ErrAccountFinanceProfileConflict
+	}
+	if _, err = tx.AccountFinanceProfile.UpdateOneID(current.ID).
+		SetEffectiveTo(effectiveAt).
+		Save(ctx); err != nil {
+		return 0, err
+	}
+
+	contractMultiplier := current.ContractMultiplier
+	contractMultiplierChangeID := current.ContractMultiplierChangeID
+	usesAccountMultiplierContract := current.ContractType != nil && strings.TrimSpace(*current.ContractType) == "multiplier" &&
+		current.ContractMultiplier != nil && account.UpstreamCostMultiplier != nil && current.ContractMultiplier.Equal(*account.UpstreamCostMultiplier) &&
+		current.ContractMultiplierChangeID != nil && account.UpstreamCostMultiplierChangeID != nil &&
+		*current.ContractMultiplierChangeID == *account.UpstreamCostMultiplierChangeID
+	if usesAccountMultiplierContract {
+		contractMultiplier = &newMultiplier
+		contractMultiplierChangeID = &multiplierChangeID
+	}
+
+	created, err := tx.AccountFinanceProfile.Create().
+		SetAccountID(account.ID).
+		SetNillableWalletID(current.WalletID).
+		SetNillableProtocolVersionID(current.ProtocolVersionID).
+		SetCostMode(current.CostMode).
+		SetNillablePricingGroup(current.PricingGroup).
+		SetEndpointSource(current.EndpointSource).
+		SetEndpointBaseURLSnapshot(current.EndpointBaseURLSnapshot).
+		SetCredentialSource(current.CredentialSource).
+		SetCounterScope(current.CounterScope).
+		SetNillableCounterScopeKey(current.CounterScopeKey).
+		SetBalanceUnitSemantics(current.BalanceUnitSemantics).
+		SetNillableRechargeOwnerType(current.RechargeOwnerType).
+		SetNillableRechargeOwnerID(current.RechargeOwnerID).
+		SetAccountMultiplierChangeID(multiplierChangeID).
+		SetAccountMultiplierSnapshot(newMultiplier).
+		SetNillableRawUpstreamMultiplier(current.RawUpstreamMultiplier).
+		SetNillableContractType(current.ContractType).
+		SetNillableContractMultiplier(contractMultiplier).
+		SetNillableContractMultiplierChangeID(contractMultiplierChangeID).
+		SetReadinessStatus(current.ReadinessStatus).
+		SetReadinessDetail(current.ReadinessDetail).
+		SetVersion(current.Version + 1).
+		SetEffectiveFrom(effectiveAt).
+		SetNillableCreatedBy(operatorID).
+		SetReason("账号倍率变更同步财务配置：" + strings.TrimSpace(reason)).
+		Save(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return created.ID, nil
+}
+
+func (r *accountRepository) ListUpstreamMultiplierChanges(ctx context.Context, accountID int64, params pagination.PaginationParams) ([]service.AccountUpstreamMultiplierChange, *pagination.PaginationResult, error) {
+	query := r.client.AccountUpstreamMultiplierChange.Query().
+		Where(dbaccountupstreammultiplierchange.AccountIDEQ(accountID))
+	total, err := query.Count(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	rows, err := query.Clone().
+		Order(dbent.Desc(dbaccountupstreammultiplierchange.FieldEffectiveAt), dbent.Desc(dbaccountupstreammultiplierchange.FieldID)).
+		Offset(params.Offset()).
+		Limit(params.Limit()).
+		All(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	operatorIDs := make([]int64, 0, len(rows))
+	seenOperators := make(map[int64]struct{})
+	for _, row := range rows {
+		if row.OperatorID != nil {
+			if _, ok := seenOperators[*row.OperatorID]; !ok {
+				seenOperators[*row.OperatorID] = struct{}{}
+				operatorIDs = append(operatorIDs, *row.OperatorID)
+			}
+		}
+	}
+	operatorNames := make(map[int64]string, len(operatorIDs))
+	if len(operatorIDs) > 0 {
+		users, userErr := r.client.User.Query().Where(dbuser.IDIn(operatorIDs...)).All(ctx)
+		if userErr != nil {
+			return nil, nil, userErr
+		}
+		for _, user := range users {
+			operatorNames[user.ID] = user.Username
+		}
+	}
+	items := make([]service.AccountUpstreamMultiplierChange, 0, len(rows))
+	for _, row := range rows {
+		var operatorName *string
+		if row.OperatorID != nil {
+			if name, ok := operatorNames[*row.OperatorID]; ok {
+				value := name
+				operatorName = &value
+			}
+		}
+		items = append(items, service.AccountUpstreamMultiplierChange{
+			ID: row.ID, AccountID: row.AccountID, OldMultiplier: row.OldMultiplier,
+			NewMultiplier: row.NewMultiplier, ChangeType: row.ChangeType,
+			EffectiveAt: row.EffectiveAt, OperatorID: row.OperatorID,
+			OperatorName: operatorName, Reason: row.Reason, CreatedAt: row.CreatedAt,
+		})
+	}
+	return items, paginationResultFromTotal(int64(total), params), nil
+}
+
 func (r *accountRepository) GetByID(ctx context.Context, id int64) (*service.Account, error) {
 	m, err := r.client.Account.Query().Where(dbaccount.IDEQ(id)).Only(ctx)
 	if err != nil {
@@ -159,6 +708,22 @@ func (r *accountRepository) GetByID(ctx context.Context, id int64) (*service.Acc
 		return nil, service.ErrAccountNotFound
 	}
 	return &accounts[0], nil
+}
+
+func (r *accountRepository) GetFinanceProfileByID(ctx context.Context, id int64) (*service.AccountFinanceProfile, error) {
+	rows, err := r.sql.QueryContext(ctx, `SELECT `+accountFinanceProfileColumns+` FROM account_finance_profiles WHERE id=$1`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	if !rows.Next() {
+		if err = rows.Err(); err != nil {
+			return nil, err
+		}
+		return nil, service.ErrAccountFinanceProfileNotFound
+	}
+	profile, err := scanAccountFinanceProfile(rows)
+	return profile, err
 }
 
 func (r *accountRepository) GetByIDs(ctx context.Context, ids []int64) ([]*service.Account, error) {
@@ -206,6 +771,16 @@ func (r *accountRepository) GetByIDs(ctx context.Context, ids []int64) ([]*servi
 	if err != nil {
 		return nil, err
 	}
+	financeAccountIDs := make([]int64, 0, len(entAccounts))
+	for _, acc := range entAccounts {
+		if acc.CurrentFinanceProfileID != nil {
+			financeAccountIDs = append(financeAccountIDs, acc.ID)
+		}
+	}
+	financeRuntimeByAccount, err := r.loadAccountFinanceRuntime(ctx, financeAccountIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	outByID := make(map[int64]*service.Account, len(entAccounts))
 	for _, entAcc := range entAccounts {
@@ -227,6 +802,11 @@ func (r *accountRepository) GetByIDs(ctx context.Context, ids []int64) ([]*servi
 		}
 		if ags, ok := accountGroupsByAccount[entAcc.ID]; ok {
 			out.AccountGroups = ags
+		}
+		if runtime, ok := financeRuntimeByAccount[entAcc.ID]; ok {
+			out.FinanceCostMode = runtime.CostMode
+			out.FinanceProtocolVersionID = cloneRepositoryInt64(runtime.ProtocolVersionID)
+			out.FinanceProtocolConfig = runtime.ProtocolConfig
 		}
 		outByID[entAcc.ID] = out
 	}
@@ -339,6 +919,16 @@ func (r *accountRepository) Update(ctx context.Context, account *service.Account
 
 	if account.RateMultiplier != nil {
 		builder.SetRateMultiplier(*account.RateMultiplier)
+	}
+	if account.UpstreamCostMultiplier != nil {
+		builder.SetUpstreamCostMultiplier(*account.UpstreamCostMultiplier)
+	} else {
+		builder.ClearUpstreamCostMultiplier()
+	}
+	if account.UpstreamCostMultiplierUpdatedAt != nil {
+		builder.SetUpstreamCostMultiplierUpdatedAt(*account.UpstreamCostMultiplierUpdatedAt)
+	} else {
+		builder.ClearUpstreamCostMultiplierUpdatedAt()
 	}
 	if account.LoadFactor != nil {
 		builder.SetLoadFactor(*account.LoadFactor)
@@ -635,6 +1225,52 @@ func (r *accountRepository) ListByGroup(ctx context.Context, groupID int64) ([]s
 		return nil, err
 	}
 	return accounts, nil
+}
+
+func (r *accountRepository) ListCatalogEligibleByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64][]*service.Account, error) {
+	result := make(map[int64][]*service.Account, len(groupIDs))
+	if len(groupIDs) == 0 {
+		return result, nil
+	}
+	now := time.Now()
+	entries, err := r.client.AccountGroup.Query().
+		Where(
+			dbaccountgroup.GroupIDIn(groupIDs...),
+			dbaccountgroup.HasAccountWith(
+				dbaccount.DeletedAtIsNil(),
+				dbaccount.StatusEQ(service.StatusActive),
+				dbaccount.SchedulableEQ(true),
+				notExpiredPredicate(now),
+			),
+		).
+		Order(dbaccountgroup.ByGroupID(), dbaccountgroup.ByPriority(), dbaccountgroup.ByAccountField(dbaccount.FieldPriority)).
+		WithAccount().
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	entities := make([]*dbent.Account, 0, len(entries))
+	seen := make(map[int64]*service.Account)
+	for _, entry := range entries {
+		if entry.Edges.Account != nil {
+			entities = append(entities, entry.Edges.Account)
+		}
+	}
+	converted, err := r.accountsToService(ctx, entities)
+	if err != nil {
+		return nil, err
+	}
+	for i := range converted {
+		account := converted[i]
+		copyAccount := account
+		seen[account.ID] = &copyAccount
+	}
+	for _, entry := range entries {
+		if account := seen[entry.AccountID]; account != nil {
+			result[entry.GroupID] = append(result[entry.GroupID], account)
+		}
+	}
+	return result, nil
 }
 
 func (r *accountRepository) ListActive(ctx context.Context) ([]service.Account, error) {
@@ -1567,15 +2203,23 @@ func (r *accountRepository) accountsToService(ctx context.Context, accounts []*d
 	}
 
 	accountIDs := make([]int64, 0, len(accounts))
+	financeAccountIDs := make([]int64, 0, len(accounts))
 	proxyIDs := make([]int64, 0, len(accounts))
 	for _, acc := range accounts {
 		accountIDs = append(accountIDs, acc.ID)
+		if acc.CurrentFinanceProfileID != nil {
+			financeAccountIDs = append(financeAccountIDs, acc.ID)
+		}
 		if acc.ProxyID != nil {
 			proxyIDs = append(proxyIDs, *acc.ProxyID)
 		}
 	}
 
 	proxyMap, err := r.loadProxies(ctx, proxyIDs)
+	if err != nil {
+		return nil, err
+	}
+	financeRuntimeByAccount, err := r.loadAccountFinanceRuntime(ctx, financeAccountIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -1604,10 +2248,57 @@ func (r *accountRepository) accountsToService(ctx context.Context, accounts []*d
 		if ags, ok := accountGroupsByAccount[acc.ID]; ok {
 			out.AccountGroups = ags
 		}
+		if runtime, ok := financeRuntimeByAccount[acc.ID]; ok {
+			out.FinanceCostMode = runtime.CostMode
+			out.FinanceProtocolVersionID = cloneRepositoryInt64(runtime.ProtocolVersionID)
+			out.FinanceProtocolConfig = runtime.ProtocolConfig
+		}
 		outAccounts = append(outAccounts, *out)
 	}
 
 	return outAccounts, nil
+}
+
+type accountFinanceRuntime struct {
+	CostMode          string
+	ProtocolVersionID *int64
+	ProtocolConfig    *service.FinanceProtocolConfig
+}
+
+func (r *accountRepository) loadAccountFinanceRuntime(ctx context.Context, accountIDs []int64) (map[int64]accountFinanceRuntime, error) {
+	result := make(map[int64]accountFinanceRuntime)
+	if len(accountIDs) == 0 {
+		return result, nil
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+SELECT a.id,p.cost_mode,p.protocol_version_id,v.config
+FROM accounts a
+JOIN account_finance_profiles p ON p.id=a.current_finance_profile_id
+LEFT JOIN upstream_finance_protocol_versions v ON v.id=p.protocol_version_id
+WHERE a.id=ANY($1)`, pq.Array(accountIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var accountID int64
+		var costMode string
+		var protocolVersionID sql.NullInt64
+		var configJSON []byte
+		if err = rows.Scan(&accountID, &costMode, &protocolVersionID, &configJSON); err != nil {
+			return nil, err
+		}
+		item := accountFinanceRuntime{CostMode: costMode, ProtocolVersionID: nullInt64Pointer(protocolVersionID)}
+		if len(configJSON) > 0 {
+			var config service.FinanceProtocolConfig
+			if err = json.Unmarshal(configJSON, &config); err != nil {
+				return nil, fmt.Errorf("decode account %d finance protocol config: %w", accountID, err)
+			}
+			item.ProtocolConfig = &config
+		}
+		result[accountID] = item
+	}
+	return result, rows.Err()
 }
 
 func tempUnschedulablePredicate() dbpredicate.Account {
@@ -1738,34 +2429,39 @@ func accountEntityToService(m *dbent.Account) *service.Account {
 	rateMultiplier := m.RateMultiplier
 
 	return &service.Account{
-		ID:                      m.ID,
-		Name:                    m.Name,
-		Notes:                   m.Notes,
-		Platform:                m.Platform,
-		Type:                    m.Type,
-		Credentials:             copyJSONMap(m.Credentials),
-		Extra:                   copyJSONMap(m.Extra),
-		ProxyID:                 m.ProxyID,
-		Concurrency:             m.Concurrency,
-		Priority:                m.Priority,
-		RateMultiplier:          &rateMultiplier,
-		LoadFactor:              m.LoadFactor,
-		Status:                  m.Status,
-		ErrorMessage:            derefString(m.ErrorMessage),
-		LastUsedAt:              m.LastUsedAt,
-		ExpiresAt:               m.ExpiresAt,
-		AutoPauseOnExpired:      m.AutoPauseOnExpired,
-		CreatedAt:               m.CreatedAt,
-		UpdatedAt:               m.UpdatedAt,
-		Schedulable:             m.Schedulable,
-		RateLimitedAt:           m.RateLimitedAt,
-		RateLimitResetAt:        m.RateLimitResetAt,
-		OverloadUntil:           m.OverloadUntil,
-		TempUnschedulableUntil:  m.TempUnschedulableUntil,
-		TempUnschedulableReason: derefString(m.TempUnschedulableReason),
-		SessionWindowStart:      m.SessionWindowStart,
-		SessionWindowEnd:        m.SessionWindowEnd,
-		SessionWindowStatus:     derefString(m.SessionWindowStatus),
+		ID:                              m.ID,
+		Name:                            m.Name,
+		Notes:                           m.Notes,
+		Platform:                        m.Platform,
+		Type:                            m.Type,
+		Credentials:                     copyJSONMap(m.Credentials),
+		Extra:                           copyJSONMap(m.Extra),
+		ProxyID:                         m.ProxyID,
+		Concurrency:                     m.Concurrency,
+		Priority:                        m.Priority,
+		RateMultiplier:                  &rateMultiplier,
+		UpstreamCostMultiplier:          m.UpstreamCostMultiplier,
+		UpstreamCostMultiplierUpdatedAt: m.UpstreamCostMultiplierUpdatedAt,
+		UpstreamCostMultiplierChangeID:  m.UpstreamCostMultiplierChangeID,
+		UpstreamCostMultiplierSource:    m.UpstreamCostMultiplierSource,
+		CurrentFinanceProfileID:         m.CurrentFinanceProfileID,
+		LoadFactor:                      m.LoadFactor,
+		Status:                          m.Status,
+		ErrorMessage:                    derefString(m.ErrorMessage),
+		LastUsedAt:                      m.LastUsedAt,
+		ExpiresAt:                       m.ExpiresAt,
+		AutoPauseOnExpired:              m.AutoPauseOnExpired,
+		CreatedAt:                       m.CreatedAt,
+		UpdatedAt:                       m.UpdatedAt,
+		Schedulable:                     m.Schedulable,
+		RateLimitedAt:                   m.RateLimitedAt,
+		RateLimitResetAt:                m.RateLimitResetAt,
+		OverloadUntil:                   m.OverloadUntil,
+		TempUnschedulableUntil:          m.TempUnschedulableUntil,
+		TempUnschedulableReason:         derefString(m.TempUnschedulableReason),
+		SessionWindowStart:              m.SessionWindowStart,
+		SessionWindowEnd:                m.SessionWindowEnd,
+		SessionWindowStatus:             derefString(m.SessionWindowStatus),
 	}
 }
 

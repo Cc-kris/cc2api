@@ -268,6 +268,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 				}
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
+					appendBillableUsageAttemptFromFailover(c, account, parsed.Model, failoverErr)
 					h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
 					if failoverErr.RetryableOnSameAccount {
 						retryLimit := account.GetPoolModeRetryCount()
@@ -344,20 +345,23 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		if result != nil {
 			upstreamModel = result.UpstreamModel
 		}
+		upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
 		h.submitMandatoryUsageRecordTask(func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
-				Result:             result,
-				APIKey:             apiKey,
-				User:               apiKey.User,
-				Account:            account,
-				Subscription:       subscription,
-				InboundEndpoint:    inboundEndpoint,
-				UpstreamEndpoint:   upstreamEndpoint,
-				UserAgent:          userAgent,
-				IPAddress:          clientIP,
-				RequestPayloadHash: requestPayloadHash,
-				APIKeyService:      h.apiKeyService,
-				ChannelUsageFields: channelMapping.ToUsageFields(parsed.Model, upstreamModel),
+				Result:                 result,
+				APIKey:                 apiKey,
+				User:                   apiKey.User,
+				Account:                account,
+				UpstreamCostMultiplier: service.CloneDecimalSnapshot(account.UpstreamCostMultiplier),
+				Subscription:           subscription,
+				InboundEndpoint:        inboundEndpoint,
+				UpstreamEndpoint:       upstreamEndpoint,
+				UserAgent:              userAgent,
+				IPAddress:              clientIP,
+				RequestPayloadHash:     requestPayloadHash,
+				APIKeyService:          h.apiKeyService,
+				ChannelUsageFields:     channelMapping.ToUsageFields(parsed.Model, upstreamModel),
+				UpstreamAttempts:       service.CloneUsageUpstreamAttempts(upstreamAttempts),
 			}); err != nil {
 				logger.L().With(
 					zap.String("component", "handler.openai_gateway.images"),

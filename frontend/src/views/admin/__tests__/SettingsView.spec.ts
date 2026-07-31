@@ -650,6 +650,28 @@ describe("admin SettingsView payment visible method controls", () => {
     );
   });
 
+  it("loads and submits the dedicated Model Square feature switch", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      available_channels_enabled: false,
+      model_square_enabled: true,
+    });
+
+    const wrapper = mountView();
+
+    await flushPromises();
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledTimes(1);
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        available_channels_enabled: false,
+        model_square_enabled: true,
+      }),
+    );
+  });
+
   it("submits message cache_control rewrite and local response cache gateway settings", async () => {
     getSettings.mockResolvedValueOnce({
       ...baseSettingsResponse,

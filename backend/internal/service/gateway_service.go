@@ -35,8 +35,10 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/google/uuid"
 	gocache "github.com/patrickmn/go-cache"
+	"github.com/shopspring/decimal"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
+	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/gin-gonic/gin"
@@ -72,6 +74,14 @@ const (
 // 用于粘性会话切换时，将 input_tokens 转为 cache_read_input_tokens 计费
 type forceCacheBillingKeyType struct{}
 
+// trustedFinanceExclusionKey is deliberately private: HTTP payloads and headers cannot
+// create it. Only server-side jobs and controlled call sites can mark traffic excluded.
+type trustedFinanceExclusionKey struct{}
+
+type trustedFinanceExclusion struct {
+	reason string
+}
+
 // accountWithLoad 账号与负载信息的组合，用于负载感知调度
 type accountWithLoad struct {
 	account  *Account
@@ -79,6 +89,31 @@ type accountWithLoad struct {
 }
 
 var ForceCacheBillingContextKey = forceCacheBillingKeyType{}
+
+// WithTrustedFinanceExclusion marks internally initiated traffic (for example a
+// controlled verification task) as non-revenue finance traffic. The marker is not
+// derived from any client input and survives the detached billing context.
+func WithTrustedFinanceExclusion(ctx context.Context, reason string) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "trusted_internal_task"
+	}
+	return context.WithValue(ctx, trustedFinanceExclusionKey{}, trustedFinanceExclusion{reason: reason})
+}
+
+func trustedFinanceExclusionFromContext(ctx context.Context) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+	value, ok := ctx.Value(trustedFinanceExclusionKey{}).(trustedFinanceExclusion)
+	if !ok || strings.TrimSpace(value.reason) == "" {
+		return "", false
+	}
+	return strings.TrimSpace(value.reason), true
+}
 
 var (
 	windowCostPrefetchCacheHitTotal  atomic.Int64
@@ -513,12 +548,13 @@ type ForwardResult struct {
 	Model     string
 	// UpstreamModel is the actual upstream model after mapping.
 	// Prefer empty when it is identical to Model; persistence normalizes equal values away as no-op mappings.
-	UpstreamModel    string
-	Stream           bool
-	Duration         time.Duration
-	FirstTokenMs     *int // 首字时间（流式请求）
-	ClientDisconnect bool // 客户端是否在流式传输过程中断开
-	ReasoningEffort  *string
+	UpstreamModel          string
+	Stream                 bool
+	Duration               time.Duration
+	FirstTokenMs           *int // 首字时间（流式请求）
+	ClientDisconnect       bool // 客户端是否在流式传输过程中断开
+	ReasoningEffort        *string
+	UpstreamBillingPayload []byte
 
 	// 图片生成计费字段（图片生成模型使用）
 	ImageCount         int    // 生成的图片数量
@@ -2422,6 +2458,10 @@ func (s *GatewayService) IsSingleAntigravityAccountGroup(ctx context.Context, gr
 }
 
 func (s *GatewayService) isAccountAllowedForPlatform(account *Account, platform string, useMixed bool) bool {
+	return accountAllowedForPlatform(account, platform, useMixed)
+}
+
+func accountAllowedForPlatform(account *Account, platform string, useMixed bool) bool {
 	if account == nil {
 		return false
 	}
@@ -5023,6 +5063,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	var usage *ClaudeUsage
 	var firstTokenMs *int
 	var clientDisconnect bool
+	var upstreamBillingPayload []byte
 	if reqStream {
 		streamResult, err := s.handleStreamingResponse(ctx, resp, c, account, startTime, originalModel, reqModel, shouldMimicClaudeCode)
 		if err != nil {
@@ -5036,22 +5077,24 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		usage = streamResult.usage
 		firstTokenMs = streamResult.firstTokenMs
 		clientDisconnect = streamResult.clientDisconnect
+		upstreamBillingPayload = append([]byte(nil), streamResult.billingPayload...)
 	} else {
-		usage, err = s.handleNonStreamingResponse(ctx, resp, c, account, originalModel, reqModel)
+		usage, upstreamBillingPayload, err = s.handleNonStreamingResponse(ctx, resp, c, account, originalModel, reqModel)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	return &ForwardResult{
-		RequestID:        resp.Header.Get("x-request-id"),
-		Usage:            *usage,
-		Model:            originalModel, // 使用原始模型用于计费和日志
-		UpstreamModel:    mappedModel,
-		Stream:           reqStream,
-		Duration:         time.Since(startTime),
-		FirstTokenMs:     firstTokenMs,
-		ClientDisconnect: clientDisconnect,
+		RequestID:              resp.Header.Get("x-request-id"),
+		Usage:                  *usage,
+		Model:                  originalModel, // 使用原始模型用于计费和日志
+		UpstreamModel:          mappedModel,
+		Stream:                 reqStream,
+		Duration:               time.Since(startTime),
+		FirstTokenMs:           firstTokenMs,
+		ClientDisconnect:       clientDisconnect,
+		UpstreamBillingPayload: upstreamBillingPayload,
 	}, nil
 }
 
@@ -5299,6 +5342,7 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 	var usage *ClaudeUsage
 	var firstTokenMs *int
 	var clientDisconnect bool
+	var upstreamBillingPayload []byte
 	if input.RequestStream {
 		streamResult, err := s.handleStreamingResponseAnthropicAPIKeyPassthrough(ctx, resp, c, account, input.StartTime, input.RequestModel, localCacheCfg.MaxBodySize)
 		if err != nil {
@@ -5307,6 +5351,7 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 		usage = streamResult.usage
 		firstTokenMs = streamResult.firstTokenMs
 		clientDisconnect = streamResult.clientDisconnect
+		upstreamBillingPayload = append([]byte(nil), streamResult.billingPayload...)
 		if !clientDisconnect && streamResult.cacheBodyTooLarge {
 			s.RecordLocalResponseCacheStat(ctx, "store_skip:body_too_large")
 		} else if !clientDisconnect && len(streamResult.cacheBody) > 0 {
@@ -5320,20 +5365,22 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 			return nil, err
 		}
 		s.persistClaudeLocalResponseCache(ctx, c, localCacheLookup, localCacheCfg, input.Body, resp.StatusCode, contentType, responseBody)
+		upstreamBillingPayload = append([]byte(nil), responseBody...)
 	}
 	if usage == nil {
 		usage = &ClaudeUsage{}
 	}
 
 	return &ForwardResult{
-		RequestID:        resp.Header.Get("x-request-id"),
-		Usage:            *usage,
-		Model:            input.OriginalModel,
-		UpstreamModel:    input.RequestModel,
-		Stream:           input.RequestStream,
-		Duration:         time.Since(input.StartTime),
-		FirstTokenMs:     firstTokenMs,
-		ClientDisconnect: clientDisconnect,
+		RequestID:              resp.Header.Get("x-request-id"),
+		Usage:                  *usage,
+		Model:                  input.OriginalModel,
+		UpstreamModel:          input.RequestModel,
+		Stream:                 input.RequestStream,
+		Duration:               time.Since(input.StartTime),
+		FirstTokenMs:           firstTokenMs,
+		ClientDisconnect:       clientDisconnect,
+		UpstreamBillingPayload: upstreamBillingPayload,
 	}, nil
 }
 
@@ -6063,6 +6110,7 @@ func (s *GatewayService) forwardBedrock(
 	var usage *ClaudeUsage
 	var firstTokenMs *int
 	var clientDisconnect bool
+	var upstreamBillingPayload []byte
 	if reqStream {
 		streamResult, err := s.handleBedrockStreamingResponse(ctx, resp, c, account, startTime, reqModel)
 		if err != nil {
@@ -6072,7 +6120,7 @@ func (s *GatewayService) forwardBedrock(
 		firstTokenMs = streamResult.firstTokenMs
 		clientDisconnect = streamResult.clientDisconnect
 	} else {
-		usage, err = s.handleBedrockNonStreamingResponse(ctx, resp, c, account)
+		usage, upstreamBillingPayload, err = s.handleBedrockNonStreamingResponse(ctx, resp, c, account)
 		if err != nil {
 			return nil, err
 		}
@@ -6082,14 +6130,15 @@ func (s *GatewayService) forwardBedrock(
 	}
 
 	return &ForwardResult{
-		RequestID:        resp.Header.Get("x-amzn-requestid"),
-		Usage:            *usage,
-		Model:            reqModel,
-		UpstreamModel:    mappedModel,
-		Stream:           reqStream,
-		Duration:         time.Since(startTime),
-		FirstTokenMs:     firstTokenMs,
-		ClientDisconnect: clientDisconnect,
+		RequestID:              resp.Header.Get("x-amzn-requestid"),
+		Usage:                  *usage,
+		Model:                  reqModel,
+		UpstreamModel:          mappedModel,
+		Stream:                 reqStream,
+		Duration:               time.Since(startTime),
+		FirstTokenMs:           firstTokenMs,
+		ClientDisconnect:       clientDisconnect,
+		UpstreamBillingPayload: upstreamBillingPayload,
 	}, nil
 }
 
@@ -6315,10 +6364,10 @@ func (s *GatewayService) handleBedrockNonStreamingResponse(
 	resp *http.Response,
 	c *gin.Context,
 	account *Account,
-) (*ClaudeUsage, error) {
+) (*ClaudeUsage, []byte, error) {
 	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, anthropicTooLargeError)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// 转换 Bedrock 特有的 amazon-bedrock-invocationMetrics 为标准 Anthropic usage 格式
@@ -6332,7 +6381,7 @@ func (s *GatewayService) handleBedrockNonStreamingResponse(
 		c.Header("x-request-id", v)
 	}
 	c.Data(resp.StatusCode, "application/json", body)
-	return usage, nil
+	return usage, append([]byte(nil), body...), nil
 }
 
 func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token, tokenType, modelID string, reqStream bool, mimicClaudeCode bool) (*http.Request, error) {
@@ -7527,6 +7576,7 @@ type streamingResult struct {
 	usage             *ClaudeUsage
 	firstTokenMs      *int
 	clientDisconnect  bool // 客户端是否在流式传输过程中断开
+	billingPayload    []byte
 	cacheBody         []byte
 	cacheContentType  string
 	cacheBodyTooLarge bool
@@ -7662,6 +7712,10 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 	needModelReplace := originalModel != mappedModel
 	clientDisconnected := false // 客户端断开标志，断开后继续读取上游以获取完整usage
 	sawTerminalEvent := false
+	var billingPayload []byte
+	resultWithBilling := func(disconnected bool) *streamingResult {
+		return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: disconnected, billingPayload: append([]byte(nil), billingPayload...)}
+	}
 
 	pendingEventLines := make([]string, 0, 4)
 
@@ -7796,27 +7850,27 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 			if !ok {
 				// 上游完成，返回结果
 				if !sawTerminalEvent {
-					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: clientDisconnected}, fmt.Errorf("stream usage incomplete: missing terminal event")
+					return resultWithBilling(clientDisconnected), fmt.Errorf("stream usage incomplete: missing terminal event")
 				}
-				return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: clientDisconnected}, nil
+				return resultWithBilling(clientDisconnected), nil
 			}
 			if ev.err != nil {
 				if sawTerminalEvent {
-					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: clientDisconnected}, nil
+					return resultWithBilling(clientDisconnected), nil
 				}
 				// 检测 context 取消（客户端断开会导致 context 取消，进而影响上游读取）
 				if errors.Is(ev.err, context.Canceled) || errors.Is(ev.err, context.DeadlineExceeded) {
-					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: true}, fmt.Errorf("stream usage incomplete: %w", ev.err)
+					return resultWithBilling(true), fmt.Errorf("stream usage incomplete: %w", ev.err)
 				}
 				// 客户端已通过写入失败检测到断开，上游也出错了，返回已收集的 usage
 				if clientDisconnected {
-					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: true}, fmt.Errorf("stream usage incomplete after disconnect: %w", ev.err)
+					return resultWithBilling(true), fmt.Errorf("stream usage incomplete after disconnect: %w", ev.err)
 				}
 				// 客户端未断开，正常的错误处理
 				if errors.Is(ev.err, bufio.ErrTooLong) {
 					logger.LegacyPrintf("service.gateway", "SSE line too long: account=%d max_size=%d error=%v", account.ID, maxLineSize, ev.err)
 					sendErrorEvent("response_too_large", fmt.Sprintf("upstream SSE line exceeded %d bytes", maxLineSize))
-					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs}, ev.err
+					return resultWithBilling(false), ev.err
 				}
 				// 上游中途读错误（unexpected EOF / connection reset 等，常见于 HTTP/2 GOAWAY）：
 				// 若尚未向客户端写过任何字节，包成 UpstreamFailoverError 让 handler 层走 failover/重试。
@@ -7841,7 +7895,7 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 					}
 				}
 				sendErrorEvent("stream_read_error", disconnectMsg)
-				return &streamingResult{usage: usage, firstTokenMs: firstTokenMs}, fmt.Errorf("stream read error: %w", ev.err)
+				return resultWithBilling(false), fmt.Errorf("stream read error: %w", ev.err)
 			}
 			line := ev.line
 			trimmed := strings.TrimSpace(line)
@@ -7855,10 +7909,11 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 				pendingEventLines = pendingEventLines[:0]
 				if err != nil {
 					if clientDisconnected {
-						return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: true}, nil
+						return resultWithBilling(true), nil
 					}
 					return nil, err
 				}
+				billingPayload = appendFinanceBillingPayload(billingPayload, []byte(strings.Join(outputBlocks, "")))
 
 				for _, block := range outputBlocks {
 					if !clientDisconnected {
@@ -7892,7 +7947,7 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 				continue
 			}
 			if clientDisconnected {
-				return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: true}, fmt.Errorf("stream usage incomplete after timeout")
+				return resultWithBilling(true), fmt.Errorf("stream usage incomplete after timeout")
 			}
 			logger.LegacyPrintf("service.gateway", "Stream data interval timeout: account=%d model=%s interval=%s", account.ID, originalModel, streamInterval)
 			// 处理流超时，可能标记账户为临时不可调度或错误状态
@@ -7900,7 +7955,7 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 				s.rateLimitService.HandleStreamTimeout(ctx, account, originalModel)
 			}
 			sendErrorEvent("stream_timeout", fmt.Sprintf("upstream stream idle for %s", streamInterval))
-			return &streamingResult{usage: usage, firstTokenMs: firstTokenMs}, fmt.Errorf("stream data interval timeout")
+			return resultWithBilling(false), fmt.Errorf("stream data interval timeout")
 
 		case <-keepaliveCh:
 			if clientDisconnected {
@@ -8154,13 +8209,13 @@ func (s *GatewayService) resolveCacheTTLUsageOverrideTarget(ctx context.Context,
 	return "", false
 }
 
-func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, originalModel, mappedModel string) (*ClaudeUsage, error) {
+func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, originalModel, mappedModel string) (*ClaudeUsage, []byte, error) {
 	// 更新5h窗口状态
 	s.rateLimitService.UpdateSessionWindow(ctx, account, resp.Header)
 
 	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, anthropicTooLargeError)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// 解析usage
@@ -8168,7 +8223,7 @@ func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *h
 		Usage ClaudeUsage `json:"usage"`
 	}
 	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
+		return nil, nil, fmt.Errorf("parse response: %w", err)
 	}
 
 	// 解析嵌套的 cache_creation 对象中的 5m/1h 明细
@@ -8223,7 +8278,7 @@ func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *h
 	// 写入响应
 	c.Data(resp.StatusCode, contentType, body)
 
-	return &response.Usage, nil
+	return &response.Usage, append([]byte(nil), body...), nil
 }
 
 // replaceModelInResponseBody 替换响应体中的model字段
@@ -8258,20 +8313,22 @@ func (s *GatewayService) getUserGroupRateMultiplier(ctx context.Context, userID,
 
 // RecordUsageInput 记录使用量的输入参数
 type RecordUsageInput struct {
-	Result             *ForwardResult
-	ParsedRequest      *ParsedRequest
-	APIKey             *APIKey
-	User               *User
-	Account            *Account
-	Subscription       *UserSubscription  // 可选：订阅信息
-	InboundEndpoint    string             // 入站端点（客户端请求路径）
-	UpstreamEndpoint   string             // 上游端点（标准化后的上游路径）
-	UserAgent          string             // 请求的 User-Agent
-	IPAddress          string             // 请求的客户端 IP 地址
-	RequestPayloadHash string             // 请求体语义哈希，用于降低 request_id 误复用时的静默误去重风险
-	ForceCacheBilling  bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
-	APIKeyService      APIKeyQuotaUpdater // 可选：用于更新API Key配额
-	QuotaPlatform      string             // user×platform 配额计量平台：handler 在请求 ctx 内经 QuotaPlatform() 算定后传入（后扣运行在 worker 池 background ctx 上，取不到 ForcePlatform）
+	Result                 *ForwardResult
+	ParsedRequest          *ParsedRequest
+	APIKey                 *APIKey
+	User                   *User
+	Account                *Account
+	Subscription           *UserSubscription  // 可选：订阅信息
+	InboundEndpoint        string             // 入站端点（客户端请求路径）
+	UpstreamEndpoint       string             // 上游端点（标准化后的上游路径）
+	UserAgent              string             // 请求的 User-Agent
+	IPAddress              string             // 请求的客户端 IP 地址
+	RequestPayloadHash     string             // 请求体语义哈希，用于降低 request_id 误复用时的静默误去重风险
+	ForceCacheBilling      bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
+	APIKeyService          APIKeyQuotaUpdater // 可选：用于更新API Key配额
+	QuotaPlatform          string             // user×platform 配额计量平台：handler 在请求 ctx 内经 QuotaPlatform() 算定后传入（后扣运行在 worker 池 background ctx 上，取不到 ForcePlatform）
+	UpstreamCostMultiplier *decimal.Decimal   // 账号选中时的上游采购倍率快照
+	UpstreamAttempts       []UsageUpstreamAttempt
 
 	ChannelUsageFields // 渠道映射信息（由 handler 在 Forward 前解析）
 }
@@ -8451,6 +8508,9 @@ func buildUsageBillingCommand(requestID string, usageLog *UsageLog, p *postUsage
 	if usageLog != nil {
 		cmd.Model = usageLog.Model
 		cmd.BillingType = usageLog.BillingType
+		cmd.FinanceBusinessType = usageLog.FinanceBusinessTypeSnapshot
+		cmd.FinanceExcluded = usageLog.FinanceExcluded
+		cmd.FinanceExclusionReason = usageLog.FinanceExclusionReason
 		cmd.InputTokens = usageLog.InputTokens
 		cmd.OutputTokens = usageLog.OutputTokens
 		cmd.CacheCreationTokens = usageLog.CacheCreationTokens
@@ -8496,6 +8556,7 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 	if p == nil || deps == nil {
 		return false, nil
 	}
+	EnsureFinalUsageUpstreamAttempt(usageLog)
 
 	cmd := buildUsageBillingCommand(requestID, usageLog, p)
 	if cmd == nil || cmd.RequestID == "" || repo == nil {
@@ -8514,6 +8575,12 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 	if result == nil || !result.Applied {
 		deps.deferredService.ScheduleLastUsedUpdate(p.Account.ID)
 		return false, nil
+	}
+	if usageLog != nil {
+		usageLog.FinanceBusinessTypeSnapshot = result.FinanceBusinessType
+		usageLog.PromotionCreditUsed = cloneDecimal(result.PromotionCreditUsed)
+		usageLog.FinanceExcluded = result.FinanceExcluded
+		usageLog.FinanceExclusionReason = result.FinanceExclusionReason
 	}
 
 	if result.APIKeyQuotaExhausted {
@@ -8659,6 +8726,7 @@ func writeUsageLogBestEffort(ctx context.Context, repo UsageLogRepository, usage
 	if repo == nil || usageLog == nil {
 		return
 	}
+	EnsureFinalUsageUpstreamAttempt(usageLog)
 	usageCtx, cancel := detachedBillingContext(ctx)
 	defer cancel()
 
@@ -8696,21 +8764,26 @@ type recordUsageOpts struct {
 
 // RecordUsage 记录使用量并扣费（或更新订阅用量）
 func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInput) error {
+	if input != nil && input.User != nil && strings.EqualFold(strings.TrimSpace(input.User.Role), RoleAdmin) {
+		ctx = WithTrustedFinanceExclusion(ctx, "admin_api_usage")
+	}
 	return s.recordUsageCore(ctx, &recordUsageCoreInput{
-		Result:             input.Result,
-		APIKey:             input.APIKey,
-		User:               input.User,
-		Account:            input.Account,
-		Subscription:       input.Subscription,
-		InboundEndpoint:    input.InboundEndpoint,
-		UpstreamEndpoint:   input.UpstreamEndpoint,
-		UserAgent:          input.UserAgent,
-		IPAddress:          input.IPAddress,
-		RequestPayloadHash: input.RequestPayloadHash,
-		ForceCacheBilling:  input.ForceCacheBilling,
-		APIKeyService:      input.APIKeyService,
-		QuotaPlatform:      input.QuotaPlatform,
-		ChannelUsageFields: input.ChannelUsageFields,
+		Result:                 input.Result,
+		APIKey:                 input.APIKey,
+		User:                   input.User,
+		Account:                input.Account,
+		Subscription:           input.Subscription,
+		InboundEndpoint:        input.InboundEndpoint,
+		UpstreamEndpoint:       input.UpstreamEndpoint,
+		UserAgent:              input.UserAgent,
+		IPAddress:              input.IPAddress,
+		RequestPayloadHash:     input.RequestPayloadHash,
+		ForceCacheBilling:      input.ForceCacheBilling,
+		APIKeyService:          input.APIKeyService,
+		QuotaPlatform:          input.QuotaPlatform,
+		UpstreamCostMultiplier: input.UpstreamCostMultiplier,
+		UpstreamAttempts:       input.UpstreamAttempts,
+		ChannelUsageFields:     input.ChannelUsageFields,
 	}, &recordUsageOpts{
 		EnableClaudePath: true,
 	})
@@ -8718,42 +8791,49 @@ func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInpu
 
 // RecordUsageLongContextInput 记录使用量的输入参数（支持长上下文双倍计费）
 type RecordUsageLongContextInput struct {
-	Result                *ForwardResult
-	APIKey                *APIKey
-	User                  *User
-	Account               *Account
-	Subscription          *UserSubscription  // 可选：订阅信息
-	InboundEndpoint       string             // 入站端点（客户端请求路径）
-	UpstreamEndpoint      string             // 上游端点（标准化后的上游路径）
-	UserAgent             string             // 请求的 User-Agent
-	IPAddress             string             // 请求的客户端 IP 地址
-	RequestPayloadHash    string             // 请求体语义哈希，用于降低 request_id 误复用时的静默误去重风险
-	LongContextThreshold  int                // 长上下文阈值（如 200000）
-	LongContextMultiplier float64            // 超出阈值部分的倍率（如 2.0）
-	ForceCacheBilling     bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
-	APIKeyService         APIKeyQuotaUpdater // API Key 配额服务（可选）
-	QuotaPlatform         string             // user×platform 配额计量平台：handler 在请求 ctx 内经 QuotaPlatform() 算定后传入（后扣运行在 worker 池 background ctx 上，取不到 ForcePlatform）
+	Result                 *ForwardResult
+	APIKey                 *APIKey
+	User                   *User
+	Account                *Account
+	Subscription           *UserSubscription  // 可选：订阅信息
+	InboundEndpoint        string             // 入站端点（客户端请求路径）
+	UpstreamEndpoint       string             // 上游端点（标准化后的上游路径）
+	UserAgent              string             // 请求的 User-Agent
+	IPAddress              string             // 请求的客户端 IP 地址
+	RequestPayloadHash     string             // 请求体语义哈希，用于降低 request_id 误复用时的静默误去重风险
+	LongContextThreshold   int                // 长上下文阈值（如 200000）
+	LongContextMultiplier  float64            // 超出阈值部分的倍率（如 2.0）
+	ForceCacheBilling      bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
+	APIKeyService          APIKeyQuotaUpdater // API Key 配额服务（可选）
+	QuotaPlatform          string             // user×platform 配额计量平台：handler 在请求 ctx 内经 QuotaPlatform() 算定后传入（后扣运行在 worker 池 background ctx 上，取不到 ForcePlatform）
+	UpstreamCostMultiplier *decimal.Decimal   // 账号选中时的上游采购倍率快照
+	UpstreamAttempts       []UsageUpstreamAttempt
 
 	ChannelUsageFields // 渠道映射信息（由 handler 在 Forward 前解析）
 }
 
 // RecordUsageWithLongContext 记录使用量并扣费，支持长上下文双倍计费（用于 Gemini）
 func (s *GatewayService) RecordUsageWithLongContext(ctx context.Context, input *RecordUsageLongContextInput) error {
+	if input != nil && input.User != nil && strings.EqualFold(strings.TrimSpace(input.User.Role), RoleAdmin) {
+		ctx = WithTrustedFinanceExclusion(ctx, "admin_api_usage")
+	}
 	return s.recordUsageCore(ctx, &recordUsageCoreInput{
-		Result:             input.Result,
-		APIKey:             input.APIKey,
-		User:               input.User,
-		Account:            input.Account,
-		Subscription:       input.Subscription,
-		InboundEndpoint:    input.InboundEndpoint,
-		UpstreamEndpoint:   input.UpstreamEndpoint,
-		UserAgent:          input.UserAgent,
-		IPAddress:          input.IPAddress,
-		RequestPayloadHash: input.RequestPayloadHash,
-		ForceCacheBilling:  input.ForceCacheBilling,
-		APIKeyService:      input.APIKeyService,
-		QuotaPlatform:      input.QuotaPlatform,
-		ChannelUsageFields: input.ChannelUsageFields,
+		Result:                 input.Result,
+		APIKey:                 input.APIKey,
+		User:                   input.User,
+		Account:                input.Account,
+		Subscription:           input.Subscription,
+		InboundEndpoint:        input.InboundEndpoint,
+		UpstreamEndpoint:       input.UpstreamEndpoint,
+		UserAgent:              input.UserAgent,
+		IPAddress:              input.IPAddress,
+		RequestPayloadHash:     input.RequestPayloadHash,
+		ForceCacheBilling:      input.ForceCacheBilling,
+		APIKeyService:          input.APIKeyService,
+		QuotaPlatform:          input.QuotaPlatform,
+		UpstreamCostMultiplier: input.UpstreamCostMultiplier,
+		UpstreamAttempts:       input.UpstreamAttempts,
+		ChannelUsageFields:     input.ChannelUsageFields,
 	}, &recordUsageOpts{
 		LongContextThreshold:  input.LongContextThreshold,
 		LongContextMultiplier: input.LongContextMultiplier,
@@ -8762,19 +8842,21 @@ func (s *GatewayService) RecordUsageWithLongContext(ctx context.Context, input *
 
 // recordUsageCoreInput 是 recordUsageCore 的公共输入字段，从两种输入结构体中提取。
 type recordUsageCoreInput struct {
-	Result             *ForwardResult
-	APIKey             *APIKey
-	User               *User
-	Account            *Account
-	Subscription       *UserSubscription
-	InboundEndpoint    string
-	UpstreamEndpoint   string
-	UserAgent          string
-	IPAddress          string
-	RequestPayloadHash string
-	ForceCacheBilling  bool
-	APIKeyService      APIKeyQuotaUpdater
-	QuotaPlatform      string
+	Result                 *ForwardResult
+	APIKey                 *APIKey
+	User                   *User
+	Account                *Account
+	Subscription           *UserSubscription
+	InboundEndpoint        string
+	UpstreamEndpoint       string
+	UserAgent              string
+	IPAddress              string
+	RequestPayloadHash     string
+	ForceCacheBilling      bool
+	APIKeyService          APIKeyQuotaUpdater
+	QuotaPlatform          string
+	UpstreamCostMultiplier *decimal.Decimal
+	UpstreamAttempts       []UsageUpstreamAttempt
 	ChannelUsageFields
 }
 
@@ -8847,6 +8929,40 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	accountRateMultiplier := account.BillingRateMultiplier()
 	usageLog := s.buildRecordUsageLog(ctx, input, result, apiKey, user, account, subscription,
 		requestedModel, multiplier, imageMultiplier, accountRateMultiplier, billingType, cacheTTLOverridden, cost, opts)
+	legacyPricingSource := ResolveLegacySalesPricingModelSource(
+		input.BillingModelSource,
+		requestedModel,
+		billingModel,
+		input.ChannelMappedModel,
+		result.UpstreamModel,
+	)
+	pricingContext, pricingErr := ResolveLegacySalesPricingContext(
+		ctx,
+		s.resolver,
+		s.billingService,
+		requestedModel,
+		billingModel,
+		legacyPricingSource,
+		apiKey.GroupID,
+		BillingMode(effectiveUsageBillingMode(usageLog)),
+		max(usageLog.ImageCount, 1),
+		intSnapshotValue(usageLog.VideoDurationSeconds),
+		cost,
+		decimal.NewFromFloat(usageLog.RateMultiplier),
+	)
+	if pricingErr != nil {
+		logger.L().With(zap.String("component", "service.gateway"), zap.String("billing_model", billingModel)).Warn("usage.sales_pricing_snapshot_failed", zap.Error(pricingErr))
+	} else {
+		appliedCost, applyErr := ApplyConfiguredSalesPricing(
+			ctx, s.settingService, s.resolver, s.channelService, s.billingService,
+			apiKey.GroupID, requestedModel, usageLog, pricingContext, cost,
+			decimal.NewFromFloat(multiplier),
+		)
+		cost = appliedCost
+		if applyErr != nil {
+			logger.L().With(zap.String("component", "service.gateway"), zap.String("billing_model", billingModel)).Warn("usage.sales_pricing_snapshot_failed", zap.Error(applyErr))
+		}
+	}
 
 	// 计算账号统计定价费用（使用最终上游模型匹配自定义规则）
 	if apiKey.GroupID != nil {
@@ -9051,44 +9167,58 @@ func (s *GatewayService) buildRecordUsageLog(
 	durationMs := int(result.Duration.Milliseconds())
 	requestID := resolveUsageBillingRequestID(ctx, result.RequestID)
 	usageLog := &UsageLog{
-		UserID:                user.ID,
-		APIKeyID:              apiKey.ID,
-		AccountID:             account.ID,
-		RequestID:             requestID,
-		Model:                 result.Model,
-		RequestedModel:        requestedModel,
-		UpstreamModel:         optionalNonEqualStringPtr(result.UpstreamModel, result.Model),
-		ReasoningEffort:       result.ReasoningEffort,
-		InboundEndpoint:       optionalTrimmedStringPtr(input.InboundEndpoint),
-		UpstreamEndpoint:      optionalTrimmedStringPtr(input.UpstreamEndpoint),
-		InputTokens:           result.Usage.InputTokens,
-		OutputTokens:          result.Usage.OutputTokens,
-		CacheCreationTokens:   result.Usage.CacheCreationInputTokens,
-		CacheReadTokens:       result.Usage.CacheReadInputTokens,
-		CacheCreation5mTokens: result.Usage.CacheCreation5mTokens,
-		CacheCreation1hTokens: result.Usage.CacheCreation1hTokens,
-		ImageOutputTokens:     result.Usage.ImageOutputTokens,
-		RateMultiplier:        multiplier,
-		AccountRateMultiplier: &accountRateMultiplier,
-		BillingType:           billingType,
-		BillingMode:           resolveBillingMode(result, cost),
-		Stream:                result.Stream,
-		DurationMs:            &durationMs,
-		FirstTokenMs:          result.FirstTokenMs,
-		ImageCount:            result.ImageCount,
-		ImageSize:             optionalTrimmedStringPtr(result.ImageSize),
-		ImageInputSize:        optionalTrimmedStringPtr(result.ImageInputSize),
-		ImageOutputSize:       optionalTrimmedStringPtr(result.ImageOutputSize),
-		ImageSizeSource:       optionalTrimmedStringPtr(result.ImageSizeSource),
-		ImageSizeBreakdown:    result.ImageSizeBreakdown,
-		CacheTTLOverridden:    cacheTTLOverridden,
-		ChannelID:             optionalInt64Ptr(input.ChannelID),
-		ModelMappingChain:     optionalTrimmedStringPtr(input.ModelMappingChain),
-		UserAgent:             optionalTrimmedStringPtr(input.UserAgent),
-		IPAddress:             optionalTrimmedStringPtr(input.IPAddress),
-		GroupID:               apiKey.GroupID,
-		SubscriptionID:        optionalSubscriptionID(subscription),
-		CreatedAt:             time.Now(),
+		UserID:                 user.ID,
+		APIKeyID:               apiKey.ID,
+		AccountID:              account.ID,
+		RequestID:              requestID,
+		Model:                  result.Model,
+		RequestedModel:         requestedModel,
+		UpstreamModel:          optionalNonEqualStringPtr(result.UpstreamModel, result.Model),
+		ReasoningEffort:        result.ReasoningEffort,
+		InboundEndpoint:        optionalTrimmedStringPtr(input.InboundEndpoint),
+		UpstreamEndpoint:       optionalTrimmedStringPtr(input.UpstreamEndpoint),
+		InputTokens:            result.Usage.InputTokens,
+		OutputTokens:           result.Usage.OutputTokens,
+		CacheCreationTokens:    result.Usage.CacheCreationInputTokens,
+		CacheReadTokens:        result.Usage.CacheReadInputTokens,
+		CacheCreation5mTokens:  result.Usage.CacheCreation5mTokens,
+		CacheCreation1hTokens:  result.Usage.CacheCreation1hTokens,
+		ImageOutputTokens:      result.Usage.ImageOutputTokens,
+		RateMultiplier:         multiplier,
+		AccountRateMultiplier:  &accountRateMultiplier,
+		UpstreamCostMultiplier: ResolveUpstreamCostMultiplierSnapshot(input.UpstreamCostMultiplier, account),
+		UpstreamAttempts:       CloneUsageUpstreamAttempts(input.UpstreamAttempts),
+		UpstreamBillingPayload: append([]byte(nil), result.UpstreamBillingPayload...),
+		BillingType:            billingType,
+		BillingMode:            resolveBillingMode(result, cost),
+		Stream:                 result.Stream,
+		DurationMs:             &durationMs,
+		FirstTokenMs:           result.FirstTokenMs,
+		ImageCount:             result.ImageCount,
+		ImageSize:              optionalTrimmedStringPtr(result.ImageSize),
+		ImageInputSize:         optionalTrimmedStringPtr(result.ImageInputSize),
+		ImageOutputSize:        optionalTrimmedStringPtr(result.ImageOutputSize),
+		ImageSizeSource:        optionalTrimmedStringPtr(result.ImageSizeSource),
+		ImageSizeBreakdown:     result.ImageSizeBreakdown,
+		CacheTTLOverridden:     cacheTTLOverridden,
+		ChannelID:              optionalInt64Ptr(input.ChannelID),
+		ModelMappingChain:      optionalTrimmedStringPtr(input.ModelMappingChain),
+		UserAgent:              optionalTrimmedStringPtr(input.UserAgent),
+		IPAddress:              optionalTrimmedStringPtr(input.IPAddress),
+		GroupID:                apiKey.GroupID,
+		SubscriptionID:         optionalSubscriptionID(subscription),
+		CreatedAt:              time.Now(),
+	}
+	if reason, excluded := trustedFinanceExclusionFromContext(ctx); excluded {
+		usageLog.FinanceExcluded = true
+		usageLog.FinanceExclusionReason = reason
+	}
+	usageLog.FinanceBusinessTypeSnapshot = "balance"
+	if billingType == BillingTypeSubscription || subscription != nil {
+		usageLog.FinanceBusinessTypeSnapshot = "subscription"
+	}
+	if user != nil && strings.EqualFold(strings.TrimSpace(user.Role), "admin") {
+		usageLog.FinanceBusinessTypeSnapshot = "admin"
 	}
 	if result.ImageCount > 0 {
 		usageLog.RateMultiplier = imageMultiplier
@@ -9102,6 +9232,7 @@ func (s *GatewayService) buildRecordUsageLog(
 		usageLog.TotalCost = cost.TotalCost
 		usageLog.ActualCost = cost.ActualCost
 	}
+	ApplyAccountFinanceEvidenceToUsageLog(usageLog, account)
 
 	return usageLog
 }

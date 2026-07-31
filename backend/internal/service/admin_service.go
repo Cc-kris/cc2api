@@ -23,6 +23,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/util/httputil"
+	"github.com/shopspring/decimal"
 )
 
 // AdminService interface defines admin management operations
@@ -272,20 +273,22 @@ type UpdateGroupInput struct {
 }
 
 type CreateAccountInput struct {
-	Name               string
-	Notes              *string
-	Platform           string
-	Type               string
-	Credentials        map[string]any
-	Extra              map[string]any
-	ProxyID            *int64
-	Concurrency        int
-	Priority           int
-	RateMultiplier     *float64 // 账号计费倍率（>=0，允许 0）
-	LoadFactor         *int
-	GroupIDs           []int64
-	ExpiresAt          *int64
-	AutoPauseOnExpired *bool
+	Name                   string
+	Notes                  *string
+	Platform               string
+	Type                   string
+	Credentials            map[string]any
+	Extra                  map[string]any
+	ProxyID                *int64
+	Concurrency            int
+	Priority               int
+	RateMultiplier         *float64 // 账号计费倍率（>=0，允许 0）
+	UpstreamCostMultiplier *decimal.Decimal
+	OperatorID             *int64
+	LoadFactor             *int
+	GroupIDs               []int64
+	ExpiresAt              *int64
+	AutoPauseOnExpired     *bool
 	// SkipDefaultGroupBind prevents auto-binding to platform default group when GroupIDs is empty.
 	SkipDefaultGroupBind bool
 	// SkipMixedChannelCheck skips the mixed channel risk check when binding groups.
@@ -294,38 +297,44 @@ type CreateAccountInput struct {
 }
 
 type UpdateAccountInput struct {
-	Name                  string
-	Notes                 *string
-	Type                  string // Account type: oauth, setup-token, apikey
-	Credentials           map[string]any
-	Extra                 map[string]any
-	ProxyID               *int64
-	Concurrency           *int     // 使用指针区分"未提供"和"设置为0"
-	Priority              *int     // 使用指针区分"未提供"和"设置为0"
-	RateMultiplier        *float64 // 账号计费倍率（>=0，允许 0）
-	LoadFactor            *int
-	Status                string
-	GroupIDs              *[]int64
-	ExpiresAt             *int64
-	AutoPauseOnExpired    *bool
-	SkipMixedChannelCheck bool // 跳过混合渠道检查（用户已确认风险）
+	Name                               string
+	Notes                              *string
+	Type                               string // Account type: oauth, setup-token, apikey
+	Credentials                        map[string]any
+	Extra                              map[string]any
+	ProxyID                            *int64
+	Concurrency                        *int     // 使用指针区分"未提供"和"设置为0"
+	Priority                           *int     // 使用指针区分"未提供"和"设置为0"
+	RateMultiplier                     *float64 // 账号计费倍率（>=0，允许 0）
+	UpstreamCostMultiplier             *decimal.Decimal
+	UpstreamCostMultiplierChangeReason string
+	OperatorID                         *int64
+	LoadFactor                         *int
+	Status                             string
+	GroupIDs                           *[]int64
+	ExpiresAt                          *int64
+	AutoPauseOnExpired                 *bool
+	SkipMixedChannelCheck              bool // 跳过混合渠道检查（用户已确认风险）
 }
 
 // BulkUpdateAccountsInput describes the payload for bulk updating accounts.
 type BulkUpdateAccountsInput struct {
-	AccountIDs     []int64
-	Filters        *BulkUpdateAccountFilters
-	Name           string
-	ProxyID        *int64
-	Concurrency    *int
-	Priority       *int
-	RateMultiplier *float64 // 账号计费倍率（>=0，允许 0）
-	LoadFactor     *int
-	Status         string
-	Schedulable    *bool
-	GroupIDs       *[]int64
-	Credentials    map[string]any
-	Extra          map[string]any
+	AccountIDs                         []int64
+	Filters                            *BulkUpdateAccountFilters
+	Name                               string
+	ProxyID                            *int64
+	Concurrency                        *int
+	Priority                           *int
+	RateMultiplier                     *float64 // 账号计费倍率（>=0，允许 0）
+	UpstreamCostMultiplier             *decimal.Decimal
+	UpstreamCostMultiplierChangeReason string
+	OperatorID                         *int64
+	LoadFactor                         *int
+	Status                             string
+	Schedulable                        *bool
+	GroupIDs                           *[]int64
+	Credentials                        map[string]any
+	Extra                              map[string]any
 	// SkipMixedChannelCheck skips the mixed channel risk check when binding groups.
 	// This should only be set when the caller has explicitly confirmed the risk.
 	SkipMixedChannelCheck bool
@@ -352,6 +361,7 @@ type BulkUpdateAccountFilters struct {
 type BulkUpdateAccountResult struct {
 	AccountID int64  `json:"account_id"`
 	Success   bool   `json:"success"`
+	Status    string `json:"status"`
 	Error     string `json:"error,omitempty"`
 }
 
@@ -387,6 +397,7 @@ type UserGroupRPMStatus struct {
 // BulkUpdateAccountsResult is the aggregated response for bulk updates.
 type BulkUpdateAccountsResult struct {
 	Success    int                       `json:"success"`
+	Unchanged  int                       `json:"unchanged"`
 	Failed     int                       `json:"failed"`
 	SuccessIDs []int64                   `json:"success_ids"`
 	FailedIDs  []int64                   `json:"failed_ids"`
@@ -2617,6 +2628,15 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 		Status:      StatusActive,
 		Schedulable: true,
 	}
+	if input.UpstreamCostMultiplier != nil {
+		upstreamMultiplier := *input.UpstreamCostMultiplier
+		if err := ValidateUpstreamCostMultiplier(upstreamMultiplier); err != nil {
+			return nil, err
+		}
+		multiplierUpdatedAt := time.Now()
+		account.UpstreamCostMultiplier = &upstreamMultiplier
+		account.UpstreamCostMultiplierUpdatedAt = &multiplierUpdatedAt
+	}
 	dropDeprecatedUpstreamWarningExtra(account.Extra)
 	// 预计算固定时间重置的下次重置时间
 	if account.Extra != nil {
@@ -2646,8 +2666,14 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 		}
 		account.LoadFactor = input.LoadFactor
 	}
-	if err := s.accountRepo.Create(ctx, account); err != nil {
-		return nil, err
+	var createErr error
+	if auditRepo, ok := s.accountRepo.(AccountUpstreamMultiplierAuditRepository); ok && account.UpstreamCostMultiplier != nil {
+		createErr = auditRepo.CreateWithUpstreamMultiplierAudit(ctx, account, input.OperatorID, "创建账号时设置上游成本倍率")
+	} else {
+		createErr = s.accountRepo.Create(ctx, account)
+	}
+	if createErr != nil {
+		return nil, createErr
 	}
 
 	// 绑定分组
@@ -2691,6 +2717,28 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		return nil, err
 	}
 	wasOveragesEnabled := account.IsOveragesEnabled()
+	var originalUpstreamMultiplier *decimal.Decimal
+	if account.UpstreamCostMultiplier != nil {
+		value := *account.UpstreamCostMultiplier
+		originalUpstreamMultiplier = &value
+	}
+	var pendingUpstreamMultiplier *decimal.Decimal
+	var pendingUpstreamMultiplierAt time.Time
+	if input.UpstreamCostMultiplier != nil {
+		if err := ValidateUpstreamCostMultiplier(*input.UpstreamCostMultiplier); err != nil {
+			return nil, err
+		}
+		changed := account.UpstreamCostMultiplier == nil || !account.UpstreamCostMultiplier.Equal(*input.UpstreamCostMultiplier)
+		if changed {
+			reason := strings.TrimSpace(input.UpstreamCostMultiplierChangeReason)
+			if len([]rune(reason)) < 5 || len([]rune(reason)) > 500 {
+				return nil, errors.New("upstream_cost_multiplier_change_reason must be 5 to 500 characters when multiplier changes")
+			}
+			value := *input.UpstreamCostMultiplier
+			pendingUpstreamMultiplier = &value
+			pendingUpstreamMultiplierAt = time.Now()
+		}
+	}
 
 	if input.Name != "" {
 		account.Name = input.Name
@@ -2800,7 +2848,27 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 	}
 
-	if err := s.accountRepo.Update(ctx, account); err != nil {
+	if pendingUpstreamMultiplier != nil {
+		account.UpstreamCostMultiplier = pendingUpstreamMultiplier
+		account.UpstreamCostMultiplierUpdatedAt = &pendingUpstreamMultiplierAt
+		if auditRepo, ok := s.accountRepo.(AccountUpstreamMultiplierAuditRepository); ok {
+			if err := auditRepo.UpdateAccountWithUpstreamMultiplierAudit(
+				ctx,
+				account,
+				originalUpstreamMultiplier,
+				*pendingUpstreamMultiplier,
+				pendingUpstreamMultiplierAt,
+				input.OperatorID,
+				strings.TrimSpace(input.UpstreamCostMultiplierChangeReason),
+			); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := s.accountRepo.Update(ctx, account); err != nil {
+				return nil, err
+			}
+		}
+	} else if err := s.accountRepo.Update(ctx, account); err != nil {
 		return nil, err
 	}
 
@@ -2817,6 +2885,17 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		return nil, err
 	}
 	return updated, nil
+}
+
+func (s *adminServiceImpl) ListAccountUpstreamMultiplierChanges(ctx context.Context, accountID int64, params pagination.PaginationParams) ([]AccountUpstreamMultiplierChange, *pagination.PaginationResult, error) {
+	if _, err := s.accountRepo.GetByID(ctx, accountID); err != nil {
+		return nil, nil, err
+	}
+	repo, ok := s.accountRepo.(AccountUpstreamMultiplierAuditRepository)
+	if !ok {
+		return nil, nil, errors.New("account upstream multiplier history repository is unavailable")
+	}
+	return repo.ListUpstreamMultiplierChanges(ctx, accountID, params)
 }
 
 // BulkUpdateAccounts updates multiple accounts in one request.
@@ -2838,6 +2917,9 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 
 	if len(input.AccountIDs) == 0 {
 		return result, nil
+	}
+	if input.UpstreamCostMultiplier != nil {
+		return s.bulkUpdateUpstreamCostMultiplier(ctx, input, result), nil
 	}
 	if input.GroupIDs != nil {
 		if err := s.validateGroupIDsExist(ctx, *input.GroupIDs); err != nil {
@@ -2929,6 +3011,7 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 		if input.GroupIDs != nil {
 			if err := s.accountRepo.BindGroups(ctx, accountID, *input.GroupIDs); err != nil {
 				entry.Success = false
+				entry.Status = "failed"
 				entry.Error = err.Error()
 				result.Failed++
 				result.FailedIDs = append(result.FailedIDs, accountID)
@@ -2938,12 +3021,58 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 		}
 
 		entry.Success = true
+		entry.Status = "success"
 		result.Success++
 		result.SuccessIDs = append(result.SuccessIDs, accountID)
 		result.Results = append(result.Results, entry)
 	}
 
 	return result, nil
+}
+
+func (s *adminServiceImpl) bulkUpdateUpstreamCostMultiplier(
+	ctx context.Context,
+	input *BulkUpdateAccountsInput,
+	result *BulkUpdateAccountsResult,
+) *BulkUpdateAccountsResult {
+	for _, accountID := range input.AccountIDs {
+		entry := BulkUpdateAccountResult{AccountID: accountID}
+		account, err := s.accountRepo.GetByID(ctx, accountID)
+		if err != nil {
+			entry.Status = "failed"
+			entry.Error = err.Error()
+			result.Failed++
+			result.FailedIDs = append(result.FailedIDs, accountID)
+			result.Results = append(result.Results, entry)
+			continue
+		}
+		if account.UpstreamCostMultiplier != nil && account.UpstreamCostMultiplier.Equal(*input.UpstreamCostMultiplier) {
+			entry.Success = true
+			entry.Status = "unchanged"
+			result.Unchanged++
+			result.SuccessIDs = append(result.SuccessIDs, accountID)
+			result.Results = append(result.Results, entry)
+			continue
+		}
+		_, err = s.UpdateAccount(ctx, accountID, &UpdateAccountInput{
+			UpstreamCostMultiplier:             CloneDecimalSnapshot(input.UpstreamCostMultiplier),
+			UpstreamCostMultiplierChangeReason: input.UpstreamCostMultiplierChangeReason,
+			OperatorID:                         input.OperatorID,
+		})
+		if err != nil {
+			entry.Status = "failed"
+			entry.Error = err.Error()
+			result.Failed++
+			result.FailedIDs = append(result.FailedIDs, accountID)
+		} else {
+			entry.Success = true
+			entry.Status = "success"
+			result.Success++
+			result.SuccessIDs = append(result.SuccessIDs, accountID)
+		}
+		result.Results = append(result.Results, entry)
+	}
+	return result
 }
 
 func (s *adminServiceImpl) resolveBulkUpdateTargetIDs(ctx context.Context, filters *BulkUpdateAccountFilters) ([]int64, error) {

@@ -104,6 +104,63 @@ func RegisterAdminRoutes(
 
 		// 上游维护与财务统计
 		registerUpstreamRoutes(admin, h)
+		registerFinanceRoutes(admin, h)
+		registerUpstreamFinanceProtocolRoutes(admin, h)
+	}
+}
+
+func registerUpstreamFinanceProtocolRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	protocols := admin.Group("/upstream-finance-protocols")
+	{
+		protocols.GET("", h.Admin.UpstreamFinanceProtocol.List)
+		protocols.POST("", h.Admin.UpstreamFinanceProtocol.Create)
+		protocols.GET("/:id", h.Admin.UpstreamFinanceProtocol.Get)
+		protocols.PUT("/:id/draft", h.Admin.UpstreamFinanceProtocol.UpdateDraft)
+		protocols.POST("/:id/test", h.Admin.UpstreamFinanceProtocol.Test)
+		protocols.POST("/:id/publish", h.Admin.UpstreamFinanceProtocol.Publish)
+		protocols.POST("/:id/disable", h.Admin.UpstreamFinanceProtocol.Disable)
+		protocols.POST("/:id/copy", h.Admin.UpstreamFinanceProtocol.Copy)
+		protocols.DELETE("/:id/draft", h.Admin.UpstreamFinanceProtocol.DeleteDraft)
+		protocols.GET("/:id/versions", h.Admin.UpstreamFinanceProtocol.Versions)
+		protocols.POST("/accounts/:account_id/detect", h.Admin.UpstreamFinanceProtocol.DetectAccount)
+	}
+}
+
+func registerFinanceRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	finance := admin.Group("/finance")
+	{
+		finance.GET("/overview", h.Admin.Finance.Overview)
+		finance.GET("/trend", h.Admin.Finance.Trend)
+		finance.GET("/breakdown", h.Admin.Finance.Breakdown)
+		finance.GET("/details", h.Admin.Finance.Details)
+		finance.GET("/details/:id", h.Admin.Finance.DetailByUsageID)
+		finance.GET("/losses", h.Admin.Finance.Losses)
+		finance.GET("/funds", h.Admin.Finance.Funds)
+		finance.GET("/data-quality", h.Admin.Finance.DataQuality)
+		finance.GET("/promotion-credit-reconciliations", h.Admin.Finance.PromotionCreditReconciliations)
+		finance.POST("/promotion-credit-reconciliations/:user_id/resolve", h.Admin.Finance.ResolvePromotionCreditReconciliation)
+		finance.GET("/cash-flow", h.Admin.Finance.CashFlow)
+		finance.GET("/alerts", h.Admin.Finance.Alerts)
+		finance.PUT("/alerts/:id", h.Admin.Finance.UpdateAlert)
+		finance.POST("/payment-fees/import", h.Admin.Finance.ImportPaymentFees)
+		finance.GET("/payment-fees", h.Admin.Finance.PaymentFees)
+		finance.GET("/fx-rates", h.Admin.Finance.FXRates)
+		finance.POST("/fx-rates", h.Admin.Finance.CreateFXRate)
+		finance.GET("/reconciliations", h.Admin.Finance.Reconciliations)
+		finance.POST("/reconciliations/import", h.Admin.Finance.ImportReconciliation)
+		finance.PUT("/reconciliations/:id", h.Admin.Finance.UpdateReconciliation)
+		finance.GET("/settlements", h.Admin.Finance.Settlements)
+		finance.GET("/settlements/:id", h.Admin.Finance.SettlementDetail)
+		finance.POST("/settlements/:id/retry", h.Admin.Finance.RetrySettlement)
+		finance.POST("/settlements/:id/reallocate", h.Admin.Finance.ReallocateSettlement)
+		finance.POST("/backfill/preview", h.Admin.Finance.BackfillPreview)
+		finance.POST("/backfill/run", h.Admin.Finance.BackfillRun)
+		finance.GET("/backfill/:job_id", h.Admin.Finance.BackfillGet)
+		finance.POST("/backfill/:job_id/pause", h.Admin.Finance.BackfillPause)
+		finance.POST("/backfill/:job_id/resume", h.Admin.Finance.BackfillResume)
+		finance.POST("/exports", h.Admin.Finance.ExportCreate)
+		finance.GET("/exports/:job_id", h.Admin.Finance.ExportGet)
+		finance.GET("/exports/:job_id/download", h.Admin.Finance.ExportDownload)
 	}
 }
 
@@ -262,6 +319,25 @@ func registerUpstreamRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		upstreams.DELETE("/:id", h.Admin.Upstream.Delete)
 		upstreams.POST("/sync-from-accounts", h.Admin.Upstream.SyncFromAccounts)
 		upstreams.GET("/stats", h.Admin.Upstream.Stats)
+		upstreams.GET("/:upstream_id/wallets", h.Admin.UpstreamWallet.List)
+		upstreams.POST("/:upstream_id/wallets", h.Admin.UpstreamWallet.Create)
+	}
+	wallets := admin.Group("/upstream-wallets")
+	{
+		wallets.PUT("/:id", h.Admin.UpstreamWallet.Update)
+		wallets.DELETE("/:id", h.Admin.UpstreamWallet.Delete)
+		wallets.POST("/:id/accounts", h.Admin.UpstreamWallet.AssignAccounts)
+		wallets.POST("/:id/probe", h.Admin.UpstreamWallet.Probe)
+		wallets.POST("/:id/sync-pricing", h.Admin.UpstreamWallet.SyncPricing)
+		wallets.POST("/:id/sync-balance", h.Admin.UpstreamWallet.SyncBalance)
+		wallets.POST("/:id/sync-quota", h.Admin.UpstreamWallet.SyncQuota)
+		wallets.POST("/:id/sync-funding", h.Admin.UpstreamWallet.SyncFunding)
+		wallets.POST("/:id/sync-account-usage", h.Admin.UpstreamWallet.SyncAccountUsage)
+		wallets.GET("/:id/prices", h.Admin.UpstreamWallet.ListPrices)
+		wallets.POST("/:id/prices/import", h.Admin.UpstreamWallet.ImportPrices)
+		wallets.GET("/:id/sync-history", h.Admin.UpstreamWallet.SyncHistory)
+		wallets.GET("/:id/fund-events", h.Admin.UpstreamWallet.ListFundEvents)
+		wallets.POST("/:id/fund-events", h.Admin.UpstreamWallet.CreateFundEvent)
 	}
 	admin.GET("/finance/stats", h.Admin.Upstream.FinanceStats)
 }
@@ -351,6 +427,10 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		accounts.POST("/sync/crs", h.Admin.Account.SyncFromCRS)
 		accounts.POST("/sync/crs/preview", h.Admin.Account.PreviewFromCRS)
 		accounts.PUT("/:id", h.Admin.Account.Update)
+		accounts.GET("/:id/upstream-multiplier-changes", h.Admin.Account.ListUpstreamMultiplierChanges)
+		accounts.GET("/:id/finance/profile", h.Admin.Finance.AccountProfile)
+		accounts.PUT("/:id/finance/profile", h.Admin.Finance.UpdateAccountProfile)
+		accounts.GET("/:id/finance/readiness", h.Admin.Finance.AccountReadiness)
 		accounts.DELETE("/:id", h.Admin.Account.Delete)
 		accounts.POST("/:id/test", h.Admin.Account.Test)
 		accounts.POST("/:id/recover-state", h.Admin.Account.RecoverState)
@@ -626,6 +706,7 @@ func registerUsageRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		usage.GET("/cleanup-tasks", h.Admin.Usage.ListCleanupTasks)
 		usage.POST("/cleanup-tasks", h.Admin.Usage.CreateCleanupTask)
 		usage.POST("/cleanup-tasks/:id/cancel", h.Admin.Usage.CancelCleanupTask)
+		usage.GET("/:id/finance", h.Admin.Finance.GetUsageFinance)
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+	"github.com/shopspring/decimal"
 )
 
 // Account 定义 AI API 账户实体的 schema。
@@ -109,6 +110,21 @@ func (Account) Fields() []ent.Field {
 		field.Float("rate_multiplier").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
 			Default(1.0),
+
+		// upstream_cost_multiplier: 精确上游价格缺失时使用的采购成本回退倍率。
+		// NULL 表示历史账号尚未配置；新账号由账号服务显式写入 1.0000。
+		field.Float("upstream_cost_multiplier").
+			GoType(decimal.Decimal{}).
+			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
+			Optional().
+			Nillable(),
+		field.Time("upstream_cost_multiplier_updated_at").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
+		field.Int64("upstream_cost_multiplier_change_id").Optional().Nillable(),
+		field.String("upstream_cost_multiplier_source").MaxLen(30).Default("account_config"),
+		field.Int64("current_finance_profile_id").Optional().Nillable(),
 
 		// status: 账户状态，如 "active", "error", "disabled"
 		field.String("status").

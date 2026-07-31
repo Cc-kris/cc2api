@@ -15,6 +15,7 @@ import (
 
 type settingUpdateRepoStub struct {
 	updates map[string]string
+	values  map[string]string
 }
 
 func (s *settingUpdateRepoStub) Get(ctx context.Context, key string) (*Setting, error) {
@@ -22,7 +23,13 @@ func (s *settingUpdateRepoStub) Get(ctx context.Context, key string) (*Setting, 
 }
 
 func (s *settingUpdateRepoStub) GetValue(ctx context.Context, key string) (string, error) {
-	panic("unexpected GetValue call")
+	if value, ok := s.values[key]; ok {
+		return value, nil
+	}
+	if key == SettingKeySalesPricingVersion {
+		return string(SalesPricingVersionLegacy), nil
+	}
+	return "", ErrSettingNotFound
 }
 
 func (s *settingUpdateRepoStub) Set(ctx context.Context, key, value string) error {
@@ -37,8 +44,53 @@ func (s *settingUpdateRepoStub) SetMultiple(ctx context.Context, settings map[st
 	s.updates = make(map[string]string, len(settings))
 	for k, v := range settings {
 		s.updates[k] = v
+		if s.values == nil {
+			s.values = make(map[string]string)
+		}
+		s.values[k] = v
 	}
 	return nil
+}
+
+func TestSettingServiceSalesPricingVersion_DefaultAndTransitions(t *testing.T) {
+	repo := &settingUpdateRepoStub{}
+	svc := NewSettingService(repo, &config.Config{})
+	require.Equal(t, SalesPricingVersionLegacy, svc.GetSalesPricingVersion(context.Background()))
+
+	err := svc.UpdateSettings(context.Background(), &SystemSettings{
+		SalesPricingVersion:      SalesPricingVersionShadow,
+		SalesPricingChangeReason: "start shadow comparison",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "shadow", repo.updates[SettingKeySalesPricingVersion])
+	require.NotEmpty(t, repo.updates[SettingKeySalesPricingShadowStartedAt])
+
+	err = svc.UpdateSettings(context.Background(), &SystemSettings{
+		SalesPricingVersion:         SalesPricingVersionV2,
+		SalesPricingChangeReason:    "enable unified pricing",
+		SalesPricingShadowStartedAt: parseOptionalSettingTime(repo.values[SettingKeySalesPricingShadowStartedAt]),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "v2", repo.updates[SettingKeySalesPricingVersion])
+	require.NotEmpty(t, repo.updates[SettingKeySalesPricingV2EnabledAt])
+}
+
+func TestSettingServiceSalesPricingVersion_RejectsSkipAndMissingReason(t *testing.T) {
+	repo := &settingUpdateRepoStub{}
+	svc := NewSettingService(repo, &config.Config{})
+
+	err := svc.UpdateSettings(context.Background(), &SystemSettings{
+		SalesPricingVersion:      SalesPricingVersionV2,
+		SalesPricingChangeReason: "skip",
+	})
+	require.Error(t, err)
+	require.Equal(t, "INVALID_SALES_PRICING_TRANSITION", infraerrors.Reason(err))
+
+	err = svc.UpdateSettings(context.Background(), &SystemSettings{
+		SalesPricingVersion: SalesPricingVersionShadow,
+	})
+	require.Error(t, err)
+	require.Equal(t, "INVALID_SALES_PRICING_CHANGE_REASON", infraerrors.Reason(err))
 }
 
 func (s *settingUpdateRepoStub) GetAll(ctx context.Context) (map[string]string, error) {

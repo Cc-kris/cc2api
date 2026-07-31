@@ -449,6 +449,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			if err != nil {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
+					appendBillableUsageAttemptFromFailover(c, account, reqModel, failoverErr)
 					// 流式内容已写入客户端，无法撤销，禁止 failover 以防止流拼接腐化
 					if c.Writer.Size() != writerSizeBeforeForward {
 						h.handleFailoverExhausted(c, failoverErr, service.PlatformGemini, true)
@@ -509,23 +510,26 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 
 			// 使用量记录通过有界 worker 池提交，避免请求热路径创建无界 goroutine。
 			quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
+			upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
 			h.submitUsageRecordTask(func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
-					Result:             result,
-					ParsedRequest:      parsedReq,
-					QuotaPlatform:      quotaPlatform,
-					APIKey:             apiKey,
-					User:               apiKey.User,
-					Account:            account,
-					Subscription:       subscription,
-					InboundEndpoint:    inboundEndpoint,
-					UpstreamEndpoint:   upstreamEndpoint,
-					UserAgent:          userAgent,
-					IPAddress:          clientIP,
-					RequestPayloadHash: requestPayloadHash,
-					ForceCacheBilling:  fs.ForceCacheBilling,
-					APIKeyService:      h.apiKeyService,
-					ChannelUsageFields: channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+					Result:                 result,
+					ParsedRequest:          parsedReq,
+					QuotaPlatform:          quotaPlatform,
+					APIKey:                 apiKey,
+					User:                   apiKey.User,
+					Account:                account,
+					UpstreamCostMultiplier: service.CloneDecimalSnapshot(account.UpstreamCostMultiplier),
+					Subscription:           subscription,
+					InboundEndpoint:        inboundEndpoint,
+					UpstreamEndpoint:       upstreamEndpoint,
+					UserAgent:              userAgent,
+					IPAddress:              clientIP,
+					RequestPayloadHash:     requestPayloadHash,
+					ForceCacheBilling:      fs.ForceCacheBilling,
+					APIKeyService:          h.apiKeyService,
+					ChannelUsageFields:     channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+					UpstreamAttempts:       service.CloneUsageUpstreamAttempts(upstreamAttempts),
 				}); err != nil {
 					logger.L().With(
 						zap.String("component", "handler.gateway.messages"),
@@ -832,6 +836,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				}
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
+					appendBillableUsageAttemptFromFailover(c, account, reqModel, failoverErr)
 					// 流式内容已写入客户端，无法撤销，禁止 failover 以防止流拼接腐化
 					if c.Writer.Size() != writerSizeBeforeForward {
 						h.handleFailoverExhausted(c, failoverErr, account.Platform, true)
@@ -903,23 +908,26 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 
 			// 使用量记录通过有界 worker 池提交，避免请求热路径创建无界 goroutine。
 			quotaPlatform := service.QuotaPlatform(c.Request.Context(), currentAPIKey)
+			upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
 			h.submitUsageRecordTask(func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
-					Result:             result,
-					ParsedRequest:      parsedReq,
-					QuotaPlatform:      quotaPlatform,
-					APIKey:             currentAPIKey,
-					User:               currentAPIKey.User,
-					Account:            account,
-					Subscription:       currentSubscription,
-					InboundEndpoint:    inboundEndpoint,
-					UpstreamEndpoint:   upstreamEndpoint,
-					UserAgent:          userAgent,
-					IPAddress:          clientIP,
-					RequestPayloadHash: requestPayloadHash,
-					ForceCacheBilling:  fs.ForceCacheBilling,
-					APIKeyService:      h.apiKeyService,
-					ChannelUsageFields: channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+					Result:                 result,
+					ParsedRequest:          parsedReq,
+					QuotaPlatform:          quotaPlatform,
+					APIKey:                 currentAPIKey,
+					User:                   currentAPIKey.User,
+					Account:                account,
+					UpstreamCostMultiplier: service.CloneDecimalSnapshot(account.UpstreamCostMultiplier),
+					Subscription:           currentSubscription,
+					InboundEndpoint:        inboundEndpoint,
+					UpstreamEndpoint:       upstreamEndpoint,
+					UserAgent:              userAgent,
+					IPAddress:              clientIP,
+					RequestPayloadHash:     requestPayloadHash,
+					ForceCacheBilling:      fs.ForceCacheBilling,
+					APIKeyService:          h.apiKeyService,
+					ChannelUsageFields:     channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+					UpstreamAttempts:       service.CloneUsageUpstreamAttempts(upstreamAttempts),
 				}); err != nil {
 					logger.L().With(
 						zap.String("component", "handler.gateway.messages"),

@@ -330,6 +330,7 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		if err != nil {
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
+				appendBillableUsageAttemptFromFailover(c, account, requestModel, failoverErr)
 				if failoverClientGone(c) {
 					reqLog.Info("grok_media.failover_aborted_client_disconnected",
 						zap.Int64("account_id", account.ID),
@@ -494,20 +495,23 @@ func recordGrokMediaUsage(
 		OriginalModel:      requestModel,
 		ChannelMappedModel: requestModel,
 	}
+	upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
 	recordTask := func(ctx context.Context) {
 		if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
-			Result:             result,
-			APIKey:             apiKey,
-			User:               apiKey.User,
-			Account:            account,
-			Subscription:       subscription,
-			InboundEndpoint:    inboundEndpoint,
-			UpstreamEndpoint:   upstreamEndpoint,
-			UserAgent:          userAgent,
-			IPAddress:          clientIP,
-			RequestPayloadHash: service.HashUsageRequestPayload(payloadForHash),
-			APIKeyService:      h.apiKeyService,
-			ChannelUsageFields: channelUsageFields,
+			Result:                 result,
+			APIKey:                 apiKey,
+			User:                   apiKey.User,
+			Account:                account,
+			UpstreamCostMultiplier: service.CloneDecimalSnapshot(account.UpstreamCostMultiplier),
+			Subscription:           subscription,
+			InboundEndpoint:        inboundEndpoint,
+			UpstreamEndpoint:       upstreamEndpoint,
+			UserAgent:              userAgent,
+			IPAddress:              clientIP,
+			RequestPayloadHash:     service.HashUsageRequestPayload(payloadForHash),
+			APIKeyService:          h.apiKeyService,
+			ChannelUsageFields:     channelUsageFields,
+			UpstreamAttempts:       service.CloneUsageUpstreamAttempts(upstreamAttempts),
 		}); err != nil {
 			logger.L().With(
 				zap.String("component", "handler.openai_gateway.grok_media"),

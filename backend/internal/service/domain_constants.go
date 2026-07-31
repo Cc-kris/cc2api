@@ -372,6 +372,17 @@ const (
 	// sidebar entry is hidden. Defaults to false (opt-in feature).
 	SettingKeyAvailableChannelsEnabled = "available_channels_enabled"
 
+	// SettingKeyModelSquareEnabled controls the customer-facing model square.
+	// It is intentionally separate from the legacy available-channels aggregate
+	// view so the two features can be enabled and rolled back independently.
+	SettingKeyModelSquareEnabled = "model_square_enabled"
+
+	// Sales pricing rollout state. The version controls whether customer
+	// billing uses legacy, shadow comparison, or the unified v2 pricing model.
+	SettingKeySalesPricingVersion         = "sales_pricing_version"
+	SettingKeySalesPricingShadowStartedAt = "sales_pricing_shadow_started_at"
+	SettingKeySalesPricingV2EnabledAt     = "sales_pricing_v2_enabled_at"
+
 	// =========================
 	// Overload Cooldown (529)
 	// =========================

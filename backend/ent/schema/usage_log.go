@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+	"github.com/shopspring/decimal"
 )
 
 // UsageLog 定义使用日志实体的 schema。
@@ -106,6 +107,58 @@ func (UsageLog) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}),
+		// upstream_cost_multiplier: 请求选中账号时的不可变采购倍率快照。
+		field.Float("upstream_cost_multiplier").
+			GoType(decimal.Decimal{}).
+			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
+			Optional().
+			Nillable(),
+		field.Int64("upstream_multiplier_change_id").Optional().Nillable(),
+		field.String("upstream_multiplier_source").MaxLen(30).Optional().Nillable(),
+		field.Time("upstream_multiplier_effective_at").Optional().Nillable().SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
+		field.Int64("account_finance_profile_id").Optional().Nillable(),
+		// sales_model: 客户请求的销售模型，独立于上游映射结果。
+		field.String("sales_model").
+			MaxLen(100).
+			Optional().
+			Nillable(),
+		// sales_pricing_effective_model: 本次客户扣费实际使用的价格模型。
+		field.String("sales_pricing_effective_model").
+			MaxLen(100).
+			Optional().
+			Nillable(),
+		field.String("sales_pricing_legacy_source").
+			MaxLen(20).
+			Optional().
+			Nillable(),
+		field.String("sales_pricing_version").
+			MaxLen(10).
+			Optional().
+			Nillable(),
+		field.String("sales_pricing_source").
+			MaxLen(30).
+			Optional().
+			Nillable(),
+		field.String("sales_pricing_checksum").
+			MaxLen(128).
+			Optional().
+			Nillable(),
+		field.JSON("sales_pricing_snapshot", map[string]any{}).
+			Optional().
+			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
+		field.JSON("sales_pricing_shadow_snapshot", map[string]any{}).
+			Optional().
+			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
+		field.Float("sales_pricing_shadow_delta").
+			GoType(decimal.Decimal{}).
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}).
+			Optional().
+			Nillable(),
+		field.Float("usage_list_value").
+			GoType(decimal.Decimal{}).
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}).
+			Optional().
+			Nillable(),
 
 		// 其他字段
 		field.Int8("billing_type").

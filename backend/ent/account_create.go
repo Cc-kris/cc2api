@@ -15,6 +15,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
+	"github.com/shopspring/decimal"
 )
 
 // AccountCreate is the builder for creating a Account entity.
@@ -177,6 +178,76 @@ func (_c *AccountCreate) SetRateMultiplier(v float64) *AccountCreate {
 func (_c *AccountCreate) SetNillableRateMultiplier(v *float64) *AccountCreate {
 	if v != nil {
 		_c.SetRateMultiplier(*v)
+	}
+	return _c
+}
+
+// SetUpstreamCostMultiplier sets the "upstream_cost_multiplier" field.
+func (_c *AccountCreate) SetUpstreamCostMultiplier(v decimal.Decimal) *AccountCreate {
+	_c.mutation.SetUpstreamCostMultiplier(v)
+	return _c
+}
+
+// SetNillableUpstreamCostMultiplier sets the "upstream_cost_multiplier" field if the given value is not nil.
+func (_c *AccountCreate) SetNillableUpstreamCostMultiplier(v *decimal.Decimal) *AccountCreate {
+	if v != nil {
+		_c.SetUpstreamCostMultiplier(*v)
+	}
+	return _c
+}
+
+// SetUpstreamCostMultiplierUpdatedAt sets the "upstream_cost_multiplier_updated_at" field.
+func (_c *AccountCreate) SetUpstreamCostMultiplierUpdatedAt(v time.Time) *AccountCreate {
+	_c.mutation.SetUpstreamCostMultiplierUpdatedAt(v)
+	return _c
+}
+
+// SetNillableUpstreamCostMultiplierUpdatedAt sets the "upstream_cost_multiplier_updated_at" field if the given value is not nil.
+func (_c *AccountCreate) SetNillableUpstreamCostMultiplierUpdatedAt(v *time.Time) *AccountCreate {
+	if v != nil {
+		_c.SetUpstreamCostMultiplierUpdatedAt(*v)
+	}
+	return _c
+}
+
+// SetUpstreamCostMultiplierChangeID sets the "upstream_cost_multiplier_change_id" field.
+func (_c *AccountCreate) SetUpstreamCostMultiplierChangeID(v int64) *AccountCreate {
+	_c.mutation.SetUpstreamCostMultiplierChangeID(v)
+	return _c
+}
+
+// SetNillableUpstreamCostMultiplierChangeID sets the "upstream_cost_multiplier_change_id" field if the given value is not nil.
+func (_c *AccountCreate) SetNillableUpstreamCostMultiplierChangeID(v *int64) *AccountCreate {
+	if v != nil {
+		_c.SetUpstreamCostMultiplierChangeID(*v)
+	}
+	return _c
+}
+
+// SetUpstreamCostMultiplierSource sets the "upstream_cost_multiplier_source" field.
+func (_c *AccountCreate) SetUpstreamCostMultiplierSource(v string) *AccountCreate {
+	_c.mutation.SetUpstreamCostMultiplierSource(v)
+	return _c
+}
+
+// SetNillableUpstreamCostMultiplierSource sets the "upstream_cost_multiplier_source" field if the given value is not nil.
+func (_c *AccountCreate) SetNillableUpstreamCostMultiplierSource(v *string) *AccountCreate {
+	if v != nil {
+		_c.SetUpstreamCostMultiplierSource(*v)
+	}
+	return _c
+}
+
+// SetCurrentFinanceProfileID sets the "current_finance_profile_id" field.
+func (_c *AccountCreate) SetCurrentFinanceProfileID(v int64) *AccountCreate {
+	_c.mutation.SetCurrentFinanceProfileID(v)
+	return _c
+}
+
+// SetNillableCurrentFinanceProfileID sets the "current_finance_profile_id" field if the given value is not nil.
+func (_c *AccountCreate) SetNillableCurrentFinanceProfileID(v *int64) *AccountCreate {
+	if v != nil {
+		_c.SetCurrentFinanceProfileID(*v)
 	}
 	return _c
 }
@@ -489,6 +560,10 @@ func (_c *AccountCreate) defaults() error {
 		v := account.DefaultRateMultiplier
 		_c.mutation.SetRateMultiplier(v)
 	}
+	if _, ok := _c.mutation.UpstreamCostMultiplierSource(); !ok {
+		v := account.DefaultUpstreamCostMultiplierSource
+		_c.mutation.SetUpstreamCostMultiplierSource(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := account.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -550,6 +625,14 @@ func (_c *AccountCreate) check() error {
 	}
 	if _, ok := _c.mutation.RateMultiplier(); !ok {
 		return &ValidationError{Name: "rate_multiplier", err: errors.New(`ent: missing required field "Account.rate_multiplier"`)}
+	}
+	if _, ok := _c.mutation.UpstreamCostMultiplierSource(); !ok {
+		return &ValidationError{Name: "upstream_cost_multiplier_source", err: errors.New(`ent: missing required field "Account.upstream_cost_multiplier_source"`)}
+	}
+	if v, ok := _c.mutation.UpstreamCostMultiplierSource(); ok {
+		if err := account.UpstreamCostMultiplierSourceValidator(v); err != nil {
+			return &ValidationError{Name: "upstream_cost_multiplier_source", err: fmt.Errorf(`ent: validator failed for field "Account.upstream_cost_multiplier_source": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "Account.status"`)}
@@ -648,6 +731,26 @@ func (_c *AccountCreate) createSpec() (*Account, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RateMultiplier(); ok {
 		_spec.SetField(account.FieldRateMultiplier, field.TypeFloat64, value)
 		_node.RateMultiplier = value
+	}
+	if value, ok := _c.mutation.UpstreamCostMultiplier(); ok {
+		_spec.SetField(account.FieldUpstreamCostMultiplier, field.TypeFloat64, value)
+		_node.UpstreamCostMultiplier = &value
+	}
+	if value, ok := _c.mutation.UpstreamCostMultiplierUpdatedAt(); ok {
+		_spec.SetField(account.FieldUpstreamCostMultiplierUpdatedAt, field.TypeTime, value)
+		_node.UpstreamCostMultiplierUpdatedAt = &value
+	}
+	if value, ok := _c.mutation.UpstreamCostMultiplierChangeID(); ok {
+		_spec.SetField(account.FieldUpstreamCostMultiplierChangeID, field.TypeInt64, value)
+		_node.UpstreamCostMultiplierChangeID = &value
+	}
+	if value, ok := _c.mutation.UpstreamCostMultiplierSource(); ok {
+		_spec.SetField(account.FieldUpstreamCostMultiplierSource, field.TypeString, value)
+		_node.UpstreamCostMultiplierSource = value
+	}
+	if value, ok := _c.mutation.CurrentFinanceProfileID(); ok {
+		_spec.SetField(account.FieldCurrentFinanceProfileID, field.TypeInt64, value)
+		_node.CurrentFinanceProfileID = &value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(account.FieldStatus, field.TypeString, value)
@@ -1011,6 +1114,108 @@ func (u *AccountUpsert) UpdateRateMultiplier() *AccountUpsert {
 // AddRateMultiplier adds v to the "rate_multiplier" field.
 func (u *AccountUpsert) AddRateMultiplier(v float64) *AccountUpsert {
 	u.Add(account.FieldRateMultiplier, v)
+	return u
+}
+
+// SetUpstreamCostMultiplier sets the "upstream_cost_multiplier" field.
+func (u *AccountUpsert) SetUpstreamCostMultiplier(v decimal.Decimal) *AccountUpsert {
+	u.Set(account.FieldUpstreamCostMultiplier, v)
+	return u
+}
+
+// UpdateUpstreamCostMultiplier sets the "upstream_cost_multiplier" field to the value that was provided on create.
+func (u *AccountUpsert) UpdateUpstreamCostMultiplier() *AccountUpsert {
+	u.SetExcluded(account.FieldUpstreamCostMultiplier)
+	return u
+}
+
+// AddUpstreamCostMultiplier adds v to the "upstream_cost_multiplier" field.
+func (u *AccountUpsert) AddUpstreamCostMultiplier(v decimal.Decimal) *AccountUpsert {
+	u.Add(account.FieldUpstreamCostMultiplier, v)
+	return u
+}
+
+// ClearUpstreamCostMultiplier clears the value of the "upstream_cost_multiplier" field.
+func (u *AccountUpsert) ClearUpstreamCostMultiplier() *AccountUpsert {
+	u.SetNull(account.FieldUpstreamCostMultiplier)
+	return u
+}
+
+// SetUpstreamCostMultiplierUpdatedAt sets the "upstream_cost_multiplier_updated_at" field.
+func (u *AccountUpsert) SetUpstreamCostMultiplierUpdatedAt(v time.Time) *AccountUpsert {
+	u.Set(account.FieldUpstreamCostMultiplierUpdatedAt, v)
+	return u
+}
+
+// UpdateUpstreamCostMultiplierUpdatedAt sets the "upstream_cost_multiplier_updated_at" field to the value that was provided on create.
+func (u *AccountUpsert) UpdateUpstreamCostMultiplierUpdatedAt() *AccountUpsert {
+	u.SetExcluded(account.FieldUpstreamCostMultiplierUpdatedAt)
+	return u
+}
+
+// ClearUpstreamCostMultiplierUpdatedAt clears the value of the "upstream_cost_multiplier_updated_at" field.
+func (u *AccountUpsert) ClearUpstreamCostMultiplierUpdatedAt() *AccountUpsert {
+	u.SetNull(account.FieldUpstreamCostMultiplierUpdatedAt)
+	return u
+}
+
+// SetUpstreamCostMultiplierChangeID sets the "upstream_cost_multiplier_change_id" field.
+func (u *AccountUpsert) SetUpstreamCostMultiplierChangeID(v int64) *AccountUpsert {
+	u.Set(account.FieldUpstreamCostMultiplierChangeID, v)
+	return u
+}
+
+// UpdateUpstreamCostMultiplierChangeID sets the "upstream_cost_multiplier_change_id" field to the value that was provided on create.
+func (u *AccountUpsert) UpdateUpstreamCostMultiplierChangeID() *AccountUpsert {
+	u.SetExcluded(account.FieldUpstreamCostMultiplierChangeID)
+	return u
+}
+
+// AddUpstreamCostMultiplierChangeID adds v to the "upstream_cost_multiplier_change_id" field.
+func (u *AccountUpsert) AddUpstreamCostMultiplierChangeID(v int64) *AccountUpsert {
+	u.Add(account.FieldUpstreamCostMultiplierChangeID, v)
+	return u
+}
+
+// ClearUpstreamCostMultiplierChangeID clears the value of the "upstream_cost_multiplier_change_id" field.
+func (u *AccountUpsert) ClearUpstreamCostMultiplierChangeID() *AccountUpsert {
+	u.SetNull(account.FieldUpstreamCostMultiplierChangeID)
+	return u
+}
+
+// SetUpstreamCostMultiplierSource sets the "upstream_cost_multiplier_source" field.
+func (u *AccountUpsert) SetUpstreamCostMultiplierSource(v string) *AccountUpsert {
+	u.Set(account.FieldUpstreamCostMultiplierSource, v)
+	return u
+}
+
+// UpdateUpstreamCostMultiplierSource sets the "upstream_cost_multiplier_source" field to the value that was provided on create.
+func (u *AccountUpsert) UpdateUpstreamCostMultiplierSource() *AccountUpsert {
+	u.SetExcluded(account.FieldUpstreamCostMultiplierSource)
+	return u
+}
+
+// SetCurrentFinanceProfileID sets the "current_finance_profile_id" field.
+func (u *AccountUpsert) SetCurrentFinanceProfileID(v int64) *AccountUpsert {
+	u.Set(account.FieldCurrentFinanceProfileID, v)
+	return u
+}
+
+// UpdateCurrentFinanceProfileID sets the "current_finance_profile_id" field to the value that was provided on create.
+func (u *AccountUpsert) UpdateCurrentFinanceProfileID() *AccountUpsert {
+	u.SetExcluded(account.FieldCurrentFinanceProfileID)
+	return u
+}
+
+// AddCurrentFinanceProfileID adds v to the "current_finance_profile_id" field.
+func (u *AccountUpsert) AddCurrentFinanceProfileID(v int64) *AccountUpsert {
+	u.Add(account.FieldCurrentFinanceProfileID, v)
+	return u
+}
+
+// ClearCurrentFinanceProfileID clears the value of the "current_finance_profile_id" field.
+func (u *AccountUpsert) ClearCurrentFinanceProfileID() *AccountUpsert {
+	u.SetNull(account.FieldCurrentFinanceProfileID)
 	return u
 }
 
@@ -1528,6 +1733,125 @@ func (u *AccountUpsertOne) AddRateMultiplier(v float64) *AccountUpsertOne {
 func (u *AccountUpsertOne) UpdateRateMultiplier() *AccountUpsertOne {
 	return u.Update(func(s *AccountUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetUpstreamCostMultiplier sets the "upstream_cost_multiplier" field.
+func (u *AccountUpsertOne) SetUpstreamCostMultiplier(v decimal.Decimal) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetUpstreamCostMultiplier(v)
+	})
+}
+
+// AddUpstreamCostMultiplier adds v to the "upstream_cost_multiplier" field.
+func (u *AccountUpsertOne) AddUpstreamCostMultiplier(v decimal.Decimal) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.AddUpstreamCostMultiplier(v)
+	})
+}
+
+// UpdateUpstreamCostMultiplier sets the "upstream_cost_multiplier" field to the value that was provided on create.
+func (u *AccountUpsertOne) UpdateUpstreamCostMultiplier() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateUpstreamCostMultiplier()
+	})
+}
+
+// ClearUpstreamCostMultiplier clears the value of the "upstream_cost_multiplier" field.
+func (u *AccountUpsertOne) ClearUpstreamCostMultiplier() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.ClearUpstreamCostMultiplier()
+	})
+}
+
+// SetUpstreamCostMultiplierUpdatedAt sets the "upstream_cost_multiplier_updated_at" field.
+func (u *AccountUpsertOne) SetUpstreamCostMultiplierUpdatedAt(v time.Time) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetUpstreamCostMultiplierUpdatedAt(v)
+	})
+}
+
+// UpdateUpstreamCostMultiplierUpdatedAt sets the "upstream_cost_multiplier_updated_at" field to the value that was provided on create.
+func (u *AccountUpsertOne) UpdateUpstreamCostMultiplierUpdatedAt() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateUpstreamCostMultiplierUpdatedAt()
+	})
+}
+
+// ClearUpstreamCostMultiplierUpdatedAt clears the value of the "upstream_cost_multiplier_updated_at" field.
+func (u *AccountUpsertOne) ClearUpstreamCostMultiplierUpdatedAt() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.ClearUpstreamCostMultiplierUpdatedAt()
+	})
+}
+
+// SetUpstreamCostMultiplierChangeID sets the "upstream_cost_multiplier_change_id" field.
+func (u *AccountUpsertOne) SetUpstreamCostMultiplierChangeID(v int64) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetUpstreamCostMultiplierChangeID(v)
+	})
+}
+
+// AddUpstreamCostMultiplierChangeID adds v to the "upstream_cost_multiplier_change_id" field.
+func (u *AccountUpsertOne) AddUpstreamCostMultiplierChangeID(v int64) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.AddUpstreamCostMultiplierChangeID(v)
+	})
+}
+
+// UpdateUpstreamCostMultiplierChangeID sets the "upstream_cost_multiplier_change_id" field to the value that was provided on create.
+func (u *AccountUpsertOne) UpdateUpstreamCostMultiplierChangeID() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateUpstreamCostMultiplierChangeID()
+	})
+}
+
+// ClearUpstreamCostMultiplierChangeID clears the value of the "upstream_cost_multiplier_change_id" field.
+func (u *AccountUpsertOne) ClearUpstreamCostMultiplierChangeID() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.ClearUpstreamCostMultiplierChangeID()
+	})
+}
+
+// SetUpstreamCostMultiplierSource sets the "upstream_cost_multiplier_source" field.
+func (u *AccountUpsertOne) SetUpstreamCostMultiplierSource(v string) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetUpstreamCostMultiplierSource(v)
+	})
+}
+
+// UpdateUpstreamCostMultiplierSource sets the "upstream_cost_multiplier_source" field to the value that was provided on create.
+func (u *AccountUpsertOne) UpdateUpstreamCostMultiplierSource() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateUpstreamCostMultiplierSource()
+	})
+}
+
+// SetCurrentFinanceProfileID sets the "current_finance_profile_id" field.
+func (u *AccountUpsertOne) SetCurrentFinanceProfileID(v int64) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetCurrentFinanceProfileID(v)
+	})
+}
+
+// AddCurrentFinanceProfileID adds v to the "current_finance_profile_id" field.
+func (u *AccountUpsertOne) AddCurrentFinanceProfileID(v int64) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.AddCurrentFinanceProfileID(v)
+	})
+}
+
+// UpdateCurrentFinanceProfileID sets the "current_finance_profile_id" field to the value that was provided on create.
+func (u *AccountUpsertOne) UpdateCurrentFinanceProfileID() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateCurrentFinanceProfileID()
+	})
+}
+
+// ClearCurrentFinanceProfileID clears the value of the "current_finance_profile_id" field.
+func (u *AccountUpsertOne) ClearCurrentFinanceProfileID() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.ClearCurrentFinanceProfileID()
 	})
 }
 
@@ -2250,6 +2574,125 @@ func (u *AccountUpsertBulk) AddRateMultiplier(v float64) *AccountUpsertBulk {
 func (u *AccountUpsertBulk) UpdateRateMultiplier() *AccountUpsertBulk {
 	return u.Update(func(s *AccountUpsert) {
 		s.UpdateRateMultiplier()
+	})
+}
+
+// SetUpstreamCostMultiplier sets the "upstream_cost_multiplier" field.
+func (u *AccountUpsertBulk) SetUpstreamCostMultiplier(v decimal.Decimal) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetUpstreamCostMultiplier(v)
+	})
+}
+
+// AddUpstreamCostMultiplier adds v to the "upstream_cost_multiplier" field.
+func (u *AccountUpsertBulk) AddUpstreamCostMultiplier(v decimal.Decimal) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.AddUpstreamCostMultiplier(v)
+	})
+}
+
+// UpdateUpstreamCostMultiplier sets the "upstream_cost_multiplier" field to the value that was provided on create.
+func (u *AccountUpsertBulk) UpdateUpstreamCostMultiplier() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateUpstreamCostMultiplier()
+	})
+}
+
+// ClearUpstreamCostMultiplier clears the value of the "upstream_cost_multiplier" field.
+func (u *AccountUpsertBulk) ClearUpstreamCostMultiplier() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.ClearUpstreamCostMultiplier()
+	})
+}
+
+// SetUpstreamCostMultiplierUpdatedAt sets the "upstream_cost_multiplier_updated_at" field.
+func (u *AccountUpsertBulk) SetUpstreamCostMultiplierUpdatedAt(v time.Time) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetUpstreamCostMultiplierUpdatedAt(v)
+	})
+}
+
+// UpdateUpstreamCostMultiplierUpdatedAt sets the "upstream_cost_multiplier_updated_at" field to the value that was provided on create.
+func (u *AccountUpsertBulk) UpdateUpstreamCostMultiplierUpdatedAt() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateUpstreamCostMultiplierUpdatedAt()
+	})
+}
+
+// ClearUpstreamCostMultiplierUpdatedAt clears the value of the "upstream_cost_multiplier_updated_at" field.
+func (u *AccountUpsertBulk) ClearUpstreamCostMultiplierUpdatedAt() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.ClearUpstreamCostMultiplierUpdatedAt()
+	})
+}
+
+// SetUpstreamCostMultiplierChangeID sets the "upstream_cost_multiplier_change_id" field.
+func (u *AccountUpsertBulk) SetUpstreamCostMultiplierChangeID(v int64) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetUpstreamCostMultiplierChangeID(v)
+	})
+}
+
+// AddUpstreamCostMultiplierChangeID adds v to the "upstream_cost_multiplier_change_id" field.
+func (u *AccountUpsertBulk) AddUpstreamCostMultiplierChangeID(v int64) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.AddUpstreamCostMultiplierChangeID(v)
+	})
+}
+
+// UpdateUpstreamCostMultiplierChangeID sets the "upstream_cost_multiplier_change_id" field to the value that was provided on create.
+func (u *AccountUpsertBulk) UpdateUpstreamCostMultiplierChangeID() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateUpstreamCostMultiplierChangeID()
+	})
+}
+
+// ClearUpstreamCostMultiplierChangeID clears the value of the "upstream_cost_multiplier_change_id" field.
+func (u *AccountUpsertBulk) ClearUpstreamCostMultiplierChangeID() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.ClearUpstreamCostMultiplierChangeID()
+	})
+}
+
+// SetUpstreamCostMultiplierSource sets the "upstream_cost_multiplier_source" field.
+func (u *AccountUpsertBulk) SetUpstreamCostMultiplierSource(v string) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetUpstreamCostMultiplierSource(v)
+	})
+}
+
+// UpdateUpstreamCostMultiplierSource sets the "upstream_cost_multiplier_source" field to the value that was provided on create.
+func (u *AccountUpsertBulk) UpdateUpstreamCostMultiplierSource() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateUpstreamCostMultiplierSource()
+	})
+}
+
+// SetCurrentFinanceProfileID sets the "current_finance_profile_id" field.
+func (u *AccountUpsertBulk) SetCurrentFinanceProfileID(v int64) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetCurrentFinanceProfileID(v)
+	})
+}
+
+// AddCurrentFinanceProfileID adds v to the "current_finance_profile_id" field.
+func (u *AccountUpsertBulk) AddCurrentFinanceProfileID(v int64) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.AddCurrentFinanceProfileID(v)
+	})
+}
+
+// UpdateCurrentFinanceProfileID sets the "current_finance_profile_id" field to the value that was provided on create.
+func (u *AccountUpsertBulk) UpdateCurrentFinanceProfileID() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateCurrentFinanceProfileID()
+	})
+}
+
+// ClearCurrentFinanceProfileID clears the value of the "current_finance_profile_id" field.
+func (u *AccountUpsertBulk) ClearCurrentFinanceProfileID() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.ClearCurrentFinanceProfileID()
 	})
 }
 

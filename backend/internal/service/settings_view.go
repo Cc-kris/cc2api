@@ -1,6 +1,9 @@
 package service
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
@@ -177,6 +180,13 @@ type SystemSettings struct {
 
 	// Available Channels feature (user-facing aggregate view)
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
+	ModelSquareEnabled       bool `json:"model_square_enabled"`
+
+	SalesPricingVersion         SalesPricingVersion `json:"sales_pricing_version"`
+	CurrentSalesPricingVersion  SalesPricingVersion `json:"-"`
+	SalesPricingShadowStartedAt *time.Time          `json:"sales_pricing_shadow_started_at"`
+	SalesPricingV2EnabledAt     *time.Time          `json:"sales_pricing_v2_enabled_at"`
+	SalesPricingChangeReason    string              `json:"-"`
 
 	// Claude Code version check
 	MinClaudeCodeVersion string
@@ -290,6 +300,7 @@ type PublicSettings struct {
 
 	// Available Channels feature (user-facing aggregate view)
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
+	ModelSquareEnabled       bool `json:"model_square_enabled"`
 
 	// Affiliate (邀请返利) feature toggle
 	AffiliateEnabled bool `json:"affiliate_enabled"`

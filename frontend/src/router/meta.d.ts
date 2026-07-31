@@ -55,6 +55,9 @@ declare module 'vue-router' {
      */
     requiresRiskControl?: boolean
 
+    /** Whether the customer model square feature switch must be enabled. */
+    requiresModelSquare?: boolean
+
     /**
      * i18n key for the page title
      */

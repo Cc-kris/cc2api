@@ -309,7 +309,11 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		ChannelMonitorPublicEnabled:          settings.ChannelMonitorPublicEnabled,
 		ChannelMonitorDefaultIntervalSeconds: settings.ChannelMonitorDefaultIntervalSeconds,
 
-		AvailableChannelsEnabled: settings.AvailableChannelsEnabled,
+		AvailableChannelsEnabled:    settings.AvailableChannelsEnabled,
+		ModelSquareEnabled:          settings.ModelSquareEnabled,
+		SalesPricingVersion:         settings.SalesPricingVersion,
+		SalesPricingShadowStartedAt: settings.SalesPricingShadowStartedAt,
+		SalesPricingV2EnabledAt:     settings.SalesPricingV2EnabledAt,
 
 		AffiliateEnabled: settings.AffiliateEnabled,
 	}
@@ -653,7 +657,10 @@ type UpdateSettingsRequest struct {
 	ChannelMonitorDefaultIntervalSeconds *int  `json:"channel_monitor_default_interval_seconds"`
 
 	// Available Channels feature switch (user-facing)
-	AvailableChannelsEnabled *bool `json:"available_channels_enabled"`
+	AvailableChannelsEnabled *bool                        `json:"available_channels_enabled"`
+	ModelSquareEnabled       *bool                        `json:"model_square_enabled"`
+	SalesPricingVersion      *service.SalesPricingVersion `json:"sales_pricing_version"`
+	SalesPricingChangeReason string                       `json:"sales_pricing_change_reason"`
 
 	// Affiliate (邀请返利) feature switch
 	AffiliateEnabled *bool `json:"affiliate_enabled"`
@@ -1781,6 +1788,22 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.AvailableChannelsEnabled
 		}(),
+		ModelSquareEnabled: func() bool {
+			if req.ModelSquareEnabled != nil {
+				return *req.ModelSquareEnabled
+			}
+			return previousSettings.ModelSquareEnabled
+		}(),
+		SalesPricingVersion: func() service.SalesPricingVersion {
+			if req.SalesPricingVersion != nil {
+				return *req.SalesPricingVersion
+			}
+			return previousSettings.SalesPricingVersion
+		}(),
+		CurrentSalesPricingVersion:  previousSettings.SalesPricingVersion,
+		SalesPricingShadowStartedAt: previousSettings.SalesPricingShadowStartedAt,
+		SalesPricingV2EnabledAt:     previousSettings.SalesPricingV2EnabledAt,
+		SalesPricingChangeReason:    strings.TrimSpace(req.SalesPricingChangeReason),
 		AffiliateEnabled: func() bool {
 			if req.AffiliateEnabled != nil {
 				return *req.AffiliateEnabled
@@ -2111,7 +2134,11 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		ChannelMonitorPublicEnabled:          updatedSettings.ChannelMonitorPublicEnabled,
 		ChannelMonitorDefaultIntervalSeconds: updatedSettings.ChannelMonitorDefaultIntervalSeconds,
 
-		AvailableChannelsEnabled: updatedSettings.AvailableChannelsEnabled,
+		AvailableChannelsEnabled:    updatedSettings.AvailableChannelsEnabled,
+		ModelSquareEnabled:          updatedSettings.ModelSquareEnabled,
+		SalesPricingVersion:         updatedSettings.SalesPricingVersion,
+		SalesPricingShadowStartedAt: updatedSettings.SalesPricingShadowStartedAt,
+		SalesPricingV2EnabledAt:     updatedSettings.SalesPricingV2EnabledAt,
 
 		AffiliateEnabled: updatedSettings.AffiliateEnabled,
 
@@ -2176,6 +2203,7 @@ func (h *SettingHandler) auditSettingsUpdate(c *gin.Context, before *service.Sys
 		"user_id", subject.UserID,
 		"role", role,
 		"changed", changed,
+		"sales_pricing_change_reason", strings.TrimSpace(req.SalesPricingChangeReason),
 	)
 }
 
@@ -2595,6 +2623,12 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.AvailableChannelsEnabled != after.AvailableChannelsEnabled {
 		changed = append(changed, "available_channels_enabled")
+	}
+	if before.ModelSquareEnabled != after.ModelSquareEnabled {
+		changed = append(changed, "model_square_enabled")
+	}
+	if before.SalesPricingVersion != after.SalesPricingVersion {
+		changed = append(changed, "sales_pricing_version")
 	}
 	if before.AffiliateEnabled != after.AffiliateEnabled {
 		changed = append(changed, "affiliate_enabled")

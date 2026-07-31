@@ -488,6 +488,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		if err != nil {
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
+				appendBillableUsageAttemptFromFailover(c, account, modelName, failoverErr)
 				failoverAction := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, failoverErr)
 				switch failoverAction {
 				case FailoverContinue:
@@ -528,24 +529,27 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		inboundEndpoint := GetInboundEndpoint(c)
 		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
 		quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
+		upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
 		h.submitUsageRecordTask(func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsageWithLongContext(ctx, &service.RecordUsageLongContextInput{
-				Result:                result,
-				QuotaPlatform:         quotaPlatform,
-				APIKey:                apiKey,
-				User:                  apiKey.User,
-				Account:               account,
-				Subscription:          subscription,
-				InboundEndpoint:       inboundEndpoint,
-				UpstreamEndpoint:      upstreamEndpoint,
-				UserAgent:             userAgent,
-				IPAddress:             clientIP,
-				RequestPayloadHash:    requestPayloadHash,
-				LongContextThreshold:  200000, // Gemini 200K 阈值
-				LongContextMultiplier: 2.0,    // 超出部分双倍计费
-				ForceCacheBilling:     fs.ForceCacheBilling,
-				APIKeyService:         h.apiKeyService,
-				ChannelUsageFields:    channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+				Result:                 result,
+				QuotaPlatform:          quotaPlatform,
+				APIKey:                 apiKey,
+				User:                   apiKey.User,
+				Account:                account,
+				UpstreamCostMultiplier: service.CloneDecimalSnapshot(account.UpstreamCostMultiplier),
+				Subscription:           subscription,
+				InboundEndpoint:        inboundEndpoint,
+				UpstreamEndpoint:       upstreamEndpoint,
+				UserAgent:              userAgent,
+				IPAddress:              clientIP,
+				RequestPayloadHash:     requestPayloadHash,
+				LongContextThreshold:   200000, // Gemini 200K 阈值
+				LongContextMultiplier:  2.0,    // 超出部分双倍计费
+				ForceCacheBilling:      fs.ForceCacheBilling,
+				APIKeyService:          h.apiKeyService,
+				ChannelUsageFields:     channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+				UpstreamAttempts:       service.CloneUsageUpstreamAttempts(upstreamAttempts),
 			}); err != nil {
 				logger.L().With(
 					zap.String("component", "handler.gemini_v1beta.models"),

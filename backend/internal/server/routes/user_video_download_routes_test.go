@@ -83,3 +83,21 @@ func TestRegisterUserRoutesIncludesVideoHistoryEndpoints(t *testing.T) {
 		require.NotEqual(t, http.StatusNotFound, rec.Code)
 	}
 }
+
+func TestRegisterUserRoutesIncludesAuthenticatedModelSquareEndpoints(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	handlers := &handler.Handlers{ModelSquare: handler.NewModelSquareHandler(nil, nil)}
+	v1 := router.Group("/api/v1")
+	RegisterUserRoutes(v1, handlers, func(c *gin.Context) { c.AbortWithStatus(http.StatusUnauthorized) }, nil)
+
+	for _, path := range []string{
+		"/api/v1/model-square/groups",
+		"/api/v1/model-square/groups/1/models",
+	} {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		router.ServeHTTP(recorder, request)
+		require.Equal(t, http.StatusUnauthorized, recorder.Code)
+	}
+}

@@ -226,6 +226,34 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	usageCleanupRepository := repository.NewUsageCleanupRepository(client, db)
 	usageCleanupService := service.ProvideUsageCleanupService(usageCleanupRepository, timingWheelService, dashboardAggregationService, configConfig)
 	adminUsageHandler := admin.NewUsageHandler(usageService, apiKeyService, adminService, usageCleanupService)
+	financeDetailRepository := repository.NewFinanceDetailRepository(client, db)
+	financeDetailService := service.NewFinanceDetailService(financeDetailRepository)
+	financeReportRepository := repository.NewFinanceReportRepository(db)
+	financeReportService := service.NewFinanceReportService(financeReportRepository)
+	financeAlertRepository := repository.NewFinanceAlertRepository(db)
+	financeAlertService := service.NewFinanceAlertService(financeAlertRepository)
+	financePaymentFeeRepository := repository.NewFinancePaymentFeeRepository(db)
+	financePaymentFeeService := service.NewFinancePaymentFeeService(financePaymentFeeRepository)
+	financeBackfillRepository := repository.NewFinanceBackfillRepository(db)
+	financeLedgerRepository := repository.NewFinanceLedgerRepository(client, db)
+	financePriceLookupRepository := repository.NewFinancePriceLookupRepository(client)
+	financePriceSelector := service.NewFinancePriceSelector(financePriceLookupRepository)
+	financeCostCalculator := service.NewFinanceCostCalculator()
+	financeUsageScanner := service.NewFinanceUsageScanner(financeLedgerRepository, financePriceSelector, financeCostCalculator)
+	financeBackfillService := service.NewFinanceBackfillService(financeBackfillRepository, financeLedgerRepository, financeUsageScanner, configConfig)
+	financeReconciliationRepository := repository.NewFinanceReconciliationRepository(db)
+	financeReconciliationService := service.NewFinanceReconciliationService(financeReconciliationRepository)
+	financeExportRepository := repository.NewFinanceExportRepository(db)
+	financeExportService := service.NewFinanceExportService(financeExportRepository, financeReportService, configConfig)
+	promotionCreditReconciliationRepository := repository.NewPromotionCreditReconciliationRepository(db)
+	promotionCreditReconciliationService := service.NewPromotionCreditReconciliationService(promotionCreditReconciliationRepository)
+	financeSettlementRepository := repository.NewFinanceSettlementRepository(db)
+	accountFinanceSettlementService := service.NewAccountFinanceSettlementService(financeSettlementRepository)
+	accountFinanceProfileRepository := repository.NewAccountFinanceProfileRepository(db, accountRepository, schedulerCache)
+	accountFinanceProfileService := service.NewAccountFinanceProfileService(accountFinanceProfileRepository)
+	financeFXRateRepository := repository.NewFinanceFXRateRepository(db)
+	financeFXRateService := service.NewFinanceFXRateService(financeFXRateRepository)
+	financeHandler := admin.NewFinanceHandler(financeDetailService, financeReportService, financeAlertService, financePaymentFeeService, financeBackfillService, financeReconciliationService, financeExportService, promotionCreditReconciliationService, accountFinanceSettlementService, accountFinanceProfileService, financeFXRateService)
 	userAttributeHandler := admin.NewUserAttributeHandler(userAttributeService)
 	errorPassthroughRepository := repository.NewErrorPassthroughRepository(client)
 	errorPassthroughCache := repository.NewErrorPassthroughCache(redisClient)
@@ -254,7 +282,27 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	upstreamRepository := repository.NewUpstreamRepository(db)
 	upstreamService := service.NewUpstreamService(upstreamRepository, settingRepository, emailService)
 	upstreamHandler := admin.NewUpstreamHandler(upstreamService)
-	adminHandlers := handler.ProvideAdminHandlers(dashboardHandler, adminUserHandler, groupHandler, accountHandler, adminAnnouncementHandler, dataManagementHandler, backupHandler, oAuthHandler, openAIOAuthHandler, geminiOAuthHandler, antigravityOAuthHandler, grokOAuthHandler, proxyHandler, adminRedeemHandler, promoHandler, settingHandler, opsHandler, systemHandler, adminSubscriptionHandler, adminUsageHandler, userAttributeHandler, errorPassthroughHandler, tlsFingerprintProfileHandler, adminAPIKeyHandler, scheduledTestHandler, channelHandler, channelMonitorHandler, channelMonitorRequestTemplateHandler, contentModerationHandler, paymentHandler, affiliateHandler, cacheConfigHandler, cacheStatsHandler, upstreamHandler)
+	upstreamWalletRepository := repository.NewUpstreamWalletRepository(db)
+	upstreamWalletService := service.NewUpstreamWalletService(upstreamWalletRepository, secretEncryptor)
+	upstreamFinanceAdapterRegistry := service.NewUpstreamFinanceAdapterRegistry()
+	upstreamFinanceSyncRepository := repository.NewUpstreamFinanceSyncRepository(db)
+	upstreamFinanceProtocolRepository := repository.NewUpstreamFinanceProtocolRepository(db)
+	upstreamFinanceHTTPExecutor := service.NewUpstreamFinanceHTTPExecutor()
+	upstreamFundRepository := repository.NewUpstreamFundRepository(db)
+	upstreamFundService := service.NewUpstreamFundService(upstreamWalletService, upstreamFundRepository)
+	accountFinanceSnapshotRepository := repository.NewAccountFinanceSnapshotRepository(db)
+	accountFinanceMultiplierAccountRepository, err := repository.BindAccountFinanceMultiplierAccountRepository(accountRepository)
+	if err != nil {
+		return nil, err
+	}
+	accountFinanceSnapshotService := service.NewAccountFinanceSnapshotService(accountFinanceSnapshotRepository, accountFinanceMultiplierAccountRepository, accountFinanceSettlementService)
+	upstreamFinanceSyncAccountRepository := repository.BindUpstreamFinanceSyncAccountRepository(accountRepository)
+	upstreamFinanceSyncService := service.NewUpstreamFinanceSyncService(upstreamWalletService, upstreamFinanceAdapterRegistry, upstreamFinanceSyncRepository, upstreamFinanceProtocolRepository, upstreamFinanceHTTPExecutor, upstreamFundService, accountFinanceSnapshotService, upstreamFinanceSyncAccountRepository)
+	upstreamWalletHandler := admin.NewUpstreamWalletHandler(upstreamWalletService, upstreamFinanceSyncService, upstreamFundService)
+	upstreamFinanceProtocolService := service.NewUpstreamFinanceProtocolService(upstreamFinanceProtocolRepository, upstreamFinanceHTTPExecutor)
+	accountService := service.NewAccountService(accountRepository, groupRepository)
+	upstreamFinanceProtocolHandler := admin.NewUpstreamFinanceProtocolHandler(upstreamFinanceProtocolService, accountService)
+	adminHandlers := handler.ProvideAdminHandlers(dashboardHandler, adminUserHandler, groupHandler, accountHandler, adminAnnouncementHandler, dataManagementHandler, backupHandler, oAuthHandler, openAIOAuthHandler, geminiOAuthHandler, antigravityOAuthHandler, grokOAuthHandler, proxyHandler, adminRedeemHandler, promoHandler, settingHandler, opsHandler, systemHandler, adminSubscriptionHandler, adminUsageHandler, financeHandler, userAttributeHandler, errorPassthroughHandler, tlsFingerprintProfileHandler, adminAPIKeyHandler, scheduledTestHandler, channelHandler, channelMonitorHandler, channelMonitorRequestTemplateHandler, contentModerationHandler, paymentHandler, affiliateHandler, cacheConfigHandler, cacheStatsHandler, upstreamHandler, upstreamWalletHandler, upstreamFinanceProtocolHandler)
 	usageRecordWorkerPool := service.NewUsageRecordWorkerPool(configConfig)
 	userMsgQueueCache := repository.NewUserMsgQueueCache(redisClient)
 	userMessageQueueService := service.ProvideUserMessageQueueService(userMsgQueueCache, rpmCache, configConfig)
@@ -269,9 +317,11 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	handlerPaymentHandler := handler.NewPaymentHandler(paymentService, paymentConfigService, channelService)
 	paymentWebhookHandler := handler.NewPaymentWebhookHandler(paymentService, registry)
 	availableChannelHandler := handler.NewAvailableChannelHandler(channelService, apiKeyService, settingService)
+	modelSquareService := service.NewModelSquareService(groupRepository, accountRepository, userRepository, userGroupRateRepository, channelService, pricingService, modelPricingResolver, settingService, configConfig)
+	modelSquareHandler := handler.NewModelSquareHandler(modelSquareService, settingService)
 	idempotencyCoordinator := service.ProvideIdempotencyCoordinator(idempotencyRepository, configConfig)
 	idempotencyCleanupService := service.ProvideIdempotencyCleanupService(idempotencyRepository, configConfig)
-	handlers := handler.ProvideHandlers(authHandler, userHandler, apiKeyHandler, usageHandler, redeemHandler, subscriptionHandler, announcementHandler, channelMonitorUserHandler, adminHandlers, gatewayHandler, openAIGatewayHandler, seedaceVideoHandler, userVideoGenerationHandler, handlerSettingHandler, totpHandler, handlerPaymentHandler, paymentWebhookHandler, availableChannelHandler, idempotencyCoordinator, idempotencyCleanupService)
+	handlers := handler.ProvideHandlers(authHandler, userHandler, apiKeyHandler, usageHandler, redeemHandler, subscriptionHandler, announcementHandler, channelMonitorUserHandler, adminHandlers, gatewayHandler, openAIGatewayHandler, seedaceVideoHandler, userVideoGenerationHandler, handlerSettingHandler, totpHandler, handlerPaymentHandler, paymentWebhookHandler, availableChannelHandler, modelSquareHandler, idempotencyCoordinator, idempotencyCleanupService)
 	jwtAuthMiddleware := middleware.NewJWTAuthMiddleware(authService, userService)
 	adminAuthMiddleware := middleware.NewAdminAuthMiddleware(authService, userService, settingService)
 	apiKeyAuthMiddleware := middleware.NewAPIKeyAuthMiddleware(apiKeyService, subscriptionService, configConfig)
@@ -288,7 +338,13 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	scheduledTestRunnerService := service.ProvideScheduledTestRunnerService(scheduledTestPlanRepository, scheduledTestService, accountTestService, rateLimitService, configConfig)
 	paymentOrderExpiryService := service.ProvidePaymentOrderExpiryService(paymentService)
 	channelMonitorRunner := service.ProvideChannelMonitorRunner(channelMonitorService, settingService)
-	v := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, schedulerSnapshotService, tokenRefreshService, balanceLowNotifyScanner, accountExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner)
+	financeCatalogVersionRepository := repository.NewFinanceCatalogVersionRepository(client)
+	financeCatalogVersionSync := service.NewFinanceCatalogVersionSync(pricingService, financeCatalogVersionRepository)
+	financeRevenueRecognitionRepository := repository.NewFinanceRevenueRecognitionRepository(db)
+	financeRevenueRecognitionService := service.NewFinanceRevenueRecognitionService(financeRevenueRecognitionRepository, configConfig)
+	financeRuntime := service.ProvideFinanceRuntime(financeCatalogVersionSync, financeUsageScanner, financeAlertService, financeRevenueRecognitionService, financeBackfillService, financeExportService)
+	upstreamFinanceSyncRuntime := service.ProvideUpstreamFinanceSyncRuntime(upstreamFinanceSyncService, upstreamFinanceSyncRepository)
+	v := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, schedulerSnapshotService, tokenRefreshService, balanceLowNotifyScanner, accountExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, financeRuntime, upstreamFinanceSyncRuntime)
 	application := &Application{
 		Server:  httpServer,
 		Cleanup: v,
@@ -345,6 +401,8 @@ func provideCleanup(
 	backupSvc *service.BackupService,
 	paymentOrderExpiry *service.PaymentOrderExpiryService,
 	channelMonitorRunner *service.ChannelMonitorRunner,
+	financeRuntime *service.FinanceRuntime,
+	upstreamFinanceSyncRuntime *service.UpstreamFinanceSyncRuntime,
 ) func() {
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -356,6 +414,18 @@ func provideCleanup(
 		}
 
 		parallelSteps := []cleanupStep{
+			{"UpstreamFinanceSyncRuntime", func() error {
+				if upstreamFinanceSyncRuntime != nil {
+					upstreamFinanceSyncRuntime.Stop()
+				}
+				return nil
+			}},
+			{"FinanceRuntime", func() error {
+				if financeRuntime != nil {
+					financeRuntime.Stop()
+				}
+				return nil
+			}},
 			{"OpsScheduledReportService", func() error {
 				if opsScheduledReport != nil {
 					opsScheduledReport.Stop()

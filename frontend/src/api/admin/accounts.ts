@@ -19,7 +19,8 @@ import type {
   CodexSessionImportRequest,
   CodexSessionImportResult,
   CheckMixedChannelRequest,
-  CheckMixedChannelResponse
+  CheckMixedChannelResponse,
+  AccountUpstreamMultiplierChange
 } from '@/types'
 
 /**
@@ -143,6 +144,85 @@ export async function create(accountData: CreateAccountRequest): Promise<Account
  */
 export async function update(id: number, updates: UpdateAccountRequest): Promise<Account> {
   const { data } = await apiClient.put<Account>(`/admin/accounts/${id}`, updates)
+  return data
+}
+
+export async function listUpstreamMultiplierChanges(
+  id: number,
+  page: number = 1,
+  pageSize: number = 20
+): Promise<PaginatedResponse<AccountUpstreamMultiplierChange>> {
+  const { data } = await apiClient.get<PaginatedResponse<AccountUpstreamMultiplierChange>>(
+    `/admin/accounts/${id}/upstream-multiplier-changes`,
+    { params: { page, page_size: pageSize } }
+  )
+  return data
+}
+
+export type AccountFinanceReadinessStatus = 'ready_exact' | 'ready_priced' | 'ready_contract' | 'pending_settlement' | 'sync_error' | 'unconfigured'
+
+export interface AccountFinanceProfile {
+  id: number
+  account_id: number
+  wallet_id?: number
+  protocol_version_id?: number
+  cost_mode: 'request_charge' | 'cumulative_list_and_actual' | 'cumulative_actual' | 'contract_multiplier' | 'manual'
+  pricing_group?: string
+  endpoint_source: 'account_base_url' | 'wallet_base_url'
+  endpoint_base_url_snapshot: string
+  credential_source: string
+  counter_scope: 'account' | 'wallet' | 'organization'
+  counter_scope_key?: string
+  balance_unit_semantics: 'fiat_currency' | 'platform_credit' | 'none'
+  account_multiplier_change_id?: number
+  account_multiplier_snapshot?: string
+  contract_type?: 'multiplier' | 'model_price'
+  contract_multiplier?: string
+  readiness_status: AccountFinanceReadinessStatus
+  readiness_detail: { issues?: string[]; actions?: string[] }
+  version: number
+  effective_from: string
+  reason: string
+}
+
+export interface AccountFinanceReadiness {
+  account_id: number
+  status: AccountFinanceReadinessStatus
+  issues: string[]
+  actions: string[]
+  profile?: AccountFinanceProfile
+}
+
+export interface AccountFinanceProfileInput {
+  wallet_id?: number
+  protocol_version_id?: number
+  cost_mode: AccountFinanceProfile['cost_mode']
+  pricing_group?: string
+  endpoint_source: AccountFinanceProfile['endpoint_source']
+  endpoint_base_url_snapshot: string
+  credential_source: string
+  counter_scope: AccountFinanceProfile['counter_scope']
+  counter_scope_key?: string
+  balance_unit_semantics: AccountFinanceProfile['balance_unit_semantics']
+  contract_type?: AccountFinanceProfile['contract_type']
+  contract_multiplier?: string
+  effective_from: string
+  expected_version: number
+  reason: string
+}
+
+export async function getFinanceProfile(id: number): Promise<AccountFinanceProfile> {
+  const { data } = await apiClient.get<AccountFinanceProfile>(`/admin/accounts/${id}/finance/profile`)
+  return data
+}
+
+export async function updateFinanceProfile(id: number, payload: AccountFinanceProfileInput): Promise<AccountFinanceProfile> {
+  const { data } = await apiClient.put<AccountFinanceProfile>(`/admin/accounts/${id}/finance/profile`, payload)
+  return data
+}
+
+export async function getFinanceReadiness(id: number): Promise<AccountFinanceReadiness> {
+  const { data } = await apiClient.get<AccountFinanceReadiness>(`/admin/accounts/${id}/finance/readiness`)
   return data
 }
 
@@ -388,7 +468,7 @@ export async function batchUpdateCredentials(request: {
   const { data } = await apiClient.post<{
     success: number
     failed: number
-    results: Array<{ account_id: number; success: boolean; error?: string }>
+    results: Array<{ account_id: number; success: boolean; status?: 'success' | 'unchanged' | 'failed'; error?: string }>
   }>('/admin/accounts/batch-update-credentials', request)
   return data
 }
@@ -404,10 +484,11 @@ export async function bulkUpdate(
   updates?: Record<string, unknown>
 ): Promise<{
   success: number
+  unchanged: number
   failed: number
   success_ids?: number[]
   failed_ids?: number[]
-  results: Array<{ account_id: number; success: boolean; error?: string }>
+  results: Array<{ account_id: number; success: boolean; status?: 'success' | 'unchanged' | 'failed'; error?: string }>
   }> {
   const payload = Array.isArray(accountIdsOrPayload)
     ? {
@@ -417,10 +498,11 @@ export async function bulkUpdate(
     : accountIdsOrPayload
   const { data } = await apiClient.post<{
     success: number
+    unchanged: number
     failed: number
     success_ids?: number[]
     failed_ids?: number[]
-    results: Array<{ account_id: number; success: boolean; error?: string }>
+    results: Array<{ account_id: number; success: boolean; status?: 'success' | 'unchanged' | 'failed'; error?: string }>
   }>('/admin/accounts/bulk-update', payload)
   return data
 }
@@ -695,6 +777,10 @@ export const accountsAPI = {
   getById,
   create,
   update,
+  listUpstreamMultiplierChanges,
+	getFinanceProfile,
+	updateFinanceProfile,
+	getFinanceReadiness,
   checkMixedChannelRisk,
   delete: deleteAccount,
   toggleStatus,

@@ -1449,7 +1449,7 @@
         <ProxySelector v-model="form.proxy_id" :proxies="proxies" />
       </div>
 
-      <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div class="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <div>
           <label class="input-label">{{ t('admin.accounts.concurrency') }}</label>
           <input v-model.number="form.concurrency" type="number" min="1" class="input"
@@ -1473,12 +1473,52 @@
           />
           <p class="input-hint">{{ t('admin.accounts.priorityHint') }}</p>
         </div>
+      </div>
+      <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
           <label class="input-label">{{ t('admin.accounts.billingRateMultiplier') }}</label>
-          <input v-model.number="form.rate_multiplier" type="number" min="0" step="0.001" class="input" />
+          <input v-model.number="form.rate_multiplier" type="number" min="0" step="0.0001" inputmode="decimal" class="input" />
           <p class="input-hint">{{ t('admin.accounts.billingRateMultiplierHint') }}</p>
         </div>
+        <div>
+          <label class="input-label">{{ t('admin.accounts.upstreamCostMultiplier') }}</label>
+          <input
+            v-model="form.upstream_cost_multiplier"
+            type="number"
+            min="0"
+            max="9999.9999"
+            step="0.0001"
+            inputmode="decimal"
+            class="input"
+            data-testid="upstream-cost-multiplier"
+            :placeholder="t('admin.accounts.upstreamCostMultiplierUnconfigured')"
+          />
+          <p class="input-hint">{{ t('admin.accounts.upstreamCostMultiplierHint') }}</p>
+        </div>
       </div>
+      <div v-if="upstreamMultiplierChanged" class="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30">
+        <p class="text-sm text-amber-900 dark:text-amber-100">
+          {{ t('admin.accounts.upstreamCostMultiplierChangeNotice', {
+            oldValue: account.upstream_cost_multiplier || t('admin.accounts.upstreamCostMultiplierUnconfigured'),
+            newValue: form.upstream_cost_multiplier || t('admin.accounts.upstreamCostMultiplierUnconfigured')
+          }) }}
+        </p>
+        <div>
+          <label class="input-label">{{ t('admin.accounts.upstreamCostMultiplierChangeReason') }}</label>
+          <textarea
+            v-model="form.upstream_cost_multiplier_change_reason"
+            rows="2"
+            minlength="5"
+            maxlength="500"
+            required
+            class="input"
+            data-testid="upstream-cost-multiplier-reason"
+          ></textarea>
+          <p class="input-hint">{{ t('admin.accounts.upstreamCostMultiplierChangeReasonHint') }}</p>
+        </div>
+      </div>
+      <AccountUpstreamMultiplierHistory :account-id="account.id" />
+	  <AccountFinanceProfilePanel :account-id="account.id" />
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <label class="input-label">{{ t('admin.accounts.expiresAt') }}</label>
         <input v-model="expiresAtInput" type="datetime-local" class="input" />
@@ -2358,6 +2398,8 @@ import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
+import AccountUpstreamMultiplierHistory from '@/components/account/AccountUpstreamMultiplierHistory.vue'
+import AccountFinanceProfilePanel from '@/components/account/AccountFinanceProfilePanel.vue'
 import {
   applyHeaderOverride,
   applyInterceptWarmup,
@@ -2680,10 +2722,31 @@ const form = reactive({
   load_factor: null as number | null,
   priority: 1,
   rate_multiplier: 1,
+  upstream_cost_multiplier: '',
+  upstream_cost_multiplier_change_reason: '',
   status: 'active' as 'active' | 'inactive' | 'error',
   group_ids: [] as number[],
   expires_at: null as number | null
 })
+
+const normalizeUpstreamMultiplier = (value: unknown) => {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return ''
+  const numeric = Number(trimmed)
+  return Number.isFinite(numeric) ? numeric.toFixed(4) : trimmed
+}
+
+const upstreamMultiplierChanged = computed(() =>
+  normalizeUpstreamMultiplier(form.upstream_cost_multiplier) !==
+    normalizeUpstreamMultiplier(props.account?.upstream_cost_multiplier)
+)
+
+const isValidUpstreamMultiplier = (value: unknown) => {
+  const trimmed = String(value ?? '').trim()
+  if (!/^\d+(?:\.\d{1,4})?$/.test(trimmed)) return false
+  const numeric = Number(trimmed)
+  return numeric >= 0 && numeric <= 9999.9999
+}
 
 const statusOptions = computed(() => {
   const options = [
@@ -2753,6 +2816,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   form.load_factor = newAccount.load_factor ?? null
   form.priority = newAccount.priority
   form.rate_multiplier = newAccount.rate_multiplier ?? 1
+  form.upstream_cost_multiplier = newAccount.upstream_cost_multiplier ?? ''
+  form.upstream_cost_multiplier_change_reason = ''
   form.status = (newAccount.status === 'active' || newAccount.status === 'inactive' || newAccount.status === 'error')
     ? newAccount.status
     : 'active'
@@ -3520,7 +3585,11 @@ const submitUpdateAccount = async (accountID: number, updatePayload: Record<stri
   submitting.value = true
   try {
     const updatedAccount = await adminAPI.accounts.update(accountID, withAntigravityConfirmFlag(updatePayload))
-    appStore.showSuccess(t('admin.accounts.accountUpdated'))
+    appStore.showSuccess(t(
+      Object.prototype.hasOwnProperty.call(updatePayload, 'upstream_cost_multiplier')
+        ? 'admin.accounts.upstreamCostMultiplierUpdated'
+        : 'admin.accounts.accountUpdated'
+    ))
     emit('updated', updatedAccount)
     handleClose()
   } catch (error: any) {
@@ -3549,8 +3618,27 @@ const handleSubmit = async () => {
     return
   }
 
+  if (upstreamMultiplierChanged.value) {
+    if (!isValidUpstreamMultiplier(form.upstream_cost_multiplier)) {
+      appStore.showError(t('admin.accounts.upstreamCostMultiplierInvalid'))
+      return
+    }
+    const reason = form.upstream_cost_multiplier_change_reason.trim()
+    if (reason.length < 5 || reason.length > 500) {
+      appStore.showError(t('admin.accounts.upstreamCostMultiplierChangeReasonHint'))
+      return
+    }
+  }
+
   const updatePayload: Record<string, unknown> = { ...form }
   try {
+    if (!upstreamMultiplierChanged.value) {
+      delete updatePayload.upstream_cost_multiplier
+      delete updatePayload.upstream_cost_multiplier_change_reason
+    } else {
+      updatePayload.upstream_cost_multiplier = normalizeUpstreamMultiplier(form.upstream_cost_multiplier)
+      updatePayload.upstream_cost_multiplier_change_reason = form.upstream_cost_multiplier_change_reason.trim()
+    }
     // 后端期望 proxy_id: 0 表示清除代理，而不是 null
     if (updatePayload.proxy_id === null) {
       updatePayload.proxy_id = 0

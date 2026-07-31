@@ -13,7 +13,10 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/Wei-Shaw/sub2api/ent/account"
+	"github.com/Wei-Shaw/sub2api/ent/accountfinancecountersnapshot"
+	"github.com/Wei-Shaw/sub2api/ent/accountfinanceprofile"
 	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
+	"github.com/Wei-Shaw/sub2api/ent/accountupstreammultiplierchange"
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
@@ -24,11 +27,19 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorhistory"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorrequesttemplate"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
+	"github.com/Wei-Shaw/sub2api/ent/financealert"
+	"github.com/Wei-Shaw/sub2api/ent/financeasyncjob"
+	"github.com/Wei-Shaw/sub2api/ent/financebackfilljob"
+	"github.com/Wei-Shaw/sub2api/ent/financecalculationrevision"
+	"github.com/Wei-Shaw/sub2api/ent/financedailyaggregate"
+	"github.com/Wei-Shaw/sub2api/ent/financeexportjob"
+	"github.com/Wei-Shaw/sub2api/ent/financefxrateversion"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/idempotencyrecord"
 	"github.com/Wei-Shaw/sub2api/ent/identityadoptiondecision"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
+	"github.com/Wei-Shaw/sub2api/ent/paymentproviderfeeevent"
 	"github.com/Wei-Shaw/sub2api/ent/paymentproviderinstance"
 	"github.com/Wei-Shaw/sub2api/ent/pendingauthsession"
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
@@ -38,9 +49,26 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/securitysecret"
 	"github.com/Wei-Shaw/sub2api/ent/setting"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
+	"github.com/Wei-Shaw/sub2api/ent/subscriptionrevenuerecognition"
+	"github.com/Wei-Shaw/sub2api/ent/systemmodelpriceversion"
 	"github.com/Wei-Shaw/sub2api/ent/tlsfingerprintprofile"
+	"github.com/Wei-Shaw/sub2api/ent/upstreambalancesnapshot"
+	"github.com/Wei-Shaw/sub2api/ent/upstreambillreconciliation"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamcostsettlementinterval"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamfinanceprotocol"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamfinanceprotocolversion"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamfinancesyncrun"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamfundevent"
+	"github.com/Wei-Shaw/sub2api/ent/upstreammodelpriceversion"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamwallet"
+	"github.com/Wei-Shaw/sub2api/ent/upstreamwalletaccount"
 	"github.com/Wei-Shaw/sub2api/ent/usagecleanuptask"
+	"github.com/Wei-Shaw/sub2api/ent/usagecostsettlementallocation"
+	"github.com/Wei-Shaw/sub2api/ent/usagefinancecostsegment"
+	"github.com/Wei-Shaw/sub2api/ent/usagefinancerecord"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
+	"github.com/Wei-Shaw/sub2api/ent/usagerevenueallocation"
+	"github.com/Wei-Shaw/sub2api/ent/usageupstreamattempt"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
@@ -107,41 +135,69 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			apikey.Table:                        apikey.ValidColumn,
-			account.Table:                       account.ValidColumn,
-			accountgroup.Table:                  accountgroup.ValidColumn,
-			announcement.Table:                  announcement.ValidColumn,
-			announcementread.Table:              announcementread.ValidColumn,
-			authidentity.Table:                  authidentity.ValidColumn,
-			authidentitychannel.Table:           authidentitychannel.ValidColumn,
-			channelmonitor.Table:                channelmonitor.ValidColumn,
-			channelmonitordailyrollup.Table:     channelmonitordailyrollup.ValidColumn,
-			channelmonitorhistory.Table:         channelmonitorhistory.ValidColumn,
-			channelmonitorrequesttemplate.Table: channelmonitorrequesttemplate.ValidColumn,
-			errorpassthroughrule.Table:          errorpassthroughrule.ValidColumn,
-			group.Table:                         group.ValidColumn,
-			idempotencyrecord.Table:             idempotencyrecord.ValidColumn,
-			identityadoptiondecision.Table:      identityadoptiondecision.ValidColumn,
-			paymentauditlog.Table:               paymentauditlog.ValidColumn,
-			paymentorder.Table:                  paymentorder.ValidColumn,
-			paymentproviderinstance.Table:       paymentproviderinstance.ValidColumn,
-			pendingauthsession.Table:            pendingauthsession.ValidColumn,
-			promocode.Table:                     promocode.ValidColumn,
-			promocodeusage.Table:                promocodeusage.ValidColumn,
-			proxy.Table:                         proxy.ValidColumn,
-			redeemcode.Table:                    redeemcode.ValidColumn,
-			securitysecret.Table:                securitysecret.ValidColumn,
-			setting.Table:                       setting.ValidColumn,
-			subscriptionplan.Table:              subscriptionplan.ValidColumn,
-			tlsfingerprintprofile.Table:         tlsfingerprintprofile.ValidColumn,
-			usagecleanuptask.Table:              usagecleanuptask.ValidColumn,
-			usagelog.Table:                      usagelog.ValidColumn,
-			user.Table:                          user.ValidColumn,
-			userallowedgroup.Table:              userallowedgroup.ValidColumn,
-			userattributedefinition.Table:       userattributedefinition.ValidColumn,
-			userattributevalue.Table:            userattributevalue.ValidColumn,
-			userplatformquota.Table:             userplatformquota.ValidColumn,
-			usersubscription.Table:              usersubscription.ValidColumn,
+			apikey.Table:                          apikey.ValidColumn,
+			account.Table:                         account.ValidColumn,
+			accountfinancecountersnapshot.Table:   accountfinancecountersnapshot.ValidColumn,
+			accountfinanceprofile.Table:           accountfinanceprofile.ValidColumn,
+			accountgroup.Table:                    accountgroup.ValidColumn,
+			accountupstreammultiplierchange.Table: accountupstreammultiplierchange.ValidColumn,
+			announcement.Table:                    announcement.ValidColumn,
+			announcementread.Table:                announcementread.ValidColumn,
+			authidentity.Table:                    authidentity.ValidColumn,
+			authidentitychannel.Table:             authidentitychannel.ValidColumn,
+			channelmonitor.Table:                  channelmonitor.ValidColumn,
+			channelmonitordailyrollup.Table:       channelmonitordailyrollup.ValidColumn,
+			channelmonitorhistory.Table:           channelmonitorhistory.ValidColumn,
+			channelmonitorrequesttemplate.Table:   channelmonitorrequesttemplate.ValidColumn,
+			errorpassthroughrule.Table:            errorpassthroughrule.ValidColumn,
+			financealert.Table:                    financealert.ValidColumn,
+			financeasyncjob.Table:                 financeasyncjob.ValidColumn,
+			financebackfilljob.Table:              financebackfilljob.ValidColumn,
+			financecalculationrevision.Table:      financecalculationrevision.ValidColumn,
+			financedailyaggregate.Table:           financedailyaggregate.ValidColumn,
+			financeexportjob.Table:                financeexportjob.ValidColumn,
+			financefxrateversion.Table:            financefxrateversion.ValidColumn,
+			group.Table:                           group.ValidColumn,
+			idempotencyrecord.Table:               idempotencyrecord.ValidColumn,
+			identityadoptiondecision.Table:        identityadoptiondecision.ValidColumn,
+			paymentauditlog.Table:                 paymentauditlog.ValidColumn,
+			paymentorder.Table:                    paymentorder.ValidColumn,
+			paymentproviderfeeevent.Table:         paymentproviderfeeevent.ValidColumn,
+			paymentproviderinstance.Table:         paymentproviderinstance.ValidColumn,
+			pendingauthsession.Table:              pendingauthsession.ValidColumn,
+			promocode.Table:                       promocode.ValidColumn,
+			promocodeusage.Table:                  promocodeusage.ValidColumn,
+			proxy.Table:                           proxy.ValidColumn,
+			redeemcode.Table:                      redeemcode.ValidColumn,
+			securitysecret.Table:                  securitysecret.ValidColumn,
+			setting.Table:                         setting.ValidColumn,
+			subscriptionplan.Table:                subscriptionplan.ValidColumn,
+			subscriptionrevenuerecognition.Table:  subscriptionrevenuerecognition.ValidColumn,
+			systemmodelpriceversion.Table:         systemmodelpriceversion.ValidColumn,
+			tlsfingerprintprofile.Table:           tlsfingerprintprofile.ValidColumn,
+			upstreambalancesnapshot.Table:         upstreambalancesnapshot.ValidColumn,
+			upstreambillreconciliation.Table:      upstreambillreconciliation.ValidColumn,
+			upstreamcostsettlementinterval.Table:  upstreamcostsettlementinterval.ValidColumn,
+			upstreamfinanceprotocol.Table:         upstreamfinanceprotocol.ValidColumn,
+			upstreamfinanceprotocolversion.Table:  upstreamfinanceprotocolversion.ValidColumn,
+			upstreamfinancesyncrun.Table:          upstreamfinancesyncrun.ValidColumn,
+			upstreamfundevent.Table:               upstreamfundevent.ValidColumn,
+			upstreammodelpriceversion.Table:       upstreammodelpriceversion.ValidColumn,
+			upstreamwallet.Table:                  upstreamwallet.ValidColumn,
+			upstreamwalletaccount.Table:           upstreamwalletaccount.ValidColumn,
+			usagecleanuptask.Table:                usagecleanuptask.ValidColumn,
+			usagecostsettlementallocation.Table:   usagecostsettlementallocation.ValidColumn,
+			usagefinancecostsegment.Table:         usagefinancecostsegment.ValidColumn,
+			usagefinancerecord.Table:              usagefinancerecord.ValidColumn,
+			usagelog.Table:                        usagelog.ValidColumn,
+			usagerevenueallocation.Table:          usagerevenueallocation.ValidColumn,
+			usageupstreamattempt.Table:            usageupstreamattempt.ValidColumn,
+			user.Table:                            user.ValidColumn,
+			userallowedgroup.Table:                userallowedgroup.ValidColumn,
+			userattributedefinition.Table:         userattributedefinition.ValidColumn,
+			userattributevalue.Table:              userattributevalue.ValidColumn,
+			userplatformquota.Table:               userplatformquota.ValidColumn,
+			usersubscription.Table:                usersubscription.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

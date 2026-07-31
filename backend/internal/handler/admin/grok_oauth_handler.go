@@ -13,8 +13,10 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
+	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 const grokSSOImportConcurrency = 3
@@ -264,20 +266,23 @@ func (h *GrokOAuthHandler) CreateAccountFromOAuth(c *gin.Context) {
 }
 
 type GrokSSOToOAuthRequest struct {
-	SSOTokens          []string       `json:"sso_tokens"`
-	SSOToken           string         `json:"sso_token"`
-	Name               string         `json:"name"`
-	Notes              *string        `json:"notes"`
-	ProxyID            *int64         `json:"proxy_id"`
-	GroupIDs           []int64        `json:"group_ids"`
-	Credentials        map[string]any `json:"credentials"`
-	Extra              map[string]any `json:"extra"`
-	Concurrency        int            `json:"concurrency"`
-	LoadFactor         *int           `json:"load_factor"`
-	Priority           int            `json:"priority"`
-	RateMultiplier     *float64       `json:"rate_multiplier"`
-	ExpiresAt          *int64         `json:"expires_at"`
-	AutoPauseOnExpired *bool          `json:"auto_pause_on_expired"`
+	SSOTokens                    []string       `json:"sso_tokens"`
+	SSOToken                     string         `json:"sso_token"`
+	Name                         string         `json:"name"`
+	Notes                        *string        `json:"notes"`
+	ProxyID                      *int64         `json:"proxy_id"`
+	GroupIDs                     []int64        `json:"group_ids"`
+	Credentials                  map[string]any `json:"credentials"`
+	Extra                        map[string]any `json:"extra"`
+	Concurrency                  int            `json:"concurrency"`
+	LoadFactor                   *int           `json:"load_factor"`
+	Priority                     int            `json:"priority"`
+	RateMultiplier               *float64       `json:"rate_multiplier"`
+	UpstreamCostMultiplier       *string        `json:"upstream_cost_multiplier"`
+	ExpiresAt                    *int64         `json:"expires_at"`
+	AutoPauseOnExpired           *bool          `json:"auto_pause_on_expired"`
+	parsedUpstreamCostMultiplier *decimal.Decimal
+	operatorID                   *int64
 }
 
 type GrokSSOToOAuthItemResult struct {
@@ -313,6 +318,15 @@ func (h *GrokOAuthHandler) CreateAccountsFromSSO(c *gin.Context) {
 	if len(tokens) == 0 {
 		response.BadRequest(c, "sso_tokens is required")
 		return
+	}
+	upstreamCostMultiplier, err := parseUpstreamCostMultiplier(req.UpstreamCostMultiplier, true)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	req.parsedUpstreamCostMultiplier = upstreamCostMultiplier
+	if subject, ok := middleware2.GetAuthSubjectFromContext(c); ok && subject.UserID > 0 {
+		req.operatorID = &subject.UserID
 	}
 
 	ctx := c.Request.Context()
@@ -377,20 +391,22 @@ func (h *GrokOAuthHandler) createAccountFromSSOToken(ctx context.Context, req Gr
 	name := grokSSOImportAccountName(req.Name, tokenInfo, index, total)
 	expiresAt, autoPauseOnExpired := grokSSOImportExpiry(req.ExpiresAt, req.AutoPauseOnExpired, tokenInfo)
 	account, err := h.adminService.CreateAccount(ctx, &service.CreateAccountInput{
-		Name:               name,
-		Notes:              req.Notes,
-		Platform:           service.PlatformGrok,
-		Type:               service.AccountTypeOAuth,
-		Credentials:        credentials,
-		Extra:              cloneGrokSSOMap(req.Extra),
-		ProxyID:            req.ProxyID,
-		Concurrency:        req.Concurrency,
-		LoadFactor:         req.LoadFactor,
-		Priority:           req.Priority,
-		RateMultiplier:     req.RateMultiplier,
-		GroupIDs:           append([]int64(nil), req.GroupIDs...),
-		ExpiresAt:          expiresAt,
-		AutoPauseOnExpired: autoPauseOnExpired,
+		Name:                   name,
+		Notes:                  req.Notes,
+		Platform:               service.PlatformGrok,
+		Type:                   service.AccountTypeOAuth,
+		Credentials:            credentials,
+		Extra:                  cloneGrokSSOMap(req.Extra),
+		ProxyID:                req.ProxyID,
+		Concurrency:            req.Concurrency,
+		LoadFactor:             req.LoadFactor,
+		Priority:               req.Priority,
+		RateMultiplier:         req.RateMultiplier,
+		UpstreamCostMultiplier: req.parsedUpstreamCostMultiplier,
+		OperatorID:             req.operatorID,
+		GroupIDs:               append([]int64(nil), req.GroupIDs...),
+		ExpiresAt:              expiresAt,
+		AutoPauseOnExpired:     autoPauseOnExpired,
 	})
 	if err != nil {
 		return grokSSOImportWorkerResult{item: GrokSSOToOAuthItemResult{Index: index, Name: name, Email: tokenInfo.Email, Error: grokSSOImportErrorMessage(err)}}

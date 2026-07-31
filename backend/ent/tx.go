@@ -18,8 +18,14 @@ type Tx struct {
 	APIKey *APIKeyClient
 	// Account is the client for interacting with the Account builders.
 	Account *AccountClient
+	// AccountFinanceCounterSnapshot is the client for interacting with the AccountFinanceCounterSnapshot builders.
+	AccountFinanceCounterSnapshot *AccountFinanceCounterSnapshotClient
+	// AccountFinanceProfile is the client for interacting with the AccountFinanceProfile builders.
+	AccountFinanceProfile *AccountFinanceProfileClient
 	// AccountGroup is the client for interacting with the AccountGroup builders.
 	AccountGroup *AccountGroupClient
+	// AccountUpstreamMultiplierChange is the client for interacting with the AccountUpstreamMultiplierChange builders.
+	AccountUpstreamMultiplierChange *AccountUpstreamMultiplierChangeClient
 	// Announcement is the client for interacting with the Announcement builders.
 	Announcement *AnnouncementClient
 	// AnnouncementRead is the client for interacting with the AnnouncementRead builders.
@@ -38,6 +44,20 @@ type Tx struct {
 	ChannelMonitorRequestTemplate *ChannelMonitorRequestTemplateClient
 	// ErrorPassthroughRule is the client for interacting with the ErrorPassthroughRule builders.
 	ErrorPassthroughRule *ErrorPassthroughRuleClient
+	// FinanceAlert is the client for interacting with the FinanceAlert builders.
+	FinanceAlert *FinanceAlertClient
+	// FinanceAsyncJob is the client for interacting with the FinanceAsyncJob builders.
+	FinanceAsyncJob *FinanceAsyncJobClient
+	// FinanceBackfillJob is the client for interacting with the FinanceBackfillJob builders.
+	FinanceBackfillJob *FinanceBackfillJobClient
+	// FinanceCalculationRevision is the client for interacting with the FinanceCalculationRevision builders.
+	FinanceCalculationRevision *FinanceCalculationRevisionClient
+	// FinanceDailyAggregate is the client for interacting with the FinanceDailyAggregate builders.
+	FinanceDailyAggregate *FinanceDailyAggregateClient
+	// FinanceExportJob is the client for interacting with the FinanceExportJob builders.
+	FinanceExportJob *FinanceExportJobClient
+	// FinanceFXRateVersion is the client for interacting with the FinanceFXRateVersion builders.
+	FinanceFXRateVersion *FinanceFXRateVersionClient
 	// Group is the client for interacting with the Group builders.
 	Group *GroupClient
 	// IdempotencyRecord is the client for interacting with the IdempotencyRecord builders.
@@ -48,6 +68,8 @@ type Tx struct {
 	PaymentAuditLog *PaymentAuditLogClient
 	// PaymentOrder is the client for interacting with the PaymentOrder builders.
 	PaymentOrder *PaymentOrderClient
+	// PaymentProviderFeeEvent is the client for interacting with the PaymentProviderFeeEvent builders.
+	PaymentProviderFeeEvent *PaymentProviderFeeEventClient
 	// PaymentProviderInstance is the client for interacting with the PaymentProviderInstance builders.
 	PaymentProviderInstance *PaymentProviderInstanceClient
 	// PendingAuthSession is the client for interacting with the PendingAuthSession builders.
@@ -66,12 +88,46 @@ type Tx struct {
 	Setting *SettingClient
 	// SubscriptionPlan is the client for interacting with the SubscriptionPlan builders.
 	SubscriptionPlan *SubscriptionPlanClient
+	// SubscriptionRevenueRecognition is the client for interacting with the SubscriptionRevenueRecognition builders.
+	SubscriptionRevenueRecognition *SubscriptionRevenueRecognitionClient
+	// SystemModelPriceVersion is the client for interacting with the SystemModelPriceVersion builders.
+	SystemModelPriceVersion *SystemModelPriceVersionClient
 	// TLSFingerprintProfile is the client for interacting with the TLSFingerprintProfile builders.
 	TLSFingerprintProfile *TLSFingerprintProfileClient
+	// UpstreamBalanceSnapshot is the client for interacting with the UpstreamBalanceSnapshot builders.
+	UpstreamBalanceSnapshot *UpstreamBalanceSnapshotClient
+	// UpstreamBillReconciliation is the client for interacting with the UpstreamBillReconciliation builders.
+	UpstreamBillReconciliation *UpstreamBillReconciliationClient
+	// UpstreamCostSettlementInterval is the client for interacting with the UpstreamCostSettlementInterval builders.
+	UpstreamCostSettlementInterval *UpstreamCostSettlementIntervalClient
+	// UpstreamFinanceProtocol is the client for interacting with the UpstreamFinanceProtocol builders.
+	UpstreamFinanceProtocol *UpstreamFinanceProtocolClient
+	// UpstreamFinanceProtocolVersion is the client for interacting with the UpstreamFinanceProtocolVersion builders.
+	UpstreamFinanceProtocolVersion *UpstreamFinanceProtocolVersionClient
+	// UpstreamFinanceSyncRun is the client for interacting with the UpstreamFinanceSyncRun builders.
+	UpstreamFinanceSyncRun *UpstreamFinanceSyncRunClient
+	// UpstreamFundEvent is the client for interacting with the UpstreamFundEvent builders.
+	UpstreamFundEvent *UpstreamFundEventClient
+	// UpstreamModelPriceVersion is the client for interacting with the UpstreamModelPriceVersion builders.
+	UpstreamModelPriceVersion *UpstreamModelPriceVersionClient
+	// UpstreamWallet is the client for interacting with the UpstreamWallet builders.
+	UpstreamWallet *UpstreamWalletClient
+	// UpstreamWalletAccount is the client for interacting with the UpstreamWalletAccount builders.
+	UpstreamWalletAccount *UpstreamWalletAccountClient
 	// UsageCleanupTask is the client for interacting with the UsageCleanupTask builders.
 	UsageCleanupTask *UsageCleanupTaskClient
+	// UsageCostSettlementAllocation is the client for interacting with the UsageCostSettlementAllocation builders.
+	UsageCostSettlementAllocation *UsageCostSettlementAllocationClient
+	// UsageFinanceCostSegment is the client for interacting with the UsageFinanceCostSegment builders.
+	UsageFinanceCostSegment *UsageFinanceCostSegmentClient
+	// UsageFinanceRecord is the client for interacting with the UsageFinanceRecord builders.
+	UsageFinanceRecord *UsageFinanceRecordClient
 	// UsageLog is the client for interacting with the UsageLog builders.
 	UsageLog *UsageLogClient
+	// UsageRevenueAllocation is the client for interacting with the UsageRevenueAllocation builders.
+	UsageRevenueAllocation *UsageRevenueAllocationClient
+	// UsageUpstreamAttempt is the client for interacting with the UsageUpstreamAttempt builders.
+	UsageUpstreamAttempt *UsageUpstreamAttemptClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 	// UserAllowedGroup is the client for interacting with the UserAllowedGroup builders.
@@ -217,7 +273,10 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.APIKey = NewAPIKeyClient(tx.config)
 	tx.Account = NewAccountClient(tx.config)
+	tx.AccountFinanceCounterSnapshot = NewAccountFinanceCounterSnapshotClient(tx.config)
+	tx.AccountFinanceProfile = NewAccountFinanceProfileClient(tx.config)
 	tx.AccountGroup = NewAccountGroupClient(tx.config)
+	tx.AccountUpstreamMultiplierChange = NewAccountUpstreamMultiplierChangeClient(tx.config)
 	tx.Announcement = NewAnnouncementClient(tx.config)
 	tx.AnnouncementRead = NewAnnouncementReadClient(tx.config)
 	tx.AuthIdentity = NewAuthIdentityClient(tx.config)
@@ -227,11 +286,19 @@ func (tx *Tx) init() {
 	tx.ChannelMonitorHistory = NewChannelMonitorHistoryClient(tx.config)
 	tx.ChannelMonitorRequestTemplate = NewChannelMonitorRequestTemplateClient(tx.config)
 	tx.ErrorPassthroughRule = NewErrorPassthroughRuleClient(tx.config)
+	tx.FinanceAlert = NewFinanceAlertClient(tx.config)
+	tx.FinanceAsyncJob = NewFinanceAsyncJobClient(tx.config)
+	tx.FinanceBackfillJob = NewFinanceBackfillJobClient(tx.config)
+	tx.FinanceCalculationRevision = NewFinanceCalculationRevisionClient(tx.config)
+	tx.FinanceDailyAggregate = NewFinanceDailyAggregateClient(tx.config)
+	tx.FinanceExportJob = NewFinanceExportJobClient(tx.config)
+	tx.FinanceFXRateVersion = NewFinanceFXRateVersionClient(tx.config)
 	tx.Group = NewGroupClient(tx.config)
 	tx.IdempotencyRecord = NewIdempotencyRecordClient(tx.config)
 	tx.IdentityAdoptionDecision = NewIdentityAdoptionDecisionClient(tx.config)
 	tx.PaymentAuditLog = NewPaymentAuditLogClient(tx.config)
 	tx.PaymentOrder = NewPaymentOrderClient(tx.config)
+	tx.PaymentProviderFeeEvent = NewPaymentProviderFeeEventClient(tx.config)
 	tx.PaymentProviderInstance = NewPaymentProviderInstanceClient(tx.config)
 	tx.PendingAuthSession = NewPendingAuthSessionClient(tx.config)
 	tx.PromoCode = NewPromoCodeClient(tx.config)
@@ -241,9 +308,26 @@ func (tx *Tx) init() {
 	tx.SecuritySecret = NewSecuritySecretClient(tx.config)
 	tx.Setting = NewSettingClient(tx.config)
 	tx.SubscriptionPlan = NewSubscriptionPlanClient(tx.config)
+	tx.SubscriptionRevenueRecognition = NewSubscriptionRevenueRecognitionClient(tx.config)
+	tx.SystemModelPriceVersion = NewSystemModelPriceVersionClient(tx.config)
 	tx.TLSFingerprintProfile = NewTLSFingerprintProfileClient(tx.config)
+	tx.UpstreamBalanceSnapshot = NewUpstreamBalanceSnapshotClient(tx.config)
+	tx.UpstreamBillReconciliation = NewUpstreamBillReconciliationClient(tx.config)
+	tx.UpstreamCostSettlementInterval = NewUpstreamCostSettlementIntervalClient(tx.config)
+	tx.UpstreamFinanceProtocol = NewUpstreamFinanceProtocolClient(tx.config)
+	tx.UpstreamFinanceProtocolVersion = NewUpstreamFinanceProtocolVersionClient(tx.config)
+	tx.UpstreamFinanceSyncRun = NewUpstreamFinanceSyncRunClient(tx.config)
+	tx.UpstreamFundEvent = NewUpstreamFundEventClient(tx.config)
+	tx.UpstreamModelPriceVersion = NewUpstreamModelPriceVersionClient(tx.config)
+	tx.UpstreamWallet = NewUpstreamWalletClient(tx.config)
+	tx.UpstreamWalletAccount = NewUpstreamWalletAccountClient(tx.config)
 	tx.UsageCleanupTask = NewUsageCleanupTaskClient(tx.config)
+	tx.UsageCostSettlementAllocation = NewUsageCostSettlementAllocationClient(tx.config)
+	tx.UsageFinanceCostSegment = NewUsageFinanceCostSegmentClient(tx.config)
+	tx.UsageFinanceRecord = NewUsageFinanceRecordClient(tx.config)
 	tx.UsageLog = NewUsageLogClient(tx.config)
+	tx.UsageRevenueAllocation = NewUsageRevenueAllocationClient(tx.config)
+	tx.UsageUpstreamAttempt = NewUsageUpstreamAttemptClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 	tx.UserAllowedGroup = NewUserAllowedGroupClient(tx.config)
 	tx.UserAttributeDefinition = NewUserAttributeDefinitionClient(tx.config)

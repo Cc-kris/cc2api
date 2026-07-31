@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useAdminSettingsStore } from '@/stores/adminSettings'
 import { useNavigationLoadingState } from '@/composables/useNavigationLoading'
+import { resolveModelSquareEnabled } from './modelSquareGuard'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
 import { canAccessAdminPath, resolveAdminHomePath } from '@/utils/adminAccess'
@@ -254,16 +255,21 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/available-channels',
-    name: 'UserAvailableChannels',
-    component: () => import('@/views/user/AvailableChannelsView.vue'),
+    path: '/model-square',
+    name: 'ModelSquare',
+    component: () => import('@/views/user/ModelSquareView.vue'),
     meta: {
       requiresAuth: true,
       requiresAdmin: false,
-      title: 'Available Channels',
-      titleKey: 'availableChannels.title',
-      descriptionKey: 'availableChannels.description'
+      title: 'Model Square',
+      titleKey: 'modelSquare.title',
+      descriptionKey: 'modelSquare.description',
+      requiresModelSquare: true
     }
+  },
+  {
+    path: '/available-channels',
+    redirect: to => ({ path: '/model-square', query: to.query })
   },
   {
     path: '/profile',
@@ -568,6 +574,12 @@ const routes: RouteRecordRaw[] = [
     name: 'AdminUpstreamStats',
     component: () => import('@/views/admin/upstreams/UpstreamStatsView.vue'),
     meta: { requiresAuth: true, requiresAdmin: true, title: 'Upstream Usage Stats', titleKey: 'nav.upstreamStats' }
+  },
+  {
+    path: '/admin/upstreams/finance-protocols',
+    name: 'AdminUpstreamFinanceProtocols',
+    component: () => import('@/views/admin/UpstreamFinanceProtocolsView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Upstream Finance Protocols', titleKey: 'nav.upstreamFinanceProtocols' }
   },
   {
     path: '/admin/finance',
@@ -982,6 +994,14 @@ router.beforeEach(async (to, _from, next) => {
   if (to.meta.requiresRiskControl) {
     const riskControlEnabled = appStore.cachedPublicSettings?.risk_control_enabled === true
     if (!riskControlEnabled) {
+      next(authStore.isAdmin ? '/admin/settings' : '/dashboard')
+      return
+    }
+  }
+
+  if (to.meta.requiresModelSquare) {
+    const modelSquareEnabled = await resolveModelSquareEnabled(appStore)
+    if (!modelSquareEnabled) {
       next(authStore.isAdmin ? '/admin/settings' : '/dashboard')
       return
     }

@@ -7,6 +7,7 @@ import (
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/shopspring/decimal"
 )
 
 var (
@@ -98,6 +99,34 @@ type AccountRepository interface {
 	IncrementQuotaUsed(ctx context.Context, id int64, amount float64) error
 	// ResetQuotaUsed 重置 API Key 账号所有维度的配额用量为 0
 	ResetQuotaUsed(ctx context.Context, id int64) error
+}
+
+// AccountUpstreamMultiplierAuditRepository atomically persists a procurement
+// multiplier and its immutable audit row. It is kept separate from the broad
+// account repository so lightweight scheduler and unit-test repositories do not
+// need unrelated finance methods.
+type AccountUpstreamMultiplierAuditRepository interface {
+	CreateWithUpstreamMultiplierAudit(ctx context.Context, account *Account, operatorID *int64, reason string) error
+	UpdateAccountWithUpstreamMultiplierAudit(ctx context.Context, account *Account, expectedOld *decimal.Decimal, newMultiplier decimal.Decimal, effectiveAt time.Time, operatorID *int64, reason string) error
+	UpdateUpstreamMultiplierWithAudit(ctx context.Context, accountID int64, expectedOld *decimal.Decimal, newMultiplier decimal.Decimal, effectiveAt time.Time, operatorID *int64, reason string) error
+	ListUpstreamMultiplierChanges(ctx context.Context, accountID int64, params pagination.PaginationParams) ([]AccountUpstreamMultiplierChange, *pagination.PaginationResult, error)
+}
+
+type ModelSquareAccountRepository interface {
+	ListCatalogEligibleByGroupIDs(ctx context.Context, groupIDs []int64) (map[int64][]*Account, error)
+}
+
+type AccountUpstreamMultiplierChange struct {
+	ID            int64
+	AccountID     int64
+	OldMultiplier *decimal.Decimal
+	NewMultiplier decimal.Decimal
+	ChangeType    string
+	EffectiveAt   time.Time
+	OperatorID    *int64
+	OperatorName  *string
+	Reason        string
+	CreatedAt     time.Time
 }
 
 // AccountBulkUpdate describes the fields that can be updated in a bulk operation.

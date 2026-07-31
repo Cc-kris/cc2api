@@ -417,14 +417,16 @@ func (s *OpenAIGatewayService) handleChatBufferedStreamingResponse(
 	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	c.JSON(http.StatusOK, chatResp)
 
+	billingPayload, _ := json.Marshal(finalResponse)
 	return &OpenAIForwardResult{
-		RequestID:     requestID,
-		Usage:         usage,
-		Model:         originalModel,
-		BillingModel:  billingModel,
-		UpstreamModel: upstreamModel,
-		Stream:        false,
-		Duration:      time.Since(startTime),
+		RequestID:              requestID,
+		Usage:                  usage,
+		Model:                  originalModel,
+		BillingModel:           billingModel,
+		UpstreamModel:          upstreamModel,
+		Stream:                 false,
+		Duration:               time.Since(startTime),
+		UpstreamBillingPayload: billingPayload,
 	}, nil
 }
 
@@ -464,6 +466,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 
 	var usage OpenAIUsage
 	var firstTokenMs *int
+	var billingPayload []byte
 	firstChunk := true
 	clientDisconnected := false
 	clientOutputStarted := false
@@ -493,14 +496,15 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 
 	resultWithUsage := func() *OpenAIForwardResult {
 		return &OpenAIForwardResult{
-			RequestID:     requestID,
-			Usage:         usage,
-			Model:         originalModel,
-			BillingModel:  billingModel,
-			UpstreamModel: upstreamModel,
-			Stream:        true,
-			Duration:      time.Since(startTime),
-			FirstTokenMs:  firstTokenMs,
+			RequestID:              requestID,
+			Usage:                  usage,
+			Model:                  originalModel,
+			BillingModel:           billingModel,
+			UpstreamModel:          upstreamModel,
+			Stream:                 true,
+			Duration:               time.Since(startTime),
+			FirstTokenMs:           firstTokenMs,
+			UpstreamBillingPayload: append([]byte(nil), billingPayload...),
 		}
 	}
 
@@ -523,6 +527,9 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 
 		// 仅按兼容转换器支持的终止事件提取 usage，避免无意扩大事件语义。
 		isTerminalEvent := isOpenAICompatResponsesTerminalEvent(event.Type)
+		if isTerminalEvent {
+			billingPayload = append(billingPayload[:0], []byte(payload)...)
+		}
 		if isTerminalEvent && event.Response != nil && event.Response.Usage != nil {
 			usage = copyOpenAIUsageFromResponsesUsage(event.Response.Usage)
 		}

@@ -68,6 +68,36 @@ const (
 	FieldRateMultiplier = "rate_multiplier"
 	// FieldAccountRateMultiplier holds the string denoting the account_rate_multiplier field in the database.
 	FieldAccountRateMultiplier = "account_rate_multiplier"
+	// FieldUpstreamCostMultiplier holds the string denoting the upstream_cost_multiplier field in the database.
+	FieldUpstreamCostMultiplier = "upstream_cost_multiplier"
+	// FieldUpstreamMultiplierChangeID holds the string denoting the upstream_multiplier_change_id field in the database.
+	FieldUpstreamMultiplierChangeID = "upstream_multiplier_change_id"
+	// FieldUpstreamMultiplierSource holds the string denoting the upstream_multiplier_source field in the database.
+	FieldUpstreamMultiplierSource = "upstream_multiplier_source"
+	// FieldUpstreamMultiplierEffectiveAt holds the string denoting the upstream_multiplier_effective_at field in the database.
+	FieldUpstreamMultiplierEffectiveAt = "upstream_multiplier_effective_at"
+	// FieldAccountFinanceProfileID holds the string denoting the account_finance_profile_id field in the database.
+	FieldAccountFinanceProfileID = "account_finance_profile_id"
+	// FieldSalesModel holds the string denoting the sales_model field in the database.
+	FieldSalesModel = "sales_model"
+	// FieldSalesPricingEffectiveModel holds the string denoting the sales_pricing_effective_model field in the database.
+	FieldSalesPricingEffectiveModel = "sales_pricing_effective_model"
+	// FieldSalesPricingLegacySource holds the string denoting the sales_pricing_legacy_source field in the database.
+	FieldSalesPricingLegacySource = "sales_pricing_legacy_source"
+	// FieldSalesPricingVersion holds the string denoting the sales_pricing_version field in the database.
+	FieldSalesPricingVersion = "sales_pricing_version"
+	// FieldSalesPricingSource holds the string denoting the sales_pricing_source field in the database.
+	FieldSalesPricingSource = "sales_pricing_source"
+	// FieldSalesPricingChecksum holds the string denoting the sales_pricing_checksum field in the database.
+	FieldSalesPricingChecksum = "sales_pricing_checksum"
+	// FieldSalesPricingSnapshot holds the string denoting the sales_pricing_snapshot field in the database.
+	FieldSalesPricingSnapshot = "sales_pricing_snapshot"
+	// FieldSalesPricingShadowSnapshot holds the string denoting the sales_pricing_shadow_snapshot field in the database.
+	FieldSalesPricingShadowSnapshot = "sales_pricing_shadow_snapshot"
+	// FieldSalesPricingShadowDelta holds the string denoting the sales_pricing_shadow_delta field in the database.
+	FieldSalesPricingShadowDelta = "sales_pricing_shadow_delta"
+	// FieldUsageListValue holds the string denoting the usage_list_value field in the database.
+	FieldUsageListValue = "usage_list_value"
 	// FieldBillingType holds the string denoting the billing_type field in the database.
 	FieldBillingType = "billing_type"
 	// FieldStream holds the string denoting the stream field in the database.
@@ -183,6 +213,21 @@ var Columns = []string{
 	FieldActualCost,
 	FieldRateMultiplier,
 	FieldAccountRateMultiplier,
+	FieldUpstreamCostMultiplier,
+	FieldUpstreamMultiplierChangeID,
+	FieldUpstreamMultiplierSource,
+	FieldUpstreamMultiplierEffectiveAt,
+	FieldAccountFinanceProfileID,
+	FieldSalesModel,
+	FieldSalesPricingEffectiveModel,
+	FieldSalesPricingLegacySource,
+	FieldSalesPricingVersion,
+	FieldSalesPricingSource,
+	FieldSalesPricingChecksum,
+	FieldSalesPricingSnapshot,
+	FieldSalesPricingShadowSnapshot,
+	FieldSalesPricingShadowDelta,
+	FieldUsageListValue,
 	FieldBillingType,
 	FieldStream,
 	FieldDurationMs,
@@ -254,6 +299,20 @@ var (
 	DefaultActualCost float64
 	// DefaultRateMultiplier holds the default value on creation for the "rate_multiplier" field.
 	DefaultRateMultiplier float64
+	// UpstreamMultiplierSourceValidator is a validator for the "upstream_multiplier_source" field. It is called by the builders before save.
+	UpstreamMultiplierSourceValidator func(string) error
+	// SalesModelValidator is a validator for the "sales_model" field. It is called by the builders before save.
+	SalesModelValidator func(string) error
+	// SalesPricingEffectiveModelValidator is a validator for the "sales_pricing_effective_model" field. It is called by the builders before save.
+	SalesPricingEffectiveModelValidator func(string) error
+	// SalesPricingLegacySourceValidator is a validator for the "sales_pricing_legacy_source" field. It is called by the builders before save.
+	SalesPricingLegacySourceValidator func(string) error
+	// SalesPricingVersionValidator is a validator for the "sales_pricing_version" field. It is called by the builders before save.
+	SalesPricingVersionValidator func(string) error
+	// SalesPricingSourceValidator is a validator for the "sales_pricing_source" field. It is called by the builders before save.
+	SalesPricingSourceValidator func(string) error
+	// SalesPricingChecksumValidator is a validator for the "sales_pricing_checksum" field. It is called by the builders before save.
+	SalesPricingChecksumValidator func(string) error
 	// DefaultBillingType holds the default value on creation for the "billing_type" field.
 	DefaultBillingType int8
 	// DefaultStream holds the default value on creation for the "stream" field.
@@ -425,6 +484,71 @@ func ByRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
 // ByAccountRateMultiplier orders the results by the account_rate_multiplier field.
 func ByAccountRateMultiplier(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAccountRateMultiplier, opts...).ToFunc()
+}
+
+// ByUpstreamCostMultiplier orders the results by the upstream_cost_multiplier field.
+func ByUpstreamCostMultiplier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamCostMultiplier, opts...).ToFunc()
+}
+
+// ByUpstreamMultiplierChangeID orders the results by the upstream_multiplier_change_id field.
+func ByUpstreamMultiplierChangeID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamMultiplierChangeID, opts...).ToFunc()
+}
+
+// ByUpstreamMultiplierSource orders the results by the upstream_multiplier_source field.
+func ByUpstreamMultiplierSource(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamMultiplierSource, opts...).ToFunc()
+}
+
+// ByUpstreamMultiplierEffectiveAt orders the results by the upstream_multiplier_effective_at field.
+func ByUpstreamMultiplierEffectiveAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamMultiplierEffectiveAt, opts...).ToFunc()
+}
+
+// ByAccountFinanceProfileID orders the results by the account_finance_profile_id field.
+func ByAccountFinanceProfileID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAccountFinanceProfileID, opts...).ToFunc()
+}
+
+// BySalesModel orders the results by the sales_model field.
+func BySalesModel(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSalesModel, opts...).ToFunc()
+}
+
+// BySalesPricingEffectiveModel orders the results by the sales_pricing_effective_model field.
+func BySalesPricingEffectiveModel(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSalesPricingEffectiveModel, opts...).ToFunc()
+}
+
+// BySalesPricingLegacySource orders the results by the sales_pricing_legacy_source field.
+func BySalesPricingLegacySource(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSalesPricingLegacySource, opts...).ToFunc()
+}
+
+// BySalesPricingVersion orders the results by the sales_pricing_version field.
+func BySalesPricingVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSalesPricingVersion, opts...).ToFunc()
+}
+
+// BySalesPricingSource orders the results by the sales_pricing_source field.
+func BySalesPricingSource(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSalesPricingSource, opts...).ToFunc()
+}
+
+// BySalesPricingChecksum orders the results by the sales_pricing_checksum field.
+func BySalesPricingChecksum(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSalesPricingChecksum, opts...).ToFunc()
+}
+
+// BySalesPricingShadowDelta orders the results by the sales_pricing_shadow_delta field.
+func BySalesPricingShadowDelta(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSalesPricingShadowDelta, opts...).ToFunc()
+}
+
+// ByUsageListValue orders the results by the usage_list_value field.
+func ByUsageListValue(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUsageListValue, opts...).ToFunc()
 }
 
 // ByBillingType orders the results by the billing_type field.

@@ -21,6 +21,16 @@
         </p>
       </div>
 
+      <div v-if="bulkResult" class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm dark:border-dark-600 dark:bg-dark-700/50">
+        <p>{{ t('admin.accounts.bulkEdit.resultSummary', bulkResult) }}</p>
+        <div v-if="bulkResult.failedIds.length" class="mt-2 flex items-center justify-between gap-3">
+          <span class="break-all text-red-600">{{ bulkResult.failedIds.join(', ') }}</span>
+          <button type="button" class="btn btn-secondary" @click="copyFailedAccountIds">
+            {{ t('admin.accounts.bulkEdit.copyFailed') }}
+          </button>
+        </div>
+      </div>
+
       <!-- Mixed platform warning -->
       <div v-if="isMixedPlatform" class="rounded-lg bg-amber-50 p-4 dark:bg-amber-900/20">
         <p class="text-sm text-amber-700 dark:text-amber-400">
@@ -632,6 +642,40 @@
           />
           <p class="input-hint">{{ t('admin.accounts.billingRateMultiplierHint') }}</p>
         </div>
+        <div>
+          <div class="mb-3 flex items-center justify-between">
+            <label id="bulk-edit-upstream-multiplier-label" class="input-label mb-0" for="bulk-edit-upstream-multiplier-enabled">
+              {{ t('admin.accounts.upstreamCostMultiplier') }}
+            </label>
+            <input
+              v-model="enableUpstreamCostMultiplier"
+              id="bulk-edit-upstream-multiplier-enabled"
+              type="checkbox"
+              aria-controls="bulk-edit-upstream-multiplier"
+              class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+          </div>
+          <input
+            v-model="upstreamCostMultiplier"
+            id="bulk-edit-upstream-multiplier"
+            type="number"
+            min="0"
+            max="9999.9999"
+            step="0.0001"
+            inputmode="decimal"
+            :disabled="!enableUpstreamCostMultiplier"
+            class="input"
+            :class="!enableUpstreamCostMultiplier && 'cursor-not-allowed opacity-50'"
+            aria-labelledby="bulk-edit-upstream-multiplier-label"
+          />
+          <p class="input-hint">{{ t('admin.accounts.upstreamCostMultiplierHint') }}</p>
+        </div>
+      </div>
+
+      <div v-if="enableUpstreamCostMultiplier" class="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30">
+        <label class="input-label">{{ t('admin.accounts.upstreamCostMultiplierChangeReason') }}</label>
+        <textarea v-model="upstreamCostMultiplierChangeReason" rows="2" minlength="5" maxlength="500" required class="input" data-testid="bulk-upstream-multiplier-reason"></textarea>
+        <p class="input-hint">{{ t('admin.accounts.upstreamCostMultiplierChangeReasonHint') }}</p>
       </div>
 
       <!-- Status -->
@@ -1086,6 +1130,15 @@
     @confirm="handleMixedChannelConfirm"
     @cancel="handleMixedChannelCancel"
   />
+  <ConfirmDialog
+    :show="showUpstreamMultiplierConfirm"
+    :title="t('admin.accounts.bulkEdit.upstreamConfirmTitle')"
+    :message="upstreamMultiplierConfirmMessage"
+    :confirm-text="t('common.confirm')"
+    :cancel-text="t('common.cancel')"
+    @confirm="handleUpstreamMultiplierConfirm"
+    @cancel="showUpstreamMultiplierConfirm = false"
+  />
 </template>
 
 <script setup lang="ts">
@@ -1093,7 +1146,7 @@ import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
-import type { Proxy as ProxyConfig, AdminGroup, AccountPlatform, AccountType, OpenAICompactMode } from '@/types'
+import type { Proxy as ProxyConfig, AdminGroup, Account, AccountPlatform, AccountType, OpenAICompactMode } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
@@ -1118,6 +1171,7 @@ interface Props {
   accountIds: number[]
   selectedPlatforms: AccountPlatform[]
   selectedTypes: AccountType[]
+  selectedAccounts?: Account[]
   target?: {
     mode: 'selected' | 'filtered'
     filters?: Record<string, unknown>
@@ -1213,6 +1267,7 @@ const enableConcurrency = ref(false)
 const enableLoadFactor = ref(false)
 const enablePriority = ref(false)
 const enableRateMultiplier = ref(false)
+const enableUpstreamCostMultiplier = ref(false)
 const enableStatus = ref(false)
 const enableGroups = ref(false)
 const enableOpenAIPassthrough = ref(false)
@@ -1240,6 +1295,11 @@ const concurrency = ref(1)
 const loadFactor = ref<number | null>(null)
 const priority = ref(1)
 const rateMultiplier = ref(1)
+const upstreamCostMultiplier = ref<string | number>('1.0000')
+const upstreamCostMultiplierChangeReason = ref('')
+const showUpstreamMultiplierConfirm = ref(false)
+const pendingUpstreamUpdates = ref<Record<string, unknown> | null>(null)
+const bulkResult = ref<{ success: number; unchanged: number; failed: number; failedIds: number[] } | null>(null)
 const status = ref<'active' | 'inactive'>('active')
 const groupIds = ref<number[]>([])
 const openaiPassthroughEnabled = ref(false)
@@ -1253,6 +1313,38 @@ const bulkBaseRpm = ref<number | null>(null)
 const bulkRpmStrategy = ref<'tiered' | 'sticky_exempt'>('tiered')
 const bulkRpmStickyBuffer = ref<number | null>(null)
 const userMsgQueueMode = ref<string | null>(null)
+
+const upstreamMultiplierText = () => {
+  const numeric = Number(upstreamCostMultiplier.value)
+  return Number.isFinite(numeric)
+    ? numeric.toFixed(4)
+    : String(upstreamCostMultiplier.value ?? '').trim()
+}
+
+const isValidUpstreamMultiplier = () => {
+  const raw = String(upstreamCostMultiplier.value ?? '').trim()
+  if (!/^\d+(?:\.\d{1,4})?$/.test(raw)) return false
+  const numeric = Number(raw)
+  return numeric >= 0 && numeric <= 9999.9999
+}
+
+const upstreamMultiplierDistribution = computed(() => {
+  const counts = new Map<string, number>()
+  for (const account of props.selectedAccounts || []) {
+    const value = account.upstream_cost_multiplier || t('admin.accounts.upstreamCostMultiplierUnconfigured')
+    counts.set(value, (counts.get(value) || 0) + 1)
+  }
+  if (counts.size === 0) return t('admin.accounts.bulkEdit.distributionUnavailable')
+  return [...counts.entries()].map(([value, count]) => `${value} × ${count}`).join('；')
+})
+
+const upstreamMultiplierConfirmMessage = computed(() =>
+  t('admin.accounts.bulkEdit.upstreamConfirmMessage', {
+    count: targetMode.value === 'filtered' ? targetPreviewCount.value : props.accountIds.length,
+    distribution: upstreamMultiplierDistribution.value,
+    value: upstreamMultiplierText()
+  })
+)
 const umqModeOptions = computed(() => [
   { value: '', label: t('admin.accounts.quotaControl.rpmLimit.umqModeOff') },
   { value: 'throttle', label: t('admin.accounts.quotaControl.rpmLimit.umqModeThrottle') },
@@ -1419,6 +1511,11 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
 
   if (enableRateMultiplier.value) {
     updates.rate_multiplier = rateMultiplier.value
+  }
+
+  if (enableUpstreamCostMultiplier.value) {
+    updates.upstream_cost_multiplier = upstreamMultiplierText()
+    updates.upstream_cost_multiplier_change_reason = upstreamCostMultiplierChangeReason.value.trim()
   }
 
   if (enableStatus.value) {
@@ -1597,6 +1694,7 @@ const handleSubmit = async () => {
     enableLoadFactor.value ||
     enablePriority.value ||
     enableRateMultiplier.value ||
+    enableUpstreamCostMultiplier.value ||
     enableStatus.value ||
     enableGroups.value ||
     enableOpenAIWSMode.value ||
@@ -1612,9 +1710,51 @@ const handleSubmit = async () => {
     return
   }
 
+  if (enableUpstreamCostMultiplier.value) {
+    const otherFieldEnabled =
+      enableBaseUrl.value ||
+      enableOpenAIPassthrough.value ||
+      enableModelRestriction.value ||
+      enableCustomErrorCodes.value ||
+      enableInterceptWarmup.value ||
+      enableProxy.value ||
+      enableConcurrency.value ||
+      enableLoadFactor.value ||
+      enablePriority.value ||
+      enableRateMultiplier.value ||
+      enableStatus.value ||
+      enableGroups.value ||
+      enableOpenAIWSMode.value ||
+      enableOpenAIAPIKeyWSMode.value ||
+      enableCodexCLIOnly.value ||
+      enableOpenAICompactMode.value ||
+      enableOpenAICompactModelMapping.value ||
+      enableRpmLimit.value ||
+      userMsgQueueMode.value !== null
+    if (otherFieldEnabled) {
+      appStore.showError(t('admin.accounts.bulkEdit.upstreamSeparateOnly'))
+      return
+    }
+    if (!isValidUpstreamMultiplier()) {
+      appStore.showError(t('admin.accounts.upstreamCostMultiplierInvalid'))
+      return
+    }
+    const reason = upstreamCostMultiplierChangeReason.value.trim()
+    if (reason.length < 5 || reason.length > 500) {
+      appStore.showError(t('admin.accounts.upstreamCostMultiplierChangeReasonHint'))
+      return
+    }
+  }
+
   const built = buildUpdatePayload()
   if (!built) {
     appStore.showError(t('admin.accounts.bulkEdit.noFieldsSelected'))
+    return
+  }
+
+  if (enableUpstreamCostMultiplier.value) {
+    pendingUpstreamUpdates.value = built
+    showUpstreamMultiplierConfirm.value = true
     return
   }
 
@@ -1640,17 +1780,25 @@ const submitBulkUpdate = async (baseUpdates: Record<string, unknown>) => {
       })
       : await adminAPI.accounts.bulkUpdate(props.accountIds, updates)
     const success = res.success || 0
+    const unchanged = res.unchanged || 0
     const failed = res.failed || 0
 
-    if (success > 0 && failed === 0) {
-      appStore.showSuccess(t('admin.accounts.bulkEdit.success', { count: success }))
-    } else if (success > 0) {
-      appStore.showError(t('admin.accounts.bulkEdit.partialSuccess', { success, failed }))
+    bulkResult.value = {
+      success,
+      unchanged,
+      failed,
+      failedIds: res.failed_ids || res.results.filter(item => !item.success).map(item => item.account_id)
+    }
+
+    if (failed === 0) {
+      appStore.showSuccess(t('admin.accounts.bulkEdit.resultSummary', bulkResult.value))
+    } else if (success > 0 || unchanged > 0) {
+      appStore.showError(t('admin.accounts.bulkEdit.resultSummary', bulkResult.value))
     } else {
       appStore.showError(t('admin.accounts.bulkEdit.failed'))
     }
 
-    if (success > 0) {
+    if (failed === 0 && success + unchanged > 0) {
       pendingUpdatesForConfirm.value = null
       emit('updated')
       handleClose()
@@ -1668,6 +1816,19 @@ const submitBulkUpdate = async (baseUpdates: Record<string, unknown>) => {
   } finally {
     submitting.value = false
   }
+}
+
+const handleUpstreamMultiplierConfirm = async () => {
+  showUpstreamMultiplierConfirm.value = false
+  const updates = pendingUpstreamUpdates.value
+  pendingUpstreamUpdates.value = null
+  if (updates) await submitBulkUpdate(updates)
+}
+
+const copyFailedAccountIds = async () => {
+  if (!bulkResult.value?.failedIds.length) return
+  await navigator.clipboard.writeText(bulkResult.value.failedIds.join(','))
+  appStore.showSuccess(t('admin.accounts.bulkEdit.failedCopied'))
 }
 
 const handleMixedChannelConfirm = async () => {
@@ -1698,6 +1859,7 @@ watch(
       enableLoadFactor.value = false
       enablePriority.value = false
       enableRateMultiplier.value = false
+      enableUpstreamCostMultiplier.value = false
       enableStatus.value = false
       enableGroups.value = false
       enableOpenAIPassthrough.value = false
@@ -1722,6 +1884,8 @@ watch(
       loadFactor.value = null
       priority.value = 1
       rateMultiplier.value = 1
+      upstreamCostMultiplier.value = '1.0000'
+      upstreamCostMultiplierChangeReason.value = ''
       status.value = 'active'
       groupIds.value = []
       openaiOAuthResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
@@ -1740,6 +1904,9 @@ watch(
       mixedChannelWarningMessage.value = ''
       pendingUpdatesForConfirm.value = null
       mixedChannelConfirmed.value = false
+      showUpstreamMultiplierConfirm.value = false
+      pendingUpstreamUpdates.value = null
+      bulkResult.value = null
     }
   }
 )

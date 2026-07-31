@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/Wei-Shaw/sub2api/ent/account"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
+	"github.com/shopspring/decimal"
 )
 
 // Account is the model entity for the Account schema.
@@ -47,6 +48,16 @@ type Account struct {
 	Priority int `json:"priority,omitempty"`
 	// RateMultiplier holds the value of the "rate_multiplier" field.
 	RateMultiplier float64 `json:"rate_multiplier,omitempty"`
+	// UpstreamCostMultiplier holds the value of the "upstream_cost_multiplier" field.
+	UpstreamCostMultiplier *decimal.Decimal `json:"upstream_cost_multiplier,omitempty"`
+	// UpstreamCostMultiplierUpdatedAt holds the value of the "upstream_cost_multiplier_updated_at" field.
+	UpstreamCostMultiplierUpdatedAt *time.Time `json:"upstream_cost_multiplier_updated_at,omitempty"`
+	// UpstreamCostMultiplierChangeID holds the value of the "upstream_cost_multiplier_change_id" field.
+	UpstreamCostMultiplierChangeID *int64 `json:"upstream_cost_multiplier_change_id,omitempty"`
+	// UpstreamCostMultiplierSource holds the value of the "upstream_cost_multiplier_source" field.
+	UpstreamCostMultiplierSource string `json:"upstream_cost_multiplier_source,omitempty"`
+	// CurrentFinanceProfileID holds the value of the "current_finance_profile_id" field.
+	CurrentFinanceProfileID *int64 `json:"current_finance_profile_id,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
 	// ErrorMessage holds the value of the "error_message" field.
@@ -139,17 +150,19 @@ func (*Account) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case account.FieldUpstreamCostMultiplier:
+			values[i] = &sql.NullScanner{S: new(decimal.Decimal)}
 		case account.FieldCredentials, account.FieldExtra:
 			values[i] = new([]byte)
 		case account.FieldAutoPauseOnExpired, account.FieldSchedulable:
 			values[i] = new(sql.NullBool)
 		case account.FieldRateMultiplier:
 			values[i] = new(sql.NullFloat64)
-		case account.FieldID, account.FieldProxyID, account.FieldConcurrency, account.FieldLoadFactor, account.FieldPriority:
+		case account.FieldID, account.FieldProxyID, account.FieldConcurrency, account.FieldLoadFactor, account.FieldPriority, account.FieldUpstreamCostMultiplierChangeID, account.FieldCurrentFinanceProfileID:
 			values[i] = new(sql.NullInt64)
-		case account.FieldName, account.FieldNotes, account.FieldPlatform, account.FieldType, account.FieldStatus, account.FieldErrorMessage, account.FieldTempUnschedulableReason, account.FieldSessionWindowStatus:
+		case account.FieldName, account.FieldNotes, account.FieldPlatform, account.FieldType, account.FieldUpstreamCostMultiplierSource, account.FieldStatus, account.FieldErrorMessage, account.FieldTempUnschedulableReason, account.FieldSessionWindowStatus:
 			values[i] = new(sql.NullString)
-		case account.FieldCreatedAt, account.FieldUpdatedAt, account.FieldDeletedAt, account.FieldLastUsedAt, account.FieldExpiresAt, account.FieldRateLimitedAt, account.FieldRateLimitResetAt, account.FieldOverloadUntil, account.FieldTempUnschedulableUntil, account.FieldSessionWindowStart, account.FieldSessionWindowEnd:
+		case account.FieldCreatedAt, account.FieldUpdatedAt, account.FieldDeletedAt, account.FieldUpstreamCostMultiplierUpdatedAt, account.FieldLastUsedAt, account.FieldExpiresAt, account.FieldRateLimitedAt, account.FieldRateLimitResetAt, account.FieldOverloadUntil, account.FieldTempUnschedulableUntil, account.FieldSessionWindowStart, account.FieldSessionWindowEnd:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -263,6 +276,40 @@ func (_m *Account) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field rate_multiplier", values[i])
 			} else if value.Valid {
 				_m.RateMultiplier = value.Float64
+			}
+		case account.FieldUpstreamCostMultiplier:
+			if value, ok := values[i].(*sql.NullScanner); !ok {
+				return fmt.Errorf("unexpected type %T for field upstream_cost_multiplier", values[i])
+			} else if value.Valid {
+				_m.UpstreamCostMultiplier = new(decimal.Decimal)
+				*_m.UpstreamCostMultiplier = *value.S.(*decimal.Decimal)
+			}
+		case account.FieldUpstreamCostMultiplierUpdatedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field upstream_cost_multiplier_updated_at", values[i])
+			} else if value.Valid {
+				_m.UpstreamCostMultiplierUpdatedAt = new(time.Time)
+				*_m.UpstreamCostMultiplierUpdatedAt = value.Time
+			}
+		case account.FieldUpstreamCostMultiplierChangeID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field upstream_cost_multiplier_change_id", values[i])
+			} else if value.Valid {
+				_m.UpstreamCostMultiplierChangeID = new(int64)
+				*_m.UpstreamCostMultiplierChangeID = value.Int64
+			}
+		case account.FieldUpstreamCostMultiplierSource:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field upstream_cost_multiplier_source", values[i])
+			} else if value.Valid {
+				_m.UpstreamCostMultiplierSource = value.String
+			}
+		case account.FieldCurrentFinanceProfileID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field current_finance_profile_id", values[i])
+			} else if value.Valid {
+				_m.CurrentFinanceProfileID = new(int64)
+				*_m.CurrentFinanceProfileID = value.Int64
 			}
 		case account.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -464,6 +511,29 @@ func (_m *Account) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("rate_multiplier=")
 	builder.WriteString(fmt.Sprintf("%v", _m.RateMultiplier))
+	builder.WriteString(", ")
+	if v := _m.UpstreamCostMultiplier; v != nil {
+		builder.WriteString("upstream_cost_multiplier=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.UpstreamCostMultiplierUpdatedAt; v != nil {
+		builder.WriteString("upstream_cost_multiplier_updated_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.UpstreamCostMultiplierChangeID; v != nil {
+		builder.WriteString("upstream_cost_multiplier_change_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("upstream_cost_multiplier_source=")
+	builder.WriteString(_m.UpstreamCostMultiplierSource)
+	builder.WriteString(", ")
+	if v := _m.CurrentFinanceProfileID; v != nil {
+		builder.WriteString("current_finance_profile_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)

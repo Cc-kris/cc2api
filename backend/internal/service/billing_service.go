@@ -91,6 +91,10 @@ type ModelPricing struct {
 	LongContextInputMultiplier     float64 // 长上下文整次会话输入倍率
 	LongContextOutputMultiplier    float64 // 长上下文整次会话输出倍率
 	ImageOutputPricePerToken       float64 // 图片输出 token 价格 (USD)
+	// Presence preserves the distinction between an absent price and an explicit
+	// zero price. Nil keeps legacy callers compatible by inferring presence from
+	// non-zero values.
+	Presence *ModelPricingPresence
 }
 
 const (
@@ -523,7 +527,7 @@ func (s *BillingService) CalculateCostUnified(input CostInput) (*CostBreakdown, 
 	var breakdown *CostBreakdown
 	var err error
 	switch resolved.Mode {
-	case BillingModePerRequest, BillingModeImage, BillingModePerSecond:
+	case BillingModePerRequest, BillingModeImage, BillingModeVideo, BillingModePerSecond:
 		breakdown, err = s.calculatePerRequestCost(resolved, input)
 	default: // BillingModeToken
 		breakdown, err = s.calculateTokenCost(resolved, input)

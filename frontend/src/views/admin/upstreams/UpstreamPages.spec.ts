@@ -3,14 +3,12 @@ import { flushPromises, mount } from '@vue/test-utils'
 
 import UpstreamManagementView from './UpstreamManagementView.vue'
 import UpstreamStatsView from './UpstreamStatsView.vue'
-import FinanceStatsView from '../FinanceStatsView.vue'
 
-const { list, accountList, deleteUpstream, getStats, getFinanceStats, showSuccess, showError } = vi.hoisted(() => ({
+const { list, accountList, deleteUpstream, getStats, showSuccess, showError } = vi.hoisted(() => ({
   list: vi.fn(),
   accountList: vi.fn(),
   deleteUpstream: vi.fn(),
   getStats: vi.fn(),
-  getFinanceStats: vi.fn(),
   showSuccess: vi.fn(),
   showError: vi.fn()
 }))
@@ -26,8 +24,7 @@ vi.mock('@/api/admin', () => ({
       update: vi.fn(),
       deleteUpstream,
       syncFromAccounts: vi.fn(),
-      getStats,
-      getFinanceStats
+      getStats
     }
   }
 }))
@@ -67,7 +64,6 @@ describe('admin upstream pages', () => {
     accountList.mockResolvedValue({ data: [] })
     deleteUpstream.mockReset()
     getStats.mockReset()
-    getFinanceStats.mockReset()
     showSuccess.mockReset()
     showError.mockReset()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -154,35 +150,5 @@ describe('admin upstream pages', () => {
     expect(chartData.datasets.map((dataset: { label: string }) => dataset.label)).toEqual(['Anthropic', 'OpenAI'])
     expect(chartData.datasets[0].data).toEqual([10, 30])
     expect(chartData.datasets[1].data).toEqual([20, 0])
-  })
-
-  it('configures finance chart to show all three values on date hover', async () => {
-    getFinanceStats.mockResolvedValue({
-      summary: {
-        user_recharge_total: 100,
-        upstream_recharge_total: 50,
-        user_consumed_amount: 40,
-        upstream_consumed_amount: 10,
-        consumed_profit: 30,
-        consumed_profit_rate: 75
-      },
-      trend: [
-        { bucket: '2026-06-18T08:00:00Z', profit: 30, upstream_cost: 10, user_recharge: 100, user_consumed_amount: 40, upstream_consumed_amount: 10 }
-      ],
-      start_date: '2026-06-18T00:00:00Z',
-      end_date: '2026-06-19T00:00:00Z',
-      granularity: 'day',
-      updated_at: '2026-06-18T00:00:00Z'
-    })
-
-    const wrapper = mount(FinanceStatsView, mountOptions)
-    await flushPromises()
-
-    const chartData = JSON.parse(wrapper.get('[data-testid="line-chart"]').text())
-    const chartOptions = JSON.parse(wrapper.get('[data-testid="line-chart"]').attributes('data-options') || '{}')
-    expect(chartData.datasets.map((dataset: { label: string }) => dataset.label)).toEqual(['上游成本', '用户消耗金额', '已消耗利润'])
-    expect(chartData.labels[0]).not.toContain(':')
-    expect(chartOptions.interaction.mode).toBe('index')
-    expect(chartOptions.plugins.tooltip.mode).toBe('index')
   })
 })

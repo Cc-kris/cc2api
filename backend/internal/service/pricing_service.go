@@ -99,6 +99,15 @@ type LiteLLMRawEntry struct {
 	OutputCostPerImageToken             *float64 `json:"output_cost_per_image_token"`
 }
 
+// PricingCatalogSnapshot is an immutable copy of the active catalog for
+// historical finance versioning. Callers must not rely on PricingService's
+// mutable in-memory structures after receiving this value.
+type PricingCatalogSnapshot struct {
+	Checksum  string
+	UpdatedAt time.Time
+	Models    map[string]LiteLLMModelPricing
+}
+
 // PricingService 动态价格服务
 type PricingService struct {
 	cfg          *config.Config
@@ -941,6 +950,30 @@ func (s *PricingService) ListModelNamesByProvider(provider string) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// Snapshot returns a deep copy of the active price catalog while holding the
+// service read lock. When the upstream hash is unavailable, a deterministic
+// SHA-256 of the copied catalog is used as the version checksum.
+func (s *PricingService) Snapshot() PricingCatalogSnapshot {
+	if s == nil {
+		return PricingCatalogSnapshot{Models: map[string]LiteLLMModelPricing{}}
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	models := make(map[string]LiteLLMModelPricing, len(s.pricingData))
+	for name, pricing := range s.pricingData {
+		if pricing != nil {
+			models[name] = *pricing
+		}
+	}
+	checksum := strings.TrimSpace(s.localHash)
+	if checksum == "" {
+		encoded, _ := json.Marshal(models)
+		sum := sha256.Sum256(encoded)
+		checksum = "sha256:" + hex.EncodeToString(sum[:])
+	}
+	return PricingCatalogSnapshot{Checksum: checksum, UpdatedAt: s.lastUpdated, Models: models}
 }
 
 // isNumeric 检查字符串是否为纯数字

@@ -27,9 +27,10 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/lib/pq"
 	gocache "github.com/patrickmn/go-cache"
+	"github.com/shopspring/decimal"
 )
 
-const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, image_output_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, video_count, video_resolution, video_duration_seconds, video_task_id, service_tier, reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, created_at"
+const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, image_output_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, video_count, video_resolution, video_duration_seconds, video_task_id, service_tier, reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, created_at, upstream_cost_multiplier, sales_model, sales_pricing_effective_model, sales_pricing_legacy_source, sales_pricing_version, sales_pricing_source, sales_pricing_checksum, sales_pricing_snapshot, sales_pricing_shadow_snapshot, sales_pricing_shadow_delta, usage_list_value, upstream_multiplier_change_id, upstream_multiplier_source, upstream_multiplier_effective_at, account_finance_profile_id"
 
 // usageLogInsertArgTypes must stay in the same order as:
 //  1. prepareUsageLogInsert().args
@@ -93,6 +94,21 @@ var usageLogInsertArgTypes = [...]string{
 	"text",        // billing_mode
 	"numeric",     // account_stats_cost
 	"timestamptz", // created_at
+	"numeric",     // upstream_cost_multiplier
+	"text",        // sales_model
+	"text",        // sales_pricing_effective_model
+	"text",        // sales_pricing_legacy_source
+	"text",        // sales_pricing_version
+	"text",        // sales_pricing_source
+	"text",        // sales_pricing_checksum
+	"jsonb",       // sales_pricing_snapshot
+	"jsonb",       // sales_pricing_shadow_snapshot
+	"numeric",     // sales_pricing_shadow_delta
+	"numeric",     // usage_list_value
+	"bigint",      // upstream_multiplier_change_id
+	"text",        // upstream_multiplier_source
+	"timestamptz", // upstream_multiplier_effective_at
+	"bigint",      // account_finance_profile_id
 }
 
 const rawUsageLogModelColumn = "model"
@@ -290,9 +306,26 @@ func (r *usageLogRepository) Create(ctx context.Context, log *service.UsageLog) 
 	if log == nil {
 		return false, nil
 	}
-
 	if tx := dbent.TxFromContext(ctx); tx != nil {
-		return r.createSingle(ctx, tx.Client(), log)
+		return r.createWithAttempts(ctx, tx.Client(), log)
+	}
+	if len(log.UpstreamAttempts) > 0 && r.db != nil {
+		tx, err := r.db.BeginTx(ctx, nil)
+		if err != nil {
+			return false, err
+		}
+		inserted, err := r.createWithAttempts(ctx, tx, log)
+		if err != nil {
+			_ = tx.Rollback()
+			return false, err
+		}
+		if err := tx.Commit(); err != nil {
+			return false, err
+		}
+		return inserted, nil
+	}
+	if len(log.UpstreamAttempts) > 0 {
+		return r.createWithAttempts(ctx, r.sql, log)
 	}
 	requestID := strings.TrimSpace(log.RequestID)
 	if requestID == "" {
@@ -305,6 +338,10 @@ func (r *usageLogRepository) Create(ctx context.Context, log *service.UsageLog) 
 func (r *usageLogRepository) CreateBestEffort(ctx context.Context, log *service.UsageLog) error {
 	if log == nil {
 		return nil
+	}
+	if len(log.UpstreamAttempts) > 0 {
+		_, err := r.Create(ctx, log)
+		return err
 	}
 
 	if tx := dbent.TxFromContext(ctx); tx != nil {
@@ -347,6 +384,76 @@ func (r *usageLogRepository) CreateBestEffort(ctx context.Context, log *service.
 	case <-ctx.Done():
 		return service.MarkUsageLogCreateDropped(ctx.Err())
 	}
+}
+
+func (r *usageLogRepository) createWithAttempts(ctx context.Context, sqlq sqlExecutor, log *service.UsageLog) (bool, error) {
+	inserted, err := r.createSingle(ctx, sqlq, log)
+	if err != nil || !inserted || len(log.UpstreamAttempts) == 0 {
+		return inserted, err
+	}
+	if err := insertUsageUpstreamAttempts(ctx, sqlq, log); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func insertUsageUpstreamAttempts(ctx context.Context, sqlq sqlExecutor, log *service.UsageLog) error {
+	if sqlq == nil || log == nil || log.ID <= 0 {
+		return errors.New("usage upstream attempts require a persisted usage log")
+	}
+	const query = `
+		INSERT INTO usage_upstream_attempts (
+			usage_log_id, request_id, attempt_no, account_id, channel_id,
+			upstream_model, service_tier, input_tokens, output_tokens,
+			cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens,
+			request_count, image_count, video_seconds, upstream_cost_multiplier,
+			upstream_multiplier_change_id, upstream_multiplier_source,
+			upstream_multiplier_effective_at, account_finance_profile_id,
+			billable, billing_observed_at, upstream_actual_charge, upstream_actual_charge_usd,
+			upstream_standard_charge, upstream_charge_currency, upstream_charge_unit_semantics,
+			upstream_billing_request_id, upstream_charge_snapshot, completed_at, created_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9,
+			$10, $11, $12, $13, $14, $15, $16, $17, $18,
+			$19, $20, $21, $22, $23, $24, $25, $26, $27,
+			$28, $29::jsonb, $30, $31
+		)
+		ON CONFLICT (usage_log_id, attempt_no) DO NOTHING
+	`
+	for index := range log.UpstreamAttempts {
+		attempt := &log.UpstreamAttempts[index]
+		if attempt.AttemptNo <= 0 {
+			attempt.AttemptNo = index + 1
+		}
+		if strings.TrimSpace(attempt.RequestID) == "" {
+			attempt.RequestID = log.RequestID
+		}
+		if attempt.CreatedAt.IsZero() {
+			attempt.CreatedAt = log.CreatedAt
+		}
+		if attempt.CompletedAt.IsZero() {
+			attempt.CompletedAt = attempt.CreatedAt
+		}
+		attempt.UsageLogID = log.ID
+		snapshotJSON, err := json.Marshal(attempt.UpstreamChargeSnapshot)
+		if err != nil {
+			return err
+		}
+		if _, err := sqlq.ExecContext(ctx, query,
+			attempt.UsageLogID, attempt.RequestID, attempt.AttemptNo, attempt.AccountID, attempt.ChannelID,
+			attempt.UpstreamModel, attempt.ServiceTier, attempt.InputTokens, attempt.OutputTokens,
+			attempt.CacheReadTokens, attempt.CacheCreation5mTokens, attempt.CacheCreation1hTokens,
+			attempt.RequestCount, attempt.ImageCount, attempt.VideoSeconds, attempt.UpstreamCostMultiplier,
+			attempt.UpstreamMultiplierChangeID, nullString(&attempt.UpstreamMultiplierSource),
+			attempt.UpstreamMultiplierEffectiveAt, attempt.AccountFinanceProfileID,
+			attempt.Billable, attempt.BillingObservedAt, attempt.UpstreamActualCharge, attempt.UpstreamActualChargeUSD,
+			attempt.UpstreamStandardCharge, nullString(&attempt.UpstreamChargeCurrency), nullString(&attempt.UpstreamChargeUnitSemantics),
+			nullString(&attempt.UpstreamBillingRequestID), snapshotJSON, attempt.CompletedAt, attempt.CreatedAt,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor, log *service.UsageLog) (bool, error) {
@@ -413,14 +520,30 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
-			created_at
+			created_at,
+			upstream_cost_multiplier,
+			sales_model,
+			sales_pricing_effective_model,
+			sales_pricing_legacy_source,
+			sales_pricing_version,
+			sales_pricing_source,
+			sales_pricing_checksum,
+			sales_pricing_snapshot,
+			sales_pricing_shadow_snapshot,
+			sales_pricing_shadow_delta,
+			usage_list_value,
+			upstream_multiplier_change_id,
+			upstream_multiplier_source,
+			upstream_multiplier_effective_at,
+			account_finance_profile_id
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7,
 			$8, $9,
 			$10, $11, $12, $13,
 			$14, $15, $16, $17,
 			$18, $19, $20, $21, $22, $23,
-			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54
+			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54,
+			$55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69
 		)
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 		RETURNING id, created_at
@@ -859,7 +982,22 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
-			created_at
+			created_at,
+			upstream_cost_multiplier,
+			sales_model,
+			sales_pricing_effective_model,
+			sales_pricing_legacy_source,
+			sales_pricing_version,
+			sales_pricing_source,
+			sales_pricing_checksum,
+			sales_pricing_snapshot,
+			sales_pricing_shadow_snapshot,
+			sales_pricing_shadow_delta,
+			usage_list_value,
+			upstream_multiplier_change_id,
+			upstream_multiplier_source,
+			upstream_multiplier_effective_at,
+			account_finance_profile_id
 		) AS (VALUES `)
 
 	args := make([]any, 0, len(keys)*(len(usageLogInsertArgTypes)+1))
@@ -944,7 +1082,22 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				billing_tier,
 				billing_mode,
 				account_stats_cost,
-				created_at
+				created_at,
+				upstream_cost_multiplier,
+				sales_model,
+				sales_pricing_effective_model,
+				sales_pricing_legacy_source,
+				sales_pricing_version,
+				sales_pricing_source,
+				sales_pricing_checksum,
+				sales_pricing_snapshot,
+				sales_pricing_shadow_snapshot,
+				sales_pricing_shadow_delta,
+				usage_list_value,
+				upstream_multiplier_change_id,
+				upstream_multiplier_source,
+				upstream_multiplier_effective_at,
+				account_finance_profile_id
 			)
 			SELECT
 				user_id,
@@ -1000,7 +1153,22 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				billing_tier,
 				billing_mode,
 				account_stats_cost,
-				created_at
+				created_at,
+				upstream_cost_multiplier,
+				sales_model,
+				sales_pricing_effective_model,
+				sales_pricing_legacy_source,
+				sales_pricing_version,
+				sales_pricing_source,
+				sales_pricing_checksum,
+				sales_pricing_snapshot,
+				sales_pricing_shadow_snapshot,
+				sales_pricing_shadow_delta,
+				usage_list_value,
+				upstream_multiplier_change_id,
+				upstream_multiplier_source,
+				upstream_multiplier_effective_at,
+				account_finance_profile_id
 			FROM input
 			ON CONFLICT (request_id, api_key_id) DO NOTHING
 			RETURNING request_id, api_key_id, id, created_at
@@ -1096,7 +1264,22 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
-			created_at
+			created_at,
+			upstream_cost_multiplier,
+			sales_model,
+			sales_pricing_effective_model,
+			sales_pricing_legacy_source,
+			sales_pricing_version,
+			sales_pricing_source,
+			sales_pricing_checksum,
+			sales_pricing_snapshot,
+			sales_pricing_shadow_snapshot,
+			sales_pricing_shadow_delta,
+			usage_list_value,
+			upstream_multiplier_change_id,
+			upstream_multiplier_source,
+			upstream_multiplier_effective_at,
+			account_finance_profile_id
 		) AS (VALUES `)
 
 	args := make([]any, 0, len(preparedList)*len(usageLogInsertArgTypes))
@@ -1178,7 +1361,22 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
-			created_at
+			created_at,
+			upstream_cost_multiplier,
+			sales_model,
+			sales_pricing_effective_model,
+			sales_pricing_legacy_source,
+			sales_pricing_version,
+			sales_pricing_source,
+			sales_pricing_checksum,
+			sales_pricing_snapshot,
+			sales_pricing_shadow_snapshot,
+			sales_pricing_shadow_delta,
+			usage_list_value,
+			upstream_multiplier_change_id,
+			upstream_multiplier_source,
+			upstream_multiplier_effective_at,
+			account_finance_profile_id
 		)
 		SELECT
 			user_id,
@@ -1234,7 +1432,22 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
-			created_at
+			created_at,
+			upstream_cost_multiplier,
+			sales_model,
+			sales_pricing_effective_model,
+			sales_pricing_legacy_source,
+			sales_pricing_version,
+			sales_pricing_source,
+			sales_pricing_checksum,
+			sales_pricing_snapshot,
+			sales_pricing_shadow_snapshot,
+			sales_pricing_shadow_delta,
+			usage_list_value,
+			upstream_multiplier_change_id,
+			upstream_multiplier_source,
+			upstream_multiplier_effective_at,
+			account_finance_profile_id
 		FROM input
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 	`)
@@ -1298,14 +1511,30 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared 
 			billing_tier,
 			billing_mode,
 			account_stats_cost,
-			created_at
+			created_at,
+			upstream_cost_multiplier,
+			sales_model,
+			sales_pricing_effective_model,
+			sales_pricing_legacy_source,
+			sales_pricing_version,
+			sales_pricing_source,
+			sales_pricing_checksum,
+			sales_pricing_snapshot,
+			sales_pricing_shadow_snapshot,
+			sales_pricing_shadow_delta,
+			usage_list_value,
+			upstream_multiplier_change_id,
+			upstream_multiplier_source,
+			upstream_multiplier_effective_at,
+			account_finance_profile_id
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7,
 			$8, $9,
 			$10, $11, $12, $13,
 			$14, $15, $16, $17,
 			$18, $19, $20, $21, $22, $23,
-			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54
+			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54,
+			$55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69
 		)
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 	`, prepared.args...)
@@ -1418,6 +1647,21 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 			billingMode,
 			log.AccountStatsCost, // account_stats_cost
 			createdAt,
+			log.UpstreamCostMultiplier,
+			nullString(log.SalesModel),
+			nullString(log.SalesPricingEffectiveModel),
+			nullString(log.SalesPricingLegacySource),
+			nullString(log.SalesPricingVersion),
+			nullString(log.SalesPricingSource),
+			nullString(log.SalesPricingChecksum),
+			nullAnyMapJSON(log.SalesPricingSnapshot),
+			nullAnyMapJSON(log.SalesPricingShadowSnapshot),
+			log.SalesPricingShadowDelta,
+			log.UsageListValue,
+			log.UpstreamMultiplierChangeID,
+			nullString(&log.UpstreamMultiplierSource),
+			log.UpstreamMultiplierEffectiveAt,
+			log.AccountFinanceProfileID,
 		},
 	}
 }
@@ -4491,61 +4735,76 @@ func (r *usageLogRepository) loadSubscriptions(ctx context.Context, ids []int64)
 
 func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, error) {
 	var (
-		id                    int64
-		userID                int64
-		apiKeyID              int64
-		accountID             int64
-		requestID             sql.NullString
-		model                 string
-		requestedModel        sql.NullString
-		upstreamModel         sql.NullString
-		groupID               sql.NullInt64
-		subscriptionID        sql.NullInt64
-		inputTokens           int
-		outputTokens          int
-		cacheCreationTokens   int
-		cacheReadTokens       int
-		cacheCreation5m       int
-		cacheCreation1h       int
-		imageOutputTokens     int
-		imageOutputCost       float64
-		inputCost             float64
-		outputCost            float64
-		cacheCreationCost     float64
-		cacheReadCost         float64
-		totalCost             float64
-		actualCost            float64
-		rateMultiplier        float64
-		accountRateMultiplier sql.NullFloat64
-		billingType           int16
-		requestTypeRaw        int16
-		stream                bool
-		openaiWSMode          bool
-		durationMs            sql.NullInt64
-		firstTokenMs          sql.NullInt64
-		userAgent             sql.NullString
-		ipAddress             sql.NullString
-		imageCount            int
-		imageSize             sql.NullString
-		imageInputSize        sql.NullString
-		imageOutputSize       sql.NullString
-		imageSizeSource       sql.NullString
-		imageSizeBreakdown    sql.NullString
-		videoCount            int
-		videoResolution       sql.NullString
-		videoDurationSeconds  sql.NullInt64
-		videoTaskID           sql.NullString
-		serviceTier           sql.NullString
-		reasoningEffort       sql.NullString
-		inboundEndpoint       sql.NullString
-		upstreamEndpoint      sql.NullString
-		cacheTTLOverridden    bool
-		channelID             sql.NullInt64
-		modelMappingChain     sql.NullString
-		billingTier           sql.NullString
-		billingMode           sql.NullString
-		accountStatsCost      sql.NullFloat64
-		createdAt             time.Time
+		id                            int64
+		userID                        int64
+		apiKeyID                      int64
+		accountID                     int64
+		requestID                     sql.NullString
+		model                         string
+		requestedModel                sql.NullString
+		upstreamModel                 sql.NullString
+		groupID                       sql.NullInt64
+		subscriptionID                sql.NullInt64
+		inputTokens                   int
+		outputTokens                  int
+		cacheCreationTokens           int
+		cacheReadTokens               int
+		cacheCreation5m               int
+		cacheCreation1h               int
+		imageOutputTokens             int
+		imageOutputCost               float64
+		inputCost                     float64
+		outputCost                    float64
+		cacheCreationCost             float64
+		cacheReadCost                 float64
+		totalCost                     float64
+		actualCost                    float64
+		rateMultiplier                float64
+		accountRateMultiplier         sql.NullFloat64
+		billingType                   int16
+		requestTypeRaw                int16
+		stream                        bool
+		openaiWSMode                  bool
+		durationMs                    sql.NullInt64
+		firstTokenMs                  sql.NullInt64
+		userAgent                     sql.NullString
+		ipAddress                     sql.NullString
+		imageCount                    int
+		imageSize                     sql.NullString
+		imageInputSize                sql.NullString
+		imageOutputSize               sql.NullString
+		imageSizeSource               sql.NullString
+		imageSizeBreakdown            sql.NullString
+		videoCount                    int
+		videoResolution               sql.NullString
+		videoDurationSeconds          sql.NullInt64
+		videoTaskID                   sql.NullString
+		serviceTier                   sql.NullString
+		reasoningEffort               sql.NullString
+		inboundEndpoint               sql.NullString
+		upstreamEndpoint              sql.NullString
+		cacheTTLOverridden            bool
+		channelID                     sql.NullInt64
+		modelMappingChain             sql.NullString
+		billingTier                   sql.NullString
+		billingMode                   sql.NullString
+		accountStatsCost              sql.NullFloat64
+		createdAt                     time.Time
+		upstreamCostMultiplier        decimal.NullDecimal
+		salesModel                    sql.NullString
+		salesPricingEffectiveModel    sql.NullString
+		salesPricingLegacySource      sql.NullString
+		salesPricingVersion           sql.NullString
+		salesPricingSource            sql.NullString
+		salesPricingChecksum          sql.NullString
+		salesPricingSnapshot          sql.NullString
+		salesPricingShadowSnapshot    sql.NullString
+		salesPricingShadowDelta       decimal.NullDecimal
+		usageListValue                decimal.NullDecimal
+		upstreamMultiplierChangeID    sql.NullInt64
+		upstreamMultiplierSource      sql.NullString
+		upstreamMultiplierEffectiveAt sql.NullTime
+		accountFinanceProfileID       sql.NullInt64
 	)
 
 	if err := scanner.Scan(
@@ -4604,42 +4863,72 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		&billingMode,
 		&accountStatsCost,
 		&createdAt,
+		&upstreamCostMultiplier,
+		&salesModel,
+		&salesPricingEffectiveModel,
+		&salesPricingLegacySource,
+		&salesPricingVersion,
+		&salesPricingSource,
+		&salesPricingChecksum,
+		&salesPricingSnapshot,
+		&salesPricingShadowSnapshot,
+		&salesPricingShadowDelta,
+		&usageListValue,
+		&upstreamMultiplierChangeID,
+		&upstreamMultiplierSource,
+		&upstreamMultiplierEffectiveAt,
+		&accountFinanceProfileID,
 	); err != nil {
 		return nil, err
 	}
 
 	log := &service.UsageLog{
-		ID:                    id,
-		UserID:                userID,
-		APIKeyID:              apiKeyID,
-		AccountID:             accountID,
-		Model:                 model,
-		RequestedModel:        coalesceTrimmedString(requestedModel, model),
-		InputTokens:           inputTokens,
-		OutputTokens:          outputTokens,
-		CacheCreationTokens:   cacheCreationTokens,
-		CacheReadTokens:       cacheReadTokens,
-		CacheCreation5mTokens: cacheCreation5m,
-		CacheCreation1hTokens: cacheCreation1h,
-		ImageOutputTokens:     imageOutputTokens,
-		ImageOutputCost:       imageOutputCost,
-		InputCost:             inputCost,
-		OutputCost:            outputCost,
-		CacheCreationCost:     cacheCreationCost,
-		CacheReadCost:         cacheReadCost,
-		TotalCost:             totalCost,
-		ActualCost:            actualCost,
-		RateMultiplier:        rateMultiplier,
-		AccountRateMultiplier: nullFloat64Ptr(accountRateMultiplier),
-		BillingType:           int8(billingType),
-		RequestType:           service.RequestTypeFromInt16(requestTypeRaw),
-		ImageCount:            imageCount,
-		VideoCount:            videoCount,
-		VideoResolution:       nullStringPtr(videoResolution),
-		VideoDurationSeconds:  nullIntPtr(videoDurationSeconds),
-		VideoTaskID:           nullStringPtr(videoTaskID),
-		CacheTTLOverridden:    cacheTTLOverridden,
-		CreatedAt:             createdAt,
+		ID:                            id,
+		UserID:                        userID,
+		APIKeyID:                      apiKeyID,
+		AccountID:                     accountID,
+		Model:                         model,
+		RequestedModel:                coalesceTrimmedString(requestedModel, model),
+		InputTokens:                   inputTokens,
+		OutputTokens:                  outputTokens,
+		CacheCreationTokens:           cacheCreationTokens,
+		CacheReadTokens:               cacheReadTokens,
+		CacheCreation5mTokens:         cacheCreation5m,
+		CacheCreation1hTokens:         cacheCreation1h,
+		ImageOutputTokens:             imageOutputTokens,
+		ImageOutputCost:               imageOutputCost,
+		InputCost:                     inputCost,
+		OutputCost:                    outputCost,
+		CacheCreationCost:             cacheCreationCost,
+		CacheReadCost:                 cacheReadCost,
+		TotalCost:                     totalCost,
+		ActualCost:                    actualCost,
+		RateMultiplier:                rateMultiplier,
+		AccountRateMultiplier:         nullFloat64Ptr(accountRateMultiplier),
+		BillingType:                   int8(billingType),
+		RequestType:                   service.RequestTypeFromInt16(requestTypeRaw),
+		ImageCount:                    imageCount,
+		VideoCount:                    videoCount,
+		VideoResolution:               nullStringPtr(videoResolution),
+		VideoDurationSeconds:          nullIntPtr(videoDurationSeconds),
+		VideoTaskID:                   nullStringPtr(videoTaskID),
+		CacheTTLOverridden:            cacheTTLOverridden,
+		CreatedAt:                     createdAt,
+		UpstreamCostMultiplier:        decimalPtrFromNull(upstreamCostMultiplier),
+		SalesModel:                    nullStringPtr(salesModel),
+		SalesPricingEffectiveModel:    nullStringPtr(salesPricingEffectiveModel),
+		SalesPricingLegacySource:      nullStringPtr(salesPricingLegacySource),
+		SalesPricingVersion:           nullStringPtr(salesPricingVersion),
+		SalesPricingSource:            nullStringPtr(salesPricingSource),
+		SalesPricingChecksum:          nullStringPtr(salesPricingChecksum),
+		SalesPricingSnapshot:          anyMapFromNullJSON(salesPricingSnapshot),
+		SalesPricingShadowSnapshot:    anyMapFromNullJSON(salesPricingShadowSnapshot),
+		SalesPricingShadowDelta:       decimalPtrFromNull(salesPricingShadowDelta),
+		UsageListValue:                decimalPtrFromNull(usageListValue),
+		UpstreamMultiplierChangeID:    nullInt64Ptr(upstreamMultiplierChangeID),
+		UpstreamMultiplierSource:      nullStringValue(upstreamMultiplierSource),
+		UpstreamMultiplierEffectiveAt: nullTimePtr(upstreamMultiplierEffectiveAt),
+		AccountFinanceProfileID:       nullInt64Ptr(accountFinanceProfileID),
 	}
 	// 先回填 legacy 字段，再基于 legacy + request_type 计算最终请求类型，保证历史数据兼容。
 	log.Stream = stream
@@ -4844,12 +5133,43 @@ func nullIntPtr(v sql.NullInt64) *int {
 	return &out
 }
 
+func nullInt64Ptr(v sql.NullInt64) *int64 {
+	if !v.Valid {
+		return nil
+	}
+	out := v.Int64
+	return &out
+}
+
+func nullTimePtr(v sql.NullTime) *time.Time {
+	if !v.Valid {
+		return nil
+	}
+	out := v.Time
+	return &out
+}
+
+func nullStringValue(v sql.NullString) string {
+	if !v.Valid {
+		return ""
+	}
+	return v.String
+}
+
 func nullFloat64Ptr(v sql.NullFloat64) *float64 {
 	if !v.Valid {
 		return nil
 	}
 	out := v.Float64
 	return &out
+}
+
+func decimalPtrFromNull(v decimal.NullDecimal) *decimal.Decimal {
+	if !v.Valid {
+		return nil
+	}
+	value := v.Decimal
+	return &value
 }
 
 func nullString(v *string) sql.NullString {
@@ -4876,6 +5196,28 @@ func nullStringIntMapJSON(v map[string]int) any {
 		return nil
 	}
 	return string(payload)
+}
+
+func nullAnyMapJSON(v map[string]any) any {
+	if v == nil {
+		return nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	return string(b)
+}
+
+func anyMapFromNullJSON(v sql.NullString) map[string]any {
+	if !v.Valid || strings.TrimSpace(v.String) == "" {
+		return nil
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(v.String), &result); err != nil {
+		return nil
+	}
+	return result
 }
 
 func stringIntMapFromNullJSON(v sql.NullString) map[string]int {

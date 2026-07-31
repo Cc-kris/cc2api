@@ -8,6 +8,13 @@ const source = readFileSync(
 )
 
 describe('CreateAccountModal Grok account types', () => {
+  it('requires a procurement multiplier and preserves four-decimal text on create', () => {
+    expect(source).toContain('data-testid="upstream-cost-multiplier"')
+    expect(source).toContain("upstream_cost_multiplier: '1.0000'")
+    expect(source).toContain('upstream_cost_multiplier: upstreamMultiplierText()')
+    expect(source).toContain('isValidUpstreamMultiplier(form.upstream_cost_multiplier)')
+  })
+
   it('offers API-key setup alongside OAuth with the official xAI default', () => {
     expect(source).toContain('data-testid="grok-account-type-api-key"')
     expect(source).toContain("@click=\"accountCategory = 'apikey'\"")

@@ -3,6 +3,7 @@ package dto
 import (
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
@@ -242,7 +243,11 @@ type SystemSettings struct {
 	ChannelMonitorDefaultIntervalSeconds int  `json:"channel_monitor_default_interval_seconds"`
 
 	// Available Channels feature switch (user-facing aggregate view)
-	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
+	AvailableChannelsEnabled    bool                        `json:"available_channels_enabled"`
+	ModelSquareEnabled          bool                        `json:"model_square_enabled"`
+	SalesPricingVersion         service.SalesPricingVersion `json:"sales_pricing_version"`
+	SalesPricingShadowStartedAt *time.Time                  `json:"sales_pricing_shadow_started_at"`
+	SalesPricingV2EnabledAt     *time.Time                  `json:"sales_pricing_v2_enabled_at"`
 
 	// 风控中心功能开关
 	RiskControlEnabled bool `json:"risk_control_enabled"`
@@ -316,6 +321,7 @@ type PublicSettings struct {
 	ChannelMonitorDefaultIntervalSeconds int  `json:"channel_monitor_default_interval_seconds"`
 
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
+	ModelSquareEnabled       bool `json:"model_square_enabled"`
 
 	AffiliateEnabled bool `json:"affiliate_enabled"`
 

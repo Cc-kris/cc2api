@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
 
-const { updateAccountMock, checkMixedChannelRiskMock, fetchUpstreamModelsMock } = vi.hoisted(() => ({
+const { updateAccountMock, checkMixedChannelRiskMock, fetchUpstreamModelsMock, listUpstreamMultiplierChangesMock } = vi.hoisted(() => ({
   updateAccountMock: vi.fn(),
   checkMixedChannelRiskMock: vi.fn(),
-  fetchUpstreamModelsMock: vi.fn()
+  fetchUpstreamModelsMock: vi.fn(),
+  listUpstreamMultiplierChangesMock: vi.fn()
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -27,7 +28,8 @@ vi.mock('@/api/admin', () => ({
     accounts: {
       update: updateAccountMock,
       checkMixedChannelRisk: checkMixedChannelRiskMock,
-      fetchUpstreamModels: fetchUpstreamModelsMock
+      fetchUpstreamModels: fetchUpstreamModelsMock,
+      listUpstreamMultiplierChanges: listUpstreamMultiplierChangesMock
     },
     settings: {
       getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }),
@@ -165,6 +167,49 @@ function mountModal(account = buildAccount()) {
 }
 
 describe('EditAccountModal', () => {
+  it('does not overwrite an unconfigured upstream multiplier when unchanged', async () => {
+    const account = buildAccount()
+    account.upstream_cost_multiplier = null
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    expect((wrapper.get('[data-testid="upstream-cost-multiplier"]').element as HTMLInputElement).value).toBe('')
+
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]).not.toHaveProperty('upstream_cost_multiplier')
+    expect(updateAccountMock.mock.calls[0]?.[1]).not.toHaveProperty('upstream_cost_multiplier_change_reason')
+  })
+
+  it('requires a reason and submits decimal text when the upstream multiplier changes', async () => {
+    const account = buildAccount()
+    account.upstream_cost_multiplier = '1.0000'
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    await wrapper.get('[data-testid="upstream-cost-multiplier"]').setValue('1.2500')
+    expect(wrapper.find('[data-testid="upstream-cost-multiplier-reason"]').exists()).toBe(true)
+
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock).not.toHaveBeenCalled()
+
+    await wrapper.get('[data-testid="upstream-cost-multiplier-reason"]').setValue('上游供应商价格调整')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]).toMatchObject({
+      upstream_cost_multiplier: '1.2500',
+      upstream_cost_multiplier_change_reason: '上游供应商价格调整'
+    })
+  })
+
   it('reopening the same account rehydrates the OpenAI whitelist from props', async () => {
     const account = buildAccount()
     updateAccountMock.mockReset()

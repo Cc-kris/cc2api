@@ -49,7 +49,11 @@ function mountModal(extraProps: Record<string, unknown> = {}) {
     global: {
       stubs: {
         BaseDialog: { template: '<div><slot /><slot name="footer" /></div>' },
-        ConfirmDialog: true,
+        ConfirmDialog: {
+          props: ['show', 'message'],
+          emits: ['confirm', 'cancel'],
+          template: '<div v-if="show"><span>{{ message }}</span><button data-testid="confirm-dialog-confirm" @click="$emit(\'confirm\')">confirm</button></div>'
+        },
         Select: {
           props: ['modelValue', 'options'],
           emits: ['update:modelValue'],
@@ -80,12 +84,38 @@ describe('BulkEditAccountModal', () => {
 
     vi.mocked(adminAPI.accounts.bulkUpdate).mockResolvedValue({
       success: 2,
+      unchanged: 0,
       failed: 0,
       results: []
     } as any)
     vi.mocked(adminAPI.accounts.checkMixedChannelRisk).mockResolvedValue({
       has_risk: false
     } as any)
+  })
+
+  it('单独确认并提交上游倍率及统一变更原因', async () => {
+    const wrapper = mountModal({
+      selectedAccounts: [
+        { id: 1, upstream_cost_multiplier: '1.0000' },
+        { id: 2, upstream_cost_multiplier: '1.2000' }
+      ]
+    })
+
+    await wrapper.get('#bulk-edit-upstream-multiplier-enabled').setValue(true)
+    await wrapper.get('#bulk-edit-upstream-multiplier').setValue('1.3500')
+    await wrapper.get('[data-testid="bulk-upstream-multiplier-reason"]').setValue('上游供应商统一调价')
+    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+
+    expect(adminAPI.accounts.bulkUpdate).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="confirm-dialog-confirm"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="confirm-dialog-confirm"]').trigger('click')
+    await flushPromises()
+
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
+      upstream_cost_multiplier: '1.3500',
+      upstream_cost_multiplier_change_reason: '上游供应商统一调价'
+    })
   })
 
   it('antigravity 白名单包含 Gemini 图片模型且过滤掉普通 GPT 模型', async () => {

@@ -64,6 +64,15 @@ func (s *UsageLogRepoSuite) createUsageLog(user *service.User, apiKey *service.A
 	return log
 }
 
+func (s *UsageLogRepoSuite) resetDashboardUsageFacts() {
+	_, err := s.tx.ExecContext(s.ctx, `
+		DELETE FROM usage_dashboard_hourly;
+		DELETE FROM usage_dashboard_daily;
+		DELETE FROM usage_logs;
+	`)
+	s.Require().NoError(err, "reset dashboard usage facts")
+}
+
 // --- Create / GetByID ---
 
 func (s *UsageLogRepoSuite) TestCreate() {
@@ -652,6 +661,7 @@ func (s *UsageLogRepoSuite) TestListWithFilters() {
 // --- GetDashboardStats ---
 
 func (s *UsageLogRepoSuite) TestDashboardStats_TodayTotalsAndPerformance() {
+	s.resetDashboardUsageFacts()
 	now := time.Now().UTC()
 	todayStart := truncateToDayUTC(now)
 	baseStats, err := s.repo.GetDashboardStats(s.ctx)
@@ -766,6 +776,7 @@ func (s *UsageLogRepoSuite) TestDashboardStats_TodayTotalsAndPerformance() {
 }
 
 func (s *UsageLogRepoSuite) TestDashboardStatsWithRange_Fallback() {
+	s.resetDashboardUsageFacts()
 	now := time.Now().UTC()
 	todayStart := truncateToDayUTC(now)
 	rangeStart := todayStart.Add(-24 * time.Hour)

@@ -16,6 +16,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
+	"github.com/shopspring/decimal"
 )
 
 // AccountUpdate is the builder for updating Account entities.
@@ -238,6 +239,121 @@ func (_u *AccountUpdate) SetNillableRateMultiplier(v *float64) *AccountUpdate {
 // AddRateMultiplier adds value to the "rate_multiplier" field.
 func (_u *AccountUpdate) AddRateMultiplier(v float64) *AccountUpdate {
 	_u.mutation.AddRateMultiplier(v)
+	return _u
+}
+
+// SetUpstreamCostMultiplier sets the "upstream_cost_multiplier" field.
+func (_u *AccountUpdate) SetUpstreamCostMultiplier(v decimal.Decimal) *AccountUpdate {
+	_u.mutation.ResetUpstreamCostMultiplier()
+	_u.mutation.SetUpstreamCostMultiplier(v)
+	return _u
+}
+
+// SetNillableUpstreamCostMultiplier sets the "upstream_cost_multiplier" field if the given value is not nil.
+func (_u *AccountUpdate) SetNillableUpstreamCostMultiplier(v *decimal.Decimal) *AccountUpdate {
+	if v != nil {
+		_u.SetUpstreamCostMultiplier(*v)
+	}
+	return _u
+}
+
+// AddUpstreamCostMultiplier adds value to the "upstream_cost_multiplier" field.
+func (_u *AccountUpdate) AddUpstreamCostMultiplier(v decimal.Decimal) *AccountUpdate {
+	_u.mutation.AddUpstreamCostMultiplier(v)
+	return _u
+}
+
+// ClearUpstreamCostMultiplier clears the value of the "upstream_cost_multiplier" field.
+func (_u *AccountUpdate) ClearUpstreamCostMultiplier() *AccountUpdate {
+	_u.mutation.ClearUpstreamCostMultiplier()
+	return _u
+}
+
+// SetUpstreamCostMultiplierUpdatedAt sets the "upstream_cost_multiplier_updated_at" field.
+func (_u *AccountUpdate) SetUpstreamCostMultiplierUpdatedAt(v time.Time) *AccountUpdate {
+	_u.mutation.SetUpstreamCostMultiplierUpdatedAt(v)
+	return _u
+}
+
+// SetNillableUpstreamCostMultiplierUpdatedAt sets the "upstream_cost_multiplier_updated_at" field if the given value is not nil.
+func (_u *AccountUpdate) SetNillableUpstreamCostMultiplierUpdatedAt(v *time.Time) *AccountUpdate {
+	if v != nil {
+		_u.SetUpstreamCostMultiplierUpdatedAt(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamCostMultiplierUpdatedAt clears the value of the "upstream_cost_multiplier_updated_at" field.
+func (_u *AccountUpdate) ClearUpstreamCostMultiplierUpdatedAt() *AccountUpdate {
+	_u.mutation.ClearUpstreamCostMultiplierUpdatedAt()
+	return _u
+}
+
+// SetUpstreamCostMultiplierChangeID sets the "upstream_cost_multiplier_change_id" field.
+func (_u *AccountUpdate) SetUpstreamCostMultiplierChangeID(v int64) *AccountUpdate {
+	_u.mutation.ResetUpstreamCostMultiplierChangeID()
+	_u.mutation.SetUpstreamCostMultiplierChangeID(v)
+	return _u
+}
+
+// SetNillableUpstreamCostMultiplierChangeID sets the "upstream_cost_multiplier_change_id" field if the given value is not nil.
+func (_u *AccountUpdate) SetNillableUpstreamCostMultiplierChangeID(v *int64) *AccountUpdate {
+	if v != nil {
+		_u.SetUpstreamCostMultiplierChangeID(*v)
+	}
+	return _u
+}
+
+// AddUpstreamCostMultiplierChangeID adds value to the "upstream_cost_multiplier_change_id" field.
+func (_u *AccountUpdate) AddUpstreamCostMultiplierChangeID(v int64) *AccountUpdate {
+	_u.mutation.AddUpstreamCostMultiplierChangeID(v)
+	return _u
+}
+
+// ClearUpstreamCostMultiplierChangeID clears the value of the "upstream_cost_multiplier_change_id" field.
+func (_u *AccountUpdate) ClearUpstreamCostMultiplierChangeID() *AccountUpdate {
+	_u.mutation.ClearUpstreamCostMultiplierChangeID()
+	return _u
+}
+
+// SetUpstreamCostMultiplierSource sets the "upstream_cost_multiplier_source" field.
+func (_u *AccountUpdate) SetUpstreamCostMultiplierSource(v string) *AccountUpdate {
+	_u.mutation.SetUpstreamCostMultiplierSource(v)
+	return _u
+}
+
+// SetNillableUpstreamCostMultiplierSource sets the "upstream_cost_multiplier_source" field if the given value is not nil.
+func (_u *AccountUpdate) SetNillableUpstreamCostMultiplierSource(v *string) *AccountUpdate {
+	if v != nil {
+		_u.SetUpstreamCostMultiplierSource(*v)
+	}
+	return _u
+}
+
+// SetCurrentFinanceProfileID sets the "current_finance_profile_id" field.
+func (_u *AccountUpdate) SetCurrentFinanceProfileID(v int64) *AccountUpdate {
+	_u.mutation.ResetCurrentFinanceProfileID()
+	_u.mutation.SetCurrentFinanceProfileID(v)
+	return _u
+}
+
+// SetNillableCurrentFinanceProfileID sets the "current_finance_profile_id" field if the given value is not nil.
+func (_u *AccountUpdate) SetNillableCurrentFinanceProfileID(v *int64) *AccountUpdate {
+	if v != nil {
+		_u.SetCurrentFinanceProfileID(*v)
+	}
+	return _u
+}
+
+// AddCurrentFinanceProfileID adds value to the "current_finance_profile_id" field.
+func (_u *AccountUpdate) AddCurrentFinanceProfileID(v int64) *AccountUpdate {
+	_u.mutation.AddCurrentFinanceProfileID(v)
+	return _u
+}
+
+// ClearCurrentFinanceProfileID clears the value of the "current_finance_profile_id" field.
+func (_u *AccountUpdate) ClearCurrentFinanceProfileID() *AccountUpdate {
+	_u.mutation.ClearCurrentFinanceProfileID()
 	return _u
 }
 
@@ -650,6 +766,11 @@ func (_u *AccountUpdate) check() error {
 			return &ValidationError{Name: "type", err: fmt.Errorf(`ent: validator failed for field "Account.type": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.UpstreamCostMultiplierSource(); ok {
+		if err := account.UpstreamCostMultiplierSourceValidator(v); err != nil {
+			return &ValidationError{Name: "upstream_cost_multiplier_source", err: fmt.Errorf(`ent: validator failed for field "Account.upstream_cost_multiplier_source": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := account.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Account.status": %w`, err)}
@@ -731,6 +852,42 @@ func (_u *AccountUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(account.FieldRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.UpstreamCostMultiplier(); ok {
+		_spec.SetField(account.FieldUpstreamCostMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedUpstreamCostMultiplier(); ok {
+		_spec.AddField(account.FieldUpstreamCostMultiplier, field.TypeFloat64, value)
+	}
+	if _u.mutation.UpstreamCostMultiplierCleared() {
+		_spec.ClearField(account.FieldUpstreamCostMultiplier, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.UpstreamCostMultiplierUpdatedAt(); ok {
+		_spec.SetField(account.FieldUpstreamCostMultiplierUpdatedAt, field.TypeTime, value)
+	}
+	if _u.mutation.UpstreamCostMultiplierUpdatedAtCleared() {
+		_spec.ClearField(account.FieldUpstreamCostMultiplierUpdatedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.UpstreamCostMultiplierChangeID(); ok {
+		_spec.SetField(account.FieldUpstreamCostMultiplierChangeID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedUpstreamCostMultiplierChangeID(); ok {
+		_spec.AddField(account.FieldUpstreamCostMultiplierChangeID, field.TypeInt64, value)
+	}
+	if _u.mutation.UpstreamCostMultiplierChangeIDCleared() {
+		_spec.ClearField(account.FieldUpstreamCostMultiplierChangeID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.UpstreamCostMultiplierSource(); ok {
+		_spec.SetField(account.FieldUpstreamCostMultiplierSource, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CurrentFinanceProfileID(); ok {
+		_spec.SetField(account.FieldCurrentFinanceProfileID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedCurrentFinanceProfileID(); ok {
+		_spec.AddField(account.FieldCurrentFinanceProfileID, field.TypeInt64, value)
+	}
+	if _u.mutation.CurrentFinanceProfileIDCleared() {
+		_spec.ClearField(account.FieldCurrentFinanceProfileID, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(account.FieldStatus, field.TypeString, value)
@@ -1168,6 +1325,121 @@ func (_u *AccountUpdateOne) AddRateMultiplier(v float64) *AccountUpdateOne {
 	return _u
 }
 
+// SetUpstreamCostMultiplier sets the "upstream_cost_multiplier" field.
+func (_u *AccountUpdateOne) SetUpstreamCostMultiplier(v decimal.Decimal) *AccountUpdateOne {
+	_u.mutation.ResetUpstreamCostMultiplier()
+	_u.mutation.SetUpstreamCostMultiplier(v)
+	return _u
+}
+
+// SetNillableUpstreamCostMultiplier sets the "upstream_cost_multiplier" field if the given value is not nil.
+func (_u *AccountUpdateOne) SetNillableUpstreamCostMultiplier(v *decimal.Decimal) *AccountUpdateOne {
+	if v != nil {
+		_u.SetUpstreamCostMultiplier(*v)
+	}
+	return _u
+}
+
+// AddUpstreamCostMultiplier adds value to the "upstream_cost_multiplier" field.
+func (_u *AccountUpdateOne) AddUpstreamCostMultiplier(v decimal.Decimal) *AccountUpdateOne {
+	_u.mutation.AddUpstreamCostMultiplier(v)
+	return _u
+}
+
+// ClearUpstreamCostMultiplier clears the value of the "upstream_cost_multiplier" field.
+func (_u *AccountUpdateOne) ClearUpstreamCostMultiplier() *AccountUpdateOne {
+	_u.mutation.ClearUpstreamCostMultiplier()
+	return _u
+}
+
+// SetUpstreamCostMultiplierUpdatedAt sets the "upstream_cost_multiplier_updated_at" field.
+func (_u *AccountUpdateOne) SetUpstreamCostMultiplierUpdatedAt(v time.Time) *AccountUpdateOne {
+	_u.mutation.SetUpstreamCostMultiplierUpdatedAt(v)
+	return _u
+}
+
+// SetNillableUpstreamCostMultiplierUpdatedAt sets the "upstream_cost_multiplier_updated_at" field if the given value is not nil.
+func (_u *AccountUpdateOne) SetNillableUpstreamCostMultiplierUpdatedAt(v *time.Time) *AccountUpdateOne {
+	if v != nil {
+		_u.SetUpstreamCostMultiplierUpdatedAt(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamCostMultiplierUpdatedAt clears the value of the "upstream_cost_multiplier_updated_at" field.
+func (_u *AccountUpdateOne) ClearUpstreamCostMultiplierUpdatedAt() *AccountUpdateOne {
+	_u.mutation.ClearUpstreamCostMultiplierUpdatedAt()
+	return _u
+}
+
+// SetUpstreamCostMultiplierChangeID sets the "upstream_cost_multiplier_change_id" field.
+func (_u *AccountUpdateOne) SetUpstreamCostMultiplierChangeID(v int64) *AccountUpdateOne {
+	_u.mutation.ResetUpstreamCostMultiplierChangeID()
+	_u.mutation.SetUpstreamCostMultiplierChangeID(v)
+	return _u
+}
+
+// SetNillableUpstreamCostMultiplierChangeID sets the "upstream_cost_multiplier_change_id" field if the given value is not nil.
+func (_u *AccountUpdateOne) SetNillableUpstreamCostMultiplierChangeID(v *int64) *AccountUpdateOne {
+	if v != nil {
+		_u.SetUpstreamCostMultiplierChangeID(*v)
+	}
+	return _u
+}
+
+// AddUpstreamCostMultiplierChangeID adds value to the "upstream_cost_multiplier_change_id" field.
+func (_u *AccountUpdateOne) AddUpstreamCostMultiplierChangeID(v int64) *AccountUpdateOne {
+	_u.mutation.AddUpstreamCostMultiplierChangeID(v)
+	return _u
+}
+
+// ClearUpstreamCostMultiplierChangeID clears the value of the "upstream_cost_multiplier_change_id" field.
+func (_u *AccountUpdateOne) ClearUpstreamCostMultiplierChangeID() *AccountUpdateOne {
+	_u.mutation.ClearUpstreamCostMultiplierChangeID()
+	return _u
+}
+
+// SetUpstreamCostMultiplierSource sets the "upstream_cost_multiplier_source" field.
+func (_u *AccountUpdateOne) SetUpstreamCostMultiplierSource(v string) *AccountUpdateOne {
+	_u.mutation.SetUpstreamCostMultiplierSource(v)
+	return _u
+}
+
+// SetNillableUpstreamCostMultiplierSource sets the "upstream_cost_multiplier_source" field if the given value is not nil.
+func (_u *AccountUpdateOne) SetNillableUpstreamCostMultiplierSource(v *string) *AccountUpdateOne {
+	if v != nil {
+		_u.SetUpstreamCostMultiplierSource(*v)
+	}
+	return _u
+}
+
+// SetCurrentFinanceProfileID sets the "current_finance_profile_id" field.
+func (_u *AccountUpdateOne) SetCurrentFinanceProfileID(v int64) *AccountUpdateOne {
+	_u.mutation.ResetCurrentFinanceProfileID()
+	_u.mutation.SetCurrentFinanceProfileID(v)
+	return _u
+}
+
+// SetNillableCurrentFinanceProfileID sets the "current_finance_profile_id" field if the given value is not nil.
+func (_u *AccountUpdateOne) SetNillableCurrentFinanceProfileID(v *int64) *AccountUpdateOne {
+	if v != nil {
+		_u.SetCurrentFinanceProfileID(*v)
+	}
+	return _u
+}
+
+// AddCurrentFinanceProfileID adds value to the "current_finance_profile_id" field.
+func (_u *AccountUpdateOne) AddCurrentFinanceProfileID(v int64) *AccountUpdateOne {
+	_u.mutation.AddCurrentFinanceProfileID(v)
+	return _u
+}
+
+// ClearCurrentFinanceProfileID clears the value of the "current_finance_profile_id" field.
+func (_u *AccountUpdateOne) ClearCurrentFinanceProfileID() *AccountUpdateOne {
+	_u.mutation.ClearCurrentFinanceProfileID()
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *AccountUpdateOne) SetStatus(v string) *AccountUpdateOne {
 	_u.mutation.SetStatus(v)
@@ -1590,6 +1862,11 @@ func (_u *AccountUpdateOne) check() error {
 			return &ValidationError{Name: "type", err: fmt.Errorf(`ent: validator failed for field "Account.type": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.UpstreamCostMultiplierSource(); ok {
+		if err := account.UpstreamCostMultiplierSourceValidator(v); err != nil {
+			return &ValidationError{Name: "upstream_cost_multiplier_source", err: fmt.Errorf(`ent: validator failed for field "Account.upstream_cost_multiplier_source": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := account.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Account.status": %w`, err)}
@@ -1688,6 +1965,42 @@ func (_u *AccountUpdateOne) sqlSave(ctx context.Context) (_node *Account, err er
 	}
 	if value, ok := _u.mutation.AddedRateMultiplier(); ok {
 		_spec.AddField(account.FieldRateMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.UpstreamCostMultiplier(); ok {
+		_spec.SetField(account.FieldUpstreamCostMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedUpstreamCostMultiplier(); ok {
+		_spec.AddField(account.FieldUpstreamCostMultiplier, field.TypeFloat64, value)
+	}
+	if _u.mutation.UpstreamCostMultiplierCleared() {
+		_spec.ClearField(account.FieldUpstreamCostMultiplier, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.UpstreamCostMultiplierUpdatedAt(); ok {
+		_spec.SetField(account.FieldUpstreamCostMultiplierUpdatedAt, field.TypeTime, value)
+	}
+	if _u.mutation.UpstreamCostMultiplierUpdatedAtCleared() {
+		_spec.ClearField(account.FieldUpstreamCostMultiplierUpdatedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.UpstreamCostMultiplierChangeID(); ok {
+		_spec.SetField(account.FieldUpstreamCostMultiplierChangeID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedUpstreamCostMultiplierChangeID(); ok {
+		_spec.AddField(account.FieldUpstreamCostMultiplierChangeID, field.TypeInt64, value)
+	}
+	if _u.mutation.UpstreamCostMultiplierChangeIDCleared() {
+		_spec.ClearField(account.FieldUpstreamCostMultiplierChangeID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.UpstreamCostMultiplierSource(); ok {
+		_spec.SetField(account.FieldUpstreamCostMultiplierSource, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CurrentFinanceProfileID(); ok {
+		_spec.SetField(account.FieldCurrentFinanceProfileID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedCurrentFinanceProfileID(); ok {
+		_spec.AddField(account.FieldCurrentFinanceProfileID, field.TypeInt64, value)
+	}
+	if _u.mutation.CurrentFinanceProfileIDCleared() {
+		_spec.ClearField(account.FieldCurrentFinanceProfileID, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(account.FieldStatus, field.TypeString, value)

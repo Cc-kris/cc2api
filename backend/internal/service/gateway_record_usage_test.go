@@ -11,6 +11,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
 
@@ -116,6 +117,32 @@ func TestGatewayServiceRecordUsage_BillingUsesDetachedContext(t *testing.T) {
 	require.NoError(t, quotaSvc.lastQuotaCtxErr)
 }
 
+func TestGatewayServiceRecordUsage_PersistsRequestTimeUpstreamMultiplier(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	svc := newGatewayRecordUsageServiceForTest(usageRepo, &openAIRecordUsageUserRepoStub{}, &openAIRecordUsageSubRepoStub{})
+	accountValue := decimal.RequireFromString("0.8000")
+	requestValue := decimal.RequireFromString("0.7250")
+
+	err := svc.RecordUsage(context.Background(), &RecordUsageInput{
+		Result: &ForwardResult{
+			RequestID: "gateway_upstream_multiplier_snapshot",
+			Usage:     ClaudeUsage{InputTokens: 10, OutputTokens: 5},
+			Model:     "claude-sonnet-4",
+		},
+		APIKey:                 &APIKey{ID: 501},
+		User:                   &User{ID: 601},
+		Account:                &Account{ID: 701, UpstreamCostMultiplier: &accountValue},
+		UpstreamCostMultiplier: &requestValue,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, usageRepo.lastLog)
+	require.NotNil(t, usageRepo.lastLog.UpstreamCostMultiplier)
+	require.True(t, usageRepo.lastLog.UpstreamCostMultiplier.Equal(decimal.RequireFromString("0.7250")))
+	requestValue = decimal.RequireFromString("9.9999")
+	require.True(t, usageRepo.lastLog.UpstreamCostMultiplier.Equal(decimal.RequireFromString("0.7250")))
+}
+
 func TestGatewayServiceRecordUsage_BillingFingerprintIncludesRequestPayloadHash(t *testing.T) {
 	usageRepo := &openAIRecordUsageLogRepoStub{}
 	billingRepo := &openAIRecordUsageBillingRepoStub{result: &UsageBillingApplyResult{Applied: true}}
@@ -165,6 +192,33 @@ func TestGatewayServiceRecordUsage_BillingFingerprintFallsBackToContextRequestID
 	require.NoError(t, err)
 	require.NotNil(t, billingRepo.lastCmd)
 	require.Equal(t, "local:req-local-123", billingRepo.lastCmd.RequestPayloadHash)
+}
+
+func TestGatewayServiceRecordUsage_TrustedExclusionFlowsIntoBillingAndScanner(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	billingRepo := &openAIRecordUsageBillingRepoStub{result: &UsageBillingApplyResult{
+		Applied: true, FinanceBusinessType: "admin", FinanceExcluded: true, FinanceExclusionReason: "admin_api_usage",
+	}}
+	svc := newGatewayRecordUsageServiceWithBillingRepoForTest(usageRepo, billingRepo, &openAIRecordUsageUserRepoStub{}, &openAIRecordUsageSubRepoStub{})
+	err := svc.RecordUsage(context.Background(), &RecordUsageInput{
+		Result: &ForwardResult{RequestID: "trusted-finance-exclusion", Model: "gpt-test", Duration: time.Second},
+		APIKey: &APIKey{ID: 501, Quota: 100}, User: &User{ID: 601, Role: RoleAdmin}, Account: &Account{ID: 701},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, billingRepo.lastCmd)
+	require.True(t, billingRepo.lastCmd.FinanceExcluded)
+	require.Equal(t, "admin_api_usage", billingRepo.lastCmd.FinanceExclusionReason)
+	require.NotNil(t, usageRepo.lastLog)
+	require.True(t, usageRepo.lastLog.FinanceExcluded)
+
+	ledger := &financeLedgerStub{launchAt: time.Now().UTC()}
+	scanner := NewFinanceUsageScanner(ledger, NewFinancePriceSelector(&financePriceLookupStub{}), NewFinanceCostCalculator())
+	projection, err := scanner.BuildHistoricalProjection(context.Background(), usageRepo.lastLog, nil)
+	require.NoError(t, err)
+	require.Equal(t, FinanceCostStatusExcluded, projection.CostStatus)
+	require.NotNil(t, projection.UpstreamCost)
+	require.True(t, projection.UpstreamCost.IsZero())
+	require.Equal(t, "admin_api_usage", projection.CalculationDetail["finance_exclusion_reason"])
 }
 
 func TestGatewayServiceRecordUsage_PreservesRequestedAndUpstreamModels(t *testing.T) {

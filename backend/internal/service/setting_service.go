@@ -102,6 +102,14 @@ const backendModeCacheTTL = 60 * time.Second
 const backendModeErrorTTL = 5 * time.Second
 const backendModeDBTimeout = 5 * time.Second
 
+type cachedSalesPricingVersion struct {
+	value     SalesPricingVersion
+	expiresAt int64
+}
+
+const salesPricingVersionCacheTTL = 60 * time.Second
+const salesPricingVersionErrorTTL = 5 * time.Second
+
 // cachedGatewayForwardingSettings 缓存网关转发行为设置（进程内缓存，60s TTL）
 type cachedGatewayForwardingSettings struct {
 	fingerprintUnification       bool
@@ -166,6 +174,8 @@ type SettingService struct {
 	antigravityUAVersionSF    singleflight.Group
 	openAICodexUACache        atomic.Value // *cachedOpenAICodexUserAgent
 	openAICodexUASF           singleflight.Group
+	salesPricingVersionCache  atomic.Value // *cachedSalesPricingVersion
+	salesPricingVersionSF     singleflight.Group
 }
 
 // DefaultPlatformQuotaSetting 单 platform 三档限额（nil = 沿用上层；0 = 显式禁用；>0 = 上限）
@@ -737,6 +747,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyChannelMonitorPublicEnabled,
 		SettingKeyChannelMonitorDefaultIntervalSeconds,
 		SettingKeyAvailableChannelsEnabled,
+		SettingKeyModelSquareEnabled,
 		SettingKeyAffiliateEnabled,
 		SettingKeyRiskControlEnabled,
 	}
@@ -848,6 +859,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		ChannelMonitorDefaultIntervalSeconds: parseChannelMonitorInterval(settings[SettingKeyChannelMonitorDefaultIntervalSeconds]),
 
 		AvailableChannelsEnabled: settings[SettingKeyAvailableChannelsEnabled] == "true",
+		ModelSquareEnabled:       settings[SettingKeyModelSquareEnabled] == "true",
 
 		AffiliateEnabled: settings[SettingKeyAffiliateEnabled] == "true",
 
@@ -939,6 +951,9 @@ type AvailableChannelsRuntime struct {
 // from the settings store. Fail-closed: on error returns Enabled=false, matching
 // the opt-in default (unknown ↔ disabled).
 func (s *SettingService) GetAvailableChannelsRuntime(ctx context.Context) AvailableChannelsRuntime {
+	if s == nil || s.settingRepo == nil {
+		return AvailableChannelsRuntime{Enabled: false}
+	}
 	vals, err := s.settingRepo.GetMultiple(ctx, []string{SettingKeyAvailableChannelsEnabled})
 	if err != nil {
 		return AvailableChannelsRuntime{Enabled: false}
@@ -946,6 +961,74 @@ func (s *SettingService) GetAvailableChannelsRuntime(ctx context.Context) Availa
 	return AvailableChannelsRuntime{
 		Enabled: vals[SettingKeyAvailableChannelsEnabled] == "true",
 	}
+}
+
+// ModelSquareRuntime is the fail-closed runtime view consumed by the customer
+// model-square handler.
+type ModelSquareRuntime struct {
+	Enabled             bool
+	SalesPricingVersion SalesPricingVersion
+}
+
+// GetModelSquareRuntime reads the dedicated model-square switch. Missing
+// services, repositories, and read failures are all disabled by default.
+func (s *SettingService) GetModelSquareRuntime(ctx context.Context) ModelSquareRuntime {
+	if s == nil || s.settingRepo == nil {
+		return ModelSquareRuntime{Enabled: false}
+	}
+	vals, err := s.settingRepo.GetMultiple(ctx, []string{SettingKeyModelSquareEnabled, SettingKeySalesPricingVersion})
+	if err != nil {
+		return ModelSquareRuntime{Enabled: false}
+	}
+	version := SalesPricingVersion(strings.ToLower(strings.TrimSpace(vals[SettingKeySalesPricingVersion])))
+	if !version.IsValid() {
+		version = SalesPricingVersionLegacy
+	}
+	// Model Square exposes the V2 customer-sales pricing contract. Keep this
+	// gate in the shared runtime object so authenticated API calls and public
+	// settings cannot disagree (or let a token bypass the public gate).
+	return ModelSquareRuntime{
+		Enabled:             vals[SettingKeyModelSquareEnabled] == "true" && version == SalesPricingVersionV2,
+		SalesPricingVersion: version,
+	}
+}
+
+// GetSalesPricingVersion returns the active customer-sales pricing version.
+// Missing, invalid, or unreadable settings fail closed to legacy so a settings
+// outage can never silently change customer charges.
+func (s *SettingService) GetSalesPricingVersion(ctx context.Context) SalesPricingVersion {
+	if s == nil || s.settingRepo == nil {
+		return SalesPricingVersionLegacy
+	}
+	now := time.Now().UnixNano()
+	if cached, ok := s.salesPricingVersionCache.Load().(*cachedSalesPricingVersion); ok && cached != nil && now < cached.expiresAt {
+		return cached.value
+	}
+	result, _, _ := s.salesPricingVersionSF.Do("sales_pricing_version", func() (any, error) {
+		now := time.Now().UnixNano()
+		if cached, ok := s.salesPricingVersionCache.Load().(*cachedSalesPricingVersion); ok && cached != nil && now < cached.expiresAt {
+			return cached.value, nil
+		}
+		value, err := s.settingRepo.GetValue(ctx, SettingKeySalesPricingVersion)
+		version := SalesPricingVersionLegacy
+		ttl := salesPricingVersionCacheTTL
+		if err == nil {
+			parsed := SalesPricingVersion(strings.ToLower(strings.TrimSpace(value)))
+			if parsed.IsValid() {
+				version = parsed
+			}
+		} else {
+			ttl = salesPricingVersionErrorTTL
+		}
+		s.salesPricingVersionCache.Store(&cachedSalesPricingVersion{
+			value: version, expiresAt: time.Now().Add(ttl).UnixNano(),
+		})
+		return version, nil
+	})
+	if version, ok := result.(SalesPricingVersion); ok {
+		return version
+	}
+	return SalesPricingVersionLegacy
 }
 
 // GetAntigravityUserAgentVersion 返回 Antigravity 上游请求使用的版本号。
@@ -1124,6 +1207,7 @@ type PublicSettingsInjectionPayload struct {
 	ChannelMonitorPublicEnabled          bool `json:"channel_monitor_public_enabled"`
 	ChannelMonitorDefaultIntervalSeconds int  `json:"channel_monitor_default_interval_seconds"`
 	AvailableChannelsEnabled             bool `json:"available_channels_enabled"`
+	ModelSquareEnabled                   bool `json:"model_square_enabled"`
 	AffiliateEnabled                     bool `json:"affiliate_enabled"`
 	RiskControlEnabled                   bool `json:"risk_control_enabled"`
 }
@@ -1187,6 +1271,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		ChannelMonitorPublicEnabled:          settings.ChannelMonitorPublicEnabled,
 		ChannelMonitorDefaultIntervalSeconds: settings.ChannelMonitorDefaultIntervalSeconds,
 		AvailableChannelsEnabled:             settings.AvailableChannelsEnabled,
+		ModelSquareEnabled:                   settings.ModelSquareEnabled,
 		AffiliateEnabled:                     settings.AffiliateEnabled,
 		RiskControlEnabled:                   settings.RiskControlEnabled,
 	}, nil
@@ -1825,6 +1910,37 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 
 	// Available channels feature switch
 	updates[SettingKeyAvailableChannelsEnabled] = strconv.FormatBool(settings.AvailableChannelsEnabled)
+	updates[SettingKeyModelSquareEnabled] = strconv.FormatBool(settings.ModelSquareEnabled)
+
+	nextSalesPricingVersion := settings.SalesPricingVersion
+	if strings.TrimSpace(string(nextSalesPricingVersion)) != "" {
+		currentSalesPricingVersion := settings.CurrentSalesPricingVersion
+		if !currentSalesPricingVersion.IsValid() {
+			currentSalesPricingVersion = s.GetSalesPricingVersion(ctx)
+		}
+		if !nextSalesPricingVersion.IsValid() {
+			return nil, infraerrors.BadRequest("INVALID_SALES_PRICING_VERSION", "sales_pricing_version must be legacy, shadow, or v2")
+		}
+		if err := ValidateSalesPricingTransition(currentSalesPricingVersion, nextSalesPricingVersion); err != nil {
+			return nil, infraerrors.BadRequest("INVALID_SALES_PRICING_TRANSITION", err.Error())
+		}
+		if currentSalesPricingVersion != nextSalesPricingVersion {
+			reason := strings.TrimSpace(settings.SalesPricingChangeReason)
+			if len([]rune(reason)) < 5 || len([]rune(reason)) > 500 {
+				return nil, infraerrors.BadRequest("INVALID_SALES_PRICING_CHANGE_REASON", "sales_pricing_change_reason must be 5 to 500 characters when version changes")
+			}
+			now := time.Now().UTC()
+			if nextSalesPricingVersion == SalesPricingVersionShadow && currentSalesPricingVersion == SalesPricingVersionLegacy {
+				settings.SalesPricingShadowStartedAt = &now
+			}
+			if nextSalesPricingVersion == SalesPricingVersionV2 {
+				settings.SalesPricingV2EnabledAt = &now
+			}
+		}
+		updates[SettingKeySalesPricingVersion] = string(nextSalesPricingVersion)
+		updates[SettingKeySalesPricingShadowStartedAt] = formatOptionalSettingTime(settings.SalesPricingShadowStartedAt)
+		updates[SettingKeySalesPricingV2EnabledAt] = formatOptionalSettingTime(settings.SalesPricingV2EnabledAt)
+	}
 
 	// Affiliate (邀请返利) feature switch
 	updates[SettingKeyAffiliateEnabled] = strconv.FormatBool(settings.AffiliateEnabled)
@@ -1955,6 +2071,16 @@ func (s *SettingService) buildAuthSourceDefaultUpdates(ctx context.Context, sett
 func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 	if settings == nil {
 		return
+	}
+	if settings.SalesPricingVersion != "" {
+		version := SalesPricingVersion(strings.ToLower(strings.TrimSpace(string(settings.SalesPricingVersion))))
+		if !version.IsValid() {
+			version = SalesPricingVersionLegacy
+		}
+		s.salesPricingVersionSF.Forget("sales_pricing_version")
+		s.salesPricingVersionCache.Store(&cachedSalesPricingVersion{
+			value: version, expiresAt: time.Now().Add(salesPricingVersionCacheTTL).UnixNano(),
+		})
 	}
 
 	// 先使 inflight singleflight 失效，再刷新缓存，缩小旧值覆盖新值的竞态窗口
@@ -2740,7 +2866,11 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyChannelMonitorDefaultIntervalSeconds: "60",
 
 		// Available channels feature (default disabled; opt-in)
-		SettingKeyAvailableChannelsEnabled: "false",
+		SettingKeyAvailableChannelsEnabled:    "false",
+		SettingKeyModelSquareEnabled:          "false",
+		SettingKeySalesPricingVersion:         string(SalesPricingVersionLegacy),
+		SettingKeySalesPricingShadowStartedAt: "",
+		SettingKeySalesPricingV2EnabledAt:     "",
 
 		// Affiliate (邀请返利) feature (default disabled; opt-in)
 		SettingKeyAffiliateEnabled: "false",
@@ -3250,6 +3380,13 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 
 	// Available channels feature (default: disabled; strict true)
 	result.AvailableChannelsEnabled = settings[SettingKeyAvailableChannelsEnabled] == "true"
+	result.ModelSquareEnabled = settings[SettingKeyModelSquareEnabled] == "true"
+	result.SalesPricingVersion = SalesPricingVersion(strings.ToLower(strings.TrimSpace(settings[SettingKeySalesPricingVersion])))
+	if !result.SalesPricingVersion.IsValid() {
+		result.SalesPricingVersion = SalesPricingVersionLegacy
+	}
+	result.SalesPricingShadowStartedAt = parseOptionalSettingTime(settings[SettingKeySalesPricingShadowStartedAt])
+	result.SalesPricingV2EnabledAt = parseOptionalSettingTime(settings[SettingKeySalesPricingV2EnabledAt])
 
 	// Affiliate (邀请返利) feature (default: disabled; strict true)
 	result.AffiliateEnabled = settings[SettingKeyAffiliateEnabled] == "true"
@@ -3327,6 +3464,26 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	}
 
 	return result
+}
+
+func parseOptionalSettingTime(raw string) *time.Time {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return nil
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return nil
+	}
+	parsed = parsed.UTC()
+	return &parsed
+}
+
+func formatOptionalSettingTime(value *time.Time) string {
+	if value == nil {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339Nano)
 }
 
 func clampAffiliateRebateRate(value float64) float64 {

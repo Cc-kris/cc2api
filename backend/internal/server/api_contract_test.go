@@ -889,7 +889,11 @@ func TestAPIContracts(t *testing.T) {
 					"channel_monitor_enabled": true,
 					"channel_monitor_public_enabled": false,
 					"channel_monitor_default_interval_seconds": 60,
-					"available_channels_enabled": false,
+					"available_channels_enabled":       false,
+					"model_square_enabled":             false,
+					"sales_pricing_version":            "legacy",
+					"sales_pricing_shadow_started_at":  null,
+					"sales_pricing_v2_enabled_at":      null,
 					"risk_control_enabled": false,
 					"affiliate_enabled": false,
 					"wechat_connect_enabled": false,
@@ -1126,7 +1130,11 @@ func TestAPIContracts(t *testing.T) {
 					"channel_monitor_enabled": true,
 					"channel_monitor_public_enabled": false,
 					"channel_monitor_default_interval_seconds": 60,
-					"available_channels_enabled": false,
+					"available_channels_enabled":       false,
+					"model_square_enabled":             false,
+					"sales_pricing_version":            "legacy",
+					"sales_pricing_shadow_started_at":  null,
+					"sales_pricing_v2_enabled_at":      null,
 					"risk_control_enabled": false,
 					"affiliate_enabled": false,
 					"wechat_connect_enabled": true,
@@ -1199,11 +1207,12 @@ func TestAPIContracts(t *testing.T) {
 				"data": {
 					"success": 2,
 					"failed": 0,
+					"unchanged": 0,
 					"success_ids": [101, 102],
 					"failed_ids": [],
 					"results": [
-						{"account_id": 101, "success": true},
-						{"account_id": 102, "success": true}
+						{"account_id": 101, "success": true, "status": "success"},
+						{"account_id": 102, "success": true, "status": "success"}
 					]
 				}
 			}`,

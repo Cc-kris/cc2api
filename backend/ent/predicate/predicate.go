@@ -12,8 +12,17 @@ type APIKey func(*sql.Selector)
 // Account is the predicate function for account builders.
 type Account func(*sql.Selector)
 
+// AccountFinanceCounterSnapshot is the predicate function for accountfinancecountersnapshot builders.
+type AccountFinanceCounterSnapshot func(*sql.Selector)
+
+// AccountFinanceProfile is the predicate function for accountfinanceprofile builders.
+type AccountFinanceProfile func(*sql.Selector)
+
 // AccountGroup is the predicate function for accountgroup builders.
 type AccountGroup func(*sql.Selector)
+
+// AccountUpstreamMultiplierChange is the predicate function for accountupstreammultiplierchange builders.
+type AccountUpstreamMultiplierChange func(*sql.Selector)
 
 // Announcement is the predicate function for announcement builders.
 type Announcement func(*sql.Selector)
@@ -42,6 +51,27 @@ type ChannelMonitorRequestTemplate func(*sql.Selector)
 // ErrorPassthroughRule is the predicate function for errorpassthroughrule builders.
 type ErrorPassthroughRule func(*sql.Selector)
 
+// FinanceAlert is the predicate function for financealert builders.
+type FinanceAlert func(*sql.Selector)
+
+// FinanceAsyncJob is the predicate function for financeasyncjob builders.
+type FinanceAsyncJob func(*sql.Selector)
+
+// FinanceBackfillJob is the predicate function for financebackfilljob builders.
+type FinanceBackfillJob func(*sql.Selector)
+
+// FinanceCalculationRevision is the predicate function for financecalculationrevision builders.
+type FinanceCalculationRevision func(*sql.Selector)
+
+// FinanceDailyAggregate is the predicate function for financedailyaggregate builders.
+type FinanceDailyAggregate func(*sql.Selector)
+
+// FinanceExportJob is the predicate function for financeexportjob builders.
+type FinanceExportJob func(*sql.Selector)
+
+// FinanceFXRateVersion is the predicate function for financefxrateversion builders.
+type FinanceFXRateVersion func(*sql.Selector)
+
 // Group is the predicate function for group builders.
 type Group func(*sql.Selector)
 
@@ -56,6 +86,9 @@ type PaymentAuditLog func(*sql.Selector)
 
 // PaymentOrder is the predicate function for paymentorder builders.
 type PaymentOrder func(*sql.Selector)
+
+// PaymentProviderFeeEvent is the predicate function for paymentproviderfeeevent builders.
+type PaymentProviderFeeEvent func(*sql.Selector)
 
 // PaymentProviderInstance is the predicate function for paymentproviderinstance builders.
 type PaymentProviderInstance func(*sql.Selector)
@@ -84,14 +117,65 @@ type Setting func(*sql.Selector)
 // SubscriptionPlan is the predicate function for subscriptionplan builders.
 type SubscriptionPlan func(*sql.Selector)
 
+// SubscriptionRevenueRecognition is the predicate function for subscriptionrevenuerecognition builders.
+type SubscriptionRevenueRecognition func(*sql.Selector)
+
+// SystemModelPriceVersion is the predicate function for systemmodelpriceversion builders.
+type SystemModelPriceVersion func(*sql.Selector)
+
 // TLSFingerprintProfile is the predicate function for tlsfingerprintprofile builders.
 type TLSFingerprintProfile func(*sql.Selector)
+
+// UpstreamBalanceSnapshot is the predicate function for upstreambalancesnapshot builders.
+type UpstreamBalanceSnapshot func(*sql.Selector)
+
+// UpstreamBillReconciliation is the predicate function for upstreambillreconciliation builders.
+type UpstreamBillReconciliation func(*sql.Selector)
+
+// UpstreamCostSettlementInterval is the predicate function for upstreamcostsettlementinterval builders.
+type UpstreamCostSettlementInterval func(*sql.Selector)
+
+// UpstreamFinanceProtocol is the predicate function for upstreamfinanceprotocol builders.
+type UpstreamFinanceProtocol func(*sql.Selector)
+
+// UpstreamFinanceProtocolVersion is the predicate function for upstreamfinanceprotocolversion builders.
+type UpstreamFinanceProtocolVersion func(*sql.Selector)
+
+// UpstreamFinanceSyncRun is the predicate function for upstreamfinancesyncrun builders.
+type UpstreamFinanceSyncRun func(*sql.Selector)
+
+// UpstreamFundEvent is the predicate function for upstreamfundevent builders.
+type UpstreamFundEvent func(*sql.Selector)
+
+// UpstreamModelPriceVersion is the predicate function for upstreammodelpriceversion builders.
+type UpstreamModelPriceVersion func(*sql.Selector)
+
+// UpstreamWallet is the predicate function for upstreamwallet builders.
+type UpstreamWallet func(*sql.Selector)
+
+// UpstreamWalletAccount is the predicate function for upstreamwalletaccount builders.
+type UpstreamWalletAccount func(*sql.Selector)
 
 // UsageCleanupTask is the predicate function for usagecleanuptask builders.
 type UsageCleanupTask func(*sql.Selector)
 
+// UsageCostSettlementAllocation is the predicate function for usagecostsettlementallocation builders.
+type UsageCostSettlementAllocation func(*sql.Selector)
+
+// UsageFinanceCostSegment is the predicate function for usagefinancecostsegment builders.
+type UsageFinanceCostSegment func(*sql.Selector)
+
+// UsageFinanceRecord is the predicate function for usagefinancerecord builders.
+type UsageFinanceRecord func(*sql.Selector)
+
 // UsageLog is the predicate function for usagelog builders.
 type UsageLog func(*sql.Selector)
+
+// UsageRevenueAllocation is the predicate function for usagerevenueallocation builders.
+type UsageRevenueAllocation func(*sql.Selector)
+
+// UsageUpstreamAttempt is the predicate function for usageupstreamattempt builders.
+type UsageUpstreamAttempt func(*sql.Selector)
 
 // User is the predicate function for user builders.
 type User func(*sql.Selector)

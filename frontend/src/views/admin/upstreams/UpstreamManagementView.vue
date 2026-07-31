@@ -57,6 +57,8 @@
         </table>
       </div>
 
+      <UpstreamWalletManager :upstreams="items" />
+
       <div v-if="editing" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
         <form class="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-dark-800" @submit.prevent="save">
           <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ editing.id ? '编辑上游' : '新建上游' }}</h2>
@@ -103,6 +105,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
+import UpstreamWalletManager from '@/components/finance/UpstreamWalletManager.vue'
 import { adminAPI } from '@/api/admin'
 import type { Upstream, UpstreamBillingMode, UpstreamInput } from '@/api/admin/upstreams'
 import { useAppStore } from '@/stores/app'

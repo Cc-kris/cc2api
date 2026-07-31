@@ -8,6 +8,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
+	"github.com/shopspring/decimal"
 )
 
 // ID filters vertices based on their ID field.
@@ -113,6 +114,31 @@ func Priority(v int) predicate.Account {
 // RateMultiplier applies equality check predicate on the "rate_multiplier" field. It's identical to RateMultiplierEQ.
 func RateMultiplier(v float64) predicate.Account {
 	return predicate.Account(sql.FieldEQ(FieldRateMultiplier, v))
+}
+
+// UpstreamCostMultiplier applies equality check predicate on the "upstream_cost_multiplier" field. It's identical to UpstreamCostMultiplierEQ.
+func UpstreamCostMultiplier(v decimal.Decimal) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldUpstreamCostMultiplier, v))
+}
+
+// UpstreamCostMultiplierUpdatedAt applies equality check predicate on the "upstream_cost_multiplier_updated_at" field. It's identical to UpstreamCostMultiplierUpdatedAtEQ.
+func UpstreamCostMultiplierUpdatedAt(v time.Time) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldUpstreamCostMultiplierUpdatedAt, v))
+}
+
+// UpstreamCostMultiplierChangeID applies equality check predicate on the "upstream_cost_multiplier_change_id" field. It's identical to UpstreamCostMultiplierChangeIDEQ.
+func UpstreamCostMultiplierChangeID(v int64) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldUpstreamCostMultiplierChangeID, v))
+}
+
+// UpstreamCostMultiplierSource applies equality check predicate on the "upstream_cost_multiplier_source" field. It's identical to UpstreamCostMultiplierSourceEQ.
+func UpstreamCostMultiplierSource(v string) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldUpstreamCostMultiplierSource, v))
+}
+
+// CurrentFinanceProfileID applies equality check predicate on the "current_finance_profile_id" field. It's identical to CurrentFinanceProfileIDEQ.
+func CurrentFinanceProfileID(v int64) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldCurrentFinanceProfileID, v))
 }
 
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
@@ -783,6 +809,271 @@ func RateMultiplierLT(v float64) predicate.Account {
 // RateMultiplierLTE applies the LTE predicate on the "rate_multiplier" field.
 func RateMultiplierLTE(v float64) predicate.Account {
 	return predicate.Account(sql.FieldLTE(FieldRateMultiplier, v))
+}
+
+// UpstreamCostMultiplierEQ applies the EQ predicate on the "upstream_cost_multiplier" field.
+func UpstreamCostMultiplierEQ(v decimal.Decimal) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldUpstreamCostMultiplier, v))
+}
+
+// UpstreamCostMultiplierNEQ applies the NEQ predicate on the "upstream_cost_multiplier" field.
+func UpstreamCostMultiplierNEQ(v decimal.Decimal) predicate.Account {
+	return predicate.Account(sql.FieldNEQ(FieldUpstreamCostMultiplier, v))
+}
+
+// UpstreamCostMultiplierIn applies the In predicate on the "upstream_cost_multiplier" field.
+func UpstreamCostMultiplierIn(vs ...decimal.Decimal) predicate.Account {
+	return predicate.Account(sql.FieldIn(FieldUpstreamCostMultiplier, vs...))
+}
+
+// UpstreamCostMultiplierNotIn applies the NotIn predicate on the "upstream_cost_multiplier" field.
+func UpstreamCostMultiplierNotIn(vs ...decimal.Decimal) predicate.Account {
+	return predicate.Account(sql.FieldNotIn(FieldUpstreamCostMultiplier, vs...))
+}
+
+// UpstreamCostMultiplierGT applies the GT predicate on the "upstream_cost_multiplier" field.
+func UpstreamCostMultiplierGT(v decimal.Decimal) predicate.Account {
+	return predicate.Account(sql.FieldGT(FieldUpstreamCostMultiplier, v))
+}
+
+// UpstreamCostMultiplierGTE applies the GTE predicate on the "upstream_cost_multiplier" field.
+func UpstreamCostMultiplierGTE(v decimal.Decimal) predicate.Account {
+	return predicate.Account(sql.FieldGTE(FieldUpstreamCostMultiplier, v))
+}
+
+// UpstreamCostMultiplierLT applies the LT predicate on the "upstream_cost_multiplier" field.
+func UpstreamCostMultiplierLT(v decimal.Decimal) predicate.Account {
+	return predicate.Account(sql.FieldLT(FieldUpstreamCostMultiplier, v))
+}
+
+// UpstreamCostMultiplierLTE applies the LTE predicate on the "upstream_cost_multiplier" field.
+func UpstreamCostMultiplierLTE(v decimal.Decimal) predicate.Account {
+	return predicate.Account(sql.FieldLTE(FieldUpstreamCostMultiplier, v))
+}
+
+// UpstreamCostMultiplierIsNil applies the IsNil predicate on the "upstream_cost_multiplier" field.
+func UpstreamCostMultiplierIsNil() predicate.Account {
+	return predicate.Account(sql.FieldIsNull(FieldUpstreamCostMultiplier))
+}
+
+// UpstreamCostMultiplierNotNil applies the NotNil predicate on the "upstream_cost_multiplier" field.
+func UpstreamCostMultiplierNotNil() predicate.Account {
+	return predicate.Account(sql.FieldNotNull(FieldUpstreamCostMultiplier))
+}
+
+// UpstreamCostMultiplierUpdatedAtEQ applies the EQ predicate on the "upstream_cost_multiplier_updated_at" field.
+func UpstreamCostMultiplierUpdatedAtEQ(v time.Time) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldUpstreamCostMultiplierUpdatedAt, v))
+}
+
+// UpstreamCostMultiplierUpdatedAtNEQ applies the NEQ predicate on the "upstream_cost_multiplier_updated_at" field.
+func UpstreamCostMultiplierUpdatedAtNEQ(v time.Time) predicate.Account {
+	return predicate.Account(sql.FieldNEQ(FieldUpstreamCostMultiplierUpdatedAt, v))
+}
+
+// UpstreamCostMultiplierUpdatedAtIn applies the In predicate on the "upstream_cost_multiplier_updated_at" field.
+func UpstreamCostMultiplierUpdatedAtIn(vs ...time.Time) predicate.Account {
+	return predicate.Account(sql.FieldIn(FieldUpstreamCostMultiplierUpdatedAt, vs...))
+}
+
+// UpstreamCostMultiplierUpdatedAtNotIn applies the NotIn predicate on the "upstream_cost_multiplier_updated_at" field.
+func UpstreamCostMultiplierUpdatedAtNotIn(vs ...time.Time) predicate.Account {
+	return predicate.Account(sql.FieldNotIn(FieldUpstreamCostMultiplierUpdatedAt, vs...))
+}
+
+// UpstreamCostMultiplierUpdatedAtGT applies the GT predicate on the "upstream_cost_multiplier_updated_at" field.
+func UpstreamCostMultiplierUpdatedAtGT(v time.Time) predicate.Account {
+	return predicate.Account(sql.FieldGT(FieldUpstreamCostMultiplierUpdatedAt, v))
+}
+
+// UpstreamCostMultiplierUpdatedAtGTE applies the GTE predicate on the "upstream_cost_multiplier_updated_at" field.
+func UpstreamCostMultiplierUpdatedAtGTE(v time.Time) predicate.Account {
+	return predicate.Account(sql.FieldGTE(FieldUpstreamCostMultiplierUpdatedAt, v))
+}
+
+// UpstreamCostMultiplierUpdatedAtLT applies the LT predicate on the "upstream_cost_multiplier_updated_at" field.
+func UpstreamCostMultiplierUpdatedAtLT(v time.Time) predicate.Account {
+	return predicate.Account(sql.FieldLT(FieldUpstreamCostMultiplierUpdatedAt, v))
+}
+
+// UpstreamCostMultiplierUpdatedAtLTE applies the LTE predicate on the "upstream_cost_multiplier_updated_at" field.
+func UpstreamCostMultiplierUpdatedAtLTE(v time.Time) predicate.Account {
+	return predicate.Account(sql.FieldLTE(FieldUpstreamCostMultiplierUpdatedAt, v))
+}
+
+// UpstreamCostMultiplierUpdatedAtIsNil applies the IsNil predicate on the "upstream_cost_multiplier_updated_at" field.
+func UpstreamCostMultiplierUpdatedAtIsNil() predicate.Account {
+	return predicate.Account(sql.FieldIsNull(FieldUpstreamCostMultiplierUpdatedAt))
+}
+
+// UpstreamCostMultiplierUpdatedAtNotNil applies the NotNil predicate on the "upstream_cost_multiplier_updated_at" field.
+func UpstreamCostMultiplierUpdatedAtNotNil() predicate.Account {
+	return predicate.Account(sql.FieldNotNull(FieldUpstreamCostMultiplierUpdatedAt))
+}
+
+// UpstreamCostMultiplierChangeIDEQ applies the EQ predicate on the "upstream_cost_multiplier_change_id" field.
+func UpstreamCostMultiplierChangeIDEQ(v int64) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldUpstreamCostMultiplierChangeID, v))
+}
+
+// UpstreamCostMultiplierChangeIDNEQ applies the NEQ predicate on the "upstream_cost_multiplier_change_id" field.
+func UpstreamCostMultiplierChangeIDNEQ(v int64) predicate.Account {
+	return predicate.Account(sql.FieldNEQ(FieldUpstreamCostMultiplierChangeID, v))
+}
+
+// UpstreamCostMultiplierChangeIDIn applies the In predicate on the "upstream_cost_multiplier_change_id" field.
+func UpstreamCostMultiplierChangeIDIn(vs ...int64) predicate.Account {
+	return predicate.Account(sql.FieldIn(FieldUpstreamCostMultiplierChangeID, vs...))
+}
+
+// UpstreamCostMultiplierChangeIDNotIn applies the NotIn predicate on the "upstream_cost_multiplier_change_id" field.
+func UpstreamCostMultiplierChangeIDNotIn(vs ...int64) predicate.Account {
+	return predicate.Account(sql.FieldNotIn(FieldUpstreamCostMultiplierChangeID, vs...))
+}
+
+// UpstreamCostMultiplierChangeIDGT applies the GT predicate on the "upstream_cost_multiplier_change_id" field.
+func UpstreamCostMultiplierChangeIDGT(v int64) predicate.Account {
+	return predicate.Account(sql.FieldGT(FieldUpstreamCostMultiplierChangeID, v))
+}
+
+// UpstreamCostMultiplierChangeIDGTE applies the GTE predicate on the "upstream_cost_multiplier_change_id" field.
+func UpstreamCostMultiplierChangeIDGTE(v int64) predicate.Account {
+	return predicate.Account(sql.FieldGTE(FieldUpstreamCostMultiplierChangeID, v))
+}
+
+// UpstreamCostMultiplierChangeIDLT applies the LT predicate on the "upstream_cost_multiplier_change_id" field.
+func UpstreamCostMultiplierChangeIDLT(v int64) predicate.Account {
+	return predicate.Account(sql.FieldLT(FieldUpstreamCostMultiplierChangeID, v))
+}
+
+// UpstreamCostMultiplierChangeIDLTE applies the LTE predicate on the "upstream_cost_multiplier_change_id" field.
+func UpstreamCostMultiplierChangeIDLTE(v int64) predicate.Account {
+	return predicate.Account(sql.FieldLTE(FieldUpstreamCostMultiplierChangeID, v))
+}
+
+// UpstreamCostMultiplierChangeIDIsNil applies the IsNil predicate on the "upstream_cost_multiplier_change_id" field.
+func UpstreamCostMultiplierChangeIDIsNil() predicate.Account {
+	return predicate.Account(sql.FieldIsNull(FieldUpstreamCostMultiplierChangeID))
+}
+
+// UpstreamCostMultiplierChangeIDNotNil applies the NotNil predicate on the "upstream_cost_multiplier_change_id" field.
+func UpstreamCostMultiplierChangeIDNotNil() predicate.Account {
+	return predicate.Account(sql.FieldNotNull(FieldUpstreamCostMultiplierChangeID))
+}
+
+// UpstreamCostMultiplierSourceEQ applies the EQ predicate on the "upstream_cost_multiplier_source" field.
+func UpstreamCostMultiplierSourceEQ(v string) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldUpstreamCostMultiplierSource, v))
+}
+
+// UpstreamCostMultiplierSourceNEQ applies the NEQ predicate on the "upstream_cost_multiplier_source" field.
+func UpstreamCostMultiplierSourceNEQ(v string) predicate.Account {
+	return predicate.Account(sql.FieldNEQ(FieldUpstreamCostMultiplierSource, v))
+}
+
+// UpstreamCostMultiplierSourceIn applies the In predicate on the "upstream_cost_multiplier_source" field.
+func UpstreamCostMultiplierSourceIn(vs ...string) predicate.Account {
+	return predicate.Account(sql.FieldIn(FieldUpstreamCostMultiplierSource, vs...))
+}
+
+// UpstreamCostMultiplierSourceNotIn applies the NotIn predicate on the "upstream_cost_multiplier_source" field.
+func UpstreamCostMultiplierSourceNotIn(vs ...string) predicate.Account {
+	return predicate.Account(sql.FieldNotIn(FieldUpstreamCostMultiplierSource, vs...))
+}
+
+// UpstreamCostMultiplierSourceGT applies the GT predicate on the "upstream_cost_multiplier_source" field.
+func UpstreamCostMultiplierSourceGT(v string) predicate.Account {
+	return predicate.Account(sql.FieldGT(FieldUpstreamCostMultiplierSource, v))
+}
+
+// UpstreamCostMultiplierSourceGTE applies the GTE predicate on the "upstream_cost_multiplier_source" field.
+func UpstreamCostMultiplierSourceGTE(v string) predicate.Account {
+	return predicate.Account(sql.FieldGTE(FieldUpstreamCostMultiplierSource, v))
+}
+
+// UpstreamCostMultiplierSourceLT applies the LT predicate on the "upstream_cost_multiplier_source" field.
+func UpstreamCostMultiplierSourceLT(v string) predicate.Account {
+	return predicate.Account(sql.FieldLT(FieldUpstreamCostMultiplierSource, v))
+}
+
+// UpstreamCostMultiplierSourceLTE applies the LTE predicate on the "upstream_cost_multiplier_source" field.
+func UpstreamCostMultiplierSourceLTE(v string) predicate.Account {
+	return predicate.Account(sql.FieldLTE(FieldUpstreamCostMultiplierSource, v))
+}
+
+// UpstreamCostMultiplierSourceContains applies the Contains predicate on the "upstream_cost_multiplier_source" field.
+func UpstreamCostMultiplierSourceContains(v string) predicate.Account {
+	return predicate.Account(sql.FieldContains(FieldUpstreamCostMultiplierSource, v))
+}
+
+// UpstreamCostMultiplierSourceHasPrefix applies the HasPrefix predicate on the "upstream_cost_multiplier_source" field.
+func UpstreamCostMultiplierSourceHasPrefix(v string) predicate.Account {
+	return predicate.Account(sql.FieldHasPrefix(FieldUpstreamCostMultiplierSource, v))
+}
+
+// UpstreamCostMultiplierSourceHasSuffix applies the HasSuffix predicate on the "upstream_cost_multiplier_source" field.
+func UpstreamCostMultiplierSourceHasSuffix(v string) predicate.Account {
+	return predicate.Account(sql.FieldHasSuffix(FieldUpstreamCostMultiplierSource, v))
+}
+
+// UpstreamCostMultiplierSourceEqualFold applies the EqualFold predicate on the "upstream_cost_multiplier_source" field.
+func UpstreamCostMultiplierSourceEqualFold(v string) predicate.Account {
+	return predicate.Account(sql.FieldEqualFold(FieldUpstreamCostMultiplierSource, v))
+}
+
+// UpstreamCostMultiplierSourceContainsFold applies the ContainsFold predicate on the "upstream_cost_multiplier_source" field.
+func UpstreamCostMultiplierSourceContainsFold(v string) predicate.Account {
+	return predicate.Account(sql.FieldContainsFold(FieldUpstreamCostMultiplierSource, v))
+}
+
+// CurrentFinanceProfileIDEQ applies the EQ predicate on the "current_finance_profile_id" field.
+func CurrentFinanceProfileIDEQ(v int64) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldCurrentFinanceProfileID, v))
+}
+
+// CurrentFinanceProfileIDNEQ applies the NEQ predicate on the "current_finance_profile_id" field.
+func CurrentFinanceProfileIDNEQ(v int64) predicate.Account {
+	return predicate.Account(sql.FieldNEQ(FieldCurrentFinanceProfileID, v))
+}
+
+// CurrentFinanceProfileIDIn applies the In predicate on the "current_finance_profile_id" field.
+func CurrentFinanceProfileIDIn(vs ...int64) predicate.Account {
+	return predicate.Account(sql.FieldIn(FieldCurrentFinanceProfileID, vs...))
+}
+
+// CurrentFinanceProfileIDNotIn applies the NotIn predicate on the "current_finance_profile_id" field.
+func CurrentFinanceProfileIDNotIn(vs ...int64) predicate.Account {
+	return predicate.Account(sql.FieldNotIn(FieldCurrentFinanceProfileID, vs...))
+}
+
+// CurrentFinanceProfileIDGT applies the GT predicate on the "current_finance_profile_id" field.
+func CurrentFinanceProfileIDGT(v int64) predicate.Account {
+	return predicate.Account(sql.FieldGT(FieldCurrentFinanceProfileID, v))
+}
+
+// CurrentFinanceProfileIDGTE applies the GTE predicate on the "current_finance_profile_id" field.
+func CurrentFinanceProfileIDGTE(v int64) predicate.Account {
+	return predicate.Account(sql.FieldGTE(FieldCurrentFinanceProfileID, v))
+}
+
+// CurrentFinanceProfileIDLT applies the LT predicate on the "current_finance_profile_id" field.
+func CurrentFinanceProfileIDLT(v int64) predicate.Account {
+	return predicate.Account(sql.FieldLT(FieldCurrentFinanceProfileID, v))
+}
+
+// CurrentFinanceProfileIDLTE applies the LTE predicate on the "current_finance_profile_id" field.
+func CurrentFinanceProfileIDLTE(v int64) predicate.Account {
+	return predicate.Account(sql.FieldLTE(FieldCurrentFinanceProfileID, v))
+}
+
+// CurrentFinanceProfileIDIsNil applies the IsNil predicate on the "current_finance_profile_id" field.
+func CurrentFinanceProfileIDIsNil() predicate.Account {
+	return predicate.Account(sql.FieldIsNull(FieldCurrentFinanceProfileID))
+}
+
+// CurrentFinanceProfileIDNotNil applies the NotNil predicate on the "current_finance_profile_id" field.
+func CurrentFinanceProfileIDNotNil() predicate.Account {
+	return predicate.Account(sql.FieldNotNull(FieldCurrentFinanceProfileID))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.

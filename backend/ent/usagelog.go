@@ -16,6 +16,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
+	"github.com/shopspring/decimal"
 )
 
 // UsageLog is the model entity for the UsageLog schema.
@@ -77,6 +78,36 @@ type UsageLog struct {
 	RateMultiplier float64 `json:"rate_multiplier,omitempty"`
 	// AccountRateMultiplier holds the value of the "account_rate_multiplier" field.
 	AccountRateMultiplier *float64 `json:"account_rate_multiplier,omitempty"`
+	// UpstreamCostMultiplier holds the value of the "upstream_cost_multiplier" field.
+	UpstreamCostMultiplier *decimal.Decimal `json:"upstream_cost_multiplier,omitempty"`
+	// UpstreamMultiplierChangeID holds the value of the "upstream_multiplier_change_id" field.
+	UpstreamMultiplierChangeID *int64 `json:"upstream_multiplier_change_id,omitempty"`
+	// UpstreamMultiplierSource holds the value of the "upstream_multiplier_source" field.
+	UpstreamMultiplierSource *string `json:"upstream_multiplier_source,omitempty"`
+	// UpstreamMultiplierEffectiveAt holds the value of the "upstream_multiplier_effective_at" field.
+	UpstreamMultiplierEffectiveAt *time.Time `json:"upstream_multiplier_effective_at,omitempty"`
+	// AccountFinanceProfileID holds the value of the "account_finance_profile_id" field.
+	AccountFinanceProfileID *int64 `json:"account_finance_profile_id,omitempty"`
+	// SalesModel holds the value of the "sales_model" field.
+	SalesModel *string `json:"sales_model,omitempty"`
+	// SalesPricingEffectiveModel holds the value of the "sales_pricing_effective_model" field.
+	SalesPricingEffectiveModel *string `json:"sales_pricing_effective_model,omitempty"`
+	// SalesPricingLegacySource holds the value of the "sales_pricing_legacy_source" field.
+	SalesPricingLegacySource *string `json:"sales_pricing_legacy_source,omitempty"`
+	// SalesPricingVersion holds the value of the "sales_pricing_version" field.
+	SalesPricingVersion *string `json:"sales_pricing_version,omitempty"`
+	// SalesPricingSource holds the value of the "sales_pricing_source" field.
+	SalesPricingSource *string `json:"sales_pricing_source,omitempty"`
+	// SalesPricingChecksum holds the value of the "sales_pricing_checksum" field.
+	SalesPricingChecksum *string `json:"sales_pricing_checksum,omitempty"`
+	// SalesPricingSnapshot holds the value of the "sales_pricing_snapshot" field.
+	SalesPricingSnapshot map[string]interface{} `json:"sales_pricing_snapshot,omitempty"`
+	// SalesPricingShadowSnapshot holds the value of the "sales_pricing_shadow_snapshot" field.
+	SalesPricingShadowSnapshot map[string]interface{} `json:"sales_pricing_shadow_snapshot,omitempty"`
+	// SalesPricingShadowDelta holds the value of the "sales_pricing_shadow_delta" field.
+	SalesPricingShadowDelta *decimal.Decimal `json:"sales_pricing_shadow_delta,omitempty"`
+	// UsageListValue holds the value of the "usage_list_value" field.
+	UsageListValue *decimal.Decimal `json:"usage_list_value,omitempty"`
 	// BillingType holds the value of the "billing_type" field.
 	BillingType int8 `json:"billing_type,omitempty"`
 	// Stream holds the value of the "stream" field.
@@ -196,17 +227,19 @@ func (*UsageLog) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case usagelog.FieldImageSizeBreakdown:
+		case usagelog.FieldUpstreamCostMultiplier, usagelog.FieldSalesPricingShadowDelta, usagelog.FieldUsageListValue:
+			values[i] = &sql.NullScanner{S: new(decimal.Decimal)}
+		case usagelog.FieldSalesPricingSnapshot, usagelog.FieldSalesPricingShadowSnapshot, usagelog.FieldImageSizeBreakdown:
 			values[i] = new([]byte)
 		case usagelog.FieldStream, usagelog.FieldCacheTTLOverridden:
 			values[i] = new(sql.NullBool)
 		case usagelog.FieldInputCost, usagelog.FieldOutputCost, usagelog.FieldCacheCreationCost, usagelog.FieldCacheReadCost, usagelog.FieldTotalCost, usagelog.FieldActualCost, usagelog.FieldRateMultiplier, usagelog.FieldAccountRateMultiplier:
 			values[i] = new(sql.NullFloat64)
-		case usagelog.FieldID, usagelog.FieldUserID, usagelog.FieldAPIKeyID, usagelog.FieldAccountID, usagelog.FieldChannelID, usagelog.FieldGroupID, usagelog.FieldSubscriptionID, usagelog.FieldInputTokens, usagelog.FieldOutputTokens, usagelog.FieldCacheCreationTokens, usagelog.FieldCacheReadTokens, usagelog.FieldCacheCreation5mTokens, usagelog.FieldCacheCreation1hTokens, usagelog.FieldBillingType, usagelog.FieldDurationMs, usagelog.FieldFirstTokenMs, usagelog.FieldImageCount, usagelog.FieldVideoDurationSeconds, usagelog.FieldVideoCount:
+		case usagelog.FieldID, usagelog.FieldUserID, usagelog.FieldAPIKeyID, usagelog.FieldAccountID, usagelog.FieldChannelID, usagelog.FieldGroupID, usagelog.FieldSubscriptionID, usagelog.FieldInputTokens, usagelog.FieldOutputTokens, usagelog.FieldCacheCreationTokens, usagelog.FieldCacheReadTokens, usagelog.FieldCacheCreation5mTokens, usagelog.FieldCacheCreation1hTokens, usagelog.FieldUpstreamMultiplierChangeID, usagelog.FieldAccountFinanceProfileID, usagelog.FieldBillingType, usagelog.FieldDurationMs, usagelog.FieldFirstTokenMs, usagelog.FieldImageCount, usagelog.FieldVideoDurationSeconds, usagelog.FieldVideoCount:
 			values[i] = new(sql.NullInt64)
-		case usagelog.FieldRequestID, usagelog.FieldModel, usagelog.FieldRequestedModel, usagelog.FieldUpstreamModel, usagelog.FieldModelMappingChain, usagelog.FieldBillingTier, usagelog.FieldBillingMode, usagelog.FieldUserAgent, usagelog.FieldIPAddress, usagelog.FieldImageSize, usagelog.FieldImageInputSize, usagelog.FieldImageOutputSize, usagelog.FieldImageSizeSource, usagelog.FieldVideoResolution, usagelog.FieldVideoTaskID:
+		case usagelog.FieldRequestID, usagelog.FieldModel, usagelog.FieldRequestedModel, usagelog.FieldUpstreamModel, usagelog.FieldModelMappingChain, usagelog.FieldBillingTier, usagelog.FieldBillingMode, usagelog.FieldUpstreamMultiplierSource, usagelog.FieldSalesModel, usagelog.FieldSalesPricingEffectiveModel, usagelog.FieldSalesPricingLegacySource, usagelog.FieldSalesPricingVersion, usagelog.FieldSalesPricingSource, usagelog.FieldSalesPricingChecksum, usagelog.FieldUserAgent, usagelog.FieldIPAddress, usagelog.FieldImageSize, usagelog.FieldImageInputSize, usagelog.FieldImageOutputSize, usagelog.FieldImageSizeSource, usagelog.FieldVideoResolution, usagelog.FieldVideoTaskID:
 			values[i] = new(sql.NullString)
-		case usagelog.FieldCreatedAt:
+		case usagelog.FieldUpstreamMultiplierEffectiveAt, usagelog.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -399,6 +432,113 @@ func (_m *UsageLog) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.AccountRateMultiplier = new(float64)
 				*_m.AccountRateMultiplier = value.Float64
+			}
+		case usagelog.FieldUpstreamCostMultiplier:
+			if value, ok := values[i].(*sql.NullScanner); !ok {
+				return fmt.Errorf("unexpected type %T for field upstream_cost_multiplier", values[i])
+			} else if value.Valid {
+				_m.UpstreamCostMultiplier = new(decimal.Decimal)
+				*_m.UpstreamCostMultiplier = *value.S.(*decimal.Decimal)
+			}
+		case usagelog.FieldUpstreamMultiplierChangeID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field upstream_multiplier_change_id", values[i])
+			} else if value.Valid {
+				_m.UpstreamMultiplierChangeID = new(int64)
+				*_m.UpstreamMultiplierChangeID = value.Int64
+			}
+		case usagelog.FieldUpstreamMultiplierSource:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field upstream_multiplier_source", values[i])
+			} else if value.Valid {
+				_m.UpstreamMultiplierSource = new(string)
+				*_m.UpstreamMultiplierSource = value.String
+			}
+		case usagelog.FieldUpstreamMultiplierEffectiveAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field upstream_multiplier_effective_at", values[i])
+			} else if value.Valid {
+				_m.UpstreamMultiplierEffectiveAt = new(time.Time)
+				*_m.UpstreamMultiplierEffectiveAt = value.Time
+			}
+		case usagelog.FieldAccountFinanceProfileID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field account_finance_profile_id", values[i])
+			} else if value.Valid {
+				_m.AccountFinanceProfileID = new(int64)
+				*_m.AccountFinanceProfileID = value.Int64
+			}
+		case usagelog.FieldSalesModel:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field sales_model", values[i])
+			} else if value.Valid {
+				_m.SalesModel = new(string)
+				*_m.SalesModel = value.String
+			}
+		case usagelog.FieldSalesPricingEffectiveModel:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field sales_pricing_effective_model", values[i])
+			} else if value.Valid {
+				_m.SalesPricingEffectiveModel = new(string)
+				*_m.SalesPricingEffectiveModel = value.String
+			}
+		case usagelog.FieldSalesPricingLegacySource:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field sales_pricing_legacy_source", values[i])
+			} else if value.Valid {
+				_m.SalesPricingLegacySource = new(string)
+				*_m.SalesPricingLegacySource = value.String
+			}
+		case usagelog.FieldSalesPricingVersion:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field sales_pricing_version", values[i])
+			} else if value.Valid {
+				_m.SalesPricingVersion = new(string)
+				*_m.SalesPricingVersion = value.String
+			}
+		case usagelog.FieldSalesPricingSource:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field sales_pricing_source", values[i])
+			} else if value.Valid {
+				_m.SalesPricingSource = new(string)
+				*_m.SalesPricingSource = value.String
+			}
+		case usagelog.FieldSalesPricingChecksum:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field sales_pricing_checksum", values[i])
+			} else if value.Valid {
+				_m.SalesPricingChecksum = new(string)
+				*_m.SalesPricingChecksum = value.String
+			}
+		case usagelog.FieldSalesPricingSnapshot:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field sales_pricing_snapshot", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.SalesPricingSnapshot); err != nil {
+					return fmt.Errorf("unmarshal field sales_pricing_snapshot: %w", err)
+				}
+			}
+		case usagelog.FieldSalesPricingShadowSnapshot:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field sales_pricing_shadow_snapshot", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.SalesPricingShadowSnapshot); err != nil {
+					return fmt.Errorf("unmarshal field sales_pricing_shadow_snapshot: %w", err)
+				}
+			}
+		case usagelog.FieldSalesPricingShadowDelta:
+			if value, ok := values[i].(*sql.NullScanner); !ok {
+				return fmt.Errorf("unexpected type %T for field sales_pricing_shadow_delta", values[i])
+			} else if value.Valid {
+				_m.SalesPricingShadowDelta = new(decimal.Decimal)
+				*_m.SalesPricingShadowDelta = *value.S.(*decimal.Decimal)
+			}
+		case usagelog.FieldUsageListValue:
+			if value, ok := values[i].(*sql.NullScanner); !ok {
+				return fmt.Errorf("unexpected type %T for field usage_list_value", values[i])
+			} else if value.Valid {
+				_m.UsageListValue = new(decimal.Decimal)
+				*_m.UsageListValue = *value.S.(*decimal.Decimal)
 			}
 		case usagelog.FieldBillingType:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -678,6 +818,77 @@ func (_m *UsageLog) String() string {
 	builder.WriteString(", ")
 	if v := _m.AccountRateMultiplier; v != nil {
 		builder.WriteString("account_rate_multiplier=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.UpstreamCostMultiplier; v != nil {
+		builder.WriteString("upstream_cost_multiplier=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.UpstreamMultiplierChangeID; v != nil {
+		builder.WriteString("upstream_multiplier_change_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.UpstreamMultiplierSource; v != nil {
+		builder.WriteString("upstream_multiplier_source=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.UpstreamMultiplierEffectiveAt; v != nil {
+		builder.WriteString("upstream_multiplier_effective_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.AccountFinanceProfileID; v != nil {
+		builder.WriteString("account_finance_profile_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.SalesModel; v != nil {
+		builder.WriteString("sales_model=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.SalesPricingEffectiveModel; v != nil {
+		builder.WriteString("sales_pricing_effective_model=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.SalesPricingLegacySource; v != nil {
+		builder.WriteString("sales_pricing_legacy_source=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.SalesPricingVersion; v != nil {
+		builder.WriteString("sales_pricing_version=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.SalesPricingSource; v != nil {
+		builder.WriteString("sales_pricing_source=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.SalesPricingChecksum; v != nil {
+		builder.WriteString("sales_pricing_checksum=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	builder.WriteString("sales_pricing_snapshot=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SalesPricingSnapshot))
+	builder.WriteString(", ")
+	builder.WriteString("sales_pricing_shadow_snapshot=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SalesPricingShadowSnapshot))
+	builder.WriteString(", ")
+	if v := _m.SalesPricingShadowDelta; v != nil {
+		builder.WriteString("sales_pricing_shadow_delta=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.UsageListValue; v != nil {
+		builder.WriteString("usage_list_value=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")

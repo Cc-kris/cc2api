@@ -80,6 +80,110 @@ func TestUsageBillingRepositoryApply_DeduplicatesBalanceBilling(t *testing.T) {
 	require.Equal(t, 1, dedupCount)
 }
 
+func TestUsageBillingRepositoryApply_RecordsPromotionAndExclusionFacts(t *testing.T) {
+	ctx := context.Background()
+	client := testEntClient(t)
+	repo := NewUsageBillingRepository(client, integrationDB)
+
+	user := mustCreateUser(t, client, &service.User{
+		Email:        fmt.Sprintf("usage-billing-promotion-%d@example.com", time.Now().UnixNano()),
+		PasswordHash: "hash",
+		Balance:      100,
+	})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{
+		UserID: user.ID,
+		Key:    "sk-usage-billing-promotion-" + uuid.NewString(),
+		Name:   "promotion-billing",
+	})
+	account := mustCreateAccount(t, client, &service.Account{
+		Name: "usage-billing-promotion-account-" + uuid.NewString(),
+		Type: service.AccountTypeAPIKey,
+	})
+
+	var promoCodeID int64
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `
+		INSERT INTO promo_codes(code, bonus_amount) VALUES($1, 2) RETURNING id
+	`, "PROMO-"+strings.ToUpper(strings.ReplaceAll(uuid.NewString(), "-", ""))[:20]).Scan(&promoCodeID))
+	_, err := integrationDB.ExecContext(ctx, `
+		INSERT INTO promo_code_usages(promo_code_id, user_id, bonus_amount) VALUES($1, $2, 2)
+	`, promoCodeID, user.ID)
+	require.NoError(t, err)
+
+	var promotionBalance string
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `
+		SELECT remaining_amount::text FROM user_promotion_credit_balances WHERE user_id=$1
+	`, user.ID).Scan(&promotionBalance))
+	require.Equal(t, "2.0000000000", promotionBalance)
+
+	requestID := uuid.NewString()
+	result, err := repo.Apply(ctx, &service.UsageBillingCommand{
+		RequestID:              requestID,
+		APIKeyID:               apiKey.ID,
+		UserID:                 user.ID,
+		AccountID:              account.ID,
+		AccountType:            service.AccountTypeAPIKey,
+		BalanceCost:            3,
+		FinanceBusinessType:    "admin",
+		FinanceExcluded:        true,
+		FinanceExclusionReason: "account_test",
+	})
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	require.Equal(t, "admin", result.FinanceBusinessType)
+	require.NotNil(t, result.PromotionCreditUsed)
+	require.Equal(t, "2", result.PromotionCreditUsed.String())
+	require.True(t, result.FinanceExcluded)
+	require.Equal(t, "account_test", result.FinanceExclusionReason)
+
+	var businessType, promotionUsed, exclusionReason string
+	var excluded bool
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `
+		SELECT finance_business_type, promotion_credit_used::text, finance_excluded,
+		       COALESCE(finance_exclusion_reason, '')
+		FROM usage_billing_dedup WHERE request_id=$1 AND api_key_id=$2
+	`, requestID, apiKey.ID).Scan(&businessType, &promotionUsed, &excluded, &exclusionReason))
+	require.Equal(t, "admin", businessType)
+	require.Equal(t, "2.0000000000", promotionUsed)
+	require.True(t, excluded)
+	require.Equal(t, "account_test", exclusionReason)
+
+	usageLog := &service.UsageLog{
+		UserID: user.ID, APIKeyID: apiKey.ID, AccountID: account.ID, RequestID: requestID,
+		Model: "gpt-test", ActualCost: 3, TotalCost: 3, CreatedAt: time.Now().UTC(),
+	}
+	inserted, err := NewUsageLogRepository(client, integrationDB).Create(ctx, usageLog)
+	require.NoError(t, err)
+	require.True(t, inserted)
+	logs := []service.UsageLog{{ID: usageLog.ID}}
+	require.NoError(t, attachFinanceUsageClassifications(ctx, integrationDB, logs))
+	require.Equal(t, "admin", logs[0].FinanceBusinessTypeSnapshot)
+	require.NotNil(t, logs[0].PromotionCreditUsed)
+	require.Equal(t, "2", logs[0].PromotionCreditUsed.String())
+	require.True(t, logs[0].FinanceExcluded)
+	require.Equal(t, "account_test", logs[0].FinanceExclusionReason)
+
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `
+		SELECT remaining_amount::text FROM user_promotion_credit_balances WHERE user_id=$1
+	`, user.ID).Scan(&promotionBalance))
+	require.Equal(t, "0.0000000000", promotionBalance)
+
+	var balance float64
+	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT balance FROM users WHERE id=$1", user.ID).Scan(&balance))
+	require.InDelta(t, 97, balance, 0.000001)
+
+	second, err := repo.Apply(ctx, &service.UsageBillingCommand{
+		RequestID:   uuid.NewString(),
+		APIKeyID:    apiKey.ID,
+		UserID:      user.ID,
+		AccountID:   account.ID,
+		AccountType: service.AccountTypeAPIKey,
+		BalanceCost: 1,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "balance", second.FinanceBusinessType)
+	require.Nil(t, second.PromotionCreditUsed)
+}
+
 func TestUsageBillingRepositoryApply_DeduplicatesSubscriptionBilling(t *testing.T) {
 	ctx := context.Background()
 	client := testEntClient(t)
@@ -339,10 +443,13 @@ func TestUsageBillingRepositoryApply_DeduplicatesAgainstArchivedKey(t *testing.T
 
 	requestID := uuid.NewString()
 	cmd := &service.UsageBillingCommand{
-		RequestID:   requestID,
-		APIKeyID:    apiKey.ID,
-		UserID:      user.ID,
-		BalanceCost: 1.25,
+		RequestID:              requestID,
+		APIKeyID:               apiKey.ID,
+		UserID:                 user.ID,
+		BalanceCost:            1.25,
+		FinanceBusinessType:    "admin",
+		FinanceExcluded:        true,
+		FinanceExclusionReason: "admin_test",
 	}
 
 	result1, err := repo.Apply(ctx, cmd)
@@ -356,6 +463,16 @@ func TestUsageBillingRepositoryApply_DeduplicatesAgainstArchivedKey(t *testing.T
 	`, time.Now().UTC().AddDate(0, 0, -400), requestID, apiKey.ID)
 	require.NoError(t, err)
 	require.NoError(t, aggRepo.CleanupUsageBillingDedup(ctx, time.Now().UTC().AddDate(0, 0, -365)))
+
+	var archivedBusinessType, archivedReason string
+	var archivedExcluded bool
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `
+		SELECT finance_business_type, finance_excluded, COALESCE(finance_exclusion_reason, '')
+		FROM usage_billing_dedup_archive WHERE request_id=$1 AND api_key_id=$2
+	`, requestID, apiKey.ID).Scan(&archivedBusinessType, &archivedExcluded, &archivedReason))
+	require.Equal(t, "admin", archivedBusinessType)
+	require.True(t, archivedExcluded)
+	require.Equal(t, "admin_test", archivedReason)
 
 	result2, err := repo.Apply(ctx, cmd)
 	require.NoError(t, err)

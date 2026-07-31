@@ -9,6 +9,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
 
@@ -92,6 +93,32 @@ func TestOpenAIGatewayServiceRecordUsage_RejectsNilInput(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	require.Error(t, svc.RecordUsage(context.Background(), nil))
 	require.Error(t, svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{}))
+}
+
+func TestOpenAIGatewayServiceRecordUsage_PersistsRequestTimeUpstreamMultiplier(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	svc := newOpenAIRecordUsageServiceForTest(usageRepo, &openAIRecordUsageUserRepoStub{}, &openAIRecordUsageSubRepoStub{}, nil)
+	accountValue := decimal.RequireFromString("0.8000")
+	requestValue := decimal.RequireFromString("0.7250")
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID: "openai_upstream_multiplier_snapshot",
+			Usage:     OpenAIUsage{InputTokens: 10, OutputTokens: 5},
+			Model:     "gpt-5.1",
+		},
+		APIKey:                 &APIKey{ID: 501},
+		User:                   &User{ID: 601},
+		Account:                &Account{ID: 701, Platform: PlatformOpenAI, UpstreamCostMultiplier: &accountValue},
+		UpstreamCostMultiplier: &requestValue,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, usageRepo.lastLog)
+	require.NotNil(t, usageRepo.lastLog.UpstreamCostMultiplier)
+	require.True(t, usageRepo.lastLog.UpstreamCostMultiplier.Equal(decimal.RequireFromString("0.7250")))
+	requestValue = decimal.RequireFromString("9.9999")
+	require.True(t, usageRepo.lastLog.UpstreamCostMultiplier.Equal(decimal.RequireFromString("0.7250")))
 }
 
 type openAIRecordUsageUserRepoStub struct {

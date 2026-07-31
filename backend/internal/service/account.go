@@ -15,6 +15,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
+	"github.com/shopspring/decimal"
 )
 
 type Account struct {
@@ -30,15 +31,25 @@ type Account struct {
 	Priority    int
 	// RateMultiplier 账号计费倍率（>=0，允许 0 表示该账号计费为 0）。
 	// 使用指针用于兼容旧版本调度缓存（Redis）中缺字段的情况：nil 表示按 1.0 处理。
-	RateMultiplier     *float64
-	LoadFactor         *int // 调度负载因子；nil 表示使用 Concurrency
-	Status             string
-	ErrorMessage       string
-	LastUsedAt         *time.Time
-	ExpiresAt          *time.Time
-	AutoPauseOnExpired bool
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	RateMultiplier *float64
+	// UpstreamCostMultiplier is the local procurement-cost fallback. It is not
+	// the account billing multiplier and is never synchronized from upstream.
+	UpstreamCostMultiplier          *decimal.Decimal
+	UpstreamCostMultiplierUpdatedAt *time.Time
+	UpstreamCostMultiplierChangeID  *int64
+	UpstreamCostMultiplierSource    string
+	CurrentFinanceProfileID         *int64
+	FinanceCostMode                 string
+	FinanceProtocolVersionID        *int64
+	FinanceProtocolConfig           *FinanceProtocolConfig
+	LoadFactor                      *int // 调度负载因子；nil 表示使用 Concurrency
+	Status                          string
+	ErrorMessage                    string
+	LastUsedAt                      *time.Time
+	ExpiresAt                       *time.Time
+	AutoPauseOnExpired              bool
+	CreatedAt                       time.Time
+	UpdatedAt                       time.Time
 
 	Schedulable bool
 

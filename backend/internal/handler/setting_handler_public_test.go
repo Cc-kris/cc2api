@@ -120,3 +120,39 @@ func TestSettingHandler_GetPublicSettings_ExposesWeChatOAuthModeCapabilities(t *
 	require.True(t, resp.Data.WeChatOAuthOpenEnabled)
 	require.True(t, resp.Data.WeChatOAuthMPEnabled)
 }
+
+func TestSettingHandler_GetPublicSettings_ModelSquareRequiresFeatureAndV2Pricing(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []struct {
+		name    string
+		enabled string
+		version string
+		want    bool
+	}{
+		{name: "disabled even on v2", enabled: "false", version: string(service.SalesPricingVersionV2), want: false},
+		{name: "legacy remains hidden", enabled: "true", version: string(service.SalesPricingVersionLegacy), want: false},
+		{name: "v2 enabled", enabled: "true", version: string(service.SalesPricingVersionV2), want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewSettingHandler(service.NewSettingService(&settingHandlerPublicRepoStub{values: map[string]string{
+				service.SettingKeyModelSquareEnabled:  tt.enabled,
+				service.SettingKeySalesPricingVersion: tt.version,
+			}}, &config.Config{}), "test-version")
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/settings/public", nil)
+
+			h.GetPublicSettings(c)
+
+			require.Equal(t, http.StatusOK, recorder.Code)
+			var resp struct {
+				Data struct {
+					ModelSquareEnabled bool `json:"model_square_enabled"`
+				} `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+			require.Equal(t, tt.want, resp.Data.ModelSquareEnabled)
+		})
+	}
+}

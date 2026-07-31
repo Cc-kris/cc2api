@@ -213,6 +213,8 @@ func TestCreateAccount_DropsDeprecatedUpstreamWarningExtra(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, created)
 	require.NotNil(t, repo.created)
+	require.Nil(t, repo.created.UpstreamCostMultiplier)
+	require.Nil(t, repo.created.UpstreamCostMultiplierUpdatedAt)
 	require.Equal(t, 25.5, repo.created.Extra["upstream_prepaid_amount"])
 	require.NotContains(t, repo.created.Extra, "upstream_warning_amount")
 	require.NotContains(t, repo.created.Extra, "upstream_notify_enabled")

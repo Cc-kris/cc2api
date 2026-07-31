@@ -9,6 +9,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,14 +37,15 @@ type dataProxy struct {
 }
 
 type dataAccount struct {
-	Name        string         `json:"name"`
-	Platform    string         `json:"platform"`
-	Type        string         `json:"type"`
-	Credentials map[string]any `json:"credentials"`
-	Extra       map[string]any `json:"extra"`
-	ProxyKey    *string        `json:"proxy_key"`
-	Concurrency int            `json:"concurrency"`
-	Priority    int            `json:"priority"`
+	Name                   string         `json:"name"`
+	Platform               string         `json:"platform"`
+	Type                   string         `json:"type"`
+	Credentials            map[string]any `json:"credentials"`
+	Extra                  map[string]any `json:"extra"`
+	ProxyKey               *string        `json:"proxy_key"`
+	Concurrency            int            `json:"concurrency"`
+	Priority               int            `json:"priority"`
+	UpstreamCostMultiplier *string        `json:"upstream_cost_multiplier"`
 }
 
 func setupAccountDataRouter() (*gin.Engine, *stubAdminService) {
@@ -104,16 +106,17 @@ func TestExportDataIncludesSecrets(t *testing.T) {
 	}
 	adminSvc.accounts = []service.Account{
 		{
-			ID:          21,
-			Name:        "account",
-			Platform:    service.PlatformOpenAI,
-			Type:        service.AccountTypeOAuth,
-			Credentials: map[string]any{"token": "secret"},
-			Extra:       map[string]any{"note": "x"},
-			ProxyID:     &proxyID,
-			Concurrency: 3,
-			Priority:    50,
-			Status:      service.StatusDisabled,
+			ID:                     21,
+			Name:                   "account",
+			Platform:               service.PlatformOpenAI,
+			Type:                   service.AccountTypeOAuth,
+			Credentials:            map[string]any{"token": "secret"},
+			Extra:                  map[string]any{"note": "x"},
+			ProxyID:                &proxyID,
+			Concurrency:            3,
+			Priority:               50,
+			Status:                 service.StatusDisabled,
+			UpstreamCostMultiplier: func() *decimal.Decimal { value := decimal.RequireFromString("1.2345"); return &value }(),
 		},
 	}
 
@@ -131,6 +134,7 @@ func TestExportDataIncludesSecrets(t *testing.T) {
 	require.Equal(t, "pass", resp.Data.Proxies[0].Password)
 	require.Len(t, resp.Data.Accounts, 1)
 	require.Equal(t, "secret", resp.Data.Accounts[0].Credentials["token"])
+	require.Equal(t, "1.2345", *resp.Data.Accounts[0].UpstreamCostMultiplier)
 }
 
 func TestExportDataWithoutProxies(t *testing.T) {
@@ -278,4 +282,5 @@ func TestImportDataReusesProxyAndSkipsDefaultGroup(t *testing.T) {
 	require.Len(t, adminSvc.createdProxies, 0)
 	require.Len(t, adminSvc.createdAccounts, 1)
 	require.True(t, adminSvc.createdAccounts[0].SkipDefaultGroupBind)
+	require.Nil(t, adminSvc.createdAccounts[0].UpstreamCostMultiplier)
 }

@@ -13,6 +13,7 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -47,23 +48,25 @@ type DataProxy struct {
 // Credentials 原文返回。这是"管理员备份"这一显式行为的一部分；如未来需要导出脱敏版本，
 // 应新增独立结构而非修改这里。
 type DataAccount struct {
-	Name               string         `json:"name"`
-	Notes              *string        `json:"notes,omitempty"`
-	Platform           string         `json:"platform"`
-	Type               string         `json:"type"`
-	Credentials        map[string]any `json:"credentials"`
-	Extra              map[string]any `json:"extra,omitempty"`
-	ProxyKey           *string        `json:"proxy_key,omitempty"`
-	Concurrency        int            `json:"concurrency"`
-	Priority           int            `json:"priority"`
-	RateMultiplier     *float64       `json:"rate_multiplier,omitempty"`
-	ExpiresAt          *int64         `json:"expires_at,omitempty"`
-	AutoPauseOnExpired *bool          `json:"auto_pause_on_expired,omitempty"`
+	Name                   string         `json:"name"`
+	Notes                  *string        `json:"notes,omitempty"`
+	Platform               string         `json:"platform"`
+	Type                   string         `json:"type"`
+	Credentials            map[string]any `json:"credentials"`
+	Extra                  map[string]any `json:"extra,omitempty"`
+	ProxyKey               *string        `json:"proxy_key,omitempty"`
+	Concurrency            int            `json:"concurrency"`
+	Priority               int            `json:"priority"`
+	RateMultiplier         *float64       `json:"rate_multiplier,omitempty"`
+	UpstreamCostMultiplier *string        `json:"upstream_cost_multiplier,omitempty"`
+	ExpiresAt              *int64         `json:"expires_at,omitempty"`
+	AutoPauseOnExpired     *bool          `json:"auto_pause_on_expired,omitempty"`
 }
 
 type DataImportRequest struct {
 	Data                 DataPayload `json:"data"`
 	SkipDefaultGroupBind *bool       `json:"skip_default_group_bind"`
+	operatorID           *int64
 }
 
 type DataImportResult struct {
@@ -151,16 +154,23 @@ func (h *AccountHandler) ExportData(c *gin.Context) {
 			expiresAt = &v
 		}
 		dataAccounts = append(dataAccounts, DataAccount{
-			Name:               acc.Name,
-			Notes:              acc.Notes,
-			Platform:           acc.Platform,
-			Type:               acc.Type,
-			Credentials:        acc.Credentials,
-			Extra:              acc.Extra,
-			ProxyKey:           proxyKey,
-			Concurrency:        acc.Concurrency,
-			Priority:           acc.Priority,
-			RateMultiplier:     acc.RateMultiplier,
+			Name:           acc.Name,
+			Notes:          acc.Notes,
+			Platform:       acc.Platform,
+			Type:           acc.Type,
+			Credentials:    acc.Credentials,
+			Extra:          acc.Extra,
+			ProxyKey:       proxyKey,
+			Concurrency:    acc.Concurrency,
+			Priority:       acc.Priority,
+			RateMultiplier: acc.RateMultiplier,
+			UpstreamCostMultiplier: func() *string {
+				if acc.UpstreamCostMultiplier == nil {
+					return nil
+				}
+				value := acc.UpstreamCostMultiplier.StringFixed(4)
+				return &value
+			}(),
 			ExpiresAt:          expiresAt,
 			AutoPauseOnExpired: &acc.AutoPauseOnExpired,
 		})
@@ -185,6 +195,9 @@ func (h *AccountHandler) ImportData(c *gin.Context) {
 	if err := validateDataHeader(req.Data); err != nil {
 		response.BadRequest(c, err.Error())
 		return
+	}
+	if subject, ok := middleware2.GetAuthSubjectFromContext(c); ok && subject.UserID > 0 {
+		req.operatorID = &subject.UserID
 	}
 
 	executeAdminIdempotentJSON(c, "admin.accounts.import_data", req, service.DefaultWriteIdempotencyTTL(), func(ctx context.Context) (any, error) {
@@ -303,22 +316,30 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 		}
 
 		enrichCredentialsFromIDToken(&item)
+		upstreamCostMultiplier, multiplierErr := parseUpstreamCostMultiplier(item.UpstreamCostMultiplier, true)
+		if multiplierErr != nil {
+			result.AccountFailed++
+			result.Errors = append(result.Errors, DataImportError{Kind: "account", Name: item.Name, Message: multiplierErr.Error()})
+			continue
+		}
 
 		accountInput := &service.CreateAccountInput{
-			Name:                 item.Name,
-			Notes:                item.Notes,
-			Platform:             item.Platform,
-			Type:                 item.Type,
-			Credentials:          item.Credentials,
-			Extra:                item.Extra,
-			ProxyID:              proxyID,
-			Concurrency:          item.Concurrency,
-			Priority:             item.Priority,
-			RateMultiplier:       item.RateMultiplier,
-			GroupIDs:             nil,
-			ExpiresAt:            item.ExpiresAt,
-			AutoPauseOnExpired:   item.AutoPauseOnExpired,
-			SkipDefaultGroupBind: skipDefaultGroupBind,
+			Name:                   item.Name,
+			Notes:                  item.Notes,
+			Platform:               item.Platform,
+			Type:                   item.Type,
+			Credentials:            item.Credentials,
+			Extra:                  item.Extra,
+			ProxyID:                proxyID,
+			Concurrency:            item.Concurrency,
+			Priority:               item.Priority,
+			RateMultiplier:         item.RateMultiplier,
+			UpstreamCostMultiplier: upstreamCostMultiplier,
+			OperatorID:             req.operatorID,
+			GroupIDs:               nil,
+			ExpiresAt:              item.ExpiresAt,
+			AutoPauseOnExpired:     item.AutoPauseOnExpired,
+			SkipDefaultGroupBind:   skipDefaultGroupBind,
 		}
 
 		created, err := h.adminService.CreateAccount(ctx, accountInput)
@@ -570,6 +591,9 @@ func validateDataAccount(item DataAccount) error {
 	}
 	if item.RateMultiplier != nil && *item.RateMultiplier < 0 {
 		return errors.New("rate_multiplier must be >= 0")
+	}
+	if _, err := parseUpstreamCostMultiplier(item.UpstreamCostMultiplier, true); err != nil {
+		return err
 	}
 	if item.Concurrency < 0 {
 		return errors.New("concurrency must be >= 0")

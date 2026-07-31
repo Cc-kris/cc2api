@@ -242,6 +242,7 @@ export interface PublicSettings {
   channel_monitor_public_enabled: boolean
   channel_monitor_default_interval_seconds: number
   available_channels_enabled: boolean
+  model_square_enabled: boolean
   affiliate_enabled: boolean
 }
 
@@ -846,6 +847,8 @@ export interface Account {
   current_concurrency?: number // Real-time concurrency count from Redis
   priority: number
   rate_multiplier?: number // Account billing multiplier (>=0, 0 means free)
+  upstream_cost_multiplier?: string | null // Procurement cost multiplier; decimal text preserves precision
+  upstream_cost_multiplier_updated_at?: string | null
   status: 'active' | 'inactive' | 'error'
   error_message: string | null
   last_used_at: string | null
@@ -1095,6 +1098,7 @@ export interface CreateAccountRequest {
   load_factor?: number | null
   priority?: number
   rate_multiplier?: number // Account billing multiplier (>=0, 0 means free)
+  upstream_cost_multiplier?: string
   group_ids?: number[]
   expires_at?: number | null
   auto_pause_on_expired?: boolean
@@ -1112,6 +1116,8 @@ export interface UpdateAccountRequest {
   load_factor?: number | null
   priority?: number
   rate_multiplier?: number // Account billing multiplier (>=0, 0 means free)
+  upstream_cost_multiplier?: string
+  upstream_cost_multiplier_change_reason?: string
   schedulable?: boolean
   status?: 'active' | 'inactive' | 'error'
   group_ids?: number[]
@@ -1189,6 +1195,7 @@ export interface AdminDataAccount {
   concurrency: number
   priority: number
   rate_multiplier?: number | null
+  upstream_cost_multiplier?: string | null
   expires_at?: number | null
   auto_pause_on_expired?: boolean
 }
@@ -1209,6 +1216,19 @@ export interface AdminDataImportResult {
   errors?: AdminDataImportError[]
 }
 
+export interface AccountUpstreamMultiplierChange {
+  id: number
+  account_id: number
+  old_multiplier: string | null
+  new_multiplier: string
+  change_type: string
+  effective_at: string
+  operator_id: number | null
+  operator_name: string | null
+  reason: string
+  created_at: string
+}
+
 export interface CodexSessionImportRequest {
   content?: string
   contents?: string[]
@@ -1219,6 +1239,7 @@ export interface CodexSessionImportRequest {
   concurrency?: number
   priority?: number
   rate_multiplier?: number
+  upstream_cost_multiplier?: string
   load_factor?: number | null
   expires_at?: number | null
   auto_pause_on_expired?: boolean

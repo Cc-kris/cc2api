@@ -138,6 +138,8 @@ docs/*
 .serena/
 .codex/
 frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
 aicodex
 output/
 
@@ -149,3 +151,5 @@ output/
 !docs/sub2api-ops-cache-admin-vnext-acceptance-20260607.md
 !docs/sub2api-image-bridge-complete-technical-design-20260619.md
 !docs/sub2api-image-bridge-scenario-comparison-20260619.md
+!docs/sub2api-model-square-technical-design-20260722.md
+!docs/sub2api-finance-loss-report-remediation-plan-20260723.md
