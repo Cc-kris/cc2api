@@ -355,7 +355,7 @@ function filters(): FinanceFilterParams {
     end_date: endDate.value,
     timezone: timezone.value || "Asia/Shanghai",
     granularity: granularity.value,
-    data_scope: "exact_only",
+    data_scope: "all",
   };
 }
 

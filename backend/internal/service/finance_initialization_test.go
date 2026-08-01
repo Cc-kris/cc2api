@@ -179,3 +179,17 @@ func TestFinanceInitializationApplyCanRecordBalanceWithoutFundEvent(t *testing.T
 	require.Equal(t, "balance_snapshot", funds.calls[0].EventType)
 	require.Equal(t, "CNY", funds.calls[0].Currency)
 }
+
+func TestFinanceInitializationApplyUsesSnapshotWhenFinanceWalletAlreadyExists(t *testing.T) {
+	accounts := &financeInitializationAccountStub{}
+	upstreams := &financeInitializationUpstreamStub{items: []*Upstream{{ID: 5, Name: "upstream", BaseURL: "https://upstream.test", NormalizedBaseURL: "https://upstream.test", ConsumedBalance: 1}}}
+	wallets := &financeInitializationWalletStub{byUpstream: map[int64][]UpstreamWallet{5: {{ID: 8, Name: financeInitializationWalletName, Currency: "USD", BalanceKind: "wallet_cash", Enabled: true}}}}
+	funds := &financeInitializationFundStub{}
+	profiles := &financeInitializationProfileStub{items: map[int64]*AccountFinanceProfile{}}
+	svc := NewFinanceInitializationService(accounts, upstreams, wallets, funds, profiles)
+
+	_, err := svc.Apply(context.Background(), FinanceInitializationRequest{OperatorID: 99, Reason: "重复确认当前余额", Upstreams: []FinanceInitializationUpstreamInput{{UpstreamID: 5, CurrentBalance: 12}}})
+	require.NoError(t, err)
+	require.Len(t, funds.calls, 1)
+	require.Equal(t, "balance_snapshot", funds.calls[0].EventType)
+}

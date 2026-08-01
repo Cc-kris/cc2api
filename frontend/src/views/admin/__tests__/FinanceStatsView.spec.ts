@@ -334,7 +334,7 @@ describe("FinanceStatsView", () => {
     const base = api.getOverview.mock.calls[0][0];
     expect(base).toMatchObject({
       granularity: "day",
-      data_scope: "exact_only",
+      data_scope: "all",
     });
     expect(base.timezone).toBeTruthy();
     expect(api.getTrend).toHaveBeenCalledWith(base);

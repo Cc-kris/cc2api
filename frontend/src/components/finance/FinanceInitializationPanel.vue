@@ -9,6 +9,7 @@
     </div>
 
     <p v-if="error" class="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{{ error }}</p>
+    <p v-if="warning" class="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">{{ warning }}</p>
     <p v-if="result" class="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">初始化完成：{{ result.initialized_accounts }} 个账号、{{ result.initialized_upstreams }} 个上游，新增 {{ result.created_wallets }} 个财务钱包。</p>
 
     <template v-if="scanData">
@@ -60,13 +61,15 @@ const reason = ref('首次财务初始化')
 const loading = ref(false)
 const applying = ref(false)
 const error = ref('')
+const warning = ref('')
 const result = ref<FinanceInitializationResult | null>(null)
 
 const canApply = computed(() => reason.value.length >= 5 && accountDrafts.value.every(item => String(item.upstream_cost_multiplier).trim() !== '' && Number.isFinite(Number(item.upstream_cost_multiplier)) && Number(item.upstream_cost_multiplier) >= 0) && upstreamDrafts.value.every(item => Number.isFinite(Number(item.current_balance)) && Number(item.current_balance) >= 0))
 
-async function scan(clearResult = true) {
+async function scan(clearResult = true, failureIsWarning = false) {
   loading.value = true
   error.value = ''
+  warning.value = ''
   if (clearResult) result.value = null
   try {
     // 账号同步是写操作，先通过 POST 同步，再调用只读扫描接口。
@@ -75,7 +78,9 @@ async function scan(clearResult = true) {
     accountDrafts.value = (scanData.value.accounts || []).map(item => ({ ...item, upstream_cost_multiplier: item.current_multiplier || '' }))
     upstreamDrafts.value = (scanData.value.upstreams || []).map(item => ({ ...item, current_balance: Number(item.current_balance || 0) }))
   } catch (caught) {
-    error.value = extractApiErrorMessage(caught, '财务初始化扫描失败')
+    const message = extractApiErrorMessage(caught, '财务初始化扫描失败')
+    if (failureIsWarning) warning.value = `初始化已完成，但重新扫描失败：${message}`
+    else error.value = message
   } finally {
     loading.value = false
   }
@@ -85,6 +90,8 @@ async function apply() {
   if (!canApply.value) return
   applying.value = true
   error.value = ''
+  warning.value = ''
+  result.value = null
   try {
     result.value = await adminAPI.finance.applyInitialization({
       accounts: accountDrafts.value.map(item => ({ account_id: item.account_id, upstream_cost_multiplier: String(item.upstream_cost_multiplier) })),
@@ -92,7 +99,7 @@ async function apply() {
       reason: reason.value,
     })
     emit('initialized')
-    await scan(false)
+    await scan(false, true)
   } catch (caught) {
     error.value = extractApiErrorMessage(caught, '财务初始化失败')
   } finally {

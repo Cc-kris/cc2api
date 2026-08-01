@@ -266,7 +266,11 @@ func (s *FinanceInitializationService) Apply(ctx context.Context, input FinanceI
 		now := s.now().UTC()
 		amount := decimal.NewFromFloat(item.CurrentBalance)
 		dedupeKey := fmt.Sprintf("finance-initialization:%d:%0.10f", upstream.ID, item.CurrentBalance)
-		if input.RecordOpeningBalance != nil && !*input.RecordOpeningBalance {
+		// An opening event is immutable and belongs only to a wallet's first
+		// initialization. Re-running initialization on an existing wallet records
+		// a balance observation instead of creating another opening event.
+		recordOpeningBalance := created && (input.RecordOpeningBalance == nil || *input.RecordOpeningBalance)
+		if !recordOpeningBalance {
 			err = s.funds.RecordBalanceSnapshot(ctx, wallet.ID, amount, currency, now, "manual-balance:"+dedupeKey)
 		} else {
 			_, _, err = s.funds.InitializeOpeningBalance(ctx, wallet.ID, amount, currency, now, &operatorID, "财务初始化期初余额："+reason, dedupeKey)

@@ -38,4 +38,36 @@ describe('FinanceInitializationPanel', () => {
     }))
     expect(wrapper.text()).toContain('初始化完成：1 个账号、1 个上游')
   })
+
+  it('clears a stale success result when a later initialization fails', async () => {
+    const wrapper = mount(FinanceInitializationPanel)
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    await wrapper.get('input[aria-label="上游账号 上游倍率"]').setValue('0.22')
+    await wrapper.findAll('button').find(button => button.text() === '确认并初始化财务')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('初始化完成')
+
+    api.applyInitialization.mockRejectedValueOnce({ message: '重复初始化失败' })
+    await wrapper.get('input[aria-label="上游账号 上游倍率"]').setValue('0.22')
+    await wrapper.findAll('button').find(button => button.text() === '确认并初始化财务')!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('重复初始化失败')
+    expect(wrapper.text()).not.toContain('初始化完成：')
+  })
+
+  it('keeps initialization success and reports a refresh failure as a warning', async () => {
+    const wrapper = mount(FinanceInitializationPanel)
+    await wrapper.get('button').trigger('click')
+    await flushPromises()
+    await wrapper.get('input[aria-label="上游账号 上游倍率"]').setValue('0.22')
+    api.scanInitialization.mockRejectedValueOnce({ message: '刷新失败' })
+
+    await wrapper.findAll('button').find(button => button.text() === '确认并初始化财务')!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('初始化完成：1 个账号、1 个上游')
+    expect(wrapper.text()).toContain('初始化已完成，但重新扫描失败：刷新失败')
+  })
 })
