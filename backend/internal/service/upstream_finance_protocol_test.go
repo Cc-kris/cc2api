@@ -210,7 +210,8 @@ func TestUpstreamFinanceHTTPExecutorMapsAndRedacts(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "2.2", result.Facts["actual_cost"])
 	require.Equal(t, FinanceUnitPlatformCredit, result.UnitSemantics)
-	snapshot := result.SafeSnapshot.(map[string]any)
+	snapshot, ok := result.SafeSnapshot.(map[string]any)
+	require.True(t, ok)
 	require.NotContains(t, snapshot, "token")
 	require.Len(t, result.SnapshotChecksum, 64)
 }
@@ -253,7 +254,8 @@ func TestUpstreamFinanceHTTPExecutorNormalizesFundingTransactions(t *testing.T) 
 	}
 	result, err := NewUpstreamFinanceHTTPExecutorWithClient(client).Execute(context.Background(), config, FinanceCapabilityFundingTransactions, "https://example.com", "key")
 	require.NoError(t, err)
-	transactions := result.Facts["transactions"].([]FinanceFundingTransactionFact)
+	transactions, ok := result.Facts["transactions"].([]FinanceFundingTransactionFact)
+	require.True(t, ok)
 	require.Equal(t, []FinanceFundingTransactionFact{{TransactionID: "tx-1", PaidAmount: "52", PaidCurrency: "CNY", FXRateToUSD: "0.138", FXSource: "bank_receipt", BaseCreditUnits: "500", BonusCreditUnits: "20", OccurredAt: "2026-07-29T00:00:00Z"}}, transactions)
 }
 

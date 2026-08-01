@@ -154,7 +154,7 @@ func (r *upstreamFundRepository) ListFundEvents(ctx context.Context, walletID in
 	if err != nil {
 		return nil, 0, fmt.Errorf("list upstream fund events: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	items := make([]service.UpstreamFundEvent, 0)
 	for rows.Next() {
 		var event service.UpstreamFundEvent

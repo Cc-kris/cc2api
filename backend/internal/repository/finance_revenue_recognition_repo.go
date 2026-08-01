@@ -102,7 +102,7 @@ ORDER BY id`, date.Format("2006-01-02"), timezone)
 	if err != nil {
 		return nil, fmt.Errorf("list subscription orders for recognition: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	orders := make([]service.FinanceSubscriptionOrder, 0)
 	for rows.Next() {
 		var order service.FinanceSubscriptionOrder
@@ -140,7 +140,7 @@ ORDER BY usage_created_at,id`, order.UserID, order.GroupID, date.Format("2006-01
 	if err != nil {
 		return nil, fmt.Errorf("list subscription usage for recognition: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	items := make([]service.FinanceSubscriptionUsage, 0)
 	for rows.Next() {
 		var item service.FinanceSubscriptionUsage

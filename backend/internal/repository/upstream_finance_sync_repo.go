@@ -512,7 +512,7 @@ FOR UPDATE`, walletID, effectiveAt)
 	if err != nil {
 		return fmt.Errorf("list active upstream price versions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	removedIDs := make([]int64, 0)
 	for rows.Next() {
 		var id int64

@@ -64,7 +64,7 @@ SELECT id, lifecycle_status, merged_count, last_seen_at, recovered_at, closed_at
 FROM ops_alert_events
 ORDER BY id`)
 	require.NoError(t, err)
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	type migratedRow struct {
 		id              int64
