@@ -230,7 +230,7 @@ func TestModelSquareRoutabilityMatrixMatchesFastEligibilityBaseContract(t *testi
 	}
 }
 
-func TestModelSquareMixedChannelMappingRestrictionCustomPricingAndFastMatrix(t *testing.T) {
+func TestModelSquareUsesChannelModelsFirstAndFallsBackToSystemPrice(t *testing.T) {
 	input, output := 3e-6, 6e-6
 	customInput, customOutput := 9e-6, 12e-6
 	incompleteInput := 5e-6
@@ -242,12 +242,13 @@ func TestModelSquareMixedChannelMappingRestrictionCustomPricingAndFastMatrix(t *
 			InputCostPerTokenPriority: 4e-6, OutputCostPerTokenPriority: 8e-6,
 			CacheReadInputTokenCostPriority: 1e-6, LiteLLMProvider: "openai", SupportsServiceTier: true,
 		},
-		"gpt-blocked": {InputCostPerToken: 1e-6, OutputCostPerToken: 2e-6, LiteLLMProvider: "openai"},
+		"gpt-blocked":       {InputCostPerToken: 1e-6, OutputCostPerToken: 2e-6, LiteLLMProvider: "openai"},
+		"incomplete-public": {InputCostPerToken: 5e-6, OutputCostPerToken: 10e-6, LiteLLMProvider: "openai"},
 	}
 	pricing.localHash = "matrix-v1"
 	pricing.lastUpdated = time.Date(2026, 7, 28, 0, 0, 0, 0, time.UTC)
 	channel := Channel{
-		ID: 30, Name: "sales", Status: StatusActive, RestrictModels: true, GroupIDs: []int64{10},
+		ID: 30, Name: "sales", Status: StatusActive, GroupIDs: []int64{10},
 		ModelMapping: map[string]map[string]string{PlatformOpenAI: {
 			"gpt-public": "gpt-upstream", "custom-public": "custom-upstream", "incomplete-public": "incomplete-upstream",
 		}},
@@ -278,8 +279,8 @@ func TestModelSquareMixedChannelMappingRestrictionCustomPricingAndFastMatrix(t *
 
 	result, err := svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 50})
 	require.NoError(t, err)
-	require.Len(t, result.Items, 2)
-	require.Equal(t, []string{"custom-public", "gpt-public"}, []string{result.Items[0].Name, result.Items[1].Name})
+	require.Len(t, result.Items, 3)
+	require.Equal(t, []string{"custom-public", "gpt-public", "incomplete-public"}, []string{result.Items[0].Name, result.Items[1].Name, result.Items[2].Name})
 	require.Equal(t, "channel", result.Items[0].PricingSource)
 	require.Equal(t, "13.50000000", result.Items[0].Prices.Input.MultiplierPrice.StringFixed(8))
 	require.Equal(t, "channel", result.Items[1].PricingSource)
@@ -288,6 +289,7 @@ func TestModelSquareMixedChannelMappingRestrictionCustomPricingAndFastMatrix(t *
 	require.NotNil(t, result.Items[1].FastPrices)
 	require.NotNil(t, result.Items[1].FastPrices.CacheRead)
 	require.NotNil(t, result.Items[1].FastPrices.CacheWrite5m)
-	require.NotContains(t, []string{result.Items[0].Name, result.Items[1].Name}, "gpt-blocked")
-	require.NotContains(t, []string{result.Items[0].Name, result.Items[1].Name}, "incomplete-public")
+	require.Equal(t, "system", result.Items[2].PricingSource)
+	require.Equal(t, "7.50000000", result.Items[2].Prices.Input.MultiplierPrice.StringFixed(8))
+	require.NotContains(t, []string{result.Items[0].Name, result.Items[1].Name, result.Items[2].Name}, "gpt-blocked")
 }

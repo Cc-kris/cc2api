@@ -1,5 +1,5 @@
 <template>
-  <section class="card overflow-hidden">
+  <section class="card overflow-hidden" data-testid="upstream-finance-details">
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 p-4 dark:border-dark-700">
       <div>
         <h2 class="font-semibold text-gray-900 dark:text-white">财务结算钱包</h2>
@@ -99,9 +99,14 @@ import type { UpstreamFinancePriceInput, UpstreamFinancePriceVersion, UpstreamFi
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 
-const props = defineProps<{ upstreams: Upstream[] }>()
+const props = withDefaults(defineProps<{
+  upstreams: Upstream[]
+  activeUpstreamId?: number
+}>(), {
+  activeUpstreamId: 0,
+})
 const appStore = useAppStore()
-const selectedUpstreamId = ref(0)
+const selectedUpstreamId = ref(props.activeUpstreamId)
 const wallets = ref<UpstreamWallet[]>([])
 const loading = ref(false)
 const saving = ref(false)
@@ -190,6 +195,9 @@ function openFundEvent(wallet: UpstreamWallet) { fundWallet.value = wallet; fund
 async function saveFundEvent() { if (!fundWallet.value) return; saving.value = true; try { const observedAt = new Date(fundEvent.occurred_at).toISOString(); await adminAPI.upstreamWallets.createFundEvent(fundWallet.value.id, { ...fundEvent, occurred_at: observedAt, fx_observed_at: observedAt }, fundEventIdempotencyKey.value); fundWallet.value = null; fundEventIdempotencyKey.value = ''; appStore.showSuccess('资金事件已记录') } catch (error) { appStore.showError(errorMessage(error, '资金事件保存失败')) } finally { saving.value = false } }
 
 watch(selectedUpstreamId, loadWallets)
+watch(() => props.activeUpstreamId, value => {
+  if (value > 0 && value !== selectedUpstreamId.value) selectedUpstreamId.value = value
+})
 watch(() => props.upstreams, values => { if (!selectedUpstreamId.value && values.length) selectedUpstreamId.value = values[0].id }, { immediate: true })
 onMounted(() => { void loadWallets(); void loadProtocols() })
 </script>

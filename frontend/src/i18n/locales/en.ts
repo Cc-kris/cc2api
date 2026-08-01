@@ -6456,7 +6456,7 @@ export default {
         modelSquare: {
           title: 'Model Square',
           description: 'Show signed-in customers public groups and the available models with base and multiplied prices. Disabled by default.',
-          configureLink: 'Configure model pricing in Channel Management > Channel Pricing',
+          pricingSourceHint: 'The model catalog and base prices sync automatically. When a group has configured channel models and complete prices, channel configuration takes precedence and missing prices fall back to system pricing.',
           enabled: 'Show Model Square',
           enabledHint: 'When off, Model Square is hidden from the customer sidebar, direct page access is blocked, and its APIs stop serving data.',
         },

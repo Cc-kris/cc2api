@@ -1518,7 +1518,6 @@
         </div>
       </div>
       <AccountUpstreamMultiplierHistory :account-id="account.id" />
-	  <AccountFinanceProfilePanel :account-id="account.id" />
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <label class="input-label">{{ t('admin.accounts.expiresAt') }}</label>
         <input v-model="expiresAtInput" type="datetime-local" class="input" />
@@ -2399,7 +2398,6 @@ import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
 import AccountUpstreamMultiplierHistory from '@/components/account/AccountUpstreamMultiplierHistory.vue'
-import AccountFinanceProfilePanel from '@/components/account/AccountFinanceProfilePanel.vue'
 import {
   applyHeaderOverride,
   applyInterceptWarmup,

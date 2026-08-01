@@ -121,23 +121,20 @@ func TestSettingHandler_GetPublicSettings_ExposesWeChatOAuthModeCapabilities(t *
 	require.True(t, resp.Data.WeChatOAuthMPEnabled)
 }
 
-func TestSettingHandler_GetPublicSettings_ModelSquareRequiresFeatureAndV2Pricing(t *testing.T) {
+func TestSettingHandler_GetPublicSettings_ModelSquareRequiresFeatureSwitchOnly(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	tests := []struct {
 		name    string
 		enabled string
-		version string
 		want    bool
 	}{
-		{name: "disabled even on v2", enabled: "false", version: string(service.SalesPricingVersionV2), want: false},
-		{name: "legacy remains hidden", enabled: "true", version: string(service.SalesPricingVersionLegacy), want: false},
-		{name: "v2 enabled", enabled: "true", version: string(service.SalesPricingVersionV2), want: true},
+		{name: "disabled", enabled: "false", want: false},
+		{name: "enabled", enabled: "true", want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := NewSettingHandler(service.NewSettingService(&settingHandlerPublicRepoStub{values: map[string]string{
-				service.SettingKeyModelSquareEnabled:  tt.enabled,
-				service.SettingKeySalesPricingVersion: tt.version,
+				service.SettingKeyModelSquareEnabled: tt.enabled,
 			}}, &config.Config{}), "test-version")
 			recorder := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(recorder)

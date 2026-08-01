@@ -130,6 +130,15 @@ describe('UpstreamWalletManager', () => {
     expect(mocks.sync).toHaveBeenCalledWith(21, 'account-usage')
   })
 
+  it('opens the requested upstream finance detail instead of defaulting to another upstream', async () => {
+    const anotherUpstream = { ...upstream, id: 32, name: '另一个上游' }
+    const wrapper = mount(UpstreamWalletManager, { props: { upstreams: [upstream as never, anotherUpstream as never], activeUpstreamId: 32 } })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="upstream-finance-details"] select').element.value).toBe('32')
+    expect(mocks.list).toHaveBeenCalledWith(32)
+  })
+
   it('allows account-credential protocols to create a wallet without a shared wallet credential', async () => {
     mocks.list.mockResolvedValue([{ ...wallet, adapter_type: 'protocol', protocol_version_id: 91 }])
     mocks.listPublishedProtocols.mockResolvedValue([{ id: 9, code: 'generic', name: '通用协议', status: 'published', current_version_id: 91 }])

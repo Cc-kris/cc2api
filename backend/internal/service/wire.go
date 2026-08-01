@@ -39,6 +39,30 @@ func ProvideCacheStatsService(repo OpsRepository, cache GatewayCache, settingSer
 	return NewCacheStatsService(repo).SetAdvancedDependencies(repo, cache, settingService)
 }
 
+func ProvideUpstreamFundService(wallets *UpstreamWalletService, repo UpstreamFundRepository, balances UpstreamFundBalanceRecorder) *UpstreamFundService {
+	return NewUpstreamFundService(wallets, repo, balances)
+}
+
+func BindFinanceInitializationAccountService(admin AdminService) FinanceInitializationAccountService {
+	return admin
+}
+
+func BindFinanceInitializationUpstreamService(upstreams *UpstreamService) FinanceInitializationUpstreamService {
+	return upstreams
+}
+
+func BindFinanceInitializationWalletService(wallets *UpstreamWalletService) FinanceInitializationWalletService {
+	return wallets
+}
+
+func BindFinanceInitializationFundService(funds *UpstreamFundService) FinanceInitializationFundService {
+	return funds
+}
+
+func BindFinanceInitializationProfileService(profiles *AccountFinanceProfileService) FinanceInitializationProfileService {
+	return profiles
+}
+
 // ProvideEmailQueueService creates EmailQueueService with default worker count
 func ProvideEmailQueueService(emailService *EmailService) *EmailQueueService {
 	return NewEmailQueueService(emailService, 3)
@@ -693,7 +717,7 @@ var ProviderSet = wire.NewSet(
 	NewUpstreamFinanceProtocolDetector,
 	NewUpstreamFinanceSyncService,
 	ProvideUpstreamFinanceSyncRuntime,
-	NewUpstreamFundService,
+	ProvideUpstreamFundService,
 	NewFinanceReportService,
 	NewFinanceAlertService,
 	NewFinancePaymentFeeService,
@@ -710,6 +734,12 @@ var ProviderSet = wire.NewSet(
 	ProvidePaymentOrderExpiryService,
 	ProvideBalanceNotifyService,
 	NewUpstreamService,
+	BindFinanceInitializationAccountService,
+	BindFinanceInitializationUpstreamService,
+	BindFinanceInitializationWalletService,
+	BindFinanceInitializationFundService,
+	BindFinanceInitializationProfileService,
+	NewFinanceInitializationService,
 	ProvideBalanceLowNotifyScanner,
 	ProvideChannelMonitorService,
 	ProvideChannelMonitorRunner,

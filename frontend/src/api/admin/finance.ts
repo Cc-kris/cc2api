@@ -328,6 +328,46 @@ export interface FinanceBackfillJob {
   error_summary?: string | null;
 }
 
+export interface FinanceInitializationAccount {
+  account_id: number;
+  account_name: string;
+  platform: string;
+  status: string;
+  upstream_id?: number;
+  upstream_name?: string;
+  current_multiplier?: string;
+  finance_profile_ready: boolean;
+  needs_multiplier_confirm: boolean;
+}
+
+export interface FinanceInitializationUpstream {
+  upstream_id: number;
+  upstream_name: string;
+  base_url: string;
+  currency: string;
+  current_balance: number;
+  account_count: number;
+  finance_wallet_set: boolean;
+}
+
+export interface FinanceInitializationScan {
+  accounts: FinanceInitializationAccount[];
+  upstreams: FinanceInitializationUpstream[];
+}
+
+export interface FinanceInitializationRequest {
+  accounts: Array<{ account_id: number; upstream_cost_multiplier: string }>;
+  upstreams: Array<{ upstream_id: number; current_balance: number }>;
+  reason: string;
+  record_opening_balance?: boolean;
+}
+
+export interface FinanceInitializationResult {
+  initialized_accounts: number;
+  initialized_upstreams: number;
+  created_wallets: number;
+}
+
 export interface FinanceExportRequest {
   report: "breakdown";
   format: "csv";
@@ -634,6 +674,23 @@ export async function resumeBackfill(
   return data;
 }
 
+export async function scanInitialization(): Promise<FinanceInitializationScan> {
+  const { data } = await apiClient.get<FinanceInitializationScan>(
+    "/admin/finance/initialization/scan",
+  );
+  return data;
+}
+
+export async function applyInitialization(
+  payload: FinanceInitializationRequest,
+): Promise<FinanceInitializationResult> {
+  const { data } = await apiClient.post<FinanceInitializationResult>(
+    "/admin/finance/initialization/apply",
+    payload,
+  );
+  return data;
+}
+
 export async function getReconciliations(
   params: FinanceReconciliationParams,
 ): Promise<FinancePaginatedResponse<FinanceReconciliation>> {
@@ -755,6 +812,8 @@ export default {
   getBackfill,
   pauseBackfill,
   resumeBackfill,
+  scanInitialization,
+  applyInitialization,
   getReconciliations,
   getSettlements,
   getSettlement,

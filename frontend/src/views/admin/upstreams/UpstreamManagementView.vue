@@ -4,7 +4,7 @@
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 class="text-2xl font-bold text-gray-900 dark:text-white">上游管理</h1>
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">按 Base URL 聚合同一上游下的多个账号，余额会按账号消耗实时扣减。</p>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">按 Base URL 聚合同一上游下的多个账号。日常只维护当前余额；账号上游倍率在财务初始化中维护。</p>
         </div>
         <div class="flex gap-2">
           <button class="btn btn-secondary" :disabled="loading || syncing" @click="syncAccounts">一键添加</button>
@@ -50,14 +50,16 @@
               <td class="px-4 py-3 text-right text-sm">{{ money(item.consumed_balance) }}</td>
               <td class="px-4 py-3 text-right text-sm">{{ item.account_count }}</td>
               <td class="px-4 py-3 text-sm"><span v-if="item.balance_alert_enabled">低于 {{ money(item.alert_balance || 0) }}</span><span v-else class="text-gray-400">未开启</span></td>
-              <td class="px-4 py-3 text-right text-sm"><button class="text-primary-600 hover:underline" @click="openEdit(item)">编辑</button><button class="ml-3 text-red-600 hover:underline" @click="remove(item)">删除</button></td>
+              <td class="px-4 py-3 text-right text-sm"><button class="text-primary-600 hover:underline" @click="openFinanceDetails(item)">财务详情</button><button class="ml-3 text-primary-600 hover:underline" @click="openEdit(item)">编辑</button><button class="ml-3 text-red-600 hover:underline" @click="remove(item)">删除</button></td>
             </tr>
             <tr v-if="items.length === 0"><td colspan="8" class="px-4 py-8 text-center text-gray-500">暂无上游，点击“一键添加”从账号 Base URL 同步。</td></tr>
           </tbody>
         </table>
       </div>
 
-      <UpstreamWalletManager :upstreams="items" />
+      <div ref="financeDetailsRef">
+        <UpstreamWalletManager :upstreams="items" :active-upstream-id="activeFinanceUpstreamId" />
+      </div>
 
       <div v-if="editing" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
         <form class="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl dark:bg-dark-800" @submit.prevent="save">
@@ -65,14 +67,16 @@
           <p class="mt-1 text-xs text-gray-500"><span class="text-red-500">*</span> 为必填项。</p>
           <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
             <label class="block text-sm">名称 <span class="text-red-500">*</span><input v-model="editing.name" class="input mt-1 w-full" required /></label>
-            <label class="block text-sm">余额 <span class="text-red-500">*</span><input v-model.number="editing.initial_balance" type="number" min="0" step="0.0001" class="input mt-1 w-full" required /></label>
+            <label class="block text-sm">当前余额 <span class="text-red-500">*</span><input v-model.number="editing.current_balance" type="number" min="0" step="0.0001" class="input mt-1 w-full" required /></label>
             <label class="block text-sm md:col-span-2">Base URL <span class="text-red-500">*</span><input v-model="editing.base_url" class="input mt-1 w-full" required /></label>
             <label class="block text-sm">告警余额 <span v-if="editing.balance_alert_enabled" class="text-red-500">*</span><input v-model.number="editing.alert_balance" type="number" min="0" step="0.0001" class="input mt-1 w-full" :required="editing.balance_alert_enabled" /></label>
             <label class="flex items-center gap-2 text-sm"><input v-model="editing.balance_alert_enabled" type="checkbox" />开启余额不足通知</label>
             <label class="block text-sm md:col-span-2">备注<textarea v-model="editing.notes" class="input mt-1 w-full" rows="3"></textarea></label>
           </div>
 
-          <div class="mt-5 rounded-lg border border-gray-200 p-4 dark:border-dark-700">
+          <details class="mt-5 rounded-lg border border-gray-200 p-4 dark:border-dark-700">
+            <summary class="cursor-pointer font-medium text-gray-900 dark:text-white">高级兼容设置</summary>
+            <p class="mt-1 text-xs text-gray-500">普通财务核算不需要配置。仅在维护旧版上游汇总统计或特殊图片计费时使用。</p>
             <div class="flex items-center justify-between gap-3">
               <div>
                 <div class="font-medium text-gray-900 dark:text-white">按平台设置计费</div>
@@ -93,7 +97,7 @@
               </div>
               <div v-if="editing.platform_rates.length === 0" class="rounded bg-gray-50 p-3 text-sm text-gray-500 dark:bg-dark-700/50">暂无平台计费配置，未配置平台按 1 倍计算。</div>
             </div>
-          </div>
+          </details>
 
           <div class="mt-6 flex justify-end gap-2"><button type="button" class="btn btn-secondary" @click="editing = null">取消</button><button class="btn btn-primary" :disabled="saving">保存</button></div>
         </form>
@@ -103,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import UpstreamWalletManager from '@/components/finance/UpstreamWalletManager.vue'
 import { adminAPI } from '@/api/admin'
@@ -116,7 +120,10 @@ const items = ref<Upstream[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const syncing = ref(false)
-const editing = ref<(UpstreamInput & { id?: number }) | null>(null)
+type EditableUpstream = UpstreamInput & { id?: number, current_balance: number, consumed_balance: number, original_current_balance: number }
+const editing = ref<EditableUpstream | null>(null)
+const activeFinanceUpstreamId = ref(0)
+const financeDetailsRef = ref<HTMLElement | null>(null)
 const fallbackPlatforms = ['anthropic', 'openai', 'gemini', 'azure-openai', 'bedrock', 'vertex', 'xai', 'deepseek', 'openrouter', 'siliconflow']
 const accountPlatforms = ref<string[]>([])
 const platformOptions = computed(() => accountPlatforms.value.length ? accountPlatforms.value : fallbackPlatforms)
@@ -129,11 +136,19 @@ function money(value: number) { return Number(value || 0).toFixed(4) }
 function balanceClass(item: Upstream) { return item.balance_alert_enabled && item.alert_balance != null && item.current_balance <= item.alert_balance ? 'text-red-600' : 'text-gray-900 dark:text-white' }
 function errorMessage(e: unknown, fallback: string) { return extractApiErrorMessage(e, fallback) }
 function normalizeBillingMode(value: unknown): UpstreamBillingMode { return value === 'image_per_use' ? 'image_per_use' : 'token' }
-function toInput(item?: Upstream): UpstreamInput & { id?: number } { return item ? { id: item.id, base_url: item.base_url, name: item.name, rate_multiplier: 1, platform_rates: (item.platform_rates || []).map(rate => ({ id: rate.id, platform: rate.platform, billing_mode: normalizeBillingMode(rate.billing_mode), rate_multiplier: rate.rate_multiplier || 1, image_unit_price: rate.image_unit_price || 0 })), initial_balance: item.initial_balance, balance_alert_enabled: item.balance_alert_enabled, alert_balance: item.alert_balance ?? null, notes: item.notes || '' } : { base_url: '', name: '', rate_multiplier: 1, platform_rates: [], initial_balance: 0, balance_alert_enabled: false, alert_balance: null, notes: '' } }
+function toInput(item?: Upstream): EditableUpstream { return item ? { id: item.id, base_url: item.base_url, name: item.name, rate_multiplier: 1, platform_rates: (item.platform_rates || []).map(rate => ({ id: rate.id, platform: rate.platform, billing_mode: normalizeBillingMode(rate.billing_mode), rate_multiplier: rate.rate_multiplier || 1, image_unit_price: rate.image_unit_price || 0 })), initial_balance: item.initial_balance, current_balance: item.current_balance, consumed_balance: item.consumed_balance, original_current_balance: item.current_balance, balance_alert_enabled: item.balance_alert_enabled, alert_balance: item.alert_balance ?? null, notes: item.notes || '' } : { base_url: '', name: '', rate_multiplier: 1, platform_rates: [], initial_balance: 0, current_balance: 0, consumed_balance: 0, original_current_balance: 0, balance_alert_enabled: false, alert_balance: null, notes: '' } }
 function openCreate() { editing.value = toInput() }
 function openEdit(item: Upstream) { editing.value = toInput(item) }
+function openFinanceDetails(item: Upstream) {
+  activeFinanceUpstreamId.value = item.id
+  void nextTick(() => financeDetailsRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+}
 function addPlatformRate() {
   if (!editing.value) return
+  if (Number.isNaN(Number(editing.value.current_balance)) || Number(editing.value.current_balance) < 0) {
+    appStore.showError('当前余额必须是大于或等于 0 的数字')
+    return
+  }
   const used = new Set(editing.value.platform_rates.map(rate => rate.platform.trim().toLowerCase()).filter(Boolean))
   const platform = platformOptions.value.find(value => !used.has(value)) || ''
   editing.value.platform_rates.push({ platform, billing_mode: 'token', rate_multiplier: 1, image_unit_price: 0 })
@@ -173,10 +188,20 @@ async function save() {
   }
   saving.value = true
   try {
-    const { id, ...payload } = editing.value
+    const { id, current_balance, consumed_balance, original_current_balance, ...payload } = editing.value
     payload.platform_rates = normalizedRows
-    if (id) await adminAPI.upstreams.update(id, payload)
-    else await adminAPI.upstreams.create(payload)
+    payload.initial_balance = Number(current_balance) + Number(consumed_balance || 0)
+    const saved = id ? await adminAPI.upstreams.update(id, payload) : await adminAPI.upstreams.create(payload)
+    const savedID = saved?.id || id
+    if (!savedID) throw new Error('保存上游后未返回上游 ID')
+    if (!id || Number(current_balance) !== Number(original_current_balance)) {
+      await adminAPI.finance.applyInitialization({
+        accounts: [],
+        upstreams: [{ upstream_id: savedID, current_balance: Number(current_balance) }],
+        reason: id ? '上游管理余额调整' : '上游管理余额初始化',
+        record_opening_balance: !id
+      })
+    }
     editing.value = null
     await load()
     appStore.showSuccess('保存成功')

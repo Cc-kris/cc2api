@@ -966,8 +966,7 @@ func (s *SettingService) GetAvailableChannelsRuntime(ctx context.Context) Availa
 // ModelSquareRuntime is the fail-closed runtime view consumed by the customer
 // model-square handler.
 type ModelSquareRuntime struct {
-	Enabled             bool
-	SalesPricingVersion SalesPricingVersion
+	Enabled bool
 }
 
 // GetModelSquareRuntime reads the dedicated model-square switch. Missing
@@ -976,20 +975,12 @@ func (s *SettingService) GetModelSquareRuntime(ctx context.Context) ModelSquareR
 	if s == nil || s.settingRepo == nil {
 		return ModelSquareRuntime{Enabled: false}
 	}
-	vals, err := s.settingRepo.GetMultiple(ctx, []string{SettingKeyModelSquareEnabled, SettingKeySalesPricingVersion})
+	vals, err := s.settingRepo.GetMultiple(ctx, []string{SettingKeyModelSquareEnabled})
 	if err != nil {
 		return ModelSquareRuntime{Enabled: false}
 	}
-	version := SalesPricingVersion(strings.ToLower(strings.TrimSpace(vals[SettingKeySalesPricingVersion])))
-	if !version.IsValid() {
-		version = SalesPricingVersionLegacy
-	}
-	// Model Square exposes the V2 customer-sales pricing contract. Keep this
-	// gate in the shared runtime object so authenticated API calls and public
-	// settings cannot disagree (or let a token bypass the public gate).
 	return ModelSquareRuntime{
-		Enabled:             vals[SettingKeyModelSquareEnabled] == "true" && version == SalesPricingVersionV2,
-		SalesPricingVersion: version,
+		Enabled: vals[SettingKeyModelSquareEnabled] == "true",
 	}
 }
 

@@ -5286,14 +5286,8 @@
             <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
               {{ t('admin.settings.features.modelSquare.description') }}
             </p>
-            <p class="mt-1.5 text-xs">
-              <router-link
-                to="/admin/channels/pricing"
-                class="inline-flex items-center gap-1 text-primary-600 hover:underline dark:text-primary-400"
-              >
-                {{ t('admin.settings.features.modelSquare.configureLink') }}
-                <span aria-hidden="true">→</span>
-              </router-link>
+            <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.settings.features.modelSquare.pricingSourceHint') }}
             </p>
           </div>
           <div class="space-y-5 p-6">

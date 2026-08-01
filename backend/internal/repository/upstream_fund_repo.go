@@ -59,6 +59,80 @@ RETURNING id,created_at`, event.WalletID, event.EventType, event.OriginalAmount,
 	return false, nil
 }
 
+// CreateFundEventWithOpeningBalance keeps the immutable opening event and its
+// balance observation in the same transaction. This is used by finance
+// initialization so a failed snapshot cannot leave a misleading fund event.
+func (r *upstreamFundRepository) CreateFundEventWithOpeningBalance(ctx context.Context, event *service.UpstreamFundEvent) (bool, error) {
+	if event.FXRateVersionID == nil {
+		versionID, err := ensureFinanceFXRateVersionSQL(ctx, r.db, event.Currency, event.FXRateToUSD, event.FXSource, event.FXObservedAt, event.OccurredAt)
+		if err != nil {
+			return false, fmt.Errorf("freeze upstream fund fx rate: %w", err)
+		}
+		event.FXRateVersionID = &versionID
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	err = tx.QueryRowContext(ctx, `
+INSERT INTO upstream_fund_events (
+ wallet_id,event_type,original_amount,currency,fx_rate_to_usd,fx_source,fx_observed_at,fx_rate_version_id,usd_amount,
+ base_credit_units,bonus_credit_units,total_credit_units,base_recharge_ratio,effective_recharge_ratio,
+ bonus_income_original,bonus_income_usd,bonus_status,reversed_event_id,
+ occurred_at,reference_no,note,operator_id,idempotency_key
+) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+ON CONFLICT (wallet_id,idempotency_key) DO NOTHING
+RETURNING id,created_at`, event.WalletID, event.EventType, event.OriginalAmount, event.Currency,
+		event.FXRateToUSD, event.FXSource, event.FXObservedAt, event.FXRateVersionID, event.USDAmount,
+		event.BaseCreditUnits, event.BonusCreditUnits, event.TotalCreditUnits, event.BaseRechargeRatio, event.EffectiveRechargeRatio,
+		event.BonusIncomeOriginal, event.BonusIncomeUSD, event.BonusStatus, event.ReversedEventID,
+		event.OccurredAt, nullableString(event.ReferenceNo), event.Note, event.OperatorID, event.IdempotencyKey,
+	).Scan(&event.ID, &event.CreatedAt)
+	created := true
+	if errors.Is(err, sql.ErrNoRows) {
+		created = false
+		err = scanUpstreamFundEvent(tx.QueryRowContext(ctx, upstreamFundEventSelect+` WHERE wallet_id=$1 AND idempotency_key=$2`, event.WalletID, event.IdempotencyKey), event)
+	} else if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Constraint == "upstream_fund_events_wallet_type_reference_unique" {
+			return false, service.ErrUpstreamFundDuplicateReference
+		}
+		return false, fmt.Errorf("create upstream opening fund event: %w", err)
+	}
+	if err != nil {
+		return false, fmt.Errorf("get idempotent upstream fund event: %w", err)
+	}
+
+	result, err := tx.ExecContext(ctx, `
+INSERT INTO upstream_balance_snapshots (
+  wallet_id,dedupe_key,balance_kind,balance_amount,currency,source,collected_at,sync_status,safe_snapshot
+)
+SELECT id,$2,'wallet_cash',$3,$4,'manual',$5,'success',jsonb_build_object('kind','opening_balance')
+FROM upstream_wallets
+WHERE id=$1 AND deleted_at IS NULL AND enabled=TRUE AND balance_kind='wallet_cash'
+ON CONFLICT (wallet_id,dedupe_key) DO NOTHING`, event.WalletID, "opening-balance-event-"+fmt.Sprint(event.ID), event.OriginalAmount.String(), event.Currency, event.OccurredAt.UTC())
+	if err != nil {
+		return false, fmt.Errorf("record opening balance snapshot: %w", err)
+	}
+	if affected, err := result.RowsAffected(); err != nil {
+		return false, fmt.Errorf("inspect opening balance snapshot result: %w", err)
+	} else if affected == 0 {
+		var exists bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM upstream_balance_snapshots WHERE wallet_id=$1 AND dedupe_key=$2)`, event.WalletID, "opening-balance-event-"+fmt.Sprint(event.ID)).Scan(&exists); err != nil {
+			return false, fmt.Errorf("inspect existing opening balance snapshot: %w", err)
+		}
+		if !exists {
+			return false, errors.New("opening balance snapshot target wallet is unavailable")
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return created, nil
+}
+
 func (r *upstreamFundRepository) GetFundEvent(ctx context.Context, walletID, eventID int64) (*service.UpstreamFundEvent, error) {
 	event := &service.UpstreamFundEvent{}
 	err := scanUpstreamFundEvent(r.db.QueryRowContext(ctx, upstreamFundEventSelect+` WHERE wallet_id=$1 AND id=$2`, walletID, eventID), event)

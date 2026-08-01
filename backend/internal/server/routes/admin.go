@@ -137,6 +137,8 @@ func registerFinanceRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		finance.GET("/losses", h.Admin.Finance.Losses)
 		finance.GET("/funds", h.Admin.Finance.Funds)
 		finance.GET("/data-quality", h.Admin.Finance.DataQuality)
+		finance.GET("/initialization/scan", h.Admin.Finance.InitializationScan)
+		finance.POST("/initialization/apply", h.Admin.Finance.InitializationApply)
 		finance.GET("/promotion-credit-reconciliations", h.Admin.Finance.PromotionCreditReconciliations)
 		finance.POST("/promotion-credit-reconciliations/:user_id/resolve", h.Admin.Finance.ResolvePromotionCreditReconciliation)
 		finance.GET("/cash-flow", h.Admin.Finance.CashFlow)

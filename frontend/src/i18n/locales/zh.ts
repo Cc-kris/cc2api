@@ -6629,7 +6629,7 @@ export default {
         modelSquare: {
           title: '模型广场',
           description: '向已登录客户展示公开分组及分组下可用模型的原价和倍率价。默认关闭。',
-          configureLink: '前往 渠道管理 > 渠道定价 配置模型价格',
+          pricingSourceHint: '模型目录和基础价格自动同步；分组配置了渠道模型和完整定价时，渠道配置优先，未配置价格自动回退系统价格。',
           enabled: '显示模型广场',
           enabledHint: '关闭后客户侧边栏隐藏“模型广场”，页面不可直接访问，模型广场接口停止提供数据。',
         },

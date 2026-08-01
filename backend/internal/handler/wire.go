@@ -8,6 +8,23 @@ import (
 	"github.com/google/wire"
 )
 
+func ProvideFinanceHandler(
+	financeService *service.FinanceDetailService,
+	reportService *service.FinanceReportService,
+	alertService *service.FinanceAlertService,
+	feeService *service.FinancePaymentFeeService,
+	backfillService *service.FinanceBackfillService,
+	reconciliationService *service.FinanceReconciliationService,
+	exportService *service.FinanceExportService,
+	promotionService *service.PromotionCreditReconciliationService,
+	settlementService *service.AccountFinanceSettlementService,
+	accountProfileService *service.AccountFinanceProfileService,
+	initializationService *service.FinanceInitializationService,
+	fxRateService *service.FinanceFXRateService,
+) *admin.FinanceHandler {
+	return admin.NewFinanceHandlerWithInitialization(financeService, reportService, alertService, feeService, backfillService, reconciliationService, exportService, promotionService, settlementService, accountProfileService, initializationService, fxRateService)
+}
+
 // ProvideAdminHandlers creates the AdminHandlers struct
 func ProvideAdminHandlers(
 	dashboardHandler *admin.DashboardHandler,
@@ -218,7 +235,7 @@ var ProviderSet = wire.NewSet(
 	ProvideSystemHandler,
 	admin.NewSubscriptionHandler,
 	admin.NewUsageHandler,
-	admin.NewFinanceHandler,
+	ProvideFinanceHandler,
 	admin.NewUserAttributeHandler,
 	admin.NewErrorPassthroughHandler,
 	admin.NewTLSFingerprintProfileHandler,

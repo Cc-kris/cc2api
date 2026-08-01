@@ -125,6 +125,8 @@
         </div>
       </section>
 
+      <FinanceInitializationPanel v-else-if="activeTab === 'initialization'" @initialized="loadAll" />
+
       <FinanceAnalysisTable
         v-else-if="activeTab === 'profit'"
         :items="breakdown"
@@ -224,6 +226,7 @@ import FinanceAnalysisTable from "@/components/finance/FinanceAnalysisTable.vue"
 import FinanceDataQualityPanel from "@/components/finance/FinanceDataQualityPanel.vue";
 import FinanceFundsPanel from "@/components/finance/FinanceFundsPanel.vue";
 import FinanceFXRatePanel from "@/components/finance/FinanceFXRatePanel.vue";
+import FinanceInitializationPanel from "@/components/finance/FinanceInitializationPanel.vue";
 import FinanceLossTable from "@/components/finance/FinanceLossTable.vue";
 import FinanceReconciliationPanel from "@/components/finance/FinanceReconciliationPanel.vue";
 import FinanceSummaryCards from "@/components/finance/FinanceSummaryCards.vue";
@@ -261,11 +264,13 @@ type FinanceTab =
   | "funds"
   | "settlements"
   | "fx-rates"
+  | "initialization"
   | "quality"
   | "alerts";
 
 const tabs: Array<{ key: FinanceTab; label: string }> = [
   { key: "overview", label: "经营总览" },
+  { key: "initialization", label: "财务初始化" },
   { key: "profit", label: "利润分析" },
   { key: "losses", label: "亏损追踪" },
   { key: "funds", label: "资金余额" },

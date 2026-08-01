@@ -27,27 +27,19 @@ type modelSquareHandlerServiceStub struct {
 
 type modelSquareSettingsStub struct {
 	enabled bool
-	version service.SalesPricingVersion
 }
 
 func (s modelSquareSettingsStub) GetModelSquareRuntime(context.Context) service.ModelSquareRuntime {
-	version := service.SalesPricingVersionLegacy
-	if s.enabled {
-		version = service.SalesPricingVersionV2
-	}
-	if s.version != "" {
-		version = s.version
-	}
-	return service.ModelSquareRuntime{Enabled: s.enabled, SalesPricingVersion: version}
+	return service.ModelSquareRuntime{Enabled: s.enabled}
 }
 
-func TestModelSquareHandlerRequiresV2SalesPricingVersion(t *testing.T) {
+func TestModelSquareHandlerAllowsFeatureOnLegacySalesPricingVersion(t *testing.T) {
 	stub := &modelSquareHandlerServiceStub{groupsResult: &service.ModelSquareGroupsResult{}}
-	h := &ModelSquareHandler{service: stub, settings: modelSquareSettingsStub{enabled: true, version: service.SalesPricingVersionLegacy}}
+	h := &ModelSquareHandler{service: stub, settings: modelSquareSettingsStub{enabled: true}}
 	recorder, ctx := modelSquareTestContext(http.MethodGet, "/api/v1/model-square/groups", true)
 	h.ListGroups(ctx)
-	require.Equal(t, http.StatusForbidden, recorder.Code)
-	require.Zero(t, stub.userID)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, int64(42), stub.userID)
 }
 
 func (s *modelSquareHandlerServiceStub) ListGroups(_ context.Context, userID int64) (*service.ModelSquareGroupsResult, error) {

@@ -28,6 +28,7 @@ type FinanceHandler struct {
 	exportService         *service.FinanceExportService
 	settlementService     *service.AccountFinanceSettlementService
 	accountProfileService *service.AccountFinanceProfileService
+	initializationService *service.FinanceInitializationService
 	fxRateService         *service.FinanceFXRateService
 }
 
@@ -36,10 +37,22 @@ func NewFinanceHandler(financeService *service.FinanceDetailService, reportServi
 	if len(fxRateServices) > 0 {
 		fxRateService = fxRateServices[0]
 	}
-	return &FinanceHandler{detailService: financeService, reportService: reportService, alertService: alertService, feeService: feeService, backfillService: backfillService, reconciliationService: reconciliationService, exportService: exportService, promotionService: promotionService, settlementService: settlementService, accountProfileService: accountProfileService, fxRateService: fxRateService}
+	return newFinanceHandler(financeService, reportService, alertService, feeService, backfillService, reconciliationService, exportService, promotionService, settlementService, accountProfileService, nil, fxRateService)
+}
+
+func NewFinanceHandlerWithInitialization(financeService *service.FinanceDetailService, reportService *service.FinanceReportService, alertService *service.FinanceAlertService, feeService *service.FinancePaymentFeeService, backfillService *service.FinanceBackfillService, reconciliationService *service.FinanceReconciliationService, exportService *service.FinanceExportService, promotionService *service.PromotionCreditReconciliationService, settlementService *service.AccountFinanceSettlementService, accountProfileService *service.AccountFinanceProfileService, initializationService *service.FinanceInitializationService, fxRateService *service.FinanceFXRateService) *FinanceHandler {
+	return newFinanceHandler(financeService, reportService, alertService, feeService, backfillService, reconciliationService, exportService, promotionService, settlementService, accountProfileService, initializationService, fxRateService)
+}
+
+func newFinanceHandler(financeService *service.FinanceDetailService, reportService *service.FinanceReportService, alertService *service.FinanceAlertService, feeService *service.FinancePaymentFeeService, backfillService *service.FinanceBackfillService, reconciliationService *service.FinanceReconciliationService, exportService *service.FinanceExportService, promotionService *service.PromotionCreditReconciliationService, settlementService *service.AccountFinanceSettlementService, accountProfileService *service.AccountFinanceProfileService, initializationService *service.FinanceInitializationService, fxRateService *service.FinanceFXRateService) *FinanceHandler {
+	return &FinanceHandler{detailService: financeService, reportService: reportService, alertService: alertService, feeService: feeService, backfillService: backfillService, reconciliationService: reconciliationService, exportService: exportService, promotionService: promotionService, settlementService: settlementService, accountProfileService: accountProfileService, initializationService: initializationService, fxRateService: fxRateService}
 }
 
 func respondFinanceServiceError(c *gin.Context, err error) {
+	if errors.Is(err, service.ErrFinanceInitializationInvalid) {
+		response.BadRequest(c, err.Error())
+		return
+	}
 	if errors.Is(err, service.ErrAccountFinanceProfileNotFound) {
 		response.NotFound(c, "Account finance profile not found")
 		return
@@ -524,6 +537,43 @@ func (h *FinanceHandler) DataQuality(c *gin.Context) {
 	}
 	page, pageSize := response.ParsePagination(c)
 	result, err := h.reportService.DataQuality(c.Request.Context(), filter, c.Query("issue_type"), page, pageSize)
+	if err != nil {
+		respondFinanceServiceError(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *FinanceHandler) InitializationScan(c *gin.Context) {
+	if h.initializationService == nil {
+		response.ErrorWithDetails(c, http.StatusServiceUnavailable, "Finance initialization is unavailable", "FINANCE_INITIALIZATION_UNAVAILABLE", nil)
+		return
+	}
+	result, err := h.initializationService.Scan(c.Request.Context())
+	if err != nil {
+		respondFinanceServiceError(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *FinanceHandler) InitializationApply(c *gin.Context) {
+	if h.initializationService == nil {
+		response.ErrorWithDetails(c, http.StatusServiceUnavailable, "Finance initialization is unavailable", "FINANCE_INITIALIZATION_UNAVAILABLE", nil)
+		return
+	}
+	var input service.FinanceInitializationRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.BadRequest(c, "Invalid finance initialization request")
+		return
+	}
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok || subject.UserID <= 0 {
+		response.Forbidden(c, "Admin identity is required")
+		return
+	}
+	input.OperatorID = subject.UserID
+	result, err := h.initializationService.Apply(c.Request.Context(), input)
 	if err != nil {
 		respondFinanceServiceError(c, err)
 		return

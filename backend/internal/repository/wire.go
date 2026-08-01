@@ -90,6 +90,7 @@ var ProviderSet = wire.NewSet(
 	NewUpstreamFinanceSyncRepository,
 	NewUpstreamFinanceProtocolRepository,
 	NewUpstreamFundRepository,
+	NewUpstreamFundBalanceRepository,
 	NewFinanceReportRepository,
 	NewFinanceAlertRepository,
 	NewFinancePaymentFeeRepository,

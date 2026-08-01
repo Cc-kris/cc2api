@@ -4,9 +4,12 @@ import { flushPromises, mount } from '@vue/test-utils'
 import UpstreamManagementView from './UpstreamManagementView.vue'
 import UpstreamStatsView from './UpstreamStatsView.vue'
 
-const { list, accountList, deleteUpstream, getStats, showSuccess, showError } = vi.hoisted(() => ({
+const { list, accountList, createUpstream, updateUpstream, applyInitialization, deleteUpstream, getStats, showSuccess, showError } = vi.hoisted(() => ({
   list: vi.fn(),
   accountList: vi.fn(),
+  createUpstream: vi.fn(),
+  updateUpstream: vi.fn(),
+  applyInitialization: vi.fn(),
   deleteUpstream: vi.fn(),
   getStats: vi.fn(),
   showSuccess: vi.fn(),
@@ -20,12 +23,13 @@ vi.mock('@/api/admin', () => ({
     },
     upstreams: {
       list,
-      create: vi.fn(),
-      update: vi.fn(),
+      create: createUpstream,
+      update: updateUpstream,
       deleteUpstream,
       syncFromAccounts: vi.fn(),
       getStats
-    }
+    },
+    finance: { applyInitialization }
   }
 }))
 
@@ -62,6 +66,10 @@ describe('admin upstream pages', () => {
     list.mockReset()
     accountList.mockReset()
     accountList.mockResolvedValue({ data: [] })
+    createUpstream.mockReset()
+    updateUpstream.mockReset()
+    applyInitialization.mockReset()
+    applyInitialization.mockResolvedValue({ initialized_accounts: 0, initialized_upstreams: 1, created_wallets: 1 })
     deleteUpstream.mockReset()
     getStats.mockReset()
     showSuccess.mockReset()
@@ -99,11 +107,12 @@ describe('admin upstream pages', () => {
     expect(wrapper.text()).toContain('平台计费')
     expect(wrapper.text()).toContain('anthropic · 图片 0.0800/次')
     expect(wrapper.text()).not.toContain('默认倍率')
+    expect(wrapper.text()).toContain('财务详情')
 
     await wrapper.get('button.btn-primary').trigger('click')
     expect(wrapper.text()).toContain('* 为必填项。')
     expect(wrapper.text()).toContain('Base URL *')
-    expect(wrapper.text()).toContain('余额 *')
+    expect(wrapper.text()).toContain('当前余额 *')
     expect(wrapper.text()).toContain('按平台设置计费')
     await wrapper.findAll('button').find(button => button.text() === '添加平台计费')?.trigger('click')
     await flushPromises()
@@ -114,6 +123,47 @@ describe('admin upstream pages', () => {
 
     expect(deleteUpstream).toHaveBeenCalledWith(1)
     expect(showSuccess).toHaveBeenCalledWith('删除成功')
+  })
+
+  it('treats the entered balance as the current balance without rewriting historical consumption', async () => {
+    list.mockResolvedValue([
+      {
+        id: 1, base_url: 'https://api.anthropic.com', normalized_base_url: 'https://api.anthropic.com', name: 'Anthropic',
+        rate_multiplier: 1, platform_rates: [], initial_balance: 100, consumed_balance: 12, current_balance: 88,
+        account_count: 2, balance_alert_enabled: false, notes: '', created_at: '2026-06-18T00:00:00Z', updated_at: '2026-06-18T00:00:00Z'
+      }
+    ])
+    updateUpstream.mockResolvedValue(undefined)
+
+    const wrapper = mount(UpstreamManagementView, mountOptions)
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === '编辑')!.trigger('click')
+    await wrapper.get('input[type="number"]').setValue('70')
+    await wrapper.get('form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(updateUpstream).toHaveBeenCalledWith(1, expect.objectContaining({ initial_balance: 82 }))
+  })
+
+  it('does not initialize finance when editing non-financial upstream fields', async () => {
+    list.mockResolvedValue([
+      {
+        id: 1, base_url: 'https://api.anthropic.com', normalized_base_url: 'https://api.anthropic.com', name: 'Anthropic',
+        rate_multiplier: 1, platform_rates: [], initial_balance: 100, consumed_balance: 12, current_balance: 88,
+        account_count: 2, balance_alert_enabled: false, notes: '', created_at: '2026-06-18T00:00:00Z', updated_at: '2026-06-18T00:00:00Z'
+      }
+    ])
+    updateUpstream.mockResolvedValue(undefined)
+
+    const wrapper = mount(UpstreamManagementView, mountOptions)
+    await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === '编辑')!.trigger('click')
+    await wrapper.get('textarea').setValue('updated note')
+    await wrapper.get('form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(updateUpstream).toHaveBeenCalledWith(1, expect.objectContaining({ initial_balance: 100 }))
+    expect(applyInitialization).not.toHaveBeenCalled()
   })
 
   it('renders one token trend line for each upstream', async () => {

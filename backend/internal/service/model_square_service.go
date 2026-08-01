@@ -360,15 +360,23 @@ func (s *ModelSquareService) listSellableModels(ctx context.Context, userID int6
 	}
 	candidates := append([]string(nil), snapshot.Models...)
 	if channel != nil && channel.IsActive() {
+		configuredModels := make([]string, 0)
 		for _, pricing := range channel.ModelPricing {
-			if !isPlatformPricingMatch(group.Platform, pricing.Platform) || !IsCompleteChannelSalesPricing(pricing) {
+			if !isPlatformPricingMatch(group.Platform, pricing.Platform) {
 				continue
 			}
 			for _, name := range pricing.Models {
 				if !strings.Contains(name, "*") {
-					candidates = append(candidates, name)
+					configuredModels = append(configuredModels, name)
 				}
 			}
+		}
+		// A channel with an explicit model list defines this group's sellable
+		// catalog. If it has no explicit list, fall back to the synchronized
+		// system catalog. Pricing still falls back to system data for incomplete
+		// channel price entries below.
+		if len(configuredModels) > 0 {
+			candidates = configuredModels
 		}
 	}
 	seen := make(map[string]struct{}, len(candidates))

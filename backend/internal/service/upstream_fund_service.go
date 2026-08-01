@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,13 +66,77 @@ type UpstreamFundRepository interface {
 	ListFundEvents(ctx context.Context, walletID int64, page, pageSize int) ([]UpstreamFundEvent, int64, error)
 }
 
-type UpstreamFundService struct {
-	wallets *UpstreamWalletService
-	repo    UpstreamFundRepository
+// UpstreamFundOpeningBalanceRepository may persist the fund event and its
+// balance snapshot in one database transaction. The optional capability keeps
+// opening-balance initialization from leaving an event without its snapshot.
+type UpstreamFundOpeningBalanceRepository interface {
+	CreateFundEventWithOpeningBalance(ctx context.Context, event *UpstreamFundEvent) (bool, error)
 }
 
-func NewUpstreamFundService(wallets *UpstreamWalletService, repo UpstreamFundRepository) *UpstreamFundService {
-	return &UpstreamFundService{wallets: wallets, repo: repo}
+type UpstreamFundService struct {
+	wallets  *UpstreamWalletService
+	repo     UpstreamFundRepository
+	balances UpstreamFundBalanceRecorder
+}
+
+// InitializeOpeningBalance stores the financial opening balance even when it
+// is zero. Positive balances also receive an immutable fund event; zero does
+// not represent a recharge and therefore only needs a balance observation.
+func (s *UpstreamFundService) InitializeOpeningBalance(ctx context.Context, walletID int64, amount decimal.Decimal, currency string, occurredAt time.Time, operatorID *int64, note, idempotencyKey string) (*UpstreamFundEvent, bool, error) {
+	wallet, err := s.wallets.Get(ctx, walletID)
+	if err != nil {
+		return nil, false, err
+	}
+	if wallet.BalanceKind != "wallet_cash" {
+		return nil, false, financeValidationError("opening balance requires a cash wallet")
+	}
+	if amount.IsNegative() {
+		return nil, false, financeValidationError("opening balance must not be negative")
+	}
+	if occurredAt.IsZero() {
+		return nil, false, financeValidationError("opening balance occurred_at is required")
+	}
+	if amount.IsZero() {
+		if s.balances == nil {
+			return nil, false, errors.New("opening balance recorder is unavailable")
+		}
+		if err := s.balances.RecordOpeningBalance(ctx, walletID, amount, strings.ToUpper(strings.TrimSpace(currency)), occurredAt.UTC(), "opening-balance-initialization-"+strings.TrimSpace(idempotencyKey)); err != nil {
+			return nil, false, err
+		}
+		return nil, true, nil
+	}
+	return s.Create(ctx, walletID, UpstreamFundEventInput{EventType: "opening_balance", OriginalAmount: amount.String(), Currency: currency, FXRateToUSD: "1", FXSource: "finance_initialization", FXObservedAt: occurredAt, USDAmount: amount.String(), OccurredAt: occurredAt, Note: note, OperatorID: operatorID, IdempotencyKey: idempotencyKey})
+}
+
+// RecordBalanceSnapshot records a manually observed balance without creating
+// a recharge/opening fund event. It is used when an existing upstream's
+// current balance is corrected from the management screen.
+func (s *UpstreamFundService) RecordBalanceSnapshot(ctx context.Context, walletID int64, amount decimal.Decimal, currency string, occurredAt time.Time, dedupeKey string) error {
+	wallet, err := s.wallets.Get(ctx, walletID)
+	if err != nil {
+		return err
+	}
+	if wallet.BalanceKind != "wallet_cash" {
+		return financeValidationError("balance snapshot requires a cash wallet")
+	}
+	if amount.IsNegative() {
+		return financeValidationError("balance snapshot must not be negative")
+	}
+	if occurredAt.IsZero() || strings.TrimSpace(dedupeKey) == "" {
+		return financeValidationError("balance snapshot timestamp and dedupe key are required")
+	}
+	if s.balances == nil {
+		return errors.New("balance recorder is unavailable")
+	}
+	return s.balances.RecordOpeningBalance(ctx, walletID, amount, strings.ToUpper(strings.TrimSpace(currency)), occurredAt.UTC(), dedupeKey)
+}
+
+func NewUpstreamFundService(wallets *UpstreamWalletService, repo UpstreamFundRepository, balanceRecorders ...UpstreamFundBalanceRecorder) *UpstreamFundService {
+	service := &UpstreamFundService{wallets: wallets, repo: repo}
+	if len(balanceRecorders) > 0 {
+		service.balances = balanceRecorders[0]
+	}
+	return service
 }
 
 func (s *UpstreamFundService) List(ctx context.Context, walletID int64, page, pageSize int) ([]UpstreamFundEvent, int64, error) {
@@ -159,12 +224,28 @@ func (s *UpstreamFundService) Create(ctx context.Context, walletID int64, input 
 		return nil, false, err
 	}
 	requested := *event
-	created, err := s.repo.CreateFundEvent(ctx, event)
+	var created bool
+	atomicOpening := false
+	if event.EventType == "opening_balance" && s.balances != nil {
+		if atomicRepo, ok := s.repo.(UpstreamFundOpeningBalanceRepository); ok {
+			atomicOpening = true
+			created, err = atomicRepo.CreateFundEventWithOpeningBalance(ctx, event)
+		} else {
+			created, err = s.repo.CreateFundEvent(ctx, event)
+		}
+	} else {
+		created, err = s.repo.CreateFundEvent(ctx, event)
+	}
 	if err != nil {
 		return nil, false, err
 	}
 	if !created && !sameUpstreamFundEvent(&requested, event) {
 		return nil, false, ErrUpstreamFundIdempotencyConflict
+	}
+	if event.EventType == "opening_balance" && s.balances != nil && !atomicOpening {
+		if err := s.balances.RecordOpeningBalance(ctx, walletID, event.OriginalAmount, event.Currency, event.OccurredAt, "opening-balance-event-"+strconv.FormatInt(event.ID, 10)); err != nil {
+			return nil, created, err
+		}
 	}
 	return event, created, nil
 }

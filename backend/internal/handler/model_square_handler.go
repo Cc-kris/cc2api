@@ -33,8 +33,7 @@ func (h *ModelSquareHandler) enabled(ctx context.Context) bool {
 	if h.settings == nil {
 		return false
 	}
-	runtime := h.settings.GetModelSquareRuntime(ctx)
-	return runtime.Enabled && runtime.SalesPricingVersion == service.SalesPricingVersionV2
+	return h.settings.GetModelSquareRuntime(ctx).Enabled
 }
 
 func (h *ModelSquareHandler) ListGroups(c *gin.Context) {
