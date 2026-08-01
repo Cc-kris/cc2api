@@ -9166,8 +9166,12 @@ func (s *GatewayService) buildRecordUsageLog(
 ) *UsageLog {
 	durationMs := int(result.Duration.Milliseconds())
 	requestID := resolveUsageBillingRequestID(ctx, result.RequestID)
+	userID := int64(0)
+	if user != nil {
+		userID = user.ID
+	}
 	usageLog := &UsageLog{
-		UserID:                 user.ID,
+		UserID:                 userID,
 		APIKeyID:               apiKey.ID,
 		AccountID:              account.ID,
 		RequestID:              requestID,

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -483,52 +482,6 @@ func financeBillingModeForUsage(log *UsageLog) string {
 		}
 	}
 	return "token"
-}
-
-func financeProjectionSnapshot(projection *UsageFinanceProjection) map[string]any {
-	if projection == nil {
-		return map[string]any{}
-	}
-	segments := make([]map[string]any, 0, len(projection.Segments))
-	for _, segment := range projection.Segments {
-		segments = append(segments, map[string]any{
-			"attempt_no":                    segment.AttemptNo,
-			"account_id":                    segment.AccountID,
-			"wallet_id":                     segment.WalletID,
-			"upstream_id":                   segment.UpstreamID,
-			"cost_status":                   segment.CostStatus,
-			"cost_amount":                   decimalPointerString(segment.CostAmount),
-			"price_version_id":              segment.PriceVersionID,
-			"pricing_source":                segment.PricingSource,
-			"upstream_multiplier_change_id": segment.UpstreamMultiplierChangeID,
-			"account_finance_profile_id":    segment.AccountFinanceProfileID,
-			"fx_rate_version_id":            segment.FXRateVersionID,
-			"source_currency":               segment.SourceCurrency,
-			"fx_rate_to_usd":                decimalPointerString(segment.FXRateToUSD),
-			"calculation_detail":            segment.CalculationDetail,
-		})
-	}
-	return map[string]any{
-		"usage_log_id":                      projection.UsageLogID,
-		"upstream_cost":                     decimalPointerString(projection.UpstreamCost),
-		"cost_status":                       projection.CostStatus,
-		"pricing_source":                    projection.PricingSource,
-		"price_version_id":                  projection.PriceVersionID,
-		"upstream_cost_multiplier_snapshot": projection.UpstreamCostMultiplierSnapshot,
-		"upstream_multiplier_change_id":     projection.UpstreamMultiplierChangeID,
-		"account_finance_profile_id":        projection.AccountFinanceProfileID,
-		"fx_rate_version_id":                projection.FXRateVersionID,
-		"source_currency":                   projection.SourceCurrency,
-		"fx_rate_to_usd":                    decimalPointerString(projection.FXRateToUSD),
-		"calculation_detail":                projection.CalculationDetail,
-		"segments":                          segments,
-	}
-}
-
-func financeProjectionEqual(left, right *UsageFinanceProjection) bool {
-	leftJSON, _ := json.Marshal(financeProjectionSnapshot(left))
-	rightJSON, _ := json.Marshal(financeProjectionSnapshot(right))
-	return string(leftJSON) == string(rightJSON)
 }
 
 func dereferenceString(value *string) string {

@@ -67,9 +67,6 @@ LIMIT $`+fmt.Sprint(len(args)), args...)
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
-	if err = rows.Close(); err != nil {
-		return nil, err
-	}
 	if err = attachFinanceUsageClassifications(ctx, r.sql, logs); err != nil {
 		return nil, err
 	}

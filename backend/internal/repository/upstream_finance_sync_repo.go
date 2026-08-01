@@ -233,11 +233,12 @@ func (r *upstreamFinanceSyncRepository) FailSyncJob(ctx context.Context, job *se
 	if summary == "capability unsupported" {
 		status = "unsupported"
 	}
-	if job.SyncType == service.UpstreamFinanceSyncPricing {
+	switch job.SyncType {
+	case service.UpstreamFinanceSyncPricing:
 		_, err = tx.ExecContext(ctx, `UPDATE upstream_wallets SET pricing_sync_status=$2,pricing_sync_error=$3,updated_at=NOW() WHERE id=$1`, job.WalletID, status, summary)
-	} else if job.SyncType == service.UpstreamFinanceSyncBalance {
+	case service.UpstreamFinanceSyncBalance:
 		_, err = tx.ExecContext(ctx, `UPDATE upstream_wallets SET balance_sync_status=$2,balance_sync_error=$3,updated_at=NOW() WHERE id=$1`, job.WalletID, status, summary)
-	} else if job.SyncType == service.UpstreamFinanceSyncQuota {
+	case service.UpstreamFinanceSyncQuota:
 		_, err = tx.ExecContext(ctx, `UPDATE upstream_wallets SET quota_sync_status=$2,quota_sync_error=$3,updated_at=NOW() WHERE id=$1`, job.WalletID, status, summary)
 	}
 	if err != nil {

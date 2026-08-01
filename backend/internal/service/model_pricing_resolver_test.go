@@ -251,7 +251,7 @@ func TestResolveUnifiedSalesPricingIgnoresPartialChannelOverride(t *testing.T) {
 	}})
 	resolved, err := ResolveUnifiedSalesPricing(context.Background(), r, r.channelService, groupIDPtr(), "claude-sonnet-4")
 	require.NoError(t, err)
-	require.Equal(t, FinancePricingSourceSystem, resolved.Source)
+	require.Equal(t, "litellm", resolved.Source)
 	require.InDelta(t, 3e-6, resolved.BasePricing.InputPricePerToken, 1e-12)
 	require.InDelta(t, 15e-6, resolved.BasePricing.OutputPricePerToken, 1e-12)
 	require.Equal(t, FinancePricingSourceSystem, normalizeSalesPricingSource(resolved.Source))

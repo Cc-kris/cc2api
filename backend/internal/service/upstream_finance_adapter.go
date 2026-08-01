@@ -281,7 +281,7 @@ func (a *legacyBillingFinanceAdapter) FetchBalance(context.Context, UpstreamWall
 
 func (a *legacyBillingFinanceAdapter) FetchQuota(ctx context.Context, wallet UpstreamWallet, credential string) (*UpstreamFinanceBalance, error) {
 	if credential == "" {
-		return nil, errors.New("Legacy Billing credential is required")
+		return nil, errors.New("legacy billing credential is required")
 	}
 	subscription, _, err := financeGetJSON(ctx, a.client, wallet.BaseURL, "/dashboard/billing/subscription", credential)
 	if err != nil {
@@ -296,11 +296,11 @@ func (a *legacyBillingFinanceAdapter) FetchQuota(ctx context.Context, wallet Ups
 	}
 	hardLimit, ok := financeDecimalAt(subscription, "hard_limit_usd")
 	if !ok {
-		return nil, errors.New("Legacy Billing subscription did not return hard_limit_usd")
+		return nil, errors.New("legacy billing subscription did not return hard_limit_usd")
 	}
 	totalUsage, ok := financeDecimalAt(usage, "total_usage")
 	if !ok {
-		return nil, errors.New("Legacy Billing usage did not return total_usage")
+		return nil, errors.New("legacy billing usage did not return total_usage")
 	}
 	used := totalUsage.Div(decimal.NewFromInt(100))
 	return &UpstreamFinanceBalance{

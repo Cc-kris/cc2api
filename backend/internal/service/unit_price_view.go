@@ -215,9 +215,10 @@ func BuildModelPriceView(resolved *ResolvedPricing, multiplier decimal.Decimal) 
 	case BillingModePerRequest, BillingModeImage, BillingModeVideo, BillingModePerSecond:
 		if resolved.DefaultPerRequestPricePresent || resolved.DefaultPerRequestPrice != 0 {
 			unit := PriceUnitPerRequest
-			if mode == BillingModeImage {
+			switch mode {
+			case BillingModeImage:
 				unit = PriceUnitPerImage
-			} else if mode == BillingModeVideo || mode == BillingModePerSecond {
+			case BillingModeVideo, BillingModePerSecond:
 				unit = PriceUnitPerSecond
 			}
 			price, priceErr := directUnitPrice(resolved.DefaultPerRequestPrice, multiplier, unit)
@@ -384,9 +385,10 @@ func normalizeTierPrices(resolved *ResolvedPricing, multiplier decimal.Decimal) 
 		}
 		if err == nil && iv.PerRequestPrice != nil {
 			unit := PriceUnitPerRequest
-			if resolved.Mode == BillingModeImage {
+			switch resolved.Mode {
+			case BillingModeImage:
 				unit = PriceUnitPerImage
-			} else if resolved.Mode == BillingModeVideo || resolved.Mode == BillingModePerSecond {
+			case BillingModeVideo, BillingModePerSecond:
 				unit = PriceUnitPerSecond
 			}
 			view.PerRequest, err = directUnitPrice(*iv.PerRequestPrice, multiplier, unit)

@@ -407,7 +407,7 @@ func AllocateFinanceSettlement(actualCost decimal.Decimal, segments []FinanceSet
 	allocated := decimal.Zero
 	for i, segment := range normalized {
 		rate := segment.StandardCost.DivRound(standardTotal, financeAmountScale+6)
-		amount := decimal.Zero
+		var amount decimal.Decimal
 		if i == len(normalized)-1 {
 			amount = actualCost.Sub(allocated).Round(financeAmountScale)
 		} else {

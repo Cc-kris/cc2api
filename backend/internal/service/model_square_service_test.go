@@ -123,7 +123,11 @@ func TestModelSquareSignedCursorPaginationAndCatalogChange(t *testing.T) {
 
 func TestModelSquareOnlyListsPublicGroupsAndKeepsCatalogFailureVisible(t *testing.T) {
 	svc := newModelSquareServiceForTest()
-	public := svc.groups.(*modelSquareGroupRepoStub).groups[0]
+	groups, ok := svc.groups.(*modelSquareGroupRepoStub)
+	require.True(t, ok)
+	accounts, ok := svc.accounts.(*modelSquareAccountRepoStub)
+	require.True(t, ok)
+	public := groups.groups[0]
 	exclusive := public
 	exclusive.ID = 11
 	exclusive.Name = "Exclusive"
@@ -132,8 +136,8 @@ func TestModelSquareOnlyListsPublicGroupsAndKeepsCatalogFailureVisible(t *testin
 	unsupported.ID = 12
 	unsupported.Name = "Unsupported"
 	unsupported.Platform = "unsupported"
-	svc.groups.(*modelSquareGroupRepoStub).groups = []Group{public, exclusive, unsupported}
-	svc.accounts.(*modelSquareAccountRepoStub).byGroup[12] = svc.accounts.(*modelSquareAccountRepoStub).byGroup[10]
+	groups.groups = []Group{public, exclusive, unsupported}
+	accounts.byGroup[12] = accounts.byGroup[10]
 	baseSnapshot := svc.catalog.(modelSquareCatalogStub).snapshot
 	svc.catalog = modelSquarePlatformCatalogStub{
 		snapshots: map[string]ModelCatalogSnapshot{PlatformOpenAI: baseSnapshot},
