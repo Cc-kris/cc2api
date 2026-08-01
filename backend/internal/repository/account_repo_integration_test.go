@@ -847,6 +847,8 @@ func (s *AccountRepoSuite) TestUpdateExtra_NilExtra() {
 }
 
 func (s *AccountRepoSuite) TestUpdateExtra_SchedulerNeutralSkipsOutboxAndSyncsFreshSnapshot() {
+	_, err := s.repo.sql.ExecContext(s.ctx, "TRUNCATE scheduler_outbox")
+	s.Require().NoError(err)
 	account := mustCreateAccount(s.T(), s.client, &service.Account{
 		Name:     "acc-extra-neutral",
 		Platform: service.PlatformOpenAI,

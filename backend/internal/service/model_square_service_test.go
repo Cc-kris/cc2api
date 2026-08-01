@@ -138,7 +138,9 @@ func TestModelSquareOnlyListsPublicGroupsAndKeepsCatalogFailureVisible(t *testin
 	unsupported.Platform = "unsupported"
 	groups.groups = []Group{public, exclusive, unsupported}
 	accounts.byGroup[12] = accounts.byGroup[10]
-	baseSnapshot := svc.catalog.(modelSquareCatalogStub).snapshot
+	catalog, ok := svc.catalog.(modelSquareCatalogStub)
+	require.True(t, ok)
+	baseSnapshot := catalog.snapshot
 	svc.catalog = modelSquarePlatformCatalogStub{
 		snapshots: map[string]ModelCatalogSnapshot{PlatformOpenAI: baseSnapshot},
 		errors:    map[string]error{"unsupported": errors.New("unsupported platform")},
@@ -183,13 +185,17 @@ func TestModelSquareCacheKeyTracksUserMultiplierAndCatalogVersion(t *testing.T) 
 	require.Equal(t, uint64(1), svc.SnapshotMetrics().CacheMisses)
 	require.Equal(t, uint64(1), svc.SnapshotMetrics().CacheHits)
 
-	svc.rates.(*modelSquareRateRepoStub).rates[10] = 1.3
+	rates, ok := svc.rates.(*modelSquareRateRepoStub)
+	require.True(t, ok)
+	rates.rates[10] = 1.3
 	changedMultiplier, err := svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 10})
 	require.NoError(t, err)
 	require.Equal(t, "3.25000000", changedMultiplier.Items[0].Prices.Input.MultiplierPrice.StringFixed(8))
 	require.Equal(t, uint64(2), svc.SnapshotMetrics().CacheMisses)
 
-	updatedSnapshot := svc.catalog.(modelSquareCatalogStub).snapshot
+	catalog, ok := svc.catalog.(modelSquareCatalogStub)
+	require.True(t, ok)
+	updatedSnapshot := catalog.snapshot
 	updatedSnapshot.Checksum = "v2"
 	updatedSnapshot.UpdatedAt = updatedSnapshot.UpdatedAt.Add(time.Second)
 	svc.catalog = modelSquareCatalogStub{snapshot: updatedSnapshot}

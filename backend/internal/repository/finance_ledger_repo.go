@@ -94,7 +94,7 @@ func (r *financeLedgerRepository) ListPendingUsage(ctx context.Context, cursor s
 	if err != nil {
 		return nil, fmt.Errorf("list pending finance usage: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	logs := make([]service.UsageLog, 0, limit)
 	for rows.Next() {
 		log, scanErr := scanUsageLog(rows)

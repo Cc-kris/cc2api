@@ -53,7 +53,7 @@ LIMIT $`+fmt.Sprint(len(args)), args...)
 	if err != nil {
 		return nil, fmt.Errorf("list finance backfill candidates: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	logs := make([]service.UsageLog, 0, limit)
 	ids := make([]int64, 0, limit)
 	for rows.Next() {
@@ -76,7 +76,7 @@ LIMIT $`+fmt.Sprint(len(args)), args...)
 		if queryErr != nil {
 			return nil, fmt.Errorf("load finance backfill projection existence: %w", queryErr)
 		}
-		defer existingRows.Close()
+		defer func() { _ = existingRows.Close() }()
 		for existingRows.Next() {
 			var id int64
 			var businessType string
