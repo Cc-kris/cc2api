@@ -149,7 +149,7 @@ WHERE u.id=ANY($1)`, pq.Array(ids))
 	if err != nil {
 		return fmt.Errorf("attach finance usage classifications: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id int64
 		var businessType, exclusionReason string
@@ -191,7 +191,7 @@ func attachFinanceUsageUsers(ctx context.Context, db *sql.DB, logs []service.Usa
 	if err != nil {
 		return fmt.Errorf("load finance usage user roles: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	roles := make(map[int64]string, len(ids))
 	for rows.Next() {
 		var id int64

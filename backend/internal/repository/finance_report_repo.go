@@ -918,7 +918,7 @@ func (r *financeReportRepository) attachRechargeBonusTrend(ctx context.Context, 
 	if err != nil {
 		return fmt.Errorf("list recharge bonus trend: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	byBucket := make(map[int64]int, len(*items))
 	for index, item := range *items {
 		byBucket[item.BucketStart.Unix()] = index

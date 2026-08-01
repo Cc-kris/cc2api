@@ -77,9 +77,11 @@ func TestApplySalesPricingContextToUsageLogPersistsExactUsageAndAmounts(t *testi
 	require.True(t, log.UsageListValue.Equal(decimal.RequireFromString("0.00478125")))
 	require.Equal(t, "1.2500", log.SalesPricingSnapshot["multiplier"])
 	require.Equal(t, "priority", log.SalesPricingSnapshot["service_tier"])
-	usage := log.SalesPricingSnapshot["usage"].(map[string]any)
+	usage, ok := log.SalesPricingSnapshot["usage"].(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, float64(1000), usage["input_tokens"])
-	amounts := log.SalesPricingSnapshot["amounts"].(map[string]any)
+	amounts, ok := log.SalesPricingSnapshot["amounts"].(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, "0.0038250000", amounts["original_total"])
 	require.Equal(t, "0.0047812500", amounts["multiplier_total"])
 }
@@ -107,7 +109,9 @@ func TestApplyShadowSalesPricingContextKeepsLegacyChargeAndStoresV2Delta(t *test
 	require.True(t, log.UsageListValue.Equal(decimal.RequireFromString("0.00144")))
 	require.True(t, log.SalesPricingShadowDelta.Equal(decimal.RequireFromString("0.00066")))
 	require.Equal(t, "v2", log.SalesPricingShadowSnapshot["version"])
-	require.Equal(t, "0.0021000000", log.SalesPricingShadowSnapshot["amounts"].(map[string]any)["multiplier_total"])
+	amounts, ok := log.SalesPricingShadowSnapshot["amounts"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "0.0021000000", amounts["multiplier_total"])
 }
 
 func TestValidateSalesPricingTransition(t *testing.T) {
