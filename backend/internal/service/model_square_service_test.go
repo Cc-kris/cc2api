@@ -110,6 +110,18 @@ func TestModelSquareUsesPublicModelRestrictionBeforeAccountMapping(t *testing.T)
 	require.Equal(t, "gpt-5.4", result.Items[0].Name)
 }
 
+func TestModelSquarePrioritizesAccountModelRestrictionList(t *testing.T) {
+	svc := newModelSquareServiceForTest()
+	accounts, ok := svc.accounts.(*modelSquareAccountRepoStub)
+	require.True(t, ok)
+	accounts.byGroup[10][0].Credentials = map[string]any{"model_mapping": map[string]any{"gpt-5.4": "provider-gpt-5.4"}}
+
+	result, err := svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 10})
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, "gpt-5.4", result.Items[0].Name)
+}
+
 func TestModelSquareSignedCursorPaginationAndCatalogChange(t *testing.T) {
 	svc := newModelSquareServiceForTest()
 	first, err := svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 1})
@@ -251,7 +263,7 @@ func TestModelSquareRoutabilityMatrixMatchesFastEligibilityBaseContract(t *testi
 	}
 }
 
-func TestModelSquareUsesChannelModelsFirstAndFallsBackToSystemPrice(t *testing.T) {
+func TestModelSquareUsesSystemCatalogAndAddsCompleteChannelModels(t *testing.T) {
 	input, output := 3e-6, 6e-6
 	customInput, customOutput := 9e-6, 12e-6
 	incompleteInput := 5e-6
@@ -284,7 +296,7 @@ func TestModelSquareUsesChannelModelsFirstAndFallsBackToSystemPrice(t *testing.T
 	account := &Account{
 		ID: 20, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true,
 		Credentials: map[string]any{"model_mapping": map[string]any{
-			"gpt-upstream": "gpt-upstream", "custom-upstream": "custom-upstream", "incomplete-upstream": "incomplete-upstream",
+			"gpt-public": "gpt-upstream", "custom-public": "custom-upstream", "incomplete-public": "incomplete-upstream",
 		}},
 	}
 	svc := &ModelSquareService{
@@ -320,7 +332,8 @@ func TestModelSquareUsesChannelModelsFirstAndFallsBackToSystemPrice(t *testing.T
 	svc.cache = nil
 	result, err = svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 50})
 	require.NoError(t, err)
-	require.Empty(t, result.Items, "mapped provider models must be routable by the account selected at request time")
+	require.Len(t, result.Items, 1, "account mappings are checked against the customer-requested model")
+	require.Equal(t, "gpt-public", result.Items[0].Name)
 }
 
 func TestModelSquareCatalogFallbackRequiresCompleteChannelPricing(t *testing.T) {
@@ -367,7 +380,7 @@ func TestModelSquareUsesChannelMappedModelForRestrictions(t *testing.T) {
 	}
 	channels := NewChannelService(nil, nil, nil, nil)
 	channels.cache.Store(populateChannelCache([]Channel{channel}, map[int64]string{10: PlatformOpenAI}))
-	account := &Account{ID: 20, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Credentials: map[string]any{"model_mapping": map[string]any{"provider-model": "provider-model"}}}
+	account := &Account{ID: 20, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Credentials: map[string]any{"model_mapping": map[string]any{"public-model": "provider-model"}}}
 	svc := &ModelSquareService{
 		groups:       &modelSquareGroupRepoStub{groups: []Group{{ID: 10, Name: "OpenAI", Platform: PlatformOpenAI, Status: StatusActive, RateMultiplier: 1}}},
 		accounts:     &modelSquareAccountRepoStub{byGroup: map[int64][]*Account{10: {account}}},
@@ -382,4 +395,37 @@ func TestModelSquareUsesChannelMappedModelForRestrictions(t *testing.T) {
 	result, err := svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 50})
 	require.NoError(t, err)
 	require.Empty(t, result.Items, "the gateway restricts the mapped billing model, so it must not be advertised")
+}
+
+func TestModelSquareUsesAccountUpstreamModelForRestrictions(t *testing.T) {
+	input, output := 3e-6, 6e-6
+	channel := Channel{
+		ID: 31, Status: StatusActive, GroupIDs: []int64{10}, RestrictModels: true,
+		BillingModelSource: BillingModelSourceUpstream,
+		ModelPricing:       []ChannelModelPricing{{Platform: PlatformOpenAI, Models: []string{"other-provider-model"}, BillingMode: BillingModeToken, InputPrice: &input, OutputPrice: &output}},
+	}
+	channels := NewChannelService(nil, nil, nil, nil)
+	channels.cache.Store(populateChannelCache([]Channel{channel}, map[int64]string{10: PlatformOpenAI}))
+	pricing := NewPricingService(&config.Config{}, nil)
+	pricing.pricingData = map[string]*LiteLLMModelPricing{
+		"public-model": {InputCostPerToken: input, OutputCostPerToken: output, LiteLLMProvider: "openai"},
+	}
+	pricing.localHash = "upstream-restriction-v1"
+	svc := &ModelSquareService{
+		groups: &modelSquareGroupRepoStub{groups: []Group{{ID: 10, Name: "OpenAI", Platform: PlatformOpenAI, Status: StatusActive, RateMultiplier: 1}}},
+		accounts: &modelSquareAccountRepoStub{byGroup: map[int64][]*Account{10: {{
+			ID: 21, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true,
+			Credentials: map[string]any{"model_mapping": map[string]any{"public-model": "blocked-provider-model"}},
+		}}}},
+		users:        &modelSquareUserRepoStub{user: &User{ID: 1}},
+		rates:        &modelSquareRateRepoStub{rates: map[int64]float64{}},
+		channels:     channels,
+		catalog:      NewPricingServiceModelCatalog(pricing),
+		resolver:     NewModelPricingResolver(channels, NewBillingService(&config.Config{}, pricing)),
+		cursorSecret: []byte("upstream-restriction-secret"),
+	}
+
+	result, err := svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 50})
+	require.NoError(t, err)
+	require.Empty(t, result.Items, "upstream billing restrictions must use the account's mapped provider model")
 }

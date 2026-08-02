@@ -141,7 +141,7 @@ test.describe('Model Square', () => {
     await mockAuthenticatedModelSquare(page)
   })
 
-  test('browses groups, prices, Fast and tier details', async ({ page, isMobile }) => {
+  test('browses groups, prices, billing details and Fast details', async ({ page, isMobile }) => {
     test.skip(Boolean(isMobile), 'Desktop group list workflow')
     await page.goto('/model-square')
 
@@ -155,8 +155,11 @@ test.describe('Model Square', () => {
 
     await list.getByText('查看 Fast 价格').click()
     await expect(list.getByTitle(/倍率价 5\.50000000/)).toBeVisible()
-    await list.getByText('查看 1 个阶梯').click()
-    await expect(list.getByText('HD', { exact: true })).toBeVisible()
+
+    await page.getByRole('searchbox', { name: '搜索当前分组的模型' }).fill('image')
+    await expect(list.getByText('gpt-image-2', { exact: true })).toBeVisible()
+    await expect(list.getByText('图片', { exact: true })).toBeVisible()
+    await expect(list.getByTitle(/倍率价 0\.04400000/)).toBeVisible()
 
     await page.getByRole('option', { name: /Anthropic 公开组/ }).click()
     await expect(page).toHaveURL(/group_id=20/)

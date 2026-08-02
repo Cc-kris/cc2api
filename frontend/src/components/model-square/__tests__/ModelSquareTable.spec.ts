@@ -59,11 +59,13 @@ describe('ModelSquareTable', () => {
     expect(mobile.text()).toContain('modelSquare.columns.input')
   })
 
-  it('renders Fast and tier disclosure controls when those prices exist', () => {
+  it('renders Fast details and keeps image or per-request prices in the billing column', () => {
     const enriched: ModelSquareModel = {
       ...item,
+      billing_mode: 'image',
+      prices: { ...item.prices, image_output: inputPrice },
       fast_prices: { input: inputPrice, output: null, cache_read: null, cache_write_5m: null, cache_write_1h: null },
-      tiers: [{ min_tokens: 0, max_tokens: null, sort_order: 0, input: inputPrice, output: null, cache_read: null, cache_write: null, per_request: null }],
+      tiers: [],
     }
     const wrapper = mount(ModelSquareTable, {
       props: { items: [enriched], loading: false, loadingMore: false, hasMore: false },
@@ -71,7 +73,8 @@ describe('ModelSquareTable', () => {
     })
 
     expect(wrapper.text()).toContain('modelSquare.viewFast')
-    expect(wrapper.text()).toContain('modelSquare.viewTiers:1')
+    expect(wrapper.text()).toContain('modelSquare.columns.imageOutput')
+    expect(wrapper.text()).not.toContain('modelSquare.viewTiers')
   })
 
   it('requests the next page when scrolling within 300px of the bottom', async () => {

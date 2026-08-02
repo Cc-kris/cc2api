@@ -381,15 +381,16 @@ func (s *ModelSquareService) listSellableModels(ctx context.Context, userID int6
 		s.metrics.cacheMisses.Add(1)
 	}
 	candidates := append([]string(nil), snapshot.Models...)
+	// Account model mappings are the first source of customer-visible model
+	// names. Exact mapping keys can represent a restricted model that is not in
+	// the synchronized upstream catalog; wildcard keys are evaluated against
+	// the finite catalog below by modelRoutableForGroup.
+	candidates = appendUniqueModelSquareNames(candidates, modelSquareAccountMappedModels(accounts))
 	if !usingCompleteChannelFallback && channel != nil && channel.IsActive() {
-		configuredModels := modelSquareChannelModels(channel, group.Platform)
-		// A channel with an explicit model list defines this group's sellable
-		// catalog. If it has no explicit list, fall back to the synchronized
-		// system catalog. Pricing still falls back to system data for incomplete
-		// channel price entries below.
-		if len(configuredModels) > 0 {
-			candidates = configuredModels
-		}
+		// The synchronized system catalog remains the primary model directory.
+		// Complete channel-priced models may extend it with site-specific models,
+		// but an explicit channel model list must never replace system models.
+		candidates = appendUniqueModelSquareNames(candidates, modelSquareCompleteChannelModels(channel, group.Platform))
 	}
 	seen := make(map[string]struct{}, len(candidates))
 	items := make([]ModelSquareModelItem, 0, len(candidates))
@@ -414,11 +415,13 @@ func (s *ModelSquareService) listSellableModels(ctx context.Context, userID int6
 				continue
 			}
 		}
-		// The gateway resolves the channel mapping before account selection, so
-		// model-square visibility must use the final provider model as well.
-		// Checking only the public key would advertise a model that cannot be
-		// selected when the account stores support for the mapped target.
-		if !modelRoutableForGroup(group, accounts, target) {
+		// Account selection is based on the customer-requested model. The channel
+		// mapping only determines the provider route and billing restriction
+		// target; it must not replace the account restriction-list key here.
+		if !modelRoutableForGroup(group, accounts, name) {
+			continue
+		}
+		if billingModelSource == BillingModelSourceUpstream && s.channels != nil && !modelSquareUpstreamRestrictionAllows(ctx, s.channels, group, accounts, name) {
 			continue
 		}
 		gid := group.ID
@@ -430,7 +433,7 @@ func (s *ModelSquareService) listSellableModels(ctx context.Context, userID int6
 		if viewErr != nil || !modelPriceViewHasPrice(view) {
 			continue
 		}
-		if !modelSquareFastAllowed(fastPolicy, group, accounts, target) {
+		if !modelSquareFastAllowed(fastPolicy, group, accounts, name) {
 			view.Fast = nil
 		}
 		items = append(items, ModelSquareModelItem{
@@ -458,25 +461,6 @@ func (s *ModelSquareService) listSellableModels(ctx context.Context, userID int6
 	return items, snapshot, nil
 }
 
-func modelSquareChannelModels(channel *Channel, platform string) []string {
-	if channel == nil || !channel.IsActive() {
-		return nil
-	}
-	models := make([]string, 0)
-	for _, pricing := range channel.ModelPricing {
-		if !isPlatformPricingMatch(platform, pricing.Platform) {
-			continue
-		}
-		for _, name := range pricing.Models {
-			name = strings.TrimSpace(name)
-			if name != "" && !strings.Contains(name, "*") {
-				models = append(models, name)
-			}
-		}
-	}
-	return models
-}
-
 func modelSquareCompleteChannelModels(channel *Channel, platform string) []string {
 	if channel == nil || !channel.IsActive() {
 		return nil
@@ -491,6 +475,45 @@ func modelSquareCompleteChannelModels(channel *Channel, platform string) []strin
 			if name != "" && !strings.Contains(name, "*") {
 				models = append(models, name)
 			}
+		}
+	}
+	return models
+}
+
+func appendUniqueModelSquareNames(existing, additional []string) []string {
+	seen := make(map[string]struct{}, len(existing)+len(additional))
+	for _, name := range existing {
+		key := strings.ToLower(strings.TrimSpace(name))
+		if key != "" {
+			seen[key] = struct{}{}
+		}
+	}
+	for _, name := range additional {
+		key := strings.ToLower(strings.TrimSpace(name))
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		existing = append(existing, strings.TrimSpace(name))
+	}
+	return existing
+}
+
+func modelSquareAccountMappedModels(accounts []*Account) []string {
+	models := make([]string, 0)
+	for _, account := range accounts {
+		if account == nil {
+			continue
+		}
+		for name := range account.GetModelMapping() {
+			name = strings.TrimSpace(name)
+			if name == "" || strings.ContainsAny(name, "*?") {
+				continue
+			}
+			models = append(models, name)
 		}
 	}
 	return models
@@ -604,6 +627,22 @@ func (s *ModelSquareService) SnapshotMetrics() ModelSquareMetricsSnapshot {
 func modelRoutableForGroup(group *Group, accounts []*Account, model string) bool {
 	for _, account := range accounts {
 		if modelSquareAccountRoutable(group, account, model) {
+			return true
+		}
+	}
+	return false
+}
+
+func modelSquareUpstreamRestrictionAllows(ctx context.Context, channels *ChannelService, group *Group, accounts []*Account, requestedModel string) bool {
+	if channels == nil || group == nil {
+		return true
+	}
+	for _, account := range accounts {
+		if !modelSquareAccountRoutable(group, account, requestedModel) {
+			continue
+		}
+		upstreamModel := resolveAccountUpstreamModel(account, requestedModel)
+		if upstreamModel == "" || !channels.IsModelRestricted(ctx, group.ID, upstreamModel) {
 			return true
 		}
 	}

@@ -47,6 +47,10 @@
               <div v-else-if="column.key === 'billing_mode'" role="cell" class="px-4 py-4">
                 <div>{{ t(`modelSquare.billingModes.${items[virtualRow.index].billing_mode}`) }}</div>
                 <div class="mt-1 text-xs text-gray-500">{{ t(`modelSquare.pricingSources.${pricingSource(items[virtualRow.index])}`) }}</div>
+                <div v-for="entry in billingEntries(items[virtualRow.index])" :key="entry.key" class="mt-3">
+                  <div class="mb-1 text-xs font-medium text-gray-500">{{ entry.label }}</div>
+                  <ModelSquarePriceCell :price="entry.price" />
+                </div>
               </div>
               <div v-else-if="column.key === 'cache_write'" role="cell" class="space-y-3 px-4 py-4">
                 <div v-if="items[virtualRow.index].prices.cache_write_5m">
@@ -70,18 +74,6 @@
                       <div class="mb-1 text-xs font-medium text-gray-500">{{ entry.label }}</div>
                       <ModelSquarePriceCell :price="entry.price" />
                     </div>
-                  </div>
-                </details>
-                <span v-else class="text-gray-400" aria-hidden="true">-</span>
-              </div>
-              <div v-else-if="column.key === 'tiers'" role="cell" class="px-4 py-4">
-                <details v-if="items[virtualRow.index].tiers.length" class="group">
-                  <summary class="cursor-pointer font-medium text-primary-700 marker:hidden dark:text-primary-300">
-                    {{ t('modelSquare.viewTiers', { count: items[virtualRow.index].tiers.length }) }}
-                    <Icon name="chevronDown" size="xs" class="ml-1 inline transition-transform group-open:rotate-180" />
-                  </summary>
-                  <div class="mt-3 space-y-3 rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
-                    <TierPrices v-for="tier in items[virtualRow.index].tiers" :key="`${tier.sort_order}-${tier.tier_label || tier.min_tokens}`" :tier="tier" />
                   </div>
                 </details>
                 <span v-else class="text-gray-400" aria-hidden="true">-</span>
@@ -117,6 +109,9 @@
             <span class="mt-1 block text-xs text-gray-500 dark:text-dark-300">
               {{ t(`modelSquare.billingModes.${item.billing_mode}`) }} · {{ t(`modelSquare.pricingSources.${pricingSource(item)}`) }}
             </span>
+            <span v-for="entry in billingEntries(item)" :key="entry.key" class="mt-1 block text-xs text-gray-500 dark:text-dark-300">
+              {{ entry.label }}: {{ compactPrice(entry.price) }}
+            </span>
           </span>
           <span class="flex shrink-0 items-center gap-2">
             <span v-if="primaryPrice(item)" class="text-right text-sm font-semibold text-gray-900 dark:text-white">
@@ -127,6 +122,16 @@
         </summary>
 
         <div class="space-y-5 pb-5">
+          <div v-if="billingEntries(item).length" class="min-w-0">
+            <div class="mb-2 text-xs font-semibold text-gray-700 dark:text-gray-200">{{ t('modelSquare.columns.billingMode') }}</div>
+            <div class="grid min-w-0 gap-4">
+              <div v-for="entry in billingEntries(item)" :key="entry.key" class="min-w-0">
+                <div class="mb-1 text-xs font-medium text-gray-500">{{ entry.label }}</div>
+                <ModelSquarePriceCell :price="entry.price" />
+              </div>
+            </div>
+          </div>
+
           <div class="grid min-w-0 gap-4">
             <div v-for="entry in regularEntries(item)" :key="entry.key" class="min-w-0">
               <div class="mb-1 text-xs font-medium text-gray-500">{{ entry.label }}</div>
@@ -142,11 +147,6 @@
                 <ModelSquarePriceCell :price="entry.price" />
               </div>
             </div>
-          </div>
-
-          <div v-if="item.tiers.length" class="min-w-0 space-y-4 border-t border-gray-100 pt-4 dark:border-dark-700">
-            <div class="text-xs font-semibold text-gray-700 dark:text-gray-200">{{ t('modelSquare.columns.tiers') }}</div>
-            <TierPrices v-for="tier in item.tiers" :key="`${tier.sort_order}-${tier.tier_label || tier.min_tokens}`" :tier="tier" />
           </div>
 
           <button type="button" class="btn btn-ghost px-0 text-xs" @click="copyModel(item.name)">
@@ -165,10 +165,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, ref, type ComponentPublicInstance, type PropType, type VNodeRef } from 'vue'
+import { computed, defineComponent, h, ref, type ComponentPublicInstance, type VNodeRef } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useI18n } from 'vue-i18n'
-import type { ModelSquareModel, ModelSquareTierPrice, ModelSquareUnitPrice } from '@/api/modelSquare'
+import type { ModelSquareModel, ModelSquareUnitPrice } from '@/api/modelSquare'
 import Icon from '@/components/icons/Icon.vue'
 import ModelSquarePriceCell from './ModelSquarePriceCell.vue'
 
@@ -190,11 +190,7 @@ const columns = computed(() => [
   { key: 'output', label: t('modelSquare.columns.output'), width: 190 },
   { key: 'cache_read', label: t('modelSquare.columns.cacheRead'), width: 190 },
   { key: 'cache_write', label: t('modelSquare.columns.cacheWrite'), width: 220 },
-  { key: 'image_output', label: t('modelSquare.columns.imageOutput'), width: 190 },
-  { key: 'per_request', label: t('modelSquare.columns.perRequest'), width: 190 },
-  { key: 'per_second', label: t('modelSquare.columns.perSecond'), width: 190 },
   { key: 'fast', label: t('modelSquare.columns.fast'), width: 210 },
-  { key: 'tiers', label: t('modelSquare.columns.tiers'), width: 220 },
 ])
 
 const gridStyle = computed(() => ({ gridTemplateColumns: columns.value.map(column => `${column.width}px`).join(' ') }))
@@ -228,19 +224,6 @@ const LoadingRows = defineComponent({
   },
 })
 
-const TierPrices = defineComponent({
-  props: { tier: { type: Object as PropType<ModelSquareTierPrice>, required: true } },
-  setup(componentProps) {
-    return () => h('div', { class: 'min-w-0 border-b border-gray-200 pb-3 last:border-0 last:pb-0 dark:border-dark-600' }, [
-      h('div', { class: 'mb-2 font-medium' }, tierLabel(componentProps.tier)),
-      h('div', { class: 'grid min-w-0 gap-3' }, tierEntries(componentProps.tier).map(entry => h('div', { key: entry.key, class: 'min-w-0' }, [
-        h('div', { class: 'mb-1 text-xs text-gray-500' }, entry.label),
-        h(ModelSquarePriceCell, { price: entry.price }),
-      ]))),
-    ])
-  },
-})
-
 function priceFor(item: ModelSquareModel, key: string): ModelSquareUnitPrice | null | undefined {
   return item.prices[key as keyof typeof item.prices]
 }
@@ -252,6 +235,11 @@ function regularEntries(item: ModelSquareModel) {
     { key: 'cache_read', label: t('modelSquare.columns.cacheRead'), price: item.prices.cache_read },
     { key: 'cache_write_5m', label: t('modelSquare.columns.cacheWrite5m'), price: item.prices.cache_write_5m },
     { key: 'cache_write_1h', label: t('modelSquare.columns.cacheWrite1h'), price: item.prices.cache_write_1h },
+  ].filter((entry): entry is { key: string; label: string; price: ModelSquareUnitPrice } => entry.price != null)
+}
+
+function billingEntries(item: ModelSquareModel) {
+  return [
     { key: 'image_output', label: t('modelSquare.columns.imageOutput'), price: item.prices.image_output },
     { key: 'per_request', label: t('modelSquare.columns.perRequest'), price: item.prices.per_request },
     { key: 'per_second', label: t('modelSquare.columns.perSecond'), price: item.prices.per_second },
@@ -267,22 +255,6 @@ function fastEntries(item: ModelSquareModel) {
     { key: 'cache_write_5m', label: t('modelSquare.columns.cacheWrite5m'), price: item.fast_prices.cache_write_5m },
     { key: 'cache_write_1h', label: t('modelSquare.columns.cacheWrite1h'), price: item.fast_prices.cache_write_1h },
   ].filter((entry): entry is { key: string; label: string; price: ModelSquareUnitPrice } => entry.price != null)
-}
-
-function tierEntries(tier: ModelSquareTierPrice) {
-  return [
-    { key: 'input', label: t('modelSquare.columns.input'), price: tier.input },
-    { key: 'output', label: t('modelSquare.columns.output'), price: tier.output },
-    { key: 'cache_read', label: t('modelSquare.columns.cacheRead'), price: tier.cache_read },
-    { key: 'cache_write', label: t('modelSquare.columns.cacheWrite'), price: tier.cache_write },
-    { key: 'per_request', label: t('modelSquare.columns.perRequest'), price: tier.per_request },
-  ].filter((entry): entry is { key: string; label: string; price: ModelSquareUnitPrice } => entry.price != null)
-}
-
-function tierLabel(tier: ModelSquareTierPrice) {
-  if (tier.tier_label) return tier.tier_label
-  const maximum = tier.max_tokens == null ? 'unlimited' : tier.max_tokens.toLocaleString()
-  return `${tier.min_tokens.toLocaleString()} - ${maximum} ${t('modelSquare.tokens')}`
 }
 
 function primaryPrice(item: ModelSquareModel): ModelSquareUnitPrice | null {
