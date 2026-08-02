@@ -103,7 +103,7 @@ func TestModelSquareUsesPublicModelRestrictionBeforeAccountMapping(t *testing.T)
 	svc := newModelSquareServiceForTest()
 	accounts, ok := svc.accounts.(*modelSquareAccountRepoStub)
 	require.True(t, ok)
-	accounts.byGroup[10][0].Credentials = map[string]any{"model_mapping": map[string]any{"gpt-5.4": "provider-gpt-5.4"}}
+	accounts.byGroup[10][0].Credentials = map[string]any{"model_mapping": map[string]any{"gpt-5.4": "gpt-5.4"}}
 	result, err := svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 10})
 	require.NoError(t, err)
 	require.Len(t, result.Items, 1)
@@ -114,7 +114,7 @@ func TestModelSquarePrioritizesAccountModelRestrictionList(t *testing.T) {
 	svc := newModelSquareServiceForTest()
 	accounts, ok := svc.accounts.(*modelSquareAccountRepoStub)
 	require.True(t, ok)
-	accounts.byGroup[10][0].Credentials = map[string]any{"model_mapping": map[string]any{"gpt-5.4": "provider-gpt-5.4"}}
+	accounts.byGroup[10][0].Credentials = map[string]any{"model_mapping": map[string]any{"gpt-5.4": "gpt-5.4"}}
 
 	result, err := svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 10})
 	require.NoError(t, err)
@@ -129,7 +129,7 @@ func TestModelSquareRestrictionListDoesNotExpandFromUnrestrictedSibling(t *testi
 	accounts.byGroup[10] = append(accounts.byGroup[10], &Account{
 		ID: 21, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true,
 	})
-	accounts.byGroup[10][0].Credentials = map[string]any{"model_mapping": map[string]any{"gpt-5.4": "provider-gpt-5.4"}}
+	accounts.byGroup[10][0].Credentials = map[string]any{"model_mapping": map[string]any{"gpt-5.4": "gpt-5.4"}}
 
 	result, err := svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 10})
 	require.NoError(t, err)
@@ -143,7 +143,7 @@ func TestModelSquareExactRestrictionTakesPriorityOverWildcardMapping(t *testing.
 	require.True(t, ok)
 	accounts.byGroup[10][0].Credentials = map[string]any{"model_mapping": map[string]any{
 		"*":       "provider-gpt-5.4",
-		"gpt-5.4": "provider-gpt-5.4",
+		"gpt-5.4": "gpt-5.4",
 	}}
 
 	result, err := svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 10})

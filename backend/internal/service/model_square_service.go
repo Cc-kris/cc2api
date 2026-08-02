@@ -388,11 +388,14 @@ func (s *ModelSquareService) listSellableModels(ctx context.Context, userID int6
 		// sibling account expand the model square back to the whole system catalog.
 		candidates = modelSquareFilterByAccountRestrictions(candidates, accounts)
 	}
-	// Account model mappings are the first source of customer-visible model
-	// names. Exact mapping keys can represent a restricted model that is not in
-	// the synchronized upstream catalog; wildcard keys are evaluated against
-	// the finite catalog below by modelRoutableForGroup.
-	candidates = appendUniqueModelSquareNames(candidates, modelSquareAccountMappedModels(accounts))
+	// Account restrictions and account mappings are separate concepts. An exact
+	// identity mapping (model -> same model) is a restriction entry; remaps and
+	// wildcard mappings only affect routing and must not expand the catalog.
+	if accountRestrictionConfigured {
+		candidates = appendUniqueModelSquareNames(candidates, modelSquareAccountRestrictionModels(accounts))
+	} else {
+		candidates = appendUniqueModelSquareNames(candidates, modelSquareAccountMappedModels(accounts))
+	}
 	if !usingCompleteChannelFallback && channel != nil && channel.IsActive() {
 		// The synchronized system catalog remains the primary model directory.
 		// Complete channel-priced models may extend it with site-specific models,
@@ -531,66 +534,42 @@ func modelSquareAccountMappedModels(accounts []*Account) []string {
 }
 
 func modelSquareAccountRestrictionConfigured(accounts []*Account) bool {
-	for _, account := range accounts {
-		if account != nil && len(account.GetModelMapping()) > 0 {
-			return true
-		}
-	}
-	return false
+	return len(modelSquareAccountRestrictionModels(accounts)) > 0
 }
 
 func modelSquareFilterByAccountRestrictions(models []string, accounts []*Account) []string {
-	exactRestrictionsConfigured := modelSquareExactRestrictionsConfigured(accounts)
+	restrictionModels := make(map[string]struct{})
+	for _, model := range modelSquareAccountRestrictionModels(accounts) {
+		restrictionModels[strings.ToLower(model)] = struct{}{}
+	}
+	if len(restrictionModels) == 0 {
+		return models
+	}
 	filtered := make([]string, 0, len(models))
 	for _, model := range models {
-		for _, account := range accounts {
-			if account == nil {
-				continue
-			}
-			mapping := account.GetModelMapping()
-			if len(mapping) == 0 {
-				continue
-			}
-			if exactRestrictionsConfigured {
-				if modelSquareAccountHasExactModel(mapping, model) {
-					filtered = append(filtered, model)
-					break
-				}
-				continue
-			}
-			if account.IsModelSupported(model) {
-				filtered = append(filtered, model)
-				break
-			}
+		if _, ok := restrictionModels[strings.ToLower(strings.TrimSpace(model))]; ok {
+			filtered = append(filtered, model)
 		}
 	}
 	return filtered
 }
 
-func modelSquareExactRestrictionsConfigured(accounts []*Account) bool {
+func modelSquareAccountRestrictionModels(accounts []*Account) []string {
+	models := make([]string, 0)
 	for _, account := range accounts {
 		if account == nil {
 			continue
 		}
-		for model := range account.GetModelMapping() {
-			if model != "" && !strings.ContainsAny(model, "*?") {
-				return true
+		for source, target := range account.GetModelMapping() {
+			source = strings.TrimSpace(source)
+			target = strings.TrimSpace(target)
+			if source == "" || strings.ContainsAny(source, "*?") || !strings.EqualFold(source, target) {
+				continue
 			}
+			models = append(models, source)
 		}
 	}
-	return false
-}
-
-func modelSquareAccountHasExactModel(mapping map[string]string, model string) bool {
-	for configuredModel := range mapping {
-		if strings.ContainsAny(configuredModel, "*?") {
-			continue
-		}
-		if strings.EqualFold(strings.TrimSpace(configuredModel), strings.TrimSpace(model)) {
-			return true
-		}
-	}
-	return false
+	return models
 }
 
 func modelSquareCacheKey(userID int64, group *Group, accounts []*Account, channel *Channel, multiplier decimal.Decimal, catalogChecksum string, fastPolicy *OpenAIFastPolicySettings) (string, error) {
