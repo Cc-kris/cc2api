@@ -185,7 +185,7 @@ const mobileScrollRef = ref<HTMLElement | null>(null)
 
 const columns = computed(() => [
   { key: 'name', label: t('modelSquare.columns.name'), width: 220 },
-  { key: 'billing_mode', label: t('modelSquare.columns.billingMode'), width: 96 },
+  { key: 'billing_mode', label: t('modelSquare.columns.billingMode'), width: 220 },
   { key: 'input', label: t('modelSquare.columns.input'), width: 190 },
   { key: 'output', label: t('modelSquare.columns.output'), width: 190 },
   { key: 'cache_read', label: t('modelSquare.columns.cacheRead'), width: 190 },
