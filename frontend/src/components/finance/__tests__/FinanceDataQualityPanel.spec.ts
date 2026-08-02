@@ -49,4 +49,12 @@ describe('FinanceDataQualityPanel', () => {
     await flushPromises()
     expect(api.resolvePromotionCreditReconciliation).toHaveBeenCalledWith(8, { confirmed_remaining_amount: '0', note: '客户已使用完毕' })
   })
+
+  it('explains excluded history separately from low cost coverage', async () => {
+    const wrapper = mount(FinanceDataQualityPanel, { props: { data: { ...data, quality: { ...data.quality, excluded_count: 3 } } as never } })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="excluded-history-risk"]').text()).toContain('3 条历史或测试记录')
+    expect(wrapper.text()).toContain('历史未确认记录')
+    expect(wrapper.find('[data-testid="quality-risk"]').exists()).toBe(false)
+  })
 })

@@ -24,6 +24,13 @@ type FinancePriceLookupRepository interface {
 	FindSystemPriceAt(ctx context.Context, model, billingMode string, at time.Time) (*FinancePriceQuote, error)
 }
 
+// FinanceWalletAssignmentLookup resolves the account's effective finance
+// wallet when a historical profile predates wallet binding. It is optional so
+// lightweight price repositories and isolated tests remain valid.
+type FinanceWalletAssignmentLookup interface {
+	FindWalletAssignmentAt(ctx context.Context, accountID int64, at time.Time) (*FinanceWalletAssignment, error)
+}
+
 type FinanceFXPriceLookup interface {
 	FindFinanceFXRateAt(ctx context.Context, currency string, at time.Time) (*FinanceFXRateVersion, error)
 }
@@ -77,6 +84,11 @@ func (s *FinancePriceSelector) Select(ctx context.Context, accountID int64, prof
 	}
 	if profile.WalletID != nil {
 		selected.Wallet, err = s.repository.FindWalletByID(ctx, *profile.WalletID)
+		if err != nil {
+			return nil, err
+		}
+	} else if assignmentLookup, ok := s.repository.(FinanceWalletAssignmentLookup); ok {
+		selected.Wallet, err = assignmentLookup.FindWalletAssignmentAt(ctx, accountID, at)
 		if err != nil {
 			return nil, err
 		}

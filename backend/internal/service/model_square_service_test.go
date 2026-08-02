@@ -99,6 +99,17 @@ func TestModelSquareListsVisibleGroupsAndUsesEffectiveMultiplier(t *testing.T) {
 	require.Equal(t, 2, result.Groups[0].ModelCount)
 }
 
+func TestModelSquareUsesPublicModelRestrictionBeforeAccountMapping(t *testing.T) {
+	svc := newModelSquareServiceForTest()
+	accounts, ok := svc.accounts.(*modelSquareAccountRepoStub)
+	require.True(t, ok)
+	accounts.byGroup[10][0].Credentials = map[string]any{"model_mapping": map[string]any{"gpt-5.4": "provider-gpt-5.4"}}
+	result, err := svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 10})
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, "gpt-5.4", result.Items[0].Name)
+}
+
 func TestModelSquareSignedCursorPaginationAndCatalogChange(t *testing.T) {
 	svc := newModelSquareServiceForTest()
 	first, err := svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 1})
@@ -302,4 +313,73 @@ func TestModelSquareUsesChannelModelsFirstAndFallsBackToSystemPrice(t *testing.T
 	require.Equal(t, "system", result.Items[2].PricingSource)
 	require.Equal(t, "7.50000000", result.Items[2].Prices.Input.MultiplierPrice.StringFixed(8))
 	require.NotContains(t, []string{result.Items[0].Name, result.Items[1].Name, result.Items[2].Name}, "gpt-blocked")
+
+	publicOnly := *account
+	publicOnly.Credentials = map[string]any{"model_mapping": map[string]any{"gpt-public": "gpt-public"}}
+	svc.accounts = &modelSquareAccountRepoStub{byGroup: map[int64][]*Account{10: {&publicOnly}}}
+	svc.cache = nil
+	result, err = svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 50})
+	require.NoError(t, err)
+	require.Empty(t, result.Items, "mapped provider models must be routable by the account selected at request time")
+}
+
+func TestModelSquareCatalogFallbackRequiresCompleteChannelPricing(t *testing.T) {
+	input, output := 3e-6, 6e-6
+	complete := Channel{ID: 30, Status: StatusActive, ModelPricing: []ChannelModelPricing{{
+		Platform: PlatformOpenAI, Models: []string{"gpt-public"}, BillingMode: BillingModeToken, InputPrice: &input, OutputPrice: &output,
+	}}}
+	incomplete := complete
+	incomplete.ModelPricing = []ChannelModelPricing{{Platform: PlatformOpenAI, Models: []string{"gpt-public"}, BillingMode: BillingModeToken, InputPrice: &input}}
+	require.Equal(t, []string{"gpt-public"}, modelSquareCompleteChannelModels(&complete, PlatformOpenAI))
+	require.Empty(t, modelSquareCompleteChannelModels(&incomplete, PlatformOpenAI))
+}
+
+func TestModelSquareCatalogFallbackExcludesIncompleteChannelModels(t *testing.T) {
+	input, output := 3e-6, 6e-6
+	channel := Channel{ID: 30, Status: StatusActive, GroupIDs: []int64{10}, ModelPricing: []ChannelModelPricing{
+		{Platform: PlatformOpenAI, Models: []string{"complete-model"}, BillingMode: BillingModeToken, InputPrice: &input, OutputPrice: &output},
+		{Platform: PlatformOpenAI, Models: []string{"incomplete-model"}, BillingMode: BillingModeToken, InputPrice: &input},
+	}}
+	channels := NewChannelService(nil, nil, nil, nil)
+	channels.cache.Store(populateChannelCache([]Channel{channel}, map[int64]string{10: PlatformOpenAI}))
+	svc := &ModelSquareService{
+		groups:       &modelSquareGroupRepoStub{groups: []Group{{ID: 10, Name: "OpenAI", Platform: PlatformOpenAI, Status: StatusActive, RateMultiplier: 1}}},
+		accounts:     &modelSquareAccountRepoStub{byGroup: map[int64][]*Account{10: {{ID: 20, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true}}}},
+		users:        &modelSquareUserRepoStub{user: &User{ID: 1}},
+		rates:        &modelSquareRateRepoStub{rates: map[int64]float64{}},
+		channels:     channels,
+		catalog:      modelSquarePlatformCatalogStub{errors: map[string]error{PlatformOpenAI: errors.New("system catalog unavailable")}},
+		resolver:     NewModelPricingResolver(channels, NewBillingService(&config.Config{}, nil)),
+		cursorSecret: []byte("fallback-secret"),
+	}
+
+	result, err := svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 50})
+	require.NoError(t, err)
+	require.Equal(t, []string{"complete-model"}, []string{result.Items[0].Name})
+}
+
+func TestModelSquareUsesChannelMappedModelForRestrictions(t *testing.T) {
+	input, output := 3e-6, 6e-6
+	channel := Channel{
+		ID: 30, Status: StatusActive, GroupIDs: []int64{10}, RestrictModels: true,
+		ModelMapping: map[string]map[string]string{PlatformOpenAI: {"public-model": "provider-model"}},
+		ModelPricing: []ChannelModelPricing{{Platform: PlatformOpenAI, Models: []string{"public-model"}, BillingMode: BillingModeToken, InputPrice: &input, OutputPrice: &output}},
+	}
+	channels := NewChannelService(nil, nil, nil, nil)
+	channels.cache.Store(populateChannelCache([]Channel{channel}, map[int64]string{10: PlatformOpenAI}))
+	account := &Account{ID: 20, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Credentials: map[string]any{"model_mapping": map[string]any{"provider-model": "provider-model"}}}
+	svc := &ModelSquareService{
+		groups:       &modelSquareGroupRepoStub{groups: []Group{{ID: 10, Name: "OpenAI", Platform: PlatformOpenAI, Status: StatusActive, RateMultiplier: 1}}},
+		accounts:     &modelSquareAccountRepoStub{byGroup: map[int64][]*Account{10: {account}}},
+		users:        &modelSquareUserRepoStub{user: &User{ID: 1}},
+		rates:        &modelSquareRateRepoStub{rates: map[int64]float64{}},
+		channels:     channels,
+		catalog:      modelSquareCatalogStub{snapshot: ModelCatalogSnapshot{Provider: "system", Checksum: "restriction-v1", UpdatedAt: time.Now(), Models: []string{"public-model"}}},
+		resolver:     NewModelPricingResolver(channels, NewBillingService(&config.Config{}, nil)),
+		cursorSecret: []byte("restriction-secret"),
+	}
+
+	result, err := svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 50})
+	require.NoError(t, err)
+	require.Empty(t, result.Items, "the gateway restricts the mapped billing model, so it must not be advertised")
 }

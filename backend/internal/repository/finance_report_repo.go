@@ -159,7 +159,8 @@ SELECT bucket_start,
        COUNT(*) FILTER (WHERE cost_status='missing_price')::bigint,
        COUNT(*) FILTER (WHERE cost_status='missing_multiplier')::bigint,
 	   COUNT(*) FILTER (WHERE cost_status='missing_usage')::bigint,
-	   COUNT(*) FILTER (WHERE cost_status='unsupported_usage')::bigint
+	   COUNT(*) FILTER (WHERE cost_status='unsupported_usage')::bigint,
+	   COUNT(*) FILTER (WHERE cost_status='excluded')::bigint
 FROM base GROUP BY bucket_start ORDER BY bucket_start`, granularityArg, timezoneArg, timezoneArg, costArg, where)
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -170,7 +171,7 @@ FROM base GROUP BY bucket_start ORDER BY bucket_start`, granularityArg, timezone
 	for rows.Next() {
 		var item service.FinanceTrendFact
 		var revenue, covered, cost, loss string
-		if err = rows.Scan(&item.BucketStart, &revenue, &covered, &cost, &loss, &item.RequestCount, &item.ExactCount, &item.EstimatedCount, &item.MissingProfile, &item.MissingPrice, &item.MissingMultiplier, &item.MissingUsage, &item.UnsupportedUsage); err != nil {
+		if err = rows.Scan(&item.BucketStart, &revenue, &covered, &cost, &loss, &item.RequestCount, &item.ExactCount, &item.EstimatedCount, &item.MissingProfile, &item.MissingPrice, &item.MissingMultiplier, &item.MissingUsage, &item.UnsupportedUsage, &item.ExcludedCount); err != nil {
 			return nil, err
 		}
 		if item.Revenue, err = decimal.NewFromString(revenue); err != nil {

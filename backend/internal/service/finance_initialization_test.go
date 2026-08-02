@@ -103,7 +103,7 @@ func (s *financeInitializationProfileStub) Get(_ context.Context, accountID int6
 }
 func (s *financeInitializationProfileStub) Save(_ context.Context, accountID int64, input AccountFinanceProfileInput) (*AccountFinanceProfile, error) {
 	s.saves = append(s.saves, input)
-	item := &AccountFinanceProfile{AccountID: accountID, Version: input.ExpectedVersion + 1, EffectiveFrom: input.EffectiveFrom, CostMode: input.CostMode}
+	item := &AccountFinanceProfile{AccountID: accountID, Version: input.ExpectedVersion + 1, EffectiveFrom: input.EffectiveFrom, CostMode: input.CostMode, WalletID: input.WalletID}
 	s.items[accountID] = item
 	return item, nil
 }
@@ -163,6 +163,68 @@ func TestFinanceInitializationApplyPreservesExistingFinanceProfile(t *testing.T)
 	_, err := svc.Apply(context.Background(), FinanceInitializationRequest{OperatorID: 99, Reason: "确认已有财务档案", Accounts: []FinanceInitializationAccountInput{{AccountID: 1, UpstreamCostMultiplier: "0.60"}}})
 	require.NoError(t, err)
 	require.Empty(t, profiles.saves)
+}
+
+func TestFinanceInitializationApplyBindsExistingProfileToFinanceWallet(t *testing.T) {
+	multiplier := decimal.RequireFromString("0.60")
+	profileID := int64(42)
+	accounts := &financeInitializationAccountStub{accounts: []Account{{ID: 1, Name: "request-charge account", Platform: "openai", Status: StatusActive, Credentials: map[string]any{"base_url": "https://upstream.test"}, UpstreamCostMultiplier: &multiplier, CurrentFinanceProfileID: &profileID}}}
+	upstreams := &financeInitializationUpstreamStub{items: []*Upstream{{ID: 5, Name: "upstream", BaseURL: "https://upstream.test", NormalizedBaseURL: "https://upstream.test"}}}
+	wallets := &financeInitializationWalletStub{byUpstream: map[int64][]UpstreamWallet{}}
+	profiles := &financeInitializationProfileStub{items: map[int64]*AccountFinanceProfile{1: {ID: profileID, AccountID: 1, Version: 3, CostMode: FinanceCostModeRequestCharge, EndpointSource: "account_base_url", CredentialSource: "api_key", CounterScope: FinanceCounterScopeAccount, BalanceUnitSemantics: FinanceUnitFiatCurrency}}}
+	svc := NewFinanceInitializationService(accounts, upstreams, wallets, &financeInitializationFundStub{}, profiles)
+	svc.now = func() time.Time { return time.Date(2026, 8, 1, 12, 0, 1, 0, time.UTC) }
+
+	_, err := svc.Apply(context.Background(), FinanceInitializationRequest{OperatorID: 99, Reason: "绑定财务钱包", Accounts: []FinanceInitializationAccountInput{{AccountID: 1, UpstreamCostMultiplier: "0.60"}}, Upstreams: []FinanceInitializationUpstreamInput{{UpstreamID: 5, CurrentBalance: 12}}})
+	require.NoError(t, err)
+	require.Len(t, profiles.saves, 1)
+	require.Equal(t, FinanceCostModeRequestCharge, profiles.saves[0].CostMode)
+	require.Equal(t, int64(101), *profiles.saves[0].WalletID)
+	require.Equal(t, 3, profiles.saves[0].ExpectedVersion)
+}
+
+func TestFinanceInitializationUsesEnabledCustomBaseURLForWalletBinding(t *testing.T) {
+	account := &Account{Platform: PlatformAnthropic, Type: AccountTypeOAuth, Extra: map[string]any{
+		"custom_base_url_enabled": true,
+		"custom_base_url":         "https://relay.example.test/",
+	}}
+	require.Equal(t, "https://relay.example.test", financeInitializationAccountURL(account))
+	require.Equal(t, "https://relay.example.test/", financeInitializationAccountEndpoint(account))
+}
+
+func TestFinanceInitializationNormalizesAntigravityAPIKeyCustomBaseURLForWalletBinding(t *testing.T) {
+	account := &Account{Platform: PlatformAntigravity, Type: AccountTypeAPIKey, Extra: map[string]any{
+		"custom_base_url_enabled": true,
+		"custom_base_url":         "https://relay.example.test/",
+	}}
+	require.Equal(t, "https://relay.example.test/antigravity", financeInitializationAccountURL(account))
+}
+
+func TestFinanceInitializationRejectsInvalidMultiplierBeforeAnyWrite(t *testing.T) {
+	accounts := &financeInitializationAccountStub{accounts: []Account{{ID: 1, Name: "upstream account", Platform: PlatformOpenAI, Status: StatusActive}}}
+	upstreams := &financeInitializationUpstreamStub{items: []*Upstream{{ID: 5, Name: "upstream", BaseURL: "https://upstream.test", NormalizedBaseURL: "https://upstream.test", CurrentBalance: 7}}}
+	wallets := &financeInitializationWalletStub{byUpstream: map[int64][]UpstreamWallet{}}
+	funds := &financeInitializationFundStub{}
+	svc := NewFinanceInitializationService(accounts, upstreams, wallets, funds, &financeInitializationProfileStub{items: map[int64]*AccountFinanceProfile{}})
+
+	_, err := svc.Apply(context.Background(), FinanceInitializationRequest{OperatorID: 99, Reason: "拒绝无效倍率", Accounts: []FinanceInitializationAccountInput{{AccountID: 1, UpstreamCostMultiplier: "-0.0001"}}, Upstreams: []FinanceInitializationUpstreamInput{{UpstreamID: 5, CurrentBalance: 12}}})
+	require.ErrorIs(t, err, ErrFinanceInitializationInvalid)
+	require.Empty(t, accounts.updates)
+	require.Zero(t, wallets.created)
+	require.Empty(t, funds.calls)
+	require.Equal(t, 7.0, upstreams.items[0].CurrentBalance)
+}
+
+func TestFinanceInitializationRejectsUnknownAccountBeforeWritingUpstream(t *testing.T) {
+	upstreams := &financeInitializationUpstreamStub{items: []*Upstream{{ID: 5, Name: "upstream", BaseURL: "https://upstream.test", NormalizedBaseURL: "https://upstream.test"}}}
+	wallets := &financeInitializationWalletStub{byUpstream: map[int64][]UpstreamWallet{}}
+	funds := &financeInitializationFundStub{}
+	svc := NewFinanceInitializationService(&financeInitializationAccountStub{}, upstreams, wallets, funds, &financeInitializationProfileStub{items: map[int64]*AccountFinanceProfile{}})
+
+	_, err := svc.Apply(context.Background(), FinanceInitializationRequest{OperatorID: 99, Reason: "校验账号存在", Accounts: []FinanceInitializationAccountInput{{AccountID: 999, UpstreamCostMultiplier: "0.60"}}, Upstreams: []FinanceInitializationUpstreamInput{{UpstreamID: 5, CurrentBalance: 12}}})
+	require.ErrorIs(t, err, ErrFinanceInitializationInvalid)
+	require.Empty(t, wallets.created)
+	require.Empty(t, funds.calls)
 }
 
 func TestFinanceInitializationApplyCanRecordBalanceWithoutFundEvent(t *testing.T) {

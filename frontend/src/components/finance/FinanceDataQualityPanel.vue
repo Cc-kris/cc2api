@@ -3,7 +3,10 @@
     <div v-if="coverageRisk" class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200" data-testid="quality-risk">
       成本覆盖率低于 99%，当前只展示已覆盖范围毛利，不能作为全站净利润。
     </div>
-    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
+    <div v-if="excludedCount > 0" class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200" data-testid="excluded-history-risk">
+      有 {{ excludedCount }} 条历史或测试记录因缺少可验证分类被排除，未计入收入和利润。
+    </div>
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-7">
       <article v-for="item in metrics" :key="item.label" class="card p-4">
         <p class="text-sm text-gray-500">{{ item.label }}</p>
         <p class="mt-2 text-xl font-semibold tabular-nums" :class="item.tone">{{ item.value }}</p>
@@ -66,6 +69,7 @@ const resolvingUserID = ref<number | null>(null)
 const promotionError = ref('')
 const promotionDrafts = reactive<Record<number, { amount: string | number; note: string }>>({})
 const issues = computed(() => props.data.items || [])
+const excludedCount = computed(() => props.data.quality.excluded_count ?? 0)
 const coverageRisk = computed(() => {
   const rate = financeNumber(props.data.quality.cost_coverage_rate)
   return rate === null || rate < 0.99
@@ -76,6 +80,7 @@ const metrics = computed(() => [
   { label: '估算成本记录', value: String(props.data.quality.estimated_count), tone: 'text-amber-800 dark:text-amber-300', hint: '单独披露，不混入确认值' },
   { label: '缺少成本信息', value: String((props.data.quality.missing_profile_count ?? 0) + props.data.quality.missing_price_count + props.data.quality.missing_multiplier_count + props.data.quality.missing_usage_count + (props.data.quality.unsupported_usage_count ?? 0)), tone: 'text-red-600 dark:text-red-400', hint: '钱包、价格、倍率、用量或计费支持缺失' },
   { label: '未定价收入', value: formatFinanceMoney(props.data.quality.unpriced_revenue), tone: 'text-amber-800 dark:text-amber-300', hint: '利润暂时无法计算' },
+  { label: '历史未确认记录', value: String(excludedCount.value), tone: excludedCount.value > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-400', hint: '不计入收入和利润，可通过受控回填处理' },
   { label: '历史优惠待核对', value: String(promotionTotal.value), tone: promotionTotal.value > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-emerald-600 dark:text-emerald-400', hint: '确认后更正优惠余额并留审计' }
 ])
 const labels: Record<string, string> = { missing_profile: '缺少结算钱包', missing_price: '缺少上游价格', missing_multiplier: '缺少历史上游倍率', missing_usage: '缺少计费用量', unsupported_usage: '不支持的用量类型' }

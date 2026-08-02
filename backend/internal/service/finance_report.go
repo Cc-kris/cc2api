@@ -742,6 +742,7 @@ type FinanceTrendFact struct {
 	MissingMultiplier   int64
 	MissingUsage        int64
 	UnsupportedUsage    int64
+	ExcludedCount       int64
 }
 
 type FinanceTrendItem struct {
@@ -787,7 +788,7 @@ func (s *FinanceReportService) Trend(ctx context.Context, filter FinanceReportFi
 			ExactCount: fact.ExactCount, EstimatedCount: fact.EstimatedCount,
 			MissingProfileCount: fact.MissingProfile, MissingPriceCount: fact.MissingPrice,
 			MissingMultiplierCount: fact.MissingMultiplier, MissingUsageCount: fact.MissingUsage,
-			UnsupportedUsageCount: fact.UnsupportedUsage,
+			UnsupportedUsageCount: fact.UnsupportedUsage, ExcludedCount: fact.ExcludedCount,
 		}
 		item := FinanceTrendItem{
 			BucketStart: fact.BucketStart, BucketEnd: fact.BucketEnd, Revenue: financeMoney(fact.Revenue), CoveredRevenue: financeMoney(fact.CoveredRevenue),
@@ -1017,7 +1018,10 @@ func financeQualityFromSummary(summary *FinanceSummaryFacts) FinanceQuality {
 		coverage = decimal.NewFromInt(summary.ExactCount).Div(decimal.NewFromInt(eligible))
 	}
 	status := "complete"
-	if missing > 0 || summary.EstimatedCount > 0 {
+	// Excluded rows are intentionally not part of revenue or profit. They still
+	// make a period incomplete, otherwise a historical period containing only
+	// legacy/unverified rows would be reported as "complete" with zero profit.
+	if missing > 0 || summary.EstimatedCount > 0 || summary.ExcludedCount > 0 {
 		status = "partial"
 	}
 	return FinanceQuality{

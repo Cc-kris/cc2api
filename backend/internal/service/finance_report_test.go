@@ -180,7 +180,7 @@ func TestFinanceReportDataQualityIncludesDailyTrend(t *testing.T) {
 	start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	repo := &financeReportRepoStub{
 		summaries: []*FinanceSummaryFacts{{MissingPriceCount: 1}},
-		trend:     []FinanceTrendFact{{BucketStart: start, MissingPrice: 1, RequestCount: 1}},
+		trend:     []FinanceTrendFact{{BucketStart: start, MissingPrice: 1, ExcludedCount: 1, RequestCount: 1}},
 		issues:    []FinanceQualityIssueFact{{UsageLogID: 10, IssueType: "missing_price"}},
 	}
 	result, err := NewFinanceReportService(repo).DataQuality(context.Background(), FinanceReportFilter{
@@ -189,6 +189,7 @@ func TestFinanceReportDataQualityIncludesDailyTrend(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Trend, 1)
 	require.Equal(t, int64(1), result.Trend[0].Quality.MissingPriceCount)
+	require.Equal(t, int64(1), result.Trend[0].Quality.ExcludedCount)
 	require.Equal(t, "partial", result.Trend[0].Quality.Status)
 	require.Len(t, result.Items, 1)
 }
@@ -213,4 +214,10 @@ func TestFinanceReportCashFlowRejectsInvalidFilters(t *testing.T) {
 	require.EqualError(t, err, "event_type is invalid")
 	_, err = svc.CashFlow(context.Background(), FinanceReportFilter{}, FinanceCashFlowRequest{Currency: "US$"})
 	require.EqualError(t, err, "currency is invalid")
+}
+
+func TestFinanceQualityMarksExcludedHistoryAsPartial(t *testing.T) {
+	quality := financeQualityFromSummary(&FinanceSummaryFacts{ExcludedCount: 353130})
+	require.Equal(t, "partial", quality.Status)
+	require.Equal(t, "0.0000", quality.CostCoverageRate)
 }

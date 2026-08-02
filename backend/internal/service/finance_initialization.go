@@ -175,6 +175,7 @@ func (s *FinanceInitializationService) Apply(ctx context.Context, input FinanceI
 		return nil, fmt.Errorf("%w: reason must be 5 to 500 characters", ErrFinanceInitializationInvalid)
 	}
 	seenAccounts := map[int64]struct{}{}
+	multipliersByAccountID := make(map[int64]decimal.Decimal, len(input.Accounts))
 	seenUpstreams := map[int64]struct{}{}
 	for _, item := range input.Accounts {
 		if item.AccountID <= 0 {
@@ -183,9 +184,14 @@ func (s *FinanceInitializationService) Apply(ctx context.Context, input FinanceI
 		if _, exists := seenAccounts[item.AccountID]; exists {
 			return nil, fmt.Errorf("%w: duplicate account_id", ErrFinanceInitializationInvalid)
 		}
-		if _, err := decimal.NewFromString(strings.TrimSpace(item.UpstreamCostMultiplier)); err != nil {
+		multiplier, err := decimal.NewFromString(strings.TrimSpace(item.UpstreamCostMultiplier))
+		if err != nil {
 			return nil, fmt.Errorf("%w: upstream_cost_multiplier must be a decimal", ErrFinanceInitializationInvalid)
 		}
+		if err := ValidateUpstreamCostMultiplier(multiplier); err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrFinanceInitializationInvalid, err)
+		}
+		multipliersByAccountID[item.AccountID] = multiplier
 		seenAccounts[item.AccountID] = struct{}{}
 	}
 	for _, item := range input.Upstreams {
@@ -196,6 +202,29 @@ func (s *FinanceInitializationService) Apply(ctx context.Context, input FinanceI
 			return nil, fmt.Errorf("%w: duplicate upstream_id", ErrFinanceInitializationInvalid)
 		}
 		seenUpstreams[item.UpstreamID] = struct{}{}
+	}
+	// Complete all account/profile reads before the first write. This turns
+	// invalid account IDs and unreadable existing finance profiles into a
+	// fail-fast validation error instead of leaving earlier wallets or balances
+	// partially initialized.
+	allAccounts, err := s.listAllAccounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	accountsByID := make(map[int64]Account, len(allAccounts))
+	for _, account := range allAccounts {
+		accountsByID[account.ID] = account
+	}
+	profilesByAccountID := make(map[int64]*AccountFinanceProfile, len(input.Accounts))
+	for _, item := range input.Accounts {
+		if _, exists := accountsByID[item.AccountID]; !exists {
+			return nil, fmt.Errorf("%w: account %d is unavailable", ErrFinanceInitializationInvalid, item.AccountID)
+		}
+		profile, profileErr := s.profiles.Get(ctx, item.AccountID)
+		if profileErr != nil && !errors.Is(profileErr, ErrAccountFinanceProfileNotFound) {
+			return nil, profileErr
+		}
+		profilesByAccountID[item.AccountID] = profile
 	}
 	// Resolve every upstream and its finance wallet before the first write.
 	// This prevents predictable lookup/wallet failures from leaving a batch
@@ -223,32 +252,7 @@ func (s *FinanceInitializationService) Apply(ctx context.Context, input FinanceI
 
 	result := &FinanceInitializationResult{}
 	operatorID := input.OperatorID
-	for _, item := range input.Accounts {
-		multiplier := decimal.RequireFromString(strings.TrimSpace(item.UpstreamCostMultiplier))
-		if err := ValidateUpstreamCostMultiplier(multiplier); err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrFinanceInitializationInvalid, err)
-		}
-		_, profileErr := s.profiles.Get(ctx, item.AccountID)
-		profileMissing := errors.Is(profileErr, ErrAccountFinanceProfileNotFound)
-		if profileErr != nil && !profileMissing {
-			return nil, profileErr
-		}
-		account, err := s.accounts.UpdateAccount(ctx, item.AccountID, &UpdateAccountInput{UpstreamCostMultiplier: &multiplier, UpstreamCostMultiplierChangeReason: "财务初始化：" + reason, OperatorID: &operatorID})
-		if err != nil {
-			return nil, err
-		}
-		// Updating the account multiplier already rolls the current finance
-		// profile forward atomically when one exists. Only create a contract
-		// profile for accounts that genuinely have no current profile; never
-		// replace an existing request-charge or cumulative profile here.
-		if profileMissing && account.CurrentFinanceProfileID == nil {
-			effectiveAt := s.now().UTC()
-			if _, err = s.profiles.Save(ctx, item.AccountID, AccountFinanceProfileInput{CostMode: FinanceCostModeContractMultiplier, EndpointSource: "account_base_url", EndpointBaseURLSnapshot: financeInitializationAccountEndpoint(account), CredentialSource: "", CounterScope: FinanceCounterScopeAccount, BalanceUnitSemantics: FinanceUnitNone, EffectiveFrom: effectiveAt, ExpectedVersion: 0, Reason: "财务初始化：" + reason, OperatorID: operatorID}); err != nil {
-				return nil, err
-			}
-		}
-		result.InitializedAccounts++
-	}
+	walletByUpstreamID := make(map[int64]*UpstreamWallet, len(input.Upstreams))
 	for _, item := range input.Upstreams {
 		upstream := upstreamPlans[item.UpstreamID]
 		var err error
@@ -259,6 +263,7 @@ func (s *FinanceInitializationService) Apply(ctx context.Context, input FinanceI
 		if created {
 			result.CreatedWallets++
 		}
+		walletByUpstreamID[upstream.ID] = wallet
 		currency := strings.ToUpper(strings.TrimSpace(wallet.Currency))
 		if currency == "" {
 			currency = "USD"
@@ -288,7 +293,86 @@ func (s *FinanceInitializationService) Apply(ctx context.Context, input FinanceI
 		}
 		result.InitializedUpstreams++
 	}
+	upstreamIDByURL := make(map[string]int64, len(upstreamPlans))
+	for upstreamID, upstream := range upstreamPlans {
+		if normalizedURL := strings.ToLower(strings.TrimSpace(upstream.NormalizedBaseURL)); normalizedURL != "" {
+			upstreamIDByURL[normalizedURL] = upstreamID
+		}
+	}
+	for _, item := range input.Accounts {
+		multiplier := multipliersByAccountID[item.AccountID]
+		account, err := s.accounts.UpdateAccount(ctx, item.AccountID, &UpdateAccountInput{UpstreamCostMultiplier: &multiplier, UpstreamCostMultiplierChangeReason: "财务初始化：" + reason, OperatorID: &operatorID})
+		if err != nil {
+			return nil, err
+		}
+		profile := profilesByAccountID[item.AccountID]
+		profileMissing := profile == nil
+		// Account multiplier updates may roll the profile forward. Re-read it
+		// after the update so the wallet-only version carries the current version
+		// and immutable multiplier evidence.
+		if !profileMissing {
+			profile, err = s.profiles.Get(ctx, item.AccountID)
+			if err != nil {
+				return nil, err
+			}
+		} else if account.CurrentFinanceProfileID != nil {
+			// Some account update implementations may materialize a profile while
+			// recording the multiplier. Preserve that profile instead of trying to
+			// insert a conflicting version at expected_version=0.
+			profile, err = s.profiles.Get(ctx, item.AccountID)
+			if err != nil {
+				return nil, err
+			}
+			profileMissing = profile == nil
+		}
+		var walletID *int64
+		if upstreamID, ok := upstreamIDByURL[financeInitializationAccountURL(account)]; ok {
+			if wallet := walletByUpstreamID[upstreamID]; wallet != nil {
+				value := wallet.ID
+				walletID = &value
+			}
+		}
+		effectiveAt := s.now().UTC()
+		if profileMissing {
+			if _, err = s.profiles.Save(ctx, item.AccountID, AccountFinanceProfileInput{WalletID: walletID, CostMode: FinanceCostModeContractMultiplier, EndpointSource: "account_base_url", EndpointBaseURLSnapshot: financeInitializationAccountEndpoint(account), CredentialSource: "", CounterScope: FinanceCounterScopeAccount, BalanceUnitSemantics: FinanceUnitNone, EffectiveFrom: effectiveAt, ExpectedVersion: 0, Reason: "财务初始化：" + reason, OperatorID: operatorID}); err != nil {
+				return nil, err
+			}
+		} else if profile.WalletID == nil && walletID != nil {
+			// A wallet association is financial evidence, not a pricing-mode
+			// change. Keep every existing mode and protocol intact while opening a
+			// new version for subsequent requests, so historic records remain
+			// immutable and new costs can be attributed to the recorded balance.
+			if _, err = s.profiles.Save(ctx, item.AccountID, financeInitializationProfileWithWallet(profile, walletID, account, effectiveAt, "财务初始化："+reason, operatorID)); err != nil {
+				return nil, err
+			}
+		}
+		result.InitializedAccounts++
+	}
 	return result, nil
+}
+
+func financeInitializationProfileWithWallet(profile *AccountFinanceProfile, walletID *int64, account *Account, effectiveAt time.Time, reason string, operatorID int64) AccountFinanceProfileInput {
+	endpoint := financeInitializationAccountEndpoint(account)
+	if profile != nil && strings.TrimSpace(profile.EndpointBaseURLSnapshot) != "" {
+		endpoint = profile.EndpointBaseURLSnapshot
+	}
+	return AccountFinanceProfileInput{
+		WalletID: walletID, ProtocolVersionID: cloneFinanceProfileInt64Pointer(profile.ProtocolVersionID), CostMode: profile.CostMode,
+		PricingGroup: cloneFinanceStringPointer(profile.PricingGroup), EndpointSource: profile.EndpointSource,
+		EndpointBaseURLSnapshot: endpoint, CredentialSource: profile.CredentialSource, CounterScope: profile.CounterScope,
+		CounterScopeKey: cloneFinanceStringPointer(profile.CounterScopeKey), BalanceUnitSemantics: profile.BalanceUnitSemantics,
+		RechargeOwnerType: cloneFinanceStringPointer(profile.RechargeOwnerType), RechargeOwnerID: cloneFinanceProfileInt64Pointer(profile.RechargeOwnerID),
+		ContractType: cloneFinanceStringPointer(profile.ContractType), ContractMultiplier: cloneFinanceDecimal(profile.ContractMultiplier),
+		EffectiveFrom: effectiveAt, ExpectedVersion: profile.Version, Reason: reason, OperatorID: operatorID,
+	}
+}
+
+func cloneFinanceStringPointer(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
 }
 
 func (s *FinanceInitializationService) listAllAccounts(ctx context.Context) ([]Account, error) {
@@ -336,8 +420,8 @@ func financeInitializationAccountURL(account *Account) string {
 	if account == nil {
 		return ""
 	}
-	if raw := strings.TrimSpace(account.GetCredential("base_url")); raw != "" {
-		return strings.ToLower(NormalizeUpstreamBaseURLForRepo(raw))
+	if raw := financeInitializationAccountBaseURL(account); raw != "" {
+		return financeInitializationNormalizeAccountBaseURL(account, raw)
 	}
 	switch strings.ToLower(strings.TrimSpace(account.Platform)) {
 	case "openai":
@@ -355,9 +439,34 @@ func financeInitializationAccountURL(account *Account) string {
 	return ""
 }
 
+func financeInitializationNormalizeAccountBaseURL(account *Account, raw string) string {
+	baseURL := strings.TrimRight(strings.ToLower(NormalizeUpstreamBaseURLForRepo(raw)), "/")
+	if account != nil && strings.EqualFold(strings.TrimSpace(account.Platform), PlatformAntigravity) && (account.Type == AccountTypeAPIKey || account.Type == "apikey") && baseURL != "" && !strings.HasSuffix(baseURL, "/antigravity") {
+		baseURL += "/antigravity"
+	}
+	return baseURL
+}
+
 func financeInitializationAccountEndpoint(account *Account) string {
 	if account == nil {
 		return ""
 	}
-	return strings.TrimSpace(account.GetCredential("base_url"))
+	return financeInitializationAccountBaseURL(account)
+}
+
+func financeInitializationAccountBaseURL(account *Account) string {
+	if account == nil {
+		return ""
+	}
+	if raw := strings.TrimSpace(account.GetCredential("base_url")); raw != "" {
+		return raw
+	}
+	if account.Extra != nil {
+		if enabled, ok := account.Extra["custom_base_url_enabled"].(bool); ok && enabled {
+			if raw := strings.TrimSpace(account.GetExtraString("custom_base_url")); raw != "" {
+				return raw
+			}
+		}
+	}
+	return ""
 }

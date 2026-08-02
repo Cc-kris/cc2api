@@ -7,6 +7,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -323,11 +325,37 @@ func effectiveGroupMultiplier(group *Group, rates map[int64]float64) (decimal.De
 }
 
 func (s *ModelSquareService) listSellableModels(ctx context.Context, userID int64, group *Group, accounts []*Account, multiplier decimal.Decimal) ([]ModelSquareModelItem, ModelCatalogSnapshot, error) {
-	snapshot, err := s.catalog.SnapshotForPlatform(group.Platform)
-	if err != nil {
-		return nil, snapshot, err
-	}
 	var channel *Channel
+	var err error
+	if s.channels != nil {
+		channel, err = s.channels.GetChannelForGroup(ctx, group.ID)
+		if err != nil {
+			return nil, ModelCatalogSnapshot{}, err
+		}
+	}
+	snapshot, catalogErr := s.catalog.SnapshotForPlatform(group.Platform)
+	usingCompleteChannelFallback := false
+	if catalogErr != nil {
+		// System catalog failure can be masked only when the channel itself has
+		// complete sell-side prices for every returned model. Incomplete channel
+		// prices require the system catalog as a pricing dependency and must keep
+		// the original failure visible to callers.
+		configuredModels := modelSquareCompleteChannelModels(channel, group.Platform)
+		if len(configuredModels) == 0 {
+			return nil, snapshot, catalogErr
+		}
+		slog.Warn("model_square.catalog_fallback_to_complete_channel_pricing",
+			"group_id", group.ID,
+			"platform", group.Platform,
+			"channel_id", channel.ID,
+			"error", catalogErr,
+		)
+		snapshot = ModelCatalogSnapshot{
+			Provider: "channel", Checksum: fmt.Sprintf("channel:%d:%d", channel.ID, channel.UpdatedAt.UnixNano()),
+			UpdatedAt: channel.UpdatedAt, Models: configuredModels,
+		}
+		usingCompleteChannelFallback = true
+	}
 	fastPolicy := DefaultOpenAIFastPolicySettings()
 	if s.settings != nil {
 		loadedPolicy, policyErr := s.settings.GetOpenAIFastPolicySettings(ctx)
@@ -335,12 +363,6 @@ func (s *ModelSquareService) listSellableModels(ctx context.Context, userID int6
 			fastPolicy = nil
 		} else {
 			fastPolicy = loadedPolicy
-		}
-	}
-	if s.channels != nil {
-		channel, err = s.channels.GetChannelForGroup(ctx, group.ID)
-		if err != nil {
-			return nil, snapshot, err
 		}
 	}
 	cacheKey, err := modelSquareCacheKey(userID, group, accounts, channel, multiplier, snapshot.Checksum, fastPolicy)
@@ -359,18 +381,8 @@ func (s *ModelSquareService) listSellableModels(ctx context.Context, userID int6
 		s.metrics.cacheMisses.Add(1)
 	}
 	candidates := append([]string(nil), snapshot.Models...)
-	if channel != nil && channel.IsActive() {
-		configuredModels := make([]string, 0)
-		for _, pricing := range channel.ModelPricing {
-			if !isPlatformPricingMatch(group.Platform, pricing.Platform) {
-				continue
-			}
-			for _, name := range pricing.Models {
-				if !strings.Contains(name, "*") {
-					configuredModels = append(configuredModels, name)
-				}
-			}
-		}
+	if !usingCompleteChannelFallback && channel != nil && channel.IsActive() {
+		configuredModels := modelSquareChannelModels(channel, group.Platform)
 		// A channel with an explicit model list defines this group's sellable
 		// catalog. If it has no explicit list, fall back to the synchronized
 		// system catalog. Pricing still falls back to system data for incomplete
@@ -390,16 +402,22 @@ func (s *ModelSquareService) listSellableModels(ctx context.Context, userID int6
 			continue
 		}
 		seen[key] = struct{}{}
-		if s.channels != nil && s.channels.IsModelRestricted(ctx, group.ID, name) {
-			continue
-		}
 		target := name
+		billingModelSource := BillingModelSourceRequested
 		if s.channels != nil {
 			mapping := s.channels.ResolveChannelMapping(ctx, group.ID, name)
 			if mapping.Mapped {
 				target = mapping.MappedModel
 			}
+			billingModelSource = mapping.BillingModelSource
+			if billingModel := billingModelForRestriction(billingModelSource, name, target); billingModel != "" && s.channels.IsModelRestricted(ctx, group.ID, billingModel) {
+				continue
+			}
 		}
+		// The gateway resolves the channel mapping before account selection, so
+		// model-square visibility must use the final provider model as well.
+		// Checking only the public key would advertise a model that cannot be
+		// selected when the account stores support for the mapped target.
 		if !modelRoutableForGroup(group, accounts, target) {
 			continue
 		}
@@ -438,6 +456,44 @@ func (s *ModelSquareService) listSellableModels(ctx context.Context, userID int6
 		s.cache.Set(cacheKey, modelSquareCacheValue{items: append([]ModelSquareModelItem(nil), items...), snapshot: snapshot}, modelSquareCacheTTL)
 	}
 	return items, snapshot, nil
+}
+
+func modelSquareChannelModels(channel *Channel, platform string) []string {
+	if channel == nil || !channel.IsActive() {
+		return nil
+	}
+	models := make([]string, 0)
+	for _, pricing := range channel.ModelPricing {
+		if !isPlatformPricingMatch(platform, pricing.Platform) {
+			continue
+		}
+		for _, name := range pricing.Models {
+			name = strings.TrimSpace(name)
+			if name != "" && !strings.Contains(name, "*") {
+				models = append(models, name)
+			}
+		}
+	}
+	return models
+}
+
+func modelSquareCompleteChannelModels(channel *Channel, platform string) []string {
+	if channel == nil || !channel.IsActive() {
+		return nil
+	}
+	models := make([]string, 0)
+	for _, pricing := range channel.ModelPricing {
+		if !isPlatformPricingMatch(platform, pricing.Platform) || !IsCompleteChannelSalesPricing(pricing) {
+			continue
+		}
+		for _, name := range pricing.Models {
+			name = strings.TrimSpace(name)
+			if name != "" && !strings.Contains(name, "*") {
+				models = append(models, name)
+			}
+		}
+	}
+	return models
 }
 
 func modelSquareCacheKey(userID int64, group *Group, accounts []*Account, channel *Channel, multiplier decimal.Decimal, catalogChecksum string, fastPolicy *OpenAIFastPolicySettings) (string, error) {

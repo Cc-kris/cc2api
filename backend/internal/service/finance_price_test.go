@@ -92,6 +92,20 @@ func TestFinancePriceSelectorFallsBackToMultiplierForPlatformCredit(t *testing.T
 	require.Equal(t, "0.2200", selected.CostMultiplier.StringFixed(4))
 }
 
+func TestFinancePriceSelectorResolvesWalletForProfileWithoutWalletBinding(t *testing.T) {
+	multiplier := decimal.RequireFromString("0.22")
+	repo := &financePriceLookupStub{
+		profile:    &AccountFinanceProfile{ID: 4, AccountID: 10, CostMode: FinanceCostModeManual, AccountMultiplierSnapshot: &multiplier},
+		assignment: &FinanceWalletAssignment{WalletID: 8, UpstreamID: 9, Currency: "USD"},
+		system:     &FinancePriceQuote{VersionID: 31, Source: FinancePricingSourceSystem},
+	}
+	profileID := int64(4)
+	selected, err := NewFinancePriceSelector(repo).Select(context.Background(), 10, &profileID, "gpt-test", "token", "", time.Now())
+	require.NoError(t, err)
+	require.Equal(t, int64(8), selected.Wallet.WalletID)
+	require.Equal(t, int64(9), selected.Wallet.UpstreamID)
+}
+
 func TestParseFinanceDecimalRejectsNegativeAndKeepsExactText(t *testing.T) {
 	value, err := ParseFinanceDecimal("0.000000000123456789")
 	require.NoError(t, err)
@@ -104,6 +118,7 @@ type financePriceLookupStub struct {
 	profile        *AccountFinanceProfile
 	profiles       map[int64]*AccountFinanceProfile
 	wallet         *FinanceWalletAssignment
+	assignment     *FinanceWalletAssignment
 	upstream       *FinancePriceQuote
 	system         *FinancePriceQuote
 	lookupAt       time.Time
@@ -119,6 +134,10 @@ func (s *financePriceLookupStub) FindAccountFinanceProfileByID(_ context.Context
 
 func (s *financePriceLookupStub) FindWalletByID(_ context.Context, _ int64) (*FinanceWalletAssignment, error) {
 	return s.wallet, nil
+}
+
+func (s *financePriceLookupStub) FindWalletAssignmentAt(_ context.Context, _ int64, _ time.Time) (*FinanceWalletAssignment, error) {
+	return s.assignment, nil
 }
 
 func (s *financePriceLookupStub) FindUpstreamPriceAt(_ context.Context, _ int64, _, _, _ string, at time.Time) (*FinancePriceQuote, error) {

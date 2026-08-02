@@ -550,7 +550,12 @@ INSERT INTO upstream_balance_snapshots(wallet_id,dedupe_key,balance_kind,balance
 VALUES($1,$2,'wallet_cash',100,'USD','newapi',NOW(),'success')`, *target, "snapshot-"+suffix+fmt.Sprint(index))
 		require.NoError(t, err)
 	}
+	usageID := insertFinanceFixture(t, "estimated", "1", "4", time.Now().UTC().Add(-time.Hour))
+	_, err := integrationDB.ExecContext(ctx, `UPDATE usage_finance_records SET wallet_id=$2 WHERE usage_log_id=$1`, usageID, walletA)
+	require.NoError(t, err)
 	t.Cleanup(func() {
+		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM usage_finance_cost_segments WHERE usage_finance_record_id IN (SELECT id FROM usage_finance_records WHERE usage_log_id=$1)`, usageID)
+		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM usage_finance_records WHERE usage_log_id=$1`, usageID)
 		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM upstream_balance_snapshots WHERE wallet_id IN ($1,$2)`, walletA, walletB)
 		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM upstream_wallets WHERE id IN ($1,$2)`, walletA, walletB)
 		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM upstreams WHERE id=$1`, upstreamID)
@@ -577,6 +582,11 @@ VALUES($1,$2,'wallet_cash',100,'USD','newapi',NOW(),'success')`, *target, "snaps
 	}
 	require.Equal(t, 2, shared)
 	require.Equal(t, 1, included)
+	for _, item := range funds.WalletCash {
+		if item.WalletID == walletA {
+			require.Equal(t, "0", item.SevenDayCost.String())
+		}
+	}
 
 	summary, err := repo.SummarizeFinance(ctx, filter)
 	require.NoError(t, err)
