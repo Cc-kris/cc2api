@@ -137,6 +137,21 @@ func TestModelSquareRestrictionListDoesNotExpandFromUnrestrictedSibling(t *testi
 	require.Equal(t, "gpt-5.4", result.Items[0].Name)
 }
 
+func TestModelSquareExactRestrictionTakesPriorityOverWildcardMapping(t *testing.T) {
+	svc := newModelSquareServiceForTest()
+	accounts, ok := svc.accounts.(*modelSquareAccountRepoStub)
+	require.True(t, ok)
+	accounts.byGroup[10][0].Credentials = map[string]any{"model_mapping": map[string]any{
+		"*":       "provider-gpt-5.4",
+		"gpt-5.4": "provider-gpt-5.4",
+	}}
+
+	result, err := svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 10})
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	require.Equal(t, "gpt-5.4", result.Items[0].Name)
+}
+
 func TestModelSquareSignedCursorPaginationAndCatalogChange(t *testing.T) {
 	svc := newModelSquareServiceForTest()
 	first, err := svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 1})

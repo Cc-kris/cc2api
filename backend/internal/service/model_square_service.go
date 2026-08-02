@@ -540,10 +540,22 @@ func modelSquareAccountRestrictionConfigured(accounts []*Account) bool {
 }
 
 func modelSquareFilterByAccountRestrictions(models []string, accounts []*Account) []string {
+	exactRestrictionsConfigured := modelSquareExactRestrictionsConfigured(accounts)
 	filtered := make([]string, 0, len(models))
 	for _, model := range models {
 		for _, account := range accounts {
-			if account == nil || len(account.GetModelMapping()) == 0 {
+			if account == nil {
+				continue
+			}
+			mapping := account.GetModelMapping()
+			if len(mapping) == 0 {
+				continue
+			}
+			if exactRestrictionsConfigured {
+				if modelSquareAccountHasExactModel(mapping, model) {
+					filtered = append(filtered, model)
+					break
+				}
 				continue
 			}
 			if account.IsModelSupported(model) {
@@ -553,6 +565,32 @@ func modelSquareFilterByAccountRestrictions(models []string, accounts []*Account
 		}
 	}
 	return filtered
+}
+
+func modelSquareExactRestrictionsConfigured(accounts []*Account) bool {
+	for _, account := range accounts {
+		if account == nil {
+			continue
+		}
+		for model := range account.GetModelMapping() {
+			if model != "" && !strings.ContainsAny(model, "*?") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func modelSquareAccountHasExactModel(mapping map[string]string, model string) bool {
+	for configuredModel := range mapping {
+		if strings.ContainsAny(configuredModel, "*?") {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(configuredModel), strings.TrimSpace(model)) {
+			return true
+		}
+	}
+	return false
 }
 
 func modelSquareCacheKey(userID int64, group *Group, accounts []*Account, channel *Channel, multiplier decimal.Decimal, catalogChecksum string, fastPolicy *OpenAIFastPolicySettings) (string, error) {
