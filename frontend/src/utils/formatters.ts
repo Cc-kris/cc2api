@@ -16,3 +16,9 @@ export function formatMultiplier(val: number): string {
   if (val >= 0.0001) return val.toFixed(4)
   return val.toPrecision(2)
 }
+
+/** 模型广场倍率固定显示两位小数。 */
+export function formatFixedMultiplier(value: string | number): string {
+  const numeric = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(numeric) ? numeric.toFixed(2) : '0.00'
+}

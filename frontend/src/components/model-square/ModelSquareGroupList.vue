@@ -29,7 +29,7 @@
       >
         <div class="flex items-start justify-between gap-2">
           <span class="truncate text-sm font-medium">{{ group.name }}</span>
-          <span class="shrink-0 text-sm font-semibold">{{ group.effective_multiplier }}×</span>
+          <span class="shrink-0 text-sm font-semibold">{{ formatFixedMultiplier(group.effective_multiplier) }}×</span>
         </div>
         <div class="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-dark-300">
           <span>{{ group.platform }}</span>
@@ -40,7 +40,7 @@
           </span>
         </div>
         <div v-if="group.has_custom_multiplier" class="mt-1 text-xs text-gray-600 dark:text-dark-300">
-          {{ t('modelSquare.defaultMultiplier', { value: group.default_multiplier }) }}
+          {{ t('modelSquare.defaultMultiplier', { value: formatFixedMultiplier(group.default_multiplier) }) }}
         </div>
       </button>
     </div>
@@ -73,7 +73,7 @@
                 <span class="block font-medium text-gray-900 dark:text-white">{{ group.name }}</span>
                 <span class="text-xs text-gray-500">{{ group.platform }} · {{ t('modelSquare.modelCount', { count: group.model_count }) }}</span>
               </span>
-              <span class="font-semibold text-gray-900 dark:text-white">{{ group.effective_multiplier }}×</span>
+              <span class="font-semibold text-gray-900 dark:text-white">{{ formatFixedMultiplier(group.effective_multiplier) }}×</span>
             </button>
           </div>
         </section>
@@ -88,6 +88,7 @@ import { useI18n } from 'vue-i18n'
 import type { ModelSquareGroup } from '@/api/modelSquare'
 import Icon from '@/components/icons/Icon.vue'
 import SearchInput from '@/components/common/SearchInput.vue'
+import { formatFixedMultiplier } from '@/utils/formatters'
 
 const props = defineProps<{ groups: ModelSquareGroup[]; selectedId: number | null }>()
 const emit = defineEmits<{ select: [id: number] }>()

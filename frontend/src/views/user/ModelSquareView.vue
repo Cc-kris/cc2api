@@ -40,8 +40,8 @@
                 </div>
                 <p class="mt-1 text-xs text-gray-500">
                   {{ selectedGroup.has_custom_multiplier
-                    ? t('modelSquare.myMultiplier', { value: selectedGroup.effective_multiplier })
-                    : t('modelSquare.defaultMultiplier', { value: selectedGroup.effective_multiplier }) }}
+                    ? t('modelSquare.myMultiplier', { value: formatFixedMultiplier(selectedGroup.effective_multiplier) })
+                    : t('modelSquare.defaultMultiplier', { value: formatFixedMultiplier(selectedGroup.effective_multiplier) }) }}
                 </p>
               </div>
               <div class="relative w-full xl:w-80">
@@ -94,6 +94,7 @@ import ModelSquareTable from '@/components/model-square/ModelSquareTable.vue'
 import { useModelSquare } from '@/composables/useModelSquare'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorCode, extractApiErrorMessage } from '@/utils/apiError'
+import { formatFixedMultiplier } from '@/utils/formatters'
 
 const { t, locale } = useI18n()
 const route = useRoute()

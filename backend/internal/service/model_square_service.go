@@ -380,7 +380,14 @@ func (s *ModelSquareService) listSellableModels(ctx context.Context, userID int6
 		}
 		s.metrics.cacheMisses.Add(1)
 	}
+	accountRestrictionConfigured := modelSquareAccountRestrictionConfigured(accounts)
 	candidates := append([]string(nil), snapshot.Models...)
+	if accountRestrictionConfigured {
+		// Once any account in the group has an explicit model restriction list,
+		// that list is the customer-visible boundary. Do not let an unrestricted
+		// sibling account expand the model square back to the whole system catalog.
+		candidates = modelSquareFilterByAccountRestrictions(candidates, accounts)
+	}
 	// Account model mappings are the first source of customer-visible model
 	// names. Exact mapping keys can represent a restricted model that is not in
 	// the synchronized upstream catalog; wildcard keys are evaluated against
@@ -390,7 +397,11 @@ func (s *ModelSquareService) listSellableModels(ctx context.Context, userID int6
 		// The synchronized system catalog remains the primary model directory.
 		// Complete channel-priced models may extend it with site-specific models,
 		// but an explicit channel model list must never replace system models.
-		candidates = appendUniqueModelSquareNames(candidates, modelSquareCompleteChannelModels(channel, group.Platform))
+		channelModels := modelSquareCompleteChannelModels(channel, group.Platform)
+		if accountRestrictionConfigured {
+			channelModels = modelSquareFilterByAccountRestrictions(channelModels, accounts)
+		}
+		candidates = appendUniqueModelSquareNames(candidates, channelModels)
 	}
 	seen := make(map[string]struct{}, len(candidates))
 	items := make([]ModelSquareModelItem, 0, len(candidates))
@@ -517,6 +528,31 @@ func modelSquareAccountMappedModels(accounts []*Account) []string {
 		}
 	}
 	return models
+}
+
+func modelSquareAccountRestrictionConfigured(accounts []*Account) bool {
+	for _, account := range accounts {
+		if account != nil && len(account.GetModelMapping()) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func modelSquareFilterByAccountRestrictions(models []string, accounts []*Account) []string {
+	filtered := make([]string, 0, len(models))
+	for _, model := range models {
+		for _, account := range accounts {
+			if account == nil || len(account.GetModelMapping()) == 0 {
+				continue
+			}
+			if account.IsModelSupported(model) {
+				filtered = append(filtered, model)
+				break
+			}
+		}
+	}
+	return filtered
 }
 
 func modelSquareCacheKey(userID int64, group *Group, accounts []*Account, channel *Channel, multiplier decimal.Decimal, catalogChecksum string, fastPolicy *OpenAIFastPolicySettings) (string, error) {
