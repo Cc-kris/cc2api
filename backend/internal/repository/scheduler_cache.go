@@ -548,6 +548,7 @@ func filterSchedulerExtra(extra map[string]any) map[string]any {
 		"openai_ws_force_http",
 		"openai_responses_mode",
 		"openai_responses_supported",
+		service.OpenAIStructuredOutputModeExtraKey,
 		service.GrokMediaEligibleExtraKey,
 		"grok_billing_snapshot",
 		"grok_client_tool_cache_enabled",

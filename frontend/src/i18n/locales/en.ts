@@ -3527,6 +3527,11 @@ export default {
         responsesStatusAutoUnknown: 'Auto probe: unknown',
         responsesStatusForcedResponses: 'Forced Responses',
         responsesStatusForcedChatCompletions: 'Forced Chat Completions',
+        structuredOutputMode: 'JSON Schema strict output',
+        structuredOutputModeDesc:
+          'Native preserves strict semantics. SAG compatibility downgrades omitted or strict:true to strict:false and is only for upstreams that cannot process strict structured output.',
+        structuredOutputModeNative: 'Native',
+        structuredOutputModeForceNonStrict: 'SAG compatibility (non-strict)',
         codexCLIOnly: 'Codex official clients only',
         codexCLIOnlyDesc:
           'Only applies to OpenAI OAuth. When enabled, only Codex official client families are allowed; when disabled, the gateway bypasses this restriction and keeps existing behavior.',

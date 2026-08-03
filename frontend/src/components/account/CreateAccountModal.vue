@@ -2932,6 +2932,28 @@
         </div>
       </div>
 
+      <!-- OpenAI APIKey structured output compatibility mode -->
+      <div
+        v-if="form.platform === 'openai' && accountCategory === 'apikey'"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <label class="input-label mb-0">{{ t('admin.accounts.openai.structuredOutputMode') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.structuredOutputModeDesc') }}
+            </p>
+          </div>
+          <div class="w-56">
+            <Select
+              v-model="openAIStructuredOutputMode"
+              :options="openAIStructuredOutputModeOptions"
+              data-testid="openai-structured-output-mode-select"
+            />
+          </div>
+        </div>
+      </div>
+
       <div>
         <div class="flex items-center justify-between">
           <div>
@@ -3409,7 +3431,8 @@ import type {
   CreateAccountRequest,
   CodexSessionImportMessage,
   OpenAICompactMode,
-  OpenAIResponsesMode
+  OpenAIResponsesMode,
+  OpenAIStructuredOutputMode
 } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -3621,6 +3644,7 @@ const autoPauseOnExpired = ref(true)
 const openaiPassthroughEnabled = ref(false)
 const openAICompactMode = ref<OpenAICompactMode>('auto')
 const openAIResponsesMode = ref<OpenAIResponsesMode>('auto')
+const openAIStructuredOutputMode = ref<OpenAIStructuredOutputMode>('native')
 const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const codexCLIOnlyEnabled = ref(false)
@@ -3683,6 +3707,10 @@ const openAIResponsesModeOptions = computed(() => [
   { value: 'auto', label: t('admin.accounts.openai.responsesModeAuto') },
   { value: 'force_responses', label: t('admin.accounts.openai.responsesModeForceResponses') },
   { value: 'force_chat_completions', label: t('admin.accounts.openai.responsesModeForceChatCompletions') }
+])
+const openAIStructuredOutputModeOptions = computed(() => [
+  { value: 'native', label: t('admin.accounts.openai.structuredOutputModeNative') },
+  { value: 'force_non_strict', label: t('admin.accounts.openai.structuredOutputModeForceNonStrict') }
 ])
 
 function buildAntigravityExtra(): Record<string, unknown> | undefined {
@@ -4436,6 +4464,7 @@ const resetForm = () => {
   openaiPassthroughEnabled.value = false
   openAICompactMode.value = 'auto'
   openAIResponsesMode.value = 'auto'
+  openAIStructuredOutputMode.value = 'native'
   openaiOAuthResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   codexCLIOnlyEnabled.value = false
@@ -4529,6 +4558,11 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
     extra.openai_responses_mode = openAIResponsesMode.value
   } else {
     delete extra.openai_responses_mode
+  }
+  if (accountCategory.value === 'apikey' && openAIStructuredOutputMode.value !== 'native') {
+    extra.structured_output_mode = openAIStructuredOutputMode.value
+  } else {
+    delete extra.structured_output_mode
   }
 
   return Object.keys(extra).length > 0 ? extra : undefined

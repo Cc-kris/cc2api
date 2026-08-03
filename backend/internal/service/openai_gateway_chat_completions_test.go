@@ -13,6 +13,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
@@ -96,6 +97,217 @@ func TestNormalizeResponsesBodyServiceTier(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, tier)
 	require.False(t, gjson.GetBytes(body, "service_tier").Exists())
+}
+
+func TestGetOpenAIStructuredOutputMode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		account *Account
+		want    string
+	}{
+		{name: "nil account", want: OpenAIStructuredOutputModeNative},
+		{name: "missing extra", account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, want: OpenAIStructuredOutputModeNative},
+		{name: "force non strict", account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Extra: map[string]any{OpenAIStructuredOutputModeExtraKey: " force_non_strict "}}, want: OpenAIStructuredOutputModeForceNonStrict},
+		{name: "unknown mode", account: &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Extra: map[string]any{OpenAIStructuredOutputModeExtraKey: "unknown"}}, want: OpenAIStructuredOutputModeNative},
+		{name: "oauth ignores mode", account: &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Extra: map[string]any{OpenAIStructuredOutputModeExtraKey: OpenAIStructuredOutputModeForceNonStrict}}, want: OpenAIStructuredOutputModeNative},
+		{name: "other platform ignores mode", account: &Account{Platform: PlatformAnthropic, Type: AccountTypeAPIKey, Extra: map[string]any{OpenAIStructuredOutputModeExtraKey: OpenAIStructuredOutputModeForceNonStrict}}, want: OpenAIStructuredOutputModeNative},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, tt.account.GetOpenAIStructuredOutputMode())
+		})
+	}
+}
+
+func TestApplyOpenAIStructuredOutputCompatibility(t *testing.T) {
+	t.Parallel()
+
+	compatAccount := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+		Extra: map[string]any{
+			OpenAIStructuredOutputModeExtraKey: OpenAIStructuredOutputModeForceNonStrict,
+		},
+	}
+	nativeAccount := &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
+	recursiveSchema := `{"type":"object","properties":{"children":{"type":"array","items":{"$ref":"#/$defs/node"}}},"$defs":{"node":{"type":"object","properties":{"children":{"type":"array","items":{"$ref":"#/$defs/node"}}}}}}`
+
+	tests := []struct {
+		name          string
+		account       *Account
+		body          string
+		wantChanged   bool
+		wantRequested string
+		wantStrict    string
+		wantSchema    string
+	}{
+		{
+			name:       "native mode preserves true",
+			account:    nativeAccount,
+			body:       `{"response_format":{"type":"json_schema","json_schema":{"name":"answer","schema":{"type":"object"},"strict":true}}}`,
+			wantStrict: "true",
+		},
+		{
+			name:          "compat mode adds false when omitted",
+			account:       compatAccount,
+			body:          `{"response_format":{"type":"json_schema","json_schema":{"name":"answer","schema":{"type":"object"}}}}`,
+			wantChanged:   true,
+			wantRequested: "omitted",
+			wantStrict:    "false",
+		},
+		{
+			name:          "compat mode downgrades true and preserves recursive schema",
+			account:       compatAccount,
+			body:          `{"response_format":{"type":"json_schema","json_schema":{"name":"answer","schema":` + recursiveSchema + `,"strict":true}}}`,
+			wantChanged:   true,
+			wantRequested: "true",
+			wantStrict:    "false",
+			wantSchema:    recursiveSchema,
+		},
+		{
+			name:       "compat mode preserves explicit false",
+			account:    compatAccount,
+			body:       `{"response_format":{"type":"json_schema","json_schema":{"name":"answer","schema":{"type":"object"},"strict":false}}}`,
+			wantStrict: "false",
+		},
+		{
+			name:    "compat mode ignores json object",
+			account: compatAccount,
+			body:    `{"response_format":{"type":"json_object"}}`,
+		},
+		{
+			name:       "compat mode does not repair malformed strict",
+			account:    compatAccount,
+			body:       `{"response_format":{"type":"json_schema","json_schema":{"name":"answer","schema":{"type":"object"},"strict":"true"}}}`,
+			wantStrict: `"true"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			out, changed, requested, err := applyOpenAIStructuredOutputCompatibility([]byte(tt.body), tt.account)
+			require.NoError(t, err)
+			require.Equal(t, tt.wantChanged, changed)
+			require.Equal(t, tt.wantRequested, requested)
+			require.Equal(t, tt.wantStrict, gjson.GetBytes(out, "response_format.json_schema.strict").Raw)
+			if tt.wantSchema != "" {
+				require.JSONEq(t, tt.wantSchema, gjson.GetBytes(out, "response_format.json_schema.schema").Raw)
+			}
+		})
+	}
+}
+
+func TestForwardAsChatCompletions_ForceNonStrictStructuredOutput(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{
+		"model":"gpt-5.5",
+		"messages":[{"role":"user","content":"Extract the document"}],
+		"stream":false,
+		"response_format":{
+			"type":"json_schema",
+			"json_schema":{
+				"name":"structured_output",
+				"schema":{
+					"type":"object",
+					"properties":{"children":{"type":"array","items":{"$ref":"#/$defs/node"}}},
+					"$defs":{"node":{"type":"object","properties":{"children":{"type":"array","items":{"$ref":"#/$defs/node"}}}}}
+				},
+				"strict":true
+			}
+		}
+	}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"error":{"type":"invalid_request_error","message":"stop after capture"}}`)),
+	}}
+	svc := &OpenAIGatewayService{
+		httpUpstream: upstream,
+		cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
+	}
+	account := &Account{
+		ID:          73,
+		Name:        "sag-compatible-upstream",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Concurrency: 1,
+		Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://api.example.com"},
+		Extra: map[string]any{
+			OpenAIStructuredOutputModeExtraKey:       OpenAIStructuredOutputModeForceNonStrict,
+			openai_compat.ExtraKeyResponsesSupported: true,
+		},
+	}
+
+	result, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "")
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Equal(t, "false", gjson.GetBytes(upstream.lastBody, "text.format.strict").Raw)
+	require.Equal(t, "structured_output", gjson.GetBytes(upstream.lastBody, "text.format.name").String())
+	require.Equal(t, "#/$defs/node", gjson.GetBytes(upstream.lastBody, "text.format.schema.properties.children.items.$ref").String())
+	require.Equal(t, "#/$defs/node", gjson.GetBytes(upstream.lastBody, "text.format.schema.$defs.node.properties.children.items.$ref").String())
+}
+
+func TestForwardAsChatCompletions_ForceNonStrictStructuredOutputRawChat(t *testing.T) {
+	t.Parallel()
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{
+		"model":"gpt-5.5",
+		"messages":[{"role":"user","content":"Extract the document"}],
+		"stream":false,
+		"response_format":{
+			"type":"json_schema",
+			"json_schema":{
+				"name":"structured_output",
+				"schema":{"type":"object"},
+				"strict":true
+			}
+		}
+	}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"error":{"type":"invalid_request_error","message":"stop after capture"}}`)),
+	}}
+	svc := &OpenAIGatewayService{
+		httpUpstream: upstream,
+		cfg:          &config.Config{Security: config.SecurityConfig{URLAllowlist: config.URLAllowlistConfig{Enabled: false}}},
+	}
+	account := &Account{
+		ID:          73,
+		Name:        "sag-compatible-raw-upstream",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Concurrency: 1,
+		Credentials: map[string]any{"api_key": "sk-test", "base_url": "https://api.example.com"},
+		Extra: map[string]any{
+			OpenAIStructuredOutputModeExtraKey:  OpenAIStructuredOutputModeForceNonStrict,
+			openai_compat.ExtraKeyResponsesMode: string(openai_compat.ResponsesSupportModeForceChatCompletions),
+		},
+	}
+
+	result, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "")
+	require.Error(t, err)
+	require.Nil(t, result)
+	require.Equal(t, "json_schema", gjson.GetBytes(upstream.lastBody, "response_format.type").String())
+	require.Equal(t, "false", gjson.GetBytes(upstream.lastBody, "response_format.json_schema.strict").Raw)
 }
 
 func TestForwardAsChatCompletions_UnknownModelDoesNotUseDefaultMappedModel(t *testing.T) {

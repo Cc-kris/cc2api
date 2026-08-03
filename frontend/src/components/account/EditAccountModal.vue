@@ -1598,6 +1598,21 @@
         <div class="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:bg-dark-700 dark:text-gray-300">
           <span class="font-medium">{{ t(openAIResponsesStatusKey) }}</span>
         </div>
+        <div class="flex items-center justify-between gap-4 border-t border-gray-200 pt-3 dark:border-dark-600">
+          <div>
+            <label class="input-label mb-0">{{ t('admin.accounts.openai.structuredOutputMode') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.structuredOutputModeDesc') }}
+            </p>
+          </div>
+          <div class="w-56">
+            <Select
+              v-model="openAIStructuredOutputMode"
+              :options="openAIStructuredOutputModeOptions"
+              data-testid="openai-structured-output-mode-select"
+            />
+          </div>
+        </div>
       </div>
 
       <!-- Anthropic API Key 自动透传开关 -->
@@ -2384,7 +2399,7 @@ import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { adminAPI } from '@/api/admin'
 import { useQuotaNotifyState } from '@/composables/useQuotaNotifyState'
-import type { Account, Proxy, AdminGroup, CheckMixedChannelResponse, OpenAICompactMode, OpenAIResponsesMode } from '@/types'
+import type { Account, Proxy, AdminGroup, CheckMixedChannelResponse, OpenAICompactMode, OpenAIResponsesMode, OpenAIStructuredOutputMode } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
@@ -2561,6 +2576,7 @@ const customBaseUrl = ref('')
 const openaiPassthroughEnabled = ref(false)
 const openAICompactMode = ref<OpenAICompactMode>('auto')
 const openAIResponsesMode = ref<OpenAIResponsesMode>('auto')
+const openAIStructuredOutputMode = ref<OpenAIStructuredOutputMode>('native')
 const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const codexCLIOnlyEnabled = ref(false)
@@ -2625,12 +2641,18 @@ const openAIResponsesModeOptions = computed(() => [
   { value: 'force_responses', label: t('admin.accounts.openai.responsesModeForceResponses') },
   { value: 'force_chat_completions', label: t('admin.accounts.openai.responsesModeForceChatCompletions') }
 ])
+const openAIStructuredOutputModeOptions = computed(() => [
+  { value: 'native', label: t('admin.accounts.openai.structuredOutputModeNative') },
+  { value: 'force_non_strict', label: t('admin.accounts.openai.structuredOutputModeForceNonStrict') }
+])
 const normalizeOpenAIResponsesMode = (mode: unknown): OpenAIResponsesMode => {
   if (mode === 'force_responses' || mode === 'force_chat_completions') {
     return mode
   }
   return 'auto'
 }
+const normalizeOpenAIStructuredOutputMode = (mode: unknown): OpenAIStructuredOutputMode =>
+  mode === 'force_non_strict' ? 'force_non_strict' : 'native'
 const isOpenAIModelRestrictionDisabled = computed(() =>
   props.account?.platform === 'openai' && openaiPassthroughEnabled.value
 )
@@ -2865,6 +2887,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   openaiPassthroughEnabled.value = false
   openAICompactMode.value = 'auto'
   openAIResponsesMode.value = 'auto'
+  openAIStructuredOutputMode.value = 'native'
   openAICompactModelMappings.value = []
   openaiOAuthResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
@@ -2877,6 +2900,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     openAICompactMode.value = (extra?.openai_compact_mode as OpenAICompactMode) || 'auto'
     if (newAccount.type === 'apikey') {
       openAIResponsesMode.value = normalizeOpenAIResponsesMode(extra?.openai_responses_mode)
+      openAIStructuredOutputMode.value = normalizeOpenAIStructuredOutputMode(extra?.structured_output_mode)
     }
     openaiOAuthResponsesWebSocketV2Mode.value = resolveOpenAIWSModeFromExtra(extra, {
       modeKey: 'openai_oauth_responses_websockets_v2_mode',
@@ -4125,6 +4149,11 @@ const handleSubmit = async () => {
           delete newExtra.openai_responses_mode
         } else {
           newExtra.openai_responses_mode = openAIResponsesMode.value
+        }
+        if (openAIStructuredOutputMode.value === 'native') {
+          delete newExtra.structured_output_mode
+        } else {
+          newExtra.structured_output_mode = openAIStructuredOutputMode.value
         }
       }
 

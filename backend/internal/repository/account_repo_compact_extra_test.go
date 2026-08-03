@@ -23,3 +23,13 @@ func TestShouldEnqueueSchedulerOutboxForExtraUpdates_OpenAIResponsesCapabilityKe
 		t.Fatalf("expected responses capability updates to enqueue scheduler outbox")
 	}
 }
+
+func TestShouldEnqueueSchedulerOutboxForExtraUpdates_StructuredOutputModeIsRelevant(t *testing.T) {
+	updates := map[string]any{
+		"structured_output_mode": "force_non_strict",
+	}
+
+	if !shouldEnqueueSchedulerOutboxForExtraUpdates(updates) {
+		t.Fatalf("expected structured output mode updates to enqueue scheduler outbox")
+	}
+}

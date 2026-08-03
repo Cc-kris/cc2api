@@ -39,6 +39,37 @@ var cursorResponsesUnsupportedFields = []string{
 	"stream_options",
 }
 
+// applyOpenAIStructuredOutputCompatibility applies an explicit account-level
+// compatibility downgrade for OpenAI-compatible upstreams that cannot handle
+// strict JSON Schema output. Native mode leaves the request untouched.
+//
+// The downgrade is intentionally limited to response_format.type=json_schema:
+// json_object and unrelated request fields must retain their original meaning.
+func applyOpenAIStructuredOutputCompatibility(body []byte, account *Account) ([]byte, bool, string, error) {
+	if account == nil || account.GetOpenAIStructuredOutputMode() != OpenAIStructuredOutputModeForceNonStrict {
+		return body, false, "", nil
+	}
+	if gjson.GetBytes(body, "response_format.type").String() != "json_schema" ||
+		!gjson.GetBytes(body, "response_format.json_schema").IsObject() {
+		return body, false, "", nil
+	}
+
+	strict := gjson.GetBytes(body, "response_format.json_schema.strict")
+	if strict.Exists() && strict.Type != gjson.True {
+		return body, false, "", nil
+	}
+	requestedStrict := "omitted"
+	if strict.Exists() {
+		requestedStrict = strict.Raw
+	}
+
+	updated, err := sjson.SetBytes(body, "response_format.json_schema.strict", false)
+	if err != nil {
+		return body, false, requestedStrict, fmt.Errorf("set response_format.json_schema.strict=false: %w", err)
+	}
+	return updated, true, requestedStrict, nil
+}
+
 // ForwardAsChatCompletions accepts a Chat Completions request body, converts it
 // to OpenAI Responses API format, forwards to the OpenAI upstream, and converts
 // the response back to Chat Completions format.
@@ -73,6 +104,21 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 			}
 		}
 		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
+	}
+
+	compatBody, downgraded, requestedStrict, compatErr := applyOpenAIStructuredOutputCompatibility(body, account)
+	if compatErr != nil {
+		return nil, compatErr
+	}
+	if downgraded {
+		body = compatBody
+		logger.L().Info("openai_chat_completions.structured_output_downgraded",
+			zap.Int64("account_id", account.ID),
+			zap.String("account_name", account.Name),
+			zap.String("requested_strict", requestedStrict),
+			zap.String("effective_strict", "false"),
+			zap.String("reason", "upstream_compatibility_mode"),
+		)
 	}
 
 	// 入口分流：APIKey 账号 + 强制或已探测确认上游不支持 Responses，走 CC 直转。

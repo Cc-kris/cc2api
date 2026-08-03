@@ -3687,6 +3687,11 @@ export default {
         responsesStatusAutoUnknown: '自动探测：未探测',
         responsesStatusForcedResponses: '已强制 Responses',
         responsesStatusForcedChatCompletions: '已强制 Chat Completions',
+        structuredOutputMode: 'JSON Schema 严格输出',
+        structuredOutputModeDesc:
+          '原样转发保留 strict 语义；SAG 兼容模式会将缺省或 strict:true 降级为 strict:false，仅用于不兼容严格结构化输出的上游。',
+        structuredOutputModeNative: '原样转发',
+        structuredOutputModeForceNonStrict: 'SAG 兼容（强制非严格）',
         codexCLIOnly: '仅允许 Codex 官方客户端',
         codexCLIOnlyDesc: '仅对 OpenAI OAuth 生效。开启后仅允许 Codex 官方客户端家族访问；关闭后完全绕过并保持原逻辑。',
         compactMode: 'Compact 模式',

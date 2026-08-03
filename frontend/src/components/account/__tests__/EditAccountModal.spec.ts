@@ -264,6 +264,21 @@ describe('EditAccountModal', () => {
     })
   })
 
+  it('submits the OpenAI structured output compatibility mode', async () => {
+    const account = buildAccount()
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    await wrapper.get('[data-testid="openai-structured-output-mode-select"]').setValue('force_non_strict')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.structured_output_mode).toBe('force_non_strict')
+  })
+
   it('removes deprecated account-level Codex image generation bridge overrides', async () => {
     const account = buildAccount()
     account.extra = {

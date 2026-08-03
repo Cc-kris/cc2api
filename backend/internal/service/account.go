@@ -1064,6 +1064,32 @@ func (a *Account) GetOpenAIBaseURL() string {
 	return "https://api.openai.com"
 }
 
+// OpenAIStructuredOutputMode controls compatibility handling for JSON Schema
+// response formats on OpenAI-compatible API-key upstreams.
+const (
+	OpenAIStructuredOutputModeExtraKey       = "structured_output_mode"
+	OpenAIStructuredOutputModeNative         = "native"
+	OpenAIStructuredOutputModeForceNonStrict = "force_non_strict"
+)
+
+// GetOpenAIStructuredOutputMode returns the account-scoped structured-output
+// compatibility mode. Missing or invalid values preserve native behavior.
+func (a *Account) GetOpenAIStructuredOutputMode() string {
+	if a == nil || !a.IsOpenAIApiKey() || a.Extra == nil {
+		return OpenAIStructuredOutputModeNative
+	}
+	mode, ok := a.Extra[OpenAIStructuredOutputModeExtraKey].(string)
+	if !ok {
+		return OpenAIStructuredOutputModeNative
+	}
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case OpenAIStructuredOutputModeForceNonStrict:
+		return OpenAIStructuredOutputModeForceNonStrict
+	default:
+		return OpenAIStructuredOutputModeNative
+	}
+}
+
 func (a *Account) GetOpenAIAccessToken() string {
 	if !a.IsOpenAI() {
 		return ""
