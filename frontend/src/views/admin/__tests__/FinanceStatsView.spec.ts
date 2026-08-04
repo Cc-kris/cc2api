@@ -9,19 +9,9 @@ const api = vi.hoisted(() => ({
   getBreakdown: vi.fn(),
   getLosses: vi.fn(),
   getFunds: vi.fn(),
-  getDataQuality: vi.fn(),
-  getAlerts: vi.fn(),
-  updateAlert: vi.fn(),
   createExport: vi.fn(),
   getExport: vi.fn(),
   downloadExport: vi.fn(),
-  getReconciliations: vi.fn(),
-  getPromotionCreditReconciliations: vi.fn(),
-  resolvePromotionCreditReconciliation: vi.fn(),
-  getSettlements: vi.fn(),
-  getSettlement: vi.fn(),
-  retrySettlement: vi.fn(),
-  reallocateSettlement: vi.fn(),
 }));
 
 vi.mock("@/api/admin", () => ({ adminAPI: { finance: api } }));
@@ -185,56 +175,17 @@ const funds = {
       sync_status: "success",
     },
   ],
+  customer_balance: "42",
   customer_cash: {
     payment: "100",
     refund: "10",
     payment_fees: "2",
     net_cash: "88",
   },
-  upstream_cash: { topup: "60", refund: "5", adjustment: "0", net_cash: "-55" },
+  upstream_cash: { topup: "60", topup_available: true, topup_event_count: 1, net_cash_available: true, event_count: 1, refund: "5", adjustment: "0", net_cash: "-55" },
   stale_wallet_count: 0,
   failed_sync_count: 0,
 };
-const dataQuality = {
-  quality,
-  trend: [],
-  items: [
-    {
-      usage_log_id: 88,
-      issue_type: "missing_multiplier",
-      related_type: "account",
-      related_id: 4,
-      exposed_revenue: "12.50",
-      first_detected_at: "2026-07-26T08:00:00Z",
-      last_scanned_at: "2026-07-27T08:00:00Z",
-      recalculable: true,
-    },
-  ],
-  total: 1,
-  page: 1,
-  page_size: 100,
-};
-const alerts = [
-  {
-    id: 9,
-    alert_type: "loss",
-    severity: "critical",
-    title: "持续亏损",
-    description: "账号连续出现负毛利",
-    dimension_type: "account",
-    dimension_id: 4,
-    impact_amount: "5",
-    request_count: 2,
-    occurrence_count: 2,
-    status: "open",
-    first_occurred_at: "2026-07-26T08:00:00Z",
-    last_occurred_at: "2026-07-27T08:00:00Z",
-    assignee_id: null,
-    handled_by: null,
-    handled_at: null,
-  },
-];
-
 function resolvedDefaults() {
   api.getOverview.mockResolvedValue(overview);
   api.getTrend.mockResolvedValue(trend);
@@ -251,15 +202,6 @@ function resolvedDefaults() {
     page_size: 100,
   });
   api.getFunds.mockResolvedValue(funds);
-  api.getDataQuality.mockResolvedValue(dataQuality);
-  api.getPromotionCreditReconciliations.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100 });
-  api.getAlerts.mockResolvedValue({
-    items: alerts,
-    total: 1,
-    page: 1,
-    page_size: 100,
-  });
-  api.updateAlert.mockResolvedValue({ ...alerts[0], status: "acknowledged" });
   api.createExport.mockResolvedValue({
     id: 77,
     type: "finance_export",
@@ -281,12 +223,6 @@ function resolvedDefaults() {
   });
   api.getExport.mockResolvedValue({});
   api.downloadExport.mockResolvedValue(new Blob(["csv"]));
-  api.getReconciliations.mockResolvedValue({
-    items: [],
-    total: 0,
-    page: 1,
-    page_size: 100,
-  });
 }
 
 function mountPage() {
@@ -294,6 +230,10 @@ function mountPage() {
     global: {
       stubs: {
         AppLayout: { template: "<div><slot /></div>" },
+        UpstreamManagementView: {
+          emits: ["changed"],
+          template: '<div data-testid="upstream-management">上游财务资料<button data-testid="upstream-finance-changed" @click="$emit(\'changed\')">保存财务资料</button></div>',
+        },
         Pagination: {
           props: ["page", "pageSize", "total"],
           emits: ["update:page", "update:pageSize"],
@@ -315,18 +255,17 @@ describe("FinanceStatsView", () => {
     const wrapper = mountPage();
     await flushPromises();
 
-    expect(wrapper.text()).toContain("经营总览");
-    expect(wrapper.text()).toContain("利润分析");
-    expect(wrapper.text()).toContain("亏损追踪");
-    expect(wrapper.text()).toContain("资金余额");
-    expect(wrapper.text()).toContain("数据质量");
-    expect(wrapper.text()).toContain("财务预警");
+    expect(wrapper.text()).toContain("看懂经营");
+    expect(wrapper.text()).toContain("收入和亏损");
+    expect(wrapper.text()).toContain("上游与资金");
+    expect(wrapper.text()).not.toContain("需要处理");
+    expect(wrapper.text()).not.toContain("财务初始化");
     expect(
       wrapper.get('[data-testid="finance-coverage-risk"]').text(),
     ).toContain("不能代表全站净利润");
     expect(wrapper.text()).toContain("无法计算");
-    expect(wrapper.text()).toContain("历史累计账面毛利（含充值赠送）");
-    expect(wrapper.text()).toContain("历史累计账面亏损");
+    expect(wrapper.text()).toContain("客户本期计费");
+    expect(wrapper.text()).toContain("钱在哪里");
     expect(wrapper.get('[data-testid="finance-line-chart"]').text()).toContain(
       "已确认毛利",
     );
@@ -339,10 +278,6 @@ describe("FinanceStatsView", () => {
     expect(base.timezone).toBeTruthy();
     expect(api.getTrend).toHaveBeenCalledWith(base);
     expect(api.getFunds).toHaveBeenCalledWith(base);
-    expect(api.getDataQuality).toHaveBeenCalledWith({
-      ...base,
-      data_scope: "all",
-    });
   });
 
   it("does not turn an overview API failure into zero-valued finance cards", async () => {
@@ -355,47 +290,44 @@ describe("FinanceStatsView", () => {
       false,
     );
     expect(wrapper.text()).not.toContain("$0.00");
+
+    await wrapper
+      .findAll("button")
+      .find((button) => button.text() === "上游与资金")!
+      .trigger("click");
+    expect(wrapper.text()).toContain("客户本期充值（收到）");
+    expect(wrapper.text()).toContain("现金钱包 A");
   });
 
-  it("renders loss, funds, quality and alerts as separate auditable sections", async () => {
+  it("renders loss details and the merged upstream finance source", async () => {
     const wrapper = mountPage();
     await flushPromises();
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text() === "亏损追踪")!
+      .find((button) => button.text() === "收入和亏损")!
       .trigger("click");
     expect(wrapper.text()).toContain("亏损客户");
     expect(wrapper.text()).toContain("上游账号 A");
     expect(wrapper.text()).toContain("负责人 #11");
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text() === "处理预警")!
-      .trigger("click");
-    expect(wrapper.text()).toContain("持续亏损");
+    expect(wrapper.text()).toContain("系统已记录该问题");
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text() === "资金余额")!
+      .find((button) => button.text() === "上游与资金")!
       .trigger("click");
     expect(wrapper.text()).toContain("现金钱包 A");
     expect(wrapper.text()).toContain("共享余额，不重复汇总");
     expect(wrapper.text()).toContain("已过期");
     expect(wrapper.text()).toContain("配额仅反映可用调用额度，不作为现金资产");
+    expect(wrapper.text()).toContain("上游财务资料");
 
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text() === "数据质量")!
-      .trigger("click");
-    expect(wrapper.text()).toContain("缺少历史上游倍率");
-    expect(wrapper.text()).toContain("98.00%");
-
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text() === "财务预警")!
-      .trigger("click");
-    expect(wrapper.text()).toContain("持续亏损");
-    expect(wrapper.text()).toContain("账号连续出现负毛利");
+    api.getOverview.mockClear();
+    api.getFunds.mockClear();
+    await wrapper.get('[data-testid="upstream-finance-changed"]').trigger("click");
+    await flushPromises();
+    expect(api.getOverview).toHaveBeenCalledTimes(1);
+    expect(api.getFunds).toHaveBeenCalledTimes(1);
   });
 
   it("reloads the profit analysis when its dimension changes", async () => {
@@ -405,7 +337,7 @@ describe("FinanceStatsView", () => {
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text() === "利润分析")!
+      .find((button) => button.text() === "收入和亏损")!
       .trigger("click");
 
     const options = wrapper
@@ -428,8 +360,8 @@ describe("FinanceStatsView", () => {
     await wrapper.get('[data-testid="finance-dimension"]').setValue("account");
     await flushPromises();
 
-    expect(api.getBreakdown).toHaveBeenCalledTimes(1);
-    expect(api.getBreakdown.mock.calls[0][0]).toMatchObject({
+    expect(api.getBreakdown).toHaveBeenCalledTimes(2);
+    expect(api.getBreakdown.mock.calls[1][0]).toMatchObject({
       dimension: "account",
       sort_by: "profit",
       sort_order: "asc",
@@ -448,7 +380,7 @@ describe("FinanceStatsView", () => {
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text() === "利润分析")!
+      .find((button) => button.text() === "收入和亏损")!
       .trigger("click");
     expect(wrapper.get('[data-testid="pagination-total"]').text()).toContain(
       "120",
@@ -481,7 +413,7 @@ describe("FinanceStatsView", () => {
     await flushPromises();
     await wrapper
       .findAll("button")
-      .find((button) => button.text() === "利润分析")!
+      .find((button) => button.text() === "收入和亏损")!
       .trigger("click");
 
     await wrapper.get('[data-testid="finance-export-create"]').trigger("click");
@@ -512,27 +444,12 @@ describe("FinanceStatsView", () => {
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:finance-export");
   });
 
-  it("updates an alert with a required handling note and refreshes counts", async () => {
+  it("does not expose one-time initialization or unactionable alert handling", async () => {
     const wrapper = mountPage();
     await flushPromises();
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text() === "财务预警")!
-      .trigger("click");
-    await wrapper
-      .get('input[placeholder="填写处理说明"]')
-      .setValue("已调整客户倍率");
-    await wrapper
-      .findAll("button")
-      .find((button) => button.text() === "保存处理")!
-      .trigger("click");
-    await flushPromises();
-
-    expect(api.updateAlert).toHaveBeenCalledWith(9, {
-      status: "open",
-      note: "已调整客户倍率",
-    });
-    expect(api.getOverview).toHaveBeenCalledTimes(2);
-    expect(api.getAlerts).toHaveBeenCalledTimes(2);
+    const labels = wrapper.findAll("button").map((button) => button.text());
+    expect(labels).not.toContain("需要处理");
+    expect(labels).not.toContain("财务设置");
+    expect(wrapper.text()).not.toContain("财务初始化");
   });
 });

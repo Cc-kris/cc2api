@@ -39,6 +39,7 @@ export interface UpstreamInput {
   balance_alert_enabled: boolean
   alert_balance?: number | null
   notes: string
+  current_balance?: number
 }
 
 export interface UpstreamStatsSummary {
@@ -118,8 +119,8 @@ export async function create(payload: UpstreamInput): Promise<Upstream> {
   return data
 }
 
-export async function update(id: number, payload: UpstreamInput): Promise<Upstream> {
-  const { data } = await apiClient.put<Upstream>(`/admin/upstreams/${id}`, payload)
+export async function update(id: number, payload: UpstreamInput, idempotencyKey?: string): Promise<Upstream> {
+  const { data } = await apiClient.put<Upstream>(`/admin/upstreams/${id}`, payload, idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined)
   return data
 }
 

@@ -6,10 +6,10 @@
       >
         <div>
           <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
-            财务管理
+            经营与财务
           </h1>
           <p class="mt-1 text-sm text-gray-500">
-            用历史计费快照核算收入、上游成本和利润，并持续追踪亏损与资金风险。
+            用最简单的方式看清客户收了多少钱、用了多少钱、上游花了多少钱，以及现在赚还是亏。
           </p>
         </div>
         <p v-if="overview" class="text-xs text-gray-500">
@@ -77,7 +77,7 @@
         <p class="font-semibold">当前财务数据不能代表全站净利润</p>
         <p class="mt-1">
           成本覆盖率低于
-          99%，报表只展示已覆盖范围毛利；未定价收入和缺失成本记录已单独列入风险。
+          99%，当前利润只能按已有成本估算。系统会自动标记缺失数据，不要求你逐条确认。
         </p>
       </div>
 
@@ -115,7 +115,20 @@
           正在加载经营总览...
         </div>
         <template v-else-if="overview"
-          ><FinanceSummaryCards :overview="overview" /><ProfitTrendChart
+          ><section class="card p-4" data-testid="finance-getting-started">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 class="text-sm font-semibold text-gray-900 dark:text-white">日常只需要看这里</h2>
+                <p class="mt-1 text-xs text-gray-500">上游余额、充值和采购价格统一放在“上游与资金”；经营结果会自动使用这些资料，不需要额外步骤。</p>
+              </div>
+              <button class="btn btn-secondary btn-sm" @click="activeTab = 'funds'">查看上游财务资料</button>
+            </div>
+            <ol class="mt-4 grid gap-3 text-sm md:grid-cols-3">
+              <li class="rounded-lg bg-gray-50 p-3 dark:bg-dark-800"><strong>1. 录入资金变化</strong><span class="mt-1 block text-xs text-gray-500">只有给上游充值、退款或调整时才记录一次。</span></li>
+              <li class="rounded-lg bg-gray-50 p-3 dark:bg-dark-800"><strong>2. 系统自动核算</strong><span class="mt-1 block text-xs text-gray-500">客户请求产生后，系统自动计算客户计费和上游成本。</span></li>
+              <li class="rounded-lg bg-gray-50 p-3 dark:bg-dark-800"><strong>3. 查看结果</strong><span class="mt-1 block text-xs text-gray-500">总览看整体，收入和亏损按客户、分组或账号追查。</span></li>
+            </ol>
+          </section><FinanceSummaryCards :overview="overview" :funds="funds" /><ProfitTrendChart
             :items="trend"
             :loading="loading.trend"
             :error="errors.trend"
@@ -125,40 +138,37 @@
         </div>
       </section>
 
-      <FinanceInitializationPanel v-else-if="activeTab === 'initialization'" @initialized="loadAll" />
+      <section v-else-if="activeTab === 'profit'" class="space-y-6">
+        <FinanceAnalysisTable
+          :items="breakdown"
+          :dimension="dimension"
+          :loading="loading.breakdown"
+          :error="errors.breakdown"
+          :page="breakdownPagination.page"
+          :page-size="breakdownPagination.page_size"
+          :total="breakdownPagination.total"
+          :exporting="exporting"
+          :export-job="exportJob"
+          :export-error="exportError"
+          @update:dimension="changeDimension"
+          @update:page="changeBreakdownPage"
+          @update:page-size="changeBreakdownPageSize"
+          @export="startFinanceExport"
+          @download="downloadFinanceExport"
+        />
+        <FinanceLossTable
+          :items="losses"
+          :loading="loading.losses"
+          :error="errors.losses"
+          :page="lossPagination.page"
+          :page-size="lossPagination.page_size"
+          :total="lossPagination.total"
+          @update:page="changeLossPage"
+          @update:page-size="changeLossPageSize"
+        />
+      </section>
 
-      <FinanceAnalysisTable
-        v-else-if="activeTab === 'profit'"
-        :items="breakdown"
-        :dimension="dimension"
-        :loading="loading.breakdown"
-        :error="errors.breakdown"
-        :page="breakdownPagination.page"
-        :page-size="breakdownPagination.page_size"
-        :total="breakdownPagination.total"
-        :exporting="exporting"
-        :export-job="exportJob"
-        :export-error="exportError"
-        @update:dimension="changeDimension"
-        @update:page="changeBreakdownPage"
-        @update:page-size="changeBreakdownPageSize"
-        @export="startFinanceExport"
-        @download="downloadFinanceExport"
-      />
-      <FinanceLossTable
-        v-else-if="activeTab === 'losses'"
-        :items="losses"
-        :loading="loading.losses"
-        :error="errors.losses"
-        :page="lossPagination.page"
-        :page-size="lossPagination.page_size"
-        :total="lossPagination.total"
-        @open-alert="openLossAlert"
-        @update:page="changeLossPage"
-        @update:page-size="changeLossPageSize"
-      />
-
-      <section v-else-if="activeTab === 'funds'">
+      <section v-else-if="activeTab === 'funds'" class="space-y-6">
         <div v-if="errors.funds" class="card p-6 text-sm text-red-600">
           {{ errors.funds }}
         </div>
@@ -172,73 +182,30 @@
         <div v-else class="card p-10 text-center text-sm text-gray-500">
           暂无资金余额数据
         </div>
+        <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
+          上游财务资料和报表已经合并在这里。余额、充值、采购价格或账号归属发生变化时再修改；没有变化就不用操作。
+        </div>
+        <UpstreamManagementView @changed="handleFinanceDataChanged" />
       </section>
 
-      <FinanceSettlementPanel v-else-if="activeTab === 'settlements'" />
-
-      <FinanceFXRatePanel v-else-if="activeTab === 'fx-rates'" />
-
-      <section v-else-if="activeTab === 'quality'">
-        <div v-if="errors.quality" class="card p-6 text-sm text-red-600">
-          {{ errors.quality }}
-        </div>
-        <div
-          v-else-if="loading.quality"
-          class="card p-10 text-center text-sm text-gray-500"
-        >
-          正在加载数据质量...
-        </div>
-        <div v-else-if="dataQuality" class="space-y-4">
-          <FinanceDataQualityPanel :data="dataQuality" /><FinanceBackfillPanel
-            :start-date="startDate"
-            :end-date="endDate"
-          />
-        </div>
-        <div v-else class="card p-10 text-center text-sm text-gray-500">
-          暂无数据质量结果
-        </div>
-      </section>
-
-      <div v-else class="space-y-4">
-        <FinanceAlertsPanel
-          :items="alerts"
-          :loading="loading.alerts"
-          :error="errors.alerts"
-          :updating-id="updatingAlertId"
-          :page="alertPagination.page"
-          :page-size="alertPagination.page_size"
-          :total="alertPagination.total"
-          @update="handleAlertUpdate"
-          @update:page="changeAlertPage"
-          @update:page-size="changeAlertPageSize"
-        /><FinanceReconciliationPanel />
-      </div>
     </div>
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import AppLayout from "@/components/layout/AppLayout.vue";
-import FinanceAlertsPanel from "@/components/finance/FinanceAlertsPanel.vue";
-import FinanceBackfillPanel from "@/components/finance/FinanceBackfillPanel.vue";
 import FinanceAnalysisTable from "@/components/finance/FinanceAnalysisTable.vue";
-import FinanceDataQualityPanel from "@/components/finance/FinanceDataQualityPanel.vue";
 import FinanceFundsPanel from "@/components/finance/FinanceFundsPanel.vue";
-import FinanceFXRatePanel from "@/components/finance/FinanceFXRatePanel.vue";
-import FinanceInitializationPanel from "@/components/finance/FinanceInitializationPanel.vue";
 import FinanceLossTable from "@/components/finance/FinanceLossTable.vue";
-import FinanceReconciliationPanel from "@/components/finance/FinanceReconciliationPanel.vue";
 import FinanceSummaryCards from "@/components/finance/FinanceSummaryCards.vue";
-import FinanceSettlementPanel from "@/components/finance/FinanceSettlementPanel.vue";
 import ProfitTrendChart from "@/components/finance/ProfitTrendChart.vue";
+import UpstreamManagementView from "@/views/admin/upstreams/UpstreamManagementView.vue";
 import { formatFinanceDate, financeNumber } from "@/components/finance/format";
 import { adminAPI } from "@/api/admin";
 import type {
-  FinanceAlert,
   FinanceBreakdownDimension,
   FinanceBreakdownItem,
-  FinanceDataQuality,
   FinanceFilterParams,
   FinanceExportJob,
   FinanceFunds,
@@ -254,30 +221,13 @@ type FinanceSection =
   | "trend"
   | "breakdown"
   | "losses"
-  | "funds"
-  | "quality"
-  | "alerts";
-type FinanceTab =
-  | "overview"
-  | "profit"
-  | "losses"
-  | "funds"
-  | "settlements"
-  | "fx-rates"
-  | "initialization"
-  | "quality"
-  | "alerts";
+  | "funds";
+type FinanceTab = "overview" | "profit" | "funds";
 
 const tabs: Array<{ key: FinanceTab; label: string }> = [
-  { key: "overview", label: "经营总览" },
-  { key: "initialization", label: "财务初始化" },
-  { key: "profit", label: "利润分析" },
-  { key: "losses", label: "亏损追踪" },
-  { key: "funds", label: "资金余额" },
-  { key: "settlements", label: "成本结算" },
-  { key: "fx-rates", label: "汇率管理" },
-  { key: "quality", label: "数据质量" },
-  { key: "alerts", label: "财务预警" },
+  { key: "overview", label: "看懂经营" },
+  { key: "profit", label: "收入和亏损" },
+  { key: "funds", label: "上游与资金" },
 ];
 
 function localDate(daysAgo = 0) {
@@ -295,22 +245,21 @@ const granularity = ref<FinanceGranularity>("day");
 const activeTab = ref<FinanceTab>("overview");
 const dimension = ref<FinanceBreakdownDimension>("user");
 const refreshing = ref(false);
-const updatingAlertId = ref<number | null>(null);
 const exporting = ref(false);
 const exportJob = ref<FinanceExportJob | null>(null);
 const exportError = ref("");
 let exportPollTimer: ReturnType<typeof setTimeout> | null = null;
+let refreshGeneration = 0;
+let breakdownRequestID = 0;
+let lossRequestID = 0;
 
 const overview = ref<FinanceOverview | null>(null);
 const trend = ref<FinanceTrendItem[]>([]);
 const breakdown = ref<FinanceBreakdownItem[]>([]);
 const losses = ref<FinanceLossItem[]>([]);
 const funds = ref<FinanceFunds | null>(null);
-const dataQuality = ref<FinanceDataQuality | null>(null);
-const alerts = ref<FinanceAlert[]>([]);
 const breakdownPagination = reactive({ page: 1, page_size: 50, total: 0 });
 const lossPagination = reactive({ page: 1, page_size: 50, total: 0 });
-const alertPagination = reactive({ page: 1, page_size: 50, total: 0 });
 
 const loading = reactive<Record<FinanceSection, boolean>>({
   overview: false,
@@ -318,8 +267,6 @@ const loading = reactive<Record<FinanceSection, boolean>>({
   breakdown: false,
   losses: false,
   funds: false,
-  quality: false,
-  alerts: false,
 });
 const errors = reactive<Record<FinanceSection, string>>({
   overview: "",
@@ -327,8 +274,6 @@ const errors = reactive<Record<FinanceSection, string>>({
   breakdown: "",
   losses: "",
   funds: "",
-  quality: "",
-  alerts: "",
 });
 const dateError = computed(() =>
   !startDate.value || !endDate.value
@@ -338,14 +283,11 @@ const dateError = computed(() =>
       : "",
 );
 const coverageRate = computed(() =>
-  financeNumber(
-    overview.value?.quality.cost_coverage_rate ??
-      dataQuality.value?.quality.cost_coverage_rate,
-  ),
+  financeNumber(overview.value?.quality.cost_coverage_rate),
 );
 const coverageRisk = computed(
   () =>
-    Boolean(overview.value || dataQuality.value) &&
+    Boolean(overview.value) &&
     (coverageRate.value === null || coverageRate.value < 0.99),
 );
 
@@ -359,27 +301,21 @@ function filters(): FinanceFilterParams {
   };
 }
 
-function setLoading(value: boolean) {
-  for (const section of Object.keys(loading) as FinanceSection[])
-    loading[section] = value;
-}
 function clearResults() {
   overview.value = null;
   trend.value = [];
   breakdown.value = [];
   losses.value = [];
   funds.value = null;
-  dataQuality.value = null;
-  alerts.value = [];
   breakdownPagination.page = 1;
   breakdownPagination.total = 0;
   lossPagination.page = 1;
   lossPagination.total = 0;
-  alertPagination.page = 1;
-  alertPagination.total = 0;
   resetFinanceExport();
   for (const section of Object.keys(errors) as FinanceSection[])
     errors[section] = "";
+  for (const section of Object.keys(loading) as FinanceSection[])
+    loading[section] = false;
 }
 
 function rejectMessage(reason: unknown, fallback: string) {
@@ -388,110 +324,57 @@ function rejectMessage(reason: unknown, fallback: string) {
 
 async function loadAll() {
   if (dateError.value) return;
+  const generation = ++refreshGeneration;
   refreshing.value = true;
   clearResults();
-  setLoading(true);
-  const params = filters();
-  const results = await Promise.allSettled([
-    adminAPI.finance.getOverview(params),
-    adminAPI.finance.getTrend(params),
-    adminAPI.finance.getBreakdown({
-      ...params,
-      dimension: dimension.value,
-      sort_by: "profit",
-      sort_order: "asc",
-      page: breakdownPagination.page,
-      page_size: breakdownPagination.page_size,
-    }),
-    adminAPI.finance.getLosses({
-      ...params,
-      sort_by: "profit",
-      sort_order: "asc",
-      page: lossPagination.page,
-      page_size: lossPagination.page_size,
-    }),
-    adminAPI.finance.getFunds(params),
-    adminAPI.finance.getDataQuality({ ...params, data_scope: "all" }),
-    adminAPI.finance.getAlerts({
-      ...params,
-      page: alertPagination.page,
-      page_size: alertPagination.page_size,
-    }),
-  ]);
-  const sections: FinanceSection[] = [
-    "overview",
-    "trend",
-    "breakdown",
-    "losses",
-    "funds",
-    "quality",
-    "alerts",
-  ];
-  const fallbacks = [
-    "经营总览加载失败",
-    "利润趋势加载失败",
-    "利润分析加载失败",
-    "亏损记录加载失败",
-    "资金余额加载失败",
-    "数据质量加载失败",
-    "财务预警加载失败",
-  ];
-  results.forEach((result, index) => {
-    const section = sections[index];
-    loading[section] = false;
-    if (result.status === "rejected") {
-      errors[section] = rejectMessage(result.reason, fallbacks[index]);
-      return;
+  // 资金数据独立加载：经营总览超时时，上游余额和充值记录仍然可用。
+  void loadFunds(generation);
+  loading.overview = true;
+  try {
+    const result = await adminAPI.finance.getOverview(filters());
+    if (generation === refreshGeneration) overview.value = result;
+  } catch (error) {
+    if (generation === refreshGeneration) errors.overview = rejectMessage(error, "经营总览加载失败");
+  } finally {
+    if (generation === refreshGeneration) {
+      loading.overview = false;
+      refreshing.value = false;
     }
-    if (section === "overview")
-      overview.value = result.value as FinanceOverview;
-    else if (section === "trend")
-      trend.value = result.value as FinanceTrendItem[];
-    else if (section === "breakdown") {
-      const response = result.value as {
-        items: FinanceBreakdownItem[] | null;
-        total: number;
-        page: number;
-        page_size: number;
-      };
-      breakdown.value = response.items || [];
-      Object.assign(breakdownPagination, {
-        total: response.total,
-        page: response.page,
-        page_size: response.page_size,
-      });
-    } else if (section === "losses") {
-      const response = result.value as {
-        items: FinanceLossItem[] | null;
-        total: number;
-        page: number;
-        page_size: number;
-      };
-      losses.value = response.items || [];
-      Object.assign(lossPagination, {
-        total: response.total,
-        page: response.page,
-        page_size: response.page_size,
-      });
-    } else if (section === "funds") funds.value = result.value as FinanceFunds;
-    else if (section === "quality")
-      dataQuality.value = result.value as FinanceDataQuality;
-    else {
-      const response = result.value as {
-        items: FinanceAlert[] | null;
-        total: number;
-        page: number;
-        page_size: number;
-      };
-      alerts.value = response.items || [];
-      Object.assign(alertPagination, {
-        total: response.total,
-        page: response.page,
-        page_size: response.page_size,
-      });
-    }
-  });
-  refreshing.value = false;
+  }
+  if (generation !== refreshGeneration || !overview.value) return;
+  // Trend and cash are useful on the first screen, but must not block the
+  // conclusion. The expensive drill-down reports load when their tab opens.
+  void loadTrend(generation);
+  if (activeTab.value === "profit") {
+    void loadBreakdown(generation);
+    void loadLosses(generation);
+  }
+}
+
+async function loadTrend(generation = refreshGeneration) {
+  loading.trend = true;
+  errors.trend = "";
+  try {
+    const result = await adminAPI.finance.getTrend(filters());
+    if (generation === refreshGeneration) trend.value = result;
+  } catch (error) {
+    if (generation === refreshGeneration) errors.trend = rejectMessage(error, "利润趋势加载失败");
+  } finally {
+    if (generation === refreshGeneration) loading.trend = false;
+  }
+}
+
+async function loadFunds(generation = refreshGeneration) {
+  loading.funds = true;
+  errors.funds = "";
+  try {
+    const result = await adminAPI.finance.getFunds(filters());
+    if (generation === refreshGeneration) funds.value = result;
+  } catch (error) {
+    if (generation === refreshGeneration) errors.funds = rejectMessage(error, "资金余额加载失败");
+  } finally {
+    if (generation === refreshGeneration) loading.funds = false;
+  }
 }
 
 async function changeDimension(value: string) {
@@ -501,7 +384,8 @@ async function changeDimension(value: string) {
   await loadBreakdown();
 }
 
-async function loadBreakdown() {
+async function loadBreakdown(generation = refreshGeneration) {
+  const requestID = ++breakdownRequestID;
   loading.breakdown = true;
   errors.breakdown = "";
   breakdown.value = [];
@@ -514,20 +398,19 @@ async function loadBreakdown() {
       page: breakdownPagination.page,
       page_size: breakdownPagination.page_size,
     });
-    breakdown.value = result.items || [];
-    Object.assign(breakdownPagination, {
-      total: result.total,
-      page: result.page,
-      page_size: result.page_size,
-    });
+    if (generation === refreshGeneration && requestID === breakdownRequestID) {
+      breakdown.value = result.items || [];
+      Object.assign(breakdownPagination, { total: result.total, page: result.page, page_size: result.page_size });
+    }
   } catch (error) {
-    errors.breakdown = rejectMessage(error, "利润分析加载失败");
+    if (generation === refreshGeneration && requestID === breakdownRequestID) errors.breakdown = rejectMessage(error, "利润分析加载失败");
   } finally {
-    loading.breakdown = false;
+    if (generation === refreshGeneration && requestID === breakdownRequestID) loading.breakdown = false;
   }
 }
 
-async function loadLosses() {
+async function loadLosses(generation = refreshGeneration) {
+  const requestID = ++lossRequestID;
   loading.losses = true;
   errors.losses = "";
   losses.value = [];
@@ -539,41 +422,23 @@ async function loadLosses() {
       page: lossPagination.page,
       page_size: lossPagination.page_size,
     });
-    losses.value = result.items || [];
-    Object.assign(lossPagination, {
-      total: result.total,
-      page: result.page,
-      page_size: result.page_size,
-    });
+    if (generation === refreshGeneration && requestID === lossRequestID) {
+      losses.value = result.items || [];
+      Object.assign(lossPagination, { total: result.total, page: result.page, page_size: result.page_size });
+    }
   } catch (error) {
-    errors.losses = rejectMessage(error, "亏损记录加载失败");
+    if (generation === refreshGeneration && requestID === lossRequestID) errors.losses = rejectMessage(error, "亏损记录加载失败");
   } finally {
-    loading.losses = false;
+    if (generation === refreshGeneration && requestID === lossRequestID) loading.losses = false;
   }
 }
 
-async function loadAlerts() {
-  loading.alerts = true;
-  errors.alerts = "";
-  alerts.value = [];
-  try {
-    const result = await adminAPI.finance.getAlerts({
-      ...filters(),
-      page: alertPagination.page,
-      page_size: alertPagination.page_size,
-    });
-    alerts.value = result.items || [];
-    Object.assign(alertPagination, {
-      total: result.total,
-      page: result.page,
-      page_size: result.page_size,
-    });
-  } catch (error) {
-    errors.alerts = rejectMessage(error, "财务预警加载失败");
-  } finally {
-    loading.alerts = false;
+watch(activeTab, (tab) => {
+  if (tab === "profit") {
+    if (!loading.breakdown && breakdownPagination.total === 0) void loadBreakdown();
+    if (!loading.losses && lossPagination.total === 0) void loadLosses();
   }
-}
+});
 
 function changeBreakdownPage(page: number) {
   breakdownPagination.page = page;
@@ -593,54 +458,9 @@ function changeLossPageSize(pageSize: number) {
   lossPagination.page = 1;
   void loadLosses();
 }
-function changeAlertPage(page: number) {
-  alertPagination.page = page;
-  void loadAlerts();
+function handleFinanceDataChanged() {
+  void loadAll();
 }
-function changeAlertPageSize(pageSize: number) {
-  alertPagination.page_size = pageSize;
-  alertPagination.page = 1;
-  void loadAlerts();
-}
-
-async function handleAlertUpdate(payload: {
-  id: number;
-  status: FinanceAlert["status"];
-  note: string;
-}) {
-  updatingAlertId.value = payload.id;
-  errors.alerts = "";
-  try {
-    await adminAPI.finance.updateAlert(payload.id, {
-      status: payload.status,
-      note: payload.note,
-    });
-    const [alertResult, overviewResult] = await Promise.all([
-      adminAPI.finance.getAlerts({
-        ...filters(),
-        page: alertPagination.page,
-        page_size: alertPagination.page_size,
-      }),
-      adminAPI.finance.getOverview(filters()),
-    ]);
-    alerts.value = alertResult.items || [];
-    Object.assign(alertPagination, {
-      total: alertResult.total,
-      page: alertResult.page,
-      page_size: alertResult.page_size,
-    });
-    overview.value = overviewResult;
-  } catch (error) {
-    errors.alerts = rejectMessage(error, "财务预警处理失败");
-  } finally {
-    updatingAlertId.value = null;
-  }
-}
-
-function openLossAlert() {
-  activeTab.value = "alerts";
-}
-
 function resetFinanceExport() {
   if (exportPollTimer) clearTimeout(exportPollTimer);
   exportPollTimer = null;

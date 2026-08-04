@@ -3,7 +3,7 @@
     <div class="border-b border-gray-200 p-4 dark:border-dark-700">
       <h2 class="font-semibold text-gray-900 dark:text-white">亏损追踪</h2>
       <p class="mt-1 text-xs text-gray-500">
-        逐笔核对已确认亏损请求，保留当时的模型、账号和成本快照。
+        每一行都说明客户少收了多少钱、发生在哪个账号，以及这笔成本是已确认还是估算。
       </p>
     </div>
     <div v-if="error" class="p-6 text-sm text-red-600">{{ error }}</div>
@@ -27,7 +27,7 @@
               <th class="px-4 py-3 text-right">成本</th>
               <th class="px-4 py-3 text-right">亏损</th>
               <th class="px-4 py-3">原因</th>
-              <th class="px-4 py-3">处理状态</th>
+                <th class="px-4 py-3">系统记录状态</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
@@ -80,6 +80,12 @@
                 <p class="text-gray-900 dark:text-white">
                   {{ lossReason(item.loss_reason) }}
                 </p>
+                <p class="mt-1 max-w-64 text-xs text-gray-500">
+                  客户收 {{ formatFinanceMoney(item.revenue) }}，上游花 {{ formatFinanceMoney(item.upstream_cost) }}，少收 {{ formatFinanceMoney(item.loss_amount) }}。
+                </p>
+                <p class="mt-1 text-xs" :class="item.cost_status === 'exact' ? 'text-emerald-600' : 'text-amber-600'">
+                  {{ item.cost_status === 'exact' ? '已确认成本' : '估算成本，金额可能变化' }}
+                </p>
                 <p class="mt-1 text-xs text-gray-500">
                   {{ item.request_id || `日志 #${item.usage_log_id}` }}
                 </p>
@@ -97,16 +103,8 @@
                 >
                   {{ item.handled_note }}
                 </p>
-                <button
-                  v-if="item.alert_id"
-                  class="mt-2 text-xs font-medium text-primary-700 hover:underline dark:text-primary-300"
-                  @click="$emit('open-alert', item.alert_id)"
-                >
-                  处理预警
-                </button>
-                <p v-else class="mt-1 text-xs text-amber-600">
-                  等待预警扫描建档
-                </p>
+                <p v-if="item.alert_id" class="mt-1 text-xs text-gray-500">系统已记录该问题</p>
+                <p v-else class="mt-1 text-xs text-amber-600">系统尚未生成关联记录</p>
               </td>
             </tr>
             <tr v-if="items.length === 0">
@@ -143,7 +141,6 @@ defineProps<{
   total: number;
 }>();
 defineEmits<{
-  "open-alert": [alertId: number];
   "update:page": [value: number];
   "update:pageSize": [value: number];
 }>();
@@ -166,11 +163,11 @@ function statusLabel(status: FinanceLossItem["status"]) {
   return (
     (
       {
-        open: "待处理",
-        acknowledged: "已确认",
-        resolved: "已解决",
-        ignored: "已忽略",
-        untracked: "待建档",
+        open: "系统已发现",
+        acknowledged: "系统已记录",
+        resolved: "已恢复",
+        ignored: "不再统计",
+        untracked: "等待系统记录",
       } as const
     )[status] || status
   );

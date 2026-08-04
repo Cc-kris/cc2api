@@ -11,7 +11,8 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-const financeInitializationWalletName = "系统财务余额"
+const FinanceBalanceWalletName = "系统财务余额"
+const financeInitializationWalletName = FinanceBalanceWalletName
 
 var ErrFinanceInitializationInvalid = errors.New("finance initialization request is invalid")
 
@@ -85,6 +86,7 @@ type FinanceInitializationRequest struct {
 	Upstreams            []FinanceInitializationUpstreamInput `json:"upstreams"`
 	Reason               string                               `json:"reason"`
 	RecordOpeningBalance *bool                                `json:"record_opening_balance,omitempty"`
+	IdempotencyKey       string                               `json:"idempotency_key,omitempty"`
 	OperatorID           int64                                `json:"-"`
 }
 
@@ -270,13 +272,20 @@ func (s *FinanceInitializationService) Apply(ctx context.Context, input FinanceI
 		}
 		now := s.now().UTC()
 		amount := decimal.NewFromFloat(item.CurrentBalance)
-		dedupeKey := fmt.Sprintf("finance-initialization:%d:%0.10f", upstream.ID, item.CurrentBalance)
+		dedupeKey := strings.TrimSpace(input.IdempotencyKey)
+		if dedupeKey == "" {
+			// Balance observations are not one-time initialization records. A new
+			// observation must remain recordable when the same amount appears again.
+			dedupeKey = fmt.Sprintf("manual-balance:%d:%d", upstream.ID, now.UnixNano())
+		} else {
+			dedupeKey = fmt.Sprintf("manual-balance:%d:%s", upstream.ID, dedupeKey)
+		}
 		// An opening event is immutable and belongs only to a wallet's first
 		// initialization. Re-running initialization on an existing wallet records
 		// a balance observation instead of creating another opening event.
 		recordOpeningBalance := created && (input.RecordOpeningBalance == nil || *input.RecordOpeningBalance)
 		if !recordOpeningBalance {
-			err = s.funds.RecordBalanceSnapshot(ctx, wallet.ID, amount, currency, now, "manual-balance:"+dedupeKey)
+			err = s.funds.RecordBalanceSnapshot(ctx, wallet.ID, amount, currency, now, dedupeKey)
 		} else {
 			_, _, err = s.funds.InitializeOpeningBalance(ctx, wallet.ID, amount, currency, now, &operatorID, "财务初始化期初余额："+reason, dedupeKey)
 		}

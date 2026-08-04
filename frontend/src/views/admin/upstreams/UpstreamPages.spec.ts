@@ -142,7 +142,12 @@ describe('admin upstream pages', () => {
     await wrapper.get('form').trigger('submit.prevent')
     await flushPromises()
 
-    expect(updateUpstream).toHaveBeenCalledWith(1, expect.objectContaining({ initial_balance: 82 }))
+    expect(updateUpstream).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ initial_balance: 82, current_balance: 70 }),
+      expect.any(String)
+    )
+    expect(applyInitialization).not.toHaveBeenCalled()
   })
 
   it('does not initialize finance when editing non-financial upstream fields', async () => {

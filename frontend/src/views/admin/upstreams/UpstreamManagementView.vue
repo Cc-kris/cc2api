@@ -1,10 +1,10 @@
 <template>
-  <AppLayout>
+  <div>
     <div class="space-y-6">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 class="text-2xl font-bold text-gray-900 dark:text-white">上游管理</h1>
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">按 Base URL 聚合同一上游下的多个账号。日常只维护当前余额；账号上游倍率在财务初始化中维护。</p>
+          <h2 class="text-2xl font-bold text-gray-900 dark:text-white">上游财务资料</h2>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">这里是财务报表的上游数据来源：维护上游余额、充值记录、采购价格和账号成本归属。修改只影响财务核算，不管理请求账号或密钥。</p>
         </div>
         <div class="flex gap-2">
           <button class="btn btn-secondary" :disabled="loading || syncing" @click="syncAccounts">一键添加</button>
@@ -44,13 +44,13 @@
                     <template v-if="rate.billing_mode === 'image_per_use'">{{ rate.platform }} · 图片 {{ money(rate.image_unit_price) }}/次</template><template v-else>{{ rate.platform }} × {{ rate.rate_multiplier }}</template>
                   </span>
                 </div>
-                <span v-else class="text-gray-400">未配置平台计费，按 1 倍计算</span>
+                <span v-else class="text-gray-600 dark:text-gray-300">未配置平台计费，按 1 倍计算</span>
               </td>
               <td class="px-4 py-3 text-right text-sm font-medium" :class="balanceClass(item)">{{ money(item.current_balance) }}</td>
               <td class="px-4 py-3 text-right text-sm">{{ money(item.consumed_balance) }}</td>
               <td class="px-4 py-3 text-right text-sm">{{ item.account_count }}</td>
-              <td class="px-4 py-3 text-sm"><span v-if="item.balance_alert_enabled">低于 {{ money(item.alert_balance || 0) }}</span><span v-else class="text-gray-400">未开启</span></td>
-              <td class="px-4 py-3 text-right text-sm"><button class="text-primary-600 hover:underline" @click="openFinanceDetails(item)">财务详情</button><button class="ml-3 text-primary-600 hover:underline" @click="openEdit(item)">编辑</button><button class="ml-3 text-red-600 hover:underline" @click="remove(item)">删除</button></td>
+              <td class="px-4 py-3 text-sm"><span v-if="item.balance_alert_enabled">低于 {{ money(item.alert_balance || 0) }}</span><span v-else class="text-gray-600 dark:text-gray-300">未开启</span></td>
+              <td class="px-4 py-3 text-right text-sm"><button class="text-primary-700 hover:underline dark:text-primary-300" @click="openFinanceDetails(item)">财务详情</button><button class="ml-3 text-primary-700 hover:underline dark:text-primary-300" @click="openEdit(item)">编辑</button><button class="ml-3 text-red-700 hover:underline dark:text-red-300" @click="remove(item)">删除</button></td>
             </tr>
             <tr v-if="items.length === 0"><td colspan="8" class="px-4 py-8 text-center text-gray-500">暂无上游，点击“一键添加”从账号 Base URL 同步。</td></tr>
           </tbody>
@@ -58,7 +58,7 @@
       </div>
 
       <div ref="financeDetailsRef">
-        <UpstreamWalletManager :upstreams="items" :active-upstream-id="activeFinanceUpstreamId" />
+        <UpstreamWalletManager :upstreams="items" :active-upstream-id="activeFinanceUpstreamId" @changed="$emit('changed')" />
       </div>
 
       <div v-if="editing" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -75,8 +75,8 @@
           </div>
 
           <details class="mt-5 rounded-lg border border-gray-200 p-4 dark:border-dark-700">
-            <summary class="cursor-pointer font-medium text-gray-900 dark:text-white">高级兼容设置</summary>
-            <p class="mt-1 text-xs text-gray-500">普通财务核算不需要配置。仅在维护旧版上游汇总统计或特殊图片计费时使用。</p>
+            <summary class="cursor-pointer font-medium text-gray-900 dark:text-white">平台计费设置</summary>
+            <p class="mt-1 text-xs text-gray-500">只有同一上游对不同平台使用不同倍率，或图片按次收费时才需要填写。</p>
             <div class="flex items-center justify-between gap-3">
               <div>
                 <div class="font-medium text-gray-900 dark:text-white">按平台设置计费</div>
@@ -103,19 +103,20 @@
         </form>
       </div>
     </div>
-  </AppLayout>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
-import AppLayout from '@/components/layout/AppLayout.vue'
 import UpstreamWalletManager from '@/components/finance/UpstreamWalletManager.vue'
 import { adminAPI } from '@/api/admin'
 import type { Upstream, UpstreamBillingMode, UpstreamInput } from '@/api/admin/upstreams'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 
+
 const appStore = useAppStore()
+const emit = defineEmits<{ changed: [] }>()
 const items = ref<Upstream[]>([])
 const loading = ref(false)
 const saving = ref(false)
@@ -191,19 +192,27 @@ async function save() {
     const { id, current_balance, consumed_balance, original_current_balance, ...payload } = editing.value
     payload.platform_rates = normalizedRows
     payload.initial_balance = Number(current_balance) + Number(consumed_balance || 0)
-    const saved = id ? await adminAPI.upstreams.update(id, payload) : await adminAPI.upstreams.create(payload)
+    const balanceChanged = !id || Number(current_balance) !== Number(original_current_balance)
+    let saved: Upstream | null = null
+    if (id && balanceChanged) {
+      saved = await adminAPI.upstreams.update(id, { ...payload, current_balance: Number(current_balance) }, crypto.randomUUID())
+    } else {
+      saved = id ? await adminAPI.upstreams.update(id, payload) : await adminAPI.upstreams.create(payload)
+    }
     const savedID = saved?.id || id
     if (!savedID) throw new Error('保存上游后未返回上游 ID')
-    if (!id || Number(current_balance) !== Number(original_current_balance)) {
+    if (!id) {
       await adminAPI.finance.applyInitialization({
         accounts: [],
         upstreams: [{ upstream_id: savedID, current_balance: Number(current_balance) }],
-        reason: id ? '上游管理余额调整' : '上游管理余额初始化',
-        record_opening_balance: !id
+        reason: id ? '更新上游余额' : '首次记录上游余额',
+        record_opening_balance: true,
+        idempotency_key: crypto.randomUUID()
       })
     }
     editing.value = null
     await load()
+    emit('changed')
     appStore.showSuccess('保存成功')
   } catch (e: unknown) {
     appStore.showError(errorMessage(e, '保存失败'))
@@ -211,12 +220,13 @@ async function save() {
     saving.value = false
   }
 }
-async function syncAccounts() { syncing.value = true; try { const res = await adminAPI.upstreams.syncFromAccounts(); await load(); appStore.showSuccess(`已添加 ${res.created} 个上游`) } catch (e: unknown) { appStore.showError(errorMessage(e, '同步失败')) } finally { syncing.value = false } }
+async function syncAccounts() { syncing.value = true; try { const res = await adminAPI.upstreams.syncFromAccounts(); await load(); emit('changed'); appStore.showSuccess(`已添加 ${res.created} 个上游`) } catch (e: unknown) { appStore.showError(errorMessage(e, '同步失败')) } finally { syncing.value = false } }
 async function remove(item: Upstream) {
   if (!window.confirm(`确认删除上游 ${item.name}？`)) return
   try {
     await adminAPI.upstreams.deleteUpstream(item.id)
     await load()
+    emit('changed')
     appStore.showSuccess('删除成功')
   } catch (e: unknown) {
     appStore.showError(errorMessage(e, '删除失败'))

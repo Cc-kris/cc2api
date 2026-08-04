@@ -39,6 +39,8 @@ type UpstreamInput struct {
 	BalanceAlertEnabled bool                   `json:"balance_alert_enabled"`
 	AlertBalance        *float64               `json:"alert_balance"`
 	Notes               string                 `json:"notes"`
+	CurrentBalance      *float64               `json:"current_balance,omitempty"`
+	BalanceDedupeKey    string                 `json:"-"`
 }
 
 type UpstreamStatsSummary struct {

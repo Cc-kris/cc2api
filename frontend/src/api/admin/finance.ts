@@ -190,6 +190,7 @@ export interface FinanceTokenQuotaItem {
 export interface FinanceFunds {
   wallet_cash: FinanceWalletCashItem[] | null;
   token_quota: FinanceTokenQuotaItem[] | null;
+  customer_balance: string | null;
   customer_cash: {
     payment: string | null;
     refund: string | null;
@@ -198,6 +199,10 @@ export interface FinanceFunds {
   };
   upstream_cash: {
     topup: string | null;
+    topup_available: boolean;
+    topup_event_count: number;
+    net_cash_available: boolean;
+    event_count: number;
     refund: string | null;
     adjustment: string | null;
 	 recharge_bonus_income: string | null;
@@ -328,38 +333,12 @@ export interface FinanceBackfillJob {
   error_summary?: string | null;
 }
 
-export interface FinanceInitializationAccount {
-  account_id: number;
-  account_name: string;
-  platform: string;
-  status: string;
-  upstream_id?: number;
-  upstream_name?: string;
-  current_multiplier?: string;
-  finance_profile_ready: boolean;
-  needs_multiplier_confirm: boolean;
-}
-
-export interface FinanceInitializationUpstream {
-  upstream_id: number;
-  upstream_name: string;
-  base_url: string;
-  currency: string;
-  current_balance: number;
-  account_count: number;
-  finance_wallet_set: boolean;
-}
-
-export interface FinanceInitializationScan {
-  accounts: FinanceInitializationAccount[];
-  upstreams: FinanceInitializationUpstream[];
-}
-
 export interface FinanceInitializationRequest {
   accounts: Array<{ account_id: number; upstream_cost_multiplier: string }>;
   upstreams: Array<{ upstream_id: number; current_balance: number }>;
   reason: string;
   record_opening_balance?: boolean;
+  idempotency_key?: string;
 }
 
 export interface FinanceInitializationResult {
@@ -674,13 +653,6 @@ export async function resumeBackfill(
   return data;
 }
 
-export async function scanInitialization(): Promise<FinanceInitializationScan> {
-  const { data } = await apiClient.get<FinanceInitializationScan>(
-    "/admin/finance/initialization/scan",
-  );
-  return data;
-}
-
 export async function applyInitialization(
   payload: FinanceInitializationRequest,
 ): Promise<FinanceInitializationResult> {
@@ -812,7 +784,6 @@ export default {
   getBackfill,
   pauseBackfill,
   resumeBackfill,
-  scanInitialization,
   applyInitialization,
   getReconciliations,
   getSettlements,

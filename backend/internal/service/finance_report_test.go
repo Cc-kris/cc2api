@@ -143,15 +143,15 @@ func TestFinanceReportOverviewUsesPreviousPeriodAndExposesPartialQuality(t *test
 	require.Equal(t, "12.00000000", overview.Profit.Amount)
 	require.Equal(t, "5.00000000", overview.RechargeBonusIncome.Amount)
 	require.Equal(t, "17.00000000", overview.CombinedProfit.Amount)
-	require.Equal(t, "17.66666667", overview.SettledProfit.Amount)
+	require.Empty(t, overview.SettledProfit.Amount)
 	require.Equal(t, "5.00000000", overview.PendingSettlementCost)
 	require.Equal(t, "10.00000000", overview.UnconfiguredExposure)
 	require.Equal(t, "0.8000", overview.SettlementCoverageRate)
-	require.Equal(t, "1.00000000", overview.TodayProfit.Amount)
-	require.Equal(t, "8.00000000", overview.MonthProfit.Amount)
-	require.Equal(t, "140.00000000", overview.HistoricalProfit.Amount)
-	require.Equal(t, "160.00000000", overview.HistoricalCombinedProfit.Amount)
-	require.Equal(t, "25.00000000", overview.HistoricalLossAmount)
+	require.Empty(t, overview.TodayProfit.Amount)
+	require.Empty(t, overview.MonthProfit.Amount)
+	require.Empty(t, overview.HistoricalProfit.Amount)
+	require.Empty(t, overview.HistoricalCombinedProfit.Amount)
+	require.Empty(t, overview.HistoricalLossAmount)
 	require.Equal(t, "5.00000000", overview.EstimatedCostRisk)
 	require.Equal(t, "2.00000000", overview.UnconfirmedExactCost)
 	require.Equal(t, "10.00000000", overview.UnpricedRevenueRisk)
@@ -161,12 +161,11 @@ func TestFinanceReportOverviewUsesPreviousPeriodAndExposesPartialQuality(t *test
 	require.Equal(t, "2026-07-27T08:00:00Z", overview.GeneratedAt.Format(time.RFC3339))
 	require.Equal(t, filter.StartAt, repo.filters[1].EndBefore)
 	require.Equal(t, "all", repo.filters[0].DataScope)
-	require.Equal(t, "exact_only", repo.filters[2].DataScope)
-	require.Equal(t, time.Unix(0, 0).UTC(), repo.filters[6].StartAt)
+	require.Len(t, repo.filters, 2)
 }
 
 func TestFinanceReportFundsOnlyCalculatesAvailableDaysForUSDWallets(t *testing.T) {
-	repo := &financeReportRepoStub{funds: &FinanceFundsFacts{WalletCash: []FinanceWalletCashFact{
+	repo := &financeReportRepoStub{funds: &FinanceFundsFacts{CustomerBalance: decimal.NewFromInt(42), UpstreamTopup: decimal.NewFromInt(60), UpstreamTopupCount: 2, UpstreamEventCount: 3, WalletCash: []FinanceWalletCashFact{
 		{WalletID: 1, Balance: decimal.NewFromInt(70), Currency: "USD", SevenDayCost: decimal.NewFromInt(35)},
 		{WalletID: 2, Balance: decimal.NewFromInt(70), Currency: "CNY", SevenDayCost: decimal.NewFromInt(35)},
 	}}}
@@ -174,6 +173,11 @@ func TestFinanceReportFundsOnlyCalculatesAvailableDaysForUSDWallets(t *testing.T
 	require.NoError(t, err)
 	require.Equal(t, "14.00", *result.WalletCash[0].AvailableDays)
 	require.Nil(t, result.WalletCash[1].AvailableDays)
+	require.Equal(t, "42.00000000", result.CustomerBalance)
+	require.True(t, result.UpstreamCash.TopupAvailable)
+	require.Equal(t, int64(2), result.UpstreamCash.TopupEventCount)
+	require.True(t, result.UpstreamCash.NetCashAvailable)
+	require.Equal(t, int64(3), result.UpstreamCash.EventCount)
 }
 
 func TestFinanceReportDataQualityIncludesDailyTrend(t *testing.T) {

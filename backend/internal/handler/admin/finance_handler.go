@@ -544,19 +544,6 @@ func (h *FinanceHandler) DataQuality(c *gin.Context) {
 	response.Success(c, result)
 }
 
-func (h *FinanceHandler) InitializationScan(c *gin.Context) {
-	if h.initializationService == nil {
-		response.ErrorWithDetails(c, http.StatusServiceUnavailable, "Finance initialization is unavailable", "FINANCE_INITIALIZATION_UNAVAILABLE", nil)
-		return
-	}
-	result, err := h.initializationService.Scan(c.Request.Context())
-	if err != nil {
-		respondFinanceServiceError(c, err)
-		return
-	}
-	response.Success(c, result)
-}
-
 func (h *FinanceHandler) InitializationApply(c *gin.Context) {
 	if h.initializationService == nil {
 		response.ErrorWithDetails(c, http.StatusServiceUnavailable, "Finance initialization is unavailable", "FINANCE_INITIALIZATION_UNAVAILABLE", nil)

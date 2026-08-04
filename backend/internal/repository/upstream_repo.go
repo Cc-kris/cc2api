@@ -4,11 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/shopspring/decimal"
 )
 
 type upstreamRepository struct{ db *sql.DB }
@@ -95,6 +97,54 @@ WHERE id=$1 AND deleted_at IS NULL`, id, input.BaseURL, service.NormalizeUpstrea
 	}
 	if err := replaceUpstreamPlatformRates(ctx, tx, id, input.PlatformRates); err != nil {
 		return nil, fmt.Errorf("replace upstream platform rates: %w", err)
+	}
+	if input.CurrentBalance != nil {
+		var walletID int64
+		var currency string
+		var walletEnabled bool
+		var balanceKind string
+		err = tx.QueryRowContext(ctx, `
+SELECT id,currency,enabled,balance_kind
+FROM upstream_wallets
+WHERE upstream_id=$1 AND lower(name)=lower($2) AND deleted_at IS NULL
+FOR UPDATE`, id, service.FinanceBalanceWalletName).Scan(&walletID, &currency, &walletEnabled, &balanceKind)
+		if errors.Is(err, sql.ErrNoRows) {
+			err = tx.QueryRowContext(ctx, `
+INSERT INTO upstream_wallets (
+  upstream_id,name,pricing_adapter,balance_adapter,quota_adapter,currency,balance_kind,enabled
+) VALUES ($1,$2,'manual','manual','none','USD','wallet_cash',TRUE)
+RETURNING id,currency,enabled,balance_kind`, id, service.FinanceBalanceWalletName).Scan(&walletID, &currency, &walletEnabled, &balanceKind)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("ensure finance balance wallet: %w", err)
+		}
+		if !walletEnabled {
+			return nil, fmt.Errorf("finance balance wallet is disabled")
+		}
+		if balanceKind != "wallet_cash" {
+			return nil, fmt.Errorf("finance balance wallet must be a cash wallet")
+		}
+		result, insertErr := tx.ExecContext(ctx, `
+INSERT INTO upstream_balance_snapshots (
+  wallet_id,dedupe_key,balance_kind,balance_amount,currency,source,collected_at,sync_status,safe_snapshot
+) VALUES ($1,$2,'wallet_cash',$3,$4,'manual',NOW(),'success',jsonb_build_object('kind','manual_balance'))
+ON CONFLICT (wallet_id,dedupe_key) DO NOTHING`, walletID, "manual-balance:"+input.BalanceDedupeKey, *input.CurrentBalance, currency)
+		if insertErr != nil {
+			return nil, fmt.Errorf("record finance balance snapshot: %w", insertErr)
+		}
+		if affected, rowsErr := result.RowsAffected(); rowsErr != nil {
+			return nil, fmt.Errorf("inspect finance balance snapshot: %w", rowsErr)
+		} else if affected == 0 {
+			// A retried request is idempotent only when it carries the same value.
+			var existing string
+			if queryErr := tx.QueryRowContext(ctx, `SELECT balance_amount::text FROM upstream_balance_snapshots WHERE wallet_id=$1 AND dedupe_key=$2`, walletID, "manual-balance:"+input.BalanceDedupeKey).Scan(&existing); queryErr != nil {
+				return nil, fmt.Errorf("inspect existing finance balance snapshot: %w", queryErr)
+			}
+			existingAmount, parseErr := decimal.NewFromString(existing)
+			if parseErr != nil || !existingAmount.Equal(decimal.NewFromFloat(*input.CurrentBalance)) {
+				return nil, fmt.Errorf("Idempotency-Key was already used with another balance")
+			}
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err

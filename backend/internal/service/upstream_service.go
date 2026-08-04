@@ -73,6 +73,13 @@ func (s *UpstreamService) Update(ctx context.Context, id int64, input *UpstreamI
 	if err != nil {
 		return nil, err
 	}
+	if normalized.CurrentBalance != nil {
+		current, getErr := s.repo.GetUpstream(ctx, id)
+		if getErr != nil {
+			return nil, getErr
+		}
+		normalized.InitialBalance = *normalized.CurrentBalance + current.ConsumedBalance
+	}
 	item, err := s.repo.UpdateUpstream(ctx, id, normalized)
 	if err != nil {
 		return nil, err
@@ -149,6 +156,12 @@ func normalizeUpstreamInput(input *UpstreamInput) (*UpstreamInput, error) {
 	if input.InitialBalance < 0 {
 		return nil, errors.New("initial_balance must be >= 0")
 	}
+	if input.CurrentBalance != nil && *input.CurrentBalance < 0 {
+		return nil, errors.New("current_balance must be >= 0")
+	}
+	if input.CurrentBalance != nil && strings.TrimSpace(input.BalanceDedupeKey) == "" {
+		return nil, errors.New("Idempotency-Key is required when current_balance changes")
+	}
 	if input.AlertBalance != nil && *input.AlertBalance < 0 {
 		return nil, errors.New("alert_balance must be >= 0")
 	}
@@ -202,6 +215,8 @@ func normalizeUpstreamInput(input *UpstreamInput) (*UpstreamInput, error) {
 		BalanceAlertEnabled: input.BalanceAlertEnabled,
 		AlertBalance:        input.AlertBalance,
 		Notes:               strings.TrimSpace(input.Notes),
+		CurrentBalance:      input.CurrentBalance,
+		BalanceDedupeKey:    strings.TrimSpace(input.BalanceDedupeKey),
 	}, nil
 }
 

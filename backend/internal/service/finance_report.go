@@ -155,10 +155,13 @@ type FinanceTokenQuotaFact struct {
 type FinanceFundsFacts struct {
 	WalletCash          []FinanceWalletCashFact
 	TokenQuota          []FinanceTokenQuotaFact
+	CustomerBalance     decimal.Decimal
 	CustomerPayment     decimal.Decimal
 	CustomerRefund      decimal.Decimal
 	PaymentFees         decimal.Decimal
 	UpstreamTopup       decimal.Decimal
+	UpstreamTopupCount  int64
+	UpstreamEventCount  int64
 	UpstreamRefund      decimal.Decimal
 	UpstreamAdjust      decimal.Decimal
 	RechargeBonusIncome decimal.Decimal
@@ -192,9 +195,10 @@ type FinanceTokenQuotaItem struct {
 }
 
 type FinanceFunds struct {
-	WalletCash   []FinanceWalletCashItem `json:"wallet_cash"`
-	TokenQuota   []FinanceTokenQuotaItem `json:"token_quota"`
-	CustomerCash struct {
+	WalletCash      []FinanceWalletCashItem `json:"wallet_cash"`
+	TokenQuota      []FinanceTokenQuotaItem `json:"token_quota"`
+	CustomerBalance string                  `json:"customer_balance"`
+	CustomerCash    struct {
 		Payment string `json:"payment"`
 		Refund  string `json:"refund"`
 		Fees    string `json:"payment_fees"`
@@ -202,6 +206,10 @@ type FinanceFunds struct {
 	} `json:"customer_cash"`
 	UpstreamCash struct {
 		Topup               string `json:"topup"`
+		TopupAvailable      bool   `json:"topup_available"`
+		TopupEventCount     int64  `json:"topup_event_count"`
+		NetCashAvailable    bool   `json:"net_cash_available"`
+		EventCount          int64  `json:"event_count"`
 		Refund              string `json:"refund"`
 		Adjustment          string `json:"adjustment"`
 		RechargeBonusIncome string `json:"recharge_bonus_income"`
@@ -217,6 +225,7 @@ func (s *FinanceReportService) Funds(ctx context.Context, filter FinanceReportFi
 		return nil, err
 	}
 	result := &FinanceFunds{StaleWalletCount: facts.StaleWalletCount, FailedSyncCount: facts.FailedSyncCount}
+	result.CustomerBalance = financeMoney(facts.CustomerBalance)
 	for _, wallet := range facts.WalletCash {
 		dailyCost := wallet.SevenDayCost.Div(decimal.NewFromInt(7))
 		item := FinanceWalletCashItem{
@@ -242,6 +251,10 @@ func (s *FinanceReportService) Funds(ctx context.Context, filter FinanceReportFi
 	result.CustomerCash.Fees = financeMoney(facts.PaymentFees)
 	result.CustomerCash.NetCash = financeMoney(facts.CustomerPayment.Sub(facts.CustomerRefund).Sub(facts.PaymentFees))
 	result.UpstreamCash.Topup = financeMoney(facts.UpstreamTopup)
+	result.UpstreamCash.TopupAvailable = facts.UpstreamTopupCount > 0
+	result.UpstreamCash.TopupEventCount = facts.UpstreamTopupCount
+	result.UpstreamCash.NetCashAvailable = facts.UpstreamEventCount > 0
+	result.UpstreamCash.EventCount = facts.UpstreamEventCount
 	result.UpstreamCash.Refund = financeMoney(facts.UpstreamRefund)
 	result.UpstreamCash.Adjustment = financeMoney(facts.UpstreamAdjust)
 	result.UpstreamCash.RechargeBonusIncome = financeMoney(facts.RechargeBonusIncome)
@@ -609,84 +622,28 @@ func (s *FinanceReportService) Overview(ctx context.Context, filter FinanceRepor
 	if err != nil {
 		return nil, err
 	}
-	settledFilter := filter
-	settledFilter.DataScope = "exact_only"
-	settled, err := s.repo.SummarizeFinance(ctx, settledFilter)
-	if err != nil {
-		return nil, err
-	}
-	previousSettledFilter := settledFilter
-	previousSettledFilter.EndBefore = filter.StartAt
-	previousSettledFilter.StartAt = filter.StartAt.Add(-duration)
-	previousSettled, err := s.repo.SummarizeFinance(ctx, previousSettledFilter)
-	if err != nil {
-		return nil, err
-	}
-
-	location := filter.Location
-	if location == nil {
-		location = time.UTC
-		if filter.Timezone != "" {
-			if loaded, loadErr := time.LoadLocation(filter.Timezone); loadErr == nil {
-				location = loaded
-			}
-		}
-	}
-	now := s.now().In(location)
-	todayFilter := bookFilter
-	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
-	todayFilter.StartAt = todayStart.UTC()
-	todayFilter.EndBefore = todayStart.AddDate(0, 0, 1).UTC()
-	today, err := s.repo.SummarizeFinance(ctx, todayFilter)
-	if err != nil {
-		return nil, err
-	}
-	monthFilter := bookFilter
-	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, location)
-	monthFilter.StartAt = monthStart.UTC()
-	monthFilter.EndBefore = todayFilter.EndBefore
-	month, err := s.repo.SummarizeFinance(ctx, monthFilter)
-	if err != nil {
-		return nil, err
-	}
-	historicalFilter := bookFilter
-	historicalFilter.StartAt = time.Unix(0, 0).UTC()
-	historical, err := s.repo.SummarizeFinance(ctx, historicalFilter)
-	if err != nil {
-		return nil, err
-	}
-
 	profit := current.CoveredRevenue.Sub(current.UpstreamCost).Sub(current.PaymentFees)
 	previousProfit := previous.CoveredRevenue.Sub(previous.UpstreamCost).Sub(previous.PaymentFees)
-	todayProfit := today.CoveredRevenue.Sub(today.UpstreamCost).Sub(today.PaymentFees)
-	monthProfit := month.CoveredRevenue.Sub(month.UpstreamCost).Sub(month.PaymentFees)
-	historicalProfit := historical.CoveredRevenue.Sub(historical.UpstreamCost).Sub(historical.PaymentFees)
-	settled.PaymentFees = allocateFinanceFeesToSettledRevenue(current.PaymentFees, settled.CoveredRevenue, current.CoveredRevenue)
-	previousSettled.PaymentFees = allocateFinanceFeesToSettledRevenue(previous.PaymentFees, previousSettled.CoveredRevenue, previous.CoveredRevenue)
-	settledProfit := settled.CoveredRevenue.Sub(settled.UpstreamCost).Sub(settled.PaymentFees)
-	previousSettledProfit := previousSettled.CoveredRevenue.Sub(previousSettled.UpstreamCost).Sub(previousSettled.PaymentFees)
-	settledProfitStatus := "complete"
-	if settled.CoveredRevenue.LessThan(current.CoveredRevenue) {
-		settledProfitStatus = "estimated"
-	}
 	combinedProfit := profit.Add(current.RechargeBonusIncome)
 	previousCombinedProfit := previousProfit.Add(previous.RechargeBonusIncome)
-	historicalCombinedProfit := historicalProfit.Add(historical.RechargeBonusIncome)
 	estimatedCostRisk := current.EstimatedCost
 	quality := financeQualityFromSummary(current)
 	status := quality.Status
+	// Exact settlement, today, month and all-history figures are advanced
+	// reports. They are intentionally not loaded by the default overview.
+	settledProfitMetric := unavailableFinanceMetric()
 	overview := &FinanceOverview{
 		Revenue:                  financeOverviewMetric(current.Revenue, previous.Revenue, "complete"),
 		UpstreamCost:             financeOverviewMetric(current.UpstreamCost, previous.UpstreamCost, status),
 		Profit:                   financeOverviewMetric(profit, previousProfit, status),
 		RechargeBonusIncome:      financeOverviewMetric(current.RechargeBonusIncome, previous.RechargeBonusIncome, "complete"),
 		CombinedProfit:           financeOverviewMetric(combinedProfit, previousCombinedProfit, status),
-		TodayProfit:              financeOverviewMetric(todayProfit, decimal.Zero, financeQualityFromSummary(today).Status),
-		MonthProfit:              financeOverviewMetric(monthProfit, decimal.Zero, financeQualityFromSummary(month).Status),
-		HistoricalProfit:         financeOverviewMetric(historicalProfit, decimal.Zero, financeQualityFromSummary(historical).Status),
-		HistoricalCombinedProfit: financeOverviewMetric(historicalCombinedProfit, decimal.Zero, financeQualityFromSummary(historical).Status),
-		HistoricalLossAmount:     financeMoney(historical.LossAmount),
-		SettledProfit:            financeOverviewMetric(settledProfit, previousSettledProfit, settledProfitStatus),
+		TodayProfit:              unavailableFinanceMetric(),
+		MonthProfit:              unavailableFinanceMetric(),
+		HistoricalProfit:         unavailableFinanceMetric(),
+		HistoricalCombinedProfit: unavailableFinanceMetric(),
+		HistoricalLossAmount:     "",
+		SettledProfit:            settledProfitMetric,
 		PendingSettlementCost:    financeMoney(current.PendingSettlementCost),
 		UnconfiguredExposure:     financeMoney(current.UnpricedRevenue),
 		SettlementCoverageRate:   quality.CostCoverageRate,
@@ -708,21 +665,8 @@ func (s *FinanceReportService) Overview(ctx context.Context, filter FinanceRepor
 	return overview, nil
 }
 
-// allocateFinanceFeesToSettledRevenue allocates period payment fees to the
-// settled revenue share. Fee events are payment-level facts and do not carry a
-// usage-log link, so applying the full period fee to exact-only profit would
-// charge unsettled revenue twice. The capped proportional allocation keeps the
-// settled KPI conservative and reproducible until payment-to-usage allocation
-// exists.
-func allocateFinanceFeesToSettledRevenue(totalFees, settledRevenue, coveredRevenue decimal.Decimal) decimal.Decimal {
-	if totalFees.IsZero() || totalFees.IsNegative() || settledRevenue.IsZero() || settledRevenue.IsNegative() || coveredRevenue.IsZero() || coveredRevenue.IsNegative() {
-		return decimal.Zero
-	}
-	ratio := settledRevenue.Div(coveredRevenue)
-	if ratio.GreaterThan(decimal.NewFromInt(1)) {
-		ratio = decimal.NewFromInt(1)
-	}
-	return totalFees.Mul(ratio).Round(financeAmountScale)
+func unavailableFinanceMetric() FinanceOverviewMetric {
+	return FinanceOverviewMetric{Amount: "", Currency: "USD", PreviousAmount: "", Status: "unavailable"}
 }
 
 type FinanceTrendFact struct {

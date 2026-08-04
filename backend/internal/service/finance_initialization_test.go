@@ -255,3 +255,22 @@ func TestFinanceInitializationApplyUsesSnapshotWhenFinanceWalletAlreadyExists(t 
 	require.Len(t, funds.calls, 1)
 	require.Equal(t, "balance_snapshot", funds.calls[0].EventType)
 }
+
+func TestFinanceInitializationApplyRecordsTheSameBalanceAfterItChanges(t *testing.T) {
+	accounts := &financeInitializationAccountStub{}
+	upstreams := &financeInitializationUpstreamStub{items: []*Upstream{{ID: 5, Name: "upstream", BaseURL: "https://upstream.test", NormalizedBaseURL: "https://upstream.test", ConsumedBalance: 1}}}
+	wallets := &financeInitializationWalletStub{byUpstream: map[int64][]UpstreamWallet{5: {{ID: 8, Name: financeInitializationWalletName, Currency: "USD", BalanceKind: "wallet_cash", Enabled: true}}}}
+	funds := &financeInitializationFundStub{}
+	profiles := &financeInitializationProfileStub{items: map[int64]*AccountFinanceProfile{}}
+	svc := NewFinanceInitializationService(accounts, upstreams, wallets, funds, profiles)
+
+	for _, balance := range []float64{100, 80, 100} {
+		_, err := svc.Apply(context.Background(), FinanceInitializationRequest{OperatorID: 99, Reason: "记录上游余额", Upstreams: []FinanceInitializationUpstreamInput{{UpstreamID: 5, CurrentBalance: balance}}})
+		require.NoError(t, err)
+	}
+	require.Len(t, funds.calls, 3)
+	require.Equal(t, "100", funds.calls[0].OriginalAmount)
+	require.Equal(t, "80", funds.calls[1].OriginalAmount)
+	require.Equal(t, "100", funds.calls[2].OriginalAmount)
+	require.NotEqual(t, funds.calls[1].IdempotencyKey, funds.calls[2].IdempotencyKey)
+}

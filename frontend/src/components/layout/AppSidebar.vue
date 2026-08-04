@@ -761,7 +761,6 @@ const adminNavItems = computed((): NavItem[] => {
       icon: ServerIcon,
       expandOnly: true,
       children: [
-        { path: '/admin/upstreams/manage', label: t('nav.upstreamManagement'), icon: GlobeIcon },
         { path: '/admin/upstreams/stats', label: t('nav.upstreamStats'), icon: ChartIcon },
         { path: '/admin/upstreams/finance-protocols', label: t('nav.upstreamFinanceProtocols'), icon: ServerIcon },
       ],

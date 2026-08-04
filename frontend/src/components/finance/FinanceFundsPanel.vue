@@ -1,6 +1,6 @@
 <template>
   <div class="space-y-4">
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
       <article v-for="item in cashMetrics" :key="item.label" class="card p-5">
         <p class="text-sm text-gray-500">{{ item.label }}</p>
         <p class="mt-2 text-xl font-semibold tabular-nums" :class="item.tone">{{ item.value }}</p>
@@ -14,8 +14,8 @@
 
     <section class="card overflow-hidden">
       <div class="border-b border-gray-200 p-4 dark:border-dark-700">
-        <h2 class="font-semibold text-gray-900 dark:text-white">上游现金钱包</h2>
-        <p class="mt-1 text-xs text-gray-500">现金余额可用于资金风险判断，不与 Token 配额相加。</p>
+        <h2 class="font-semibold text-gray-900 dark:text-white">上游账户还剩多少钱</h2>
+        <p class="mt-1 text-xs text-gray-500">显示最后一次采集到的余额，并明确标出同步失败或已过期；过期值不会冒充实时余额。</p>
       </div>
       <div class="overflow-x-auto" role="region" aria-label="上游现金钱包明细" tabindex="0">
         <table class="min-w-full divide-y divide-gray-200 text-sm dark:divide-dark-700">
@@ -63,11 +63,11 @@ const props = defineProps<{ funds: FinanceFunds }>()
 const cashWallets = computed(() => props.funds.wallet_cash || [])
 const quotaWallets = computed(() => props.funds.token_quota || [])
 const cashMetrics = computed(() => [
-  { label: '客户净现金流', value: formatFinanceMoney(props.funds.customer_cash.net_cash), tone: financeTone(props.funds.customer_cash.net_cash), hint: '充值 - 退款 - 支付手续费' },
-  { label: '上游净现金流', value: formatFinanceMoney(props.funds.upstream_cash.net_cash), tone: financeTone(props.funds.upstream_cash.net_cash), hint: '充值、退款与资金调整' },
-  { label: '客户充值', value: formatFinanceMoney(props.funds.customer_cash.payment), tone: 'text-gray-900 dark:text-white', hint: `退款 ${formatFinanceMoney(props.funds.customer_cash.refund)}` },
-  { label: '上游充值', value: formatFinanceMoney(props.funds.upstream_cash.topup), tone: 'text-gray-900 dark:text-white', hint: `退款 ${formatFinanceMoney(props.funds.upstream_cash.refund)}` }
-  , { label: '充值赠送收益', value: formatFinanceMoney(props.funds.upstream_cash.recharge_bonus_income), tone: financeTone(props.funds.upstream_cash.recharge_bonus_income), hint: '独立核算，不改变上游倍率或请求成本' }
+  { label: '客户本期充值（收到）', value: formatFinanceMoney(props.funds.customer_cash.payment), tone: 'text-gray-900 dark:text-white', hint: `客户本期打进来的钱；退款 ${formatFinanceMoney(props.funds.customer_cash.refund)}` },
+  { label: '客户还剩余额（欠客户）', value: formatFinanceMoney(props.funds.customer_balance), tone: 'text-gray-900 dark:text-white', hint: '客户以后还能消费的钱，不是你的利润' },
+  { label: '客户本期净收到', value: formatFinanceMoney(props.funds.customer_cash.net_cash), tone: financeTone(props.funds.customer_cash.net_cash), hint: '充值 - 退款 - 支付手续费；仍不等于利润' },
+  { label: '上游本期充值（付出去）', value: props.funds.upstream_cash.topup_available ? formatFinanceMoney(props.funds.upstream_cash.topup) : '未录入', tone: props.funds.upstream_cash.topup_available ? 'text-gray-900 dark:text-white' : 'text-amber-700 dark:text-amber-300', hint: props.funds.upstream_cash.topup_available ? `${props.funds.upstream_cash.topup_event_count} 笔充值流水` : '系统只有期初余额，没有上游充值流水' },
+  { label: '上游本期净付出', value: props.funds.upstream_cash.net_cash_available ? formatFinanceMoney(props.funds.upstream_cash.net_cash) : '未录入', tone: props.funds.upstream_cash.net_cash_available ? financeTone(props.funds.upstream_cash.net_cash) : 'text-amber-700 dark:text-amber-300', hint: props.funds.upstream_cash.net_cash_available ? `已记录 ${props.funds.upstream_cash.event_count} 笔上游资金流水；负数表示净流出` : '系统没有上游资金流水' }
 ])
 
 function formatQuota(value: string | null, currency: string) {

@@ -426,6 +426,36 @@ INSERT INTO usage_finance_cost_segments(
 	require.True(t, items[0].OtherCost.IsZero())
 }
 
+func TestFinanceBreakdownUsesImageCostFallbackWhenItemsAreMissing(t *testing.T) {
+	createdAt := time.Date(2045, 8, 21, 3, 0, 0, 0, time.UTC)
+	usageID := insertFinanceFixture(t, "exact", "10", "4", createdAt)
+	ctx := context.Background()
+	var recordID, accountID int64
+	require.NoError(t, integrationDB.QueryRowContext(ctx,
+		`SELECT id,account_id FROM usage_finance_records WHERE usage_log_id=$1`, usageID,
+	).Scan(&recordID, &accountID))
+	_, err := integrationDB.ExecContext(ctx, `UPDATE usage_finance_records SET billing_type='image' WHERE id=$1`, recordID)
+	require.NoError(t, err)
+	_, err = integrationDB.ExecContext(ctx, `
+INSERT INTO usage_finance_cost_segments(
+ usage_finance_record_id,attempt_no,account_id,upstream_model,usage_detail,
+ pricing_source,cost_status,cost_amount,calculation_detail,created_at
+) VALUES
+ ($1,1,$2,'image-model','{"image_count":1}','estimated','exact',3,'{"items":[{"item":"image_output","amount":"3"}]}',$3),
+ ($1,2,$2,'image-model','{"image_count":1}','estimated','exact',1,'{"reason":"usage_log_total_cost_fallback"}',$3)`,
+		recordID, accountID, createdAt)
+	require.NoError(t, err)
+	filter := service.FinanceReportFilter{StartDate: "2045-08-21", EndDate: "2045-08-21", Timezone: "UTC", Location: time.UTC,
+		StartAt: createdAt.Truncate(24 * time.Hour), EndBefore: createdAt.Truncate(24 * time.Hour).Add(24 * time.Hour), Granularity: "day", DataScope: "exact_only"}
+	items, total, err := NewFinanceReportRepository(integrationDB).ListFinanceBreakdown(ctx, filter, service.FinanceBreakdownRequest{
+		Dimension: "billing_type", SortBy: "profit", SortOrder: "desc", Page: 1, PageSize: 20,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), total)
+	require.Len(t, items, 1)
+	require.Equal(t, "4", items[0].ImageCost.String())
+}
+
 func TestSubscriptionRevenueRecognitionPersistsAndIsIdempotent(t *testing.T) {
 	ctx := context.Background()
 	date := time.Date(2026, 7, 27, 3, 0, 0, 0, time.UTC)

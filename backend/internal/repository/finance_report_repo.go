@@ -286,9 +286,9 @@ WITH base AS (
      COALESCE(SUM(amount) FILTER (WHERE NOT is_fast AND item_name='output'),0) AS output_cost,
      COALESCE(SUM(amount) FILTER (WHERE NOT is_fast AND item_name IN ('cache_read','cache_write_5m','cache_write_1h')),0) AS cache_cost,
      COALESCE(SUM(amount) FILTER (WHERE is_fast),0) AS fast_cost,
-     COALESCE(SUM(amount) FILTER (WHERE NOT is_fast AND item_name IN ('image_output','image','per_image')),0) AS image_cost,
-     COALESCE(SUM(amount) FILTER (WHERE NOT is_fast AND item_name IN ('video_second','per_second')),0) AS video_cost,
-     COALESCE(SUM(amount) FILTER (WHERE NOT is_fast AND item_name NOT IN ('input','output','cache_read','cache_write_5m','cache_write_1h','image_output','image','per_image','video_second','per_second')),0) AS other_cost
+     COALESCE(SUM(amount) FILTER (WHERE NOT is_fast AND item_name IN ('image_output','image','per_image','image_fallback')),0) AS image_cost,
+     COALESCE(SUM(amount) FILTER (WHERE NOT is_fast AND item_name IN ('video_second','per_second','video_fallback')),0) AS video_cost,
+     COALESCE(SUM(amount) FILTER (WHERE NOT is_fast AND item_name NOT IN ('input','output','cache_read','cache_write_5m','cache_write_1h','image_output','image','per_image','image_fallback','video_second','per_second','video_fallback')),0) AS other_cost
    FROM (
      SELECT LOWER(COALESCE(seg.service_tier,'')) IN ('fast','priority') AS is_fast,
             item->>'item' AS item_name,
@@ -296,6 +296,15 @@ WITH base AS (
      FROM usage_finance_cost_segments seg
      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(seg.calculation_detail->'items','[]'::jsonb)) item
      WHERE seg.usage_finance_record_id=ufr.id
+     UNION ALL
+     SELECT LOWER(COALESCE(seg.service_tier,'')) IN ('fast','priority') AS is_fast,
+            CASE WHEN ufr.billing_type='image' THEN 'image_fallback'
+                 WHEN ufr.billing_type='per_second' THEN 'video_fallback'
+                 ELSE 'other_fallback' END AS item_name,
+            COALESCE(seg.cost_amount,0) AS amount
+     FROM usage_finance_cost_segments seg
+     WHERE seg.usage_finance_record_id=ufr.id
+       AND jsonb_array_length(COALESCE(seg.calculation_detail->'items','[]'::jsonb))=0
    ) component_items
  ) components ON TRUE
  WHERE %s
@@ -628,8 +637,10 @@ FROM payment_orders`, filter.StartAt, filter.EndBefore).Scan(&payment, &refund)
 SELECT COALESCE(SUM(usd_amount) FILTER (WHERE event_type='topup'),0)::text,
        COALESCE(SUM(usd_amount) FILTER (WHERE event_type='refund'),0)::text,
        COALESCE(SUM(usd_amount) FILTER (WHERE event_type='adjustment'),0)::text,
-       COALESCE(SUM(bonus_income_usd) FILTER (WHERE bonus_status IN ('confirmed','reversed')),0)::text
-FROM upstream_fund_events WHERE occurred_at >= $1 AND occurred_at < $2`, filter.StartAt, filter.EndBefore).Scan(&topup, &upstreamRefund, &adjustment, &rechargeBonus)
+       COALESCE(SUM(bonus_income_usd) FILTER (WHERE bonus_status IN ('confirmed','reversed')),0)::text,
+       COUNT(*) FILTER (WHERE event_type='topup')::bigint,
+       COUNT(*) FILTER (WHERE event_type <> 'opening_balance')::bigint
+FROM upstream_fund_events WHERE occurred_at >= $1 AND occurred_at < $2`, filter.StartAt, filter.EndBefore).Scan(&topup, &upstreamRefund, &adjustment, &rechargeBonus, &facts.UpstreamTopupCount, &facts.UpstreamEventCount)
 	if err != nil {
 		return nil, err
 	}
@@ -640,6 +651,13 @@ FROM upstream_fund_events WHERE occurred_at >= $1 AND occurred_at < $2`, filter.
 		if *target, err = decimal.NewFromString(raw); err != nil {
 			return nil, err
 		}
+	}
+	var customerBalance string
+	if err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(balance),0)::text FROM users WHERE role='user' AND deleted_at IS NULL`).Scan(&customerBalance); err != nil {
+		return nil, err
+	}
+	if facts.CustomerBalance, err = decimal.NewFromString(customerBalance); err != nil {
+		return nil, err
 	}
 	if err = r.db.QueryRowContext(ctx, `
 WITH latest AS (SELECT DISTINCT ON (wallet_id) wallet_id,collected_at FROM upstream_balance_snapshots WHERE balance_kind='wallet_cash' ORDER BY wallet_id,collected_at DESC,id DESC)

@@ -6,7 +6,7 @@
         <p class="mt-1 text-xs text-gray-500">配置上游采购价格、现金余额或 Token 配额。凭据只保存配置状态，不会回显。</p>
       </div>
       <div class="flex items-center gap-2">
-        <select v-model.number="selectedUpstreamId" class="input min-w-52">
+        <select v-model.number="selectedUpstreamId" class="input min-w-52" aria-label="选择上游财务资料">
           <option :value="0">选择上游</option>
           <option v-for="upstream in upstreams" :key="upstream.id" :value="upstream.id">{{ upstream.name }}</option>
         </select>
@@ -105,6 +105,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   activeUpstreamId: 0,
 })
+const emit = defineEmits<{ changed: [] }>()
 const appStore = useAppStore()
 const selectedUpstreamId = ref(props.activeUpstreamId)
 const wallets = ref<UpstreamWallet[]>([])
@@ -167,6 +168,7 @@ async function save() {
     else await adminAPI.upstreamWallets.create(selectedUpstreamId.value, payload)
     editing.value = null
     await loadWallets()
+    emit('changed')
     appStore.showSuccess('钱包已保存')
   } catch (error) { appStore.showError(errorMessage(error, '钱包保存失败')) }
   finally { saving.value = false }
@@ -174,7 +176,7 @@ async function save() {
 async function withBusy(wallet: UpstreamWallet, action: () => Promise<void>) { busy.add(wallet.id); try { await action() } finally { busy.delete(wallet.id) } }
 async function probeWallet(wallet: UpstreamWallet) { await withBusy(wallet, async () => { try { const result = await adminAPI.upstreamWallets.probe(wallet.id); appStore.showSuccess(result.reachable ? `探测成功，耗时 ${result.latency_ms} ms` : `探测未通过：${result.error_summary || '上游不可达'}`); await loadWallets() } catch (error) { appStore.showError(errorMessage(error, '能力探测失败')) } }) }
 async function syncWallet(wallet: UpstreamWallet, type: 'pricing' | 'balance' | 'quota' | 'funding' | 'account-usage') { await withBusy(wallet, async () => { try { const result = await adminAPI.upstreamWallets.sync(wallet.id, type); appStore.showSuccess(result.created ? '同步任务已创建' : '已有相同同步任务，未重复创建'); await loadWallets() } catch (error) { appStore.showError(errorMessage(error, '同步任务创建失败')) } }) }
-async function remove(wallet: UpstreamWallet) { if (!window.confirm(`确认删除钱包 ${wallet.name}？历史财务记录会保留。`)) return; try { await adminAPI.upstreamWallets.deleteWallet(wallet.id); await loadWallets(); appStore.showSuccess('钱包已删除') } catch (error) { appStore.showError(errorMessage(error, '钱包删除失败')) } }
+async function remove(wallet: UpstreamWallet) { if (!window.confirm(`确认删除钱包 ${wallet.name}？历史财务记录会保留。`)) return; try { await adminAPI.upstreamWallets.deleteWallet(wallet.id); await loadWallets(); emit('changed'); appStore.showSuccess('钱包已删除') } catch (error) { appStore.showError(errorMessage(error, '钱包删除失败')) } }
 function normalizedURL(value: unknown) { return String(value || '').trim().toLowerCase().replace(/\/+$/, '') }
 function accountURL(item: any) {
   const explicit = item.credentials?.base_url || (item.extra?.custom_base_url_enabled ? item.extra?.custom_base_url : '')
@@ -186,13 +188,13 @@ function accountURL(item: any) {
   return ''
 }
 async function openAssignment(wallet: UpstreamWallet) { assigning.value = wallet; assignmentAccountIds.value = []; assignmentReason.value = ''; const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset()); assignmentEffectiveAt.value = now.toISOString().slice(0, 16); try { const response = await adminAPI.accounts.list(1, 1000); const target = normalizedURL(selectedUpstream.value?.normalized_base_url || selectedUpstream.value?.base_url); accountOptions.value = (response.items || []).filter(item => accountURL(item) === target).map(item => ({ id: item.id, name: item.name, platform: item.platform })) } catch (error) { appStore.showError(errorMessage(error, '账号列表加载失败')) } }
-async function saveAssignment() { if (!assigning.value) return; saving.value = true; try { await adminAPI.upstreamWallets.assignAccounts(assigning.value.id, assignmentAccountIds.value, new Date(assignmentEffectiveAt.value).toISOString(), assignmentReason.value.trim()); assigning.value = null; await loadWallets(); appStore.showSuccess('账号归属已保存') } catch (error) { appStore.showError(errorMessage(error, '账号归属保存失败')) } finally { saving.value = false } }
+async function saveAssignment() { if (!assigning.value) return; saving.value = true; try { await adminAPI.upstreamWallets.assignAccounts(assigning.value.id, assignmentAccountIds.value, new Date(assignmentEffectiveAt.value).toISOString(), assignmentReason.value.trim()); assigning.value = null; await loadWallets(); emit('changed'); appStore.showSuccess('账号归属已保存') } catch (error) { appStore.showError(errorMessage(error, '账号归属保存失败')) } finally { saving.value = false } }
 async function openDetails(wallet: UpstreamWallet) { details.value = wallet; prices.value = []; histories.value = []; fundEvents.value = []; try { const [priceResult, historyResult, fundResult] = await Promise.all([adminAPI.upstreamWallets.listPrices(wallet.id), adminAPI.upstreamWallets.listSyncHistory(wallet.id), adminAPI.upstreamWallets.listFundEvents(wallet.id)]); prices.value = priceResult.items || []; histories.value = historyResult.items || []; fundEvents.value = fundResult.items || [] } catch (error) { appStore.showError(errorMessage(error, '钱包详情加载失败')) } }
 function openPriceImport(wallet: UpstreamWallet) { priceImportWallet.value = wallet; priceImportJSON.value = '[]' }
-async function savePriceImport() { if (!priceImportWallet.value) return; saving.value = true; try { const prices = JSON.parse(priceImportJSON.value) as UpstreamFinancePriceInput[]; if (!Array.isArray(prices) || prices.length === 0) throw new Error('价格 JSON 必须是非空数组'); const result = await adminAPI.upstreamWallets.importPrices(priceImportWallet.value.id, prices); priceImportWallet.value = null; appStore.showSuccess(`已导入 ${result.created_count} 条价格`) } catch (error) { appStore.showError(errorMessage(error, '价格导入失败')) } finally { saving.value = false } }
+async function savePriceImport() { if (!priceImportWallet.value) return; saving.value = true; try { const prices = JSON.parse(priceImportJSON.value) as UpstreamFinancePriceInput[]; if (!Array.isArray(prices) || prices.length === 0) throw new Error('价格 JSON 必须是非空数组'); const result = await adminAPI.upstreamWallets.importPrices(priceImportWallet.value.id, prices); priceImportWallet.value = null; emit('changed'); appStore.showSuccess(`已导入 ${result.created_count} 条价格`) } catch (error) { appStore.showError(errorMessage(error, '价格导入失败')) } finally { saving.value = false } }
 function newIdempotencyKey() { return globalThis.crypto?.randomUUID?.() || `fund-${Date.now()}-${Math.random().toString(16).slice(2)}` }
 function openFundEvent(wallet: UpstreamWallet) { fundWallet.value = wallet; fundEventIdempotencyKey.value = newIdempotencyKey(); const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset()); Object.assign(fundEvent, { event_type: 'topup', original_amount: '', currency: wallet.currency, fx_rate_to_usd: '1', fx_source: 'manual', usd_amount: '', base_credit_units: '', bonus_credit_units: '', reversed_event_id: undefined, reference_no: '', occurred_at: now.toISOString().slice(0, 16), note: '' }) }
-async function saveFundEvent() { if (!fundWallet.value) return; saving.value = true; try { const observedAt = new Date(fundEvent.occurred_at).toISOString(); await adminAPI.upstreamWallets.createFundEvent(fundWallet.value.id, { ...fundEvent, occurred_at: observedAt, fx_observed_at: observedAt }, fundEventIdempotencyKey.value); fundWallet.value = null; fundEventIdempotencyKey.value = ''; appStore.showSuccess('资金事件已记录') } catch (error) { appStore.showError(errorMessage(error, '资金事件保存失败')) } finally { saving.value = false } }
+async function saveFundEvent() { if (!fundWallet.value) return; saving.value = true; try { const observedAt = new Date(fundEvent.occurred_at).toISOString(); await adminAPI.upstreamWallets.createFundEvent(fundWallet.value.id, { ...fundEvent, occurred_at: observedAt, fx_observed_at: observedAt }, fundEventIdempotencyKey.value); fundWallet.value = null; fundEventIdempotencyKey.value = ''; emit('changed'); appStore.showSuccess('资金事件已记录') } catch (error) { appStore.showError(errorMessage(error, '资金事件保存失败')) } finally { saving.value = false } }
 
 watch(selectedUpstreamId, loadWallets)
 watch(() => props.activeUpstreamId, value => {

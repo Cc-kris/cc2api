@@ -3,6 +3,7 @@ package admin
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -31,6 +32,7 @@ func (h *UpstreamHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	req.BalanceDedupeKey = strings.TrimSpace(c.GetHeader("Idempotency-Key"))
 	item, err := h.service.Create(c.Request.Context(), &req)
 	if err != nil {
 		logger.LegacyPrintf("handler.admin.upstream", "[UpstreamManagement] create failed: base_url=%q name=%q platform_rates=%d err=%v", req.BaseURL, req.Name, len(req.PlatformRates), err)
