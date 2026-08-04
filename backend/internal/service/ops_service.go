@@ -1029,13 +1029,10 @@ func opsUnifiedDetailTitle(classification OpsUnifiedErrorClassification, result 
 }
 
 func opsUnifiedDetailSummary(classification OpsUnifiedErrorClassification, detail *OpsErrorLogDetail) string {
-	for _, candidate := range []string{classification.ClassificationReason, detail.Message, detail.UpstreamErrorMessage} {
-		candidate = strings.TrimSpace(candidate)
-		if candidate != "" {
-			return truncateRunes(candidate, 160)
-		}
+	if detail == nil {
+		return BuildOpsErrorSummary(classification.ClassificationReason, "", "", "")
 	}
-	return "暂无摘要"
+	return BuildOpsErrorSummary(classification.ClassificationReason, detail.Message, detail.UpstreamErrorMessage, detail.UpstreamErrorDetail)
 }
 
 func opsUnifiedRecoveryMethod(detail *OpsErrorLogDetail, result string) string {

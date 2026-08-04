@@ -138,10 +138,22 @@ func TestClassifyOpsError_MajorCategories(t *testing.T) {
 			sub:      "account_pool_empty",
 		},
 		{
+			name:     "provider no available account stays upstream",
+			input:    OpsErrorClassificationInput{StatusCode: 503, UpstreamStatusCode: intPtrForOpsTest(503), ErrorOwner: "provider", ErrorSource: "upstream_http", ErrorPhase: "upstream", UpstreamErrorMessage: "no available accounts"},
+			category: OpsErrorCategoryUpstream,
+			sub:      "upstream_unavailable",
+		},
+		{
 			name:     "client default model routing failure",
 			input:    OpsErrorClassificationInput{StatusCode: 503, ErrorOwner: "platform", ErrorSource: "gateway", ErrorPhase: "routing", ErrorMessage: "Service temporarily unavailable", Model: "codex-current", RequestedModel: "codex-current"},
 			category: OpsErrorCategoryClient,
 			sub:      OpsClientErrorSubcategoryModel,
+		},
+		{
+			name:     "generic platform routing unavailable",
+			input:    OpsErrorClassificationInput{StatusCode: 503, ErrorOwner: "platform", ErrorSource: "gateway", ErrorPhase: "routing", ErrorMessage: "Service temporarily unavailable"},
+			category: OpsErrorCategoryAccountPool,
+			sub:      "account_pool_empty",
 		},
 		{
 			name:     "upstream rate limit",
@@ -186,6 +198,12 @@ func TestClassifyOpsError_MajorCategories(t *testing.T) {
 			sub:      "platform_dependency_error",
 		},
 		{
+			name:     "platform stream terminal event",
+			input:    OpsErrorClassificationInput{StatusCode: 502, ErrorOwner: "platform", ErrorSource: "gateway", ErrorMessage: "Upstream stream ended without a terminal response event"},
+			category: OpsErrorCategoryPlatform,
+			sub:      "platform_internal_error",
+		},
+		{
 			name:     "unknown",
 			input:    OpsErrorClassificationInput{ErrorMessage: ""},
 			category: OpsErrorCategoryUnknown,
@@ -219,6 +237,66 @@ func TestSetOpsErrorClassificationUsesNilClientSubcategoryForNonClient(t *testin
 	}
 }
 
+func TestClassifyOpsError_OpenAIImageWebSocketHTTPFallback(t *testing.T) {
+	got := ClassifyOpsError(OpsErrorClassificationInput{
+		StatusCode:   426,
+		ErrorType:    "api_error",
+		ErrorPhase:   "internal",
+		ErrorSource:  "gateway",
+		ErrorOwner:   "platform",
+		ErrorMessage: "Codex image channels require HTTPS Responses transport",
+		ErrorBody:    `{"error":{"type":"websocket_transport_unsupported","message":"Codex image channels require HTTPS Responses transport"}}`,
+		RequestPath:  "/openai/v1/responses",
+	})
+
+	if got.ErrorCategory != OpsErrorCategoryPlatform {
+		t.Fatalf("category = %q, want %q", got.ErrorCategory, OpsErrorCategoryPlatform)
+	}
+	if got.ErrorSubcategory != "platform_internal_error" {
+		t.Fatalf("subcategory = %q, want platform_internal_error", got.ErrorSubcategory)
+	}
+	if got.ClassificationReason != OpsClassificationReasonOpenAIImageWebSocketHTTPFallback {
+		t.Fatalf("reason = %q, want %q", got.ClassificationReason, OpsClassificationReasonOpenAIImageWebSocketHTTPFallback)
+	}
+}
+
+func TestClassifyOpsError_UsesSpecificClientReason(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      OpsErrorClassificationInput
+		wantReason string
+	}{
+		{name: "balance", input: clientInput(403, "Insufficient account balance"), wantReason: "用户余额不足"},
+		{name: "group rpm", input: clientInput(429, "group requests-per-minute limit exceeded"), wantReason: "分组 RPM 限流"},
+		{name: "group rpm code", input: clientInput(429, "GROUP_RPM_EXCEEDED"), wantReason: "分组 RPM 限流"},
+		{name: "user rpm code", input: clientInput(429, "USER_RPM_EXCEEDED"), wantReason: "用户 RPM 限流"},
+		{name: "key rate window", input: clientInput(429, "API key 5小时限额已用完"), wantReason: "API Key 限流"},
+		{name: "key quota", input: clientInput(429, "API_KEY_QUOTA_EXHAUSTED API key 额度已用完"), wantReason: "API Key 配额已用完"},
+		{name: "generic quota", input: clientInput(429, "quota exhausted"), wantReason: "用户或订阅额度已用完"},
+		{name: "key disabled", input: clientInput(401, "API_KEY_DISABLED API key is disabled"), wantReason: "API Key 已禁用"},
+		{name: "image permission", input: OpsErrorClassificationInput{StatusCode: 403, ErrorOwner: "platform", ErrorSource: "gateway", ErrorPhase: "internal", ErrorMessage: "Image generation is not enabled for this group"}, wantReason: "当前分组未开启生图权限"},
+		{name: "image permission recorded as upstream context", input: OpsErrorClassificationInput{StatusCode: 403, UpstreamStatusCode: intPtrForOpsTest(403), ErrorOwner: "provider", ErrorSource: "upstream_http", ErrorPhase: "upstream", ErrorMessage: "Image generation is not enabled for this group", UpstreamErrorMessage: "Image generation is not enabled for this group"}, wantReason: "当前分组未开启生图权限"},
+		{name: "messages permission", input: OpsErrorClassificationInput{StatusCode: 403, ErrorOwner: "platform", ErrorSource: "gateway", ErrorPhase: "internal", ErrorMessage: "This group does not allow /v1/messages dispatch"}, wantReason: "当前分组未开启 /v1/messages 调度"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ClassifyOpsError(tt.input)
+			if got.ClassificationReason != tt.wantReason {
+				t.Fatalf("reason = %q, want %q (classification=%s/%s)", got.ClassificationReason, tt.wantReason, got.ErrorCategory, got.ErrorSubcategory)
+			}
+		})
+	}
+}
+
+func TestBuildOpsErrorSummaryIncludesConcreteDetail(t *testing.T) {
+	if got := BuildOpsErrorSummary("上游服务不可用或过载", "Upstream request failed", "openai_error", "Cloudflare 524: origin timed out"); got != "上游服务不可用或过载：Cloudflare 524: origin timed out" {
+		t.Fatalf("summary = %q", got)
+	}
+	if got := BuildOpsErrorSummary("API Key 已禁用", "API key is disabled", "", ""); got != "API Key 已禁用：API key is disabled" {
+		t.Fatalf("summary = %q", got)
+	}
+}
+
 func clientInput(status int, message string) OpsErrorClassificationInput {
 	return OpsErrorClassificationInput{
 		StatusCode:   status,
@@ -227,4 +305,8 @@ func clientInput(status int, message string) OpsErrorClassificationInput {
 		ErrorPhase:   "request",
 		ErrorMessage: message,
 	}
+}
+
+func intPtrForOpsTest(value int) *int {
+	return &value
 }

@@ -320,17 +320,19 @@ func buildUnifiedErrorClassifiedWhere(filter *service.OpsUnifiedErrorListFilter,
 
 func unifiedErrorCategorySQL() string {
 	return `CASE
+      WHEN ` + unifiedSQLImageWebSocketHTTPFallbackExpr() + ` THEN 'platform'
       WHEN text_blob LIKE '%request body is incomplete%' OR text_blob LIKE '%incomplete_body%' OR (LOWER(error_phase) = 'request' AND text_blob LIKE '%unexpected eof%') OR text_blob LIKE '%context canceled%' OR text_blob LIKE '%client canceled%' OR text_blob LIKE '%request canceled%' OR text_blob LIKE '%cancelled%' OR text_blob LIKE '%broken pipe%' OR text_blob LIKE '%connection reset%' OR text_blob LIKE '%client disconnected%' THEN 'client'
       WHEN ` + unifiedSQLClientDefaultModelRoutingFailureExpr() + ` THEN 'client'
-      WHEN text_blob LIKE '%no available accounts%' OR text_blob LIKE '%no available account%' OR text_blob LIKE '%account pool%' OR text_blob LIKE '%账号池%' OR text_blob LIKE '%账号不可用%' OR text_blob LIKE '%无可用账号%' OR text_blob LIKE '%account scheduler%' OR text_blob LIKE '%scheduling account%' THEN 'account_pool'
-      WHEN (NOT ` + unifiedSQLHasUpstreamEvidenceExpr() + `) AND (text_blob LIKE '%group_disabled%' OR text_blob LIKE '%group disabled%' OR text_blob LIKE '%group inactive%' OR text_blob LIKE '%group unavailable%' OR text_blob LIKE '%group not available%' OR text_blob LIKE '%所属分组%' OR text_blob LIKE '%分组已停用%' OR text_blob LIKE '%分组不可用%' OR text_blob LIKE '%分组未启用%' OR text_blob LIKE '%分组已禁用%' OR text_blob LIKE '%subscription_not_found%' OR text_blob LIKE '%subscription_invalid%' OR text_blob LIKE '%subscription expired%' OR text_blob LIKE '%no active subscription%' OR text_blob LIKE '%订阅不存在%' OR text_blob LIKE '%订阅无效%' OR text_blob LIKE '%订阅已过期%') THEN 'client'
+      WHEN (text_blob LIKE '%no available accounts%' OR text_blob LIKE '%no available account%' OR text_blob LIKE '%no available compatible accounts%' OR text_blob LIKE '%account pool%' OR text_blob LIKE '%账号池%' OR text_blob LIKE '%账号不可用%' OR text_blob LIKE '%无可用账号%' OR text_blob LIKE '%account scheduler%' OR text_blob LIKE '%scheduling account%') AND ((NOT ` + unifiedSQLHasUpstreamEvidenceExpr() + `) OR (LOWER(error_phase) = 'routing' AND LOWER(error_owner) = 'platform' AND LOWER(error_source) = 'gateway')) THEN 'account_pool'
+      WHEN ((NOT ` + unifiedSQLHasUpstreamEvidenceExpr() + `) OR (effective_status_code = 403 AND text_blob LIKE '%image generation is not enabled for this group%' AND COALESCE(upstream_error_detail,'') = '' AND (COALESCE(upstream_error_message,'') = '' OR LOWER(upstream_error_message) LIKE '%image generation is not enabled for this group%'))) AND (text_blob LIKE '%this group does not allow /v1/messages dispatch%' OR text_blob LIKE '%image generation is not enabled for this group%' OR text_blob LIKE '%group_deleted%' OR text_blob LIKE '%group deleted%' OR text_blob LIKE '%分组已删除%' OR text_blob LIKE '%group_disabled%' OR text_blob LIKE '%group disabled%' OR text_blob LIKE '%group inactive%' OR text_blob LIKE '%group unavailable%' OR text_blob LIKE '%group not available%' OR text_blob LIKE '%所属分组%' OR text_blob LIKE '%分组已停用%' OR text_blob LIKE '%分组不可用%' OR text_blob LIKE '%分组未启用%' OR text_blob LIKE '%分组已禁用%' OR text_blob LIKE '%subscription_not_found%' OR text_blob LIKE '%subscription_invalid%' OR text_blob LIKE '%subscription expired%' OR text_blob LIKE '%no active subscription%' OR text_blob LIKE '%订阅不存在%' OR text_blob LIKE '%订阅无效%' OR text_blob LIKE '%订阅已过期%') THEN 'client'
+      WHEN (NOT ` + unifiedSQLHasUpstreamEvidenceExpr() + `) AND LOWER(error_phase) = 'routing' AND LOWER(error_owner) = 'platform' AND LOWER(error_source) = 'gateway' AND text_blob LIKE '%service temporarily unavailable%' THEN 'account_pool'
       WHEN ` + unifiedSQLClientSideExpr() + ` THEN 'client'
       WHEN effective_status_code = 429 OR text_blob LIKE '%rate limit%' OR text_blob LIKE '%rate_limit%' OR text_blob LIKE '%too many requests%' OR text_blob LIKE '%rpm%' OR text_blob LIKE '%tpm%' OR text_blob LIKE '%concurrency%' OR text_blob LIKE '%限流%' OR text_blob LIKE '%频率限制%' THEN 'rate_limit'
       WHEN text_blob LIKE '%insufficient balance%' OR text_blob LIKE '%insufficient_balance%' OR text_blob LIKE '%balance%' OR text_blob LIKE '%quota%' OR text_blob LIKE '%credit%' OR text_blob LIKE '%usage limit%' OR text_blob LIKE '%subscription%' OR text_blob LIKE '%余额%' OR text_blob LIKE '%额度%' THEN 'balance'
       WHEN effective_status_code = 401 OR LOWER(error_phase) = 'auth' OR text_blob LIKE '%permission%' OR text_blob LIKE '%unauthorized%' OR text_blob LIKE '%forbidden%' OR text_blob LIKE '%access denied%' OR text_blob LIKE '%invalid api key%' OR text_blob LIKE '%invalid_api_key%' OR text_blob LIKE '%权限%' OR text_blob LIKE '%鉴权%' THEN 'permission'
       WHEN text_blob LIKE '%model mapping%' OR text_blob LIKE '%no mapping%' OR text_blob LIKE '%mapped model%' OR text_blob LIKE '%channel config%' OR text_blob LIKE '%config%' OR text_blob LIKE '%cache config%' OR text_blob LIKE '%ai config%' OR text_blob LIKE '%配置%' OR text_blob LIKE '%映射%' THEN 'config'
       WHEN text_blob LIKE '%slow%' OR text_blob LIKE '%p99%' OR text_blob LIKE '%ttft%' OR text_blob LIKE '%time to first token%' OR text_blob LIKE '%latency%' OR text_blob LIKE '%耗时%' OR text_blob LIKE '%慢请求%' OR COALESCE(time_to_first_token_ms,0) >= 30000 OR COALESCE(response_latency_ms,0) >= 120000 OR COALESCE(upstream_latency_ms,0) >= 120000 THEN 'slow_request'
-      WHEN ` + unifiedSQLHasUpstreamEvidenceExpr() + ` OR effective_status_code >= 500 OR ((LOWER(error_owner) <> 'platform') AND (text_blob LIKE '%timeout%' OR text_blob LIKE '%overloaded%' OR text_blob LIKE '%unavailable%' OR text_blob LIKE '%bad gateway%' OR text_blob LIKE '%service unavailable%' OR text_blob LIKE '%gateway timeout%')) THEN 'upstream'
+      WHEN ` + unifiedSQLHasUpstreamEvidenceExpr() + ` OR (LOWER(error_owner) <> 'platform' AND effective_status_code >= 500) OR ((LOWER(error_owner) <> 'platform') AND (text_blob LIKE '%timeout%' OR text_blob LIKE '%overloaded%' OR text_blob LIKE '%unavailable%' OR text_blob LIKE '%bad gateway%' OR text_blob LIKE '%service unavailable%' OR text_blob LIKE '%gateway timeout%')) THEN 'upstream'
       WHEN text_blob LIKE '%panic%' OR text_blob LIKE '%internal%' OR text_blob LIKE '%database%' OR text_blob LIKE '%redis%' OR text_blob LIKE '%gateway%' OR text_blob LIKE '%platform%' OR text_blob LIKE '%平台%' OR LOWER(error_owner) = 'platform' THEN 'platform'
       ELSE 'unknown'
     END`
@@ -338,18 +340,20 @@ func unifiedErrorCategorySQL() string {
 
 func unifiedErrorSubcategorySQL() string {
 	return `CASE
+      WHEN ` + unifiedSQLImageWebSocketHTTPFallbackExpr() + ` THEN 'platform_internal_error'
       WHEN text_blob LIKE '%request body is incomplete%' OR text_blob LIKE '%incomplete_body%' OR (LOWER(error_phase) = 'request' AND text_blob LIKE '%unexpected eof%') OR text_blob LIKE '%context canceled%' OR text_blob LIKE '%client canceled%' OR text_blob LIKE '%request canceled%' OR text_blob LIKE '%cancelled%' OR text_blob LIKE '%broken pipe%' OR text_blob LIKE '%connection reset%' OR text_blob LIKE '%client disconnected%' THEN 'client_disconnect_error'
       WHEN ` + unifiedSQLClientDefaultModelRoutingFailureExpr() + ` THEN 'client_model_error'
-      WHEN text_blob LIKE '%no available accounts%' OR text_blob LIKE '%no available account%' OR text_blob LIKE '%account pool%' OR text_blob LIKE '%账号池%' OR text_blob LIKE '%账号不可用%' OR text_blob LIKE '%无可用账号%' OR text_blob LIKE '%account scheduler%' OR text_blob LIKE '%scheduling account%' THEN 'account_pool_empty'
-      WHEN (NOT ` + unifiedSQLHasUpstreamEvidenceExpr() + `) AND (text_blob LIKE '%group_disabled%' OR text_blob LIKE '%group disabled%' OR text_blob LIKE '%group inactive%' OR text_blob LIKE '%group unavailable%' OR text_blob LIKE '%group not available%' OR text_blob LIKE '%所属分组%' OR text_blob LIKE '%分组已停用%' OR text_blob LIKE '%分组不可用%' OR text_blob LIKE '%分组未启用%' OR text_blob LIKE '%分组已禁用%') THEN 'client_group_error'
+      WHEN (text_blob LIKE '%no available accounts%' OR text_blob LIKE '%no available account%' OR text_blob LIKE '%no available compatible accounts%' OR text_blob LIKE '%account pool%' OR text_blob LIKE '%账号池%' OR text_blob LIKE '%账号不可用%' OR text_blob LIKE '%无可用账号%' OR text_blob LIKE '%account scheduler%' OR text_blob LIKE '%scheduling account%') AND ((NOT ` + unifiedSQLHasUpstreamEvidenceExpr() + `) OR (LOWER(error_phase) = 'routing' AND LOWER(error_owner) = 'platform' AND LOWER(error_source) = 'gateway')) THEN 'account_pool_empty'
+      WHEN ((NOT ` + unifiedSQLHasUpstreamEvidenceExpr() + `) OR (effective_status_code = 403 AND text_blob LIKE '%image generation is not enabled for this group%' AND COALESCE(upstream_error_detail,'') = '' AND (COALESCE(upstream_error_message,'') = '' OR LOWER(upstream_error_message) LIKE '%image generation is not enabled for this group%'))) AND (text_blob LIKE '%this group does not allow /v1/messages dispatch%' OR text_blob LIKE '%image generation is not enabled for this group%' OR text_blob LIKE '%group_deleted%' OR text_blob LIKE '%group deleted%' OR text_blob LIKE '%分组已删除%' OR text_blob LIKE '%group_disabled%' OR text_blob LIKE '%group disabled%' OR text_blob LIKE '%group inactive%' OR text_blob LIKE '%group unavailable%' OR text_blob LIKE '%group not available%' OR text_blob LIKE '%所属分组%' OR text_blob LIKE '%分组已停用%' OR text_blob LIKE '%分组不可用%' OR text_blob LIKE '%分组未启用%' OR text_blob LIKE '%分组已禁用%') THEN 'client_group_error'
       WHEN (NOT ` + unifiedSQLHasUpstreamEvidenceExpr() + `) AND (text_blob LIKE '%subscription_not_found%' OR text_blob LIKE '%subscription_invalid%' OR text_blob LIKE '%subscription expired%' OR text_blob LIKE '%no active subscription%' OR text_blob LIKE '%订阅不存在%' OR text_blob LIKE '%订阅无效%' OR text_blob LIKE '%订阅已过期%') THEN 'client_subscription_error'
+      WHEN (NOT ` + unifiedSQLHasUpstreamEvidenceExpr() + `) AND LOWER(error_phase) = 'routing' AND LOWER(error_owner) = 'platform' AND LOWER(error_source) = 'gateway' AND text_blob LIKE '%service temporarily unavailable%' THEN 'account_pool_empty'
       WHEN ` + unifiedSQLClientSideExpr() + ` THEN ` + unifiedClientSubcategorySQL() + `
       WHEN effective_status_code = 429 OR text_blob LIKE '%rate limit%' OR text_blob LIKE '%rate_limit%' OR text_blob LIKE '%too many requests%' OR text_blob LIKE '%rpm%' OR text_blob LIKE '%tpm%' OR text_blob LIKE '%concurrency%' OR text_blob LIKE '%限流%' OR text_blob LIKE '%频率限制%' THEN 'upstream_rate_limit'
       WHEN text_blob LIKE '%insufficient balance%' OR text_blob LIKE '%insufficient_balance%' OR text_blob LIKE '%balance%' OR text_blob LIKE '%quota%' OR text_blob LIKE '%credit%' OR text_blob LIKE '%usage limit%' OR text_blob LIKE '%subscription%' OR text_blob LIKE '%余额%' OR text_blob LIKE '%额度%' THEN 'upstream_balance_error'
       WHEN effective_status_code = 401 OR LOWER(error_phase) = 'auth' OR text_blob LIKE '%permission%' OR text_blob LIKE '%unauthorized%' OR text_blob LIKE '%forbidden%' OR text_blob LIKE '%access denied%' OR text_blob LIKE '%invalid api key%' OR text_blob LIKE '%invalid_api_key%' OR text_blob LIKE '%权限%' OR text_blob LIKE '%鉴权%' THEN 'upstream_permission_error'
       WHEN text_blob LIKE '%model mapping%' OR text_blob LIKE '%no mapping%' OR text_blob LIKE '%mapped model%' OR text_blob LIKE '%channel config%' OR text_blob LIKE '%config%' OR text_blob LIKE '%cache config%' OR text_blob LIKE '%ai config%' OR text_blob LIKE '%配置%' OR text_blob LIKE '%映射%' THEN 'config_model_mapping_error'
       WHEN text_blob LIKE '%slow%' OR text_blob LIKE '%p99%' OR text_blob LIKE '%ttft%' OR text_blob LIKE '%time to first token%' OR text_blob LIKE '%latency%' OR text_blob LIKE '%耗时%' OR text_blob LIKE '%慢请求%' OR COALESCE(time_to_first_token_ms,0) >= 30000 OR COALESCE(response_latency_ms,0) >= 120000 OR COALESCE(upstream_latency_ms,0) >= 120000 THEN 'slow_response'
-      WHEN ` + unifiedSQLHasUpstreamEvidenceExpr() + ` OR effective_status_code >= 500 OR ((LOWER(error_owner) <> 'platform') AND (text_blob LIKE '%timeout%' OR text_blob LIKE '%overloaded%' OR text_blob LIKE '%unavailable%' OR text_blob LIKE '%bad gateway%' OR text_blob LIKE '%service unavailable%' OR text_blob LIKE '%gateway timeout%')) THEN CASE WHEN text_blob LIKE '%timeout%' OR text_blob LIKE '%deadline%' OR text_blob LIKE '%gateway timeout%' OR effective_status_code = 504 THEN 'upstream_timeout' WHEN effective_status_code IN (502,503) OR text_blob LIKE '%overloaded%' OR text_blob LIKE '%unavailable%' OR text_blob LIKE '%bad gateway%' OR text_blob LIKE '%service unavailable%' THEN 'upstream_unavailable' ELSE 'upstream_error' END
+      WHEN ` + unifiedSQLHasUpstreamEvidenceExpr() + ` OR (LOWER(error_owner) <> 'platform' AND effective_status_code >= 500) OR ((LOWER(error_owner) <> 'platform') AND (text_blob LIKE '%timeout%' OR text_blob LIKE '%overloaded%' OR text_blob LIKE '%unavailable%' OR text_blob LIKE '%bad gateway%' OR text_blob LIKE '%service unavailable%' OR text_blob LIKE '%gateway timeout%')) THEN CASE WHEN text_blob LIKE '%timeout%' OR text_blob LIKE '%deadline%' OR text_blob LIKE '%gateway timeout%' OR effective_status_code = 504 THEN 'upstream_timeout' WHEN effective_status_code IN (502,503) OR text_blob LIKE '%overloaded%' OR text_blob LIKE '%unavailable%' OR text_blob LIKE '%bad gateway%' OR text_blob LIKE '%service unavailable%' THEN 'upstream_unavailable' ELSE 'upstream_error' END
       WHEN text_blob LIKE '%panic%' OR text_blob LIKE '%internal%' OR text_blob LIKE '%database%' OR text_blob LIKE '%redis%' OR text_blob LIKE '%gateway%' OR text_blob LIKE '%platform%' OR text_blob LIKE '%平台%' OR LOWER(error_owner) = 'platform' THEN CASE WHEN text_blob LIKE '%database%' OR text_blob LIKE '%redis%' OR text_blob LIKE '%dependency%' OR text_blob LIKE '%依赖%' THEN 'platform_dependency_error' ELSE 'platform_internal_error' END
       ELSE 'unknown_insufficient_evidence'
     END`
@@ -358,6 +362,7 @@ func unifiedErrorSubcategorySQL() string {
 func unifiedClientSubcategorySQL() string {
 	return `CASE
         WHEN text_blob LIKE '%request body is incomplete%' OR text_blob LIKE '%incomplete_body%' OR (LOWER(error_phase) = 'request' AND text_blob LIKE '%unexpected eof%') OR text_blob LIKE '%context canceled%' OR text_blob LIKE '%client canceled%' OR text_blob LIKE '%request canceled%' OR text_blob LIKE '%cancelled%' OR text_blob LIKE '%broken pipe%' OR text_blob LIKE '%connection reset%' OR text_blob LIKE '%client disconnected%' THEN 'client_disconnect_error'
+        WHEN text_blob LIKE '%api_key_quota_exhausted%' OR text_blob LIKE '%api key 额度已用完%' OR text_blob LIKE '%quota exhausted%' OR text_blob LIKE '%配额耗尽%' OR text_blob LIKE '%user_platform_daily_quota_exhausted%' OR text_blob LIKE '%user_platform_weekly_quota_exhausted%' OR text_blob LIKE '%user_platform_monthly_quota_exhausted%' THEN 'client_balance_error'
         WHEN effective_status_code = 429 OR text_blob LIKE '%rate limit%' OR text_blob LIKE '%rate_limit%' OR text_blob LIKE '%too many requests%' OR text_blob LIKE '%user rate%' OR text_blob LIKE '%key rate%' OR text_blob LIKE '%group rate%' OR text_blob LIKE '%rpm%' OR text_blob LIKE '%tpm%' OR text_blob LIKE '%concurrency%' OR text_blob LIKE '%pending%' OR text_blob LIKE '%queue%' OR text_blob LIKE '%用户限流%' OR text_blob LIKE '%key 限流%' THEN 'client_rate_limit_error'
         WHEN text_blob LIKE '%group_disabled%' OR text_blob LIKE '%group disabled%' OR text_blob LIKE '%group inactive%' OR text_blob LIKE '%group unavailable%' OR text_blob LIKE '%group not available%' OR text_blob LIKE '%所属分组%' OR text_blob LIKE '%分组已停用%' OR text_blob LIKE '%分组不可用%' OR text_blob LIKE '%分组未启用%' OR text_blob LIKE '%分组已禁用%' THEN 'client_group_error'
         WHEN text_blob LIKE '%subscription_not_found%' OR text_blob LIKE '%subscription_invalid%' OR text_blob LIKE '%subscription expired%' OR text_blob LIKE '%no active subscription%' OR text_blob LIKE '%订阅不存在%' OR text_blob LIKE '%订阅无效%' OR text_blob LIKE '%订阅已过期%' THEN 'client_subscription_error'
@@ -391,7 +396,11 @@ func unifiedSeveritySQL() string {
 }
 
 func unifiedSQLHasUpstreamEvidenceExpr() string {
-	return `(upstream_status_code IS NOT NULL OR text_blob LIKE '%upstream_http%' OR text_blob LIKE '%provider%' OR text_blob LIKE '%upstream error%' OR text_blob LIKE '%upstream_error%' OR text_blob LIKE '%upstream_status%' OR text_blob LIKE '%upstream status%' OR LOWER(error_owner) = 'provider' OR LOWER(error_source) = 'upstream_http' OR LOWER(error_phase) = 'upstream')`
+	return `(upstream_status_code > 0 OR text_blob LIKE '%upstream_http%' OR text_blob LIKE '%provider%' OR text_blob LIKE '%upstream error%' OR text_blob LIKE '%upstream_error%' OR text_blob LIKE '%upstream_status%' OR text_blob LIKE '%upstream status%' OR LOWER(error_owner) = 'provider' OR LOWER(error_source) = 'upstream_http' OR LOWER(error_phase) = 'upstream')`
+}
+
+func unifiedSQLImageWebSocketHTTPFallbackExpr() string {
+	return `(effective_status_code = 426 AND text_blob LIKE '%codex image channels require https responses transport%' AND (text_blob LIKE '%websocket_transport_unsupported%' OR LOWER(request_path) LIKE '%/openai/v1/responses%'))`
 }
 
 func unifiedSQLClientSideExpr() string {
@@ -531,7 +540,7 @@ func applyUnifiedErrorClassification(c *opsUnifiedErrorCandidate) {
 	}
 	c.item.ErrorResult = unifiedErrorResultFor(c.clientStatusCode, classification)
 	c.item.Severity = unifiedSeverityFor(c.rawSeverity, c.item.StatusCode)
-	c.item.Summary = unifiedErrorSummary(classification.ClassificationReason, c.message, c.upstreamErrorMessage)
+	c.item.Summary = service.BuildOpsErrorSummary(classification.ClassificationReason, c.message, c.upstreamErrorMessage, c.upstreamErrorDetail)
 }
 
 func normalizeUnifiedErrorAIAnalysisLimit(maxSamples int) int {
@@ -595,19 +604,6 @@ func unifiedSeverityFor(raw string, statusCode int) string {
 		return "P2"
 	}
 	return "normal"
-}
-
-func unifiedErrorSummary(reason, message, upstreamMessage string) string {
-	for _, candidate := range []string{reason, message, upstreamMessage} {
-		candidate = strings.TrimSpace(candidate)
-		if candidate != "" {
-			if len([]rune(candidate)) > 160 {
-				return string([]rune(candidate)[:160])
-			}
-			return candidate
-		}
-	}
-	return "暂无摘要"
 }
 
 func opsUnifiedAPIKeyDisplay(id int64, name string) string {

@@ -1,6 +1,10 @@
 package service
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
+)
 
 const (
 	OpsErrorCategoryClient      = "client"
@@ -61,6 +65,8 @@ const (
 	OpsClassificationConfidenceMedium = "medium"
 	OpsClassificationConfidenceLow    = "low"
 )
+
+const OpsClassificationReasonOpenAIImageWebSocketHTTPFallback = "生图ws降级http"
 
 type OpsErrorClassificationInput struct {
 	StatusCode           int
@@ -147,6 +153,21 @@ func ClassifyOpsError(input OpsErrorClassificationInput) OpsErrorClassification 
 		strings.EqualFold(strings.TrimSpace(input.ErrorPhase), "upstream")
 	clientSide := isOpsClassificationClientSide(input, hasUpstreamEvidence)
 
+	// A Codex image channel intentionally rejects the WebSocket upgrade with 426
+	// so the client retries the same request over the HTTPS Responses endpoint.
+	// This is an expected transport downgrade, not a platform failure.
+	if isOpenAIImageWebSocketHTTPFallback(input, text) {
+		return opsClassification(
+			OpsErrorCategoryPlatform,
+			"platform_internal_error",
+			OpsClassificationReasonOpenAIImageWebSocketHTTPFallback,
+			OpsClassificationConfidenceHigh,
+		)
+	}
+	if isLocalImagePermissionError(input, text) {
+		return clientClassification(OpsClientErrorSubcategoryGroup, "当前分组未开启生图权限", OpsClassificationConfidenceHigh)
+	}
+
 	if containsAny(text, "request body is incomplete", "incomplete_body") ||
 		(containsAny(text, "unexpected eof") && strings.EqualFold(strings.TrimSpace(input.ErrorPhase), "request")) {
 		return clientClassification(OpsClientErrorSubcategoryDisconnect, "请求体上传未完成，客户端连接提前中断", OpsClassificationConfidenceHigh)
@@ -157,15 +178,27 @@ func ClassifyOpsError(input OpsErrorClassificationInput) OpsErrorClassification 
 	if isOpenAIClientDefaultModelRoutingFailure(input, hasUpstreamEvidence, text) {
 		return clientClassification(OpsClientErrorSubcategoryModel, "客户端未传入有效模型，平台占位模型无法直接调度上游账号", OpsClassificationConfidenceHigh)
 	}
-	if containsAny(text, "no available accounts", "no available account", "account pool", "账号池", "账号不可用", "无可用账号", "account scheduler", "scheduling account") {
+	if isLocalAccountPoolSignal(input, text, hasUpstreamEvidence) {
 		return opsClassification(OpsErrorCategoryAccountPool, "account_pool_empty", "账号池没有可用上游账号或账号调度失败", OpsClassificationConfidenceHigh)
 	}
 
+	if !hasUpstreamEvidence && containsAny(text, "this group does not allow /v1/messages dispatch") {
+		return clientClassification(OpsClientErrorSubcategoryGroup, "当前分组未开启 /v1/messages 调度", OpsClassificationConfidenceHigh)
+	}
+	if !hasUpstreamEvidence && containsAny(text, "image generation is not enabled for this group") {
+		return clientClassification(OpsClientErrorSubcategoryGroup, "当前分组未开启生图权限", OpsClassificationConfidenceHigh)
+	}
+	if !hasUpstreamEvidence && containsAny(text, "group_deleted", "group deleted", "分组已删除") {
+		return clientClassification(OpsClientErrorSubcategoryGroup, "API Key 所属分组已删除", OpsClassificationConfidenceHigh)
+	}
 	if !hasUpstreamEvidence && containsAny(text, "group_disabled", "group disabled", "group inactive", "group unavailable", "group not available", "所属分组", "分组已停用", "分组不可用", "分组未启用", "分组已禁用") {
 		return clientClassification(OpsClientErrorSubcategoryGroup, "API Key 绑定的分组已停用或不可用", OpsClassificationConfidenceHigh)
 	}
 	if !hasUpstreamEvidence && containsAny(text, "subscription_not_found", "subscription_invalid", "subscription expired", "no active subscription", "订阅不存在", "订阅无效", "订阅已过期") {
 		return clientClassification(OpsClientErrorSubcategorySubscription, "订阅不存在、已过期或不满足当前分组要求", OpsClassificationConfidenceHigh)
+	}
+	if !hasUpstreamEvidence && strings.EqualFold(strings.TrimSpace(input.ErrorPhase), "routing") && strings.EqualFold(strings.TrimSpace(input.ErrorOwner), "platform") && strings.EqualFold(strings.TrimSpace(input.ErrorSource), "gateway") && containsAny(text, "service temporarily unavailable") {
+		return opsClassification(OpsErrorCategoryAccountPool, "account_pool_empty", "平台路由没有可用上游账号或渠道", OpsClassificationConfidenceHigh)
 	}
 
 	if clientSide {
@@ -188,7 +221,7 @@ func ClassifyOpsError(input OpsErrorClassificationInput) OpsErrorClassification 
 		return opsClassification(OpsErrorCategorySlowRequest, "slow_response", "请求耗时或首 token 延迟异常", OpsClassificationConfidenceMedium)
 	}
 	platformOwned := strings.EqualFold(strings.TrimSpace(input.ErrorOwner), "platform")
-	if hasUpstreamEvidence || status >= 500 || (!platformOwned && containsAny(text, "timeout", "overloaded", "unavailable", "bad gateway", "service unavailable", "gateway timeout")) {
+	if hasUpstreamEvidence || (!platformOwned && status >= 500) || (!platformOwned && containsAny(text, "timeout", "overloaded", "unavailable", "bad gateway", "service unavailable", "gateway timeout")) {
 		sub := "upstream_error"
 		reason := "上游服务返回错误或不可用"
 		if containsAny(text, "timeout", "deadline", "gateway timeout") || status == 504 {
@@ -199,6 +232,9 @@ func ClassifyOpsError(input OpsErrorClassificationInput) OpsErrorClassification 
 			reason = "上游服务不可用或过载"
 		}
 		return opsClassification(OpsErrorCategoryUpstream, sub, reason, OpsClassificationConfidenceHigh)
+	}
+	if containsAny(text, "upstream stream ended without a terminal response event") {
+		return opsClassification(OpsErrorCategoryPlatform, "platform_internal_error", "上游响应流未返回终止事件", OpsClassificationConfidenceHigh)
 	}
 	if containsAny(text, "panic", "internal", "database", "redis", "gateway", "platform", "平台") || strings.EqualFold(strings.TrimSpace(input.ErrorOwner), "platform") {
 		sub := "platform_internal_error"
@@ -215,8 +251,11 @@ func classifyClientSideOpsError(input OpsErrorClassificationInput, text string) 
 	status := input.StatusCode
 	phase := strings.ToLower(strings.TrimSpace(input.ErrorPhase))
 
+	if containsAny(text, "api_key_quota_exhausted", "api key 额度已用完", "quota exhausted", "配额耗尽", "user_platform_daily_quota_exhausted", "user_platform_weekly_quota_exhausted", "user_platform_monthly_quota_exhausted") {
+		return clientClassification(OpsClientErrorSubcategoryBalance, clientBalanceReason(text), OpsClassificationConfidenceHigh)
+	}
 	if status == 429 || containsAny(text, "rate limit", "rate_limit", "too many requests", "user rate", "key rate", "group rate", "rpm", "tpm", "concurrency", "pending", "queue", "用户限流", "key 限流") {
-		return clientClassification(OpsClientErrorSubcategoryRateLimit, "用户、Key 或分组维度触发限流", OpsClassificationConfidenceHigh)
+		return clientClassification(OpsClientErrorSubcategoryRateLimit, clientRateLimitReason(text), OpsClassificationConfidenceHigh)
 	}
 	if containsAny(text, "group_disabled", "group disabled", "group inactive", "group unavailable", "group not available", "所属分组", "分组已停用", "分组不可用", "分组未启用", "分组已禁用") {
 		return clientClassification(OpsClientErrorSubcategoryGroup, "API Key 绑定的分组已停用或不可用", OpsClassificationConfidenceHigh)
@@ -225,7 +264,7 @@ func classifyClientSideOpsError(input OpsErrorClassificationInput, text string) 
 		return clientClassification(OpsClientErrorSubcategorySubscription, "订阅不存在、已过期或不满足当前分组要求", OpsClassificationConfidenceHigh)
 	}
 	if containsAny(text, "insufficient balance", "insufficient_balance", "insufficient quota", "quota exhausted", "api_key_quota_exhausted", "usage_limit_exceeded", "balance", "余额不足", "额度不足", "配额耗尽", "用量限制") {
-		return clientClassification(OpsClientErrorSubcategoryBalance, "用户余额不足、Key 配额耗尽或用户额度不足", OpsClassificationConfidenceHigh)
+		return clientClassification(OpsClientErrorSubcategoryBalance, clientBalanceReason(text), OpsClassificationConfidenceHigh)
 	}
 	if containsAny(text, "context length", "context window", "maximum context", "max_tokens", "input tokens", "output tokens", "token limit", "上下文", "超限") {
 		return clientClassification(OpsClientErrorSubcategoryContext, "输入上下文或输出上限超过模型配置", OpsClassificationConfidenceHigh)
@@ -240,7 +279,7 @@ func classifyClientSideOpsError(input OpsErrorClassificationInput, text string) 
 		return clientClassification(OpsClientErrorSubcategoryParameter, "请求参数校验失败或请求体格式错误", OpsClassificationConfidenceHigh)
 	}
 	if status == 401 || phase == "auth" || containsAny(text, "invalid api key", "invalid_api_key", "api_key_required", "api key required", "api_key_disabled", "api_key_expired", "key disabled", "key missing", "unauthorized", "forbidden", "access denied", "鉴权", "认证", "key 无效", "key 禁用") {
-		return clientClassification(OpsClientErrorSubcategoryAuth, "客户端凭证缺失、无效、禁用、过期，或被访问控制拒绝", OpsClassificationConfidenceHigh)
+		return clientClassification(OpsClientErrorSubcategoryAuth, clientAuthReason(text), OpsClassificationConfidenceHigh)
 	}
 
 	return OpsErrorClassification{
@@ -251,6 +290,108 @@ func classifyClientSideOpsError(input OpsErrorClassificationInput, text string) 
 		ClassificationReason:     "客户端请求错误缺少可判断具体子类的必需字段",
 		MissingEvidence:          []string{"status_code", "error_code", "request_path", "requested_model", "validation_error"},
 	}
+}
+
+func clientRateLimitReason(text string) string {
+	switch {
+	case containsAny(text, "group requests-per-minute", "group requests per minute", "group rpm", "group_rpm_exceeded", "分组 rpm"):
+		return "分组 RPM 限流"
+	case containsAny(text, "api key requests-per-minute", "api key requests per minute", "api key rpm", "api_key_rpm_exceeded", "key_rpm_exceeded", "key rpm", "key rate", "api key 5小时限额已用完"):
+		return "API Key 限流"
+	case containsAny(text, "user requests-per-minute", "user requests per minute", "user_rpm_exceeded", "user requests per minute", "user rpm", "user rate"):
+		return "用户 RPM 限流"
+	case containsAny(text, "concurrency", "并发"):
+		return "并发数超限"
+	case containsAny(text, "pending", "queue"):
+		return "请求排队数超限"
+	default:
+		return "用户、API Key 或分组触发限流"
+	}
+}
+
+func clientBalanceReason(text string) string {
+	switch {
+	case containsAny(text, "insufficient account balance", "insufficient balance", "insufficient_balance", "余额不足"):
+		return "用户余额不足"
+	case containsAny(text, "api_key_quota_exhausted", "api key 额度已用完"):
+		return "API Key 配额已用完"
+	case containsAny(text, "usage_limit_exceeded", "insufficient quota", "额度不足", "用量限制"):
+		return "用户或订阅额度已用完"
+	case containsAny(text, "quota exhausted", "配额耗尽", "user_platform_daily_quota_exhausted", "user_platform_weekly_quota_exhausted", "user_platform_monthly_quota_exhausted"):
+		return "用户或订阅额度已用完"
+	default:
+		return "客户端余额或配额不足"
+	}
+}
+
+func isLocalAccountPoolSignal(input OpsErrorClassificationInput, text string, hasUpstreamEvidence bool) bool {
+	if !containsAny(text, "no available accounts", "no available account", "no available compatible accounts", "account pool", "账号池", "账号不可用", "无可用账号", "account scheduler", "scheduling account") {
+		return false
+	}
+	if !hasUpstreamEvidence {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(input.ErrorPhase), "routing") &&
+		strings.EqualFold(strings.TrimSpace(input.ErrorOwner), "platform") &&
+		strings.EqualFold(strings.TrimSpace(input.ErrorSource), "gateway")
+}
+
+func clientAuthReason(text string) string {
+	switch {
+	case containsAny(text, "api_key_disabled", "api key is disabled", "key disabled", "key 禁用"):
+		return "API Key 已禁用"
+	case containsAny(text, "api_key_expired", "api key 已过期"):
+		return "API Key 已过期"
+	case containsAny(text, "api_key_required", "api key required", "key missing"):
+		return "请求未提供 API Key"
+	case containsAny(text, "invalid api key", "invalid_api_key", "key 无效"):
+		return "API Key 无效"
+	case containsAny(text, "access denied"):
+		return "API Key 访问被拒绝"
+	default:
+		return "客户端鉴权失败"
+	}
+}
+
+// BuildOpsErrorSummary keeps the classified layer/reason visible while adding
+// the first concrete sanitized detail available in the error record.
+func BuildOpsErrorSummary(reason, message, upstreamMessage, upstreamDetail string) string {
+	reason = strings.TrimSpace(reason)
+	for _, candidate := range []string{upstreamDetail, upstreamMessage, message} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" || isGenericOpsSummaryCandidate(candidate) || strings.EqualFold(candidate, reason) {
+			continue
+		}
+		candidate = strings.TrimSpace(logredact.RedactResponseBody(candidate, 500))
+		if candidate == "" {
+			continue
+		}
+		if reason == "" {
+			return truncateOpsSummary(candidate)
+		}
+		return truncateOpsSummary(reason + "：" + candidate)
+	}
+	if reason != "" {
+		return truncateOpsSummary(reason)
+	}
+	return "暂无摘要"
+}
+
+func isGenericOpsSummaryCandidate(candidate string) bool {
+	switch strings.ToLower(strings.TrimSpace(candidate)) {
+	case "api_error", "upstream_error", "openai_error", "upstream request failed", "upstream service temporarily unavailable", "service temporarily unavailable":
+		return true
+	default:
+		return false
+	}
+}
+
+func truncateOpsSummary(value string) string {
+	runes := []rune(strings.TrimSpace(value))
+	if len(runes) <= 160 {
+		return string(runes)
+	}
+	return string(runes[:160])
 }
 
 func ApplyOpsErrorClassificationToLog(log *OpsErrorLog) {
@@ -378,6 +519,37 @@ func isOpenAIClientDefaultModelRoutingFailure(input OpsErrorClassificationInput,
 		"no available accounts",
 		"no available account",
 	)
+}
+
+func isOpenAIImageWebSocketHTTPFallback(input OpsErrorClassificationInput, text string) bool {
+	statusCode := input.StatusCode
+	if input.UpstreamStatusCode != nil && *input.UpstreamStatusCode > 0 {
+		statusCode = *input.UpstreamStatusCode
+	}
+	if statusCode != 426 {
+		return false
+	}
+	message := strings.ToLower(strings.TrimSpace(input.ErrorMessage))
+	if !strings.Contains(message, "codex image channels require https responses transport") {
+		return false
+	}
+	return containsAny(text, "websocket_transport_unsupported") ||
+		containsAny(strings.ToLower(input.RequestPath), "/openai/v1/responses")
+}
+
+func isLocalImagePermissionError(input OpsErrorClassificationInput, text string) bool {
+	if !containsAny(text, "image generation is not enabled for this group") {
+		return false
+	}
+	statusCode := input.StatusCode
+	if input.UpstreamStatusCode != nil && *input.UpstreamStatusCode > 0 {
+		statusCode = *input.UpstreamStatusCode
+	}
+	if statusCode != 403 || strings.TrimSpace(input.UpstreamErrorDetail) != "" {
+		return false
+	}
+	upstreamMessage := strings.TrimSpace(input.UpstreamErrorMessage)
+	return upstreamMessage == "" || strings.Contains(strings.ToLower(upstreamMessage), "image generation is not enabled for this group")
 }
 
 func int64GreaterOrEqual(v *int64, threshold int64) bool {
