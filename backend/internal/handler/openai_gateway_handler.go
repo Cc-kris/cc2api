@@ -527,6 +527,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		} else if channelMapping.Mapped {
 			forwardBody = h.gatewayService.ReplaceModelInBody(body, channelMapping.MappedModel)
 		}
+		if !bytes.Equal(forwardBody, body) {
+			// function_call_output 预校验会缓存映射前的请求体。渠道映射或图片路由
+			// 修改 body 后必须让 service 重新解析，否则会上报错误的上游模型，
+			// 完整重编码分支还可能把旧模型重新写回实际请求。
+			c.Set(service.OpenAIParsedRequestBodyKey, nil)
+		}
 		if codexTextBypassTurn {
 			reqLog.Info("openai.codex_non_user_mapping_bypassed",
 				zap.String("request_role", string(codexDecision.Role)),

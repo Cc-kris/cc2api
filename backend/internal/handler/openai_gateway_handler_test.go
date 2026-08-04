@@ -1171,29 +1171,56 @@ func TestOpenAIResponses_ChannelMappedModelSelectsMappedAccount(t *testing.T) {
 	})
 	router.POST("/openai/v1/responses", h.Responses)
 
-	req := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", strings.NewReader(`{"model":"gpt-5.6-luna","input":"reply OK","stream":false}`))
-	req.Header.Set("Content-Type", "application/json")
-	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, req)
-
-	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
-	select {
-	case upstream := <-upstreamRequest:
-		require.Equal(t, "/v1/responses", upstream.path)
-		require.Equal(t, "Bearer sk-test", upstream.authorization)
-		require.Empty(t, upstream.grokClientVersion)
-		require.Equal(t, "grok-4.5", gjson.GetBytes(upstream.payload, "model").String())
-	case <-time.After(3 * time.Second):
-		t.Fatal("等待渠道映射后的 HTTP 上游请求超时")
+	testCases := []struct {
+		name         string
+		body         string
+		accountExtra map[string]any
+	}{
+		{
+			name:         "ordinary passthrough request",
+			body:         `{"model":"gpt-5.6-luna","input":"reply OK","stream":false}`,
+			accountExtra: map[string]any{"openai_passthrough": true},
+		},
+		{
+			name:         "function call output continuation",
+			body:         `{"model":"gpt-5.6-luna","stream":false,"input":[{"type":"function_call","call_id":"call_1","name":"shell","arguments":"{}"},{"type":"function_call_output","call_id":"call_1","output":"ok"}]}`,
+			accountExtra: map[string]any{"openai_responses_supported": true},
+		},
+		{
+			name:         "function call output continuation with full body reserialization",
+			body:         `{"model":"gpt-5.6-luna","stream":false,"reasoning":{"effort":"minimal"},"input":[{"type":"function_call","call_id":"call_1","name":"shell","arguments":"{}"},{"type":"function_call_output","call_id":"call_1","output":"ok"}]}`,
+			accountExtra: map[string]any{"openai_responses_supported": true},
+		},
 	}
-	select {
-	case usageLog := <-usageRepo.created:
-		require.Equal(t, int64(9903), usageLog.AccountID)
-		require.Equal(t, "gpt-5.6-luna", usageLog.RequestedModel)
-		require.NotNil(t, usageLog.ModelMappingChain)
-		require.Equal(t, "gpt-5.6-luna→grok-4.5", *usageLog.ModelMappingChain)
-	case <-time.After(3 * time.Second):
-		t.Fatal("等待渠道映射后的 HTTP usage log 超时")
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			accountRepo.account.Extra = testCase.accountExtra
+			req := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", strings.NewReader(testCase.body))
+			req.Header.Set("Content-Type", "application/json")
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, req)
+
+			require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+			select {
+			case upstream := <-upstreamRequest:
+				require.Equal(t, "/v1/responses", upstream.path)
+				require.Equal(t, "Bearer sk-test", upstream.authorization)
+				require.Empty(t, upstream.grokClientVersion)
+				require.Equal(t, "grok-4.5", gjson.GetBytes(upstream.payload, "model").String())
+			case <-time.After(3 * time.Second):
+				t.Fatal("等待渠道映射后的 HTTP 上游请求超时")
+			}
+			select {
+			case usageLog := <-usageRepo.created:
+				require.Equal(t, int64(9903), usageLog.AccountID)
+				require.Equal(t, "gpt-5.6-luna", usageLog.RequestedModel)
+				require.NotNil(t, usageLog.ModelMappingChain)
+				require.Equal(t, "gpt-5.6-luna→grok-4.5", *usageLog.ModelMappingChain)
+			case <-time.After(3 * time.Second):
+				t.Fatal("等待渠道映射后的 HTTP usage log 超时")
+			}
+		})
 	}
 }
 
