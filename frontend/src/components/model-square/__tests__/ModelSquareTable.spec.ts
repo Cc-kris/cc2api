@@ -77,7 +77,7 @@ describe('ModelSquareTable', () => {
     expect(wrapper.text()).not.toContain('modelSquare.viewTiers')
   })
 
-  it('renders tier prices in desktop and mobile row disclosures', () => {
+  it('renders each tier inside its corresponding desktop and mobile price column', () => {
     const tiered: ModelSquareModel = {
       ...item,
       name: 'minimax-m3',
@@ -95,8 +95,8 @@ describe('ModelSquareTable', () => {
           sort_order: 0,
           input: { ...inputPrice, original: '2.1', multiplier_price: '1.68' },
           output: { ...inputPrice, original: '8.4', multiplier_price: '6.72' },
-          cache_read: null,
-          cache_write: null,
+          cache_read: { ...inputPrice, original: '0.42', multiplier_price: '0.336', unit: 'per_1m_cache_tokens' },
+          cache_write: { ...inputPrice, original: '2.6', multiplier_price: '2.08', unit: 'per_1m_cache_tokens' },
           per_request: null,
         },
         {
@@ -105,8 +105,8 @@ describe('ModelSquareTable', () => {
           sort_order: 1,
           input: { ...inputPrice, original: '4.2', multiplier_price: '3.36' },
           output: { ...inputPrice, original: '16.8', multiplier_price: '13.44' },
-          cache_read: null,
-          cache_write: null,
+          cache_read: { ...inputPrice, original: '0.84', multiplier_price: '0.672', unit: 'per_1m_cache_tokens' },
+          cache_write: { ...inputPrice, original: '2.625', multiplier_price: '2.1', unit: 'per_1m_cache_tokens' },
           per_request: null,
         },
       ],
@@ -117,16 +117,39 @@ describe('ModelSquareTable', () => {
     })
 
     const desktop = wrapper.get('[data-testid="model-square-desktop-list"]')
-    expect(desktop.get('[data-testid="model-square-desktop-tier-disclosure"]').text()).toContain('modelSquare.viewTiers:2')
-    expect(desktop.findAll('[data-testid="model-square-tier"]')).toHaveLength(2)
-    expect(desktop.text()).toContain('0 ≤ modelSquare.tokens < 512,000')
-    expect(desktop.text()).toContain('modelSquare.tokens ≥ 512,000')
-    expect(desktop.text()).toContain('$1.68')
-    expect(desktop.text()).toContain('modelSquare.originalPrice $2.1')
+    expect(desktop.find('[data-testid="model-square-desktop-tier-cell"]').exists()).toBe(false)
+    expect(desktop.text()).not.toContain('modelSquare.viewTiers')
+
+    const desktopInput = desktop.get('[data-testid="model-square-desktop-input-cell"]')
+    expect(desktopInput.findAll('[data-testid="model-square-tier-price"]')).toHaveLength(2)
+    expect(desktopInput.text()).toContain('0 ≤ modelSquare.tokens < 512,000')
+    expect(desktopInput.text()).toContain('modelSquare.tokens ≥ 512,000')
+    expect(desktopInput.text()).toContain('$1.68')
+    expect(desktopInput.text()).toContain('$3.36')
+    expect(desktopInput.text()).not.toContain('$6.72')
+
+    const desktopOutput = desktop.get('[data-testid="model-square-desktop-output-cell"]')
+    expect(desktopOutput.findAll('[data-testid="model-square-tier-price"]')).toHaveLength(2)
+    expect(desktopOutput.text()).toContain('$6.72')
+    expect(desktopOutput.text()).toContain('$13.44')
+
+    const desktopCacheRead = desktop.get('[data-testid="model-square-desktop-cache_read-cell"]')
+    expect(desktopCacheRead.findAll('[data-testid="model-square-tier-price"]')).toHaveLength(2)
+    expect(desktopCacheRead.text()).toContain('$0.336')
+    expect(desktopCacheRead.text()).toContain('$0.672')
+
+    const desktopCacheWrite = desktop.get('[data-testid="model-square-desktop-cache_write-cell"]')
+    expect(desktopCacheWrite.findAll('[data-testid="model-square-tier-price"]')).toHaveLength(2)
+    expect(desktopCacheWrite.text()).toContain('$2.08')
+    expect(desktopCacheWrite.text()).toContain('$2.1')
 
     const mobile = wrapper.get('[data-testid="model-square-mobile-list"]')
-    expect(mobile.get('[data-testid="model-square-mobile-tier-list"]').text()).toContain('modelSquare.columns.tiers')
-    expect(mobile.findAll('[data-testid="model-square-tier"]')).toHaveLength(2)
+    expect(mobile.find('[data-testid="model-square-mobile-tier-list"]').exists()).toBe(false)
+    expect(mobile.text()).not.toContain('modelSquare.columns.tiers')
+    expect(mobile.get('[data-testid="model-square-mobile-input-prices"]').findAll('[data-testid="model-square-tier-price"]')).toHaveLength(2)
+    expect(mobile.get('[data-testid="model-square-mobile-output-prices"]').findAll('[data-testid="model-square-tier-price"]')).toHaveLength(2)
+    expect(mobile.get('[data-testid="model-square-mobile-cache_read-prices"]').findAll('[data-testid="model-square-tier-price"]')).toHaveLength(2)
+    expect(mobile.get('[data-testid="model-square-mobile-cache_write-prices"]').findAll('[data-testid="model-square-tier-price"]')).toHaveLength(2)
   })
 
   it('requests the next page when scrolling within 300px of the bottom', async () => {
