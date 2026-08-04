@@ -77,6 +77,58 @@ describe('ModelSquareTable', () => {
     expect(wrapper.text()).not.toContain('modelSquare.viewTiers')
   })
 
+  it('renders tier prices in desktop and mobile row disclosures', () => {
+    const tiered: ModelSquareModel = {
+      ...item,
+      name: 'minimax-m3',
+      prices: {
+        input: null,
+        output: null,
+        cache_read: null,
+        cache_write_5m: null,
+        cache_write_1h: null,
+      },
+      tiers: [
+        {
+          min_tokens: 0,
+          max_tokens: 512000,
+          sort_order: 0,
+          input: { ...inputPrice, original: '2.1', multiplier_price: '1.68' },
+          output: { ...inputPrice, original: '8.4', multiplier_price: '6.72' },
+          cache_read: null,
+          cache_write: null,
+          per_request: null,
+        },
+        {
+          min_tokens: 512000,
+          max_tokens: null,
+          sort_order: 1,
+          input: { ...inputPrice, original: '4.2', multiplier_price: '3.36' },
+          output: { ...inputPrice, original: '16.8', multiplier_price: '13.44' },
+          cache_read: null,
+          cache_write: null,
+          per_request: null,
+        },
+      ],
+    }
+    const wrapper = mount(ModelSquareTable, {
+      props: { items: [tiered], loading: false, loadingMore: false, hasMore: false },
+      global: { stubs: { Icon: true } },
+    })
+
+    const desktop = wrapper.get('[data-testid="model-square-desktop-list"]')
+    expect(desktop.get('[data-testid="model-square-desktop-tier-disclosure"]').text()).toContain('modelSquare.viewTiers:2')
+    expect(desktop.findAll('[data-testid="model-square-tier"]')).toHaveLength(2)
+    expect(desktop.text()).toContain('0 ≤ modelSquare.tokens < 512,000')
+    expect(desktop.text()).toContain('modelSquare.tokens ≥ 512,000')
+    expect(desktop.text()).toContain('$1.68')
+    expect(desktop.text()).toContain('modelSquare.originalPrice $2.1')
+
+    const mobile = wrapper.get('[data-testid="model-square-mobile-list"]')
+    expect(mobile.get('[data-testid="model-square-mobile-tier-list"]').text()).toContain('modelSquare.columns.tiers')
+    expect(mobile.findAll('[data-testid="model-square-tier"]')).toHaveLength(2)
+  })
+
   it('requests the next page when scrolling within 300px of the bottom', async () => {
     const wrapper = mount(ModelSquareTable, {
       props: { items: [item], loading: false, loadingMore: false, hasMore: true },

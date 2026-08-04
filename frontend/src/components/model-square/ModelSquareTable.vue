@@ -82,6 +82,36 @@
                 <ModelSquarePriceCell :price="priceFor(items[virtualRow.index], column.key)" />
               </div>
             </template>
+            <div
+              v-if="items[virtualRow.index].tiers.length"
+              role="cell"
+              aria-colspan="7"
+              data-testid="model-square-desktop-tier-cell"
+              class="col-span-full border-t border-gray-100 px-4 py-3 dark:border-dark-700"
+            >
+              <details class="group" data-testid="model-square-desktop-tier-disclosure">
+                <summary class="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-primary-700 marker:hidden dark:text-primary-300">
+                  {{ t('modelSquare.viewTiers', { count: items[virtualRow.index].tiers.length }) }}
+                  <Icon name="chevronDown" size="xs" class="transition-transform group-open:rotate-180" />
+                </summary>
+                <div class="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div
+                    v-for="tier in items[virtualRow.index].tiers"
+                    :key="`${tier.min_tokens}-${tier.max_tokens ?? 'open'}-${tier.sort_order}`"
+                    data-testid="model-square-tier"
+                    class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700"
+                  >
+                    <div class="mb-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{{ tierTitle(tier) }}</div>
+                    <div class="grid gap-3">
+                      <div v-for="entry in tierEntries(tier)" :key="entry.key">
+                        <div class="mb-1 text-xs font-medium text-gray-500">{{ entry.label }}</div>
+                        <ModelSquarePriceCell :price="entry.price" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </details>
+            </div>
           </div>
         </div>
 
@@ -112,6 +142,9 @@
             <span v-for="entry in billingEntries(item)" :key="entry.key" class="mt-1 block text-xs text-gray-500 dark:text-dark-300">
               {{ entry.label }}: {{ compactPrice(entry.price) }}
             </span>
+            <span v-if="item.tiers.length" class="mt-1 block text-xs text-gray-500 dark:text-dark-300">
+              {{ t('modelSquare.viewTiers', { count: item.tiers.length }) }}
+            </span>
           </span>
           <span class="flex shrink-0 items-center gap-2">
             <span v-if="primaryPrice(item)" class="text-right text-sm font-semibold text-gray-900 dark:text-white">
@@ -136,6 +169,26 @@
             <div v-for="entry in regularEntries(item)" :key="entry.key" class="min-w-0">
               <div class="mb-1 text-xs font-medium text-gray-500">{{ entry.label }}</div>
               <ModelSquarePriceCell :price="entry.price" />
+            </div>
+          </div>
+
+          <div v-if="item.tiers.length" data-testid="model-square-mobile-tier-list" class="border-t border-gray-100 pt-4 dark:border-dark-700">
+            <div class="mb-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{{ t('modelSquare.columns.tiers') }}</div>
+            <div class="grid min-w-0 gap-3">
+              <div
+                v-for="tier in item.tiers"
+                :key="`${tier.min_tokens}-${tier.max_tokens ?? 'open'}-${tier.sort_order}`"
+                data-testid="model-square-tier"
+                class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700"
+              >
+                <div class="mb-3 text-xs font-semibold text-gray-700 dark:text-gray-200">{{ tierTitle(tier) }}</div>
+                <div class="grid min-w-0 gap-4">
+                  <div v-for="entry in tierEntries(tier)" :key="entry.key" class="min-w-0">
+                    <div class="mb-1 text-xs font-medium text-gray-500">{{ entry.label }}</div>
+                    <ModelSquarePriceCell :price="entry.price" />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -168,7 +221,7 @@
 import { computed, defineComponent, h, ref, type ComponentPublicInstance, type VNodeRef } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useI18n } from 'vue-i18n'
-import type { ModelSquareModel, ModelSquareUnitPrice } from '@/api/modelSquare'
+import type { ModelSquareModel, ModelSquareTierPrice, ModelSquareUnitPrice } from '@/api/modelSquare'
 import Icon from '@/components/icons/Icon.vue'
 import ModelSquarePriceCell from './ModelSquarePriceCell.vue'
 
@@ -255,6 +308,28 @@ function fastEntries(item: ModelSquareModel) {
     { key: 'cache_write_5m', label: t('modelSquare.columns.cacheWrite5m'), price: item.fast_prices.cache_write_5m },
     { key: 'cache_write_1h', label: t('modelSquare.columns.cacheWrite1h'), price: item.fast_prices.cache_write_1h },
   ].filter((entry): entry is { key: string; label: string; price: ModelSquareUnitPrice } => entry.price != null)
+}
+
+function tierEntries(tier: ModelSquareTierPrice) {
+  return [
+    { key: 'input', label: t('modelSquare.columns.input'), price: tier.input },
+    { key: 'output', label: t('modelSquare.columns.output'), price: tier.output },
+    { key: 'cache_read', label: t('modelSquare.columns.cacheRead'), price: tier.cache_read },
+    { key: 'cache_write', label: t('modelSquare.columns.cacheWrite'), price: tier.cache_write },
+    { key: 'per_request', label: t('modelSquare.columns.perRequest'), price: tier.per_request },
+  ].filter((entry): entry is { key: string; label: string; price: ModelSquareUnitPrice } => entry.price != null)
+}
+
+function formatTokenCount(value: number) {
+  return new Intl.NumberFormat().format(value)
+}
+
+function tierTitle(tier: ModelSquareTierPrice) {
+  const min = formatTokenCount(tier.min_tokens)
+  const range = tier.max_tokens == null
+    ? `${t('modelSquare.tokens')} ≥ ${min}`
+    : `${min} ≤ ${t('modelSquare.tokens')} < ${formatTokenCount(tier.max_tokens)}`
+  return tier.tier_label ? `${tier.tier_label} · ${range}` : range
 }
 
 function primaryPrice(item: ModelSquareModel): ModelSquareUnitPrice | null {
