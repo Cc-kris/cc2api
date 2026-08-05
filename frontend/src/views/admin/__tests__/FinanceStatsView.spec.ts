@@ -79,7 +79,7 @@ const overview = {
 };
 const trend = [
   {
-    bucket_start: "2026-07-26T00:00:00Z",
+    bucket_start: "2026-07-25T16:00:00Z",
     bucket_end: "2026-07-27T00:00:00Z",
     revenue: "100",
     upstream_cost: "70",
@@ -150,6 +150,19 @@ const losses = [
 const funds = {
   wallet_cash: [
     {
+      wallet_id: 4,
+      wallet_name: "现金钱包 B",
+      balance_scope_key: "newapi-live",
+      balance: "260",
+      currency: "USD",
+      daily_cost: "10",
+      available_days: "26",
+      collected_at: "2026-07-27T08:00:00Z",
+      sync_status: "success",
+      included_in_total: true,
+      stale: false,
+    },
+    {
       wallet_id: 5,
       wallet_name: "现金钱包 A",
       balance_scope_key: "newapi-main",
@@ -160,7 +173,7 @@ const funds = {
       collected_at: "2026-07-27T08:00:00Z",
       sync_status: "success",
       included_in_total: false,
-      stale: true,
+      stale: false,
     },
   ],
   token_quota: [
@@ -230,9 +243,9 @@ function mountPage() {
     global: {
       stubs: {
         AppLayout: { template: "<div><slot /></div>" },
-        UpstreamManagementView: {
+        AccountFinanceSettings: {
           emits: ["changed"],
-          template: '<div data-testid="upstream-management">上游财务资料<button data-testid="upstream-finance-changed" @click="$emit(\'changed\')">保存财务资料</button></div>',
+          template: '<div data-testid="account-finance-settings">上游账号采购倍率<button data-testid="account-finance-changed" @click="$emit(\'changed\')">保存采购倍率</button></div>',
         },
         Pagination: {
           props: ["page", "pageSize", "total"],
@@ -255,19 +268,21 @@ describe("FinanceStatsView", () => {
     const wrapper = mountPage();
     await flushPromises();
 
-    expect(wrapper.text()).toContain("看懂经营");
-    expect(wrapper.text()).toContain("收入和亏损");
-    expect(wrapper.text()).toContain("上游与资金");
+    expect(wrapper.text()).toContain("财务总览");
+    expect(wrapper.text()).toContain("盈利分析");
+    expect(wrapper.text()).toContain("上游账号");
     expect(wrapper.text()).not.toContain("需要处理");
     expect(wrapper.text()).not.toContain("财务初始化");
     expect(
       wrapper.get('[data-testid="finance-coverage-risk"]').text(),
     ).toContain("不能代表全站净利润");
     expect(wrapper.text()).toContain("无法计算");
-    expect(wrapper.text()).toContain("客户本期计费");
+    expect(wrapper.text()).toContain("客户消费金额");
     expect(wrapper.text()).toContain("钱在哪里");
+    expect(wrapper.text()).not.toContain("日常只需要看这里");
+    expect(wrapper.text()).not.toContain("先看这三个关系");
     expect(wrapper.get('[data-testid="finance-line-chart"]').text()).toContain(
-      "已确认毛利",
+      "利润",
     );
 
     const base = api.getOverview.mock.calls[0][0];
@@ -275,7 +290,10 @@ describe("FinanceStatsView", () => {
       granularity: "day",
       data_scope: "all",
     });
-    expect(base.timezone).toBeTruthy();
+    expect(base.timezone).toBe("Asia/Shanghai");
+    expect(wrapper.get('[data-testid="finance-line-chart"]').text()).toContain(
+      "07/26",
+    );
     expect(api.getTrend).toHaveBeenCalledWith(base);
     expect(api.getFunds).toHaveBeenCalledWith(base);
   });
@@ -293,10 +311,10 @@ describe("FinanceStatsView", () => {
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text() === "上游与资金")!
+      .find((button) => button.text() === "上游账号")!
       .trigger("click");
-    expect(wrapper.text()).toContain("客户本期充值（收到）");
-    expect(wrapper.text()).toContain("现金钱包 A");
+    expect(wrapper.text()).toContain("客户本期充值");
+    expect(wrapper.text()).toContain("现金钱包 B");
   });
 
   it("renders loss details and the merged upstream finance source", async () => {
@@ -305,26 +323,24 @@ describe("FinanceStatsView", () => {
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text() === "收入和亏损")!
+      .find((button) => button.text() === "盈利分析")!
       .trigger("click");
     expect(wrapper.text()).toContain("亏损客户");
     expect(wrapper.text()).toContain("上游账号 A");
-    expect(wrapper.text()).toContain("负责人 #11");
-    expect(wrapper.text()).toContain("系统已记录该问题");
+    expect(wrapper.text()).not.toContain("系统记录状态");
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text() === "上游与资金")!
+      .find((button) => button.text() === "上游账号")!
       .trigger("click");
-    expect(wrapper.text()).toContain("现金钱包 A");
-    expect(wrapper.text()).toContain("共享余额，不重复汇总");
-    expect(wrapper.text()).toContain("已过期");
-    expect(wrapper.text()).toContain("配额仅反映可用调用额度，不作为现金资产");
-    expect(wrapper.text()).toContain("上游财务资料");
+    expect(wrapper.text()).toContain("现金钱包 B");
+    expect(wrapper.text()).not.toContain("现金钱包 A");
+    expect(wrapper.text()).not.toContain("Token 配额");
+    expect(wrapper.text()).toContain("上游账号采购倍率");
 
     api.getOverview.mockClear();
     api.getFunds.mockClear();
-    await wrapper.get('[data-testid="upstream-finance-changed"]').trigger("click");
+    await wrapper.get('[data-testid="account-finance-changed"]').trigger("click");
     await flushPromises();
     expect(api.getOverview).toHaveBeenCalledTimes(1);
     expect(api.getFunds).toHaveBeenCalledTimes(1);
@@ -337,7 +353,7 @@ describe("FinanceStatsView", () => {
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text() === "收入和亏损")!
+      .find((button) => button.text() === "盈利分析")!
       .trigger("click");
 
     const options = wrapper
@@ -348,13 +364,7 @@ describe("FinanceStatsView", () => {
       "user",
       "group",
       "requested_model",
-      "upstream_model",
-      "channel",
-      "upstream",
-      "wallet",
       "account",
-      "billing_type",
-      "business_type",
     ]);
 
     await wrapper.get('[data-testid="finance-dimension"]').setValue("account");
@@ -380,7 +390,7 @@ describe("FinanceStatsView", () => {
 
     await wrapper
       .findAll("button")
-      .find((button) => button.text() === "收入和亏损")!
+      .find((button) => button.text() === "盈利分析")!
       .trigger("click");
     expect(wrapper.get('[data-testid="pagination-total"]').text()).toContain(
       "120",
@@ -413,7 +423,7 @@ describe("FinanceStatsView", () => {
     await flushPromises();
     await wrapper
       .findAll("button")
-      .find((button) => button.text() === "收入和亏损")!
+      .find((button) => button.text() === "盈利分析")!
       .trigger("click");
 
     await wrapper.get('[data-testid="finance-export-create"]').trigger("click");

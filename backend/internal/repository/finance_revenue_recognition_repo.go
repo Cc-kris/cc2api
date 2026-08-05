@@ -49,10 +49,11 @@ WITH eligible AS (
  SELECT id,(paid_at AT TIME ZONE $2)::date AS start_date,
         ((paid_at AT TIME ZONE $2)::date + (subscription_days - 1)) AS end_date,
         CASE WHEN refund_at IS NULL THEN NULL ELSE (refund_at AT TIME ZONE $2)::date END AS refund_date
- FROM payment_orders
+ FROM payment_orders po
  WHERE order_type='subscription'
    AND status IN ('PAID','RECHARGING','COMPLETED','REFUND_REQUESTED','REFUNDING','PARTIALLY_REFUNDED','REFUNDED','REFUND_FAILED')
    AND paid_at IS NOT NULL AND subscription_days IS NOT NULL AND subscription_days>0
+   AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$3)
 ), candidate_days AS (
  SELECT e.id,day::date AS recognition_date
  FROM eligible e
@@ -65,7 +66,7 @@ SELECT COALESCE(MIN(c.recognition_date)::text,'')
 FROM candidate_days c
 LEFT JOIN subscription_revenue_recognitions r
   ON r.payment_order_id=c.id AND r.recognition_date=c.recognition_date
-WHERE r.id IS NULL`, through.Format("2006-01-02"), timezone).Scan(&value)
+WHERE r.id IS NULL`, through.Format("2006-01-02"), timezone, service.RoleAdmin).Scan(&value)
 	if err != nil {
 		return nil, fmt.Errorf("find oldest unrecognized subscription date: %w", err)
 	}
@@ -87,18 +88,19 @@ func (r *financeRevenueRecognitionRepository) ListSubscriptionOrdersForDate(ctx 
 	rows, err := r.db.QueryContext(ctx, `
 SELECT id,user_id,subscription_group_id,amount::text,COALESCE(refund_amount,0)::text,
        paid_at,subscription_days,refund_at
-FROM payment_orders
+FROM payment_orders po
 WHERE order_type='subscription'
   AND status IN ('PAID','RECHARGING','COMPLETED','REFUND_REQUESTED','REFUNDING','PARTIALLY_REFUNDED','REFUNDED','REFUND_FAILED')
   AND paid_at IS NOT NULL
   AND subscription_days IS NOT NULL
   AND subscription_days > 0
+  AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$3)
   AND (
     $1::date BETWEEN (paid_at AT TIME ZONE $2)::date
                  AND ((paid_at AT TIME ZONE $2)::date + (subscription_days - 1))
     OR (refund_at IS NOT NULL AND (refund_at AT TIME ZONE $2)::date = $1::date)
   )
-ORDER BY id`, date.Format("2006-01-02"), timezone)
+ORDER BY id`, date.Format("2006-01-02"), timezone, service.RoleAdmin)
 	if err != nil {
 		return nil, fmt.Errorf("list subscription orders for recognition: %w", err)
 	}

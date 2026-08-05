@@ -161,6 +161,8 @@ func TestFinanceReportOverviewUsesPreviousPeriodAndExposesPartialQuality(t *test
 	require.Equal(t, "2026-07-27T08:00:00Z", overview.GeneratedAt.Format(time.RFC3339))
 	require.Equal(t, filter.StartAt, repo.filters[1].EndBefore)
 	require.Equal(t, "all", repo.filters[0].DataScope)
+	require.False(t, repo.filters[0].SkipCurrentSnapshot)
+	require.True(t, repo.filters[1].SkipCurrentSnapshot)
 	require.Len(t, repo.filters, 2)
 }
 

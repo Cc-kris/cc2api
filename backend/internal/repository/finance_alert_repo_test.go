@@ -65,6 +65,28 @@ func TestFinanceAlertRepositoryLocksSignalsInStableAggregationOrder(t *testing.T
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestFinanceAlertRepositoryListExcludesHistoricalAdminDerivedAlerts(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	repo := &financeAlertRepository{db: db}
+	start := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	end := start.Add(24 * time.Hour)
+
+	mock.ExpectQuery(`(?s)missing_scope\.impact_amount.*FROM finance_alerts alert.*ufr\.cost_status=alert\.alert_type.*alert\.aggregation_key='payment_fee_uncollected:'\|\|COALESCE.*provider_key.*WHERE.*ufr\.usage_log_id=alert\.dimension_id.*LIMIT \$4 OFFSET \$5`).
+		WithArgs(start, end, service.RoleAdmin, 50, 0).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "alert_type", "severity", "title", "description", "dimension_type", "dimension_id", "impact_amount",
+			"request_count", "occurrence_count", "status", "first_occurred_at", "last_occurred_at", "assignee_id", "handled_by", "handled_note", "handled_at", "total",
+		}))
+
+	items, total, err := repo.ListFinanceAlerts(t.Context(), service.FinanceReportFilter{StartAt: start, EndBefore: end}, service.FinanceAlertListRequest{Page: 1, PageSize: 50})
+	require.NoError(t, err)
+	require.Empty(t, items)
+	require.Zero(t, total)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestFinanceAlertRepositoryStatusUpdateWritesAuditAtomically(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)

@@ -40,6 +40,15 @@ describe('AppSidebar cache management navigation', () => {
   })
 })
 
+describe('AppSidebar finance navigation', () => {
+  it('keeps business finance as the only upstream finance entry', () => {
+    expect(componentSource).toContain("path: '/admin/finance'")
+    expect(componentSource).toContain("label: t('nav.financeStats')")
+    expect(componentSource).not.toContain("path: '/admin/upstreams'")
+    expect(componentSource).not.toContain("nav.upstreamMaintenance")
+  })
+})
+
 describe('AppSidebar custom menu navigation', () => {
   it('routes custom menu links through the custom page shell', () => {
     expect(componentSource).toContain('function resolveCustomMenuPath')

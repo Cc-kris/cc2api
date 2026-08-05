@@ -122,8 +122,13 @@ FROM usage_summary`, costStatusArg, where)
 	if err = r.attachUnallocatedSubscriptionRevenue(ctx, filter, facts); err != nil {
 		return nil, err
 	}
-	if err = r.attachFinanceCashSummary(ctx, filter, facts); err != nil {
+	if err = r.attachFinancePaymentFees(ctx, filter, facts); err != nil {
 		return nil, err
+	}
+	if !filter.SkipCurrentSnapshot {
+		if err = r.attachFinanceCashSummary(ctx, filter, facts); err != nil {
+			return nil, err
+		}
 	}
 	if err = r.attachRechargeBonusIncome(ctx, filter, facts); err != nil {
 		return nil, err
@@ -211,11 +216,16 @@ func (r *financeReportRepository) attachPaymentFeeTrend(ctx context.Context, fil
 		return nil
 	}
 	rows, err := r.db.QueryContext(ctx, `
-SELECT (date_trunc($3, occurred_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket_start,
-       COALESCE(SUM(fee_usd_amount),0)::text
-FROM payment_provider_fee_events
-WHERE occurred_at >= $1 AND occurred_at < $2 AND fee_status='confirmed'
-GROUP BY bucket_start`, filter.StartAt, filter.EndBefore, filter.Granularity, filter.Timezone)
+SELECT (date_trunc($3, fee.occurred_at AT TIME ZONE $4) AT TIME ZONE $4) AS bucket_start,
+       COALESCE(SUM(fee.fee_usd_amount),0)::text
+FROM payment_provider_fee_events fee
+WHERE fee.occurred_at >= $1 AND fee.occurred_at < $2 AND fee.fee_status='confirmed'
+  AND EXISTS (
+    SELECT 1 FROM payment_orders po
+    WHERE po.id=fee.payment_order_id
+      AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$5)
+  )
+GROUP BY bucket_start`, filter.StartAt, filter.EndBefore, filter.Granularity, filter.Timezone, service.RoleAdmin)
 	if err != nil {
 		return fmt.Errorf("list payment fee trend: %w", err)
 	}
@@ -559,6 +569,8 @@ WITH latest AS (
  SELECT ws.balance_scope_key,COALESCE(SUM(ufr.upstream_cost),0) AS seven_day_cost
  FROM usage_finance_records ufr JOIN wallet_scopes ws ON ws.wallet_id=ufr.wallet_id
  WHERE ufr.usage_created_at >= NOW()-INTERVAL '7 days' AND ufr.cost_status='exact'
+   AND COALESCE(ufr.business_type,'') <> $1
+   AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=ufr.user_id AND finance_admin.role=$1)
  GROUP BY ws.balance_scope_key
 )
 SELECT l.wallet_id,l.name,l.balance_amount::text,l.currency,l.collected_at,l.sync_status,COALESCE(c.seven_day_cost,0)::text,
@@ -566,7 +578,7 @@ SELECT l.wallet_id,l.name,l.balance_amount::text,l.currency,l.collected_at,l.syn
        (l.scope_rank=1 AND l.sync_status='success' AND l.collected_at>=NOW()-INTERVAL '20 minutes') AS included_in_total,
        (l.collected_at<NOW()-INTERVAL '20 minutes') AS stale
 FROM ranked l LEFT JOIN costs c ON c.balance_scope_key=l.balance_scope_key
-ORDER BY l.name,l.wallet_id`)
+ORDER BY l.name,l.wallet_id`, service.RoleAdmin)
 	if err != nil {
 		return nil, fmt.Errorf("list wallet cash funds: %w", err)
 	}
@@ -590,46 +602,16 @@ ORDER BY l.name,l.wallet_id`)
 	if err = rows.Close(); err != nil {
 		return nil, err
 	}
-	rows, err = r.db.QueryContext(ctx, `
-WITH latest AS (
- SELECT DISTINCT ON (s.wallet_id) s.wallet_id,s.total_quota,s.used_quota,s.currency,s.collected_at,s.sync_status
- FROM upstream_balance_snapshots s WHERE s.balance_kind='token_quota'
- ORDER BY s.wallet_id,s.collected_at DESC,s.id DESC
-)
-SELECT l.wallet_id,w.name,l.total_quota::text,l.used_quota::text,l.currency,l.collected_at,l.sync_status
-FROM latest l JOIN upstream_wallets w ON w.id=l.wallet_id ORDER BY w.name,l.wallet_id`)
-	if err != nil {
-		return nil, fmt.Errorf("list token quota funds: %w", err)
-	}
-	for rows.Next() {
-		var item service.FinanceTokenQuotaFact
-		var total, used string
-		if err = rows.Scan(&item.WalletID, &item.WalletName, &total, &used, &item.Currency, &item.CollectedAt, &item.SyncStatus); err != nil {
-			_ = rows.Close()
-			return nil, err
-		}
-		if item.TotalQuota, err = decimal.NewFromString(total); err != nil {
-			_ = rows.Close()
-			return nil, err
-		}
-		if item.UsedQuota, err = decimal.NewFromString(used); err != nil {
-			_ = rows.Close()
-			return nil, err
-		}
-		facts.TokenQuota = append(facts.TokenQuota, item)
-	}
-	if err = rows.Close(); err != nil {
-		return nil, err
-	}
 	var payment, refund, fees, topup, upstreamRefund, adjustment, rechargeBonus string
 	err = r.db.QueryRowContext(ctx, `
 SELECT COALESCE(SUM(pay_amount) FILTER (WHERE paid_at >= $1 AND paid_at < $2),0)::text,
        COALESCE(SUM(refund_amount) FILTER (WHERE refund_amount>0 AND refund_at >= $1 AND refund_at < $2),0)::text
-FROM payment_orders`, filter.StartAt, filter.EndBefore).Scan(&payment, &refund)
+FROM payment_orders po
+WHERE NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$3)`, filter.StartAt, filter.EndBefore, service.RoleAdmin).Scan(&payment, &refund)
 	if err != nil {
 		return nil, err
 	}
-	err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(fee_usd_amount),0)::text FROM payment_provider_fee_events WHERE occurred_at >= $1 AND occurred_at < $2 AND fee_status='confirmed'`, filter.StartAt, filter.EndBefore).Scan(&fees)
+	err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(fee.fee_usd_amount),0)::text FROM payment_provider_fee_events fee WHERE fee.occurred_at >= $1 AND fee.occurred_at < $2 AND fee.fee_status='confirmed' AND EXISTS (SELECT 1 FROM payment_orders po WHERE po.id=fee.payment_order_id AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$3))`, filter.StartAt, filter.EndBefore, service.RoleAdmin).Scan(&fees)
 	if err != nil {
 		return nil, err
 	}
@@ -653,7 +635,7 @@ FROM upstream_fund_events WHERE occurred_at >= $1 AND occurred_at < $2`, filter.
 		}
 	}
 	var customerBalance string
-	if err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(balance),0)::text FROM users WHERE role='user' AND deleted_at IS NULL`).Scan(&customerBalance); err != nil {
+	if err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(balance),0)::text FROM users WHERE role<>$1 AND deleted_at IS NULL`, service.RoleAdmin).Scan(&customerBalance); err != nil {
 		return nil, err
 	}
 	if facts.CustomerBalance, err = decimal.NewFromString(customerBalance); err != nil {
@@ -716,11 +698,12 @@ func (r *financeReportRepository) GetFinanceCashFlow(ctx context.Context, filter
 SELECT COALESCE(SUM(pay_amount) FILTER (WHERE paid_at >= $1 AND paid_at < $2),0)::text,
        COALESCE(SUM(refund_amount) FILTER (WHERE refund_amount>0 AND refund_at >= $1 AND refund_at < $2),0)::text,
        COALESCE(SUM(GREATEST(pay_amount-amount,0)) FILTER (WHERE paid_at >= $1 AND paid_at < $2),0)::text
-FROM payment_orders`, filter.StartAt, filter.EndBefore).Scan(&payments, &refunds, &surcharge)
+FROM payment_orders po
+WHERE NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$3)`, filter.StartAt, filter.EndBefore, service.RoleAdmin).Scan(&payments, &refunds, &surcharge)
 	if err != nil {
 		return nil, err
 	}
-	err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(fee_usd_amount),0)::text FROM payment_provider_fee_events WHERE occurred_at >= $1 AND occurred_at < $2 AND fee_status='confirmed'`, filter.StartAt, filter.EndBefore).Scan(&fees)
+	err = r.db.QueryRowContext(ctx, `SELECT COALESCE(SUM(fee.fee_usd_amount),0)::text FROM payment_provider_fee_events fee WHERE fee.occurred_at >= $1 AND fee.occurred_at < $2 AND fee.fee_status='confirmed' AND EXISTS (SELECT 1 FROM payment_orders po WHERE po.id=fee.payment_order_id AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$3))`, filter.StartAt, filter.EndBefore, service.RoleAdmin).Scan(&fees)
 	if err != nil {
 		return nil, err
 	}
@@ -743,16 +726,20 @@ FROM upstream_fund_events WHERE occurred_at >= $1 AND occurred_at < $2`, filter.
 	rows, err := r.db.QueryContext(ctx, `
 WITH events AS (
  SELECT 'customer_payment'::text event_type,'payment_order'::text source_type,id source_id,pay_amount::text original_amount,'USD'::text currency,'1'::text fx_rate_to_usd,pay_amount::text usd_amount,paid_at occurred_at,out_trade_no reference_no
- FROM payment_orders WHERE paid_at >= $1 AND paid_at < $2
+ FROM payment_orders po WHERE paid_at >= $1 AND paid_at < $2
+   AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$7)
  UNION ALL
  SELECT 'customer_refund','payment_order',id,refund_amount::text,'USD','1',refund_amount::text,refund_at,out_trade_no
- FROM payment_orders WHERE refund_amount>0 AND refund_at >= $1 AND refund_at < $2
+ FROM payment_orders po WHERE refund_amount>0 AND refund_at >= $1 AND refund_at < $2
+   AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$7)
  UNION ALL
 	SELECT 'payment_surcharge','payment_order',id,GREATEST(pay_amount-amount,0)::text,'USD','1',GREATEST(pay_amount-amount,0)::text,paid_at,out_trade_no
-	FROM payment_orders WHERE pay_amount>amount AND paid_at >= $1 AND paid_at < $2
+	FROM payment_orders po WHERE pay_amount>amount AND paid_at >= $1 AND paid_at < $2
+	  AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$7)
 	UNION ALL
- SELECT 'payment_fee','payment_fee_event',id,COALESCE(fee_amount,0)::text,currency,COALESCE(fx_rate_to_usd,0)::text,COALESCE(fee_usd_amount,0)::text,occurred_at,bill_event_id
-	FROM payment_provider_fee_events WHERE fee_status='confirmed' AND occurred_at >= $1 AND occurred_at < $2
+	SELECT 'payment_fee','payment_fee_event',id,COALESCE(fee_amount,0)::text,currency,COALESCE(fx_rate_to_usd,0)::text,COALESCE(fee_usd_amount,0)::text,occurred_at,bill_event_id
+	FROM payment_provider_fee_events fee WHERE fee_status='confirmed' AND occurred_at >= $1 AND occurred_at < $2
+	  AND EXISTS (SELECT 1 FROM payment_orders po WHERE po.id=fee.payment_order_id AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$7))
  UNION ALL
 	SELECT CASE WHEN event_type='topup' THEN 'upstream_topup' WHEN event_type='refund' THEN 'upstream_refund' ELSE 'upstream_adjustment' END,
 	       'upstream_fund_event',id,original_amount::text,currency,fx_rate_to_usd::text,usd_amount::text,occurred_at,COALESCE(reference_no,'')
@@ -762,7 +749,7 @@ SELECT event_type,source_type,source_id,original_amount,currency,fx_rate_to_usd,
 FROM events
 WHERE ($3='' OR event_type=$3) AND ($4='' OR currency=$4)
 ORDER BY occurred_at DESC,source_type,source_id DESC LIMIT $5 OFFSET $6`,
-		filter.StartAt, filter.EndBefore, request.EventType, request.Currency, request.PageSize, (request.Page-1)*request.PageSize)
+		filter.StartAt, filter.EndBefore, request.EventType, request.Currency, request.PageSize, (request.Page-1)*request.PageSize, service.RoleAdmin)
 	if err != nil {
 		return nil, err
 	}
@@ -809,22 +796,16 @@ func (r *financeReportRepository) attachFinanceCashSummary(ctx context.Context, 
 	if !financeCashApplies(filter) {
 		return nil
 	}
-	var paymentCash, paymentFees, upstreamCash, walletCash string
+	var paymentCash, upstreamCash, walletCash string
 	err := r.db.QueryRowContext(ctx, `
 SELECT (
   COALESCE(SUM(pay_amount) FILTER (WHERE paid_at >= $1 AND paid_at < $2),0)
   - COALESCE(SUM(refund_amount) FILTER (WHERE refund_amount>0 AND refund_at >= $1 AND refund_at < $2),0)
 )::text
-FROM payment_orders`, filter.StartAt, filter.EndBefore).Scan(&paymentCash)
+FROM payment_orders po
+WHERE NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$3)`, filter.StartAt, filter.EndBefore, service.RoleAdmin).Scan(&paymentCash)
 	if err != nil {
 		return fmt.Errorf("summarize payment cash: %w", err)
-	}
-	err = r.db.QueryRowContext(ctx, `
-SELECT COALESCE(SUM(fee_usd_amount),0)::text
-FROM payment_provider_fee_events
-WHERE occurred_at >= $1 AND occurred_at < $2 AND fee_status='confirmed'`, filter.StartAt, filter.EndBefore).Scan(&paymentFees)
-	if err != nil {
-		return fmt.Errorf("summarize payment fees: %w", err)
 	}
 	err = r.db.QueryRowContext(ctx, `
 SELECT COALESCE(SUM(CASE
@@ -852,16 +833,42 @@ FROM latest`).Scan(&walletCash)
 		return fmt.Errorf("summarize wallet cash: %w", err)
 	}
 	if err = r.db.QueryRowContext(ctx, `
-SELECT COUNT(DISTINCT wallet_id)::bigint FROM upstream_balance_snapshots WHERE balance_kind='token_quota'`).Scan(&facts.TokenQuotaWalletCount); err != nil {
-		return fmt.Errorf("count token quota wallets: %w", err)
-	}
-	if err = r.db.QueryRowContext(ctx, `SELECT COUNT(*)::bigint FROM finance_alerts WHERE status IN ('open','acknowledged')`).Scan(&facts.OpenAlertCount); err != nil {
+SELECT COUNT(*)::bigint
+FROM finance_alerts alert
+WHERE alert.status IN ('open','acknowledged')
+  AND NOT (alert.alert_type='negative_profit' AND COALESCE(alert.dimension_type,'')='global')
+  AND (
+    COALESCE(alert.dimension_type,'') <> 'usage_log'
+    OR EXISTS (
+      SELECT 1 FROM usage_finance_records ufr
+      WHERE ufr.usage_log_id=alert.dimension_id
+        AND COALESCE(ufr.business_type,'') <> $3
+        AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=ufr.user_id AND finance_admin.role=$3)
+    )
+  )
+  AND (
+    alert.alert_type NOT IN ('missing_price','missing_multiplier','missing_usage')
+    OR EXISTS (
+      SELECT 1 FROM usage_finance_records ufr
+      WHERE ufr.usage_created_at >= $1 AND ufr.usage_created_at < $2
+        AND ufr.cost_status=alert.alert_type
+        AND COALESCE(ufr.business_type,'') <> $3
+        AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=ufr.user_id AND finance_admin.role=$3)
+    )
+  )
+  AND (
+    alert.alert_type <> 'payment_fee_uncollected'
+    OR EXISTS (
+      SELECT 1 FROM payment_orders po
+      WHERE po.paid_at >= $1 AND po.paid_at < $2
+        AND alert.aggregation_key='payment_fee_uncollected:'||COALESCE(NULLIF(po.provider_key,''),'unknown')
+        AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$3)
+        AND NOT EXISTS (SELECT 1 FROM payment_provider_fee_events fee WHERE fee.payment_order_id=po.id AND fee.fee_status='confirmed')
+    )
+  )`, filter.StartAt, filter.EndBefore, service.RoleAdmin).Scan(&facts.OpenAlertCount); err != nil {
 		return fmt.Errorf("count finance alerts: %w", err)
 	}
 	if facts.PaymentNetCash, err = decimal.NewFromString(paymentCash); err != nil {
-		return err
-	}
-	if facts.PaymentFees, err = decimal.NewFromString(paymentFees); err != nil {
 		return err
 	}
 	if facts.UpstreamNetCash, err = decimal.NewFromString(upstreamCash); err != nil {
@@ -870,6 +877,30 @@ SELECT COUNT(DISTINCT wallet_id)::bigint FROM upstream_balance_snapshots WHERE b
 	if facts.WalletCashTotal, err = decimal.NewFromString(walletCash); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (r *financeReportRepository) attachFinancePaymentFees(ctx context.Context, filter service.FinanceReportFilter, facts *service.FinanceSummaryFacts) error {
+	if !financeCashApplies(filter) {
+		return nil
+	}
+	var paymentFees string
+	if err := r.db.QueryRowContext(ctx, `
+SELECT COALESCE(SUM(fee.fee_usd_amount),0)::text
+FROM payment_provider_fee_events fee
+WHERE fee.occurred_at >= $1 AND fee.occurred_at < $2 AND fee.fee_status='confirmed'
+  AND EXISTS (
+    SELECT 1 FROM payment_orders po
+    WHERE po.id=fee.payment_order_id
+      AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$3)
+  )`, filter.StartAt, filter.EndBefore, service.RoleAdmin).Scan(&paymentFees); err != nil {
+		return fmt.Errorf("summarize payment fees: %w", err)
+	}
+	amount, err := decimal.NewFromString(paymentFees)
+	if err != nil {
+		return err
+	}
+	facts.PaymentFees = amount
 	return nil
 }
 
@@ -973,8 +1004,8 @@ func (r *financeReportRepository) attachUnallocatedSubscriptionRevenue(ctx conte
 	}
 	startDate := filter.StartAt.In(filter.Location).Format("2006-01-02")
 	endDate := filter.EndBefore.In(filter.Location).Format("2006-01-02")
-	args := []any{startDate, endDate}
-	where := "recognition_date >= $1::date AND recognition_date < $2::date"
+	args := []any{startDate, endDate, service.RoleAdmin}
+	where := "recognition_date >= $1::date AND recognition_date < $2::date AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=subscription_revenue_recognitions.user_id AND finance_admin.role=$3)"
 	if filter.UserID != nil {
 		args = append(args, *filter.UserID)
 		where += fmt.Sprintf(" AND user_id=$%d", len(args))
@@ -1006,8 +1037,9 @@ func (r *financeReportRepository) attachUnallocatedSubscriptionTrend(ctx context
 		filter.EndBefore.In(filter.Location).Format("2006-01-02"),
 		filter.Granularity,
 		filter.Timezone,
+		service.RoleAdmin,
 	}
-	where := "recognition_date >= $1::date AND recognition_date < $2::date"
+	where := "recognition_date >= $1::date AND recognition_date < $2::date AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=subscription_revenue_recognitions.user_id AND finance_admin.role=$5)"
 	if filter.UserID != nil {
 		args = append(args, *filter.UserID)
 		where += fmt.Sprintf(" AND user_id=$%d", len(args))
@@ -1055,8 +1087,13 @@ GROUP BY bucket_start`, args...)
 }
 
 func financeReportWhere(filter service.FinanceReportFilter, alias string) (string, []any) {
-	args := []any{filter.StartAt, filter.EndBefore}
-	conditions := []string{alias + ".usage_created_at >= $1", alias + ".usage_created_at < $2"}
+	args := []any{filter.StartAt, filter.EndBefore, service.RoleAdmin}
+	conditions := []string{
+		alias + ".usage_created_at >= $1",
+		alias + ".usage_created_at < $2",
+		"COALESCE(" + alias + ".business_type,'') <> $3",
+		"NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=" + alias + ".user_id AND finance_admin.role=$3)",
+	}
 	addEqual := func(column string, value any) {
 		args = append(args, value)
 		conditions = append(conditions, fmt.Sprintf("%s.%s=$%d", alias, column, len(args)))

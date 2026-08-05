@@ -62,7 +62,7 @@ ON CONFLICT (provider,bill_event_id) DO NOTHING`, nullableInt64Value(orderID), i
 }
 
 func (r *financePaymentFeeRepository) ListPaymentFees(ctx context.Context, filter service.FinanceReportFilter, request service.FinancePaymentFeeListRequest) ([]service.FinancePaymentFeeItem, int64, error) {
-	args := []any{filter.StartAt, filter.EndBefore}
+	args := []any{filter.StartAt, filter.EndBefore, service.RoleAdmin}
 	where := "occurred_at >= $1 AND occurred_at < $2"
 	if request.OrderNo != "" {
 		args = append(args, request.OrderNo)
@@ -82,12 +82,14 @@ WITH fee_rows AS (
  SELECT fee.id,fee.payment_order_id,COALESCE(po.out_trade_no,'') order_no,fee.provider,fee.bill_event_id,
         fee.gross_amount::text,fee.fee_amount::text,fee.net_amount::text,fee.currency,fee.fx_rate_to_usd::text,fee.fee_usd_amount::text,
         fee.fee_status status,fee.occurred_at
- FROM payment_provider_fee_events fee LEFT JOIN payment_orders po ON po.id=fee.payment_order_id
+ FROM payment_provider_fee_events fee JOIN payment_orders po ON po.id=fee.payment_order_id
+ WHERE NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$3)
  UNION ALL
  SELECT NULL::bigint,po.id,po.out_trade_no,COALESCE(NULLIF(po.provider_key,''),'unknown'),'uncollected:'||po.id,
         NULL::text,NULL::text,NULL::text,'USD',NULL::text,NULL::text,'uncollected',po.paid_at
  FROM payment_orders po
  WHERE po.status IN ('PAID','COMPLETED')
+   AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$3)
    AND NOT EXISTS (SELECT 1 FROM payment_provider_fee_events fee WHERE fee.payment_order_id=po.id AND fee.fee_status='confirmed')
 )
 SELECT id,payment_order_id,order_no,provider,bill_event_id,gross_amount,fee_amount,net_amount,currency,fx_rate_to_usd,fee_usd_amount,status,occurred_at,COUNT(*) OVER()::bigint

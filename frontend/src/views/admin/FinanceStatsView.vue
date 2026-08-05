@@ -8,9 +8,6 @@
           <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
             经营与财务
           </h1>
-          <p class="mt-1 text-sm text-gray-500">
-            用最简单的方式看清客户收了多少钱、用了多少钱、上游花了多少钱，以及现在赚还是亏。
-          </p>
         </div>
         <p v-if="overview" class="text-xs text-gray-500">
           数据生成时间：{{ formatFinanceDate(overview.generated_at) }}
@@ -19,7 +16,7 @@
 
       <section class="card p-4" aria-label="财务筛选条件">
         <div
-          class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(160px,1fr)_minmax(160px,1fr)_minmax(180px,1fr)_150px_auto]"
+          class="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(160px,1fr)_minmax(160px,1fr)_auto]"
         >
           <label class="block text-sm text-gray-600 dark:text-gray-300"
             >开始日期<input
@@ -35,24 +32,6 @@
               class="input mt-1 w-full"
               data-testid="finance-end-date"
           /></label>
-          <label class="block text-sm text-gray-600 dark:text-gray-300"
-            >时区<input
-              v-model.trim="timezone"
-              class="input mt-1 w-full"
-              data-testid="finance-timezone"
-          /></label>
-          <label class="block text-sm text-gray-600 dark:text-gray-300"
-            >统计粒度<select
-              v-model="granularity"
-              class="input mt-1 w-full"
-              data-testid="finance-granularity"
-            >
-              <option value="hour">小时</option>
-              <option value="day">天</option>
-              <option value="week">周</option>
-              <option value="month">月</option>
-            </select></label
-          >
           <div class="flex items-end">
             <button
               class="btn btn-primary w-full"
@@ -112,29 +91,16 @@
           v-else-if="loading.overview"
           class="card p-10 text-center text-sm text-gray-500"
         >
-          正在加载经营总览...
+          正在加载财务总览...
         </div>
         <template v-else-if="overview"
-          ><section class="card p-4" data-testid="finance-getting-started">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 class="text-sm font-semibold text-gray-900 dark:text-white">日常只需要看这里</h2>
-                <p class="mt-1 text-xs text-gray-500">上游余额、充值和采购价格统一放在“上游与资金”；经营结果会自动使用这些资料，不需要额外步骤。</p>
-              </div>
-              <button class="btn btn-secondary btn-sm" @click="activeTab = 'funds'">查看上游财务资料</button>
-            </div>
-            <ol class="mt-4 grid gap-3 text-sm md:grid-cols-3">
-              <li class="rounded-lg bg-gray-50 p-3 dark:bg-dark-800"><strong>1. 录入资金变化</strong><span class="mt-1 block text-xs text-gray-500">只有给上游充值、退款或调整时才记录一次。</span></li>
-              <li class="rounded-lg bg-gray-50 p-3 dark:bg-dark-800"><strong>2. 系统自动核算</strong><span class="mt-1 block text-xs text-gray-500">客户请求产生后，系统自动计算客户计费和上游成本。</span></li>
-              <li class="rounded-lg bg-gray-50 p-3 dark:bg-dark-800"><strong>3. 查看结果</strong><span class="mt-1 block text-xs text-gray-500">总览看整体，收入和亏损按客户、分组或账号追查。</span></li>
-            </ol>
-          </section><FinanceSummaryCards :overview="overview" :funds="funds" /><ProfitTrendChart
+          ><FinanceSummaryCards :overview="overview" :funds="funds" /><ProfitTrendChart
             :items="trend"
             :loading="loading.trend"
             :error="errors.trend"
         /></template>
         <div v-else class="card p-10 text-center text-sm text-gray-500">
-          暂无经营总览数据
+          暂无财务总览数据
         </div>
       </section>
 
@@ -182,10 +148,7 @@
         <div v-else class="card p-10 text-center text-sm text-gray-500">
           暂无资金余额数据
         </div>
-        <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
-          上游财务资料和报表已经合并在这里。余额、充值、采购价格或账号归属发生变化时再修改；没有变化就不用操作。
-        </div>
-        <UpstreamManagementView @changed="handleFinanceDataChanged" />
+        <AccountFinanceSettings @changed="handleFinanceDataChanged" />
       </section>
 
     </div>
@@ -195,12 +158,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import AppLayout from "@/components/layout/AppLayout.vue";
+import AccountFinanceSettings from "@/components/finance/AccountFinanceSettings.vue";
 import FinanceAnalysisTable from "@/components/finance/FinanceAnalysisTable.vue";
 import FinanceFundsPanel from "@/components/finance/FinanceFundsPanel.vue";
 import FinanceLossTable from "@/components/finance/FinanceLossTable.vue";
 import FinanceSummaryCards from "@/components/finance/FinanceSummaryCards.vue";
 import ProfitTrendChart from "@/components/finance/ProfitTrendChart.vue";
-import UpstreamManagementView from "@/views/admin/upstreams/UpstreamManagementView.vue";
 import { formatFinanceDate, financeNumber } from "@/components/finance/format";
 import { adminAPI } from "@/api/admin";
 import type {
@@ -225,9 +188,9 @@ type FinanceSection =
 type FinanceTab = "overview" | "profit" | "funds";
 
 const tabs: Array<{ key: FinanceTab; label: string }> = [
-  { key: "overview", label: "看懂经营" },
-  { key: "profit", label: "收入和亏损" },
-  { key: "funds", label: "上游与资金" },
+  { key: "overview", label: "财务总览" },
+  { key: "profit", label: "盈利分析" },
+  { key: "funds", label: "上游账号" },
 ];
 
 function localDate(daysAgo = 0) {
@@ -238,9 +201,7 @@ function localDate(daysAgo = 0) {
 
 const startDate = ref(localDate(29));
 const endDate = ref(localDate());
-const timezone = ref(
-  Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
-);
+const timezone = ref("Asia/Shanghai");
 const granularity = ref<FinanceGranularity>("day");
 const activeTab = ref<FinanceTab>("overview");
 const dimension = ref<FinanceBreakdownDimension>("user");
@@ -327,14 +288,14 @@ async function loadAll() {
   const generation = ++refreshGeneration;
   refreshing.value = true;
   clearResults();
-  // 资金数据独立加载：经营总览超时时，上游余额和充值记录仍然可用。
+  // 资金数据独立加载：财务总览超时时，上游余额和充值记录仍然可用。
   void loadFunds(generation);
   loading.overview = true;
   try {
     const result = await adminAPI.finance.getOverview(filters());
     if (generation === refreshGeneration) overview.value = result;
   } catch (error) {
-    if (generation === refreshGeneration) errors.overview = rejectMessage(error, "经营总览加载失败");
+    if (generation === refreshGeneration) errors.overview = rejectMessage(error, "财务总览加载失败");
   } finally {
     if (generation === refreshGeneration) {
       loading.overview = false;

@@ -24,7 +24,10 @@ func (r *financeAlertRepository) CollectFinanceAlertSignals(ctx context.Context,
 WITH revenue AS (
  SELECT ufr.usage_log_id,ufr.cost_status,ufr.upstream_cost,
         COALESCE((SELECT SUM(ura.allocated_amount) FROM usage_revenue_allocations ura WHERE ura.usage_log_id=ufr.usage_log_id AND ura.invalidated_at IS NULL),CASE WHEN ufr.business_type='subscription' THEN 0 ELSE ufr.usage_list_value END,0) AS revenue
- FROM usage_finance_records ufr WHERE ufr.usage_created_at >= $1 AND ufr.usage_created_at < $2
+ FROM usage_finance_records ufr
+ WHERE ufr.usage_created_at >= $1 AND ufr.usage_created_at < $2
+   AND COALESCE(ufr.business_type,'') <> $3
+   AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=ufr.user_id AND finance_admin.role=$3)
 ), signals AS (
 	SELECT 'negative_profit' alert_type,'critical' severity,'negative_profit:usage:'||usage_log_id aggregation_key,
 		'请求发生确定亏损' title,'采购成本高于该请求的已确认客户收入' description,
@@ -41,7 +44,7 @@ WITH revenue AS (
  FROM revenue WHERE cost_status IN ('missing_price','missing_multiplier','missing_usage') GROUP BY cost_status
 )
 SELECT alert_type,severity,aggregation_key,title,description,dimension_type,dimension_id,impact_amount::text,request_count
-FROM signals WHERE request_count>0`, windowStart, now)
+FROM signals WHERE request_count>0`, windowStart, now, service.RoleAdmin)
 	if err != nil {
 		return nil, fmt.Errorf("collect finance record alerts: %w", err)
 	}
@@ -74,8 +77,10 @@ WITH wallet_latest AS (
 ), costs AS (
  SELECT ws.balance_scope_key,SUM(ufr.upstream_cost)/7 AS daily_cost
  FROM usage_finance_records ufr JOIN wallet_scopes ws ON ws.wallet_id=ufr.wallet_id
- WHERE ufr.usage_created_at >= $1::timestamptz-INTERVAL '7 days' AND ufr.usage_created_at < $1::timestamptz
+	WHERE ufr.usage_created_at >= $1::timestamptz-INTERVAL '7 days' AND ufr.usage_created_at < $1::timestamptz
 	AND ufr.cost_status='exact'
+	AND COALESCE(ufr.business_type,'') <> $2
+	AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=ufr.user_id AND finance_admin.role=$2)
  GROUP BY ws.balance_scope_key
 )
 SELECT 'wallet_low_balance','critical','wallet_low_balance_scope:'||l.balance_scope_key,
@@ -100,8 +105,9 @@ FROM (
  SELECT COALESCE(NULLIF(po.provider_key,''),'unknown') AS provider
  FROM payment_orders po
  WHERE po.paid_at >= $1::timestamptz-INTERVAL '24 hours' AND po.paid_at < $1::timestamptz
+   AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$2)
    AND NOT EXISTS (SELECT 1 FROM payment_provider_fee_events fee WHERE fee.payment_order_id=po.id AND fee.fee_status='confirmed')
-) unpaid_fees GROUP BY provider`, now)
+) unpaid_fees GROUP BY provider`, now, service.RoleAdmin)
 	if err != nil {
 		return nil, fmt.Errorf("collect finance operational alerts: %w", err)
 	}
@@ -193,26 +199,68 @@ ON CONFLICT (aggregation_key) WHERE status IN ('open','acknowledged') DO UPDATE 
 }
 
 func (r *financeAlertRepository) ListFinanceAlerts(ctx context.Context, filter service.FinanceReportFilter, request service.FinanceAlertListRequest) ([]service.FinanceAlert, int64, error) {
-	args := []any{filter.StartAt, filter.EndBefore}
-	where := "last_occurred_at >= $1 AND last_occurred_at < $2"
+	args := []any{filter.StartAt, filter.EndBefore, service.RoleAdmin}
+	where := `alert.last_occurred_at >= $1 AND alert.last_occurred_at < $2
+AND NOT (alert.alert_type='negative_profit' AND COALESCE(alert.dimension_type,'')='global')
+AND (
+  COALESCE(alert.dimension_type,'') <> 'usage_log'
+  OR EXISTS (
+    SELECT 1 FROM usage_finance_records ufr
+    WHERE ufr.usage_log_id=alert.dimension_id
+      AND COALESCE(ufr.business_type,'') <> $3
+      AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=ufr.user_id AND finance_admin.role=$3)
+  )
+)
+AND (
+  alert.alert_type NOT IN ('missing_price','missing_multiplier','missing_usage')
+  OR COALESCE(missing_scope.request_count,0) > 0
+)
+AND (
+  alert.alert_type <> 'payment_fee_uncollected'
+  OR COALESCE(payment_scope.request_count,0) > 0
+)`
 	if request.AlertType != "" {
 		args = append(args, request.AlertType)
-		where += fmt.Sprintf(" AND alert_type=$%d", len(args))
+		where += fmt.Sprintf(" AND alert.alert_type=$%d", len(args))
 	}
 	if request.Severity != "" {
 		args = append(args, request.Severity)
-		where += fmt.Sprintf(" AND severity=$%d", len(args))
+		where += fmt.Sprintf(" AND alert.severity=$%d", len(args))
 	}
 	if request.Status != "" {
 		args = append(args, request.Status)
-		where += fmt.Sprintf(" AND status=$%d", len(args))
+		where += fmt.Sprintf(" AND alert.status=$%d", len(args))
 	}
 	args = append(args, request.PageSize, (request.Page-1)*request.PageSize)
 	query := fmt.Sprintf(`
-SELECT id,alert_type,severity,title,description,COALESCE(dimension_type,''),dimension_id,impact_amount::text,
- request_count,occurrence_count,status,first_occurred_at,last_occurred_at,assignee_id,handled_by,COALESCE(handled_note,''),handled_at,COUNT(*) OVER()::bigint
-FROM finance_alerts WHERE %s
-ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 ELSE 3 END,last_occurred_at DESC,id DESC
+SELECT alert.id,alert.alert_type,alert.severity,alert.title,alert.description,COALESCE(alert.dimension_type,''),alert.dimension_id,
+ CASE WHEN alert.alert_type IN ('missing_price','missing_multiplier','missing_usage') THEN missing_scope.impact_amount ELSE alert.impact_amount END::text,
+ CASE WHEN alert.alert_type IN ('missing_price','missing_multiplier','missing_usage') THEN missing_scope.request_count
+      WHEN alert.alert_type='payment_fee_uncollected' THEN payment_scope.request_count ELSE alert.request_count END,
+ alert.occurrence_count,alert.status,alert.first_occurred_at,alert.last_occurred_at,alert.assignee_id,alert.handled_by,COALESCE(alert.handled_note,''),alert.handled_at,COUNT(*) OVER()::bigint
+FROM finance_alerts alert
+LEFT JOIN LATERAL (
+  SELECT COALESCE(SUM(COALESCE((
+           SELECT SUM(ura.allocated_amount) FROM usage_revenue_allocations ura
+           WHERE ura.usage_log_id=ufr.usage_log_id AND ura.invalidated_at IS NULL
+         ),CASE WHEN ufr.business_type='subscription' THEN 0 ELSE ufr.usage_list_value END,0)),0) AS impact_amount,
+         COUNT(*)::bigint AS request_count
+  FROM usage_finance_records ufr
+  WHERE ufr.usage_created_at >= $1 AND ufr.usage_created_at < $2
+    AND ufr.cost_status=alert.alert_type
+    AND COALESCE(ufr.business_type,'') <> $3
+    AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=ufr.user_id AND finance_admin.role=$3)
+) missing_scope ON alert.alert_type IN ('missing_price','missing_multiplier','missing_usage')
+LEFT JOIN LATERAL (
+  SELECT COUNT(*)::bigint AS request_count
+  FROM payment_orders po
+  WHERE po.paid_at >= $1 AND po.paid_at < $2
+    AND alert.aggregation_key='payment_fee_uncollected:'||COALESCE(NULLIF(po.provider_key,''),'unknown')
+    AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$3)
+    AND NOT EXISTS (SELECT 1 FROM payment_provider_fee_events fee WHERE fee.payment_order_id=po.id AND fee.fee_status='confirmed')
+) payment_scope ON alert.alert_type='payment_fee_uncollected'
+WHERE %s
+ORDER BY CASE alert.severity WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 ELSE 3 END,alert.last_occurred_at DESC,alert.id DESC
 LIMIT $%d OFFSET $%d`, where, len(args)-1, len(args))
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {

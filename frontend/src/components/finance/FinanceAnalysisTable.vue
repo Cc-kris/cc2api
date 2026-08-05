@@ -6,7 +6,7 @@
       <div>
         <h2 class="font-semibold text-gray-900 dark:text-white">利润分析</h2>
         <p class="mt-1 text-xs text-gray-500">
-          按同一口径定位低毛利客户、分组、模型、渠道和上游账号。
+          查看每个客户、分组、模型或上游账号赚了还是亏了。
         </p>
       </div>
       <div class="flex flex-wrap items-center gap-3">
@@ -28,13 +28,7 @@
             <option value="user">客户</option>
             <option value="group">客户分组</option>
             <option value="requested_model">请求模型</option>
-            <option value="upstream_model">上游模型</option>
-            <option value="channel">渠道</option>
-            <option value="upstream">上游站点</option>
-            <option value="wallet">上游钱包</option>
-            <option value="account">路由账号</option>
-            <option value="billing_type">计费类型</option>
-            <option value="business_type">业务类型</option>
+            <option value="account">上游账号</option>
           </select>
         </label>
         <button
@@ -86,21 +80,15 @@
             class="bg-gray-50 text-left text-xs uppercase text-gray-500 dark:bg-dark-800"
           >
             <tr>
-              <th class="px-4 py-3">维度</th>
-              <th class="px-4 py-3 text-right">收入</th>
-              <th class="px-4 py-3 text-right">已确认成本</th>
-              <th class="px-4 py-3 text-right">输入</th>
-              <th class="px-4 py-3 text-right">输出</th>
-              <th class="px-4 py-3 text-right">缓存</th>
-              <th class="px-4 py-3 text-right">Fast</th>
-              <th class="px-4 py-3 text-right">图片</th>
-              <th class="px-4 py-3 text-right">视频</th>
-              <th class="px-4 py-3 text-right">其他</th>
-              <th class="px-4 py-3 text-right">毛利</th>
-              <th class="px-4 py-3 text-right">毛利率</th>
+              <th class="px-4 py-3">分析对象</th>
+              <th class="px-4 py-3 text-right">客户消费</th>
+              <th class="px-4 py-3 text-right">上游成本</th>
+              <th class="px-4 py-3 text-right">图片成本</th>
+              <th class="px-4 py-3 text-right">利润</th>
+              <th class="px-4 py-3 text-right">利润率</th>
               <th class="px-4 py-3 text-right">亏损金额</th>
               <th class="px-4 py-3 text-right">请求数</th>
-              <th class="px-4 py-3 text-right">待完善</th>
+              <th class="px-4 py-3 text-right">未完整核算</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
@@ -119,25 +107,7 @@
                 {{ formatFinanceMoney(item.upstream_cost) }}
               </td>
               <td class="px-4 py-3 text-right tabular-nums">
-                {{ formatFinanceMoney(item.input_cost) }}
-              </td>
-              <td class="px-4 py-3 text-right tabular-nums">
-                {{ formatFinanceMoney(item.output_cost) }}
-              </td>
-              <td class="px-4 py-3 text-right tabular-nums">
-                {{ formatFinanceMoney(item.cache_cost) }}
-              </td>
-              <td class="px-4 py-3 text-right tabular-nums">
-                {{ formatFinanceMoney(item.fast_cost) }}
-              </td>
-              <td class="px-4 py-3 text-right tabular-nums">
                 {{ formatFinanceMoney(item.image_cost) }}
-              </td>
-              <td class="px-4 py-3 text-right tabular-nums">
-                {{ formatFinanceMoney(item.video_cost) }}
-              </td>
-              <td class="px-4 py-3 text-right tabular-nums">
-                {{ formatFinanceMoney(item.other_cost) }}
               </td>
               <td
                 class="px-4 py-3 text-right font-medium tabular-nums"
@@ -159,7 +129,7 @@
               </td>
             </tr>
             <tr v-if="items.length === 0">
-              <td colspan="15" class="px-4 py-10 text-center text-gray-500">
+              <td colspan="9" class="px-4 py-10 text-center text-gray-500">
                 所选期间暂无利润分析数据
               </td>
             </tr>

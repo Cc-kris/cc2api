@@ -27,7 +27,6 @@
               <th class="px-4 py-3 text-right">成本</th>
               <th class="px-4 py-3 text-right">亏损</th>
               <th class="px-4 py-3">原因</th>
-                <th class="px-4 py-3">系统记录状态</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 dark:divide-dark-700">
@@ -84,31 +83,15 @@
                   客户收 {{ formatFinanceMoney(item.revenue) }}，上游花 {{ formatFinanceMoney(item.upstream_cost) }}，少收 {{ formatFinanceMoney(item.loss_amount) }}。
                 </p>
                 <p class="mt-1 text-xs" :class="item.cost_status === 'exact' ? 'text-emerald-600' : 'text-amber-600'">
-                  {{ item.cost_status === 'exact' ? '已确认成本' : '估算成本，金额可能变化' }}
+                  {{ item.cost_status === 'exact' ? '上游实际扣费' : '按现有价格估算，金额可能变化' }}
                 </p>
                 <p class="mt-1 text-xs text-gray-500">
                   {{ item.request_id || `日志 #${item.usage_log_id}` }}
                 </p>
               </td>
-              <td class="px-4 py-3">
-                <p class="font-medium text-gray-900 dark:text-white">
-                  {{ statusLabel(item.status) }}
-                </p>
-                <p v-if="item.assignee_id" class="mt-1 text-xs text-gray-500">
-                  负责人 #{{ item.assignee_id }}
-                </p>
-                <p
-                  v-if="item.handled_note"
-                  class="mt-1 max-w-56 text-xs text-gray-500"
-                >
-                  {{ item.handled_note }}
-                </p>
-                <p v-if="item.alert_id" class="mt-1 text-xs text-gray-500">系统已记录该问题</p>
-                <p v-else class="mt-1 text-xs text-amber-600">系统尚未生成关联记录</p>
-              </td>
             </tr>
             <tr v-if="items.length === 0">
-              <td colspan="9" class="px-4 py-10 text-center text-gray-500">
+              <td colspan="8" class="px-4 py-10 text-center text-gray-500">
                 所选期间没有已确认亏损记录
               </td>
             </tr>
@@ -159,17 +142,4 @@ function lossReason(reason: string) {
   return reasonLabels[reason] || reason || "待核实";
 }
 
-function statusLabel(status: FinanceLossItem["status"]) {
-  return (
-    (
-      {
-        open: "系统已发现",
-        acknowledged: "系统已记录",
-        resolved: "已恢复",
-        ignored: "不再统计",
-        untracked: "等待系统记录",
-      } as const
-    )[status] || status
-  );
-}
 </script>

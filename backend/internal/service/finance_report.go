@@ -30,6 +30,9 @@ type FinanceReportFilter struct {
 	BusinessType   string
 	CostStatuses   []string
 	DataScope      string
+	// SkipCurrentSnapshot is set only for internal period comparisons. It keeps
+	// prior-period profit calculations from re-querying current balances and alerts.
+	SkipCurrentSnapshot bool
 }
 
 type FinanceQuality struct {
@@ -618,6 +621,7 @@ func (s *FinanceReportService) Overview(ctx context.Context, filter FinanceRepor
 	previousFilter := bookFilter
 	previousFilter.EndBefore = filter.StartAt
 	previousFilter.StartAt = filter.StartAt.Add(-duration)
+	previousFilter.SkipCurrentSnapshot = true
 	previous, err := s.repo.SummarizeFinance(ctx, previousFilter)
 	if err != nil {
 		return nil, err
