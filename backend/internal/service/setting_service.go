@@ -669,6 +669,25 @@ func (s *SettingService) GetAllSettings(ctx context.Context) (*SystemSettings, e
 	return s.parseSettings(settings), nil
 }
 
+// GetAnnouncementTranslationConfig returns the effective announcement
+// translation configuration. Database settings override config.yaml values;
+// this keeps existing deployments working while allowing the admin UI to take
+// effect without restarting the process.
+func (s *SettingService) GetAnnouncementTranslationConfig(ctx context.Context) (config.AnnouncementTranslationConfig, error) {
+	settings, err := s.settingRepo.GetAll(ctx)
+	if err != nil {
+		return config.AnnouncementTranslationConfig{}, fmt.Errorf("get announcement translation settings: %w", err)
+	}
+	parsed := s.parseSettings(settings)
+	return config.AnnouncementTranslationConfig{
+		Enabled:        parsed.AnnouncementTranslationEnabled,
+		BaseURL:        parsed.AnnouncementTranslationBaseURL,
+		APIKey:         parsed.AnnouncementTranslationAPIKey,
+		Model:          parsed.AnnouncementTranslationModel,
+		TimeoutSeconds: parsed.AnnouncementTranslationTimeoutSeconds,
+	}, nil
+}
+
 // GetFrontendURL 获取前端基础URL（数据库优先，fallback 到配置文件）
 func (s *SettingService) GetFrontendURL(ctx context.Context) string {
 	val, err := s.settingRepo.GetValue(ctx, SettingKeyFrontendURL)
@@ -1714,6 +1733,18 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeySMTPFrom] = settings.SMTPFrom
 	updates[SettingKeySMTPFromName] = settings.SMTPFromName
 	updates[SettingKeySMTPUseTLS] = strconv.FormatBool(settings.SMTPUseTLS)
+
+	// 公告自动翻译设置（API Key 为空时保留既有密钥）
+	updates[SettingKeyAnnouncementTranslationEnabled] = strconv.FormatBool(settings.AnnouncementTranslationEnabled)
+	updates[SettingKeyAnnouncementTranslationBaseURL] = strings.TrimSpace(settings.AnnouncementTranslationBaseURL)
+	updates[SettingKeyAnnouncementTranslationModel] = strings.TrimSpace(settings.AnnouncementTranslationModel)
+	if settings.AnnouncementTranslationTimeoutSeconds <= 0 {
+		settings.AnnouncementTranslationTimeoutSeconds = 90
+	}
+	updates[SettingKeyAnnouncementTranslationTimeoutSeconds] = strconv.Itoa(settings.AnnouncementTranslationTimeoutSeconds)
+	if strings.TrimSpace(settings.AnnouncementTranslationAPIKey) != "" {
+		updates[SettingKeyAnnouncementTranslationAPIKey] = strings.TrimSpace(settings.AnnouncementTranslationAPIKey)
+	}
 
 	// Cloudflare Turnstile 设置（只有非空才更新密钥）
 	updates[SettingKeyTurnstileEnabled] = strconv.FormatBool(settings.TurnstileEnabled)
@@ -2905,41 +2936,46 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		apiKeyACLTrustForwardedIP = s.cfg.Security.TrustForwardedIPForAPIKeyACL
 	}
 	result := &SystemSettings{
-		RegistrationEnabled:              settings[SettingKeyRegistrationEnabled] == "true",
-		EmailVerifyEnabled:               emailVerifyEnabled,
-		RegistrationEmailSuffixWhitelist: ParseRegistrationEmailSuffixWhitelist(settings[SettingKeyRegistrationEmailSuffixWhitelist]),
-		PromoCodeEnabled:                 settings[SettingKeyPromoCodeEnabled] != "false", // 默认启用
-		PasswordResetEnabled:             emailVerifyEnabled && settings[SettingKeyPasswordResetEnabled] == "true",
-		FrontendURL:                      settings[SettingKeyFrontendURL],
-		InvitationCodeEnabled:            settings[SettingKeyInvitationCodeEnabled] == "true",
-		TotpEnabled:                      settings[SettingKeyTotpEnabled] == "true",
-		LoginAgreementEnabled:            settings[SettingKeyLoginAgreementEnabled] == "true",
-		LoginAgreementMode:               normalizeLoginAgreementMode(settings[SettingKeyLoginAgreementMode]),
-		LoginAgreementUpdatedAt:          loginAgreementUpdatedAt,
-		LoginAgreementDocuments:          loginAgreementDocuments,
-		SMTPHost:                         settings[SettingKeySMTPHost],
-		SMTPUsername:                     settings[SettingKeySMTPUsername],
-		SMTPFrom:                         settings[SettingKeySMTPFrom],
-		SMTPFromName:                     settings[SettingKeySMTPFromName],
-		SMTPUseTLS:                       settings[SettingKeySMTPUseTLS] == "true",
-		SMTPPasswordConfigured:           settings[SettingKeySMTPPassword] != "",
-		TurnstileEnabled:                 settings[SettingKeyTurnstileEnabled] == "true",
-		TurnstileSiteKey:                 settings[SettingKeyTurnstileSiteKey],
-		TurnstileSecretKeyConfigured:     settings[SettingKeyTurnstileSecretKey] != "",
-		APIKeyACLTrustForwardedIP:        apiKeyACLTrustForwardedIP,
-		SiteName:                         s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
-		SiteLogo:                         settings[SettingKeySiteLogo],
-		SiteSubtitle:                     s.getStringOrDefault(settings, SettingKeySiteSubtitle, "Subscription to API Conversion Platform"),
-		APIBaseURL:                       settings[SettingKeyAPIBaseURL],
-		ContactInfo:                      settings[SettingKeyContactInfo],
-		DocURL:                           settings[SettingKeyDocURL],
-		HomeContent:                      settings[SettingKeyHomeContent],
-		HideCcsImportButton:              settings[SettingKeyHideCcsImportButton] == "true",
-		PurchaseSubscriptionEnabled:      settings[SettingKeyPurchaseSubscriptionEnabled] == "true",
-		PurchaseSubscriptionURL:          strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionURL]),
-		CustomMenuItems:                  settings[SettingKeyCustomMenuItems],
-		CustomEndpoints:                  settings[SettingKeyCustomEndpoints],
-		BackendModeEnabled:               settings[SettingKeyBackendModeEnabled] == "true",
+		RegistrationEnabled:                   settings[SettingKeyRegistrationEnabled] == "true",
+		EmailVerifyEnabled:                    emailVerifyEnabled,
+		RegistrationEmailSuffixWhitelist:      ParseRegistrationEmailSuffixWhitelist(settings[SettingKeyRegistrationEmailSuffixWhitelist]),
+		PromoCodeEnabled:                      settings[SettingKeyPromoCodeEnabled] != "false", // 默认启用
+		PasswordResetEnabled:                  emailVerifyEnabled && settings[SettingKeyPasswordResetEnabled] == "true",
+		FrontendURL:                           settings[SettingKeyFrontendURL],
+		InvitationCodeEnabled:                 settings[SettingKeyInvitationCodeEnabled] == "true",
+		TotpEnabled:                           settings[SettingKeyTotpEnabled] == "true",
+		LoginAgreementEnabled:                 settings[SettingKeyLoginAgreementEnabled] == "true",
+		LoginAgreementMode:                    normalizeLoginAgreementMode(settings[SettingKeyLoginAgreementMode]),
+		LoginAgreementUpdatedAt:               loginAgreementUpdatedAt,
+		LoginAgreementDocuments:               loginAgreementDocuments,
+		SMTPHost:                              settings[SettingKeySMTPHost],
+		SMTPUsername:                          settings[SettingKeySMTPUsername],
+		SMTPFrom:                              settings[SettingKeySMTPFrom],
+		SMTPFromName:                          settings[SettingKeySMTPFromName],
+		SMTPUseTLS:                            settings[SettingKeySMTPUseTLS] == "true",
+		SMTPPasswordConfigured:                settings[SettingKeySMTPPassword] != "",
+		AnnouncementTranslationEnabled:        parseAnnouncementTranslationEnabled(settings, s.cfg),
+		AnnouncementTranslationBaseURL:        parseAnnouncementTranslationString(settings, SettingKeyAnnouncementTranslationBaseURL, s.cfg, func(cfg config.Config) string { return cfg.AnnouncementTranslation.BaseURL }),
+		AnnouncementTranslationAPIKey:         parseAnnouncementTranslationString(settings, SettingKeyAnnouncementTranslationAPIKey, s.cfg, func(cfg config.Config) string { return cfg.AnnouncementTranslation.APIKey }),
+		AnnouncementTranslationModel:          parseAnnouncementTranslationString(settings, SettingKeyAnnouncementTranslationModel, s.cfg, func(cfg config.Config) string { return cfg.AnnouncementTranslation.Model }),
+		AnnouncementTranslationTimeoutSeconds: parseAnnouncementTranslationTimeout(settings, s.cfg),
+		TurnstileEnabled:                      settings[SettingKeyTurnstileEnabled] == "true",
+		TurnstileSiteKey:                      settings[SettingKeyTurnstileSiteKey],
+		TurnstileSecretKeyConfigured:          settings[SettingKeyTurnstileSecretKey] != "",
+		APIKeyACLTrustForwardedIP:             apiKeyACLTrustForwardedIP,
+		SiteName:                              s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
+		SiteLogo:                              settings[SettingKeySiteLogo],
+		SiteSubtitle:                          s.getStringOrDefault(settings, SettingKeySiteSubtitle, "Subscription to API Conversion Platform"),
+		APIBaseURL:                            settings[SettingKeyAPIBaseURL],
+		ContactInfo:                           settings[SettingKeyContactInfo],
+		DocURL:                                settings[SettingKeyDocURL],
+		HomeContent:                           settings[SettingKeyHomeContent],
+		HideCcsImportButton:                   settings[SettingKeyHideCcsImportButton] == "true",
+		PurchaseSubscriptionEnabled:           settings[SettingKeyPurchaseSubscriptionEnabled] == "true",
+		PurchaseSubscriptionURL:               strings.TrimSpace(settings[SettingKeyPurchaseSubscriptionURL]),
+		CustomMenuItems:                       settings[SettingKeyCustomMenuItems],
+		CustomEndpoints:                       settings[SettingKeyCustomEndpoints],
+		BackendModeEnabled:                    settings[SettingKeyBackendModeEnabled] == "true",
 	}
 	result.TableDefaultPageSize, result.TablePageSizeOptions = parseTablePreferences(
 		settings[SettingKeyTableDefaultPageSize],
@@ -2994,6 +3030,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	// 敏感信息直接返回，方便测试连接时使用
 	result.SMTPPassword = settings[SettingKeySMTPPassword]
 	result.TurnstileSecretKey = settings[SettingKeyTurnstileSecretKey]
+	result.AnnouncementTranslationAPIKeyConfigured = strings.TrimSpace(result.AnnouncementTranslationAPIKey) != ""
 
 	// LinuxDo Connect 设置：
 	// - 兼容 config.yaml/env（避免老部署因为未迁移到数据库设置而被意外关闭）
@@ -3682,6 +3719,35 @@ func (s *SettingService) getStringOrDefault(settings map[string]string, key, def
 		return value
 	}
 	return defaultValue
+}
+
+func parseAnnouncementTranslationEnabled(settings map[string]string, cfg *config.Config) bool {
+	if value, ok := settings[SettingKeyAnnouncementTranslationEnabled]; ok {
+		return strings.EqualFold(strings.TrimSpace(value), "true")
+	}
+	return cfg != nil && cfg.AnnouncementTranslation.Enabled
+}
+
+func parseAnnouncementTranslationString(settings map[string]string, key string, cfg *config.Config, fallback func(config.Config) string) string {
+	if value, ok := settings[key]; ok && strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	if cfg == nil {
+		return ""
+	}
+	return strings.TrimSpace(fallback(*cfg))
+}
+
+func parseAnnouncementTranslationTimeout(settings map[string]string, cfg *config.Config) int {
+	if value, ok := settings[SettingKeyAnnouncementTranslationTimeoutSeconds]; ok {
+		if parsed, err := strconv.Atoi(strings.TrimSpace(value)); err == nil && parsed > 0 {
+			return parsed
+		}
+	}
+	if cfg != nil && cfg.AnnouncementTranslation.TimeoutSeconds > 0 {
+		return cfg.AnnouncementTranslation.TimeoutSeconds
+	}
+	return 90
 }
 
 // IsTurnstileEnabled 检查是否启用 Turnstile 验证

@@ -154,6 +154,13 @@ const (
 	SettingKeySMTPFromName = "smtp_from_name" // 发件人名称
 	SettingKeySMTPUseTLS   = "smtp_use_tls"   // 是否使用TLS
 
+	// 公告自动翻译设置（OpenAI 兼容 Chat Completions）
+	SettingKeyAnnouncementTranslationEnabled        = "announcement_translation_enabled"
+	SettingKeyAnnouncementTranslationBaseURL        = "announcement_translation_base_url"
+	SettingKeyAnnouncementTranslationAPIKey         = "announcement_translation_api_key"
+	SettingKeyAnnouncementTranslationModel          = "announcement_translation_model"
+	SettingKeyAnnouncementTranslationTimeoutSeconds = "announcement_translation_timeout_seconds"
+
 	// Cloudflare Turnstile 设置
 	SettingKeyTurnstileEnabled   = "turnstile_enabled"    // 是否启用 Turnstile 验证
 	SettingKeyTurnstileSiteKey   = "turnstile_site_key"   // Turnstile Site Key

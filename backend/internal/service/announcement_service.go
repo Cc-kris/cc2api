@@ -2,11 +2,13 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	stdhtml "html"
 	"log/slog"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
@@ -21,6 +23,12 @@ type AnnouncementService struct {
 	userSubRepo      UserSubscriptionRepository
 	emailService     *EmailService
 	settingService   *SettingService
+	translator       AnnouncementTranslator
+	translationJobs  sync.Map
+}
+
+func (s *AnnouncementService) SetTranslator(translator AnnouncementTranslator) {
+	s.translator = translator
 }
 
 func NewAnnouncementService(
@@ -121,13 +129,16 @@ func (s *AnnouncementService) Create(ctx context.Context, input *CreateAnnouncem
 	}
 
 	a := &Announcement{
-		Title:      title,
-		Content:    content,
-		Status:     status,
-		NotifyMode: notifyMode,
-		Targeting:  targeting,
-		StartsAt:   input.StartsAt,
-		EndsAt:     input.EndsAt,
+		Title:         title,
+		Content:       content,
+		SourceLocale:  "zh",
+		SourceVersion: 1,
+		Translations:  newAnnouncementTranslations("zh", title, content, 1),
+		Status:        status,
+		NotifyMode:    notifyMode,
+		Targeting:     targeting,
+		StartsAt:      input.StartsAt,
+		EndsAt:        input.EndsAt,
 	}
 	if input.ActorID != nil && *input.ActorID > 0 {
 		a.CreatedBy = input.ActorID
@@ -137,6 +148,7 @@ func (s *AnnouncementService) Create(ctx context.Context, input *CreateAnnouncem
 	if err := s.announcementRepo.Create(ctx, a); err != nil {
 		return nil, fmt.Errorf("create announcement: %w", err)
 	}
+	s.queueAnnouncementTranslations(*a)
 	if input.SendEmail {
 		s.queueAnnouncementEmailNotifications(ctx, a)
 		refreshed, err := s.announcementRepo.GetByID(ctx, a.ID)
@@ -157,19 +169,26 @@ func (s *AnnouncementService) Update(ctx context.Context, id int64, input *Updat
 		return nil, err
 	}
 
+	sourceChanged := false
 	if input.Title != nil {
 		title := strings.TrimSpace(*input.Title)
 		if title == "" || len(title) > 200 {
 			return nil, ErrAnnouncementInvalidTitle
 		}
-		a.Title = title
+		if a.Title != title {
+			a.Title = title
+			sourceChanged = true
+		}
 	}
 	if input.Content != nil {
 		content := strings.TrimSpace(*input.Content)
 		if content == "" {
 			return nil, ErrAnnouncementContentRequired
 		}
-		a.Content = content
+		if a.Content != content {
+			a.Content = content
+			sourceChanged = true
+		}
 	}
 	if input.Status != nil {
 		status := strings.TrimSpace(*input.Status)
@@ -211,9 +230,22 @@ func (s *AnnouncementService) Update(ctx context.Context, id int64, input *Updat
 	if input.ActorID != nil && *input.ActorID > 0 {
 		a.UpdatedBy = input.ActorID
 	}
+	if strings.TrimSpace(a.SourceLocale) == "" {
+		a.SourceLocale = "zh"
+	}
+	if a.SourceVersion <= 0 {
+		a.SourceVersion = 1
+	}
+	if sourceChanged {
+		a.SourceVersion++
+		a.Translations = newAnnouncementTranslations(a.SourceLocale, a.Title, a.Content, a.SourceVersion)
+	}
 
 	if err := s.announcementRepo.Update(ctx, a); err != nil {
 		return nil, fmt.Errorf("update announcement: %w", err)
+	}
+	if sourceChanged {
+		s.queueAnnouncementTranslations(*a)
 	}
 	if input.SendEmail {
 		s.queueAnnouncementEmailNotifications(ctx, a)
@@ -241,6 +273,10 @@ func (s *AnnouncementService) List(ctx context.Context, params pagination.Pagina
 }
 
 func (s *AnnouncementService) ListForUser(ctx context.Context, userID int64, unreadOnly bool) ([]UserAnnouncement, error) {
+	return s.ListForUserLocale(ctx, userID, unreadOnly, "zh")
+}
+
+func (s *AnnouncementService) ListForUserLocale(ctx context.Context, userID int64, unreadOnly bool, locale string) ([]UserAnnouncement, error) {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("get user: %w", err)
@@ -288,6 +324,10 @@ func (s *AnnouncementService) ListForUser(ctx context.Context, userID int64, unr
 	out := make([]UserAnnouncement, 0, len(visible))
 	for i := range visible {
 		a := visible[i]
+		if !a.HasTranslation(locale) {
+			s.queueAnnouncementTranslations(a)
+		}
+		localized := a.Localized(locale)
 		readAt, ok := readMap[a.ID]
 		if unreadOnly && ok {
 			continue
@@ -298,7 +338,7 @@ func (s *AnnouncementService) ListForUser(ctx context.Context, userID int64, unr
 			ptr = &t
 		}
 		out = append(out, UserAnnouncement{
-			Announcement: a,
+			Announcement: localized,
 			ReadAt:       ptr,
 		})
 	}
@@ -313,6 +353,133 @@ func (s *AnnouncementService) ListForUser(ctx context.Context, userID int64, unr
 	})
 
 	return out, nil
+}
+
+func (s *AnnouncementService) queueAnnouncementTranslations(announcement Announcement) {
+	if s == nil || s.announcementRepo == nil || announcement.ID <= 0 {
+		return
+	}
+	jobKey := announcementTranslationJobKey(announcement)
+	if _, loaded := s.translationJobs.LoadOrStore(jobKey, struct{}{}); loaded {
+		return
+	}
+
+	go func() {
+		defer s.translationJobs.Delete(jobKey)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		translator := s.resolveAnnouncementTranslator(ctx)
+		if translator == nil {
+			return
+		}
+
+		sourceLocale := domain.NormalizeAnnouncementLocale(announcement.SourceLocale)
+		sourceVersion := announcement.SourceVersion
+		if sourceVersion <= 0 {
+			sourceVersion = 1
+		}
+		translations := make(map[string]AnnouncementTranslation, len(announcement.Translations)+5)
+		for locale, translation := range announcement.Translations {
+			if translation.SourceVersion == sourceVersion || (sourceVersion == 1 && translation.SourceVersion == 0) {
+				translations[domain.NormalizeAnnouncementLocale(locale)] = translation
+			}
+		}
+		translations[sourceLocale] = AnnouncementTranslation{
+			Title:         announcement.Title,
+			Content:       announcement.Content,
+			SourceVersion: sourceVersion,
+			Status:        domain.AnnouncementTranslationStatusSource,
+			UpdatedAt:     time.Now().UTC(),
+		}
+
+		for _, targetLocale := range []string{"zh", "en", "ru", "fr", "de"} {
+			if targetLocale == sourceLocale {
+				continue
+			}
+			if translation, ok := translations[targetLocale]; ok && strings.TrimSpace(translation.Title) != "" && strings.TrimSpace(translation.Content) != "" {
+				continue
+			}
+			translation, err := translator.Translate(ctx, sourceLocale, targetLocale, announcement.Title, announcement.Content)
+			if err != nil {
+				translations[targetLocale] = AnnouncementTranslation{
+					SourceVersion: sourceVersion,
+					Status:        domain.AnnouncementTranslationStatusFailed,
+					UpdatedAt:     time.Now().UTC(),
+				}
+				slog.Warn("announcement translation failed", "announcement_id", announcement.ID, "target_locale", targetLocale, "error", err)
+				continue
+			}
+			if strings.TrimSpace(translation.Title) == "" || strings.TrimSpace(translation.Content) == "" {
+				slog.Warn("announcement translation returned empty content", "announcement_id", announcement.ID, "target_locale", targetLocale)
+				continue
+			}
+			translation.SourceVersion = sourceVersion
+			translation.Status = domain.AnnouncementTranslationStatusReady
+			translation.UpdatedAt = time.Now().UTC()
+			translations[targetLocale] = translation
+		}
+
+		updated, err := s.announcementRepo.UpdateTranslationsIfSourceMatches(
+			ctx,
+			announcement.ID,
+			sourceVersion,
+			announcement.Title,
+			announcement.Content,
+			translations,
+		)
+		if err != nil {
+			slog.Warn("save announcement translations failed", "announcement_id", announcement.ID, "error", err)
+			return
+		}
+		if !updated {
+			slog.Info("discarded stale announcement translations", "announcement_id", announcement.ID)
+		}
+	}()
+}
+
+func (s *AnnouncementService) resolveAnnouncementTranslator(ctx context.Context) AnnouncementTranslator {
+	if s == nil {
+		return nil
+	}
+	if s.settingService != nil {
+		cfg, err := s.settingService.GetAnnouncementTranslationConfig(ctx)
+		if err != nil {
+			slog.Warn("load announcement translation settings failed", "error", err)
+			return nil
+		}
+		return newAnnouncementTranslator(cfg)
+	}
+	// Tests and embedded callers may inject a deterministic translator without
+	// constructing the full settings service.
+	return s.translator
+}
+
+func newAnnouncementTranslations(sourceLocale, title, content string, sourceVersion int) map[string]AnnouncementTranslation {
+	if sourceVersion <= 0 {
+		sourceVersion = 1
+	}
+	now := time.Now().UTC()
+	translations := make(map[string]AnnouncementTranslation, 5)
+	for _, locale := range []string{"zh", "en", "ru", "fr", "de"} {
+		translations[locale] = AnnouncementTranslation{
+			SourceVersion: sourceVersion,
+			Status:        domain.AnnouncementTranslationStatusPending,
+			UpdatedAt:     now,
+		}
+	}
+	translations[domain.NormalizeAnnouncementLocale(sourceLocale)] = AnnouncementTranslation{
+		Title:         title,
+		Content:       content,
+		SourceVersion: sourceVersion,
+		Status:        domain.AnnouncementTranslationStatusSource,
+		UpdatedAt:     now,
+	}
+	return translations
+}
+
+func announcementTranslationJobKey(announcement Announcement) string {
+	sourceHash := sha256.Sum256([]byte(announcement.Title + "\x00" + announcement.Content))
+	return fmt.Sprintf("%d:%x", announcement.ID, sourceHash[:8])
 }
 
 func (s *AnnouncementService) MarkRead(ctx context.Context, userID, announcementID int64) error {

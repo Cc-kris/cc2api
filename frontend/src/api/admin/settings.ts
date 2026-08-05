@@ -446,6 +446,11 @@ export interface SystemSettings {
   smtp_from_email: string;
   smtp_from_name: string;
   smtp_use_tls: boolean;
+  announcement_translation_enabled: boolean;
+  announcement_translation_base_url: string;
+  announcement_translation_api_key_configured: boolean;
+  announcement_translation_model: string;
+  announcement_translation_timeout_seconds: number;
   // Cloudflare Turnstile settings
   turnstile_enabled: boolean;
   turnstile_site_key: string;
@@ -720,6 +725,11 @@ export interface UpdateSettingsRequest {
   smtp_from_email?: string;
   smtp_from_name?: string;
   smtp_use_tls?: boolean;
+  announcement_translation_enabled?: boolean;
+  announcement_translation_base_url?: string;
+  announcement_translation_api_key?: string;
+  announcement_translation_model?: string;
+  announcement_translation_timeout_seconds?: number;
   turnstile_enabled?: boolean;
   turnstile_site_key?: string;
   turnstile_secret_key?: string;

@@ -7,6 +7,7 @@ import (
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -26,6 +27,9 @@ func (r *announcementRepository) Create(ctx context.Context, a *service.Announce
 	builder := client.Announcement.Create().
 		SetTitle(a.Title).
 		SetContent(a.Content).
+		SetSourceLocale(normalizeAnnouncementSourceLocale(a.SourceLocale)).
+		SetSourceVersion(normalizeAnnouncementSourceVersion(a.SourceVersion)).
+		SetTranslations(normalizeAnnouncementTranslations(a)).
 		SetStatus(a.Status).
 		SetNotifyMode(a.NotifyMode).
 		SetTargeting(a.Targeting).
@@ -74,6 +78,9 @@ func (r *announcementRepository) Update(ctx context.Context, a *service.Announce
 	builder := client.Announcement.UpdateOneID(a.ID).
 		SetTitle(a.Title).
 		SetContent(a.Content).
+		SetSourceLocale(normalizeAnnouncementSourceLocale(a.SourceLocale)).
+		SetSourceVersion(normalizeAnnouncementSourceVersion(a.SourceVersion)).
+		SetTranslations(normalizeAnnouncementTranslations(a)).
 		SetStatus(a.Status).
 		SetNotifyMode(a.NotifyMode).
 		SetTargeting(a.Targeting).
@@ -115,6 +122,30 @@ func (r *announcementRepository) Update(ctx context.Context, a *service.Announce
 
 	a.UpdatedAt = updated.UpdatedAt
 	return nil
+}
+
+func (r *announcementRepository) UpdateTranslationsIfSourceMatches(
+	ctx context.Context,
+	id int64,
+	sourceVersion int,
+	title string,
+	content string,
+	translations map[string]service.AnnouncementTranslation,
+) (bool, error) {
+	client := clientFromContext(ctx, r.client)
+	affected, err := client.Announcement.Update().
+		Where(
+			announcement.IDEQ(id),
+			announcement.SourceVersionEQ(sourceVersion),
+			announcement.TitleEQ(title),
+			announcement.ContentEQ(content),
+		).
+		SetTranslations(translations).
+		Save(ctx)
+	if err != nil {
+		return false, translatePersistenceError(err, service.ErrAnnouncementNotFound, nil)
+	}
+	return affected > 0, nil
 }
 
 func (r *announcementRepository) MarkEmailSentIfUnset(ctx context.Context, id int64, sentAt time.Time) (bool, error) {
@@ -293,24 +324,63 @@ func announcementEntityToService(m *dbent.Announcement) *service.Announcement {
 		return nil
 	}
 	return &service.Announcement{
-		ID:          m.ID,
-		Title:       m.Title,
-		Content:     m.Content,
-		Status:      m.Status,
-		NotifyMode:  m.NotifyMode,
-		Targeting:   m.Targeting,
-		StartsAt:    m.StartsAt,
-		EndsAt:      m.EndsAt,
-		CreatedBy:   m.CreatedBy,
-		UpdatedBy:   m.UpdatedBy,
-		EmailSentAt: m.EmailSentAt,
-		EmailStatus: m.EmailStatus,
-		EmailTotal:  m.EmailTotal,
-		EmailSent:   m.EmailSent,
-		EmailFailed: m.EmailFailed,
-		CreatedAt:   m.CreatedAt,
-		UpdatedAt:   m.UpdatedAt,
+		ID:            m.ID,
+		Title:         m.Title,
+		Content:       m.Content,
+		SourceLocale:  m.SourceLocale,
+		SourceVersion: m.SourceVersion,
+		Translations:  m.Translations,
+		Status:        m.Status,
+		NotifyMode:    m.NotifyMode,
+		Targeting:     m.Targeting,
+		StartsAt:      m.StartsAt,
+		EndsAt:        m.EndsAt,
+		CreatedBy:     m.CreatedBy,
+		UpdatedBy:     m.UpdatedBy,
+		EmailSentAt:   m.EmailSentAt,
+		EmailStatus:   m.EmailStatus,
+		EmailTotal:    m.EmailTotal,
+		EmailSent:     m.EmailSent,
+		EmailFailed:   m.EmailFailed,
+		CreatedAt:     m.CreatedAt,
+		UpdatedAt:     m.UpdatedAt,
 	}
+}
+
+func normalizeAnnouncementSourceLocale(locale string) string {
+	locale = strings.ToLower(strings.TrimSpace(locale))
+	if locale == "" {
+		return "zh"
+	}
+	return locale
+}
+
+func normalizeAnnouncementSourceVersion(version int) int {
+	if version <= 0 {
+		return 1
+	}
+	return version
+}
+
+func normalizeAnnouncementTranslations(a *service.Announcement) map[string]service.AnnouncementTranslation {
+	translations := make(map[string]service.AnnouncementTranslation, len(a.Translations)+1)
+	for locale, translation := range a.Translations {
+		translations[locale] = translation
+	}
+	sourceLocale := normalizeAnnouncementSourceLocale(a.SourceLocale)
+	sourceVersion := normalizeAnnouncementSourceVersion(a.SourceVersion)
+	translation := translations[sourceLocale]
+	translation.Title = a.Title
+	translation.Content = a.Content
+	translation.SourceVersion = sourceVersion
+	if translation.Status == "" {
+		translation.Status = domain.AnnouncementTranslationStatusSource
+	}
+	if translation.UpdatedAt.IsZero() {
+		translation.UpdatedAt = time.Now().UTC()
+	}
+	translations[sourceLocale] = translation
+	return translations
 }
 
 func announcementEntitiesToService(models []*dbent.Announcement) []service.Announcement {

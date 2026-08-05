@@ -605,6 +605,20 @@ func ProvideGeminiMessagesCompatService(
 	return svc
 }
 
+func ProvideAnnouncementService(
+	announcementRepo AnnouncementRepository,
+	readRepo AnnouncementReadRepository,
+	userRepo UserRepository,
+	userSubRepo UserSubscriptionRepository,
+	emailService *EmailService,
+	settingService *SettingService,
+	cfg *config.Config,
+) *AnnouncementService {
+	svc := NewAnnouncementService(announcementRepo, readRepo, userRepo, userSubRepo, emailService, settingService)
+	_ = cfg // translation settings are read dynamically from SettingService
+	return svc
+}
+
 // ProviderSet is the Wire provider set for all services
 var ProviderSet = wire.NewSet(
 	// Core services
@@ -622,7 +636,7 @@ var ProviderSet = wire.NewSet(
 	ProvidePricingService,
 	NewBillingService,
 	ProvideBillingCacheService,
-	NewAnnouncementService,
+	ProvideAnnouncementService,
 	NewAdminService,
 	ProvideSemanticCacheAsyncWriter,
 	ProvideGatewayService,

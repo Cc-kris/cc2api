@@ -159,6 +159,83 @@ func TestSettingHandler_GetSettings_InjectsAuthSourceDefaults(t *testing.T) {
 	require.Len(t, subscriptions, 1)
 }
 
+func TestSettingHandler_GetSettings_ExposesAnnouncementTranslationWithoutAPIKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &settingHandlerRepoStub{values: map[string]string{
+		service.SettingKeyRegistrationEnabled:                   "true",
+		service.SettingKeyPromoCodeEnabled:                      "true",
+		service.SettingKeyAnnouncementTranslationEnabled:        "true",
+		service.SettingKeyAnnouncementTranslationBaseURL:        "https://translation.example.com/v1",
+		service.SettingKeyAnnouncementTranslationAPIKey:         "secret-key",
+		service.SettingKeyAnnouncementTranslationModel:          "translation-model",
+		service.SettingKeyAnnouncementTranslationTimeoutSeconds: "45",
+	}}
+	svc := service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}})
+	handler := NewSettingHandler(svc, nil, nil, nil, nil, nil, nil)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/settings", nil)
+	handler.GetSettings(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp response.Response
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	data, ok := resp.Data.(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, true, data["announcement_translation_enabled"])
+	require.Equal(t, true, data["announcement_translation_api_key_configured"])
+	require.Equal(t, "translation-model", data["announcement_translation_model"])
+	require.NotContains(t, data, "announcement_translation_api_key")
+}
+
+func TestSettingHandler_UpdateSettings_PersistsAndPreservesAnnouncementTranslation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &settingHandlerRepoStub{values: map[string]string{
+		service.SettingKeyRegistrationEnabled:                   "true",
+		service.SettingKeyPromoCodeEnabled:                      "true",
+		service.SettingKeyAnnouncementTranslationEnabled:        "false",
+		service.SettingKeyAnnouncementTranslationBaseURL:        "https://old.example.com/v1",
+		service.SettingKeyAnnouncementTranslationAPIKey:         "old-secret",
+		service.SettingKeyAnnouncementTranslationModel:          "old-model",
+		service.SettingKeyAnnouncementTranslationTimeoutSeconds: "90",
+	}}
+	svc := service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}})
+	handler := NewSettingHandler(svc, nil, nil, nil, nil, nil, nil)
+
+	update := func(body map[string]any) *httptest.ResponseRecorder {
+		rawBody, err := json.Marshal(body)
+		require.NoError(t, err)
+		rec := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rec)
+		c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/admin/settings", bytes.NewReader(rawBody))
+		c.Request.Header.Set("Content-Type", "application/json")
+		handler.UpdateSettings(c)
+		return rec
+	}
+
+	rec := update(map[string]any{
+		"promo_code_enabled":                       true,
+		"announcement_translation_enabled":         true,
+		"announcement_translation_base_url":        "https://translation.example.com/v1",
+		"announcement_translation_api_key":         "new-secret",
+		"announcement_translation_model":           "translation-model",
+		"announcement_translation_timeout_seconds": 45,
+	})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "true", repo.values[service.SettingKeyAnnouncementTranslationEnabled])
+	require.Equal(t, "https://translation.example.com/v1", repo.values[service.SettingKeyAnnouncementTranslationBaseURL])
+	require.Equal(t, "new-secret", repo.values[service.SettingKeyAnnouncementTranslationAPIKey])
+	require.Equal(t, "translation-model", repo.values[service.SettingKeyAnnouncementTranslationModel])
+	require.Equal(t, "45", repo.values[service.SettingKeyAnnouncementTranslationTimeoutSeconds])
+
+	rec = update(map[string]any{"promo_code_enabled": false})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "true", repo.values[service.SettingKeyAnnouncementTranslationEnabled])
+	require.Equal(t, "new-secret", repo.values[service.SettingKeyAnnouncementTranslationAPIKey])
+	require.Equal(t, "translation-model", repo.values[service.SettingKeyAnnouncementTranslationModel])
+}
+
 func TestSettingHandler_UpdateSettings_PreservesOmittedAuthSourceDefaults(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repo := &settingHandlerRepoStub{

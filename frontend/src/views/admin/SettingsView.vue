@@ -4975,6 +4975,123 @@
               </button>
             </div>
           </div>
+
+          <!-- Announcement Translation -->
+          <div class="card">
+            <div
+              class="border-b border-gray-100 px-6 py-4 dark:border-dark-700"
+            >
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                    {{ localText("公告自动翻译", "Automatic announcement translation") }}
+                  </h2>
+                  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    {{
+                      localText(
+                        "管理员只需维护一份公告原文，系统会在后台生成中文、英文、俄文、法文和德文版本。",
+                        "Maintain one source announcement and generate Chinese, English, Russian, French, and German copies in the background.",
+                      )
+                    }}
+                  </p>
+                </div>
+                <Toggle v-model="form.announcement_translation_enabled" />
+              </div>
+            </div>
+
+            <div class="space-y-6 p-6">
+              <div
+                class="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200"
+              >
+                {{
+                  localText(
+                    "配置使用 OpenAI 兼容的 Chat Completions 接口。保存后立即生效，无需重启服务；翻译失败时用户仍会看到公告原文。",
+                    "Uses an OpenAI-compatible Chat Completions endpoint. Changes take effect immediately without a restart; the source announcement remains visible if translation fails.",
+                  )
+                }}
+              </div>
+
+              <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div class="md:col-span-2">
+                  <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ localText("接口基础地址", "API base URL") }}
+                  </label>
+                  <input
+                    v-model="form.announcement_translation_base_url"
+                    type="url"
+                    class="input font-mono text-sm"
+                    placeholder="https://api.openai.com/v1"
+                  />
+                  <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{
+                      localText(
+                        "系统会自动补全 /chat/completions；如果已经填写完整路径则不会重复追加。",
+                        "The system appends /chat/completions unless the full endpoint is already provided.",
+                      )
+                    }}
+                  </p>
+                </div>
+
+                <div>
+                  <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ localText("模型", "Model") }}
+                  </label>
+                  <input
+                    v-model="form.announcement_translation_model"
+                    type="text"
+                    class="input font-mono text-sm"
+                    placeholder="gpt-4.1-mini"
+                  />
+                </div>
+
+                <div>
+                  <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ localText("请求超时（秒）", "Request timeout (seconds)") }}
+                  </label>
+                  <input
+                    v-model.number="form.announcement_translation_timeout_seconds"
+                    type="number"
+                    min="1"
+                    step="1"
+                    class="input"
+                  />
+                </div>
+
+                <div class="md:col-span-2">
+                  <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    API Key
+                  </label>
+                  <input
+                    v-model="form.announcement_translation_api_key"
+                    type="password"
+                    autocomplete="new-password"
+                    class="input font-mono text-sm"
+                    :placeholder="
+                      form.announcement_translation_api_key_configured
+                        ? localText(
+                            '密钥已配置，留空保留当前值',
+                            'Key configured; leave blank to keep it',
+                          )
+                        : localText('请输入 API Key', 'Enter API Key')
+                    "
+                  />
+                  <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{
+                      form.announcement_translation_api_key_configured
+                        ? localText(
+                            "当前已有可用密钥。只有输入新值时才会覆盖。",
+                            "A key is already configured and is replaced only when a new value is entered.",
+                          )
+                        : localText(
+                            "启用公告自动翻译前必须配置密钥。",
+                            "An API key is required before automatic translation can be enabled.",
+                          )
+                    }}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
 	        </div>
 	        <!-- /Tab: General -->
 
@@ -7099,6 +7216,7 @@ type SettingsForm = Omit<
   | "wechat_connect_mobile_enabled"
 > & {
   smtp_password: string;
+  announcement_translation_api_key: string;
   turnstile_secret_key: string;
   linuxdo_connect_client_secret: string;
   dingtalk_connect_client_secret: string;
@@ -7198,6 +7316,12 @@ const form = reactive<SettingsForm>({
   smtp_from_email: "",
   smtp_from_name: "",
   smtp_use_tls: true,
+  announcement_translation_enabled: false,
+  announcement_translation_base_url: "",
+  announcement_translation_api_key: "",
+  announcement_translation_api_key_configured: false,
+  announcement_translation_model: "",
+  announcement_translation_timeout_seconds: 90,
   // Cloudflare Turnstile
   turnstile_enabled: false,
   turnstile_site_key: "",
@@ -8031,6 +8155,7 @@ async function loadSettings() {
     registrationEmailSuffixWhitelistDraft.value = "";
     form.smtp_password = "";
     smtpPasswordManuallyEdited.value = false;
+    form.announcement_translation_api_key = "";
     form.turnstile_secret_key = "";
     form.linuxdo_connect_client_secret = "";
     form.dingtalk_connect_client_secret = "";
@@ -8264,6 +8389,74 @@ async function saveSettings() {
       form.login_agreement_mode === "checkbox" ? "checkbox" : "modal";
     form.login_agreement_documents = normalizedLoginAgreementDocuments;
 
+    form.announcement_translation_base_url =
+      form.announcement_translation_base_url.trim();
+    form.announcement_translation_model =
+      form.announcement_translation_model.trim();
+    form.announcement_translation_timeout_seconds = Math.floor(
+      Number(form.announcement_translation_timeout_seconds),
+    );
+    if (form.announcement_translation_enabled) {
+      if (!form.announcement_translation_base_url) {
+        appStore.showError(
+          localText(
+            "启用公告自动翻译时必须填写接口基础地址。",
+            "API base URL is required when automatic announcement translation is enabled.",
+          ),
+        );
+        return;
+      }
+      try {
+        const translationURL = new URL(
+          form.announcement_translation_base_url,
+        );
+        if (!['http:', 'https:'].includes(translationURL.protocol)) {
+          throw new Error("unsupported protocol");
+        }
+      } catch {
+        appStore.showError(
+          localText(
+            "公告翻译接口地址必须是有效的 HTTP 或 HTTPS 地址。",
+            "Announcement translation API base URL must be a valid HTTP or HTTPS URL.",
+          ),
+        );
+        return;
+      }
+      if (!form.announcement_translation_model) {
+        appStore.showError(
+          localText(
+            "启用公告自动翻译时必须填写模型。",
+            "Model is required when automatic announcement translation is enabled.",
+          ),
+        );
+        return;
+      }
+      if (
+        !Number.isInteger(form.announcement_translation_timeout_seconds) ||
+        form.announcement_translation_timeout_seconds <= 0
+      ) {
+        appStore.showError(
+          localText(
+            "公告翻译请求超时必须是大于 0 的整数。",
+            "Announcement translation timeout must be a positive integer.",
+          ),
+        );
+        return;
+      }
+      if (
+        !form.announcement_translation_api_key.trim() &&
+        !form.announcement_translation_api_key_configured
+      ) {
+        appStore.showError(
+          localText(
+            "启用公告自动翻译时必须填写 API Key。",
+            "API Key is required when automatic announcement translation is enabled.",
+          ),
+        );
+        return;
+      }
+    }
+
     const normalizedDefaultSubscriptions = normalizeDefaultSubscriptionSettings(
       form.default_subscriptions,
     );
@@ -8378,6 +8571,16 @@ async function saveSettings() {
       smtp_from_email: form.smtp_from_email,
       smtp_from_name: form.smtp_from_name,
       smtp_use_tls: form.smtp_use_tls,
+      announcement_translation_enabled:
+        form.announcement_translation_enabled,
+      announcement_translation_base_url:
+        form.announcement_translation_base_url,
+      announcement_translation_api_key:
+        form.announcement_translation_api_key.trim() || undefined,
+      announcement_translation_model:
+        form.announcement_translation_model,
+      announcement_translation_timeout_seconds:
+        form.announcement_translation_timeout_seconds,
       turnstile_enabled: form.turnstile_enabled,
       turnstile_site_key: form.turnstile_site_key,
       turnstile_secret_key: form.turnstile_secret_key || undefined,
@@ -8599,6 +8802,7 @@ async function saveSettings() {
     registrationEmailSuffixWhitelistDraft.value = "";
     form.smtp_password = "";
     smtpPasswordManuallyEdited.value = false;
+    form.announcement_translation_api_key = "";
     form.turnstile_secret_key = "";
     form.linuxdo_connect_client_secret = "";
     form.dingtalk_connect_client_secret = "";

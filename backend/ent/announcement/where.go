@@ -65,6 +65,16 @@ func Content(v string) predicate.Announcement {
 	return predicate.Announcement(sql.FieldEQ(FieldContent, v))
 }
 
+// SourceLocale applies equality check predicate on the "source_locale" field. It's identical to SourceLocaleEQ.
+func SourceLocale(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldSourceLocale, v))
+}
+
+// SourceVersion applies equality check predicate on the "source_version" field. It's identical to SourceVersionEQ.
+func SourceVersion(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldSourceVersion, v))
+}
+
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
 func Status(v string) predicate.Announcement {
 	return predicate.Announcement(sql.FieldEQ(FieldStatus, v))
@@ -258,6 +268,111 @@ func ContentEqualFold(v string) predicate.Announcement {
 // ContentContainsFold applies the ContainsFold predicate on the "content" field.
 func ContentContainsFold(v string) predicate.Announcement {
 	return predicate.Announcement(sql.FieldContainsFold(FieldContent, v))
+}
+
+// SourceLocaleEQ applies the EQ predicate on the "source_locale" field.
+func SourceLocaleEQ(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldSourceLocale, v))
+}
+
+// SourceLocaleNEQ applies the NEQ predicate on the "source_locale" field.
+func SourceLocaleNEQ(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldNEQ(FieldSourceLocale, v))
+}
+
+// SourceLocaleIn applies the In predicate on the "source_locale" field.
+func SourceLocaleIn(vs ...string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldIn(FieldSourceLocale, vs...))
+}
+
+// SourceLocaleNotIn applies the NotIn predicate on the "source_locale" field.
+func SourceLocaleNotIn(vs ...string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldNotIn(FieldSourceLocale, vs...))
+}
+
+// SourceLocaleGT applies the GT predicate on the "source_locale" field.
+func SourceLocaleGT(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldGT(FieldSourceLocale, v))
+}
+
+// SourceLocaleGTE applies the GTE predicate on the "source_locale" field.
+func SourceLocaleGTE(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldGTE(FieldSourceLocale, v))
+}
+
+// SourceLocaleLT applies the LT predicate on the "source_locale" field.
+func SourceLocaleLT(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldLT(FieldSourceLocale, v))
+}
+
+// SourceLocaleLTE applies the LTE predicate on the "source_locale" field.
+func SourceLocaleLTE(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldLTE(FieldSourceLocale, v))
+}
+
+// SourceLocaleContains applies the Contains predicate on the "source_locale" field.
+func SourceLocaleContains(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldContains(FieldSourceLocale, v))
+}
+
+// SourceLocaleHasPrefix applies the HasPrefix predicate on the "source_locale" field.
+func SourceLocaleHasPrefix(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldHasPrefix(FieldSourceLocale, v))
+}
+
+// SourceLocaleHasSuffix applies the HasSuffix predicate on the "source_locale" field.
+func SourceLocaleHasSuffix(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldHasSuffix(FieldSourceLocale, v))
+}
+
+// SourceLocaleEqualFold applies the EqualFold predicate on the "source_locale" field.
+func SourceLocaleEqualFold(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEqualFold(FieldSourceLocale, v))
+}
+
+// SourceLocaleContainsFold applies the ContainsFold predicate on the "source_locale" field.
+func SourceLocaleContainsFold(v string) predicate.Announcement {
+	return predicate.Announcement(sql.FieldContainsFold(FieldSourceLocale, v))
+}
+
+// SourceVersionEQ applies the EQ predicate on the "source_version" field.
+func SourceVersionEQ(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldEQ(FieldSourceVersion, v))
+}
+
+// SourceVersionNEQ applies the NEQ predicate on the "source_version" field.
+func SourceVersionNEQ(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldNEQ(FieldSourceVersion, v))
+}
+
+// SourceVersionIn applies the In predicate on the "source_version" field.
+func SourceVersionIn(vs ...int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldIn(FieldSourceVersion, vs...))
+}
+
+// SourceVersionNotIn applies the NotIn predicate on the "source_version" field.
+func SourceVersionNotIn(vs ...int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldNotIn(FieldSourceVersion, vs...))
+}
+
+// SourceVersionGT applies the GT predicate on the "source_version" field.
+func SourceVersionGT(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldGT(FieldSourceVersion, v))
+}
+
+// SourceVersionGTE applies the GTE predicate on the "source_version" field.
+func SourceVersionGTE(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldGTE(FieldSourceVersion, v))
+}
+
+// SourceVersionLT applies the LT predicate on the "source_version" field.
+func SourceVersionLT(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldLT(FieldSourceVersion, v))
+}
+
+// SourceVersionLTE applies the LTE predicate on the "source_version" field.
+func SourceVersionLTE(v int) predicate.Announcement {
+	return predicate.Announcement(sql.FieldLTE(FieldSourceVersion, v))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.

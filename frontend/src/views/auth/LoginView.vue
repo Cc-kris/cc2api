@@ -402,7 +402,7 @@ function rejectLoginAgreement(): void {
   localStorage.removeItem(LOGIN_AGREEMENT_STORAGE_KEY)
   agreementAccepted.value = false
   showAgreementModal.value = false
-  appStore.showWarning('未同意最新条款前，点击登录时需要先勾选并同意。')
+  appStore.showWarning(t('auth.agreement.loginRejectWarning'))
 }
 
 // ==================== Turnstile Handlers ====================
@@ -433,7 +433,7 @@ function validateForm(): boolean {
   let isValid = true
 
   if (agreementGateActive.value) {
-    appStore.showWarning('请先阅读并同意最新条款后再登录。')
+    appStore.showWarning(t('auth.agreement.loginRequiredWarning'))
     if (loginAgreementMode.value !== 'checkbox') {
       showAgreementModal.value = true
     }

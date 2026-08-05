@@ -67,6 +67,20 @@ server:
 run_mode: "standard"
 
 # =============================================================================
+# Announcement Translation
+# 公告自动翻译
+# =============================================================================
+# Uses an OpenAI-compatible /chat/completions endpoint. The administrator still
+# edits one source announcement; translated user copies are generated in the background.
+# 使用 OpenAI 兼容的 /chat/completions 接口。管理员仍只编辑一份原文，用户侧翻译由后台生成。
+announcement_translation:
+  enabled: false
+  base_url: ""
+  api_key: ""
+  model: ""
+  timeout_seconds: 90
+
+# =============================================================================
 # CORS Configuration
 # 跨域资源共享 (CORS) 配置
 # =============================================================================

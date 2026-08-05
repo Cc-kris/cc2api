@@ -444,42 +444,58 @@ func init() {
 	announcementDescContent := announcementFields[1].Descriptor()
 	// announcement.ContentValidator is a validator for the "content" field. It is called by the builders before save.
 	announcement.ContentValidator = announcementDescContent.Validators[0].(func(string) error)
+	// announcementDescSourceLocale is the schema descriptor for source_locale field.
+	announcementDescSourceLocale := announcementFields[2].Descriptor()
+	// announcement.DefaultSourceLocale holds the default value on creation for the source_locale field.
+	announcement.DefaultSourceLocale = announcementDescSourceLocale.Default.(string)
+	// announcement.SourceLocaleValidator is a validator for the "source_locale" field. It is called by the builders before save.
+	announcement.SourceLocaleValidator = announcementDescSourceLocale.Validators[0].(func(string) error)
+	// announcementDescSourceVersion is the schema descriptor for source_version field.
+	announcementDescSourceVersion := announcementFields[3].Descriptor()
+	// announcement.DefaultSourceVersion holds the default value on creation for the source_version field.
+	announcement.DefaultSourceVersion = announcementDescSourceVersion.Default.(int)
+	// announcement.SourceVersionValidator is a validator for the "source_version" field. It is called by the builders before save.
+	announcement.SourceVersionValidator = announcementDescSourceVersion.Validators[0].(func(int) error)
+	// announcementDescTranslations is the schema descriptor for translations field.
+	announcementDescTranslations := announcementFields[4].Descriptor()
+	// announcement.DefaultTranslations holds the default value on creation for the translations field.
+	announcement.DefaultTranslations = announcementDescTranslations.Default.(map[string]domain.AnnouncementTranslation)
 	// announcementDescStatus is the schema descriptor for status field.
-	announcementDescStatus := announcementFields[2].Descriptor()
+	announcementDescStatus := announcementFields[5].Descriptor()
 	// announcement.DefaultStatus holds the default value on creation for the status field.
 	announcement.DefaultStatus = announcementDescStatus.Default.(string)
 	// announcement.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	announcement.StatusValidator = announcementDescStatus.Validators[0].(func(string) error)
 	// announcementDescNotifyMode is the schema descriptor for notify_mode field.
-	announcementDescNotifyMode := announcementFields[3].Descriptor()
+	announcementDescNotifyMode := announcementFields[6].Descriptor()
 	// announcement.DefaultNotifyMode holds the default value on creation for the notify_mode field.
 	announcement.DefaultNotifyMode = announcementDescNotifyMode.Default.(string)
 	// announcement.NotifyModeValidator is a validator for the "notify_mode" field. It is called by the builders before save.
 	announcement.NotifyModeValidator = announcementDescNotifyMode.Validators[0].(func(string) error)
 	// announcementDescEmailStatus is the schema descriptor for email_status field.
-	announcementDescEmailStatus := announcementFields[10].Descriptor()
+	announcementDescEmailStatus := announcementFields[13].Descriptor()
 	// announcement.DefaultEmailStatus holds the default value on creation for the email_status field.
 	announcement.DefaultEmailStatus = announcementDescEmailStatus.Default.(string)
 	// announcement.EmailStatusValidator is a validator for the "email_status" field. It is called by the builders before save.
 	announcement.EmailStatusValidator = announcementDescEmailStatus.Validators[0].(func(string) error)
 	// announcementDescEmailTotal is the schema descriptor for email_total field.
-	announcementDescEmailTotal := announcementFields[11].Descriptor()
+	announcementDescEmailTotal := announcementFields[14].Descriptor()
 	// announcement.DefaultEmailTotal holds the default value on creation for the email_total field.
 	announcement.DefaultEmailTotal = announcementDescEmailTotal.Default.(int)
 	// announcementDescEmailSent is the schema descriptor for email_sent field.
-	announcementDescEmailSent := announcementFields[12].Descriptor()
+	announcementDescEmailSent := announcementFields[15].Descriptor()
 	// announcement.DefaultEmailSent holds the default value on creation for the email_sent field.
 	announcement.DefaultEmailSent = announcementDescEmailSent.Default.(int)
 	// announcementDescEmailFailed is the schema descriptor for email_failed field.
-	announcementDescEmailFailed := announcementFields[13].Descriptor()
+	announcementDescEmailFailed := announcementFields[16].Descriptor()
 	// announcement.DefaultEmailFailed holds the default value on creation for the email_failed field.
 	announcement.DefaultEmailFailed = announcementDescEmailFailed.Default.(int)
 	// announcementDescCreatedAt is the schema descriptor for created_at field.
-	announcementDescCreatedAt := announcementFields[14].Descriptor()
+	announcementDescCreatedAt := announcementFields[17].Descriptor()
 	// announcement.DefaultCreatedAt holds the default value on creation for the created_at field.
 	announcement.DefaultCreatedAt = announcementDescCreatedAt.Default.(func() time.Time)
 	// announcementDescUpdatedAt is the schema descriptor for updated_at field.
-	announcementDescUpdatedAt := announcementFields[15].Descriptor()
+	announcementDescUpdatedAt := announcementFields[18].Descriptor()
 	// announcement.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	announcement.DefaultUpdatedAt = announcementDescUpdatedAt.Default.(func() time.Time)
 	// announcement.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

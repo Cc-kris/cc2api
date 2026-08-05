@@ -51,6 +51,12 @@ type SystemSettings struct {
 	SMTPFromName           string `json:"smtp_from_name"`
 	SMTPUseTLS             bool   `json:"smtp_use_tls"`
 
+	AnnouncementTranslationEnabled          bool   `json:"announcement_translation_enabled"`
+	AnnouncementTranslationBaseURL          string `json:"announcement_translation_base_url"`
+	AnnouncementTranslationAPIKeyConfigured bool   `json:"announcement_translation_api_key_configured"`
+	AnnouncementTranslationModel            string `json:"announcement_translation_model"`
+	AnnouncementTranslationTimeoutSeconds   int    `json:"announcement_translation_timeout_seconds"`
+
 	TurnstileEnabled             bool   `json:"turnstile_enabled"`
 	TurnstileSiteKey             string `json:"turnstile_site_key"`
 	TurnstileSecretKeyConfigured bool   `json:"turnstile_secret_key_configured"`

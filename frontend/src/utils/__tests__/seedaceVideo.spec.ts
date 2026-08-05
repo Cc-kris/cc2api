@@ -94,7 +94,7 @@ describe('seedaceVideo task response helpers', () => {
 
   it('builds a single 10-character session summary from the latest input', () => {
     expect(createSeedaceSessionSummary('  生成一个雨夜城市霓虹灯慢镜头  ')).toBe('生成一个雨夜城市霓虹')
-    expect(createSeedaceSessionSummary('!!!')).toBe('未命名会话')
+    expect(createSeedaceSessionSummary('!!!')).toBe('')
   })
 })
 
@@ -139,6 +139,6 @@ describe('seedaceVideo payload and validation', () => {
       '生成视频',
     )
 
-    expect(errors).toContain('上传参考音频时，需要至少上传 1 张参考图')
+    expect(errors).toContain('audioImageRequired')
   })
 })

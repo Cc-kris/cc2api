@@ -35,7 +35,7 @@
             class="toc-sidebar"
           >
             <div class="toc-header">
-              <span class="toc-title">目录</span>
+              <span class="toc-title">{{ t('customPage.tableOfContents') }}</span>
               <button class="toc-close-btn" @click="tocVisible = false">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
               </button>
@@ -64,7 +64,7 @@
             @click="tocVisible = true"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
-            <span class="ml-1 text-xs">目录</span>
+            <span class="ml-1 text-xs">{{ t('customPage.tableOfContents') }}</span>
           </button>
 
           <!-- Content -->
@@ -320,7 +320,7 @@ function injectCopyButtons() {
     const btn = document.createElement('button')
     btn.className = 'copy-btn'
     btn.type = 'button'
-    btn.textContent = '复制'
+    setCopyButtonState(btn, 'idle')
     btn.addEventListener('click', async () => {
       const codeEl = pre.querySelector('code')
       let code = codeEl?.textContent ?? ''
@@ -331,17 +331,32 @@ function injectCopyButtons() {
       }
       try {
         await navigator.clipboard.writeText(code)
-        btn.textContent = '已复制 ✓'
-        setTimeout(() => { btn.textContent = '复制' }, 2000)
+        setCopyButtonState(btn, 'copied')
+        setTimeout(() => setCopyButtonState(btn, 'idle'), 2000)
       } catch {
-        btn.textContent = '失败'
-        setTimeout(() => { btn.textContent = '复制' }, 2000)
+        setCopyButtonState(btn, 'failed')
+        setTimeout(() => setCopyButtonState(btn, 'idle'), 2000)
       }
     })
     pre.style.position = 'relative'
     pre.appendChild(btn)
   })
 }
+
+function setCopyButtonState(button: HTMLButtonElement, state: 'idle' | 'copied' | 'failed') {
+  button.dataset.copyState = state
+  button.textContent = state === 'copied'
+    ? `${t('customPage.copied')} ✓`
+    : state === 'failed'
+      ? t('customPage.copyFailed')
+      : t('customPage.copy')
+}
+
+watch(locale, () => {
+  markdownContainer.value?.querySelectorAll<HTMLButtonElement>('.copy-btn').forEach((button) => {
+    setCopyButtonState(button, (button.dataset.copyState as 'idle' | 'copied' | 'failed') || 'idle')
+  })
+})
 
 watch(markdownSlug, (slug) => {
   if (slug) {

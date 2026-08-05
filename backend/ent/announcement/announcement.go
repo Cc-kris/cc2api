@@ -7,6 +7,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 )
 
 const (
@@ -18,6 +19,12 @@ const (
 	FieldTitle = "title"
 	// FieldContent holds the string denoting the content field in the database.
 	FieldContent = "content"
+	// FieldSourceLocale holds the string denoting the source_locale field in the database.
+	FieldSourceLocale = "source_locale"
+	// FieldSourceVersion holds the string denoting the source_version field in the database.
+	FieldSourceVersion = "source_version"
+	// FieldTranslations holds the string denoting the translations field in the database.
+	FieldTranslations = "translations"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldNotifyMode holds the string denoting the notify_mode field in the database.
@@ -64,6 +71,9 @@ var Columns = []string{
 	FieldID,
 	FieldTitle,
 	FieldContent,
+	FieldSourceLocale,
+	FieldSourceVersion,
+	FieldTranslations,
 	FieldStatus,
 	FieldNotifyMode,
 	FieldTargeting,
@@ -95,6 +105,16 @@ var (
 	TitleValidator func(string) error
 	// ContentValidator is a validator for the "content" field. It is called by the builders before save.
 	ContentValidator func(string) error
+	// DefaultSourceLocale holds the default value on creation for the "source_locale" field.
+	DefaultSourceLocale string
+	// SourceLocaleValidator is a validator for the "source_locale" field. It is called by the builders before save.
+	SourceLocaleValidator func(string) error
+	// DefaultSourceVersion holds the default value on creation for the "source_version" field.
+	DefaultSourceVersion int
+	// SourceVersionValidator is a validator for the "source_version" field. It is called by the builders before save.
+	SourceVersionValidator func(int) error
+	// DefaultTranslations holds the default value on creation for the "translations" field.
+	DefaultTranslations map[string]domain.AnnouncementTranslation
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -137,6 +157,16 @@ func ByTitle(opts ...sql.OrderTermOption) OrderOption {
 // ByContent orders the results by the content field.
 func ByContent(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldContent, opts...).ToFunc()
+}
+
+// BySourceLocale orders the results by the source_locale field.
+func BySourceLocale(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSourceLocale, opts...).ToFunc()
+}
+
+// BySourceVersion orders the results by the source_version field.
+func BySourceVersion(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSourceVersion, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.

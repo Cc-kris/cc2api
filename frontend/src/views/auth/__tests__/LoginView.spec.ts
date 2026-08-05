@@ -90,7 +90,11 @@ vi.mock('vue-i18n', () => ({
     },
   }),
   useI18n: () => ({
-    t: (key: string) => key,
+    t: (key: string) => ({
+      'auth.agreement.loginRequiredWarning': '请先阅读并同意最新条款后再登录。',
+      'auth.agreement.updateTitle': '条款更新通知',
+    } as Record<string, string>)[key] || key,
+    locale: { value: 'zh' },
   }),
 }))
 

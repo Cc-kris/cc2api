@@ -37,6 +37,14 @@ type SystemSettings struct {
 	SMTPFromName           string
 	SMTPUseTLS             bool
 
+	// 公告自动翻译设置。API Key 只在服务内部保留，管理端仅接收 configured 状态。
+	AnnouncementTranslationEnabled          bool
+	AnnouncementTranslationBaseURL          string
+	AnnouncementTranslationAPIKey           string
+	AnnouncementTranslationAPIKeyConfigured bool
+	AnnouncementTranslationModel            string
+	AnnouncementTranslationTimeoutSeconds   int
+
 	TurnstileEnabled             bool
 	TurnstileSiteKey             string
 	TurnstileSecretKey           string

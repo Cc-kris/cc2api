@@ -23,6 +23,12 @@ type Announcement struct {
 	Title string `json:"title,omitempty"`
 	// 公告内容（支持 Markdown）
 	Content string `json:"content,omitempty"`
+	// 公告原文语言
+	SourceLocale string `json:"source_locale,omitempty"`
+	// 公告原文版本，用于隔离过期翻译
+	SourceVersion int `json:"source_version,omitempty"`
+	// 公告多语言翻译缓存
+	Translations map[string]domain.AnnouncementTranslation `json:"translations,omitempty"`
 	// 状态: draft, active, archived
 	Status string `json:"status,omitempty"`
 	// 通知模式: silent(仅铃铛), popup(弹窗提醒)
@@ -80,11 +86,11 @@ func (*Announcement) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case announcement.FieldTargeting:
+		case announcement.FieldTranslations, announcement.FieldTargeting:
 			values[i] = new([]byte)
-		case announcement.FieldID, announcement.FieldCreatedBy, announcement.FieldUpdatedBy, announcement.FieldEmailTotal, announcement.FieldEmailSent, announcement.FieldEmailFailed:
+		case announcement.FieldID, announcement.FieldSourceVersion, announcement.FieldCreatedBy, announcement.FieldUpdatedBy, announcement.FieldEmailTotal, announcement.FieldEmailSent, announcement.FieldEmailFailed:
 			values[i] = new(sql.NullInt64)
-		case announcement.FieldTitle, announcement.FieldContent, announcement.FieldStatus, announcement.FieldNotifyMode, announcement.FieldEmailStatus:
+		case announcement.FieldTitle, announcement.FieldContent, announcement.FieldSourceLocale, announcement.FieldStatus, announcement.FieldNotifyMode, announcement.FieldEmailStatus:
 			values[i] = new(sql.NullString)
 		case announcement.FieldStartsAt, announcement.FieldEndsAt, announcement.FieldEmailSentAt, announcement.FieldCreatedAt, announcement.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -120,6 +126,26 @@ func (_m *Announcement) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field content", values[i])
 			} else if value.Valid {
 				_m.Content = value.String
+			}
+		case announcement.FieldSourceLocale:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field source_locale", values[i])
+			} else if value.Valid {
+				_m.SourceLocale = value.String
+			}
+		case announcement.FieldSourceVersion:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field source_version", values[i])
+			} else if value.Valid {
+				_m.SourceVersion = int(value.Int64)
+			}
+		case announcement.FieldTranslations:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field translations", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Translations); err != nil {
+					return fmt.Errorf("unmarshal field translations: %w", err)
+				}
 			}
 		case announcement.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -258,6 +284,15 @@ func (_m *Announcement) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("content=")
 	builder.WriteString(_m.Content)
+	builder.WriteString(", ")
+	builder.WriteString("source_locale=")
+	builder.WriteString(_m.SourceLocale)
+	builder.WriteString(", ")
+	builder.WriteString("source_version=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SourceVersion))
+	builder.WriteString(", ")
+	builder.WriteString("translations=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Translations))
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)

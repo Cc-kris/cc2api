@@ -100,6 +100,15 @@ type Config struct {
 	Gemini                  GeminiConfig                  `mapstructure:"gemini"`
 	Update                  UpdateConfig                  `mapstructure:"update"`
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
+	AnnouncementTranslation AnnouncementTranslationConfig `mapstructure:"announcement_translation"`
+}
+
+type AnnouncementTranslationConfig struct {
+	Enabled        bool   `mapstructure:"enabled"`
+	BaseURL        string `mapstructure:"base_url"`
+	APIKey         string `mapstructure:"api_key"`
+	Model          string `mapstructure:"model"`
+	TimeoutSeconds int    `mapstructure:"timeout_seconds"`
 }
 
 type LogConfig struct {
@@ -1429,6 +1438,9 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	applyLegacyWeChatConnectEnvCompatibility(&cfg.WeChat)
 	normalizeWeChatConnectConfig(&cfg.WeChat)
 	cfg.OIDC.ProviderName = strings.TrimSpace(cfg.OIDC.ProviderName)
+	cfg.AnnouncementTranslation.BaseURL = strings.TrimSpace(cfg.AnnouncementTranslation.BaseURL)
+	cfg.AnnouncementTranslation.APIKey = strings.TrimSpace(cfg.AnnouncementTranslation.APIKey)
+	cfg.AnnouncementTranslation.Model = strings.TrimSpace(cfg.AnnouncementTranslation.Model)
 	cfg.OIDC.ClientID = strings.TrimSpace(cfg.OIDC.ClientID)
 	cfg.OIDC.ClientSecret = strings.TrimSpace(cfg.OIDC.ClientSecret)
 	cfg.OIDC.IssuerURL = strings.TrimSpace(cfg.OIDC.IssuerURL)
@@ -1756,6 +1768,13 @@ func setDefaults() {
 	// Timezone (default to Asia/Shanghai for Chinese users)
 	viper.SetDefault("timezone", "Asia/Shanghai")
 
+	// Announcement automatic translation (OpenAI-compatible chat completions)
+	viper.SetDefault("announcement_translation.enabled", false)
+	viper.SetDefault("announcement_translation.base_url", "")
+	viper.SetDefault("announcement_translation.api_key", "")
+	viper.SetDefault("announcement_translation.model", "")
+	viper.SetDefault("announcement_translation.timeout_seconds", 90)
+
 	// API Key auth cache
 	viper.SetDefault("api_key_auth_cache.l1_size", 65535)
 	viper.SetDefault("api_key_auth_cache.l1_ttl_seconds", 15)
@@ -1971,6 +1990,23 @@ func setDefaults() {
 }
 
 func (c *Config) Validate() error {
+	if c.AnnouncementTranslation.Enabled {
+		if c.AnnouncementTranslation.TimeoutSeconds <= 0 {
+			return fmt.Errorf("announcement_translation.timeout_seconds must be positive when enabled")
+		}
+		if c.AnnouncementTranslation.BaseURL == "" {
+			return fmt.Errorf("announcement_translation.base_url is required when enabled")
+		}
+		if c.AnnouncementTranslation.APIKey == "" {
+			return fmt.Errorf("announcement_translation.api_key is required when enabled")
+		}
+		if c.AnnouncementTranslation.Model == "" {
+			return fmt.Errorf("announcement_translation.model is required when enabled")
+		}
+		if err := ValidateAbsoluteHTTPURL(c.AnnouncementTranslation.BaseURL); err != nil {
+			return fmt.Errorf("announcement_translation.base_url: %w", err)
+		}
+	}
 	jwtSecret := strings.TrimSpace(c.JWT.Secret)
 	if jwtSecret == "" {
 		return fmt.Errorf("jwt.secret is required")

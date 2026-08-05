@@ -19,6 +19,57 @@ type SettingHandler struct {
 	version                  string
 }
 
+var localeByCountryCode = map[string]string{
+	"CN": "zh",
+	"HK": "zh",
+	"MO": "zh",
+	"TW": "zh",
+	"RU": "ru",
+	"BY": "ru",
+	"KZ": "ru",
+	"KG": "ru",
+	"FR": "fr",
+	"MC": "fr",
+	"DE": "de",
+	"AT": "de",
+	"LI": "de",
+}
+
+var localeCountryHeaders = []string{
+	"CF-IPCountry",
+	"X-Vercel-IP-Country",
+	"CloudFront-Viewer-Country",
+	"X-Country-Code",
+}
+
+func localeForCountryCode(countryCode string) string {
+	if locale, ok := localeByCountryCode[strings.ToUpper(strings.TrimSpace(countryCode))]; ok {
+		return locale
+	}
+	return "en"
+}
+
+func requestCountryCode(c *gin.Context) string {
+	for _, header := range localeCountryHeaders {
+		if value := strings.TrimSpace(c.GetHeader(header)); value != "" {
+			return strings.ToUpper(value)
+		}
+	}
+	return ""
+}
+
+// GetDetectedLocale returns the first-visit locale derived from the trusted edge country header.
+// GET /api/v1/settings/locale
+func (h *SettingHandler) GetDetectedLocale(c *gin.Context) {
+	countryCode := requestCountryCode(c)
+	c.Header("Cache-Control", "private, no-store")
+	c.Header("Vary", strings.Join(localeCountryHeaders, ", "))
+	response.Success(c, gin.H{
+		"country_code": countryCode,
+		"locale":       localeForCountryCode(countryCode),
+	})
+}
+
 // NewSettingHandler 创建公开设置处理器
 func NewSettingHandler(settingService *service.SettingService, version string) *SettingHandler {
 	return &SettingHandler{

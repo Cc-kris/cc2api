@@ -11133,37 +11133,41 @@ func (m *AccountUpstreamMultiplierChangeMutation) ResetEdge(name string) error {
 // AnnouncementMutation represents an operation that mutates the Announcement nodes in the graph.
 type AnnouncementMutation struct {
 	config
-	op              Op
-	typ             string
-	id              *int64
-	title           *string
-	content         *string
-	status          *string
-	notify_mode     *string
-	targeting       *domain.AnnouncementTargeting
-	starts_at       *time.Time
-	ends_at         *time.Time
-	created_by      *int64
-	addcreated_by   *int64
-	updated_by      *int64
-	addupdated_by   *int64
-	email_sent_at   *time.Time
-	email_status    *string
-	email_total     *int
-	addemail_total  *int
-	email_sent      *int
-	addemail_sent   *int
-	email_failed    *int
-	addemail_failed *int
-	created_at      *time.Time
-	updated_at      *time.Time
-	clearedFields   map[string]struct{}
-	reads           map[int64]struct{}
-	removedreads    map[int64]struct{}
-	clearedreads    bool
-	done            bool
-	oldValue        func(context.Context) (*Announcement, error)
-	predicates      []predicate.Announcement
+	op                Op
+	typ               string
+	id                *int64
+	title             *string
+	content           *string
+	source_locale     *string
+	source_version    *int
+	addsource_version *int
+	translations      *map[string]domain.AnnouncementTranslation
+	status            *string
+	notify_mode       *string
+	targeting         *domain.AnnouncementTargeting
+	starts_at         *time.Time
+	ends_at           *time.Time
+	created_by        *int64
+	addcreated_by     *int64
+	updated_by        *int64
+	addupdated_by     *int64
+	email_sent_at     *time.Time
+	email_status      *string
+	email_total       *int
+	addemail_total    *int
+	email_sent        *int
+	addemail_sent     *int
+	email_failed      *int
+	addemail_failed   *int
+	created_at        *time.Time
+	updated_at        *time.Time
+	clearedFields     map[string]struct{}
+	reads             map[int64]struct{}
+	removedreads      map[int64]struct{}
+	clearedreads      bool
+	done              bool
+	oldValue          func(context.Context) (*Announcement, error)
+	predicates        []predicate.Announcement
 }
 
 var _ ent.Mutation = (*AnnouncementMutation)(nil)
@@ -11334,6 +11338,134 @@ func (m *AnnouncementMutation) OldContent(ctx context.Context) (v string, err er
 // ResetContent resets all changes to the "content" field.
 func (m *AnnouncementMutation) ResetContent() {
 	m.content = nil
+}
+
+// SetSourceLocale sets the "source_locale" field.
+func (m *AnnouncementMutation) SetSourceLocale(s string) {
+	m.source_locale = &s
+}
+
+// SourceLocale returns the value of the "source_locale" field in the mutation.
+func (m *AnnouncementMutation) SourceLocale() (r string, exists bool) {
+	v := m.source_locale
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceLocale returns the old "source_locale" field's value of the Announcement entity.
+// If the Announcement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementMutation) OldSourceLocale(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceLocale is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceLocale requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceLocale: %w", err)
+	}
+	return oldValue.SourceLocale, nil
+}
+
+// ResetSourceLocale resets all changes to the "source_locale" field.
+func (m *AnnouncementMutation) ResetSourceLocale() {
+	m.source_locale = nil
+}
+
+// SetSourceVersion sets the "source_version" field.
+func (m *AnnouncementMutation) SetSourceVersion(i int) {
+	m.source_version = &i
+	m.addsource_version = nil
+}
+
+// SourceVersion returns the value of the "source_version" field in the mutation.
+func (m *AnnouncementMutation) SourceVersion() (r int, exists bool) {
+	v := m.source_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSourceVersion returns the old "source_version" field's value of the Announcement entity.
+// If the Announcement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementMutation) OldSourceVersion(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSourceVersion is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSourceVersion requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSourceVersion: %w", err)
+	}
+	return oldValue.SourceVersion, nil
+}
+
+// AddSourceVersion adds i to the "source_version" field.
+func (m *AnnouncementMutation) AddSourceVersion(i int) {
+	if m.addsource_version != nil {
+		*m.addsource_version += i
+	} else {
+		m.addsource_version = &i
+	}
+}
+
+// AddedSourceVersion returns the value that was added to the "source_version" field in this mutation.
+func (m *AnnouncementMutation) AddedSourceVersion() (r int, exists bool) {
+	v := m.addsource_version
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSourceVersion resets all changes to the "source_version" field.
+func (m *AnnouncementMutation) ResetSourceVersion() {
+	m.source_version = nil
+	m.addsource_version = nil
+}
+
+// SetTranslations sets the "translations" field.
+func (m *AnnouncementMutation) SetTranslations(mt map[string]domain.AnnouncementTranslation) {
+	m.translations = &mt
+}
+
+// Translations returns the value of the "translations" field in the mutation.
+func (m *AnnouncementMutation) Translations() (r map[string]domain.AnnouncementTranslation, exists bool) {
+	v := m.translations
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTranslations returns the old "translations" field's value of the Announcement entity.
+// If the Announcement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementMutation) OldTranslations(ctx context.Context) (v map[string]domain.AnnouncementTranslation, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTranslations is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTranslations requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTranslations: %w", err)
+	}
+	return oldValue.Translations, nil
+}
+
+// ResetTranslations resets all changes to the "translations" field.
+func (m *AnnouncementMutation) ResetTranslations() {
+	m.translations = nil
 }
 
 // SetStatus sets the "status" field.
@@ -12108,12 +12240,21 @@ func (m *AnnouncementMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AnnouncementMutation) Fields() []string {
-	fields := make([]string, 0, 16)
+	fields := make([]string, 0, 19)
 	if m.title != nil {
 		fields = append(fields, announcement.FieldTitle)
 	}
 	if m.content != nil {
 		fields = append(fields, announcement.FieldContent)
+	}
+	if m.source_locale != nil {
+		fields = append(fields, announcement.FieldSourceLocale)
+	}
+	if m.source_version != nil {
+		fields = append(fields, announcement.FieldSourceVersion)
+	}
+	if m.translations != nil {
+		fields = append(fields, announcement.FieldTranslations)
 	}
 	if m.status != nil {
 		fields = append(fields, announcement.FieldStatus)
@@ -12169,6 +12310,12 @@ func (m *AnnouncementMutation) Field(name string) (ent.Value, bool) {
 		return m.Title()
 	case announcement.FieldContent:
 		return m.Content()
+	case announcement.FieldSourceLocale:
+		return m.SourceLocale()
+	case announcement.FieldSourceVersion:
+		return m.SourceVersion()
+	case announcement.FieldTranslations:
+		return m.Translations()
 	case announcement.FieldStatus:
 		return m.Status()
 	case announcement.FieldNotifyMode:
@@ -12210,6 +12357,12 @@ func (m *AnnouncementMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldTitle(ctx)
 	case announcement.FieldContent:
 		return m.OldContent(ctx)
+	case announcement.FieldSourceLocale:
+		return m.OldSourceLocale(ctx)
+	case announcement.FieldSourceVersion:
+		return m.OldSourceVersion(ctx)
+	case announcement.FieldTranslations:
+		return m.OldTranslations(ctx)
 	case announcement.FieldStatus:
 		return m.OldStatus(ctx)
 	case announcement.FieldNotifyMode:
@@ -12260,6 +12413,27 @@ func (m *AnnouncementMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetContent(v)
+		return nil
+	case announcement.FieldSourceLocale:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceLocale(v)
+		return nil
+	case announcement.FieldSourceVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSourceVersion(v)
+		return nil
+	case announcement.FieldTranslations:
+		v, ok := value.(map[string]domain.AnnouncementTranslation)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTranslations(v)
 		return nil
 	case announcement.FieldStatus:
 		v, ok := value.(string)
@@ -12367,6 +12541,9 @@ func (m *AnnouncementMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *AnnouncementMutation) AddedFields() []string {
 	var fields []string
+	if m.addsource_version != nil {
+		fields = append(fields, announcement.FieldSourceVersion)
+	}
 	if m.addcreated_by != nil {
 		fields = append(fields, announcement.FieldCreatedBy)
 	}
@@ -12390,6 +12567,8 @@ func (m *AnnouncementMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *AnnouncementMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case announcement.FieldSourceVersion:
+		return m.AddedSourceVersion()
 	case announcement.FieldCreatedBy:
 		return m.AddedCreatedBy()
 	case announcement.FieldUpdatedBy:
@@ -12409,6 +12588,13 @@ func (m *AnnouncementMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *AnnouncementMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case announcement.FieldSourceVersion:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSourceVersion(v)
+		return nil
 	case announcement.FieldCreatedBy:
 		v, ok := value.(int64)
 		if !ok {
@@ -12515,6 +12701,15 @@ func (m *AnnouncementMutation) ResetField(name string) error {
 		return nil
 	case announcement.FieldContent:
 		m.ResetContent()
+		return nil
+	case announcement.FieldSourceLocale:
+		m.ResetSourceLocale()
+		return nil
+	case announcement.FieldSourceVersion:
+		m.ResetSourceVersion()
+		return nil
+	case announcement.FieldTranslations:
+		m.ResetTranslations()
 		return nil
 	case announcement.FieldStatus:
 		m.ResetStatus()

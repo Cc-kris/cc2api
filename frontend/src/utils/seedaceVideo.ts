@@ -103,10 +103,10 @@ export function hasSeedaceImageReference(form: Pick<SeedaceVideoFormState, 'refe
 export function resolveSeedaceUpstreamModel(form: SeedaceVideoFormState): string {
   const option = getSeedaceModelOption(form.modelOption)
   if (!option) {
-    throw new Error('请选择模型')
+    throw new Error('modelRequired')
   }
   if (!form.resolution || !option.resolutions.includes(form.resolution)) {
-    throw new Error('当前模型不支持该分辨率')
+    throw new Error('unsupportedResolution')
   }
   if (option.scope === 'domestic') {
     return `${option.family}-${form.resolution.replace('p', '')}`
@@ -118,7 +118,7 @@ export function resolveSeedaceUpstreamModel(form: SeedaceVideoFormState): string
 export function buildSeedaceVideoPayload(form: SeedaceVideoFormState, prompt: string): Record<string, unknown> {
   const option = getSeedaceModelOption(form.modelOption)
   if (!option) {
-    throw new Error('请选择模型')
+    throw new Error('modelRequired')
   }
 
   const payload: Record<string, unknown> = {
@@ -197,22 +197,22 @@ export function validateSeedaceVideoForm(form: SeedaceVideoFormState, prompt: st
   const errors: string[] = []
   const option = getSeedaceModelOption(form.modelOption)
 
-  if (!form.apiKeyId) errors.push('请选择 API Key')
-  if (!option) errors.push('请选择模型')
-  if (!form.resolution) errors.push('请选择分辨率')
-  if (option && form.resolution && !option.resolutions.includes(form.resolution)) errors.push('当前模型不支持该分辨率')
-  if (!form.aspectRatio) errors.push('请选择视频比例')
-  if (!SEEDACE_VIDEO_DURATION_OPTIONS.includes(form.duration)) errors.push('请选择视频时间')
-  if (!prompt.trim()) errors.push('请输入视频生成内容')
-  if (form.referenceImages.length > 9) errors.push('参考图不能超过 9 张')
-  if (form.referenceVideos.length > 3) errors.push('参考视频不能超过 3 个')
-  if (form.referenceAudios.length > 3) errors.push('参考音频不能超过 3 个')
-  if (form.referenceVideos.some((asset) => (asset.durationSeconds ?? 0) >= 15)) errors.push('参考视频必须小于 15 秒')
-  if (form.referenceAudios.length > 0 && !hasSeedaceImageReference(form)) errors.push('上传参考音频时，需要至少上传 1 张参考图')
-  if (form.frameMode === 'start_frame' && !form.firstFrame) errors.push('首帧参考模式需要上传首帧图')
+  if (!form.apiKeyId) errors.push('apiKeyRequired')
+  if (!option) errors.push('modelRequired')
+  if (!form.resolution) errors.push('resolutionRequired')
+  if (option && form.resolution && !option.resolutions.includes(form.resolution)) errors.push('unsupportedResolution')
+  if (!form.aspectRatio) errors.push('aspectRatioRequired')
+  if (!SEEDACE_VIDEO_DURATION_OPTIONS.includes(form.duration)) errors.push('durationRequired')
+  if (!prompt.trim()) errors.push('promptRequired')
+  if (form.referenceImages.length > 9) errors.push('tooManyImages')
+  if (form.referenceVideos.length > 3) errors.push('tooManyVideos')
+  if (form.referenceAudios.length > 3) errors.push('tooManyAudios')
+  if (form.referenceVideos.some((asset) => (asset.durationSeconds ?? 0) >= 15)) errors.push('videoTooLong')
+  if (form.referenceAudios.length > 0 && !hasSeedaceImageReference(form)) errors.push('audioImageRequired')
+  if (form.frameMode === 'start_frame' && !form.firstFrame) errors.push('firstFrameRequired')
   if (form.frameMode === 'start_end') {
-    if (!form.firstFrame) errors.push('首尾帧参考模式需要上传首帧图')
-    if (!form.lastFrame) errors.push('首尾帧参考模式需要上传尾帧图')
+    if (!form.firstFrame) errors.push('firstFrameRequired')
+    if (!form.lastFrame) errors.push('lastFrameRequired')
   }
 
   return errors
@@ -239,7 +239,7 @@ export function isSeedaceVideoCompleted(payload: unknown): boolean {
 
 export function createSeedaceSessionSummary(input: string): string {
   const summary = Array.from(input.replace(/[\s\p{P}\p{S}]+/gu, '')).slice(0, 10).join('')
-  return summary || '未命名会话'
+  return summary
 }
 
 export function normalizeSeedaceTaskStatus(payload: unknown): 'pending' | 'running' | 'success' | 'failed' | 'unknown' {

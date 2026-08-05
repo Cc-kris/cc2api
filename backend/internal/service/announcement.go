@@ -71,6 +71,8 @@ type AnnouncementCondition = domain.AnnouncementCondition
 
 type Announcement = domain.Announcement
 
+type AnnouncementTranslation = domain.AnnouncementTranslation
+
 type AnnouncementListFilters struct {
 	Status string
 	Search string
@@ -80,6 +82,7 @@ type AnnouncementRepository interface {
 	Create(ctx context.Context, a *Announcement) error
 	GetByID(ctx context.Context, id int64) (*Announcement, error)
 	Update(ctx context.Context, a *Announcement) error
+	UpdateTranslationsIfSourceMatches(ctx context.Context, id int64, sourceVersion int, title, content string, translations map[string]AnnouncementTranslation) (bool, error)
 	MarkEmailSentIfUnset(ctx context.Context, id int64, sentAt time.Time) (bool, error)
 	QueueEmailIfNotStarted(ctx context.Context, id int64) (bool, error)
 	UpdateEmailProgress(ctx context.Context, id int64, status string, total, sent, failed int, sentAt *time.Time) error
@@ -87,6 +90,10 @@ type AnnouncementRepository interface {
 
 	List(ctx context.Context, params pagination.PaginationParams, filters AnnouncementListFilters) ([]Announcement, *pagination.PaginationResult, error)
 	ListActive(ctx context.Context, now time.Time) ([]Announcement, error)
+}
+
+type AnnouncementTranslator interface {
+	Translate(ctx context.Context, sourceLocale, targetLocale, title, content string) (AnnouncementTranslation, error)
 }
 
 type AnnouncementReadRepository interface {

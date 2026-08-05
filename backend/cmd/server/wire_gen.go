@@ -96,7 +96,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	subscriptionHandler := handler.NewSubscriptionHandler(subscriptionService)
 	announcementRepository := repository.NewAnnouncementRepository(client)
 	announcementReadRepository := repository.NewAnnouncementReadRepository(client)
-	announcementService := service.NewAnnouncementService(announcementRepository, announcementReadRepository, userRepository, userSubscriptionRepository, emailService, settingService)
+	announcementService := service.ProvideAnnouncementService(announcementRepository, announcementReadRepository, userRepository, userSubscriptionRepository, emailService, settingService, configConfig)
 	announcementHandler := handler.NewAnnouncementHandler(announcementService)
 	channelMonitorRepository := repository.NewChannelMonitorRepository(client, db)
 	schedulerCache := repository.ProvideSchedulerCache(redisClient, configConfig)

@@ -224,8 +224,8 @@ export function formatTime(date: string | Date | null | undefined): string {
  * @param num 数字
  * @returns 格式化后的字符串，如 "12,345"
  */
-export function formatNumberLocaleString(num: number): string {
-  return num.toLocaleString()
+export function formatNumberLocaleString(num: number, options?: Intl.NumberFormatOptions): string {
+  return new Intl.NumberFormat(getLocale(), options).format(num)
 }
 
 /**

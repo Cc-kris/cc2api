@@ -385,6 +385,9 @@ var (
 		{Name: "id", Type: field.TypeInt64, Increment: true},
 		{Name: "title", Type: field.TypeString, Size: 200},
 		{Name: "content", Type: field.TypeString, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "source_locale", Type: field.TypeString, Size: 10, Default: "zh"},
+		{Name: "source_version", Type: field.TypeInt, Default: 1},
+		{Name: "translations", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
 		{Name: "status", Type: field.TypeString, Size: 20, Default: "draft"},
 		{Name: "notify_mode", Type: field.TypeString, Size: 20, Default: "silent"},
 		{Name: "targeting", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
@@ -409,32 +412,32 @@ var (
 			{
 				Name:    "announcement_status",
 				Unique:  false,
-				Columns: []*schema.Column{AnnouncementsColumns[3]},
+				Columns: []*schema.Column{AnnouncementsColumns[6]},
 			},
 			{
 				Name:    "announcement_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{AnnouncementsColumns[15]},
+				Columns: []*schema.Column{AnnouncementsColumns[18]},
 			},
 			{
 				Name:    "announcement_starts_at",
 				Unique:  false,
-				Columns: []*schema.Column{AnnouncementsColumns[6]},
+				Columns: []*schema.Column{AnnouncementsColumns[9]},
 			},
 			{
 				Name:    "announcement_ends_at",
 				Unique:  false,
-				Columns: []*schema.Column{AnnouncementsColumns[7]},
+				Columns: []*schema.Column{AnnouncementsColumns[10]},
 			},
 			{
 				Name:    "announcement_email_sent_at",
 				Unique:  false,
-				Columns: []*schema.Column{AnnouncementsColumns[10]},
+				Columns: []*schema.Column{AnnouncementsColumns[13]},
 			},
 			{
 				Name:    "announcement_email_status",
 				Unique:  false,
-				Columns: []*schema.Column{AnnouncementsColumns[11]},
+				Columns: []*schema.Column{AnnouncementsColumns[14]},
 			},
 		},
 	}

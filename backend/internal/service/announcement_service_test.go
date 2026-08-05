@@ -11,10 +11,14 @@ import (
 )
 
 type announcementRepoStub struct {
-	item *Announcement
+	item                *Announcement
+	translationsUpdated chan struct{}
 }
 
 func (s *announcementRepoStub) Create(_ context.Context, a *Announcement) error {
+	if a.ID == 0 {
+		a.ID = 1
+	}
 	s.item = a
 	return nil
 }
@@ -29,6 +33,29 @@ func (s *announcementRepoStub) GetByID(_ context.Context, _ int64) (*Announcemen
 func (s *announcementRepoStub) Update(_ context.Context, a *Announcement) error {
 	s.item = a
 	return nil
+}
+
+func (s *announcementRepoStub) UpdateTranslationsIfSourceMatches(_ context.Context, _ int64, sourceVersion int, title, content string, translations map[string]AnnouncementTranslation) (bool, error) {
+	if s.item == nil || s.item.SourceVersion != sourceVersion || s.item.Title != title || s.item.Content != content {
+		return false, nil
+	}
+	s.item.Translations = translations
+	if s.translationsUpdated != nil {
+		select {
+		case s.translationsUpdated <- struct{}{}:
+		default:
+		}
+	}
+	return true, nil
+}
+
+type announcementTranslatorStub struct{}
+
+func (announcementTranslatorStub) Translate(_ context.Context, _, targetLocale, title, content string) (AnnouncementTranslation, error) {
+	return AnnouncementTranslation{
+		Title:   targetLocale + ":" + title,
+		Content: targetLocale + ":" + content,
+	}, nil
 }
 
 func (s *announcementRepoStub) MarkEmailSentIfUnset(_ context.Context, _ int64, sentAt time.Time) (bool, error) {
@@ -102,6 +129,44 @@ func TestAnnouncementServiceCreateRejectsEqualStartEndTimes(t *testing.T) {
 	require.ErrorIs(t, err, ErrAnnouncementInvalidSchedule)
 }
 
+func TestAnnouncementServiceCreatesAndCachesTranslations(t *testing.T) {
+	repo := &announcementRepoStub{translationsUpdated: make(chan struct{}, 1)}
+	svc := NewAnnouncementService(repo, nil, nil, nil, nil, nil)
+	svc.SetTranslator(announcementTranslatorStub{})
+
+	created, err := svc.Create(context.Background(), &CreateAnnouncementInput{
+		Title:      "系统公告",
+		Content:    "内容",
+		Status:     AnnouncementStatusActive,
+		NotifyMode: AnnouncementNotifyModeSilent,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "zh", created.SourceLocale)
+	require.Equal(t, 1, created.SourceVersion)
+	require.Equal(t, "系统公告", created.Translations["zh"].Title)
+	require.Equal(t, 1, created.Translations["zh"].SourceVersion)
+
+	select {
+	case <-repo.translationsUpdated:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for announcement translations")
+	}
+
+	require.Len(t, repo.item.Translations, 5)
+	localized := repo.item.Localized("fr-FR")
+	require.Equal(t, "fr:系统公告", localized.Title)
+	require.Equal(t, "fr:内容", localized.Content)
+}
+
+func TestAnnouncementTranslationJobKeyChangesWithSourceContent(t *testing.T) {
+	base := Announcement{ID: 7, Title: "Title", Content: "Content"}
+	same := Announcement{ID: 7, Title: "Title", Content: "Content"}
+	updated := Announcement{ID: 7, Title: "Updated title", Content: "Content"}
+
+	require.Equal(t, announcementTranslationJobKey(base), announcementTranslationJobKey(same))
+	require.NotEqual(t, announcementTranslationJobKey(base), announcementTranslationJobKey(updated))
+}
+
 func TestAnnouncementServiceUpdateRejectsEqualStartEndTimes(t *testing.T) {
 	repo := &announcementRepoStub{
 		item: &Announcement{
@@ -122,6 +187,35 @@ func TestAnnouncementServiceUpdateRejectsEqualStartEndTimes(t *testing.T) {
 		EndsAt:   &endsAt,
 	})
 	require.ErrorIs(t, err, ErrAnnouncementInvalidSchedule)
+}
+
+func TestAnnouncementServiceUpdateIncrementsSourceVersionAndInvalidatesTranslations(t *testing.T) {
+	repo := &announcementRepoStub{
+		item: &Announcement{
+			ID:            1,
+			Title:         "旧公告",
+			Content:       "旧内容",
+			SourceLocale:  "zh",
+			SourceVersion: 1,
+			Translations: map[string]AnnouncementTranslation{
+				"zh": {Title: "旧公告", Content: "旧内容", SourceVersion: 1},
+				"en": {Title: "Old", Content: "Old content", SourceVersion: 1},
+			},
+			Status:     AnnouncementStatusActive,
+			NotifyMode: AnnouncementNotifyModePopup,
+		},
+	}
+	svc := NewAnnouncementService(repo, nil, nil, nil, nil, nil)
+	newTitle := "新公告"
+
+	updated, err := svc.Update(context.Background(), 1, &UpdateAnnouncementInput{Title: &newTitle})
+
+	require.NoError(t, err)
+	require.Equal(t, 2, updated.SourceVersion)
+	require.Equal(t, "新公告", updated.Translations["zh"].Title)
+	require.Equal(t, 2, updated.Translations["zh"].SourceVersion)
+	require.Equal(t, "pending", updated.Translations["en"].Status)
+	require.Empty(t, updated.Translations["en"].Title)
 }
 
 func TestAnnouncementEmailRecipientsUseAnnouncementTargeting(t *testing.T) {

@@ -58,6 +58,47 @@ func (_u *AnnouncementUpdate) SetNillableContent(v *string) *AnnouncementUpdate 
 	return _u
 }
 
+// SetSourceLocale sets the "source_locale" field.
+func (_u *AnnouncementUpdate) SetSourceLocale(v string) *AnnouncementUpdate {
+	_u.mutation.SetSourceLocale(v)
+	return _u
+}
+
+// SetNillableSourceLocale sets the "source_locale" field if the given value is not nil.
+func (_u *AnnouncementUpdate) SetNillableSourceLocale(v *string) *AnnouncementUpdate {
+	if v != nil {
+		_u.SetSourceLocale(*v)
+	}
+	return _u
+}
+
+// SetSourceVersion sets the "source_version" field.
+func (_u *AnnouncementUpdate) SetSourceVersion(v int) *AnnouncementUpdate {
+	_u.mutation.ResetSourceVersion()
+	_u.mutation.SetSourceVersion(v)
+	return _u
+}
+
+// SetNillableSourceVersion sets the "source_version" field if the given value is not nil.
+func (_u *AnnouncementUpdate) SetNillableSourceVersion(v *int) *AnnouncementUpdate {
+	if v != nil {
+		_u.SetSourceVersion(*v)
+	}
+	return _u
+}
+
+// AddSourceVersion adds value to the "source_version" field.
+func (_u *AnnouncementUpdate) AddSourceVersion(v int) *AnnouncementUpdate {
+	_u.mutation.AddSourceVersion(v)
+	return _u
+}
+
+// SetTranslations sets the "translations" field.
+func (_u *AnnouncementUpdate) SetTranslations(v map[string]domain.AnnouncementTranslation) *AnnouncementUpdate {
+	_u.mutation.SetTranslations(v)
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *AnnouncementUpdate) SetStatus(v string) *AnnouncementUpdate {
 	_u.mutation.SetStatus(v)
@@ -392,6 +433,16 @@ func (_u *AnnouncementUpdate) check() error {
 			return &ValidationError{Name: "content", err: fmt.Errorf(`ent: validator failed for field "Announcement.content": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.SourceLocale(); ok {
+		if err := announcement.SourceLocaleValidator(v); err != nil {
+			return &ValidationError{Name: "source_locale", err: fmt.Errorf(`ent: validator failed for field "Announcement.source_locale": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SourceVersion(); ok {
+		if err := announcement.SourceVersionValidator(v); err != nil {
+			return &ValidationError{Name: "source_version", err: fmt.Errorf(`ent: validator failed for field "Announcement.source_version": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := announcement.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Announcement.status": %w`, err)}
@@ -427,6 +478,18 @@ func (_u *AnnouncementUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if value, ok := _u.mutation.Content(); ok {
 		_spec.SetField(announcement.FieldContent, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourceLocale(); ok {
+		_spec.SetField(announcement.FieldSourceLocale, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourceVersion(); ok {
+		_spec.SetField(announcement.FieldSourceVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSourceVersion(); ok {
+		_spec.AddField(announcement.FieldSourceVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.Translations(); ok {
+		_spec.SetField(announcement.FieldTranslations, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(announcement.FieldStatus, field.TypeString, value)
@@ -590,6 +653,47 @@ func (_u *AnnouncementUpdateOne) SetNillableContent(v *string) *AnnouncementUpda
 	if v != nil {
 		_u.SetContent(*v)
 	}
+	return _u
+}
+
+// SetSourceLocale sets the "source_locale" field.
+func (_u *AnnouncementUpdateOne) SetSourceLocale(v string) *AnnouncementUpdateOne {
+	_u.mutation.SetSourceLocale(v)
+	return _u
+}
+
+// SetNillableSourceLocale sets the "source_locale" field if the given value is not nil.
+func (_u *AnnouncementUpdateOne) SetNillableSourceLocale(v *string) *AnnouncementUpdateOne {
+	if v != nil {
+		_u.SetSourceLocale(*v)
+	}
+	return _u
+}
+
+// SetSourceVersion sets the "source_version" field.
+func (_u *AnnouncementUpdateOne) SetSourceVersion(v int) *AnnouncementUpdateOne {
+	_u.mutation.ResetSourceVersion()
+	_u.mutation.SetSourceVersion(v)
+	return _u
+}
+
+// SetNillableSourceVersion sets the "source_version" field if the given value is not nil.
+func (_u *AnnouncementUpdateOne) SetNillableSourceVersion(v *int) *AnnouncementUpdateOne {
+	if v != nil {
+		_u.SetSourceVersion(*v)
+	}
+	return _u
+}
+
+// AddSourceVersion adds value to the "source_version" field.
+func (_u *AnnouncementUpdateOne) AddSourceVersion(v int) *AnnouncementUpdateOne {
+	_u.mutation.AddSourceVersion(v)
+	return _u
+}
+
+// SetTranslations sets the "translations" field.
+func (_u *AnnouncementUpdateOne) SetTranslations(v map[string]domain.AnnouncementTranslation) *AnnouncementUpdateOne {
+	_u.mutation.SetTranslations(v)
 	return _u
 }
 
@@ -940,6 +1044,16 @@ func (_u *AnnouncementUpdateOne) check() error {
 			return &ValidationError{Name: "content", err: fmt.Errorf(`ent: validator failed for field "Announcement.content": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.SourceLocale(); ok {
+		if err := announcement.SourceLocaleValidator(v); err != nil {
+			return &ValidationError{Name: "source_locale", err: fmt.Errorf(`ent: validator failed for field "Announcement.source_locale": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SourceVersion(); ok {
+		if err := announcement.SourceVersionValidator(v); err != nil {
+			return &ValidationError{Name: "source_version", err: fmt.Errorf(`ent: validator failed for field "Announcement.source_version": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := announcement.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Announcement.status": %w`, err)}
@@ -992,6 +1106,18 @@ func (_u *AnnouncementUpdateOne) sqlSave(ctx context.Context) (_node *Announceme
 	}
 	if value, ok := _u.mutation.Content(); ok {
 		_spec.SetField(announcement.FieldContent, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourceLocale(); ok {
+		_spec.SetField(announcement.FieldSourceLocale, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourceVersion(); ok {
+		_spec.SetField(announcement.FieldSourceVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSourceVersion(); ok {
+		_spec.AddField(announcement.FieldSourceVersion, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.Translations(); ok {
+		_spec.SetField(announcement.FieldTranslations, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(announcement.FieldStatus, field.TypeString, value)

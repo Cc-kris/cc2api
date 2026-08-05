@@ -19,6 +19,13 @@ const (
 )
 
 const (
+	AnnouncementTranslationStatusSource  = "source"
+	AnnouncementTranslationStatusPending = "pending"
+	AnnouncementTranslationStatusReady   = "ready"
+	AnnouncementTranslationStatusFailed  = "failed"
+)
+
+const (
 	AnnouncementConditionTypeSubscription = "subscription"
 	AnnouncementConditionTypeBalance      = "balance"
 	AnnouncementConditionTypeTag          = "tag"
@@ -234,23 +241,70 @@ func (c AnnouncementCondition) validate() error {
 }
 
 type Announcement struct {
-	ID          int64
-	Title       string
-	Content     string
-	Status      string
-	NotifyMode  string
-	Targeting   AnnouncementTargeting
-	StartsAt    *time.Time
-	EndsAt      *time.Time
-	CreatedBy   *int64
-	UpdatedBy   *int64
-	EmailSentAt *time.Time
-	EmailStatus string
-	EmailTotal  int
-	EmailSent   int
-	EmailFailed int
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID            int64
+	Title         string
+	Content       string
+	SourceLocale  string
+	SourceVersion int
+	Translations  map[string]AnnouncementTranslation
+	Status        string
+	NotifyMode    string
+	Targeting     AnnouncementTargeting
+	StartsAt      *time.Time
+	EndsAt        *time.Time
+	CreatedBy     *int64
+	UpdatedBy     *int64
+	EmailSentAt   *time.Time
+	EmailStatus   string
+	EmailTotal    int
+	EmailSent     int
+	EmailFailed   int
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type AnnouncementTranslation struct {
+	Title         string    `json:"title"`
+	Content       string    `json:"content"`
+	SourceVersion int       `json:"source_version"`
+	Status        string    `json:"status"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+func (a Announcement) Localized(locale string) Announcement {
+	locale = NormalizeAnnouncementLocale(locale)
+	localized := a
+	if translation, ok := a.Translations[locale]; ok && a.translationIsCurrent(translation) {
+		localized.Title = translation.Title
+		localized.Content = translation.Content
+	}
+	return localized
+}
+
+func (a Announcement) HasTranslation(locale string) bool {
+	translation, ok := a.Translations[NormalizeAnnouncementLocale(locale)]
+	return ok && a.translationIsCurrent(translation)
+}
+
+func (a Announcement) translationIsCurrent(translation AnnouncementTranslation) bool {
+	versionMatches := translation.SourceVersion == a.SourceVersion || (a.SourceVersion <= 1 && translation.SourceVersion == 0)
+	return versionMatches && strings.TrimSpace(translation.Title) != "" && strings.TrimSpace(translation.Content) != ""
+}
+
+func NormalizeAnnouncementLocale(locale string) string {
+	locale = strings.ToLower(strings.TrimSpace(locale))
+	if separator := strings.IndexAny(locale, ",;"); separator >= 0 {
+		locale = locale[:separator]
+	}
+	if separator := strings.IndexAny(locale, "-_"); separator >= 0 {
+		locale = locale[:separator]
+	}
+	switch locale {
+	case "zh", "en", "ru", "fr", "de":
+		return locale
+	default:
+		return "en"
+	}
 }
 
 func (a *Announcement) IsActiveAt(now time.Time) bool {

@@ -35,7 +35,12 @@ func (h *AnnouncementHandler) List(c *gin.Context) {
 
 	unreadOnly := parseBoolQuery(c.Query("unread_only"))
 
-	items, err := h.announcementService.ListForUser(c.Request.Context(), subject.UserID, unreadOnly)
+	items, err := h.announcementService.ListForUserLocale(
+		c.Request.Context(),
+		subject.UserID,
+		unreadOnly,
+		c.GetHeader("Accept-Language"),
+	)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

@@ -5,58 +5,58 @@
         <aside class="min-h-0 overflow-y-auto rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-800">
           <div class="space-y-5">
             <section class="space-y-2">
-              <label class="form-label">API Key <span class="text-red-500">*</span></label>
+              <label class="form-label">{{ t('videoGeneration.apiKeyLabel') }} <span class="text-red-500">*</span></label>
               <Select
                 v-model="form.apiKeyId"
                 :options="apiKeyOptions"
                 :disabled="loadingKeys"
-                :placeholder="loadingKeys ? '正在加载 API Key' : '请选择 Seedance API Key'"
+                :placeholder="loadingKeys ? t('videoGeneration.loadingApiKeys') : t('videoGeneration.selectApiKey')"
               />
-              <p v-if="!loadingKeys && apiKeyOptions.length === 0" class="text-xs text-amber-600 dark:text-amber-300">当前没有可用的 seedace 分组 API Key。</p>
+              <p v-if="!loadingKeys && apiKeyOptions.length === 0" class="text-xs text-amber-600 dark:text-amber-300">{{ t('videoGeneration.noApiKeys') }}</p>
             </section>
 
             <section class="space-y-2">
-              <label class="form-label">模型选择 <span class="text-red-500">*</span></label>
-              <Select v-model="form.modelOption" :options="modelOptions" placeholder="请选择模型" />
+              <label class="form-label">{{ t('videoGeneration.modelLabel') }} <span class="text-red-500">*</span></label>
+              <Select v-model="form.modelOption" :options="modelOptions" :placeholder="t('videoGeneration.selectModel')" />
             </section>
 
             <section class="grid grid-cols-2 gap-3">
               <div class="space-y-2">
-                <label class="form-label">分辨率 <span class="text-red-500">*</span></label>
-                <Select v-model="form.resolution" :options="resolutionOptions" placeholder="请选择分辨率" />
+                <label class="form-label">{{ t('videoGeneration.resolutionLabel') }} <span class="text-red-500">*</span></label>
+                <Select v-model="form.resolution" :options="resolutionOptions" :placeholder="t('videoGeneration.selectResolution')" />
               </div>
               <div class="space-y-2">
-                <label class="form-label">视频比例 <span class="text-red-500">*</span></label>
+                <label class="form-label">{{ t('videoGeneration.aspectRatioLabel') }} <span class="text-red-500">*</span></label>
                 <Select v-model="form.aspectRatio" :options="aspectRatioOptions" />
               </div>
             </section>
 
             <section class="grid grid-cols-2 gap-3">
               <div class="space-y-2">
-                <label class="form-label">视频时间 <span class="text-red-500">*</span></label>
+                <label class="form-label">{{ t('videoGeneration.durationLabel') }} <span class="text-red-500">*</span></label>
                 <Select v-model="form.duration" :options="durationOptions" />
               </div>
               <div class="space-y-2">
-                <label class="form-label">是否生成声音</label>
+                <label class="form-label">{{ t('videoGeneration.audioLabel') }}</label>
                 <Select v-model="generateAudioValue" :options="generateAudioOptions" />
               </div>
             </section>
 
             <section class="space-y-2">
-              <label class="form-label">参考图 <span class="text-xs font-normal text-gray-400">非必填，小于 9 张</span></label>
+              <label class="form-label">{{ t('videoGeneration.referenceImages') }} <span class="text-xs font-normal text-gray-400">{{ t('videoGeneration.referenceImagesHint') }}</span></label>
               <input ref="imageInputRef" type="file" class="hidden" accept="image/*" multiple @change="onReferenceImagesChange" />
               <button type="button" class="upload-button" @click="imageInputRef?.click()">
-                <Icon name="upload" size="sm" /> 上传参考图
+                <Icon name="upload" size="sm" /> {{ t('videoGeneration.uploadReferenceImages') }}
               </button>
               <AssetList :assets="form.referenceImages" @remove="removeReferenceImage" />
             </section>
 
             <section class="space-y-2">
-              <label class="form-label">首尾帧参考 <span class="text-red-500">*</span></label>
+              <label class="form-label">{{ t('videoGeneration.frameReference') }} <span class="text-red-500">*</span></label>
               <Select v-model="form.frameMode" :options="frameModeOptions" />
               <div v-if="form.frameMode !== 'none'" class="grid grid-cols-2 gap-2">
-                <button type="button" class="upload-button" @click="firstFrameInputRef?.click()">上传首帧</button>
-                <button v-if="form.frameMode === 'start_end'" type="button" class="upload-button" @click="lastFrameInputRef?.click()">上传尾帧</button>
+                <button type="button" class="upload-button" @click="firstFrameInputRef?.click()">{{ t('videoGeneration.uploadFirstFrame') }}</button>
+                <button v-if="form.frameMode === 'start_end'" type="button" class="upload-button" @click="lastFrameInputRef?.click()">{{ t('videoGeneration.uploadLastFrame') }}</button>
               </div>
               <input ref="firstFrameInputRef" type="file" class="hidden" accept="image/*" @change="onFirstFrameChange" />
               <input ref="lastFrameInputRef" type="file" class="hidden" accept="image/*" @change="onLastFrameChange" />
@@ -64,21 +64,21 @@
             </section>
 
             <section class="space-y-2">
-              <label class="form-label">参考视频 <span class="text-xs font-normal text-gray-400">非必填，小于 3 个，每个小于 15s</span></label>
+              <label class="form-label">{{ t('videoGeneration.referenceVideos') }} <span class="text-xs font-normal text-gray-400">{{ t('videoGeneration.referenceVideosHint') }}</span></label>
               <input ref="videoInputRef" type="file" class="hidden" accept="video/*" multiple @change="onReferenceVideosChange" />
               <button type="button" class="upload-button" @click="videoInputRef?.click()">
-                <Icon name="upload" size="sm" /> 上传参考视频
+                <Icon name="upload" size="sm" /> {{ t('videoGeneration.uploadReferenceVideos') }}
               </button>
               <AssetList :assets="form.referenceVideos" @remove="removeReferenceVideo" />
             </section>
 
             <section class="space-y-2">
-              <label class="form-label">参考音频 <span class="text-xs font-normal text-gray-400">非必填，≤3，mp3/wav/m4a 等</span></label>
+              <label class="form-label">{{ t('videoGeneration.referenceAudios') }} <span class="text-xs font-normal text-gray-400">{{ t('videoGeneration.referenceAudiosHint') }}</span></label>
               <input ref="audioInputRef" type="file" class="hidden" accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg" multiple @change="onReferenceAudiosChange" />
               <button type="button" class="upload-button" @click="audioInputRef?.click()">
-                <Icon name="upload" size="sm" /> 上传参考音频
+                <Icon name="upload" size="sm" /> {{ t('videoGeneration.uploadReferenceAudios') }}
               </button>
-              <p v-if="form.referenceAudios.length > 0 && !hasImageReference" class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/30 dark:text-amber-200">上传参考音频后，需要至少上传 1 张参考图。</p>
+              <p v-if="form.referenceAudios.length > 0 && !hasImageReference" class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-900/30 dark:text-amber-200">{{ t('videoGeneration.audioNeedsImage') }}</p>
               <AssetList :assets="form.referenceAudios" @remove="removeReferenceAudio" />
             </section>
           </div>
@@ -89,19 +89,19 @@
             <div class="flex items-start justify-between gap-3">
               <div>
                 <div class="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-dark-50">
-                  <VideoGenerationLogo class="h-9 w-9" /> 视频生成对话
+                  <VideoGenerationLogo class="h-9 w-9" /> {{ t('videoGeneration.dialogTitle') }}
                 </div>
-                <p class="mt-1 text-xs text-gray-500 dark:text-dark-300">提交后自动轮询生成结果，生成完成后只提供下载按钮。</p>
+                <p class="mt-1 text-xs text-gray-500 dark:text-dark-300">{{ t('videoGeneration.dialogDescription') }}</p>
               </div>
               <div class="relative flex items-center gap-2">
                 <button type="button" class="btn btn-secondary btn-sm" @click="startNewSession">
-                  <Icon name="plus" size="sm" /> 新对话
+                  <Icon name="plus" size="sm" /> {{ t('videoGeneration.newConversation') }}
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm" @click.stop="showHistoryDropdown = !showHistoryDropdown">
-                  <Icon name="clock" size="sm" /> 历史记录
+                  <Icon name="clock" size="sm" /> {{ t('videoGeneration.history') }}
                 </button>
                 <div v-if="showHistoryDropdown" class="absolute right-0 top-full z-20 mt-2 w-72 rounded-xl border border-gray-200 bg-white p-2 shadow-lg dark:border-dark-700 dark:bg-dark-800">
-                  <div v-if="sessionHistoryRecords.length === 0" class="px-3 py-6 text-center text-sm text-gray-400 dark:text-dark-300">暂无生成记录</div>
+                  <div v-if="sessionHistoryRecords.length === 0" class="px-3 py-6 text-center text-sm text-gray-400 dark:text-dark-300">{{ t('videoGeneration.emptyHistory') }}</div>
                   <button
                     v-for="record in sessionHistoryRecords"
                     :key="record.id"
@@ -111,9 +111,9 @@
                   >
                     <div class="flex items-center justify-between gap-3">
                       <span class="truncate text-sm font-medium text-gray-900 dark:text-dark-50">{{ record.summary }}</span>
-                      <span class="shrink-0 text-xs text-gray-400 dark:text-dark-300">{{ record.generationCount }} 次</span>
+                      <span class="shrink-0 text-xs text-gray-400 dark:text-dark-300">{{ t('videoGeneration.generationCount', { count: record.generationCount }) }}</span>
                     </div>
-                    <div class="mt-1 text-xs text-gray-500 dark:text-dark-300">最后生成 {{ formatHistoryTime(record.updatedAt) }}</div>
+                    <div class="mt-1 text-xs text-gray-500 dark:text-dark-300">{{ t('videoGeneration.lastGenerated', { time: formatHistoryTime(record.updatedAt) }) }}</div>
                   </button>
                 </div>
               </div>
@@ -122,21 +122,21 @@
 
           <div ref="messagesRef" class="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
             <div v-if="messages.length === 0" class="flex h-full items-center justify-center text-center text-sm text-gray-400 dark:text-dark-300">
-              选择 API Key 和模型后，在底部输入内容
+              {{ t('videoGeneration.emptyConversation') }}
             </div>
 
             <div v-for="message in messages" :key="message.id" :class="['flex', message.role === 'user' ? 'justify-end' : 'justify-start']">
               <div :class="['max-w-[78%] rounded-2xl px-4 py-3 text-sm', message.role === 'user' ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-800 dark:bg-dark-700 dark:text-dark-50']">
                 <div class="whitespace-pre-wrap">{{ message.content }}</div>
                 <div v-if="message.status === 'generating'" class="mt-2 flex items-center gap-2 text-xs text-gray-500 dark:text-dark-300">
-                  <Icon name="refresh" size="sm" class="animate-spin" /> 正在轮询生成结果
+                  <Icon name="refresh" size="sm" class="animate-spin" /> {{ t('videoGeneration.polling') }}
                 </div>
                 <div v-if="message.status === 'completed' && message.taskId" class="mt-3 flex flex-wrap items-center gap-3">
                   <button type="button" class="btn btn-primary btn-sm" :disabled="downloadingTaskId === message.taskId" @click="handleDownload(message.taskId)">
                     <Icon name="download" size="sm" :class="downloadingTaskId === message.taskId ? 'animate-bounce' : ''" />
-                    下载
+                    {{ t('videoGeneration.download') }}
                   </button>
-                  <span class="text-xs text-amber-600 dark:text-amber-300">该视频有效期24小时，请及时下载！</span>
+                  <span class="text-xs text-amber-600 dark:text-amber-300">{{ t('videoGeneration.expiryWarning') }}</span>
                 </div>
                 <div v-if="message.status === 'failed' && message.error" class="mt-2 text-xs text-red-500">{{ message.error }}</div>
               </div>
@@ -150,14 +150,14 @@
                 v-model="prompt"
                 rows="3"
                 class="input min-h-[72px] flex-1 resize-none"
-                placeholder="请输入视频生成内容，作为 prompt 提交"
+                :placeholder="t('videoGeneration.promptPlaceholder')"
                 :disabled="generating"
                 @keydown.enter.exact.prevent="submitVideoGeneration"
               ></textarea>
               <button type="button" class="btn btn-primary min-h-[44px]" :disabled="generating" @click="submitVideoGeneration">
                 <Icon v-if="generating" name="refresh" size="sm" class="animate-spin" />
                 <Icon v-else name="play" size="sm" />
-                提交
+                {{ t('videoGeneration.submit') }}
               </button>
             </div>
           </div>
@@ -169,6 +169,7 @@
 
 <script setup lang="ts">
 import { computed, defineComponent, h, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -195,6 +196,7 @@ import {
   type SeedaceVideoResolution,
 } from '@/utils/seedaceVideo'
 import { extractApiErrorMessage } from '@/utils/apiError'
+import { formatTime } from '@/utils/format'
 
 type ChatMessage = SeedaceVideoHistoryMessage
 
@@ -202,6 +204,7 @@ interface SessionHistoryRecord extends Omit<SeedaceVideoHistoryRecord, 'updatedA
   updatedAt: number
 }
 
+const { t } = useI18n()
 
 const VideoGenerationLogo = defineComponent({
   name: 'VideoGenerationLogo',
@@ -241,7 +244,7 @@ const AssetList = defineComponent({
         (props.assets as SeedaceVideoReferenceAsset[]).map((asset, index) =>
           h('div', { class: 'flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:bg-dark-700 dark:text-dark-100' }, [
             h('span', { class: 'truncate' }, asset.durationSeconds ? `${asset.name}（${asset.durationSeconds.toFixed(1)}s）` : asset.name),
-            h('button', { type: 'button', class: 'ml-2 text-gray-400 hover:text-red-500', onClick: () => emit('remove', index) }, '移除'),
+            h('button', { type: 'button', class: 'ml-2 text-gray-400 hover:text-red-500', onClick: () => emit('remove', index) }, t('videoGeneration.remove')),
           ]),
         ),
       )
@@ -285,18 +288,21 @@ const form = reactive<SeedaceVideoFormState>({
   generateAudio: true,
 })
 
-const modelOptions = SEEDACE_VIDEO_MODEL_OPTIONS.map((option) => ({ value: option.value, label: option.label }))
+const modelOptions = computed<SelectOption[]>(() => SEEDACE_VIDEO_MODEL_OPTIONS.map((option) => ({
+  value: option.value,
+  label: t(`videoGeneration.models.${option.value === 'domestic-seedance-2.0' ? 'domestic' : option.value === 'international-seedance-2.0' ? 'international' : 'internationalFast'}`),
+})))
 const aspectRatioOptions = SEEDACE_VIDEO_ASPECT_RATIO_OPTIONS.map((value) => ({ value, label: value }))
 const durationOptions = SEEDACE_VIDEO_DURATION_OPTIONS.map((value) => ({ value, label: `${value}s` }))
-const frameModeOptions: SelectOption[] = [
-  { value: 'none', label: '不使用' },
-  { value: 'start_frame', label: '首帧参考' },
-  { value: 'start_end', label: '首尾帧参考' },
-]
-const generateAudioOptions: SelectOption[] = [
-  { value: 'yes', label: '是（出声）' },
-  { value: 'no', label: '否（静音视频）' },
-]
+const frameModeOptions = computed<SelectOption[]>(() => [
+  { value: 'none', label: t('videoGeneration.frameModes.none') },
+  { value: 'start_frame', label: t('videoGeneration.frameModes.startFrame') },
+  { value: 'start_end', label: t('videoGeneration.frameModes.startEnd') },
+])
+const generateAudioOptions = computed<SelectOption[]>(() => [
+  { value: 'yes', label: t('videoGeneration.audioOptions.yes') },
+  { value: 'no', label: t('videoGeneration.audioOptions.no') },
+])
 
 const apiKeyOptions = computed<SelectOption[]>(() => apiKeys.value.map((key) => ({ value: key.id, label: `${key.name}（${key.group?.name || 'seedace'}）` })))
 const selectedApiKey = computed(() => apiKeys.value.find((key) => key.id === form.apiKeyId) ?? null)
@@ -337,7 +343,7 @@ async function loadHistoryRecords() {
     const records = await listSeedaceVideoHistory()
     sessionHistoryRecords.value = records.map((record) => ({ ...record, updatedAt: Date.parse(record.updatedAt) || Date.now() }))
   } catch (err: unknown) {
-    submitError.value = extractApiErrorMessage(err, '视频生成历史加载失败')
+    submitError.value = extractApiErrorMessage(err, t('videoGeneration.errors.historyLoadFailed'))
   }
 }
 
@@ -348,7 +354,7 @@ async function loadAPIKeys() {
     apiKeys.value = result.items.filter((key) => key.status === 'active' && key.group?.platform === 'seedace')
     if (!form.apiKeyId && apiKeys.value.length > 0) form.apiKeyId = apiKeys.value[0].id
   } catch (err: unknown) {
-    submitError.value = extractApiErrorMessage(err, 'API Key 加载失败')
+    submitError.value = extractApiErrorMessage(err, t('videoGeneration.errors.apiKeysLoadFailed'))
   } finally {
     loadingKeys.value = false
   }
@@ -358,11 +364,11 @@ async function submitVideoGeneration() {
   submitError.value = ''
   const errors = validateSeedaceVideoForm(form, prompt.value)
   if (errors.length > 0) {
-    submitError.value = errors[0]
+    submitError.value = t(`videoGeneration.errors.${errors[0]}`)
     return
   }
   if (!selectedApiKey.value) {
-    submitError.value = '请选择 API Key'
+    submitError.value = t('videoGeneration.errors.apiKeyRequired')
     return
   }
 
@@ -371,7 +377,7 @@ async function submitVideoGeneration() {
   const assistantMessage: ChatMessage = {
     id: crypto.randomUUID(),
     role: 'assistant',
-    content: '生成中',
+    content: t('videoGeneration.generating'),
     status: 'generating',
   }
   messages.value.push({ id: crypto.randomUUID(), role: 'user', content: userContent }, assistantMessage)
@@ -386,13 +392,16 @@ async function submitVideoGeneration() {
     const payload = buildSeedaceVideoPayload(form, userContent)
     const createResult = await createSeedaceVideoTask(selectedApiKey.value.key, payload, abortController.value.signal)
     const taskId = extractSeedaceTaskId(createResult)
-    if (!taskId) throw new Error('上游未返回任务 ID')
+    if (!taskId) throw new Error('upstreamTaskMissing')
     assistantMessage.taskId = taskId
     await pollUntilCompleted(selectedApiKey.value.key, taskId, assistantMessage)
   } catch (err: unknown) {
     assistantMessage.status = 'failed'
-    assistantMessage.content = '生成失败'
-    assistantMessage.error = extractApiErrorMessage(err, err instanceof Error ? err.message : '视频生成失败')
+    assistantMessage.content = t('videoGeneration.generationFailed')
+    const errorKey = err instanceof Error ? err.message : ''
+    assistantMessage.error = errorKey && t(`videoGeneration.errors.${errorKey}`) !== `videoGeneration.errors.${errorKey}`
+      ? t(`videoGeneration.errors.${errorKey}`)
+      : extractApiErrorMessage(err, t('videoGeneration.generationFailed'))
   } finally {
     generating.value = false
     upsertCurrentSessionHistoryRecord()
@@ -407,8 +416,8 @@ async function pollUntilCompleted(apiKey: string, taskId: string, message: ChatM
     const status = normalizeSeedaceTaskStatus(result)
     if (status === 'failed') {
       message.status = 'failed'
-      message.content = '生成失败'
-      message.error = '上游返回生成失败'
+      message.content = t('videoGeneration.generationFailed')
+      message.error = t('videoGeneration.errors.upstreamFailed')
       return
     }
     if (status === 'success' && !isSeedaceVideoCompleted(result)) {
@@ -416,13 +425,13 @@ async function pollUntilCompleted(apiKey: string, taskId: string, message: ChatM
     }
     if (isSeedaceVideoCompleted(result)) {
       message.status = 'completed'
-      message.content = '已生成视频'
+      message.content = t('videoGeneration.generated')
       return
     }
   }
   message.status = 'failed'
-  message.content = '生成失败'
-  message.error = '轮询超时，未获取到视频链接，请稍后重试'
+  message.content = t('videoGeneration.generationFailed')
+  message.error = t('videoGeneration.errors.pollingTimeout')
 }
 
 function updateSessionHistory(userContent: string) {
@@ -435,7 +444,7 @@ function upsertCurrentSessionHistoryRecord() {
   if (sessionGenerationCount.value === 0 || messages.value.length === 0) return
   const record: SessionHistoryRecord = {
     id: sessionId.value,
-    summary: sessionSummary.value || '未命名会话',
+    summary: sessionSummary.value || t('videoGeneration.unnamedSession'),
     generationCount: sessionGenerationCount.value,
     updatedAt: sessionUpdatedAt.value,
     messages: cloneMessages(messages.value),
@@ -453,7 +462,7 @@ async function persistCurrentSessionHistoryRecord(record: SessionHistoryRecord) 
     const index = sessionHistoryRecords.value.findIndex((item) => item.id === savedRecord.id)
     if (index >= 0) sessionHistoryRecords.value[index] = savedRecord
   } catch (err: unknown) {
-    submitError.value = extractApiErrorMessage(err, '视频生成历史保存失败')
+    submitError.value = extractApiErrorMessage(err, t('videoGeneration.errors.historySaveFailed'))
   }
 }
 
@@ -491,12 +500,12 @@ function cloneMessages(source: ChatMessage[]): ChatMessage[] {
 
 function formatHistoryTime(timestamp: number) {
   if (!timestamp) return '-'
-  return new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  return formatTime(new Date(timestamp))
 }
 
 function handleDownload(taskId: string) {
   if (!form.apiKeyId) {
-    submitError.value = '请选择 API Key'
+    submitError.value = t('videoGeneration.errors.apiKeyRequired')
     return
   }
   downloadingTaskId.value = taskId
@@ -504,7 +513,7 @@ function handleDownload(taskId: string) {
   try {
     downloadSeedaceVideo(taskId, form.apiKeyId)
   } catch (err: unknown) {
-    submitError.value = extractApiErrorMessage(err, err instanceof Error ? err.message : '视频下载失败')
+    submitError.value = extractApiErrorMessage(err, t('videoGeneration.errors.downloadFailed'))
   } finally {
     setTimeout(() => {
       if (downloadingTaskId.value === taskId) downloadingTaskId.value = ''
@@ -514,7 +523,7 @@ function handleDownload(taskId: string) {
 
 async function onReferenceImagesChange(event: Event) {
   const input = event.target as HTMLInputElement
-  await appendImageFiles(input.files, form.referenceImages, 9, '参考图不能超过 9 张')
+  await appendImageFiles(input.files, form.referenceImages, 9, t('videoGeneration.errors.tooManyImages'))
   input.value = ''
 }
 
@@ -522,14 +531,14 @@ async function onReferenceVideosChange(event: Event) {
   const input = event.target as HTMLInputElement
   const files = Array.from(input.files || [])
   if (form.referenceVideos.length + files.length > 3) {
-    submitError.value = '参考视频不能超过 3 个'
+    submitError.value = t('videoGeneration.errors.tooManyVideos')
     input.value = ''
     return
   }
   for (const file of files) {
     const duration = await readVideoDuration(file)
     if (duration >= 15) {
-      submitError.value = '参考视频必须小于 15 秒'
+      submitError.value = t('videoGeneration.errors.videoTooLong')
       continue
     }
     form.referenceVideos.push({ name: file.name, mimeType: file.type, dataUrl: await readFileAsDataURL(file), durationSeconds: duration })
@@ -541,18 +550,18 @@ async function onReferenceAudiosChange(event: Event) {
   const input = event.target as HTMLInputElement
   const files = Array.from(input.files || [])
   if (form.referenceAudios.length + files.length > 3) {
-    submitError.value = '参考音频不能超过 3 个'
+    submitError.value = t('videoGeneration.errors.tooManyAudios')
     input.value = ''
     return
   }
   for (const file of files) {
     if (!isAllowedSeedaceAudioFile(file)) {
-      submitError.value = '参考音频仅支持 mp3/wav/m4a 等音频格式'
+      submitError.value = t('videoGeneration.errors.audioTypeInvalid')
       continue
     }
     form.referenceAudios.push({ name: file.name, mimeType: file.type, dataUrl: await readFileAsDataURL(file) })
   }
-  if (!hasImageReference.value) submitError.value = '上传参考音频后，需要至少上传 1 张参考图'
+  if (!hasImageReference.value) submitError.value = t('videoGeneration.errors.audioImageRequired')
   input.value = ''
 }
 
@@ -576,7 +585,7 @@ async function appendImageFiles(files: FileList | null, target: SeedaceVideoRefe
   }
   for (const file of list) {
     if (!file.type.startsWith('image/')) {
-      submitError.value = '参考图仅支持图片格式'
+      submitError.value = t('videoGeneration.errors.imageTypeInvalid')
       continue
     }
     target.push({ name: file.name, mimeType: file.type, dataUrl: await readFileAsDataURL(file) })
@@ -601,7 +610,7 @@ function readFileAsDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('文件读取失败'))
+    reader.onerror = () => reject(new Error(t('videoGeneration.errors.fileReadFailed')))
     reader.readAsDataURL(file)
   })
 }
@@ -618,7 +627,7 @@ function readVideoDuration(file: File): Promise<number> {
     }
     video.onerror = () => {
       URL.revokeObjectURL(url)
-      reject(new Error('参考视频读取失败'))
+      reject(new Error(t('videoGeneration.errors.videoReadFailed')))
     }
     video.src = url
   })

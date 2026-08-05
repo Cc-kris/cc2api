@@ -37,6 +37,18 @@ func (Announcement) Fields() []ent.Field {
 			SchemaType(map[string]string{dialect.Postgres: "text"}).
 			NotEmpty().
 			Comment("公告内容（支持 Markdown）"),
+		field.String("source_locale").
+			MaxLen(10).
+			Default("zh").
+			Comment("公告原文语言"),
+		field.Int("source_version").
+			Default(1).
+			Positive().
+			Comment("公告原文版本，用于隔离过期翻译"),
+		field.JSON("translations", map[string]domain.AnnouncementTranslation{}).
+			Default(map[string]domain.AnnouncementTranslation{}).
+			SchemaType(map[string]string{dialect.Postgres: "jsonb"}).
+			Comment("公告多语言翻译缓存"),
 		field.String("status").
 			MaxLen(20).
 			Default(domain.AnnouncementStatusDraft).

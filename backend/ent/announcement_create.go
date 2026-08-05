@@ -36,6 +36,40 @@ func (_c *AnnouncementCreate) SetContent(v string) *AnnouncementCreate {
 	return _c
 }
 
+// SetSourceLocale sets the "source_locale" field.
+func (_c *AnnouncementCreate) SetSourceLocale(v string) *AnnouncementCreate {
+	_c.mutation.SetSourceLocale(v)
+	return _c
+}
+
+// SetNillableSourceLocale sets the "source_locale" field if the given value is not nil.
+func (_c *AnnouncementCreate) SetNillableSourceLocale(v *string) *AnnouncementCreate {
+	if v != nil {
+		_c.SetSourceLocale(*v)
+	}
+	return _c
+}
+
+// SetSourceVersion sets the "source_version" field.
+func (_c *AnnouncementCreate) SetSourceVersion(v int) *AnnouncementCreate {
+	_c.mutation.SetSourceVersion(v)
+	return _c
+}
+
+// SetNillableSourceVersion sets the "source_version" field if the given value is not nil.
+func (_c *AnnouncementCreate) SetNillableSourceVersion(v *int) *AnnouncementCreate {
+	if v != nil {
+		_c.SetSourceVersion(*v)
+	}
+	return _c
+}
+
+// SetTranslations sets the "translations" field.
+func (_c *AnnouncementCreate) SetTranslations(v map[string]domain.AnnouncementTranslation) *AnnouncementCreate {
+	_c.mutation.SetTranslations(v)
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *AnnouncementCreate) SetStatus(v string) *AnnouncementCreate {
 	_c.mutation.SetStatus(v)
@@ -282,6 +316,18 @@ func (_c *AnnouncementCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *AnnouncementCreate) defaults() {
+	if _, ok := _c.mutation.SourceLocale(); !ok {
+		v := announcement.DefaultSourceLocale
+		_c.mutation.SetSourceLocale(v)
+	}
+	if _, ok := _c.mutation.SourceVersion(); !ok {
+		v := announcement.DefaultSourceVersion
+		_c.mutation.SetSourceVersion(v)
+	}
+	if _, ok := _c.mutation.Translations(); !ok {
+		v := announcement.DefaultTranslations
+		_c.mutation.SetTranslations(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := announcement.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -333,6 +379,25 @@ func (_c *AnnouncementCreate) check() error {
 		if err := announcement.ContentValidator(v); err != nil {
 			return &ValidationError{Name: "content", err: fmt.Errorf(`ent: validator failed for field "Announcement.content": %w`, err)}
 		}
+	}
+	if _, ok := _c.mutation.SourceLocale(); !ok {
+		return &ValidationError{Name: "source_locale", err: errors.New(`ent: missing required field "Announcement.source_locale"`)}
+	}
+	if v, ok := _c.mutation.SourceLocale(); ok {
+		if err := announcement.SourceLocaleValidator(v); err != nil {
+			return &ValidationError{Name: "source_locale", err: fmt.Errorf(`ent: validator failed for field "Announcement.source_locale": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SourceVersion(); !ok {
+		return &ValidationError{Name: "source_version", err: errors.New(`ent: missing required field "Announcement.source_version"`)}
+	}
+	if v, ok := _c.mutation.SourceVersion(); ok {
+		if err := announcement.SourceVersionValidator(v); err != nil {
+			return &ValidationError{Name: "source_version", err: fmt.Errorf(`ent: validator failed for field "Announcement.source_version": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.Translations(); !ok {
+		return &ValidationError{Name: "translations", err: errors.New(`ent: missing required field "Announcement.translations"`)}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "Announcement.status"`)}
@@ -407,6 +472,18 @@ func (_c *AnnouncementCreate) createSpec() (*Announcement, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.Content(); ok {
 		_spec.SetField(announcement.FieldContent, field.TypeString, value)
 		_node.Content = value
+	}
+	if value, ok := _c.mutation.SourceLocale(); ok {
+		_spec.SetField(announcement.FieldSourceLocale, field.TypeString, value)
+		_node.SourceLocale = value
+	}
+	if value, ok := _c.mutation.SourceVersion(); ok {
+		_spec.SetField(announcement.FieldSourceVersion, field.TypeInt, value)
+		_node.SourceVersion = value
+	}
+	if value, ok := _c.mutation.Translations(); ok {
+		_spec.SetField(announcement.FieldTranslations, field.TypeJSON, value)
+		_node.Translations = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(announcement.FieldStatus, field.TypeString, value)
@@ -553,6 +630,48 @@ func (u *AnnouncementUpsert) SetContent(v string) *AnnouncementUpsert {
 // UpdateContent sets the "content" field to the value that was provided on create.
 func (u *AnnouncementUpsert) UpdateContent() *AnnouncementUpsert {
 	u.SetExcluded(announcement.FieldContent)
+	return u
+}
+
+// SetSourceLocale sets the "source_locale" field.
+func (u *AnnouncementUpsert) SetSourceLocale(v string) *AnnouncementUpsert {
+	u.Set(announcement.FieldSourceLocale, v)
+	return u
+}
+
+// UpdateSourceLocale sets the "source_locale" field to the value that was provided on create.
+func (u *AnnouncementUpsert) UpdateSourceLocale() *AnnouncementUpsert {
+	u.SetExcluded(announcement.FieldSourceLocale)
+	return u
+}
+
+// SetSourceVersion sets the "source_version" field.
+func (u *AnnouncementUpsert) SetSourceVersion(v int) *AnnouncementUpsert {
+	u.Set(announcement.FieldSourceVersion, v)
+	return u
+}
+
+// UpdateSourceVersion sets the "source_version" field to the value that was provided on create.
+func (u *AnnouncementUpsert) UpdateSourceVersion() *AnnouncementUpsert {
+	u.SetExcluded(announcement.FieldSourceVersion)
+	return u
+}
+
+// AddSourceVersion adds v to the "source_version" field.
+func (u *AnnouncementUpsert) AddSourceVersion(v int) *AnnouncementUpsert {
+	u.Add(announcement.FieldSourceVersion, v)
+	return u
+}
+
+// SetTranslations sets the "translations" field.
+func (u *AnnouncementUpsert) SetTranslations(v map[string]domain.AnnouncementTranslation) *AnnouncementUpsert {
+	u.Set(announcement.FieldTranslations, v)
+	return u
+}
+
+// UpdateTranslations sets the "translations" field to the value that was provided on create.
+func (u *AnnouncementUpsert) UpdateTranslations() *AnnouncementUpsert {
+	u.SetExcluded(announcement.FieldTranslations)
 	return u
 }
 
@@ -848,6 +967,55 @@ func (u *AnnouncementUpsertOne) SetContent(v string) *AnnouncementUpsertOne {
 func (u *AnnouncementUpsertOne) UpdateContent() *AnnouncementUpsertOne {
 	return u.Update(func(s *AnnouncementUpsert) {
 		s.UpdateContent()
+	})
+}
+
+// SetSourceLocale sets the "source_locale" field.
+func (u *AnnouncementUpsertOne) SetSourceLocale(v string) *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetSourceLocale(v)
+	})
+}
+
+// UpdateSourceLocale sets the "source_locale" field to the value that was provided on create.
+func (u *AnnouncementUpsertOne) UpdateSourceLocale() *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateSourceLocale()
+	})
+}
+
+// SetSourceVersion sets the "source_version" field.
+func (u *AnnouncementUpsertOne) SetSourceVersion(v int) *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetSourceVersion(v)
+	})
+}
+
+// AddSourceVersion adds v to the "source_version" field.
+func (u *AnnouncementUpsertOne) AddSourceVersion(v int) *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.AddSourceVersion(v)
+	})
+}
+
+// UpdateSourceVersion sets the "source_version" field to the value that was provided on create.
+func (u *AnnouncementUpsertOne) UpdateSourceVersion() *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateSourceVersion()
+	})
+}
+
+// SetTranslations sets the "translations" field.
+func (u *AnnouncementUpsertOne) SetTranslations(v map[string]domain.AnnouncementTranslation) *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetTranslations(v)
+	})
+}
+
+// UpdateTranslations sets the "translations" field to the value that was provided on create.
+func (u *AnnouncementUpsertOne) UpdateTranslations() *AnnouncementUpsertOne {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateTranslations()
 	})
 }
 
@@ -1346,6 +1514,55 @@ func (u *AnnouncementUpsertBulk) SetContent(v string) *AnnouncementUpsertBulk {
 func (u *AnnouncementUpsertBulk) UpdateContent() *AnnouncementUpsertBulk {
 	return u.Update(func(s *AnnouncementUpsert) {
 		s.UpdateContent()
+	})
+}
+
+// SetSourceLocale sets the "source_locale" field.
+func (u *AnnouncementUpsertBulk) SetSourceLocale(v string) *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetSourceLocale(v)
+	})
+}
+
+// UpdateSourceLocale sets the "source_locale" field to the value that was provided on create.
+func (u *AnnouncementUpsertBulk) UpdateSourceLocale() *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateSourceLocale()
+	})
+}
+
+// SetSourceVersion sets the "source_version" field.
+func (u *AnnouncementUpsertBulk) SetSourceVersion(v int) *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetSourceVersion(v)
+	})
+}
+
+// AddSourceVersion adds v to the "source_version" field.
+func (u *AnnouncementUpsertBulk) AddSourceVersion(v int) *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.AddSourceVersion(v)
+	})
+}
+
+// UpdateSourceVersion sets the "source_version" field to the value that was provided on create.
+func (u *AnnouncementUpsertBulk) UpdateSourceVersion() *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateSourceVersion()
+	})
+}
+
+// SetTranslations sets the "translations" field.
+func (u *AnnouncementUpsertBulk) SetTranslations(v map[string]domain.AnnouncementTranslation) *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.SetTranslations(v)
+	})
+}
+
+// UpdateTranslations sets the "translations" field to the value that was provided on create.
+func (u *AnnouncementUpsertBulk) UpdateTranslations() *AnnouncementUpsertBulk {
+	return u.Update(func(s *AnnouncementUpsert) {
+		s.UpdateTranslations()
 	})
 }
 

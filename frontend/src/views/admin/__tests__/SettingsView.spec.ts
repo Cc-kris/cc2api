@@ -334,6 +334,11 @@ const baseSettingsResponse = {
   smtp_from_email: "",
   smtp_from_name: "",
   smtp_use_tls: true,
+  announcement_translation_enabled: false,
+  announcement_translation_base_url: "",
+  announcement_translation_api_key_configured: false,
+  announcement_translation_model: "",
+  announcement_translation_timeout_seconds: 90,
   turnstile_enabled: false,
   turnstile_site_key: "",
   turnstile_secret_key_configured: false,
@@ -702,6 +707,44 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(wrapper.text()).not.toContain("缓存使用情况");
     expect(wrapper.text()).not.toContain("tools_or_functions");
     expect(wrapper.text()).not.toContain("stream_incomplete");
+  });
+
+  it("loads and submits announcement translation settings without echoing the saved API key", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      announcement_translation_enabled: true,
+      announcement_translation_base_url: "https://translation.example.com/v1",
+      announcement_translation_api_key_configured: true,
+      announcement_translation_model: "translation-model",
+      announcement_translation_timeout_seconds: 75,
+    });
+
+    const wrapper = mountView();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("公告自动翻译");
+    expect(
+      wrapper.find('input[placeholder="https://api.openai.com/v1"]').element,
+    ).toHaveProperty("value", "https://translation.example.com/v1");
+    expect(
+      wrapper.find('input[placeholder="gpt-4.1-mini"]').element,
+    ).toHaveProperty("value", "translation-model");
+
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        announcement_translation_enabled: true,
+        announcement_translation_base_url:
+          "https://translation.example.com/v1",
+        announcement_translation_model: "translation-model",
+        announcement_translation_timeout_seconds: 75,
+      }),
+    );
+    expect(
+      updateSettings.mock.calls[0]?.[0].announcement_translation_api_key,
+    ).toBeUndefined();
   });
 
   it("submits Antigravity user agent version gateway setting", async () => {
