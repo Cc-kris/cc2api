@@ -380,29 +380,25 @@ func (s *ModelSquareService) listSellableModels(ctx context.Context, userID int6
 		}
 		s.metrics.cacheMisses.Add(1)
 	}
-	accountRestrictionConfigured := modelSquareAccountRestrictionConfigured(accounts)
+	accountVisibleModelsConfigured := modelSquareAccountVisibleModelsConfigured(accounts)
 	candidates := append([]string(nil), snapshot.Models...)
-	if accountRestrictionConfigured {
-		// Once any account in the group has an explicit model restriction list,
-		// that list is the customer-visible boundary. Do not let an unrestricted
-		// sibling account expand the model square back to the whole system catalog.
-		candidates = modelSquareFilterByAccountRestrictions(candidates, accounts)
+	if accountVisibleModelsConfigured {
+		// Concrete account mapping sources are customer-requested model names and
+		// define the customer-visible boundary. Do not let an unrestricted sibling
+		// account expand the model square back to the whole system catalog.
+		candidates = modelSquareFilterByAccountVisibleModels(candidates, accounts)
 	}
-	// Account restrictions and account mappings are separate concepts. An exact
-	// identity mapping (model -> same model) is a restriction entry; remaps and
-	// wildcard mappings only affect routing and must not expand the catalog.
-	if accountRestrictionConfigured {
-		candidates = appendUniqueModelSquareNames(candidates, modelSquareAccountRestrictionModels(accounts))
-	} else {
-		candidates = appendUniqueModelSquareNames(candidates, modelSquareAccountMappedModels(accounts))
-	}
+	// Account mapping sources are the names customers request. The mapping target
+	// only determines the upstream route, so a remap must still list its source
+	// model. Wildcard mappings remain routing-only and do not expand the catalog.
+	candidates = appendUniqueModelSquareNames(candidates, modelSquareAccountVisibleModels(accounts))
 	if !usingCompleteChannelFallback && channel != nil && channel.IsActive() {
 		// The synchronized system catalog remains the primary model directory.
 		// Complete channel-priced models may extend it with site-specific models,
 		// but an explicit channel model list must never replace system models.
 		channelModels := modelSquareCompleteChannelModels(channel, group.Platform)
-		if accountRestrictionConfigured {
-			channelModels = modelSquareFilterByAccountRestrictions(channelModels, accounts)
+		if accountVisibleModelsConfigured {
+			channelModels = modelSquareFilterByAccountVisibleModels(channelModels, accounts)
 		}
 		candidates = appendUniqueModelSquareNames(candidates, channelModels)
 	}
@@ -516,45 +512,28 @@ func appendUniqueModelSquareNames(existing, additional []string) []string {
 	return existing
 }
 
-func modelSquareAccountMappedModels(accounts []*Account) []string {
-	models := make([]string, 0)
-	for _, account := range accounts {
-		if account == nil {
-			continue
-		}
-		for name := range account.GetModelMapping() {
-			name = strings.TrimSpace(name)
-			if name == "" || strings.ContainsAny(name, "*?") {
-				continue
-			}
-			models = append(models, name)
-		}
-	}
-	return models
+func modelSquareAccountVisibleModelsConfigured(accounts []*Account) bool {
+	return len(modelSquareAccountVisibleModels(accounts)) > 0
 }
 
-func modelSquareAccountRestrictionConfigured(accounts []*Account) bool {
-	return len(modelSquareAccountRestrictionModels(accounts)) > 0
-}
-
-func modelSquareFilterByAccountRestrictions(models []string, accounts []*Account) []string {
-	restrictionModels := make(map[string]struct{})
-	for _, model := range modelSquareAccountRestrictionModels(accounts) {
-		restrictionModels[strings.ToLower(model)] = struct{}{}
+func modelSquareFilterByAccountVisibleModels(models []string, accounts []*Account) []string {
+	visibleModels := make(map[string]struct{})
+	for _, model := range modelSquareAccountVisibleModels(accounts) {
+		visibleModels[strings.ToLower(model)] = struct{}{}
 	}
-	if len(restrictionModels) == 0 {
+	if len(visibleModels) == 0 {
 		return models
 	}
 	filtered := make([]string, 0, len(models))
 	for _, model := range models {
-		if _, ok := restrictionModels[strings.ToLower(strings.TrimSpace(model))]; ok {
+		if _, ok := visibleModels[strings.ToLower(strings.TrimSpace(model))]; ok {
 			filtered = append(filtered, model)
 		}
 	}
 	return filtered
 }
 
-func modelSquareAccountRestrictionModels(accounts []*Account) []string {
+func modelSquareAccountVisibleModels(accounts []*Account) []string {
 	models := make([]string, 0)
 	for _, account := range accounts {
 		if account == nil {
@@ -563,7 +542,7 @@ func modelSquareAccountRestrictionModels(accounts []*Account) []string {
 		for source, target := range account.GetModelMapping() {
 			source = strings.TrimSpace(source)
 			target = strings.TrimSpace(target)
-			if source == "" || strings.ContainsAny(source, "*?") || !strings.EqualFold(source, target) {
+			if source == "" || target == "" || strings.ContainsAny(source, "*?") {
 				continue
 			}
 			models = append(models, source)

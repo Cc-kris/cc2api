@@ -122,6 +122,20 @@ func TestModelSquarePrioritizesAccountModelRestrictionList(t *testing.T) {
 	require.Equal(t, "gpt-5.4", result.Items[0].Name)
 }
 
+func TestModelSquareListsForwardedAccountMappingSource(t *testing.T) {
+	svc := newModelSquareServiceForTest()
+	accounts, ok := svc.accounts.(*modelSquareAccountRepoStub)
+	require.True(t, ok)
+	accounts.byGroup[10][0].Credentials = map[string]any{"model_mapping": map[string]any{
+		"gpt-5.4": "gpt-5.4",
+		"gpt-5.5": "provider-gpt-5.5",
+	}}
+
+	result, err := svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 10})
+	require.NoError(t, err)
+	require.Equal(t, []string{"gpt-5.4", "gpt-5.5"}, []string{result.Items[0].Name, result.Items[1].Name})
+}
+
 func TestModelSquareRestrictionListDoesNotExpandFromUnrestrictedSibling(t *testing.T) {
 	svc := newModelSquareServiceForTest()
 	accounts, ok := svc.accounts.(*modelSquareAccountRepoStub)
@@ -356,14 +370,16 @@ func TestModelSquareUsesSystemCatalogAndAddsCompleteChannelModels(t *testing.T) 
 	require.Equal(t, "7.50000000", result.Items[2].Prices.Input.MultiplierPrice.StringFixed(8))
 	require.NotContains(t, []string{result.Items[0].Name, result.Items[1].Name, result.Items[2].Name}, "gpt-blocked")
 
-	publicOnly := *account
-	publicOnly.Credentials = map[string]any{"model_mapping": map[string]any{"gpt-public": "gpt-public"}}
-	svc.accounts = &modelSquareAccountRepoStub{byGroup: map[int64][]*Account{10: {&publicOnly}}}
+	publicAndForwarded := *account
+	publicAndForwarded.Credentials = map[string]any{"model_mapping": map[string]any{
+		"gpt-public":    "gpt-public",
+		"custom-public": "custom-upstream",
+	}}
+	svc.accounts = &modelSquareAccountRepoStub{byGroup: map[int64][]*Account{10: {&publicAndForwarded}}}
 	svc.cache = nil
 	result, err = svc.ListModels(context.Background(), 1, 10, ModelSquareModelsQuery{PageSize: 50})
 	require.NoError(t, err)
-	require.Len(t, result.Items, 1, "account mappings are checked against the customer-requested model")
-	require.Equal(t, "gpt-public", result.Items[0].Name)
+	require.Equal(t, []string{"custom-public", "gpt-public"}, []string{result.Items[0].Name, result.Items[1].Name}, "forwarded mappings must remain visible as their customer-requested model")
 }
 
 func TestModelSquareCatalogFallbackRequiresCompleteChannelPricing(t *testing.T) {
