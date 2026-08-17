@@ -3996,10 +3996,11 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			if retryIngressTurn(relayErr, turn, connID) {
 				continue
 			}
+			// Keep the ingress-turn wrapper on the returned error. The outer
+			// Responses WebSocket handler uses its stage and downstream-write
+			// metadata to decide whether it is safe to fail over before sending
+			// any response data to the client.
 			finalErr := relayErr
-			if unwrapped := errors.Unwrap(relayErr); unwrapped != nil {
-				finalErr = unwrapped
-			}
 			if hooks != nil && hooks.AfterTurn != nil {
 				hooks.AfterTurn(turn, nil, finalErr)
 			}

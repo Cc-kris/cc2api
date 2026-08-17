@@ -2258,6 +2258,71 @@ func TestOpenAIImages_OAuth5xxSkipsSameAccountReplayAndFailsOver(t *testing.T) {
 	}
 }
 
+func TestOpenAIResponsesWebSocket_SilentRetrySwitchesOnUpstreamTemporaryClose(t *testing.T) {
+	for _, closeCode := range []coderws.StatusCode{coderws.StatusTryAgainLater, coderws.StatusInternalError} {
+		t.Run(strconv.Itoa(int(closeCode)), func(t *testing.T) {
+			var failedHits int32
+			failedUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				atomic.AddInt32(&failedHits, 1)
+				conn, err := coderws.Accept(w, r, nil)
+				require.NoError(t, err)
+				defer func() { _ = conn.CloseNow() }()
+
+				readCtx, cancelRead := context.WithTimeout(r.Context(), 3*time.Second)
+				_, _, err = conn.Read(readCtx)
+				cancelRead()
+				require.NoError(t, err)
+				require.NoError(t, conn.Close(closeCode, "no available account"))
+			}))
+			defer failedUpstream.Close()
+
+			var successHits int32
+			successUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				atomic.AddInt32(&successHits, 1)
+				conn, err := coderws.Accept(w, r, nil)
+				require.NoError(t, err)
+				defer func() { _ = conn.CloseNow() }()
+
+				readCtx, cancelRead := context.WithTimeout(r.Context(), 3*time.Second)
+				_, _, err = conn.Read(readCtx)
+				cancelRead()
+				require.NoError(t, err)
+
+				writeCtx, cancelWrite := context.WithTimeout(r.Context(), 3*time.Second)
+				err = conn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"response.completed","response":{"id":"resp_temporary_close_retry","model":"gpt-5.4","usage":{"input_tokens":2,"output_tokens":1}}}`))
+				cancelWrite()
+				require.NoError(t, err)
+			}))
+			defer successUpstream.Close()
+
+			usageRepo := &openAIWSUsageHandlerUsageLogRepoStub{created: make(chan *service.UsageLog, 2)}
+			server := newOpenAIWSSilentRetryHandlerTestServer(t, []service.Account{
+				newOpenAIWSSilentRetryAccount(9401, "ws-temporary-close-first", failedUpstream.URL, 0),
+				newOpenAIWSSilentRetryAccount(9402, "ws-temporary-close-second", successUpstream.URL, 1),
+			}, usageRepo)
+			defer server.Close()
+
+			clientConn := dialOpenAIWSTestClient(t, server.URL)
+			defer func() { _ = clientConn.CloseNow() }()
+			writeOpenAIWSTestPayload(t, clientConn, `{"type":"response.create","model":"gpt-5.4","input":"hello","stream":true}`)
+
+			_, event, err := readOpenAIWSTestMessage(t, clientConn)
+			require.NoError(t, err)
+			require.Equal(t, "resp_temporary_close_retry", gjson.GetBytes(event, "response.id").String())
+			_ = clientConn.Close(coderws.StatusNormalClosure, "done")
+
+			require.Eventually(t, func() bool { return atomic.LoadInt32(&failedHits) >= 1 }, time.Second, 10*time.Millisecond)
+			require.Eventually(t, func() bool { return atomic.LoadInt32(&successHits) == 1 }, time.Second, 10*time.Millisecond)
+			select {
+			case usageLog := <-usageRepo.created:
+				require.Equal(t, int64(9402), usageLog.AccountID)
+			case <-time.After(3 * time.Second):
+				t.Fatal("等待 WebSocket usage log 写入超时")
+			}
+		})
+	}
+}
+
 func TestOpenAIResponsesWebSocket_SilentRetryDoesNotSwitchWithPreviousResponseID(t *testing.T) {
 	var failedHits int32
 	failedUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
