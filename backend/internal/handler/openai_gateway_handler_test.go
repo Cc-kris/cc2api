@@ -2261,9 +2261,9 @@ func TestOpenAIImages_OAuth5xxSkipsSameAccountReplayAndFailsOver(t *testing.T) {
 func TestOpenAIResponsesWebSocket_SilentRetrySwitchesOnUpstreamTemporaryClose(t *testing.T) {
 	for _, closeCode := range []coderws.StatusCode{coderws.StatusTryAgainLater, coderws.StatusInternalError} {
 		t.Run(strconv.Itoa(int(closeCode)), func(t *testing.T) {
-			var failedHits int32
-			failedUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				atomic.AddInt32(&failedHits, 1)
+			var upstreamHits int32
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				attempt := atomic.AddInt32(&upstreamHits, 1)
 				conn, err := coderws.Accept(w, r, nil)
 				require.NoError(t, err)
 				defer func() { _ = conn.CloseNow() }()
@@ -2272,34 +2272,23 @@ func TestOpenAIResponsesWebSocket_SilentRetrySwitchesOnUpstreamTemporaryClose(t 
 				_, _, err = conn.Read(readCtx)
 				cancelRead()
 				require.NoError(t, err)
-				require.NoError(t, conn.Close(closeCode, "no available account"))
-			}))
-			defer failedUpstream.Close()
-
-			var successHits int32
-			successUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				atomic.AddInt32(&successHits, 1)
-				conn, err := coderws.Accept(w, r, nil)
-				require.NoError(t, err)
-				defer func() { _ = conn.CloseNow() }()
-
-				readCtx, cancelRead := context.WithTimeout(r.Context(), 3*time.Second)
-				_, _, err = conn.Read(readCtx)
-				cancelRead()
-				require.NoError(t, err)
+				if attempt <= 2 {
+					require.NoError(t, conn.Close(closeCode, "no available account"))
+					return
+				}
 
 				writeCtx, cancelWrite := context.WithTimeout(r.Context(), 3*time.Second)
 				err = conn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"response.completed","response":{"id":"resp_temporary_close_retry","model":"gpt-5.4","usage":{"input_tokens":2,"output_tokens":1}}}`))
 				cancelWrite()
 				require.NoError(t, err)
 			}))
-			defer successUpstream.Close()
+			defer upstream.Close()
 
 			usageRepo := &openAIWSUsageHandlerUsageLogRepoStub{created: make(chan *service.UsageLog, 2)}
-			server := newOpenAIWSSilentRetryHandlerTestServer(t, []service.Account{
-				newOpenAIWSSilentRetryAccount(9401, "ws-temporary-close-first", failedUpstream.URL, 0),
-				newOpenAIWSSilentRetryAccount(9402, "ws-temporary-close-second", successUpstream.URL, 1),
-			}, usageRepo)
+			server := newOpenAIWSSilentRetryHandlerTestServerWithModeRouterV2(t, []service.Account{
+				newOpenAIWSSilentRetryAccount(9401, "ws-temporary-close-first", upstream.URL, 0),
+				newOpenAIWSSilentRetryAccount(9402, "ws-temporary-close-second", upstream.URL, 1),
+			}, usageRepo, false)
 			defer server.Close()
 
 			clientConn := dialOpenAIWSTestClient(t, server.URL)
@@ -2311,8 +2300,7 @@ func TestOpenAIResponsesWebSocket_SilentRetrySwitchesOnUpstreamTemporaryClose(t 
 			require.Equal(t, "resp_temporary_close_retry", gjson.GetBytes(event, "response.id").String())
 			_ = clientConn.Close(coderws.StatusNormalClosure, "done")
 
-			require.Eventually(t, func() bool { return atomic.LoadInt32(&failedHits) >= 1 }, time.Second, 10*time.Millisecond)
-			require.Eventually(t, func() bool { return atomic.LoadInt32(&successHits) == 1 }, time.Second, 10*time.Millisecond)
+			require.Eventually(t, func() bool { return atomic.LoadInt32(&upstreamHits) == 3 }, time.Second, 10*time.Millisecond)
 			select {
 			case usageLog := <-usageRepo.created:
 				require.Equal(t, int64(9402), usageLog.AccountID)
@@ -2423,6 +2411,10 @@ func newOpenAIWSSilentRetryAccount(id int64, name string, upstreamBaseURL string
 }
 
 func newOpenAIWSSilentRetryHandlerTestServer(t *testing.T, accounts []service.Account, usageRepo *openAIWSUsageHandlerUsageLogRepoStub) *httptest.Server {
+	return newOpenAIWSSilentRetryHandlerTestServerWithModeRouterV2(t, accounts, usageRepo, true)
+}
+
+func newOpenAIWSSilentRetryHandlerTestServerWithModeRouterV2(t *testing.T, accounts []service.Account, usageRepo *openAIWSUsageHandlerUsageLogRepoStub, modeRouterV2Enabled bool) *httptest.Server {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -2434,7 +2426,7 @@ func newOpenAIWSSilentRetryHandlerTestServer(t *testing.T, accounts []service.Ac
 	cfg.Gateway.OpenAIWS.Enabled = true
 	cfg.Gateway.OpenAIWS.APIKeyEnabled = true
 	cfg.Gateway.OpenAIWS.ResponsesWebsocketsV2 = true
-	cfg.Gateway.OpenAIWS.ModeRouterV2Enabled = true
+	cfg.Gateway.OpenAIWS.ModeRouterV2Enabled = modeRouterV2Enabled
 	cfg.Gateway.OpenAIWS.DialTimeoutSeconds = 3
 	cfg.Gateway.OpenAIWS.ReadTimeoutSeconds = 1
 	cfg.Gateway.OpenAIWS.WriteTimeoutSeconds = 3
