@@ -62,11 +62,9 @@ describe('AppSidebar custom menu navigation', () => {
 
 
 describe('AppSidebar video generation navigation', () => {
-  it('adds video generation to the shared user navigation after API keys', () => {
-    expect(componentSource).toContain("path: '/video-generation'")
-    expect(componentSource).toContain("label: t('nav.videoGeneration')")
-    expect(componentSource.indexOf("path: '/keys'")).toBeLessThan(componentSource.indexOf("path: '/video-generation'"))
-    expect(componentSource.indexOf("path: '/video-generation'")).toBeLessThan(componentSource.indexOf("path: '/usage'"))
+  it('hides video generation from the shared user navigation', () => {
+    expect(componentSource).not.toContain("path: '/video-generation'")
+    expect(componentSource).not.toContain("label: t('nav.videoGeneration')")
   })
 })
 
