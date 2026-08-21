@@ -221,6 +221,7 @@ SELECT
   COALESCE(e.user_id, ak.user_id),
   COALESCE(u.email, ''),
   e.api_key_id,
+  CASE WHEN COALESCE(ak.key, '') = '' THEN '' ELSE RIGHT(ak.key, 4) END,
   e.account_id,
   COALESCE(a.name, ''),
   e.group_id,
@@ -268,6 +269,7 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 		var clientStatusCode sql.NullInt64
 		var userID sql.NullInt64
 		var apiKeyID sql.NullInt64
+		var apiKeyLastFour string
 		var accountID sql.NullInt64
 		var accountName string
 		var groupID sql.NullInt64
@@ -310,6 +312,7 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 			&userID,
 			&userEmail,
 			&apiKeyID,
+			&apiKeyLastFour,
 			&accountID,
 			&accountName,
 			&groupID,
@@ -361,6 +364,13 @@ LIMIT $` + itoa(len(args)+1) + ` OFFSET $` + itoa(len(args)+2)
 		if apiKeyID.Valid {
 			v := apiKeyID.Int64
 			item.APIKeyID = &v
+		}
+		item.APIKeyLastFour = strings.TrimSpace(apiKeyLastFour)
+		if strings.TrimSpace(item.UpstreamModel) == "" {
+			item.UpstreamModel = strings.TrimSpace(item.RequestedModel)
+		}
+		if strings.TrimSpace(item.UpstreamModel) == "" {
+			item.UpstreamModel = strings.TrimSpace(item.Model)
 		}
 		if accountID.Valid {
 			v := accountID.Int64
@@ -458,6 +468,7 @@ SELECT
   COALESCE(e.user_id, ak.user_id),
   COALESCE(u.email, ''),
   e.api_key_id,
+  CASE WHEN COALESCE(ak.key, '') = '' THEN '' ELSE RIGHT(ak.key, 4) END,
   e.account_id,
   COALESCE(a.name, ''),
   e.group_id,
@@ -493,6 +504,7 @@ LIMIT 1`
 	var clientIP sql.NullString
 	var userID sql.NullInt64
 	var apiKeyID sql.NullInt64
+	var apiKeyLastFour string
 	var accountID sql.NullInt64
 	var groupID sql.NullInt64
 	var authLatency sql.NullInt64
@@ -529,6 +541,7 @@ LIMIT 1`
 		&userID,
 		&out.UserEmail,
 		&apiKeyID,
+		&apiKeyLastFour,
 		&accountID,
 		&out.AccountName,
 		&groupID,
@@ -579,6 +592,13 @@ LIMIT 1`
 	if apiKeyID.Valid {
 		v := apiKeyID.Int64
 		out.APIKeyID = &v
+	}
+	out.APIKeyLastFour = strings.TrimSpace(apiKeyLastFour)
+	if strings.TrimSpace(out.UpstreamModel) == "" {
+		out.UpstreamModel = strings.TrimSpace(out.RequestedModel)
+	}
+	if strings.TrimSpace(out.UpstreamModel) == "" {
+		out.UpstreamModel = strings.TrimSpace(out.Model)
 	}
 	if accountID.Valid {
 		v := accountID.Int64

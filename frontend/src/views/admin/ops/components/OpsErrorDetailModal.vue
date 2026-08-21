@@ -36,6 +36,13 @@
         </div>
 
         <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
+          <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.apiKey') }}</div>
+          <div class="mt-1 font-mono text-sm font-medium text-gray-900 dark:text-white">
+            {{ formatAPIKey(detail) || '—' }}
+          </div>
+        </div>
+
+        <div class="rounded-xl bg-gray-50 p-4 dark:bg-dark-900">
           <div class="text-xs font-bold uppercase tracking-wider text-gray-400">{{ t('admin.ops.errorDetail.platform') }}</div>
           <div class="mt-1 text-sm font-medium text-gray-900 dark:text-white">
             {{ detail.platform || '—' }}
@@ -255,10 +262,15 @@ const emptyText = computed(() => t('admin.ops.errorDetail.noErrorSelected'))
 
 function formatRequestAccount(d: OpsErrorDetail | null): string {
   if (!d) return ''
-  if (d.user_email) return formatUserEmailForRole(d.user_email, viewerRole.value)
-  if (d.user_id != null) return `user:${d.user_id}`
-  if (d.api_key_id != null) return `key:${d.api_key_id}`
-  return ''
+	if (d.user_email) return formatUserEmailForRole(d.user_email, viewerRole.value)
+	if (d.user_id != null) return `user:${d.user_id}`
+	return ''
+}
+
+function formatAPIKey(d: OpsErrorDetail | null): string {
+  if (!d || !d.api_key_id) return ''
+  const suffix = String(d.api_key_last_four || '').trim()
+  return suffix ? `API Key · ****${suffix}` : 'API Key'
 }
 
 function formatUpstreamAccount(d: OpsErrorDetail | null): string {

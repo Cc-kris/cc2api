@@ -165,7 +165,7 @@ function openRowErrorDetail(row: OpsRequestDetail) {
 function requestAccountLabel(row: OpsRequestDetail): string {
   if (row.user_email) return formatUserEmailForRole(row.user_email, viewerRole.value)
   if (row.user_id != null) return t('admin.ops.requestDetails.accountUser', { id: row.user_id })
-  if (row.api_key_id != null) return t('admin.ops.requestDetails.accountApiKey', { id: row.api_key_id })
+  if (row.api_key_id != null) return 'API Key'
   return '-'
 }
 

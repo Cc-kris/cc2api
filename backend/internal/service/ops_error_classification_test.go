@@ -295,6 +295,27 @@ func TestBuildOpsErrorSummaryIncludesConcreteDetail(t *testing.T) {
 	if got := BuildOpsErrorSummary("API Key 已禁用", "API key is disabled", "", ""); got != "API Key 已禁用：API key is disabled" {
 		t.Fatalf("summary = %q", got)
 	}
+	cases := []struct {
+		name     string
+		reason   string
+		message  string
+		upstream string
+		detail   string
+		want     string
+	}{
+		{"json wrapper", "上游服务不可用或过载", `{"error":{"message":"Cloudflare 503: Service Unavailable"}}`, "", "", "上游服务不可用或过载：Cloudflare 503: Service Unavailable"},
+		{"json generic message with concrete detail", "上游服务不可用或过载", `{"error":{"message":"upstream_error","detail":"Cloudflare 524: origin timed out"}}`, "", "", "上游服务不可用或过载：Cloudflare 524: origin timed out"},
+		{"websocket pool", "上游账号池无可用账号", `1013 websocket close: upstream websocket proxy failed: no available account`, "", "", "上游账号池无可用账号：上游账号池暂无可用账号"},
+		{"image format", "上游请求参数不兼容", "", `Failed to deserialize the JSON body into the target type: unknown variant 'image_url'`, "", "上游请求参数不兼容：上游不支持当前请求中的 image_url 内容格式"},
+		{"generic only", "上游服务不可用或过载", "upstream_error", "openai_error", "", "上游服务不可用或过载"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := BuildOpsErrorSummary(tc.reason, tc.message, tc.upstream, tc.detail); got != tc.want {
+				t.Fatalf("summary = %q, want %q", got, tc.want)
+			}
+		})
+	}
 }
 
 func clientInput(status int, message string) OpsErrorClassificationInput {

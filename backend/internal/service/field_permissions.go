@@ -258,7 +258,7 @@ func applyOpsEntityFieldPolicy(ref *OpsUnifiedEntityRef, role fieldPermissionRol
 	switch role {
 	case fieldPermissionOwner, fieldPermissionOps:
 		if kind == opsEntityAPIKey && out.Display == "" {
-			out.Display = opsUnifiedAPIKeyDisplayFromID(out.ID)
+			out.Display = opsUnifiedAPIKeyFallbackDisplay()
 		}
 	case fieldPermissionBusiness:
 		if kind == opsEntityUser {
@@ -267,7 +267,7 @@ func applyOpsEntityFieldPolicy(ref *OpsUnifiedEntityRef, role fieldPermissionRol
 		}
 		if kind == opsEntityAPIKey {
 			out.Name = ""
-			out.Display = opsUnifiedAPIKeyDisplayFromID(out.ID)
+			out.Display = opsUnifiedAPIKeyDisplayWithoutName(out.Display)
 		}
 		if kind == opsEntityUpstreamAccount {
 			out.Name = maskUpstreamAccountNameForExport(out.Name)
@@ -280,7 +280,7 @@ func applyOpsEntityFieldPolicy(ref *OpsUnifiedEntityRef, role fieldPermissionRol
 		out.Name = ""
 		out.Email = maskEmailForExport(out.Email)
 		if kind == opsEntityAPIKey {
-			out.Display = opsUnifiedAPIKeyDisplayFromID(out.ID)
+			out.Display = opsUnifiedAPIKeyDisplayWithoutName(out.Display)
 		} else {
 			out.Display = ""
 		}
@@ -298,11 +298,20 @@ func cloneOpsEntityRef(ref *OpsUnifiedEntityRef) *OpsUnifiedEntityRef {
 	return &out
 }
 
-func opsUnifiedAPIKeyDisplayFromID(id int64) string {
-	if id <= 0 {
-		return ""
+func opsUnifiedAPIKeyFallbackDisplay() string {
+	return "API Key"
+}
+
+func opsUnifiedAPIKeyDisplayWithoutName(display string) string {
+	display = strings.TrimSpace(display)
+	marker := " · ****"
+	if index := strings.LastIndex(display, marker); index >= 0 {
+		suffix := strings.TrimSpace(display[index+len(marker):])
+		if suffix != "" {
+			return "API Key" + marker + suffix
+		}
 	}
-	return "API Key #" + opsStrconvFormatInt(id)
+	return opsUnifiedAPIKeyFallbackDisplay()
 }
 
 func sanitizeOpsRawRecord(raw OpsUnifiedErrorRawRecord) OpsUnifiedErrorRawRecord {

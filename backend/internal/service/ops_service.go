@@ -448,6 +448,12 @@ func (s *OpsService) GetUnifiedErrorDetail(ctx context.Context, id int64) (*OpsU
 	if err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(detail.UpstreamModel) == "" {
+		detail.UpstreamModel = strings.TrimSpace(detail.RequestedModel)
+	}
+	if strings.TrimSpace(detail.UpstreamModel) == "" {
+		detail.UpstreamModel = strings.TrimSpace(detail.Model)
+	}
 	if detail.ClientStatusCode == 0 {
 		detail.ClientStatusCode = detail.StatusCode
 	}
@@ -536,7 +542,7 @@ func (s *OpsService) GetUnifiedErrorDetail(ctx context.Context, id int64) (*OpsU
 		},
 		RequestChain: OpsUnifiedErrorRequestChain{
 			User:             opsUnifiedUserRef(detail.UserID, detail.UserEmail),
-			APIKey:           opsUnifiedNameRef(detail.APIKeyID, "", opsUnifiedAPIKeyDisplayFromPtr(detail.APIKeyID)),
+			APIKey:           opsUnifiedNameRef(detail.APIKeyID, "", opsUnifiedAPIKeyDisplay(detail.APIKeyLastFour)),
 			Group:            opsUnifiedNameRef(detail.GroupID, detail.GroupName, ""),
 			Platform:         detail.Platform,
 			Model:            detail.Model,
@@ -982,11 +988,12 @@ func opsUnifiedNameRef(id *int64, name string, display string) *OpsUnifiedEntity
 	return &OpsUnifiedEntityRef{ID: *id, Name: name, Display: display}
 }
 
-func opsUnifiedAPIKeyDisplayFromPtr(id *int64) string {
-	if id == nil || *id <= 0 {
-		return ""
+func opsUnifiedAPIKeyDisplay(lastFour string) string {
+	lastFour = strings.TrimSpace(lastFour)
+	if lastFour == "" {
+		return "API Key"
 	}
-	return "API Key #" + opsStrconvFormatInt(*id)
+	return "API Key · ****" + lastFour
 }
 
 func opsStrconvFormatInt(v int64) string {
@@ -1113,7 +1120,7 @@ func opsUnifiedErrorCSVRow(item *OpsUnifiedErrorItem) []string {
 			apiKey = item.APIKey.Name
 		}
 		if apiKey == "" && item.APIKey.ID > 0 {
-			apiKey = "API Key #" + opsStrconvFormatInt(item.APIKey.ID)
+			apiKey = "API Key"
 		}
 	}
 	groupID, groupName := "", ""

@@ -43,6 +43,7 @@ func TestGetUnifiedErrorDetailBuildsReadableSections(t *testing.T) {
 					UserID:                   &userID,
 					UserEmail:                "user@example.com",
 					APIKeyID:                 &apiKeyID,
+					APIKeyLastFour:           "4321",
 					AccountID:                &accountID,
 					AccountName:              "上游账号A",
 					GroupID:                  &groupID,
@@ -77,6 +78,8 @@ func TestGetUnifiedErrorDetailBuildsReadableSections(t *testing.T) {
 	require.Equal(t, OpsErrorCategoryClient, got.Classification.ErrorCategory)
 	require.Equal(t, OpsClientErrorSubcategoryParameter, *got.Classification.ClientErrorSubcategory)
 	require.Equal(t, int64(6), got.RequestChain.User.ID)
+	require.Equal(t, "API Key · ****4321", got.RequestChain.APIKey.Display)
+	require.Equal(t, "gpt-5.5", got.RequestChain.UpstreamModel)
 	require.Equal(t, int64(88), got.RequestChain.UpstreamAccount.ID)
 	require.Equal(t, 2, got.ImpactScope.SameKindCount)
 	require.Equal(t, 2, got.ImpactScope.AffectedUsers)
@@ -111,4 +114,24 @@ func TestGetUnifiedErrorDetailMarksRecoveredFromClientStatus(t *testing.T) {
 	require.Equal(t, "account_switch", got.Recovery.RecoveryMethod)
 	require.Equal(t, 200, got.Classification.ClientStatusCode)
 	require.Equal(t, 429, got.Classification.StatusCode)
+}
+
+func TestApplyOpsEntityFieldPolicyKeepsAPIKeySuffixWithoutExposingID(t *testing.T) {
+	ref := &OpsUnifiedEntityRef{ID: 42, Name: "production", Display: "production · ****9876"}
+
+	for _, role := range []string{"", "ops"} {
+		got := applyOpsEntityFieldPolicy(ref, normalizeFieldPermissionRole(role), opsEntityAPIKey)
+		require.NotNil(t, got)
+		require.Equal(t, "production · ****9876", got.Display)
+		require.NotContains(t, got.Display, "42")
+	}
+	for _, role := range []string{"business", "support"} {
+		got := applyOpsEntityFieldPolicy(ref, normalizeFieldPermissionRole(role), opsEntityAPIKey)
+		require.NotNil(t, got)
+		require.Equal(t, "API Key · ****9876", got.Display)
+		require.Empty(t, got.Name)
+	}
+
+	withoutSuffix := applyOpsEntityFieldPolicy(&OpsUnifiedEntityRef{ID: 42}, fieldPermissionBusiness, opsEntityAPIKey)
+	require.Equal(t, "API Key", withoutSuffix.Display)
 }

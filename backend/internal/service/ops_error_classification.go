@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
@@ -358,8 +359,8 @@ func clientAuthReason(text string) string {
 func BuildOpsErrorSummary(reason, message, upstreamMessage, upstreamDetail string) string {
 	reason = strings.TrimSpace(reason)
 	for _, candidate := range []string{upstreamDetail, upstreamMessage, message} {
-		candidate = strings.TrimSpace(candidate)
-		if candidate == "" || isGenericOpsSummaryCandidate(candidate) || strings.EqualFold(candidate, reason) {
+		candidate, ok := normalizeOpsSummaryCandidate(candidate)
+		if !ok || strings.EqualFold(candidate, reason) {
 			continue
 		}
 		candidate = strings.TrimSpace(logredact.RedactResponseBody(candidate, 500))
@@ -375,6 +376,83 @@ func BuildOpsErrorSummary(reason, message, upstreamMessage, upstreamDetail strin
 		return truncateOpsSummary(reason)
 	}
 	return "暂无摘要"
+}
+
+// normalizeOpsSummaryCandidate turns provider wrappers and transport diagnostics
+// into a short human-readable detail before it is shown in the error summary.
+// Stored error fields are intentionally treated as untrusted text: only known
+// JSON message fields and known gateway phrases are extracted.
+func normalizeOpsSummaryCandidate(candidate string) (string, bool) {
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" {
+		return "", false
+	}
+	if strings.HasPrefix(candidate, "{") || strings.HasPrefix(candidate, "[") {
+		var value any
+		if json.Unmarshal([]byte(candidate), &value) == nil {
+			if extracted := extractOpsSummaryJSONValue(value); extracted != "" {
+				candidate = extracted
+			} else {
+				return "", false
+			}
+		}
+	}
+	lower := strings.ToLower(candidate)
+	switch {
+	case strings.Contains(lower, "no available account"):
+		return "上游账号池暂无可用账号", true
+	case strings.Contains(lower, "account is busy"):
+		return "上游账号繁忙，请稍后重试", true
+	case strings.Contains(lower, "upstream websocket authentication failed"):
+		return "上游 WebSocket 鉴权失败", true
+	case strings.Contains(lower, "upstream websocket proxy failed"):
+		return "上游 WebSocket 代理连接失败", true
+	case strings.Contains(lower, "failed to deserialize") && strings.Contains(lower, "image_url"):
+		return "上游不支持当前请求中的 image_url 内容格式", true
+	case strings.Contains(lower, "stream must be set to true"):
+		return "上游要求请求使用 stream=true", true
+	case strings.Contains(lower, "response_format") && strings.Contains(lower, "not available"):
+		return "上游暂不支持当前 response_format", true
+	case strings.Contains(lower, "not supported on chat completions endpoint"):
+		return "当前模型不支持 Chat Completions 接口", true
+	case strings.Contains(lower, "safety system") || strings.Contains(lower, "safety policy"):
+		return "请求被上游安全策略拒绝", true
+	case strings.Contains(lower, "no available channel for model"):
+		return candidate, true
+	}
+	if isGenericOpsSummaryCandidate(candidate) || strings.EqualFold(candidate, "unknown") {
+		return "", false
+	}
+	if strings.HasPrefix(lower, "<html") || strings.HasPrefix(lower, "<!doctype") {
+		return "", false
+	}
+	return candidate, true
+}
+
+func extractOpsSummaryJSONValue(value any) string {
+	switch typed := value.(type) {
+	case map[string]any:
+		for _, key := range []string{"message", "detail", "reason", "error"} {
+			if child, ok := typed[key]; ok {
+				if extracted := extractOpsSummaryJSONValue(child); extracted != "" {
+					return extracted
+				}
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if extracted := extractOpsSummaryJSONValue(child); extracted != "" {
+				return extracted
+			}
+		}
+	case string:
+		candidate := strings.TrimSpace(typed)
+		if candidate == "" || isGenericOpsSummaryCandidate(candidate) || strings.EqualFold(candidate, "unknown") {
+			return ""
+		}
+		return candidate
+	}
+	return ""
 }
 
 func isGenericOpsSummaryCandidate(candidate string) bool {

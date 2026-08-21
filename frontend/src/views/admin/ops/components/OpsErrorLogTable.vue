@@ -322,7 +322,7 @@ function getStatusClass(code: number): string {
 function formatRequestAccount(log: OpsErrorLog): string {
   if (log.user_email) return formatUserEmailForRole(log.user_email, viewerRole.value)
   if (log.user_id != null) return `${t('admin.ops.errorLog.userId')} ${log.user_id}`
-  if (log.api_key_id != null) return `${t('admin.ops.errorLog.apiKeyId')} ${log.api_key_id}`
+  if (log.api_key_id != null) return formatAPIKey(log)
   return ''
 }
 
@@ -330,8 +330,13 @@ function formatRequestAccountTooltip(log: OpsErrorLog): string {
   const parts: string[] = []
   if (log.user_email) parts.push(formatUserEmailForRole(log.user_email, viewerRole.value))
   if (log.user_id != null) parts.push(`${t('admin.ops.errorLog.userId')} ${log.user_id}`)
-  if (log.api_key_id != null) parts.push(`${t('admin.ops.errorLog.apiKeyId')} ${log.api_key_id}`)
+  if (log.api_key_id != null) parts.push(formatAPIKey(log))
   return parts.join('\n')
+}
+
+function formatAPIKey(log: OpsErrorLog): string {
+  const suffix = String(log.api_key_last_four || '').trim()
+  return suffix ? `API Key · ****${suffix}` : 'API Key'
 }
 
 function formatUpstreamAccount(log: OpsErrorLog): string {

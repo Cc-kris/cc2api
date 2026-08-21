@@ -92,6 +92,7 @@ WITH base AS (
     COALESCE(u.email, '') AS user_email,
     e.api_key_id,
     COALESCE(ak.name, '') AS api_key_name,
+    CASE WHEN COALESCE(ak.key, '') = '' THEN '' ELSE RIGHT(ak.key, 4) END AS api_key_last_four,
     e.account_id,
     COALESCE(a.name, '') AS account_name,
     e.group_id,
@@ -167,6 +168,7 @@ SELECT
   user_email,
   api_key_id,
   api_key_name,
+  api_key_last_four,
   account_id,
   account_name,
   group_id,
@@ -428,7 +430,7 @@ func unifiedErrorSortExpr(sortBy string) string {
 func scanUnifiedErrorCandidate(rows *sql.Rows) (opsUnifiedErrorCandidate, int, int, error) {
 	var c opsUnifiedErrorCandidate
 	var userID, apiKeyID, accountID, groupID sql.NullInt64
-	var userEmail, apiKeyName, accountName, groupName string
+	var userEmail, apiKeyName, apiKeyLastFour, accountName, groupName string
 	var upstreamStatusCode sql.NullInt64
 	var authLatency, routingLatency, upstreamLatency, responseLatency, ttft sql.NullInt64
 	var sameKindCount int
@@ -458,6 +460,7 @@ func scanUnifiedErrorCandidate(rows *sql.Rows) (opsUnifiedErrorCandidate, int, i
 		&userEmail,
 		&apiKeyID,
 		&apiKeyName,
+		&apiKeyLastFour,
 		&accountID,
 		&accountName,
 		&groupID,
@@ -491,7 +494,13 @@ func scanUnifiedErrorCandidate(rows *sql.Rows) (opsUnifiedErrorCandidate, int, i
 		c.item.User = &service.OpsUnifiedEntityRef{ID: userID.Int64, Email: userEmail}
 	}
 	if apiKeyID.Valid {
-		c.item.APIKey = &service.OpsUnifiedEntityRef{ID: apiKeyID.Int64, Name: apiKeyName, Display: opsUnifiedAPIKeyDisplay(apiKeyID.Int64, apiKeyName)}
+		c.item.APIKey = &service.OpsUnifiedEntityRef{ID: apiKeyID.Int64, Name: apiKeyName, Display: opsUnifiedAPIKeyDisplay(apiKeyName, apiKeyLastFour)}
+	}
+	if strings.TrimSpace(c.upstreamModel) == "" {
+		c.upstreamModel = strings.TrimSpace(c.requestedModel)
+	}
+	if strings.TrimSpace(c.upstreamModel) == "" {
+		c.upstreamModel = strings.TrimSpace(c.item.Model)
 	}
 	if accountID.Valid {
 		c.item.UpstreamAccount = &service.OpsUnifiedEntityRef{ID: accountID.Int64, Name: accountName}
@@ -606,10 +615,15 @@ func unifiedSeverityFor(raw string, statusCode int) string {
 	return "normal"
 }
 
-func opsUnifiedAPIKeyDisplay(id int64, name string) string {
+func opsUnifiedAPIKeyDisplay(name, lastFour string) string {
 	name = strings.TrimSpace(name)
-	if name == "" {
-		return fmt.Sprintf("API Key #%d", id)
+	lastFour = strings.TrimSpace(lastFour)
+	label := name
+	if label == "" {
+		label = "API Key"
 	}
-	return fmt.Sprintf("%s #%d", name, id)
+	if lastFour == "" {
+		return label
+	}
+	return label + " · ****" + lastFour
 }
