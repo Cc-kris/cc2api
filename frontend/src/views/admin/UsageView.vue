@@ -1,6 +1,16 @@
 <template>
   <AppLayout>
-    <div class="space-y-6">
+    <div
+      class="space-y-6"
+      :data-test="usageContentReady ? 'usage-content-ready' : undefined"
+    >
+      <div class="flex flex-wrap gap-2 border-b border-gray-200 dark:border-dark-700" role="tablist" :aria-label="t('usage.tabs.label')">
+        <button v-for="tab in usageTabs" :key="tab.key" type="button" role="tab" :aria-selected="activeTab === tab.key" class="border-b-2 px-3 py-2 text-sm font-medium transition-colors" :class="activeTab === tab.key ? 'border-primary-500 text-primary-700 dark:text-primary-300' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'" @click="activeTab = tab.key">
+          {{ tab.label }}
+        </button>
+      </div>
+
+      <template v-if="activeTab === 'details'">
       <UsageStatsCards :stats="usageStats" />
       <!-- Charts Section -->
       <div class="space-y-4">
@@ -109,8 +119,20 @@
         :default-sort-order="'desc'"
         @sort="handleSort"
         @userClick="handleUserClick"
+        @requestClick="handleRequestClick"
       />
       <Pagination v-if="pagination.total > 0" :page="pagination.page" :total="pagination.total" :page-size="pagination.page_size" @update:page="handlePageChange" @update:pageSize="handlePageSizeChange" />
+      </template>
+
+      <template v-else-if="activeTab === 'errors'">
+        <section class="card p-6">
+          <h2 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('usage.tabs.errors') }}</h2>
+          <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{{ t('usage.tabs.errorsHint') }}</p>
+          <button type="button" class="btn btn-primary mt-4" @click="openOpsErrors">{{ t('usage.tabs.openErrors') }}</button>
+        </section>
+      </template>
+
+      <UserTokenRanking v-else :active="activeTab === 'ranking'" :start-date="rankingRange.start" :end-date="rankingRange.end" @user-click="handleRankingUserClick" />
     </div>
   </AppLayout>
   <UsageExportProgress :show="exportProgress.show" :progress="exportProgress.progress" :current="exportProgress.current" :total="exportProgress.total" :estimated-time="exportProgress.estimatedTime" @cancel="cancelExport" />
@@ -131,7 +153,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch, getCurrentInstance } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { saveAs } from 'file-saver'
 import { useRoute } from 'vue-router'
@@ -146,6 +168,7 @@ import UsageCleanupDialog from '@/components/admin/usage/UsageCleanupDialog.vue'
 import UserBalanceHistoryModal from '@/components/admin/user/UserBalanceHistoryModal.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'; import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'; import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
+import UserTokenRanking from '@/components/admin/usage/UserTokenRanking.vue'
 import Icon from '@/components/icons/Icon.vue'
 import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat, AdminUser } from '@/types'; import type { AdminUsageStatsResponse, AdminUsageQueryParams } from '@/api/admin/usage'
 
@@ -155,8 +178,29 @@ type DistributionMetric = 'tokens' | 'actual_cost'
 type EndpointSource = 'inbound' | 'upstream' | 'path'
 type ModelDistributionSource = 'requested' | 'upstream' | 'mapping'
 const route = useRoute()
+const router = getCurrentInstance()?.proxy?.$router as { push: (location: { path: string; query: Record<string, string> }) => void } | undefined
+type UsageTab = 'details' | 'errors' | 'ranking'
+const activeTab = ref<UsageTab>('details')
+const usageTabs = computed(() => [
+  { key: 'details' as const, label: t('usage.tabs.details') },
+  { key: 'errors' as const, label: t('usage.tabs.errors') },
+  { key: 'ranking' as const, label: t('usage.tabs.ranking') },
+])
+const rankingRange = computed(() => {
+  const end = new Date()
+  const start = new Date(end)
+  start.setDate(start.getDate() - 30)
+  const format = (date: Date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+  return { start: format(start), end: format(end) }
+})
 const usageStats = ref<AdminUsageStatsResponse | null>(null); const usageLogs = ref<AdminUsageLog[]>([]); const loading = ref(false); const exporting = ref(false)
 const trendData = ref<TrendDataPoint[]>([]); const requestedModelStats = ref<ModelStat[]>([]); const upstreamModelStats = ref<ModelStat[]>([]); const mappingModelStats = ref<ModelStat[]>([]); const groupStats = ref<GroupStat[]>([]); const chartsLoading = ref(false); const modelStatsLoading = ref(false); const granularity = ref<'day' | 'hour'>('hour')
+const usageContentReady = ref(false)
 const modelDistributionMetric = ref<DistributionMetric>('tokens')
 const modelDistributionSource = ref<ModelDistributionSource>('requested')
 const loadedModelSources = reactive<Record<ModelDistributionSource, boolean>>({
@@ -200,6 +244,24 @@ const handleUserClick = async (userId: number) => {
   } catch {
     appStore.showError(t('admin.usage.failedToLoadUser'))
   }
+}
+
+const handleRequestClick = (requestId: string) => {
+  if (router) {
+    router.push({ path: '/admin/ops/errors', query: { request_id: requestId } })
+  }
+}
+
+const openOpsErrors = () => {
+  router?.push({ path: '/admin/ops/errors', query: {} })
+}
+
+const handleRankingUserClick = (userId: number) => {
+  activeTab.value = 'details'
+  startDate.value = rankingRange.value.start
+  endDate.value = rankingRange.value.end
+  filters.value = { ...filters.value, user_id: userId, start_date: startDate.value, end_date: endDate.value }
+  applyFilters()
 }
 
 const granularityOptions = computed(() => [{ value: 'day', label: t('admin.dashboard.day') }, { value: 'hour', label: t('admin.dashboard.hour') }])
@@ -533,8 +595,8 @@ const allColumns = computed(() => [
   { key: 'billing_mode', label: t('admin.usage.billingMode'), sortable: false },
   { key: 'tokens', label: t('usage.tokens'), sortable: false },
   { key: 'cost', label: t('usage.cost'), sortable: false },
-  { key: 'first_token', label: t('usage.firstToken'), sortable: false },
-  { key: 'duration', label: t('usage.duration'), sortable: false },
+  { key: 'latency_health', label: `${t('usage.firstToken')} / ${t('usage.duration')}`, sortable: false },
+  { key: 'request_id', label: t('admin.usage.requestId'), sortable: false },
   { key: 'created_at', label: t('usage.time'), sortable: true },
   { key: 'user_agent', label: t('usage.userAgent'), sortable: false },
   { key: 'ip_address', label: t('admin.usage.ipAddress'), sortable: false }
@@ -595,14 +657,20 @@ const handleColumnClickOutside = (event: MouseEvent) => {
   }
 }
 
+const loadInitialUsageContent = async () => {
+  await Promise.all([
+    loadLogs(),
+    loadStats(),
+    loadModelStats(modelDistributionSource.value, true),
+  ])
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 120))
+  await loadChartData()
+  usageContentReady.value = true
+}
+
 onMounted(() => {
   applyRouteQueryFilters()
-  loadLogs()
-  loadStats()
-  loadModelStats(modelDistributionSource.value, true)
-  window.setTimeout(() => {
-    void loadChartData()
-  }, 120)
+  void loadInitialUsageContent()
   loadSavedColumns()
   document.addEventListener('click', handleColumnClickOutside)
 })
