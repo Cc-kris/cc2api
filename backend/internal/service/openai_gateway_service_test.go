@@ -1809,7 +1809,7 @@ func TestForwardRoutesNativeGrokAPIKeyToXAIResponses(t *testing.T) {
 		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
 			`data: {"type":"response.output_text.delta","sequence_number":0,"delta":"ok"}`,
 			"",
-			`data: {"type":"response.completed","sequence_number":1,"response":{"id":"resp_grok_api_key","model":"grok-4.5","usage":{"input_tokens":2,"output_tokens":1}}}`,
+			`data: {"type":"response.completed","sequence_number":1,"response":{"id":"resp_grok_api_key","model":"grok-4.6","usage":{"input_tokens":2,"output_tokens":1}}}`,
 			"",
 		}, "\n"))),
 	}}
@@ -1819,7 +1819,7 @@ func TestForwardRoutesNativeGrokAPIKeyToXAIResponses(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "https://api.x.ai/v1/responses", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer xai-test-key", upstream.lastReq.Header.Get("Authorization"))
-	require.Equal(t, "grok-4.5", gjson.GetBytes(upstream.lastBody, "model").String())
+	require.Equal(t, "grok-4.6", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.Equal(t, "resp_grok_api_key", result.ResponseID)
 }
 

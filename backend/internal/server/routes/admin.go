@@ -434,6 +434,7 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		accounts.GET("/:id/finance/readiness", h.Admin.Finance.AccountReadiness)
 		accounts.DELETE("/:id", h.Admin.Account.Delete)
 		accounts.POST("/:id/test", h.Admin.Account.Test)
+		accounts.GET("/:id/team-workspace", h.Admin.Account.GetTeamWorkspaceBlock)
 		accounts.POST("/:id/recover-state", h.Admin.Account.RecoverState)
 		accounts.POST("/:id/refresh", h.Admin.Account.Refresh)
 		accounts.POST("/:id/set-privacy", h.Admin.Account.SetPrivacy)
@@ -583,6 +584,8 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	{
 		adminSettings.GET("", h.Admin.Setting.GetSettings)
 		adminSettings.PUT("", h.Admin.Setting.UpdateSettings)
+		adminSettings.GET("/x-search-price", h.Admin.Setting.GetXSearchPrice)
+		adminSettings.PUT("/x-search-price", h.Admin.Setting.UpdateXSearchPrice)
 		adminSettings.POST("/test-smtp", h.Admin.Setting.TestSMTPConnection)
 		adminSettings.POST("/send-test-email", h.Admin.Setting.SendTestEmail)
 		adminSettings.GET("/email-templates", h.Admin.Setting.ListEmailTemplates)
@@ -774,6 +777,7 @@ func registerChannelMonitorRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	monitors := admin.Group("/channel-monitors")
 	{
 		monitors.GET("", h.Admin.ChannelMonitor.List)
+		monitors.GET("/accounts", h.Admin.ChannelMonitor.SearchAccounts)
 		monitors.POST("", h.Admin.ChannelMonitor.Create)
 		monitors.POST("/import-accounts", h.Admin.ChannelMonitor.CreateFromAccounts)
 		monitors.GET("/:id", h.Admin.ChannelMonitor.Get)
