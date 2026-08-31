@@ -8949,6 +8949,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		intSnapshotValue(usageLog.VideoDurationSeconds),
 		cost,
 		decimal.NewFromFloat(usageLog.RateMultiplier),
+		s.settingService,
 	)
 	if pricingErr != nil {
 		logger.L().With(zap.String("component", "service.gateway"), zap.String("billing_model", billingModel)).Warn("usage.sales_pricing_snapshot_failed", zap.Error(pricingErr))
@@ -9039,6 +9040,9 @@ func (s *GatewayService) calculateRecordUsageCost(
 // resolveChannelPricing 检查指定模型是否存在渠道级别定价。
 // 返回非 nil 的 ResolvedPricing 表示有渠道定价，nil 表示走默认定价路径。
 func (s *GatewayService) resolveChannelPricing(ctx context.Context, billingModel string, apiKey *APIKey) *ResolvedPricing {
+	if s.settingService != nil && !s.settingService.IsSalesPricingResolverEnabled(ctx) {
+		return nil
+	}
 	if s.resolver == nil || apiKey.Group == nil {
 		return nil
 	}

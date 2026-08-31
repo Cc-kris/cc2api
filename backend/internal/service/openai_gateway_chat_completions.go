@@ -105,6 +105,11 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 		}
 		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
+	// Kimi/Zhipu/DeepSeek are native OpenAI-compatible API-key providers.
+	// They expose Chat Completions rather than the Codex Responses endpoint.
+	if account.Platform == PlatformKimi || account.Platform == PlatformZhipu || account.Platform == PlatformDeepSeek {
+		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
+	}
 
 	compatBody, downgraded, requestedStrict, compatErr := applyOpenAIStructuredOutputCompatibility(body, account)
 	if compatErr != nil {
