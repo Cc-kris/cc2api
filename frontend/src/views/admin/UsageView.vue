@@ -4,12 +4,6 @@
       class="space-y-6"
       :data-test="usageContentReady ? 'usage-content-ready' : undefined"
     >
-      <div class="flex flex-wrap gap-2 border-b border-gray-200 dark:border-dark-700" role="tablist" :aria-label="t('usage.tabs.label')">
-        <button v-for="tab in usageTabs" :key="tab.key" type="button" role="tab" :aria-selected="activeTab === tab.key" class="border-b-2 px-3 py-2 text-sm font-medium transition-colors" :class="activeTab === tab.key ? 'border-primary-500 text-primary-700 dark:text-primary-300' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'" @click="activeTab = tab.key">
-          {{ tab.label }}
-        </button>
-      </div>
-
       <template v-if="activeTab === 'details'">
       <UsageStatsCards :stats="usageStats" />
       <!-- Charts Section -->
@@ -74,6 +68,15 @@
           <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading" />
         </div>
       </div>
+      </template>
+
+      <div class="flex flex-wrap gap-2 border-b border-gray-200 dark:border-dark-700" role="tablist" :aria-label="t('usage.tabs.label')">
+        <button v-for="tab in usageTabs" :key="tab.key" type="button" role="tab" :aria-selected="activeTab === tab.key" class="border-b-2 px-3 py-2 text-sm font-medium transition-colors" :class="activeTab === tab.key ? 'border-primary-500 text-primary-700 dark:text-primary-300' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'" @click="activeTab = tab.key">
+          {{ tab.label }}
+        </button>
+      </div>
+
+      <template v-if="activeTab === 'details'">
       <UsageFilters v-model="filters" :start-date="startDate" :end-date="endDate" :exporting="exporting" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
         <template #after-reset>
           <div class="relative" ref="columnDropdownRef">
@@ -132,7 +135,7 @@
         </section>
       </template>
 
-      <UserTokenRanking v-else :active="activeTab === 'ranking'" :start-date="rankingRange.start" :end-date="rankingRange.end" @user-click="handleRankingUserClick" />
+      <UserTokenRanking v-else :active="activeTab === 'ranking'" :start-date="startDate" :end-date="endDate" :user-id="filters.user_id" @user-click="handleRankingUserClick" />
     </div>
   </AppLayout>
   <UsageExportProgress :show="exportProgress.show" :progress="exportProgress.progress" :current="exportProgress.current" :total="exportProgress.total" :estimated-time="exportProgress.estimatedTime" @cancel="cancelExport" />
@@ -186,18 +189,6 @@ const usageTabs = computed(() => [
   { key: 'errors' as const, label: t('usage.tabs.errors') },
   { key: 'ranking' as const, label: t('usage.tabs.ranking') },
 ])
-const rankingRange = computed(() => {
-  const end = new Date()
-  const start = new Date(end)
-  start.setDate(start.getDate() - 30)
-  const format = (date: Date) => {
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-  }
-  return { start: format(start), end: format(end) }
-})
 const usageStats = ref<AdminUsageStatsResponse | null>(null); const usageLogs = ref<AdminUsageLog[]>([]); const loading = ref(false); const exporting = ref(false)
 const trendData = ref<TrendDataPoint[]>([]); const requestedModelStats = ref<ModelStat[]>([]); const upstreamModelStats = ref<ModelStat[]>([]); const mappingModelStats = ref<ModelStat[]>([]); const groupStats = ref<GroupStat[]>([]); const chartsLoading = ref(false); const modelStatsLoading = ref(false); const granularity = ref<'day' | 'hour'>('hour')
 const usageContentReady = ref(false)
@@ -253,13 +244,13 @@ const handleRequestClick = (requestId: string) => {
 }
 
 const openOpsErrors = () => {
-  router?.push({ path: '/admin/ops/errors', query: {} })
+  const query: Record<string, string> = { start_date: startDate.value, end_date: endDate.value }
+  if (filters.value.user_id != null) query.user_id = String(filters.value.user_id)
+  router?.push({ path: '/admin/ops/errors', query })
 }
 
 const handleRankingUserClick = (userId: number) => {
   activeTab.value = 'details'
-  startDate.value = rankingRange.value.start
-  endDate.value = rankingRange.value.end
   filters.value = { ...filters.value, user_id: userId, start_date: startDate.value, end_date: endDate.value }
   applyFilters()
 }

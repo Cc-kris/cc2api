@@ -2418,7 +2418,7 @@ func (r *stubUsageLogRepo) GetUserUsageTrend(ctx context.Context, startTime, end
 	return nil, errors.New("not implemented")
 }
 
-func (r *stubUsageLogRepo) GetUserSpendingRanking(ctx context.Context, startTime, endTime time.Time, limit int) (*usagestats.UserSpendingRankingResponse, error) {
+func (r *stubUsageLogRepo) GetUserSpendingRanking(ctx context.Context, startTime, endTime time.Time, limit int, userID ...int64) (*usagestats.UserSpendingRankingResponse, error) {
 	return nil, errors.New("not implemented")
 }
 

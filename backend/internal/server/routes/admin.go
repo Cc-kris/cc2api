@@ -99,9 +99,6 @@ func RegisterAdminRoutes(
 		// 邀请返利（专属用户管理）
 		registerAffiliateRoutes(admin, h)
 
-		// 缓存管理
-		registerCacheManagementRoutes(admin, h)
-
 		// 上游维护与财务统计
 		registerUpstreamRoutes(admin, h)
 		registerFinanceRoutes(admin, h)
@@ -162,27 +159,6 @@ func registerFinanceRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		finance.POST("/exports", h.Admin.Finance.ExportCreate)
 		finance.GET("/exports/:job_id", h.Admin.Finance.ExportGet)
 		finance.GET("/exports/:job_id/download", h.Admin.Finance.ExportDownload)
-	}
-}
-
-func registerCacheManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
-	cache := admin.Group("/cache")
-	{
-		cache.GET("/config", h.Admin.CacheConfig.GetConfig)
-		cache.PUT("/config", h.Admin.CacheConfig.UpdateConfig)
-		cache.GET("/advanced-config", h.Admin.CacheConfig.GetAdvancedConfig)
-		cache.PUT("/advanced-config", h.Admin.CacheConfig.UpdateAdvancedConfig)
-		cache.GET("/semantic-config", h.Admin.CacheConfig.GetSemanticConfig)
-		cache.PUT("/semantic-config", h.Admin.CacheConfig.UpdateSemanticConfig)
-		cache.POST("/semantic-config/test", h.Admin.CacheConfig.TestSemanticConfig)
-		cache.GET("/advanced-stats", h.Admin.CacheStats.GetAdvancedStats)
-		cache.GET("/stats", h.Admin.CacheStats.GetStats)
-		cache.GET("/stats/export", h.Admin.CacheStats.Export)
-		cache.POST("/clear", h.Admin.CacheConfig.Clear)
-		cache.GET("/clear-audits", h.Admin.CacheConfig.ListClearAudits)
-		cache.GET("/semantic-audits", h.Admin.CacheConfig.ListSemanticAudits)
-		cache.POST("/semantic-audits/:id/review", h.Admin.CacheConfig.ReviewSemanticAudit)
-		cache.POST("/semantic-audits/:id/feedback", h.Admin.CacheConfig.FeedbackSemanticAudit)
 	}
 }
 
@@ -606,8 +582,6 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		// 流超时处理配置
 		adminSettings.GET("/stream-timeout", h.Admin.Setting.GetStreamTimeoutSettings)
 		adminSettings.PUT("/stream-timeout", h.Admin.Setting.UpdateStreamTimeoutSettings)
-		// 本地响应缓存统计
-		adminSettings.GET("/local-response-cache/stats", h.OpenAIGateway.LocalResponseCacheStats)
 		// 请求整流器配置
 		adminSettings.GET("/rectifier", h.Admin.Setting.GetRectifierSettings)
 		adminSettings.PUT("/rectifier", h.Admin.Setting.UpdateRectifierSettings)

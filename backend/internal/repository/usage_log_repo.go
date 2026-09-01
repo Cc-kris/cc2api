@@ -2890,12 +2890,23 @@ func (r *usageLogRepository) GetUserUsageTrend(ctx context.Context, startTime, e
 }
 
 // GetUserSpendingRanking returns user spending ranking aggregated within the time range.
-func (r *usageLogRepository) GetUserSpendingRanking(ctx context.Context, startTime, endTime time.Time, limit int) (result *UserSpendingRankingResponse, err error) {
+func (r *usageLogRepository) GetUserSpendingRanking(ctx context.Context, startTime, endTime time.Time, limit int, userIDs ...int64) (result *UserSpendingRankingResponse, err error) {
 	if limit <= 0 {
 		limit = 12
 	}
 
-	query := `
+	userFilter := ""
+	args := []any{startTime, endTime}
+	if len(userIDs) > 0 && userIDs[0] > 0 {
+		userFilter = " AND u.user_id = $3"
+		args = append(args, userIDs[0])
+	}
+	limitPlaceholder := "$3"
+	if userFilter != "" {
+		limitPlaceholder = "$4"
+	}
+	args = append(args, limit)
+	query := fmt.Sprintf(`
 		WITH user_spend AS (
 			SELECT
 				u.user_id,
@@ -2905,7 +2916,7 @@ func (r *usageLogRepository) GetUserSpendingRanking(ctx context.Context, startTi
 				COALESCE(SUM(u.input_tokens + u.output_tokens + u.cache_creation_tokens + u.cache_read_tokens), 0) as tokens
 			FROM usage_logs u
 			LEFT JOIN users us ON u.user_id = us.id
-			WHERE u.created_at >= $1 AND u.created_at < $2
+			WHERE u.created_at >= $1 AND u.created_at < $2%s
 			GROUP BY u.user_id, us.email
 		),
 		ranked AS (
@@ -2920,7 +2931,7 @@ func (r *usageLogRepository) GetUserSpendingRanking(ctx context.Context, startTi
 				COALESCE(SUM(tokens) OVER (), 0) as total_tokens
 			FROM user_spend
 			ORDER BY tokens DESC, actual_cost DESC, user_id ASC
-			LIMIT $3
+			LIMIT %s
 		)
 		SELECT
 			user_id,
@@ -2933,9 +2944,9 @@ func (r *usageLogRepository) GetUserSpendingRanking(ctx context.Context, startTi
 			total_tokens
 		FROM ranked
 		ORDER BY tokens DESC, actual_cost DESC, user_id ASC
-	`
+	`, userFilter, limitPlaceholder)
 
-	rows, err := r.sql.QueryContext(ctx, query, startTime, endTime, limit)
+	rows, err := r.sql.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
