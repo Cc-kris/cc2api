@@ -52,7 +52,7 @@ import { useI18n } from 'vue-i18n'
 import { getUserSpendingRanking } from '@/api/admin/dashboard'
 import type { UserSpendingRankingItem } from '@/types'
 
-const props = defineProps<{ startDate: string; endDate: string; active?: boolean }>()
+const props = defineProps<{ startDate: string; endDate: string; userId?: number; active?: boolean }>()
 defineEmits<{ (event: 'userClick', userId: number): void }>()
 const { t } = useI18n()
 const items = ref<UserSpendingRankingItem[]>([])
@@ -67,7 +67,7 @@ const load = async () => {
   loading.value = true
   error.value = false
   try {
-    const response = await getUserSpendingRanking({ start_date: props.startDate, end_date: props.endDate, limit: 50 })
+    const response = await getUserSpendingRanking({ start_date: props.startDate, end_date: props.endDate, user_id: props.userId, limit: 50 })
     items.value = [...(response.ranking || [])].sort((a, b) => b.tokens - a.tokens || a.user_id - b.user_id)
     loaded.value = true
   } catch {
@@ -77,7 +77,9 @@ const load = async () => {
   }
 }
 
-watch(() => props.active, (active) => {
-  if (active && !loaded.value) void load()
+watch(() => [props.active, props.startDate, props.endDate, props.userId] as const, ([active], previous) => {
+  if (!active) return
+  const filterChanged = previous && (previous[1] !== props.startDate || previous[2] !== props.endDate || previous[3] !== props.userId)
+  if (!loaded.value || filterChanged) void load()
 }, { immediate: true })
 </script>
