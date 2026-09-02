@@ -1345,6 +1345,35 @@ func (s *OpenAIGatewayService) GenerateSessionHash(c *gin.Context, body []byte) 
 	return currentHash
 }
 
+// GenerateHTTPResponsesSessionHash builds the sticky routing key for HTTP
+// Responses requests. Explicit client session signals retain their existing
+// semantics. When a client omits those signals, route by its stable
+// prompt prefix instead of the first user turn so later turns stay on the
+// upstream account that owns the prompt cache.
+//
+// The API key and model are included only for this compatibility fallback:
+// they prevent unrelated tenants or model families from sharing a route while
+// leaving legacy explicit-session bindings untouched.
+func (s *OpenAIGatewayService) GenerateHTTPResponsesSessionHash(c *gin.Context, body []byte) string {
+	if c == nil {
+		return ""
+	}
+	if explicitOpenAIRequestSessionID(c, body) != "" {
+		return s.GenerateSessionHash(c, body)
+	}
+
+	stablePrefix := deriveOpenAIStablePrefixSessionSeed(body)
+	if stablePrefix == "" {
+		return s.GenerateSessionHash(c, body)
+	}
+
+	model := strings.TrimSpace(gjson.GetBytes(body, "model").String())
+	seed := fmt.Sprintf("openai_http_responses_cache_affinity:v1:key=%d:model=%s:%s", getAPIKeyIDFromContext(c), model, stablePrefix)
+	currentHash, legacyHash := deriveOpenAISessionHashes(seed)
+	attachOpenAILegacySessionHashToGin(c, legacyHash)
+	return currentHash
+}
+
 // GenerateSessionHashWithFallback 先按常规信号生成会话哈希；
 // 当未携带 session_id/conversation_id/prompt_cache_key 时，使用 fallbackSeed 生成稳定哈希。
 // 该方法用于 WS ingress，避免会话信号缺失时发生跨账号漂移。

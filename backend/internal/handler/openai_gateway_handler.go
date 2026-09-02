@@ -422,8 +422,10 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 
-	// Generate session hash (header first; fallback to prompt_cache_key)
-	sessionHash := h.gatewayService.GenerateSessionHash(c, sessionHashBody)
+	// HTTP Responses requests without an explicit client session use a stable
+	// prompt-prefix affinity key. This keeps later turns on the account whose
+	// upstream prompt cache was populated by the first turn.
+	sessionHash := h.gatewayService.GenerateHTTPResponsesSessionHash(c, sessionHashBody)
 	requireCompact := isOpenAIRemoteCompactPath(c) || compactionContext.NativeResponses
 
 	maxAccountSwitches := h.maxAccountSwitches
