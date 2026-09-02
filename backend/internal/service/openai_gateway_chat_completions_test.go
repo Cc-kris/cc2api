@@ -753,7 +753,7 @@ func TestForwardAsChatCompletions_DoneSentinelWithoutTerminalReturnsError(t *tes
 	require.Zero(t, result.Usage.OutputTokens)
 }
 
-func TestForwardAsChatCompletions_UpstreamRequestIgnoresClientCancel(t *testing.T) {
+func TestForwardAsChatCompletions_UpstreamRequestCancelsBeforeResponseStarts(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	rec := httptest.NewRecorder()
@@ -793,5 +793,5 @@ func TestForwardAsChatCompletions_UpstreamRequestIgnoresClientCancel(t *testing.
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, upstream.lastReq)
-	require.NoError(t, upstream.lastReq.Context().Err())
+	require.ErrorIs(t, upstream.lastReq.Context().Err(), context.Canceled)
 }

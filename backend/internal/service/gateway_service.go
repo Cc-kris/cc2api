@@ -13,6 +13,7 @@ import (
 	mathrand "math/rand"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -58,6 +59,7 @@ const (
 	defaultUserGroupRateCacheTTL = 30 * time.Second
 	defaultModelsListCacheTTL    = 15 * time.Second
 	postUsageBillingTimeout      = 15 * time.Second
+	detachedUpstreamMaxLifetime  = 30 * time.Minute
 	debugGatewayBodyEnv          = "SUB2API_DEBUG_GATEWAY_BODY"
 )
 
@@ -8559,7 +8561,7 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
 	//   - DB 异步:在独立 goroutine 中走 detached context,失败用 ALERT log 触发 oncall 对账
 	if !p.IsSubscriptionBill && p.Platform != "" && p.Cost.ActualCost > 0 && p.User != nil && deps.userPlatformQuotaRepo != nil {
 		deps.billingCacheService.IncrementUserPlatformQuotaUsage(p.User.ID, p.Platform, p.Cost.ActualCost)
-		dbCtx, dbCancel := detachUpstreamContext(ctx)
+		dbCtx, dbCancel := detachedBillingContext(ctx)
 		userID, platform, cost := p.User.ID, p.Platform, p.Cost.ActualCost
 		go func() {
 			defer func() {
@@ -8623,20 +8625,74 @@ func detachedBillingContext(ctx context.Context) (context.Context, context.Cance
 }
 
 func detachStreamUpstreamContext(ctx context.Context, stream bool) (context.Context, context.CancelFunc) {
-	if ctx == nil {
-		return context.Background(), func() {}
-	}
 	if !stream {
+		if ctx == nil {
+			return context.Background(), func() {}
+		}
 		return ctx, func() {}
 	}
-	return context.WithoutCancel(ctx), func() {}
+	return detachUpstreamContext(ctx)
 }
 
 func detachUpstreamContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return detachUpstreamContextWithTimeout(ctx, detachedUpstreamMaxLifetime)
+}
+
+type detachedUpstreamLifecycle struct {
+	cancel           context.CancelFunc
+	stopParentCancel func() bool
+}
+
+type detachedUpstreamLifecycleKey struct{}
+
+func detachUpstreamContextWithTimeout(ctx context.Context, maxLifetime time.Duration) (context.Context, context.CancelFunc) {
 	if ctx == nil {
-		return context.Background(), func() {}
+		ctx = context.Background()
 	}
-	return context.WithoutCancel(ctx), func() {}
+	if maxLifetime <= 0 {
+		maxLifetime = detachedUpstreamMaxLifetime
+	}
+
+	detachedCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), maxLifetime)
+	lifecycle := &detachedUpstreamLifecycle{cancel: cancel}
+	lifecycle.stopParentCancel = context.AfterFunc(ctx, cancel)
+
+	trace := &httptrace.ClientTrace{
+		GotFirstResponseByte: lifecycle.markResponseStarted,
+	}
+	detachedCtx = httptrace.WithClientTrace(detachedCtx, trace)
+	detachedCtx = context.WithValue(detachedCtx, detachedUpstreamLifecycleKey{}, lifecycle)
+
+	// Existing call sites invoke the returned function immediately after request
+	// construction. The HTTP upstream owns final cleanup after it adopts the
+	// context; request-context cancellation covers construction failures.
+	return detachedCtx, func() {}
+}
+
+func (l *detachedUpstreamLifecycle) markResponseStarted() {
+	if l == nil || l.stopParentCancel == nil {
+		return
+	}
+	l.stopParentCancel()
+}
+
+func (l *detachedUpstreamLifecycle) release() {
+	if l == nil {
+		return
+	}
+	l.markResponseStarted()
+	l.cancel()
+}
+
+// ReleaseDetachedUpstreamContext releases the bounded lifecycle attached by
+// detachUpstreamContext. HTTP upstream implementations call it when the
+// response body closes or the request fails before a response is available.
+func ReleaseDetachedUpstreamContext(ctx context.Context) {
+	if ctx == nil {
+		return
+	}
+	lifecycle, _ := ctx.Value(detachedUpstreamLifecycleKey{}).(*detachedUpstreamLifecycle)
+	lifecycle.release()
 }
 
 // billingDeps 扣费逻辑依赖的服务（由各 gateway service 提供）
