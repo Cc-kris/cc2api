@@ -1349,7 +1349,10 @@ func (s *OpenAIGatewayService) GenerateSessionHash(c *gin.Context, body []byte) 
 // OpenAI-compatible requests. Explicit client session signals retain their
 // existing semantics. When a client omits those signals, route by its stable
 // prompt prefix instead of the first user turn so later turns stay on the
-// upstream account that owns the prompt cache.
+// upstream account that owns the prompt cache. If no reusable prefix exists
+// (for example, a client sends only the current user turn), fall back to a
+// deterministic API-key/model affinity key rather than hashing request
+// content, which would create a new sticky account on every turn.
 //
 // The API key and model are included only for this compatibility fallback:
 // they prevent unrelated tenants or model families from sharing a route while
@@ -1363,12 +1366,18 @@ func (s *OpenAIGatewayService) GenerateHTTPStableSessionHash(c *gin.Context, bod
 	}
 
 	stablePrefix := deriveOpenAIStablePrefixSessionSeed(body)
+	apiKeyID := getAPIKeyIDFromContext(c)
+	model := strings.TrimSpace(gjson.GetBytes(body, "model").String())
 	if stablePrefix == "" {
-		return s.GenerateSessionHash(c, body)
+		// Authenticated HTTP requests always carry an API key. Do not create a
+		// shared anonymous affinity bucket when the middleware context is absent.
+		if apiKeyID <= 0 {
+			return ""
+		}
+		stablePrefix = "fallback"
 	}
 
-	model := strings.TrimSpace(gjson.GetBytes(body, "model").String())
-	seed := fmt.Sprintf("openai_http_responses_cache_affinity:v1:key=%d:model=%s:%s", getAPIKeyIDFromContext(c), model, stablePrefix)
+	seed := fmt.Sprintf("openai_http_responses_cache_affinity:v2:key=%d:model=%s:%s", apiKeyID, model, stablePrefix)
 	currentHash, legacyHash := deriveOpenAISessionHashes(seed)
 	attachOpenAILegacySessionHashToGin(c, legacyHash)
 	return currentHash
