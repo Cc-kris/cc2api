@@ -1032,6 +1032,8 @@ export default {
     cost: '费用',
     firstToken: '首 Token',
     duration: '耗时',
+    firstTokenShort: '首字',
+    durationTotal: '总耗时',
     time: '时间',
     ws: 'WS',
     stream: '流式',

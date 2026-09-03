@@ -759,6 +759,8 @@ export default {
     "cost": "Kosten",
     "firstToken": "Erster Token",
     "duration": "Dauer",
+    "firstTokenShort": "Erster",
+    "durationTotal": "Gesamt",
     "time": "Uhrzeit",
     "ws": "WS",
     "stream": "Strom",

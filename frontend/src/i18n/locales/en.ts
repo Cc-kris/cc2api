@@ -1026,6 +1026,8 @@ export default {
     cost: 'Cost',
     firstToken: 'First Token',
     duration: 'Duration',
+    firstTokenShort: 'First',
+    durationTotal: 'Total',
     time: 'Time',
     ws: 'WS',
     stream: 'Stream',

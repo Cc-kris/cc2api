@@ -302,7 +302,12 @@
           </template>
 
           <template #cell-latency_health="{ row }">
-            <UsageLatencyHealth :first-token-ms="row.first_token_ms" :duration-ms="row.duration_ms" />
+            <UsageLatencyHealth
+              :first-token-ms="row.first_token_ms"
+              :duration-ms="row.duration_ms"
+              :first-token-label="t('usage.firstTokenShort')"
+              :duration-label="t('usage.durationTotal')"
+            />
           </template>
 
           <template #cell-created_at="{ value }">

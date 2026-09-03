@@ -11,9 +11,19 @@ describe('UsageLatencyHealth', () => {
 
     expect(wrapper.text()).toContain('1.2s')
     expect(wrapper.text()).toContain('2.4s')
-    expect(wrapper.find('.bg-emerald-500').exists()).toBe(true)
-    expect(wrapper.find('.h-full').attributes('style')).toContain('width: 8%')
+    expect(wrapper.findAll('.bg-emerald-500')).toHaveLength(2)
     expect(wrapper.attributes('title')).toBe('TTFT 1.2s · Total 2.4s')
+  })
+
+  it('colors first token independently from total duration', () => {
+    const wrapper = mount(UsageLatencyHealth, {
+      props: { firstTokenMs: 1200, durationMs: 11000 },
+    })
+
+    expect(wrapper.find('.text-emerald-500').exists()).toBe(true)
+    expect(wrapper.find('.text-amber-500').exists()).toBe(true)
+    expect(wrapper.findAll('.bg-emerald-500')).toHaveLength(1)
+    expect(wrapper.findAll('.bg-amber-500')).toHaveLength(1)
   })
 
   it('marks failed and missing requests distinctly', () => {
@@ -26,8 +36,7 @@ describe('UsageLatencyHealth', () => {
     const missing = mount(UsageLatencyHealth, {
       props: { firstTokenMs: undefined, durationMs: undefined },
     })
-    expect(missing.text()).toBe('-/-')
+    expect(missing.text()).toBe('首字-总耗时-')
     expect(missing.find('.bg-gray-300').exists()).toBe(true)
-    expect(missing.find('.h-full').attributes('style')).toContain('width: 0%')
   })
 })

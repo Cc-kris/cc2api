@@ -759,6 +759,8 @@ export default {
     "cost": "Стоимость",
     "firstToken": "Первый токен",
     "duration": "Продолжительность",
+    "firstTokenShort": "Первый",
+    "durationTotal": "Итого",
     "time": "Время",
     "ws": "WS",
     "stream": "поток",

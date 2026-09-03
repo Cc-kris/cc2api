@@ -161,7 +161,13 @@
         </template>
 
         <template #cell-latency_health="{ row }">
-          <UsageLatencyHealth :first-token-ms="row.first_token_ms" :duration-ms="row.duration_ms" :is-error="(row.status_code ?? 200) >= 400 || !!row.error_message" />
+          <UsageLatencyHealth
+            :first-token-ms="row.first_token_ms"
+            :duration-ms="row.duration_ms"
+            :is-error="(row.status_code ?? 200) >= 400 || !!row.error_message"
+            :first-token-label="t('usage.firstTokenShort')"
+            :duration-label="t('usage.durationTotal')"
+          />
         </template>
 
         <template #cell-request_id="{ row }">

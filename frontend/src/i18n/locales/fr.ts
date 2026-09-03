@@ -759,6 +759,8 @@ export default {
     "cost": "Coût",
     "firstToken": "Premier jeton",
     "duration": "Durée",
+    "firstTokenShort": "Premier",
+    "durationTotal": "Total",
     "time": "Heure",
     "ws": "WS",
     "stream": "Flux",
