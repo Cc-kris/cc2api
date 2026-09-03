@@ -1345,16 +1345,16 @@ func (s *OpenAIGatewayService) GenerateSessionHash(c *gin.Context, body []byte) 
 	return currentHash
 }
 
-// GenerateHTTPResponsesSessionHash builds the sticky routing key for HTTP
-// Responses requests. Explicit client session signals retain their existing
-// semantics. When a client omits those signals, route by its stable
+// GenerateHTTPStableSessionHash builds the sticky routing key for HTTP
+// OpenAI-compatible requests. Explicit client session signals retain their
+// existing semantics. When a client omits those signals, route by its stable
 // prompt prefix instead of the first user turn so later turns stay on the
 // upstream account that owns the prompt cache.
 //
 // The API key and model are included only for this compatibility fallback:
 // they prevent unrelated tenants or model families from sharing a route while
 // leaving legacy explicit-session bindings untouched.
-func (s *OpenAIGatewayService) GenerateHTTPResponsesSessionHash(c *gin.Context, body []byte) string {
+func (s *OpenAIGatewayService) GenerateHTTPStableSessionHash(c *gin.Context, body []byte) string {
 	if c == nil {
 		return ""
 	}
@@ -1372,6 +1372,12 @@ func (s *OpenAIGatewayService) GenerateHTTPResponsesSessionHash(c *gin.Context, 
 	currentHash, legacyHash := deriveOpenAISessionHashes(seed)
 	attachOpenAILegacySessionHashToGin(c, legacyHash)
 	return currentHash
+}
+
+// GenerateHTTPResponsesSessionHash is kept as a compatibility wrapper for
+// callers and tests that use the original Responses-specific name.
+func (s *OpenAIGatewayService) GenerateHTTPResponsesSessionHash(c *gin.Context, body []byte) string {
+	return s.GenerateHTTPStableSessionHash(c, body)
 }
 
 // GenerateSessionHashWithFallback 先按常规信号生成会话哈希；

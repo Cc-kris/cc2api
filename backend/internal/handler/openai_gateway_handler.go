@@ -425,7 +425,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	// HTTP Responses requests without an explicit client session use a stable
 	// prompt-prefix affinity key. This keeps later turns on the account whose
 	// upstream prompt cache was populated by the first turn.
-	sessionHash := h.gatewayService.GenerateHTTPResponsesSessionHash(c, sessionHashBody)
+	sessionHash := h.gatewayService.GenerateHTTPStableSessionHash(c, sessionHashBody)
 	requireCompact := isOpenAIRemoteCompactPath(c) || compactionContext.NativeResponses
 
 	maxAccountSwitches := h.maxAccountSwitches

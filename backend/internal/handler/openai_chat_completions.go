@@ -137,7 +137,9 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		return
 	}
 
-	sessionHash := h.gatewayService.GenerateSessionHash(c, body)
+	// Keep HTTP Chat Completions turns on the account that owns the upstream
+	// prompt cache when the client does not provide an explicit session key.
+	sessionHash := h.gatewayService.GenerateHTTPStableSessionHash(c, body)
 	promptCacheKey := h.gatewayService.ExtractSessionID(c, body)
 
 	maxAccountSwitches := h.maxAccountSwitches
