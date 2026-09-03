@@ -2618,6 +2618,33 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		}
 	}
 
+	// Native API-key Responses requests do not go through the Chat Completions
+	// compatibility injector. Provide the same stable prompt identity here so
+	// the upstream can populate and reuse its prompt cache across turns.
+	if promptCacheKey == "" && account.Type == AccountTypeAPIKey &&
+		account.Platform == PlatformOpenAI && !isOpenAIResponsesCompactPath(c) {
+		cacheKeyBody := body
+		if bodyModified {
+			// Use the effective request after gateway normalization (for example,
+			// the default instructions) so the key describes the prefix actually
+			// sent upstream.
+			if effectiveBody, marshalErr := json.Marshal(reqBody); marshalErr == nil {
+				cacheKeyBody = effectiveBody
+			}
+		}
+		if generatedKey := deriveResponsesPromptCacheKey(cacheKeyBody, upstreamModel, getAPIKeyIDFromContext(c)); generatedKey != "" {
+			promptCacheKey = generatedKey
+			reqBody["prompt_cache_key"] = generatedKey
+			bodyModified = true
+			markPatchSet("prompt_cache_key", generatedKey)
+			logger.L().Debug("openai responses: prompt cache key auto-injected",
+				zap.Int64("account_id", account.ID),
+				zap.String("model", upstreamModel),
+				zap.String("prompt_cache_key_sha256", hashSensitiveValueForLog(generatedKey)),
+			)
+		}
+	}
+
 	// Handle max_output_tokens based on platform and account type
 	if !isCodexCLI {
 		if maxOutputTokens, hasMaxOutputTokens := reqBody["max_output_tokens"]; hasMaxOutputTokens {
