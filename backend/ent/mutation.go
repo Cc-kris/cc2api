@@ -79787,6 +79787,8 @@ type UsageUpstreamAttemptMutation struct {
 	addoutput_tokens                 *int64
 	cache_read_tokens                *int64
 	addcache_read_tokens             *int64
+	cache_creation_tokens            *int64
+	addcache_creation_tokens         *int64
 	cache_creation_5m_tokens         *int64
 	addcache_creation_5m_tokens      *int64
 	cache_creation_1h_tokens         *int64
@@ -80448,6 +80450,62 @@ func (m *UsageUpstreamAttemptMutation) AddedCacheReadTokens() (r int64, exists b
 func (m *UsageUpstreamAttemptMutation) ResetCacheReadTokens() {
 	m.cache_read_tokens = nil
 	m.addcache_read_tokens = nil
+}
+
+// SetCacheCreationTokens sets the "cache_creation_tokens" field.
+func (m *UsageUpstreamAttemptMutation) SetCacheCreationTokens(i int64) {
+	m.cache_creation_tokens = &i
+	m.addcache_creation_tokens = nil
+}
+
+// CacheCreationTokens returns the value of the "cache_creation_tokens" field in the mutation.
+func (m *UsageUpstreamAttemptMutation) CacheCreationTokens() (r int64, exists bool) {
+	v := m.cache_creation_tokens
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCacheCreationTokens returns the old "cache_creation_tokens" field's value of the UsageUpstreamAttempt entity.
+// If the UsageUpstreamAttempt object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageUpstreamAttemptMutation) OldCacheCreationTokens(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCacheCreationTokens is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCacheCreationTokens requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCacheCreationTokens: %w", err)
+	}
+	return oldValue.CacheCreationTokens, nil
+}
+
+// AddCacheCreationTokens adds i to the "cache_creation_tokens" field.
+func (m *UsageUpstreamAttemptMutation) AddCacheCreationTokens(i int64) {
+	if m.addcache_creation_tokens != nil {
+		*m.addcache_creation_tokens += i
+	} else {
+		m.addcache_creation_tokens = &i
+	}
+}
+
+// AddedCacheCreationTokens returns the value that was added to the "cache_creation_tokens" field in this mutation.
+func (m *UsageUpstreamAttemptMutation) AddedCacheCreationTokens() (r int64, exists bool) {
+	v := m.addcache_creation_tokens
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCacheCreationTokens resets all changes to the "cache_creation_tokens" field.
+func (m *UsageUpstreamAttemptMutation) ResetCacheCreationTokens() {
+	m.cache_creation_tokens = nil
+	m.addcache_creation_tokens = nil
 }
 
 // SetCacheCreation5mTokens sets the "cache_creation_5m_tokens" field.
@@ -81635,7 +81693,7 @@ func (m *UsageUpstreamAttemptMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageUpstreamAttemptMutation) Fields() []string {
-	fields := make([]string, 0, 31)
+	fields := make([]string, 0, 32)
 	if m.usage_log_id != nil {
 		fields = append(fields, usageupstreamattempt.FieldUsageLogID)
 	}
@@ -81665,6 +81723,9 @@ func (m *UsageUpstreamAttemptMutation) Fields() []string {
 	}
 	if m.cache_read_tokens != nil {
 		fields = append(fields, usageupstreamattempt.FieldCacheReadTokens)
+	}
+	if m.cache_creation_tokens != nil {
+		fields = append(fields, usageupstreamattempt.FieldCacheCreationTokens)
 	}
 	if m.cache_creation_5m_tokens != nil {
 		fields = append(fields, usageupstreamattempt.FieldCacheCreation5mTokens)
@@ -81757,6 +81818,8 @@ func (m *UsageUpstreamAttemptMutation) Field(name string) (ent.Value, bool) {
 		return m.OutputTokens()
 	case usageupstreamattempt.FieldCacheReadTokens:
 		return m.CacheReadTokens()
+	case usageupstreamattempt.FieldCacheCreationTokens:
+		return m.CacheCreationTokens()
 	case usageupstreamattempt.FieldCacheCreation5mTokens:
 		return m.CacheCreation5mTokens()
 	case usageupstreamattempt.FieldCacheCreation1hTokens:
@@ -81828,6 +81891,8 @@ func (m *UsageUpstreamAttemptMutation) OldField(ctx context.Context, name string
 		return m.OldOutputTokens(ctx)
 	case usageupstreamattempt.FieldCacheReadTokens:
 		return m.OldCacheReadTokens(ctx)
+	case usageupstreamattempt.FieldCacheCreationTokens:
+		return m.OldCacheCreationTokens(ctx)
 	case usageupstreamattempt.FieldCacheCreation5mTokens:
 		return m.OldCacheCreation5mTokens(ctx)
 	case usageupstreamattempt.FieldCacheCreation1hTokens:
@@ -81948,6 +82013,13 @@ func (m *UsageUpstreamAttemptMutation) SetField(name string, value ent.Value) er
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCacheReadTokens(v)
+		return nil
+	case usageupstreamattempt.FieldCacheCreationTokens:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCacheCreationTokens(v)
 		return nil
 	case usageupstreamattempt.FieldCacheCreation5mTokens:
 		v, ok := value.(int64)
@@ -82125,6 +82197,9 @@ func (m *UsageUpstreamAttemptMutation) AddedFields() []string {
 	if m.addcache_read_tokens != nil {
 		fields = append(fields, usageupstreamattempt.FieldCacheReadTokens)
 	}
+	if m.addcache_creation_tokens != nil {
+		fields = append(fields, usageupstreamattempt.FieldCacheCreationTokens)
+	}
 	if m.addcache_creation_5m_tokens != nil {
 		fields = append(fields, usageupstreamattempt.FieldCacheCreation5mTokens)
 	}
@@ -82180,6 +82255,8 @@ func (m *UsageUpstreamAttemptMutation) AddedField(name string) (ent.Value, bool)
 		return m.AddedOutputTokens()
 	case usageupstreamattempt.FieldCacheReadTokens:
 		return m.AddedCacheReadTokens()
+	case usageupstreamattempt.FieldCacheCreationTokens:
+		return m.AddedCacheCreationTokens()
 	case usageupstreamattempt.FieldCacheCreation5mTokens:
 		return m.AddedCacheCreation5mTokens()
 	case usageupstreamattempt.FieldCacheCreation1hTokens:
@@ -82259,6 +82336,13 @@ func (m *UsageUpstreamAttemptMutation) AddField(name string, value ent.Value) er
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddCacheReadTokens(v)
+		return nil
+	case usageupstreamattempt.FieldCacheCreationTokens:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCacheCreationTokens(v)
 		return nil
 	case usageupstreamattempt.FieldCacheCreation5mTokens:
 		v, ok := value.(int64)
@@ -82486,6 +82570,9 @@ func (m *UsageUpstreamAttemptMutation) ResetField(name string) error {
 		return nil
 	case usageupstreamattempt.FieldCacheReadTokens:
 		m.ResetCacheReadTokens()
+		return nil
+	case usageupstreamattempt.FieldCacheCreationTokens:
+		m.ResetCacheCreationTokens()
 		return nil
 	case usageupstreamattempt.FieldCacheCreation5mTokens:
 		m.ResetCacheCreation5mTokens()

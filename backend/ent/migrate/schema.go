@@ -2546,6 +2546,7 @@ var (
 		{Name: "input_tokens", Type: field.TypeInt64, Default: 0},
 		{Name: "output_tokens", Type: field.TypeInt64, Default: 0},
 		{Name: "cache_read_tokens", Type: field.TypeInt64, Default: 0},
+		{Name: "cache_creation_tokens", Type: field.TypeInt64, Default: 0},
 		{Name: "cache_creation_5m_tokens", Type: field.TypeInt64, Default: 0},
 		{Name: "cache_creation_1h_tokens", Type: field.TypeInt64, Default: 0},
 		{Name: "request_count", Type: field.TypeInt64, Default: 0},
@@ -2587,7 +2588,7 @@ var (
 			{
 				Name:    "usageupstreamattempt_account_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{UsageUpstreamAttemptsColumns[4], UsageUpstreamAttemptsColumns[31]},
+				Columns: []*schema.Column{UsageUpstreamAttemptsColumns[4], UsageUpstreamAttemptsColumns[32]},
 			},
 		},
 	}

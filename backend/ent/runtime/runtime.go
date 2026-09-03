@@ -2825,62 +2825,68 @@ func init() {
 	usageupstreamattempt.DefaultCacheReadTokens = usageupstreamattemptDescCacheReadTokens.Default.(int64)
 	// usageupstreamattempt.CacheReadTokensValidator is a validator for the "cache_read_tokens" field. It is called by the builders before save.
 	usageupstreamattempt.CacheReadTokensValidator = usageupstreamattemptDescCacheReadTokens.Validators[0].(func(int64) error)
+	// usageupstreamattemptDescCacheCreationTokens is the schema descriptor for cache_creation_tokens field.
+	usageupstreamattemptDescCacheCreationTokens := usageupstreamattemptFields[10].Descriptor()
+	// usageupstreamattempt.DefaultCacheCreationTokens holds the default value on creation for the cache_creation_tokens field.
+	usageupstreamattempt.DefaultCacheCreationTokens = usageupstreamattemptDescCacheCreationTokens.Default.(int64)
+	// usageupstreamattempt.CacheCreationTokensValidator is a validator for the "cache_creation_tokens" field. It is called by the builders before save.
+	usageupstreamattempt.CacheCreationTokensValidator = usageupstreamattemptDescCacheCreationTokens.Validators[0].(func(int64) error)
 	// usageupstreamattemptDescCacheCreation5mTokens is the schema descriptor for cache_creation_5m_tokens field.
-	usageupstreamattemptDescCacheCreation5mTokens := usageupstreamattemptFields[10].Descriptor()
+	usageupstreamattemptDescCacheCreation5mTokens := usageupstreamattemptFields[11].Descriptor()
 	// usageupstreamattempt.DefaultCacheCreation5mTokens holds the default value on creation for the cache_creation_5m_tokens field.
 	usageupstreamattempt.DefaultCacheCreation5mTokens = usageupstreamattemptDescCacheCreation5mTokens.Default.(int64)
 	// usageupstreamattempt.CacheCreation5mTokensValidator is a validator for the "cache_creation_5m_tokens" field. It is called by the builders before save.
 	usageupstreamattempt.CacheCreation5mTokensValidator = usageupstreamattemptDescCacheCreation5mTokens.Validators[0].(func(int64) error)
 	// usageupstreamattemptDescCacheCreation1hTokens is the schema descriptor for cache_creation_1h_tokens field.
-	usageupstreamattemptDescCacheCreation1hTokens := usageupstreamattemptFields[11].Descriptor()
+	usageupstreamattemptDescCacheCreation1hTokens := usageupstreamattemptFields[12].Descriptor()
 	// usageupstreamattempt.DefaultCacheCreation1hTokens holds the default value on creation for the cache_creation_1h_tokens field.
 	usageupstreamattempt.DefaultCacheCreation1hTokens = usageupstreamattemptDescCacheCreation1hTokens.Default.(int64)
 	// usageupstreamattempt.CacheCreation1hTokensValidator is a validator for the "cache_creation_1h_tokens" field. It is called by the builders before save.
 	usageupstreamattempt.CacheCreation1hTokensValidator = usageupstreamattemptDescCacheCreation1hTokens.Validators[0].(func(int64) error)
 	// usageupstreamattemptDescRequestCount is the schema descriptor for request_count field.
-	usageupstreamattemptDescRequestCount := usageupstreamattemptFields[12].Descriptor()
+	usageupstreamattemptDescRequestCount := usageupstreamattemptFields[13].Descriptor()
 	// usageupstreamattempt.DefaultRequestCount holds the default value on creation for the request_count field.
 	usageupstreamattempt.DefaultRequestCount = usageupstreamattemptDescRequestCount.Default.(int64)
 	// usageupstreamattempt.RequestCountValidator is a validator for the "request_count" field. It is called by the builders before save.
 	usageupstreamattempt.RequestCountValidator = usageupstreamattemptDescRequestCount.Validators[0].(func(int64) error)
 	// usageupstreamattemptDescImageCount is the schema descriptor for image_count field.
-	usageupstreamattemptDescImageCount := usageupstreamattemptFields[13].Descriptor()
+	usageupstreamattemptDescImageCount := usageupstreamattemptFields[14].Descriptor()
 	// usageupstreamattempt.DefaultImageCount holds the default value on creation for the image_count field.
 	usageupstreamattempt.DefaultImageCount = usageupstreamattemptDescImageCount.Default.(int64)
 	// usageupstreamattempt.ImageCountValidator is a validator for the "image_count" field. It is called by the builders before save.
 	usageupstreamattempt.ImageCountValidator = usageupstreamattemptDescImageCount.Validators[0].(func(int64) error)
 	// usageupstreamattemptDescVideoSeconds is the schema descriptor for video_seconds field.
-	usageupstreamattemptDescVideoSeconds := usageupstreamattemptFields[14].Descriptor()
+	usageupstreamattemptDescVideoSeconds := usageupstreamattemptFields[15].Descriptor()
 	// usageupstreamattempt.DefaultVideoSeconds holds the default value on creation for the video_seconds field.
 	usageupstreamattempt.DefaultVideoSeconds = usageupstreamattemptDescVideoSeconds.Default.(int64)
 	// usageupstreamattempt.VideoSecondsValidator is a validator for the "video_seconds" field. It is called by the builders before save.
 	usageupstreamattempt.VideoSecondsValidator = usageupstreamattemptDescVideoSeconds.Validators[0].(func(int64) error)
 	// usageupstreamattemptDescUpstreamMultiplierSource is the schema descriptor for upstream_multiplier_source field.
-	usageupstreamattemptDescUpstreamMultiplierSource := usageupstreamattemptFields[17].Descriptor()
+	usageupstreamattemptDescUpstreamMultiplierSource := usageupstreamattemptFields[18].Descriptor()
 	// usageupstreamattempt.UpstreamMultiplierSourceValidator is a validator for the "upstream_multiplier_source" field. It is called by the builders before save.
 	usageupstreamattempt.UpstreamMultiplierSourceValidator = usageupstreamattemptDescUpstreamMultiplierSource.Validators[0].(func(string) error)
 	// usageupstreamattemptDescBillable is the schema descriptor for billable field.
-	usageupstreamattemptDescBillable := usageupstreamattemptFields[20].Descriptor()
+	usageupstreamattemptDescBillable := usageupstreamattemptFields[21].Descriptor()
 	// usageupstreamattempt.DefaultBillable holds the default value on creation for the billable field.
 	usageupstreamattempt.DefaultBillable = usageupstreamattemptDescBillable.Default.(bool)
 	// usageupstreamattemptDescUpstreamChargeCurrency is the schema descriptor for upstream_charge_currency field.
-	usageupstreamattemptDescUpstreamChargeCurrency := usageupstreamattemptFields[25].Descriptor()
+	usageupstreamattemptDescUpstreamChargeCurrency := usageupstreamattemptFields[26].Descriptor()
 	// usageupstreamattempt.UpstreamChargeCurrencyValidator is a validator for the "upstream_charge_currency" field. It is called by the builders before save.
 	usageupstreamattempt.UpstreamChargeCurrencyValidator = usageupstreamattemptDescUpstreamChargeCurrency.Validators[0].(func(string) error)
 	// usageupstreamattemptDescUpstreamChargeUnitSemantics is the schema descriptor for upstream_charge_unit_semantics field.
-	usageupstreamattemptDescUpstreamChargeUnitSemantics := usageupstreamattemptFields[26].Descriptor()
+	usageupstreamattemptDescUpstreamChargeUnitSemantics := usageupstreamattemptFields[27].Descriptor()
 	// usageupstreamattempt.UpstreamChargeUnitSemanticsValidator is a validator for the "upstream_charge_unit_semantics" field. It is called by the builders before save.
 	usageupstreamattempt.UpstreamChargeUnitSemanticsValidator = usageupstreamattemptDescUpstreamChargeUnitSemantics.Validators[0].(func(string) error)
 	// usageupstreamattemptDescUpstreamBillingRequestID is the schema descriptor for upstream_billing_request_id field.
-	usageupstreamattemptDescUpstreamBillingRequestID := usageupstreamattemptFields[27].Descriptor()
+	usageupstreamattemptDescUpstreamBillingRequestID := usageupstreamattemptFields[28].Descriptor()
 	// usageupstreamattempt.UpstreamBillingRequestIDValidator is a validator for the "upstream_billing_request_id" field. It is called by the builders before save.
 	usageupstreamattempt.UpstreamBillingRequestIDValidator = usageupstreamattemptDescUpstreamBillingRequestID.Validators[0].(func(string) error)
 	// usageupstreamattemptDescCompletedAt is the schema descriptor for completed_at field.
-	usageupstreamattemptDescCompletedAt := usageupstreamattemptFields[29].Descriptor()
+	usageupstreamattemptDescCompletedAt := usageupstreamattemptFields[30].Descriptor()
 	// usageupstreamattempt.DefaultCompletedAt holds the default value on creation for the completed_at field.
 	usageupstreamattempt.DefaultCompletedAt = usageupstreamattemptDescCompletedAt.Default.(func() time.Time)
 	// usageupstreamattemptDescCreatedAt is the schema descriptor for created_at field.
-	usageupstreamattemptDescCreatedAt := usageupstreamattemptFields[30].Descriptor()
+	usageupstreamattemptDescCreatedAt := usageupstreamattemptFields[31].Descriptor()
 	// usageupstreamattempt.DefaultCreatedAt holds the default value on creation for the created_at field.
 	usageupstreamattempt.DefaultCreatedAt = usageupstreamattemptDescCreatedAt.Default.(func() time.Time)
 	userMixin := schema.User{}.Mixin()
