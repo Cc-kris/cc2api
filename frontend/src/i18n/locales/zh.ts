@@ -2464,7 +2464,11 @@ export default {
         openai: 'OpenAI',
         gemini: 'Gemini',
         antigravity: 'Antigravity',
+        grok: 'Grok',
         seedace: 'Seedace',
+        kimi: 'Kimi',
+        zhipu: '智谱',
+        deepseek: 'DeepSeek',
       },
       saving: '保存中...',
       noGroups: '暂无分组',
@@ -5609,8 +5613,8 @@ export default {
         }
       },
       aiAnalysis: {
-        title: 'AI 分析配置',
-        description: '维护 AI 分析服务配置，并在保存后执行测试连接。',
+        title: 'AI 分析中心',
+        description: '配置 AI 分析服务，查看最新结果和历史报告。',
         loadFailed: '加载 AI 配置失败',
         saveSuccess: 'AI 配置已保存',
         saveFailed: '保存 AI 配置失败',
@@ -5619,6 +5623,7 @@ export default {
         testAction: '测试连接',
         testActionRetry: '重新测试',
         refresh: '刷新配置',
+        refreshResults: '刷新分析结果',
         save: '保存配置',
         saving: '保存中...',
         testing: '测试中...',
@@ -5626,6 +5631,15 @@ export default {
         dirtyHint: '测试连接前会先保存当前配置。',
         readOnly: '当前账号仅可查看脱敏配置，不能修改或测试连接。',
         noTestResult: '尚未执行测试连接。',
+        tabs: {
+          label: 'AI 分析视图',
+          configuration: 'AI 配置',
+          results: '分析结果'
+        },
+        results: {
+          latestTitle: '最近一次自动分析',
+          latestDescription: '查看最近自动分析任务的状态和摘要。'
+        },
         cards: {
           basic: '基础配置',
           behavior: '分析行为',

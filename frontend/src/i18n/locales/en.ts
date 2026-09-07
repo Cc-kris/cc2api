@@ -2434,7 +2434,11 @@ export default {
         openai: 'OpenAI',
         gemini: 'Gemini',
         antigravity: 'Antigravity',
+        grok: 'Grok',
         seedace: 'Seedace',
+        kimi: 'Kimi',
+        zhipu: 'Zhipu',
+        deepseek: 'DeepSeek',
       },
       deleteConfirm:
         "Are you sure you want to delete '{name}'? All associated API keys will no longer belong to any group.",
@@ -5444,8 +5448,8 @@ export default {
         }
       },
       aiAnalysis: {
-        title: 'AI Analysis Configuration',
-        description: 'Maintain the AI analysis service settings and run a saved-configuration connection test.',
+        title: 'AI Analysis Center',
+        description: 'Configure the AI analysis service and review the latest results and historical reports.',
         loadFailed: 'Failed to load AI configuration',
         saveSuccess: 'AI configuration saved',
         saveFailed: 'Failed to save AI configuration',
@@ -5454,6 +5458,7 @@ export default {
         testAction: 'Test Connection',
         testActionRetry: 'Retest',
         refresh: 'Refresh Config',
+        refreshResults: 'Refresh Results',
         save: 'Save Config',
         saving: 'Saving...',
         testing: 'Testing...',
@@ -5461,10 +5466,29 @@ export default {
         dirtyHint: 'Current changes will be saved before the connection test runs.',
         readOnly: 'This account can only view the masked configuration and cannot edit or test the connection.',
         noTestResult: 'No connection test has been run yet.',
+        tabs: {
+          label: 'AI analysis views',
+          configuration: 'AI Configuration',
+          results: 'Analysis Results'
+        },
+        results: {
+          latestTitle: 'Latest Automatic Analysis',
+          latestDescription: 'Review the latest automatic analysis task status and summary.'
+        },
         cards: {
           basic: 'Basic Configuration',
           behavior: 'Analysis Behavior',
           testResult: 'Test Result'
+        },
+        history: {
+          title: 'Recent AI Analysis',
+          description: 'Review generated AI analyses and open the full details for any historical report.',
+          empty: 'No AI analysis reports yet',
+          selectHint: 'Select a report to view its details',
+          summary: 'Summary',
+          rootCause: 'Root cause',
+          actions: 'Suggested actions',
+          loadFailed: 'Failed to load AI analysis history'
         },
         fields: {
           enabled: 'Enable AI analysis',

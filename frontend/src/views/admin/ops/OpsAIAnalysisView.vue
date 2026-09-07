@@ -14,13 +14,14 @@
             <button
               type="button"
               class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:border-blue-300 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-600 dark:text-gray-200 dark:hover:border-blue-500 dark:hover:text-blue-300"
-              :disabled="loading || saving || testing"
-              @click="loadConfig"
+              :disabled="loading || resultRefreshing || saving || testing"
+              @click="activeTab === 'config' ? loadConfig() : refreshAIResults()"
             >
-              <Icon name="refresh" size="sm" :class="loading ? 'animate-spin' : ''" />
-              {{ t('admin.ops.aiAnalysis.refresh') }}
+              <Icon name="refresh" size="sm" :class="loading || resultRefreshing ? 'animate-spin' : ''" />
+              {{ activeTab === 'config' ? t('admin.ops.aiAnalysis.refresh') : t('admin.ops.aiAnalysis.refreshResults') }}
             </button>
             <button
+              v-if="activeTab === 'config'"
               type="button"
               class="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:border-blue-300 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-600 dark:text-gray-200 dark:hover:border-blue-500 dark:hover:text-blue-300"
               :disabled="testButtonDisabled"
@@ -30,6 +31,7 @@
               {{ testing ? t('admin.ops.aiAnalysis.testing') : testButtonLabel }}
             </button>
             <button
+              v-if="activeTab === 'config'"
               type="button"
               class="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300 dark:disabled:bg-blue-800/60"
               :disabled="saveButtonDisabled"
@@ -56,28 +58,41 @@
         <div v-if="loadError" class="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
           {{ loadError }}
         </div>
+      </section>
 
-        <!-- Status Summary Bar -->
-        <div class="mt-4 rounded-2xl border px-4 py-3 text-sm" :class="configStatusBarClass">
+      <div class="border-b border-gray-200 dark:border-dark-700">
+        <div class="flex gap-6" role="tablist" :aria-label="t('admin.ops.aiAnalysis.tabs.label')">
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="activeTab === 'config'"
+            :class="tabClass('config')"
+            @click="activeTab = 'config'"
+          >
+            {{ t('admin.ops.aiAnalysis.tabs.configuration') }}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            :aria-selected="activeTab === 'results'"
+            :class="tabClass('results')"
+            @click="activeTab = 'results'"
+          >
+            {{ t('admin.ops.aiAnalysis.tabs.results') }}
+          </button>
+        </div>
+      </div>
+
+      <section v-if="activeTab === 'config'" class="space-y-6">
+        <div class="rounded-3xl border px-4 py-3 text-sm" :class="configStatusBarClass">
           <div class="flex items-center justify-between gap-3">
             <div class="font-medium">{{ configStatusLabel }}</div>
             <span v-if="testResult" class="text-xs opacity-75">
               上次测试：{{ testResult.success ? '连接成功' : '连接失败' }}
             </span>
           </div>
-          <div class="mt-2 border-t border-current/10 pt-2">
-            <template v-if="latestAutoLoading">
-              <div class="h-3 w-48 animate-pulse rounded bg-current/20"></div>
-            </template>
-            <template v-else-if="latestAutoTaskDisplay">
-              <div class="opacity-75">{{ latestAutoTaskDisplay.text }}</div>
-              <div v-if="latestAutoTaskDisplay.summary" class="mt-0.5 opacity-60 text-xs">{{ latestAutoTaskDisplay.summary }}</div>
-            </template>
-          </div>
         </div>
-      </section>
 
-      <section class="space-y-6">
         <div class="space-y-6">
           <div class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900">
             <div class="mb-4 flex items-center justify-between gap-3">
@@ -223,7 +238,26 @@
           </div>
         </div>
       </section>
-      <section class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900">
+      <section v-else class="space-y-6">
+        <div class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.aiAnalysis.results.latestTitle') }}</h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.ops.aiAnalysis.results.latestDescription') }}</p>
+            </div>
+            <div class="text-right text-sm text-gray-600 dark:text-gray-300">
+              <template v-if="latestAutoLoading">
+                <div class="h-4 w-32 animate-pulse rounded bg-gray-200 dark:bg-dark-700"></div>
+              </template>
+              <template v-else-if="latestAutoTaskDisplay">
+                <div>{{ latestAutoTaskDisplay.text }}</div>
+                <div v-if="latestAutoTaskDisplay.summary" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ latestAutoTaskDisplay.summary }}</div>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm dark:border-dark-700 dark:bg-dark-900">
         <div class="mb-4 flex items-center justify-between gap-3">
           <div>
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('admin.ops.aiAnalysis.history.title') }}</h2>
@@ -292,6 +326,7 @@
             </div>
           </div>
         </div>
+        </div>
       </section>
 
     </div>
@@ -299,7 +334,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -343,6 +378,12 @@ const historyLoading = ref(false)
 const selectedHistoryID = ref<number | null>(null)
 const selectedHistoryDetail = ref<OpsAIAnalysisTaskDetailResponse | null>(null)
 const historyDetailLoading = ref(false)
+const resultRefreshing = ref(false)
+let autoRefreshTimer: ReturnType<typeof setInterval> | null = null
+
+type AIAnalysisTab = 'config' | 'results'
+
+const activeTab = ref<AIAnalysisTab>('config')
 
 const form = reactive<FormState>({
   enabled: false,
@@ -508,6 +549,12 @@ const autoLevelsDescription = computed(() => {
   return form.auto_levels.map((level) => levelMap[level] || level).join('、')
 })
 
+function tabClass(tab: AIAnalysisTab): string {
+  return activeTab.value === tab
+    ? 'border-b-2 border-blue-600 px-1 py-3 text-sm font-semibold text-blue-600 dark:border-blue-400 dark:text-blue-300'
+    : 'border-b-2 border-transparent px-1 py-3 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-dark-500 dark:hover:text-gray-200'
+}
+
 const latestAutoTaskDisplay = computed(() => {
   if (latestAutoLoading.value) return null
   const t_task = latestAutoTask.value
@@ -579,6 +626,16 @@ async function loadHistory() {
   historyLoading.value = true
   try {
     historyTasks.value = await opsAPI.listAIAnalysisReportHistory(50)
+    const selectedStillExists = selectedHistoryID.value != null && historyTasks.value.some((item) => item.task.id === selectedHistoryID.value)
+    if (!selectedStillExists) {
+      const latest = historyTasks.value[0]
+      if (latest) {
+        await selectHistory(latest.task.id)
+      } else {
+        selectedHistoryID.value = null
+        selectedHistoryDetail.value = null
+      }
+    }
   } catch (err: unknown) {
     appStore.showError(extractApiErrorMessage(err, t('admin.ops.aiAnalysis.history.loadFailed')))
   } finally {
@@ -620,6 +677,30 @@ async function loadLatestAutoTask() {
     latestAutoTask.value = null
   } finally {
     latestAutoLoading.value = false
+  }
+}
+
+async function refreshAIResults() {
+  if (resultRefreshing.value) return
+  resultRefreshing.value = true
+  try {
+    await Promise.all([loadLatestAutoTask(), loadHistory()])
+  } finally {
+    resultRefreshing.value = false
+  }
+}
+
+function startAIResultRefresh() {
+  stopAIResultRefresh()
+  autoRefreshTimer = setInterval(() => {
+    void refreshAIResults()
+  }, 15000)
+}
+
+function stopAIResultRefresh() {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer)
+    autoRefreshTimer = null
   }
 }
 
@@ -682,9 +763,12 @@ function resolvedStatusMessage(result: OpsAIAnalysisTestResponse): string {
   return result.message || t('admin.ops.aiAnalysis.testFailed')
 }
 
-onMounted(() => {
-  void loadConfig()
-  void loadLatestAutoTask()
-  void loadHistory()
+onMounted(async () => {
+  await Promise.all([loadConfig(), refreshAIResults()])
+  startAIResultRefresh()
+})
+
+onUnmounted(() => {
+  stopAIResultRefresh()
 })
 </script>

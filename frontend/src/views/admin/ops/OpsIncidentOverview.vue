@@ -396,8 +396,9 @@
             <div class="mb-3 flex items-center justify-between shrink-0">
               <span class="ov-section-title">最近 AI 分析报告</span>
               <div class="flex items-center gap-2">
+                <button v-if="canManageOpsSettings" type="button" class="ov-btn" @click="openAIAnalysisCenter">查看历史报告 →</button>
                 <button
-                  v-if="displayOverview?.latest_ai_analysis"
+                  v-if="canManageOpsSettings && (latestAIAnalysisTask?.task || displayOverview?.latest_ai_analysis)"
                   type="button"
                   class="ov-btn"
                   @click="openLatestAIAnalysis"
@@ -416,7 +417,7 @@
             </div>
 
             <!-- 有报告 -->
-            <template v-if="latestAnalysisState === 'ready' && displayOverview?.latest_ai_analysis">
+            <template v-if="latestAnalysisState === 'ready' && latestAIAnalysisSummary">
               <!-- 元信息行 -->
               <div class="mb-3 flex flex-wrap items-center gap-2 shrink-0">
                 <span :class="['rounded-full px-2.5 py-0.5 text-xs font-semibold', latestAnalysisStatusClass]">{{ latestAnalysisStatusLabel }}</span>
@@ -424,14 +425,14 @@
                   AI 分析报告
                 </span>
                 <span class="text-[11px] text-gray-400 dark:text-gray-500">
-                  分析时间：{{ formatDateTime(displayOverview?.latest_ai_analysis.created_at) }}
+                  分析时间：{{ formatDateTime(latestAIAnalysisSummary.created_at) }}
                 </span>
               </div>
               <!-- 5列横向内容 -->
               <div class="grid grid-cols-2 gap-3 flex-1 min-h-0 md:grid-cols-5">
                 <div class="ov-report-col">
                   <div class="ov-report-col-title">摘要</div>
-                  <p class="ov-report-col-body">{{ displayOverview?.latest_ai_analysis.summary || '报告已生成，点击查看完整内容。' }}</p>
+                  <p class="ov-report-col-body">{{ latestAIAnalysisSummary.summary || '报告已生成，点击查看完整内容。' }}</p>
                 </div>
                 <div class="ov-report-col">
                   <div class="ov-report-col-title">根因判断</div>
@@ -461,6 +462,12 @@
             <div v-else-if="latestAnalysisState === 'pending'" class="flex-1 flex items-center justify-center">
               <div class="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-300">
                 AI 分析正在进行中，请稍候...
+              </div>
+            </div>
+
+            <div v-else-if="latestAnalysisState === 'failed'" class="flex-1 flex items-center justify-center">
+              <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
+                AI 分析失败：{{ latestAIAnalysisTask?.task?.error_message || '请打开 AI 分析中心查看任务详情。' }}
               </div>
             </div>
 
@@ -707,6 +714,7 @@ const hasLoadedOnce = ref(false)
 const errorMessage = ref('')
 const overview = ref<OpsIncidentOverview | null>(null)
 const lastSuccessfulOverview = ref<OpsIncidentOverview | null>(null)
+const latestAIAnalysisTask = ref<OpsAIAnalysisTaskDetailResponse | null>(null)
 
 const errorTrend = ref<OpsErrorTrendResponse | null>(null)
 const loadingErrorTrend = ref(false)
@@ -850,7 +858,30 @@ const scoreValue = computed(() => {
   return typeof value === 'number' && Number.isFinite(value) ? String(value) : '--'
 })
 
-const latestAnalysisState = computed<'none' | 'ready' | 'pending' | 'expired'>(() => {
+const latestAIAnalysisSummary = computed(() => {
+  const overviewReport = displayOverview.value?.latest_ai_analysis
+  if (overviewReport) return overviewReport
+
+  const report = latestAIAnalysisTask.value?.report
+  if (report) {
+    return {
+      id: report.task_id,
+      status: latestAIAnalysisTask.value?.task.status || 'completed',
+      summary: report.summary,
+      created_at: report.created_at
+    }
+  }
+  return null
+})
+
+const latestAnalysisState = computed<'none' | 'ready' | 'pending' | 'failed' | 'expired'>(() => {
+  const task = latestAIAnalysisTask.value?.task
+  if (task) {
+    const taskStatus = String(task.status || '').trim().toLowerCase()
+    if (taskStatus === 'failed') return 'failed'
+    if (taskStatus === 'pending' || taskStatus === 'running') return 'pending'
+    if (taskStatus === 'completed' && latestAIAnalysisTask.value?.report) return 'ready'
+  }
   const analysis = displayOverview?.value?.latest_ai_analysis
   if (!analysis) return 'none'
   const status = String(analysis.status || '').trim().toLowerCase()
@@ -860,14 +891,14 @@ const latestAnalysisState = computed<'none' | 'ready' | 'pending' | 'expired'>((
 })
 
 const latestAnalysisStatusLabel = computed(() => {
-  const status = String(displayOverview?.value?.latest_ai_analysis?.status || '').trim().toLowerCase()
+  const status = String(latestAIAnalysisTask.value?.task.status || latestAIAnalysisSummary.value?.status || '').trim().toLowerCase()
   if (!status) return t('admin.ops.incidentOverview.analysisStatus.completed')
   const key = `admin.ops.incidentOverview.analysisStatus.${status}`
   const translated = t(key)
   return translated === key ? status : translated
 })
 
-const latestAnalysisStatusClass = computed(() => analysisTaskStatusClass(displayOverview?.value?.latest_ai_analysis?.status || 'completed'))
+const latestAnalysisStatusClass = computed(() => analysisTaskStatusClass(latestAIAnalysisTask.value?.task.status || latestAIAnalysisSummary.value?.status || 'completed'))
 const currentViewerRole = computed(() => String((authStore.user as { role?: string } | null)?.role || '').trim().toLowerCase())
 const canRunManualAIAnalysis = computed(() => canManageManualAIAnalysis(currentViewerRole.value))
 const canSubmitAIReportFeedback = computed(() => aiFeedbackAllowedRoles.has(currentViewerRole.value))
@@ -1172,12 +1203,14 @@ async function fetchOverview() {
   loading.value = true
 
   try {
-    const [data] = await Promise.all([
+    const [data, latestTask] = await Promise.all([
       opsAPI.getIncidentOverview(buildOverviewParams(), { signal: fetchController.signal }),
+      opsAPI.getLatestAutoAIAnalysisTask().catch(() => null),
       fetchErrorTrend(fetchController.signal)
-    ])
+    ]).then(([overviewData, latestAutoTask]) => [overviewData, latestAutoTask] as const)
     overview.value = data
     lastSuccessfulOverview.value = data
+    latestAIAnalysisTask.value = latestTask
     errorMessage.value = ''
     hasLoadedOnce.value = true
     autoRefreshCountdown.value = 30
@@ -1325,12 +1358,20 @@ async function fetchAIAnalysisTaskDetail(taskId: number, poll = false) {
 }
 
 async function openLatestAIAnalysis() {
-  const taskId = displayOverview?.value?.latest_ai_analysis?.id
+  const task = latestAIAnalysisTask.value?.task
+  const taskStatus = String(task?.status || '').trim().toLowerCase()
+  const taskId = task && ['pending', 'running', 'failed'].includes(taskStatus)
+    ? task.id
+    : latestAIAnalysisSummary.value?.id || task?.id || displayOverview.value?.latest_ai_analysis?.id
   if (!taskId) return
   aiTaskDetail.value = null
   resetFeedbackForm()
   showAIReportDialog.value = true
   await fetchAIAnalysisTaskDetail(taskId, true)
+}
+
+function openAIAnalysisCenter() {
+  void router.push({ name: 'AdminOpsAIAnalysis' })
 }
 
 function feedbackStatusLabel(status?: string | null): string {
