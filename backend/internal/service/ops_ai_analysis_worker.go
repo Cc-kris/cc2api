@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -155,6 +156,14 @@ func (s *OpsService) executeAIAnalysisTask(parent context.Context, task *OpsAIAn
 		s.markAIAnalysisTaskFailed(task.ID, err)
 		return
 	}
+	if errors.Is(parent.Err(), context.Canceled) || errors.Is(ctx.Err(), context.Canceled) {
+		logger.LegacyPrintf("service.ops_ai_analysis_worker", "[%s] task interrupted after sampling id=%d", opsAIAnalysisWorkerName, task.ID)
+		return
+	}
+	if len(analysisContext.Samples) == 0 {
+		s.markAIAnalysisTaskNoSamples(task.ID, analysisContext.Total)
+		return
+	}
 	executor := s.getAIAnalysisTaskExecutor()
 
 	sampleCount, err := executor.ExecuteOpsAIAnalysisTask(ctx, task, analysisContext)
@@ -179,6 +188,10 @@ func (s *OpsService) executeAIAnalysisTask(parent context.Context, task *OpsAIAn
 	if sampleCount < 0 {
 		sampleCount = 0
 	}
+	if sampleCount == 0 {
+		s.markAIAnalysisTaskNoSamples(task.ID, analysisContext.Total)
+		return
+	}
 	finishedAt := time.Now()
 	_, err = s.opsRepo.UpdateAIAnalysisTask(context.Background(), task.ID, &OpsAIAnalysisTaskUpdate{Status: OpsAIAnalysisStatusCompleted, SampleCount: &sampleCount, FinishedAt: &finishedAt})
 	if err != nil {
@@ -186,6 +199,21 @@ func (s *OpsService) executeAIAnalysisTask(parent context.Context, task *OpsAIAn
 		return
 	}
 	logger.LegacyPrintf("service.ops_ai_analysis_worker", "[%s] task completed id=%d sample_count=%d", opsAIAnalysisWorkerName, task.ID, sampleCount)
+}
+
+func (s *OpsService) markAIAnalysisTaskNoSamples(taskID int64, total int) {
+	if s == nil || s.opsRepo == nil || taskID <= 0 {
+		return
+	}
+	sampleCount := 0
+	msg := fmt.Sprintf("AI 分析未生成报告：没有可用错误样本（匹配总数=%d）", total)
+	finishedAt := time.Now()
+	_, updateErr := s.opsRepo.UpdateAIAnalysisTask(context.Background(), taskID, &OpsAIAnalysisTaskUpdate{Status: OpsAIAnalysisStatusFailed, SampleCount: &sampleCount, ErrorMessage: &msg, FinishedAt: &finishedAt})
+	if updateErr != nil {
+		logger.LegacyPrintf("service.ops_ai_analysis_worker", "[%s] mark no-sample failed id=%d err=%v", opsAIAnalysisWorkerName, taskID, updateErr)
+		return
+	}
+	logger.LegacyPrintf("service.ops_ai_analysis_worker", "[%s] task failed id=%d no usable samples total=%d", opsAIAnalysisWorkerName, taskID, total)
 }
 
 func (s *OpsService) markAIAnalysisTaskFailed(taskID int64, err error) {

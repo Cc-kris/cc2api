@@ -72,6 +72,9 @@ func (e *opsAIAnalysisLLMExecutor) ExecuteOpsAIAnalysisTask(ctx context.Context,
 	}
 
 	sampleCount := len(contextData.Samples)
+	if sampleCount == 0 {
+		return 0, fmt.Errorf("AI 分析未生成报告：没有可用错误样本（匹配总数=%d）", contextData.Total)
+	}
 	prompt := buildOpsAIAnalysisPrompt(task, contextData)
 
 	report, err := e.callLLM(ctx, baseURL, plainKey, model, prompt)

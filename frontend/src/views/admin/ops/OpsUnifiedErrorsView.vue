@@ -607,6 +607,7 @@ const errorSubcategoryLabels: Record<string, string> = {
   upstream_permission_error: '上游权限错误',
   upstream_balance_error: '上游余额或额度不足',
   upstream_timeout: '上游超时',
+  upstream_context_canceled: '上游请求取消/连接中断',
   upstream_unavailable: '上游不可用',
   upstream_error: '上游错误',
   config_model_mapping_error: '配置或模型映射错误',

@@ -47,6 +47,11 @@ const (
 	OpsClientErrorSubcategoryInsufficientEvidence = "client_insufficient_evidence"
 )
 
+// Upstream cancellation is distinct from a client-aborted request. The
+// gateway may propagate an upstream context cancellation after the provider
+// has already accepted the request; exposing it as client_aborted is misleading.
+const OpsUpstreamErrorSubcategoryContextCanceled = "upstream_context_canceled"
+
 var AllOpsClientErrorSubcategories = []string{
 	OpsClientErrorSubcategoryAuth,
 	OpsClientErrorSubcategoryRateLimit,
@@ -173,7 +178,10 @@ func ClassifyOpsError(input OpsErrorClassificationInput) OpsErrorClassification 
 		(containsAny(text, "unexpected eof") && strings.EqualFold(strings.TrimSpace(input.ErrorPhase), "request")) {
 		return clientClassification(OpsClientErrorSubcategoryDisconnect, "请求体上传未完成，客户端连接提前中断", OpsClassificationConfidenceHigh)
 	}
-	if containsAny(text, "context canceled", "client canceled", "request canceled", "cancelled", "broken pipe", "connection reset", "client disconnected") {
+	if containsAny(text, "context canceled", "client canceled", "request canceled", "cancelled", "broken pipe", "connection reset", "client disconnected") && hasUpstreamEvidence && !isTrueClientCancellation(input) {
+		return opsClassification(OpsErrorCategoryUpstream, OpsUpstreamErrorSubcategoryContextCanceled, "上游请求被取消或连接中断", OpsClassificationConfidenceHigh)
+	}
+	if containsAny(text, "context canceled", "client canceled", "request canceled", "cancelled", "broken pipe", "connection reset", "client disconnected") && isTrueClientCancellation(input) {
 		return clientClassification(OpsClientErrorSubcategoryDisconnect, "客户端连接中断或主动取消请求", OpsClassificationConfidenceHigh)
 	}
 	if isOpenAIClientDefaultModelRoutingFailure(input, hasUpstreamEvidence, text) {
@@ -246,6 +254,13 @@ func ClassifyOpsError(input OpsErrorClassificationInput) OpsErrorClassification 
 	}
 
 	return opsClassification(OpsErrorCategoryUnknown, "unknown_insufficient_evidence", "缺少足够证据，无法归入固定错误分类", OpsClassificationConfidenceLow)
+}
+
+func isTrueClientCancellation(input OpsErrorClassificationInput) bool {
+	phase := strings.ToLower(strings.TrimSpace(input.ErrorPhase))
+	owner := strings.ToLower(strings.TrimSpace(input.ErrorOwner))
+	source := strings.ToLower(strings.TrimSpace(input.ErrorSource))
+	return phase == "request" && (owner == "client" || source == "client_request")
 }
 
 func classifyClientSideOpsError(input OpsErrorClassificationInput, text string) OpsErrorClassification {

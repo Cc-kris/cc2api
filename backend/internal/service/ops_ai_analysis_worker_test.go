@@ -24,10 +24,32 @@ func newOpsAIWorkerService(t *testing.T, repo *opsRepoMock) *OpsService {
 	return svc
 }
 
+func singleOpsAIAnalysisErrorList() *OpsUnifiedErrorList {
+	return &OpsUnifiedErrorList{
+		Total: 1,
+		Items: []*OpsUnifiedErrorItem{{
+			ID:               1,
+			OccurredAt:       time.Now(),
+			ErrorCategory:    OpsErrorCategoryUpstream,
+			ErrorSubcategory: "upstream_error",
+			ErrorResult:      OpsUnifiedErrorResultFinalFailed,
+			Severity:         "P1",
+			StatusCode:       502,
+			Platform:         "openai",
+			Model:            "gpt-5.5",
+			Summary:          "Upstream request failed",
+			SameKindCount:    1,
+		}},
+	}
+}
+
 func TestOpsAIAnalysisWorkerRunOnceCompletesTask(t *testing.T) {
 	claimCount := 0
 	updates := make([]*OpsAIAnalysisTaskUpdate, 0, 1)
 	repo := &opsRepoMock{
+		ListUnifiedErrorsForAIAnalysisFn: func(ctx context.Context, filter *OpsUnifiedErrorListFilter, maxSamples int) (*OpsUnifiedErrorList, error) {
+			return singleOpsAIAnalysisErrorList(), nil
+		},
 		ClaimNextAIAnalysisTaskFn: func(ctx context.Context) (*OpsAIAnalysisTask, error) {
 			claimCount++
 			if claimCount == 1 {
@@ -67,6 +89,9 @@ func TestOpsAIAnalysisWorkerRunOnceMarksFailed(t *testing.T) {
 	var failed *OpsAIAnalysisTaskUpdate
 	claimed := false
 	repo := &opsRepoMock{
+		ListUnifiedErrorsForAIAnalysisFn: func(ctx context.Context, filter *OpsUnifiedErrorListFilter, maxSamples int) (*OpsUnifiedErrorList, error) {
+			return singleOpsAIAnalysisErrorList(), nil
+		},
 		ClaimNextAIAnalysisTaskFn: func(ctx context.Context) (*OpsAIAnalysisTask, error) {
 			if claimed {
 				return nil, nil
@@ -92,9 +117,47 @@ func TestOpsAIAnalysisWorkerRunOnceMarksFailed(t *testing.T) {
 	}
 }
 
+func TestOpsAIAnalysisWorkerZeroSamplesMarksFailedWithoutReport(t *testing.T) {
+	var failed *OpsAIAnalysisTaskUpdate
+	repo := &opsRepoMock{
+		ClaimNextAIAnalysisTaskFn: func(ctx context.Context) (*OpsAIAnalysisTask, error) {
+			if failed != nil {
+				return nil, nil
+			}
+			return &OpsAIAnalysisTask{ID: 47, Status: OpsAIAnalysisStatusRunning}, nil
+		},
+		UpdateAIAnalysisTaskFn: func(ctx context.Context, taskID int64, update *OpsAIAnalysisTaskUpdate) (*OpsAIAnalysisTask, error) {
+			failed = update
+			return &OpsAIAnalysisTask{ID: taskID, Status: update.Status}, nil
+		},
+	}
+	svc := newOpsAIWorkerService(t, repo)
+	svc.aiWorkerCtx = context.Background()
+	executorCalled := false
+	svc.SetAIAnalysisTaskExecutor(opsAIWorkerExecutorFunc(func(ctx context.Context, task *OpsAIAnalysisTask, contextData *OpsAIAnalysisContext) (int, error) {
+		executorCalled = true
+		return 0, nil
+	}))
+
+	svc.runAIAnalysisWorkerOnce()
+
+	if failed == nil || failed.Status != OpsAIAnalysisStatusFailed || failed.SampleCount == nil || *failed.SampleCount != 0 || failed.ErrorMessage == nil {
+		t.Fatalf("unexpected zero-sample update: %+v", failed)
+	}
+	if executorCalled {
+		t.Fatal("zero-sample task must not invoke report executor")
+	}
+	if !strings.Contains(*failed.ErrorMessage, "没有可用错误样本") || !strings.Contains(*failed.ErrorMessage, "匹配总数=0") {
+		t.Fatalf("zero-sample reason not preserved: %q", *failed.ErrorMessage)
+	}
+}
+
 func TestOpsAIAnalysisWorkerMarksDeadlineExceededFailed(t *testing.T) {
 	var failed *OpsAIAnalysisTaskUpdate
 	repo := &opsRepoMock{
+		ListUnifiedErrorsForAIAnalysisFn: func(ctx context.Context, filter *OpsUnifiedErrorListFilter, maxSamples int) (*OpsUnifiedErrorList, error) {
+			return singleOpsAIAnalysisErrorList(), nil
+		},
 		UpdateAIAnalysisTaskFn: func(ctx context.Context, taskID int64, update *OpsAIAnalysisTaskUpdate) (*OpsAIAnalysisTask, error) {
 			failed = update
 			return &OpsAIAnalysisTask{ID: taskID, Status: update.Status}, nil

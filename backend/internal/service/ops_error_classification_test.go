@@ -120,6 +120,26 @@ func TestClassifyOpsError_DoesNotTreatEvery403AsAPIKey(t *testing.T) {
 	}
 }
 
+func TestClassifyOpsError_ContextCanceledUsesEvidence(t *testing.T) {
+	upstreamStatus := 502
+	got := ClassifyOpsError(OpsErrorClassificationInput{
+		StatusCode: 502, UpstreamStatusCode: &upstreamStatus,
+		ErrorPhase: "upstream", ErrorOwner: "provider", ErrorSource: "upstream_http",
+		ErrorMessage: "Post https://provider.example/v1/responses: context canceled",
+	})
+	if got.ErrorCategory != OpsErrorCategoryUpstream || got.ErrorSubcategory != OpsUpstreamErrorSubcategoryContextCanceled {
+		t.Fatalf("classification = %s/%s, want upstream/%s", got.ErrorCategory, got.ErrorSubcategory, OpsUpstreamErrorSubcategoryContextCanceled)
+	}
+
+	got = ClassifyOpsError(OpsErrorClassificationInput{
+		StatusCode: 499, ErrorPhase: "request", ErrorOwner: "client", ErrorSource: "client_request",
+		ErrorMessage: "context canceled by client",
+	})
+	if got.ErrorCategory != OpsErrorCategoryClient || got.ErrorSubcategory != OpsClientErrorSubcategoryDisconnect {
+		t.Fatalf("classification = %s/%s, want client/%s", got.ErrorCategory, got.ErrorSubcategory, OpsClientErrorSubcategoryDisconnect)
+	}
+}
+
 func TestClassifyOpsError_MajorCategories(t *testing.T) {
 	upstreamStatus429 := 429
 	upstreamStatus403 := 403
@@ -190,6 +210,12 @@ func TestClassifyOpsError_MajorCategories(t *testing.T) {
 			input:    OpsErrorClassificationInput{StatusCode: 200, UpstreamStatusCode: &upstreamStatus503, ErrorOwner: "provider", ErrorSource: "upstream_http", UpstreamErrorMessage: "service unavailable"},
 			category: OpsErrorCategoryUpstream,
 			sub:      "upstream_unavailable",
+		},
+		{
+			name:     "upstream context canceled is not client disconnect",
+			input:    OpsErrorClassificationInput{StatusCode: 499, UpstreamStatusCode: &upstreamStatus503, ErrorOwner: "provider", ErrorSource: "upstream_http", ErrorPhase: "upstream", ErrorMessage: "context canceled"},
+			category: OpsErrorCategoryUpstream,
+			sub:      OpsUpstreamErrorSubcategoryContextCanceled,
 		},
 		{
 			name:     "platform dependency",
