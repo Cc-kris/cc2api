@@ -20,11 +20,14 @@ func optionalNonEqualStringPtr(value, compare string) *string {
 	return &value
 }
 
+// Account-level model mapping changes the upstream model and therefore the
+// billing basis. Fall back to the requested model only when no upstream model
+// was recorded (for example, a local or synthetic result).
 func forwardResultBillingModel(requestedModel, upstreamModel string) string {
-	if trimmed := strings.TrimSpace(requestedModel); trimmed != "" {
+	if trimmed := strings.TrimSpace(upstreamModel); trimmed != "" {
 		return trimmed
 	}
-	return strings.TrimSpace(upstreamModel)
+	return strings.TrimSpace(requestedModel)
 }
 
 func optionalInt64Ptr(v int64) *int64 {

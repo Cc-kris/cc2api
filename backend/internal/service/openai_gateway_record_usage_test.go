@@ -1157,16 +1157,16 @@ func TestOpenAIGatewayServiceRecordUsage_UsesRequestedModelAndUpstreamModelMetad
 	require.Equal(t, 1, userRepo.deductCalls)
 }
 
-func TestOpenAIGatewayServiceRecordUsage_BillsMappedRequestsUsingRequestedModel(t *testing.T) {
+func TestOpenAIGatewayServiceRecordUsage_BillsMappedRequestsUsingUpstreamModel(t *testing.T) {
 	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
 	userRepo := &openAIRecordUsageUserRepoStub{}
 	subRepo := &openAIRecordUsageSubRepoStub{}
 	svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, subRepo, nil)
 	usage := OpenAIUsage{InputTokens: 20, OutputTokens: 10}
 
-	// Billing should use the requested model ("gpt-5.1"), not the upstream mapped model ("gpt-5.1-codex").
-	// This ensures pricing is always based on the model the user requested.
-	expectedCost, err := svc.billingService.CalculateCost("gpt-5.1", UsageTokens{
+	// Account-level model mapping changes the upstream route and the billing model.
+	// Billing should use the mapped upstream model ("gpt-5.1-codex").
+	expectedCost, err := svc.billingService.CalculateCost("gpt-5.1-codex", UsageTokens{
 		InputTokens:  20,
 		OutputTokens: 10,
 	}, 1.1)
@@ -1175,6 +1175,7 @@ func TestOpenAIGatewayServiceRecordUsage_BillsMappedRequestsUsingRequestedModel(
 	err = svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
 		Result: &OpenAIForwardResult{
 			RequestID:     "resp_upstream_model_billing_fallback",
+			BillingModel:  "gpt-5.1-codex",
 			Model:         "gpt-5.1",
 			UpstreamModel: "gpt-5.1-codex",
 			Usage:         usage,
