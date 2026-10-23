@@ -153,3 +153,71 @@ output/
 !docs/sub2api-image-bridge-scenario-comparison-20260619.md
 !docs/sub2api-model-square-technical-design-20260722.md
 !docs/sub2api-finance-loss-report-remediation-plan-20260723.md
+
+# ===================
+# 本地运行产物 / 临时文件（合并前清理）
+# ===================
+dump.rdb
+outputs/
+artifacts/
+.playwright-cli/
+.installed
+fix_codex_gpt56_windows*.bat
+
+# 上游同步临时分析（不纳入仓库）
+upstream-sync-source/
+
+# ===================
+# 本地运行产物 / 一次性验收工具（2026-10-22 清理，禁止入库）
+# ===================
+# 本地编译出的服务端二进制（112MB/154MB，超 GitHub 单文件上限）
+/bin/
+*.bak[0-9]*
+
+# 自动化工具状态（含 sqlite 数据库与配置备份）
+.automaker/
+
+# 使用量报表导出
+admin_usage_report_*/
+
+# 历史组件快照与一次性工作目录
+/snapshots_20261019/
+/cc_w[0-9]/
+/content_fix_1022/
+
+# 一次性验收脚本（仅仓库根）
+/step1.py
+/tools_*.py
+/be_*.py
+/rebuild*.py
+/patch_public.py
+/fix_build.py
+/verify_*.py
+
+# 验收取证文件
+/*_dom*.json
+/n9_*.json
+/cleanup*.json
+/front_*.json
+/api_*.json
+/admin_*.json
+/b4_verify.json
+/*.diff
+/concept4_home_demo.html
+
+# 组件改动前备份
+*.before-*.vue
+
+# 历史轮次的临时报告 / 含密钥的需求原文（保留 fix_*.md 与 ui_acceptance_1022.md）
+/acceptance_report_20261018.md
+/full_acceptance_*.md
+/functional_verification_report.md
+/content_center_verification.md
+/verification_report.md
+/backend_fix_notes.md
+/fix_notes_p1.md
+/fix_report.md
+/notes.md
+/progress.md
+/_verify_evidence.md
+/user_requirements_raw_*.md
