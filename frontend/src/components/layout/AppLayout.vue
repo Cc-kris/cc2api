@@ -1,7 +1,7 @@
 <template>
-  <div class="min-h-screen bg-gray-50 dark:bg-dark-950">
-    <!-- Background Decoration -->
-    <div class="pointer-events-none fixed inset-0 bg-mesh-gradient"></div>
+  <div class="ccai-console-shell min-h-screen bg-[#F5F2EB] dark:bg-dark-950">
+    <!-- Neo-Lab Blueprint Grid Background -->
+    <div class="pointer-events-none fixed inset-0 ccai-blueprint-grid"></div>
 
     <!-- Sidebar -->
     <AppSidebar />

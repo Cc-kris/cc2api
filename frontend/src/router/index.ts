@@ -32,13 +32,47 @@ const routes: RouteRecordRaw[] = [
 
   // ==================== Public Routes ====================
   {
-    path: '/home',
+    path: '/',
     name: 'Home',
-    component: () => import('@/views/HomeView.vue'),
+    component: () => import('@/views/public/PublicContentView.vue'),
     meta: {
       requiresAuth: false,
       title: 'Home'
     }
+  },
+  {
+    path: '/home',
+    redirect: '/'
+  },
+  {
+    path: '/news',
+    name: 'PublicNewsList',
+    component: () => import('@/views/public/PublicContentView.vue'),
+    meta: { requiresAuth: false, title: 'News' }
+  },
+  {
+    path: '/news/:locale/:slug',
+    name: 'PublicNewsDetail',
+    component: () => import('@/views/public/PublicContentView.vue'),
+    meta: { requiresAuth: false, title: 'News' }
+  },
+  {
+    path: '/articles',
+    name: 'PublicArticlesList',
+    component: () => import('@/views/public/PublicContentView.vue'),
+    meta: { requiresAuth: false, title: '深度解析' }
+  },
+  {
+    path: '/articles/:locale/:slug',
+    name: 'PublicArticleDetail',
+    component: () => import('@/views/public/PublicContentView.vue'),
+    meta: { requiresAuth: false, title: '深度解析' }
+  },
+  {
+    path: '/docs/:pathMatch(.*)*',
+    name: 'PublicDocs',
+    component: () => import('@/views/public/PublicContentView.vue'),
+    meta: { requiresAuth: false, title: 'API Documentation' }
   },
   {
     path: '/login',
@@ -178,10 +212,6 @@ const routes: RouteRecordRaw[] = [
   },
 
   // ==================== User Routes ====================
-  {
-    path: '/',
-    redirect: '/home'
-  },
   {
     path: '/dashboard',
     name: 'Dashboard',
@@ -577,6 +607,7 @@ const routes: RouteRecordRaw[] = [
       descriptionKey: 'admin.announcements.description'
     }
   },
+  { path: '/admin/content', name: 'AdminContentCenter', component: () => import('@/views/admin/ContentCenterView.vue'), meta: { requiresAuth: true, requiresAdmin: true, title: 'Content Center' } },
   {
     path: '/admin/proxies',
     name: 'AdminProxies',
@@ -736,7 +767,8 @@ const routes: RouteRecordRaw[] = [
     name: 'NotFound',
     component: () => import('@/views/NotFoundView.vue'),
     meta: {
-      title: '404 Not Found'
+      title: '404 Not Found',
+      requiresAuth: false
     }
   }
 ]
@@ -766,7 +798,19 @@ let authInitialized = false
 const navigationLoading = useNavigationLoadingState()
 // 延迟初始化预加载，传入 router 实例
 let routePrefetch: ReturnType<typeof useRoutePrefetch> | null = null
-const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/payment/result', '/payment/airwallex', '/legal']
+const BACKEND_MODE_ALLOWED_PATHS = [
+  '/',
+  '/home',
+  '/news',
+  '/articles',
+  '/docs',
+  '/login',
+  '/key-usage',
+  '/setup',
+  '/payment/result',
+  '/payment/airwallex',
+  '/legal'
+]
 const BACKEND_MODE_CALLBACK_PATHS = [
   '/auth/callback',
   '/auth/linuxdo/callback',
@@ -779,7 +823,11 @@ const BACKEND_MODE_CALLBACK_PATHS = [
 const BACKEND_MODE_PENDING_AUTH_PATHS = ['/register', '/email-verify']
 
 function isBackendModePublicRouteAllowed(path: string, hasPendingAuthSession: boolean): boolean {
-  if (BACKEND_MODE_ALLOWED_PATHS.some((allowedPath) => path === allowedPath || path.startsWith(allowedPath))) {
+  if (
+    BACKEND_MODE_ALLOWED_PATHS.some((allowedPath) =>
+      allowedPath === '/' ? path === '/' : path === allowedPath || path.startsWith(`${allowedPath}/`)
+    )
+  ) {
     return true
   }
 
@@ -823,6 +871,12 @@ router.beforeEach(async (to, _from, next) => {
     }
   } else {
     document.title = resolveDocumentTitle(to.meta.title, appStore.siteName, to.meta.titleKey as string)
+  }
+
+  // Unknown public paths should render the 404 page, including backend mode.
+  if (to.name === 'NotFound') {
+    next()
+    return
   }
 
   // Check if route requires authentication

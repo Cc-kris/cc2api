@@ -151,6 +151,8 @@ describe('admin UsageView distribution metric toggles', () => {
           UsageStatsCards: true,
           UsageFilters: UsageFiltersStub,
           UsageTable: true,
+          OpsErrorLogTable: true,
+          OpsErrorDetailModal: true,
           UsageExportProgress: true,
           UsageCleanupDialog: true,
           UserBalanceHistoryModal: true,

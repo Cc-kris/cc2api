@@ -48,8 +48,8 @@
             {{ t('auth.emailLabel') }}
           </label>
           <div class="relative">
-            <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
-              <Icon name="mail" size="md" class="text-gray-400 dark:text-dark-500" />
+            <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5">
+              <span class="neo-mini-icon bg-[#DBEAFE] text-[#121316]"><Icon name="mail" size="sm" /></span>
             </div>
             <input
               id="email"
@@ -59,7 +59,7 @@
               autofocus
               autocomplete="email"
               :disabled="isLoading"
-              class="input pl-11"
+              class="input pl-12"
               :class="{ 'input-error': errors.email }"
               :placeholder="t('auth.emailPlaceholder')"
             />
@@ -81,11 +81,11 @@
         <button
           type="submit"
           :disabled="isLoading || (turnstileEnabled && !turnstileToken)"
-          class="btn btn-primary w-full"
+          class="btn btn-primary neo-auth-submit-btn w-full"
         >
           <svg
             v-if="isLoading"
-            class="-ml-1 mr-2 h-4 w-4 animate-spin text-white"
+            class="-ml-1 mr-2 h-4 w-4 animate-spin text-[#121316]"
             fill="none"
             viewBox="0 0 24 24"
           >

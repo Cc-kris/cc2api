@@ -39,6 +39,16 @@ async function captureUiEvidence(page: Page, testInfo: TestInfo, testName: strin
 test.describe('UI accessibility baseline', () => {
   test.describe.configure({ mode: 'serial' })
 
+  for (const route of ['/', '/news', '/articles', '/docs']) {
+    test(`${route} public shell has no serious violations`, async ({ page }, testInfo) => {
+      await page.goto(route)
+      await expect(page.locator('body')).toContainText('CCAI')
+      const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()
+      expect(results.violations.filter(v => ['critical', 'serious'].includes(v.impact || ''))).toEqual([])
+      await captureUiEvidence(page, testInfo, `public-${route.replaceAll('/', '_') || 'home'}`)
+    })
+  }
+
   test('login shell has keyboard-visible form controls and no serious violations', async ({ page }, testInfo) => {
     await page.addInitScript(theme => {
       localStorage.setItem('theme', theme)

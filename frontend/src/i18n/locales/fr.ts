@@ -539,9 +539,9 @@ export default {
         "note": "Ces variables d'environnement seront actives dans la session terminal actuelle. Pour une configuration permanente, ajoutez-les à ~/.bashrc, ~/.zshrc ou au fichier de configuration approprié."
       },
       "grok": {
-        "description": "Configurez Grok Build, Claude Code, Codex ou OpenCode pour envoyer des demandes par l'intermédiaire de votre groupe Sub2API Grok.",
-        "claudeDescription": "Configurez Claude Code pour envoyer du trafic API Messages via votre groupe Sub2API Grok.",
-        "codexDescription": "Configurez Codex pour envoyer le trafic API des réponses via votre groupe Sub2API Grok.",
+        "description": "Configurez Grok Build, Claude Code, Codex ou OpenCode pour envoyer des demandes par l'intermédiaire de votre groupe CCAI Grok.",
+        "claudeDescription": "Configurez Claude Code pour envoyer du trafic API Messages via votre groupe CCAI Grok.",
+        "codexDescription": "Configurez Codex pour envoyer le trafic API des réponses via votre groupe CCAI Grok.",
         "configTomlHint": "Sauvegarder un config.toml existant avant de fusionner cette entrée de modèle. Exécutez l'inspection de grok après l'enregistrement pour vérifier la configuration efficace.",
         "codexConfigTomlHint": "Sauvegarder un config.toml existant avant de fusionner cette configuration du fournisseur.",
         "note": "Enregistrer le fichier sous ~/.grok/config.toml, puis lancer grok inspecter et sélectionner grok dans /model.",

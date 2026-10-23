@@ -74,7 +74,7 @@
             class="flex items-center gap-2 rounded-xl p-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-dark-800"
             :aria-label="t('common.userMenu')"
           >
-            <div class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 text-sm font-medium text-white shadow-sm">
+            <div class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg border-2 border-[#121316] bg-[#CCFF00] font-mono text-xs font-black text-[#121316] shadow-[1.8px_1.8px_0_#121316] dark:border-[#60A5FA] dark:bg-[#2563EB] dark:text-white">
               <img
                 v-if="avatarUrl"
                 :src="avatarUrl"

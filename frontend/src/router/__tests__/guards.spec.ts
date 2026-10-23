@@ -84,7 +84,7 @@ function simulateGuard(
       return authState.isAdmin ? '/admin/dashboard' : '/dashboard'
     }
     if (authState.backendModeEnabled && !authState.isAuthenticated) {
-      const allowed = ['/login', '/key-usage', '/setup', '/payment/result']
+      const allowed = ['/', '/home', '/news', '/articles', '/docs', '/login', '/key-usage', '/setup', '/payment/result']
       const callbackPaths = [
         '/auth/callback',
         '/auth/linuxdo/callback',
@@ -94,7 +94,7 @@ function simulateGuard(
       ]
       const pendingAuthPaths = ['/register', '/email-verify']
       const isAllowed =
-        allowed.some((path) => toPath === path || toPath.startsWith(path)) ||
+        allowed.some((path) => path === '/' ? toPath === '/' : toPath === path || toPath.startsWith(`${path}/`)) ||
         callbackPaths.includes(toPath) ||
         (authState.hasPendingAuthSession && pendingAuthPaths.includes(toPath))
       if (!isAllowed) {
@@ -133,7 +133,7 @@ function simulateGuard(
     if (authState.isAuthenticated && authState.isAdmin) {
       return null
     }
-    const allowed = ['/login', '/key-usage', '/setup', '/payment/result']
+    const allowed = ['/', '/home', '/news', '/articles', '/docs', '/login', '/key-usage', '/setup', '/payment/result']
     const callbackPaths = [
       '/auth/callback',
       '/auth/linuxdo/callback',
@@ -143,7 +143,7 @@ function simulateGuard(
     ]
     const pendingAuthPaths = ['/register', '/email-verify']
     const isAllowed =
-      allowed.some((path) => toPath === path || toPath.startsWith(path)) ||
+      allowed.some((path) => path === '/' ? toPath === '/' : toPath === path || toPath.startsWith(`${path}/`)) ||
       callbackPaths.includes(toPath) ||
       (authState.hasPendingAuthSession && pendingAuthPaths.includes(toPath))
     if (!isAllowed) {
@@ -336,7 +336,7 @@ describe('路由守卫逻辑', () => {
   })
 
   describe('Backend Mode', () => {
-    it('unauthenticated: /home redirects to /login', () => {
+    it.each(['/home', '/news', '/news/zh-CN/story', '/articles', '/articles/en-US/guide', '/docs/api'])('unauthenticated: %s is allowed', (path) => {
       const authState: MockAuthState = {
         isAuthenticated: false,
         isAdmin: false,
@@ -344,8 +344,8 @@ describe('路由守卫逻辑', () => {
         backendModeEnabled: true,
         hasPendingAuthSession: false,
       }
-      const redirect = simulateGuard('/home', { requiresAuth: false }, authState)
-      expect(redirect).toBe('/login')
+	  const redirect = simulateGuard(path, { requiresAuth: false }, authState)
+	  expect(redirect).toBeNull()
     })
 
     it('unauthenticated: /login is allowed', () => {

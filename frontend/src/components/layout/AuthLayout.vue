@@ -1,66 +1,49 @@
 <template>
-  <div class="relative flex min-h-screen items-center justify-center overflow-hidden p-4">
-    <div class="absolute right-4 top-4 z-20">
+  <div class="ccai-auth-shell relative flex min-h-screen items-center justify-center overflow-hidden p-4 bg-[#F5F2EB] dark:bg-dark-950">
+    <div class="absolute right-6 top-6 z-20 flex items-center gap-3">
+      <router-link
+        to="/"
+        class="inline-flex h-10 items-center px-3.5 rounded-xl bg-white text-xs font-black text-[#121316] border-2 border-[#121316] shadow-[3px_3px_0_#121316] hover:-translate-y-0.5 transition-transform"
+      >
+        ← CCAI Home
+      </router-link>
       <LocaleSwitcher />
     </div>
 
-    <!-- Background -->
-    <div
-      class="absolute inset-0 bg-gradient-to-br from-gray-50 via-primary-50/30 to-gray-100 dark:from-dark-950 dark:via-dark-900 dark:to-dark-950"
-    ></div>
-
-    <!-- Decorative Elements -->
-    <div class="pointer-events-none absolute inset-0 overflow-hidden">
-      <!-- Gradient Orbs -->
-      <div
-        class="absolute -right-40 -top-40 h-80 w-80 rounded-full bg-primary-400/20 blur-3xl"
-      ></div>
-      <div
-        class="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-primary-500/15 blur-3xl"
-      ></div>
-      <div
-        class="absolute left-1/2 top-1/2 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-300/10 blur-3xl"
-      ></div>
-
-      <!-- Grid Pattern -->
-      <div
-        class="absolute inset-0 bg-[linear-gradient(rgba(20,184,166,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(20,184,166,0.03)_1px,transparent_1px)] bg-[size:64px_64px]"
-      ></div>
-    </div>
+    <!-- Neo-Lab Blueprint Grid Background -->
+    <div class="pointer-events-none fixed inset-0 ccai-blueprint-grid"></div>
 
     <!-- Content Container -->
     <div class="relative z-10 w-full max-w-md">
       <!-- Logo/Brand -->
-      <div class="mb-8 text-center">
-        <!-- Custom Logo or Default Logo -->
-        <template v-if="settingsLoaded">
-          <div
-            class="mb-4 inline-flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl shadow-lg shadow-primary-500/30"
-          >
-            <img :src="siteLogo || '/logo.png'" alt="Logo" class="h-full w-full object-contain" />
-          </div>
-          <h1 class="text-gradient mb-2 text-3xl font-bold">
-            {{ siteName }}
-          </h1>
-          <p class="text-sm text-gray-500 dark:text-dark-400">
-            {{ siteSubtitle }}
-          </p>
-        </template>
+      <div class="mb-7 text-center">
+        <router-link
+          to="/"
+          class="mb-4 inline-flex h-14 px-5 items-center justify-center rounded-2xl bg-[#2563EB] text-white font-mono text-2xl font-black tracking-tight border-[2.5px] border-[#121316] shadow-[5px_5px_0_#121316] transition-transform hover:-rotate-3"
+        >
+          CCAI
+        </router-link>
+        <h1 class="mb-1.5 text-3xl font-black tracking-tight text-[#121316] dark:text-white">
+          CCAI
+        </h1>
+        <p class="text-sm font-semibold text-[#5E6577] dark:text-dark-400">
+          {{ siteSubtitle }}
+        </p>
       </div>
 
       <!-- Card Container -->
-      <div class="card-glass rounded-2xl p-8 shadow-glass">
+      <div class="card-glass rounded-2xl p-8">
         <slot />
       </div>
 
       <!-- Footer Links -->
-      <div class="mt-6 text-center text-sm">
+      <div class="mt-6 text-center text-sm font-semibold">
         <slot name="footer" />
       </div>
 
       <!-- Copyright -->
-      <div class="mt-8 text-center text-xs text-gray-400 dark:text-dark-500">
-        &copy; {{ currentYear }} {{ siteName }}. {{ t('common.allRightsReserved') }}
+      <div class="mt-8 text-center font-mono text-xs font-bold text-[#5E6577] dark:text-dark-500">
+        &copy; {{ currentYear }} CCAI. {{ t('common.allRightsReserved') }}
       </div>
     </div>
   </div>
@@ -70,16 +53,12 @@
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores'
-import { sanitizeUrl } from '@/utils/url'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 
 const appStore = useAppStore()
 const { t } = useI18n()
 
-const siteName = computed(() => appStore.siteName || 'Sub2API')
-const siteLogo = computed(() => sanitizeUrl(appStore.siteLogo || '', { allowRelative: true, allowDataUrl: true }))
 const siteSubtitle = computed(() => appStore.cachedPublicSettings?.site_subtitle || t('auth.defaultSiteSubtitle'))
-const settingsLoaded = computed(() => appStore.publicSettingsLoaded)
 
 const currentYear = computed(() => new Date().getFullYear())
 

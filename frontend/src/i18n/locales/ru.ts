@@ -539,9 +539,9 @@ export default {
         "note": "Эти переменные среды будут активны в текущей терминальной сессии. Для постоянной конфигурации добавьте их в ~/.bashrc, ~/.zshrc или соответствующий файл конфигурации."
       },
       "grok": {
-        "description": "Настройте Grok Build, Claude Code, Codex или OpenCode для отправки запросов через группу Sub2API Grok.",
-        "claudeDescription": "Настройте код Claude для отправки трафика API сообщений через группу Sub2API Grok.",
-        "codexDescription": "Настройте Codex для отправки трафика API-интерфейсов через группу Sub2API Grok.",
+        "description": "Настройте Grok Build, Claude Code, Codex или OpenCode для отправки запросов через группу CCAI Grok.",
+        "claudeDescription": "Настройте код Claude для отправки трафика API сообщений через группу CCAI Grok.",
+        "codexDescription": "Настройте Codex для отправки трафика API-интерфейсов через группу CCAI Grok.",
         "configTomlHint": "Резервное копирование существующего config.toml перед объединением этой модели. Запустите проверку после сохранения, чтобы проверить эффективную конфигурацию.",
         "codexConfigTomlHint": "Резервное копирование существующего config.toml перед объединением этой конфигурации провайдера.",
         "note": "Сохраните файл как ~/.grok/config.toml, затем запустите проверку grok и выберите grok из /model.",

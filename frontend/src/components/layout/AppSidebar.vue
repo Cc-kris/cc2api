@@ -8,13 +8,13 @@
   >
     <!-- Logo/Brand -->
     <div class="sidebar-header" :class="{ 'sidebar-header-collapsed': sidebarCollapsed }">
-      <!-- Custom Logo or Default Logo -->
-      <div class="sidebar-logo flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl shadow-glow">
-        <img v-if="settingsLoaded" :src="siteLogo || '/logo.png'" alt="Logo" class="h-full w-full object-contain" />
-      </div>
+      <!-- CCAI Neo-Lab Brand Stamp -->
+      <router-link to="/" class="ccai-sidebar-stamp flex h-10 px-2.5 items-center justify-center rounded-xl font-mono text-sm font-black tracking-tight text-white bg-[#2563EB] border-2 border-[#121316] shadow-[3px_3px_0_#121316] transition-transform hover:-translate-y-0.5">
+        CCAI
+      </router-link>
       <div class="sidebar-brand" :class="{ 'sidebar-brand-collapsed': sidebarCollapsed }" :aria-hidden="sidebarCollapsed ? 'true' : 'false'">
-        <span class="sidebar-brand-title text-lg font-bold text-gray-900 dark:text-white">
-          {{ siteName }}
+        <span class="sidebar-brand-title text-lg font-black tracking-tight text-[#121316] dark:text-white">
+          CCAI
         </span>
         <!-- Version Badge -->
         <VersionBadge :version="siteVersion" />
@@ -248,10 +248,7 @@ const isDark = ref(document.documentElement.classList.contains('dark'))
 const expandedGroups = ref<Set<string>>(new Set())
 
 // Site settings from appStore (cached, no flicker)
-const siteName = computed(() => appStore.siteName)
-const siteLogo = computed(() => appStore.siteLogo)
 const siteVersion = computed(() => appStore.siteVersion)
-const settingsLoaded = computed(() => appStore.publicSettingsLoaded)
 
 // SVG Icon Components
 const DashboardIcon = {
@@ -741,6 +738,7 @@ const adminNavItems = computed((): NavItem[] => {
     { path: '/admin/accounts', label: t('nav.accounts'), icon: GlobeIcon },
     { path: '/admin/finance', label: t('nav.financeStats'), icon: CreditCardIcon },
     { path: '/admin/announcements', label: t('nav.announcements'), icon: BellIcon },
+    { path: '/admin/content', label: '内容中心', icon: ChartIcon },
     { path: '/admin/proxies', label: t('nav.proxies'), icon: ServerIcon },
     { path: '/admin/risk-control', label: t('nav.riskControl'), icon: ShieldIcon, hideInSimpleMode: true, featureFlag: flagRiskControl },
     { path: '/admin/redeem', label: t('nav.redeemCodes'), icon: TicketIcon, hideInSimpleMode: true },

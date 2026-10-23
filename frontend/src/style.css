@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --ccai-ink: #111827;
+  --ccai-muted: #6b7280;
+  --ccai-line: #e5e7eb;
+  --ccai-blue: #2563eb;
+  --ccai-surface: #ffffff;
+  --ccai-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+}
+
 @layer base {
   * {
     @apply border-gray-200 dark:border-dark-700;
@@ -767,4 +780,1316 @@
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
+}
+
+/* ==================== CCAI NEO-LAB GLOBAL CONSOLE THEME ==================== */
+:root {
+  --neolab-bg: #F5F2EB;
+  --neolab-ink: #121316;
+  --neolab-muted: #5E6577;
+  --neolab-blue: #2563EB;
+  --neolab-mint: #00C896;
+  --neolab-lime: #CCFF00;
+  --neolab-red: #FF3B30;
+  --neolab-shadow: 4px 4px 0px #121316;
+  --neolab-shadow-lg: 6px 6px 0px #121316;
+  --neolab-shadow-sm: 3px 3px 0px #121316;
+}
+
+body {
+  background-color: var(--neolab-bg) !important;
+  color: var(--neolab-ink) !important;
+}
+
+.dark body {
+  background-color: #0E1015 !important;
+  color: #F8FAFC !important;
+}
+
+/* 工程蓝图背景网格 */
+.ccai-blueprint-grid {
+  background-size: 40px 40px;
+  background-image:
+    linear-gradient(to right, rgba(18, 19, 22, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(18, 19, 22, 0.045) 1px, transparent 1px);
+}
+.dark .ccai-blueprint-grid {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+}
+
+/* 侧边栏 Neo-Lab 化 */
+.sidebar {
+  background-color: #FFFFFF !important;
+  border-right: 2.5px solid #121316 !important;
+  backdrop-filter: none !important;
+  box-shadow: 4px 0px 0px rgba(18, 19, 22, 0.06) !important;
+}
+.dark .sidebar {
+  background-color: #161922 !important;
+  border-right: 2px solid #334155 !important;
+}
+
+.sidebar-header {
+  border-bottom: 2.5px solid #121316 !important;
+  background-color: #F8FAFC;
+}
+.dark .sidebar-header {
+  border-bottom: 2px solid #334155 !important;
+  background-color: #161922;
+}
+
+.sidebar-link {
+  border: 2px solid transparent !important;
+  border-radius: 12px !important;
+  font-weight: 700 !important;
+  color: #121316 !important;
+  transition: all 0.15s ease !important;
+}
+.dark .sidebar-link {
+  color: #E2E8F0 !important;
+}
+
+.sidebar-link:hover {
+  background-color: #F4F4F6 !important;
+  border-color: #121316 !important;
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0px #121316 !important;
+}
+
+.sidebar-link-active {
+  background-color: #CCFF00 !important;
+  color: #121316 !important;
+  border: 2px solid #121316 !important;
+  box-shadow: 3px 3px 0px #121316 !important;
+  font-weight: 900 !important;
+}
+.dark .sidebar-link-active {
+  background-color: #CCFF00 !important;
+  color: #121316 !important;
+  border-color: #FFFFFF !important;
+}
+
+/* 顶部导航栏 Header Neo-Lab 化 */
+header.glass {
+  background-color: #FFFFFF !important;
+  backdrop-filter: none !important;
+  border-bottom: 2.5px solid #121316 !important;
+}
+.dark header.glass {
+  background-color: #161922 !important;
+  border-bottom: 2px solid #334155 !important;
+}
+
+/* 全站卡片、统计卡、面板全面切换为 Neo-Lab 硬朗微立体风格 */
+.card,
+.card-glass,
+.stat-card {
+  background-color: #FFFFFF !important;
+  border: 2.5px solid #121316 !important;
+  border-radius: 18px !important;
+  box-shadow: var(--neolab-shadow) !important;
+  backdrop-filter: none !important;
+}
+.dark .card,
+.dark .card-glass,
+.dark .stat-card {
+  background-color: #181C26 !important;
+  border: 2px solid #475569 !important;
+  box-shadow: 4px 4px 0px #000000 !important;
+}
+
+.card-hover:hover,
+.stat-card:hover {
+  transform: translate(-2px, -2px) !important;
+  box-shadow: var(--neolab-shadow-lg) !important;
+  border-color: #2563EB !important;
+}
+
+.card-header {
+  border-bottom: 2px solid #121316 !important;
+  background-color: #F8FAFC !important;
+  border-top-left-radius: 15px !important;
+  border-top-right-radius: 15px !important;
+  font-weight: 800 !important;
+}
+.dark .card-header {
+  border-bottom: 2px solid #334155 !important;
+  background-color: #1E2433 !important;
+}
+
+.card-footer {
+  border-top: 2px solid #121316 !important;
+  background-color: #F8FAFC !important;
+  border-bottom-left-radius: 15px !important;
+  border-bottom-right-radius: 15px !important;
+}
+
+/* 按钮体系 Neo-Lab 化 */
+.btn {
+  border: 2px solid #121316 !important;
+  border-radius: 12px !important;
+  font-weight: 800 !important;
+  box-shadow: var(--neolab-shadow-sm) !important;
+  transition: transform 0.14s ease, box-shadow 0.14s ease !important;
+}
+.btn:hover:not(:disabled) {
+  transform: translate(-1.5px, -1.5px) !important;
+  box-shadow: 5px 5px 0px #121316 !important;
+}
+.btn:active:not(:disabled) {
+  transform: translate(1px, 1px) !important;
+  box-shadow: 1px 1px 0px #121316 !important;
+}
+
+.btn-primary {
+  background-color: #CCFF00 !important;
+  color: #121316 !important;
+  border-color: #121316 !important;
+}
+.btn-primary:hover:not(:disabled) {
+  background-color: #d8ff33 !important;
+}
+
+.btn-secondary {
+  background-color: #FFFFFF !important;
+  color: #121316 !important;
+  border-color: #121316 !important;
+}
+.dark .btn-secondary {
+  background-color: #1E293B !important;
+  color: #F8FAFC !important;
+  border-color: #475569 !important;
+}
+
+.btn-danger {
+  background-color: #FF3B30 !important;
+  color: #FFFFFF !important;
+  border-color: #121316 !important;
+}
+
+/* 输入框 & 选择器 Neo-Lab 化 */
+.input,
+select.input,
+textarea.input {
+  background-color: #FFFFFF !important;
+  border: 2px solid #121316 !important;
+  border-radius: 12px !important;
+  box-shadow: 2px 2px 0px rgba(18, 19, 22, 0.15) !important;
+  font-weight: 600 !important;
+  color: #121316 !important;
+}
+.dark .input,
+.dark select.input,
+.dark textarea.input {
+  background-color: #0F172A !important;
+  border-color: #475569 !important;
+  color: #F8FAFC !important;
+}
+.input:focus {
+  border-color: #2563EB !important;
+  box-shadow: 3px 3px 0px #2563EB !important;
+  outline: none !important;
+}
+
+/* 表格 Table Neo-Lab 化 */
+.table-container,
+.table-wrapper {
+  background-color: #FFFFFF !important;
+  border: 2.5px solid #121316 !important;
+  border-radius: 16px !important;
+  box-shadow: var(--neolab-shadow) !important;
+  overflow: hidden !important;
+}
+.dark .table-container,
+.dark .table-wrapper {
+  background-color: #181C26 !important;
+  border-color: #475569 !important;
+}
+
+.table thead {
+  background-color: #EDF4FF !important;
+  border-bottom: 2px solid #121316 !important;
+}
+.dark .table thead {
+  background-color: #1E293B !important;
+  border-bottom: 2px solid #475569 !important;
+}
+
+.table th {
+  color: #121316 !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-weight: 800 !important;
+  font-size: 12px !important;
+}
+.dark .table th {
+  color: #E2E8F0 !important;
+}
+
+.table tbody tr {
+  border-bottom: 1.5px solid rgba(18, 19, 22, 0.1) !important;
+}
+.table tbody tr:hover {
+  background-color: #F8FAFF !important;
+}
+.dark .table tbody tr:hover {
+  background-color: #1E293B !important;
+}
+
+/* 徽章 Badge Neo-Lab 化 */
+.badge {
+  border: 1.5px solid #121316 !important;
+  border-radius: 8px !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-weight: 800 !important;
+  box-shadow: 1.5px 1.5px 0px #121316 !important;
+}
+.badge-primary {
+  background-color: #DBEAFE !important;
+  color: #1D4ED8 !important;
+}
+.badge-success {
+  background-color: #D1FAE5 !important;
+  color: #047857 !important;
+}
+.badge-warning {
+  background-color: #FEF3C7 !important;
+  color: #B45309 !important;
+}
+.badge-danger {
+  background-color: #FFE4E1 !important;
+  color: #FF3B30 !important;
+}
+
+/* 弹窗 & 下拉菜单 Neo-Lab 化 */
+.dropdown,
+.modal-content {
+  background-color: #FFFFFF !important;
+  border: 2.5px solid #121316 !important;
+  border-radius: 18px !important;
+  box-shadow: 7px 7px 0px #121316 !important;
+}
+.dark .dropdown,
+.dark .modal-content {
+  background-color: #181C26 !important;
+  border-color: #475569 !important;
+}
+
+/* 标签页 Tabs Neo-Lab 化 */
+.tabs {
+  border-bottom: 2.5px solid #121316 !important;
+}
+.tab-active {
+  border-bottom-color: #2563EB !important;
+  border-bottom-width: 3px !important;
+  color: #2563EB !important;
+  font-weight: 900 !important;
+}
+/* ==========================================================================
+   CCAI NEO-LAB GLOBAL CONSOLE THEME (Aligned with Home Page 100%)
+   ========================================================================== */
+
+:root {
+  --neo-bg-warm: #F5F2EB;
+  --neo-bg-order: #EDF4FF;
+  --neo-ink: #121316;
+  --neo-muted: #5E6577;
+  --neo-blue: #2563EB;
+  --neo-lime: #CCFF00;
+  --neo-mint: #00C896;
+  --neo-red: #FF3B30;
+  --neo-amber: #FF9500;
+}
+
+/* 1. 全局字体、字色与文本选中高亮（彻底杜绝白底白字） */
+body,
+#app {
+  font-family: 'Plus Jakarta Sans', 'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, sans-serif !important;
+  background-color: #F5F2EB !important;
+  color: #121316 !important;
+  letter-spacing: -0.01em;
+}
+
+html.dark body,
+html.dark #app {
+  background-color: #11141C !important;
+  color: #F8FAFC !important;
+}
+
+/* 无论亮色还是深色，鼠标框选文字一律用荧光黄绿底 #CCFF00 + 纯黑字 #121316，绝不白底白字 */
+::selection {
+  background-color: #CCFF00 !important;
+  color: #121316 !important;
+}
+::-moz-selection {
+  background-color: #CCFF00 !important;
+  color: #121316 !important;
+}
+
+/* 全局标题与字体颜色强对比度对齐首页 */
+h1, h2, h3, h4, .page-title, .card-title, .stat-value {
+  color: #121316 !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.025em !important;
+}
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark .page-title,
+html.dark .card-title,
+html.dark .stat-value {
+  color: #F8FAFC !important;
+}
+
+.page-description,
+.stat-label,
+.input-hint {
+  color: #5E6577 !important;
+  font-weight: 700 !important;
+}
+html.dark .page-description,
+html.dark .stat-label,
+html.dark .input-hint {
+  color: #94A3B8 !important;
+}
+
+/* 等宽数字与代码字体统一 */
+code, pre, .font-mono, .stat-value, .badge, .table th {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+}
+
+/* 2. 全站卡片 (.card / .stat-card / 详情面板) 统一 Neo-Lab 粗黑框 + 硬朗投影 */
+.card,
+.stat-card {
+  background-color: #FFFFFF !important;
+  background-image: none !important;
+  border: 2.5px solid #121316 !important;
+  border-radius: 18px !important;
+  box-shadow: 5px 5px 0px #121316 !important;
+  backdrop-filter: none !important;
+  transition: transform 0.18s ease, box-shadow 0.18s ease !important;
+}
+.card-hover:hover,
+.stat-card:hover {
+  transform: translate(-2px, -2px) !important;
+  box-shadow: 7px 7px 0px #121316 !important;
+}
+
+html.dark .card,
+html.dark .stat-card {
+  background-color: #181C26 !important;
+  border-color: #E2E8F0 !important;
+  box-shadow: 5px 5px 0px #000000 !important;
+  color: #F8FAFC !important;
+}
+
+.card-header {
+  border-bottom: 2px solid #121316 !important;
+  background-color: #EDF4FF !important;
+  border-top-left-radius: 15px !important;
+  border-top-right-radius: 15px !important;
+}
+html.dark .card-header {
+  border-bottom-color: #475569 !important;
+  background-color: #1E2536 !important;
+}
+
+.card-footer {
+  border-top: 2px solid #121316 !important;
+  background-color: #F5F2EB !important;
+  border-bottom-left-radius: 15px !important;
+  border-bottom-right-radius: 15px !important;
+}
+html.dark .card-footer {
+  border-top-color: #475569 !important;
+  background-color: #141822 !important;
+}
+
+/* 3. 全站按钮 (.btn / 登录注册按钮 / 弹窗按钮) 彻底清除渐变图并统一为首页 Neo-Lab 按钮 */
+.btn {
+  border: 2px solid #121316 !important;
+  border-radius: 12px !important;
+  font-weight: 900 !important;
+  background-image: none !important;
+  box-shadow: 3px 3px 0px #121316 !important;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, background-color 0.14s ease !important;
+  letter-spacing: -0.01em !important;
+}
+.btn:hover:not(:disabled) {
+  transform: translate(-1.5px, -1.5px) !important;
+  box-shadow: 4.5px 4.5px 0px #121316 !important;
+}
+.btn:active:not(:disabled) {
+  transform: translate(1px, 1px) !important;
+  box-shadow: 1.5px 1.5px 0px #121316 !important;
+}
+
+/* 主按钮（包括登录/注册提交大按钮、新建、确认）：首页标志性荧光黄绿 #CCFF00 + 纯黑粗体字 #121316 */
+.btn-primary,
+button.bg-primary-600,
+button.bg-primary-500,
+a.btn-primary {
+  background-color: #CCFF00 !important;
+  background-image: none !important;
+  color: #121316 !important;
+  border: 2.5px solid #121316 !important;
+  box-shadow: 4px 4px 0px #121316 !important;
+  font-weight: 900 !important;
+}
+.btn-primary *,
+button.bg-primary-600 *,
+button.bg-primary-500 * {
+  color: #121316 !important;
+}
+.btn-primary:hover:not(:disabled),
+button.bg-primary-600:hover:not(:disabled),
+button.bg-primary-500:hover:not(:disabled) {
+  background-color: #d8ff33 !important;
+  background-image: none !important;
+  color: #121316 !important;
+  transform: translate(-2px, -2px) !important;
+  box-shadow: 6px 6px 0px #121316 !important;
+}
+
+/* 登录与注册页专属大按钮强化 */
+.neo-auth-submit-btn {
+  height: 48px !important;
+  font-size: 15px !important;
+  border-radius: 13px !important;
+  border: 2.5px solid #121316 !important;
+  box-shadow: 4px 4px 0px #121316 !important;
+}
+
+/* 次要按钮与幽灵按钮 */
+.btn-secondary,
+.btn-ghost {
+  background-color: #FFFFFF !important;
+  background-image: none !important;
+  color: #121316 !important;
+  border: 2px solid #121316 !important;
+  box-shadow: 3px 3px 0px #121316 !important;
+  font-weight: 800 !important;
+}
+.btn-secondary:hover:not(:disabled),
+.btn-ghost:hover:not(:disabled) {
+  background-color: #EDF4FF !important;
+  color: #121316 !important;
+}
+html.dark .btn-secondary,
+html.dark .btn-ghost {
+  background-color: #222838 !important;
+  color: #F8FAFC !important;
+  border-color: #E2E8F0 !important;
+  box-shadow: 3px 3px 0px #000000 !important;
+}
+html.dark .btn-secondary:hover:not(:disabled),
+html.dark .btn-ghost:hover:not(:disabled) {
+  background-color: #2563EB !important;
+  color: #FFFFFF !important;
+  border-color: #60A5FA !important;
+}
+html.dark .btn-secondary:hover:not(:disabled) *,
+html.dark .btn-ghost:hover:not(:disabled) * {
+  color: #FFFFFF !important;
+}
+
+/* 危险按钮 / 成功按钮 / 警告按钮 */
+.btn-danger,
+button.bg-red-600,
+button.bg-red-500 {
+  background-color: #FF3B30 !important;
+  background-image: none !important;
+  color: #FFFFFF !important;
+  border: 2px solid #121316 !important;
+  box-shadow: 3px 3px 0px #121316 !important;
+  font-weight: 900 !important;
+}
+.btn-success,
+button.bg-emerald-600,
+button.bg-green-600 {
+  background-color: #00C896 !important;
+  background-image: none !important;
+  color: #121316 !important;
+  border: 2px solid #121316 !important;
+  box-shadow: 3px 3px 0px #121316 !important;
+  font-weight: 900 !important;
+}
+.btn-warning,
+button.bg-amber-500 {
+  background-color: #FF9500 !important;
+  background-image: none !important;
+  color: #121316 !important;
+  border: 2px solid #121316 !important;
+  box-shadow: 3px 3px 0px #121316 !important;
+  font-weight: 900 !important;
+}
+
+/* 4. 输入框 (.input / input / textarea / select) 对齐首页硬边框风格 */
+.input,
+input[type="text"]:not(.select-search-input),
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="url"],
+input[type="search"],
+textarea,
+select {
+  background-color: #FFFFFF !important;
+  border: 2px solid #121316 !important;
+  border-radius: 12px !important;
+  color: #121316 !important;
+  font-weight: 700 !important;
+  box-shadow: 2.5px 2.5px 0px rgba(18, 19, 22, 0.18) !important;
+  transition: all 0.15s ease !important;
+}
+.input:focus,
+input[type="text"]:not(.select-search-input):focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus,
+input[type="url"]:focus,
+input[type="search"]:focus,
+textarea:focus,
+select:focus {
+  border-color: #2563EB !important;
+  box-shadow: 3.5px 3.5px 0px #2563EB !important;
+  outline: none !important;
+}
+html.dark .input,
+html.dark input[type="text"]:not(.select-search-input),
+html.dark input[type="email"],
+html.dark input[type="password"],
+html.dark input[type="number"],
+html.dark input[type="url"],
+html.dark input[type="search"],
+html.dark textarea,
+html.dark select {
+  background-color: #141822 !important;
+  border-color: #CBD5E1 !important;
+  color: #F8FAFC !important;
+  box-shadow: 2.5px 2.5px 0px #000000 !important;
+}
+
+.input-label {
+  font-weight: 800 !important;
+  color: #121316 !important;
+  font-size: 13.5px !important;
+}
+html.dark .input-label {
+  color: #F1F5F9 !important;
+}
+
+/* 登录/注册输入框内部左侧的 Neo-Lab 迷你图标方盒 */
+.neo-mini-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1.8px solid #121316;
+  box-shadow: 1.8px 1.8px 0px #121316;
+  flex-shrink: 0;
+}
+
+/* 5. 其他所有页面的 Icon 全面对齐首页风格（粗黑框 + 硬阴影方盒底座） */
+.stat-icon {
+  border: 2px solid #121316 !important;
+  border-radius: 12px !important;
+  box-shadow: 3px 3px 0px #121316 !important;
+  color: #121316 !important;
+}
+.stat-icon * {
+  color: #121316 !important;
+}
+.stat-icon-primary { background-color: #DBEAFE !important; }
+.stat-icon-success { background-color: #D1FAE5 !important; }
+.stat-icon-warning { background-color: #FEF3C7 !important; }
+.stat-icon-danger  { background-color: #FFE4E1 !important; }
+
+/* 自动捕获全站各页面卡片、统计块、弹窗标题、详情里的彩色图标底座 */
+:is(
+  div.rounded-lg.p-2,
+  div.rounded-lg.p-2\.5,
+  div.rounded-lg.p-3,
+  div.rounded-xl.p-2,
+  div.rounded-xl.p-2\.5,
+  div.rounded-xl.p-3,
+  div.rounded-2xl.p-2\.5,
+  div.rounded-2xl.p-3,
+  div.rounded-2xl.p-3\.5,
+  div.flex.h-8.w-8.items-center.justify-center,
+  div.flex.h-9.w-9.items-center.justify-center,
+  div.flex.h-10.w-10.items-center.justify-center,
+  div.flex.h-11.w-11.items-center.justify-center,
+  div.flex.h-12.w-12.items-center.justify-center
+):has(> svg) {
+  border: 2px solid #121316 !important;
+  border-radius: 11px !important;
+  box-shadow: 2.5px 2.5px 0px #121316 !important;
+}
+
+:is(
+  div[class*="bg-blue-50"], div[class*="bg-blue-100"], div[class*="bg-primary-50"], div[class*="bg-primary-100"], div[class*="bg-indigo-50"], div[class*="bg-indigo-100"], div[class*="bg-cyan-50"], div[class*="bg-cyan-100"]
+):has(> svg) {
+  background-color: #DBEAFE !important;
+}
+:is(
+  div[class*="bg-emerald-50"], div[class*="bg-emerald-100"], div[class*="bg-green-50"], div[class*="bg-green-100"], div[class*="bg-teal-50"], div[class*="bg-teal-100"]
+):has(> svg) {
+  background-color: #D1FAE5 !important;
+}
+:is(
+  div[class*="bg-amber-50"], div[class*="bg-amber-100"], div[class*="bg-yellow-50"], div[class*="bg-yellow-100"], div[class*="bg-orange-50"], div[class*="bg-orange-100"]
+):has(> svg) {
+  background-color: #FEF3C7 !important;
+}
+:is(
+  div[class*="bg-red-50"], div[class*="bg-red-100"], div[class*="bg-rose-50"], div[class*="bg-rose-100"], div[class*="bg-pink-50"], div[class*="bg-pink-100"]
+):has(> svg) {
+  background-color: #FFE4E1 !important;
+}
+:is(
+  div[class*="bg-purple-50"], div[class*="bg-purple-100"], div[class*="bg-violet-50"], div[class*="bg-violet-100"]
+):has(> svg) {
+  background-color: #EDE9FE !important;
+}
+
+:is(
+  div.rounded-lg.p-2,
+  div.rounded-lg.p-2\.5,
+  div.rounded-lg.p-3,
+  div.rounded-xl.p-2,
+  div.rounded-xl.p-2\.5,
+  div.rounded-xl.p-3,
+  div.rounded-2xl.p-2\.5,
+  div.rounded-2xl.p-3,
+  div.flex.h-8.w-8.items-center.justify-center,
+  div.flex.h-9.w-9.items-center.justify-center,
+  div.flex.h-10.w-10.items-center.justify-center,
+  div.flex.h-11.w-11.items-center.justify-center,
+  div.flex.h-12.w-12.items-center.justify-center
+):has(> svg) > svg {
+  color: #121316 !important;
+}
+
+/* 6. 侧边栏 (.sidebar / .sidebar-link) 与其图标、深色/选中态（绝不白底白字） */
+.sidebar {
+  background-color: #FFFFFF !important;
+  border-right: 2.5px solid #121316 !important;
+  backdrop-filter: none !important;
+}
+html.dark .sidebar {
+  background-color: #151922 !important;
+  border-right: 2.5px solid #E2E8F0 !important;
+}
+
+.sidebar-link {
+  border-radius: 12px !important;
+  font-weight: 800 !important;
+  color: #3F4654 !important;
+  border: 2px solid transparent !important;
+  margin-bottom: 3px !important;
+  transition: all 0.14s ease !important;
+}
+html.dark .sidebar-link {
+  color: #E2E8F0 !important;
+}
+
+/* 侧边栏每个菜单的 Icon 加上首页风格的工业圆角方框底座 */
+.sidebar-link > svg,
+.sidebar-link > .icon {
+  padding: 4px !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 8px !important;
+  border: 1.8px solid #121316 !important;
+  background-color: #F4F7FF !important;
+  color: #121316 !important;
+  box-shadow: 1.8px 1.8px 0px #121316 !important;
+  flex-shrink: 0 !important;
+  transition: all 0.14s ease !important;
+}
+
+.sidebar-link:hover:not(.sidebar-link-active) {
+  background-color: #EDF4FF !important;
+  color: #121316 !important;
+  border-color: #121316 !important;
+  box-shadow: 2px 2px 0px #121316 !important;
+  transform: translate(-1px, -1px);
+}
+/* 深色模式下侧边栏悬停：深蓝底配纯白字，绝不白底白字 */
+html.dark .sidebar-link:hover:not(.sidebar-link-active) {
+  background-color: #252D40 !important;
+  color: #FFFFFF !important;
+  border-color: #94A3B8 !important;
+  box-shadow: 2px 2px 0px #000000 !important;
+}
+html.dark .sidebar-link:hover:not(.sidebar-link-active) span {
+  color: #FFFFFF !important;
+}
+
+/* 侧边栏选中态：无论亮色还是深色模式，一律采用首页标志性的荧光黄绿 #CCFF00 底 + 纯黑字 #121316 + 粗黑框硬投影！ */
+.sidebar-link-active,
+html.dark .sidebar-link-active {
+  background-color: #CCFF00 !important;
+  color: #121316 !important;
+  border: 2px solid #121316 !important;
+  box-shadow: 3px 3px 0px #121316 !important;
+  font-weight: 900 !important;
+}
+.sidebar-link-active *,
+html.dark .sidebar-link-active * {
+  color: #121316 !important;
+}
+.sidebar-link-active > svg,
+html.dark .sidebar-link-active > svg {
+  background-color: #FFFFFF !important;
+  border-color: #121316 !important;
+  color: #121316 !important;
+}
+
+/* 7. 徽章 (.badge) 全部改为首页同款工业印章标签 */
+.badge {
+  border: 1.8px solid #121316 !important;
+  border-radius: 8px !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-weight: 800 !important;
+  box-shadow: 1.8px 1.8px 0px #121316 !important;
+  padding: 2px 9px !important;
+}
+.badge-primary {
+  background-color: #DBEAFE !important;
+  color: #1E40AF !important;
+}
+.badge-success {
+  background-color: #D1FAE5 !important;
+  color: #065F46 !important;
+}
+.badge-warning {
+  background-color: #FEF3C7 !important;
+  color: #92400E !important;
+}
+.badge-danger {
+  background-color: #FFE4E1 !important;
+  color: #B91C1C !important;
+}
+.badge-gray {
+  background-color: #F1F5F9 !important;
+  color: #121316 !important;
+}
+.badge * {
+  color: inherit !important;
+}
+
+/* 8. 表格 (.table / DataTable) 工业账本化 */
+.table-container {
+  border: 2.5px solid #121316 !important;
+  border-radius: 18px !important;
+  box-shadow: 5px 5px 0px #121316 !important;
+  background-color: #FFFFFF !important;
+  overflow: hidden !important;
+}
+html.dark .table-container {
+  background-color: #181C26 !important;
+  border-color: #E2E8F0 !important;
+  box-shadow: 5px 5px 0px #000000 !important;
+}
+
+.table thead,
+table thead {
+  background-color: #EDF4FF !important;
+  border-bottom: 2.5px solid #121316 !important;
+}
+html.dark .table thead,
+html.dark table thead {
+  background-color: #1E2638 !important;
+  border-bottom: 2.5px solid #94A3B8 !important;
+}
+
+.table th,
+table th {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-weight: 900 !important;
+  color: #121316 !important;
+  letter-spacing: 0.04em !important;
+}
+html.dark .table th,
+html.dark table th {
+  color: #F8FAFC !important;
+}
+
+.table td,
+table td {
+  color: #121316 !important;
+  font-weight: 600 !important;
+}
+html.dark .table td,
+html.dark table td {
+  color: #F1F5F9 !important;
+}
+
+.table tbody tr,
+table tbody tr {
+  border-bottom: 1.5px solid rgba(18, 19, 22, 0.1) !important;
+  transition: background-color 0.12s ease !important;
+}
+html.dark .table tbody tr,
+html.dark table tbody tr {
+  border-bottom: 1.5px solid rgba(226, 232, 240, 0.12) !important;
+}
+
+.table tbody tr:hover,
+table tbody tr:hover {
+  background-color: #F4F7FF !important;
+}
+/* 深色模式下表格行悬停：深蓝灰底配纯白字，绝不白底白字 */
+html.dark .table tbody tr:hover,
+html.dark table tbody tr:hover {
+  background-color: #252E42 !important;
+}
+html.dark .table tbody tr:hover td,
+html.dark table tbody tr:hover td {
+  color: #FFFFFF !important;
+}
+
+/* 9. 弹窗 (.dialog-container / .modal-content) 与详情抽屉/面板全面对齐首页风格 */
+.modal-overlay,
+.dialog-overlay {
+  background-color: rgba(18, 19, 22, 0.55) !important;
+  backdrop-filter: blur(3px) !important;
+}
+
+.modal-content,
+.dialog-container {
+  background-color: #FFFFFF !important;
+  border: 3px solid #121316 !important;
+  border-radius: 22px !important;
+  box-shadow: 9px 9px 0px #121316 !important;
+  overflow: hidden !important;
+}
+html.dark .modal-content,
+html.dark .dialog-container {
+  background-color: #181C26 !important;
+  border-color: #E2E8F0 !important;
+  box-shadow: 9px 9px 0px #000000 !important;
+  color: #F8FAFC !important;
+}
+
+.modal-header,
+.dialog-header {
+  background-color: #EDF4FF !important;
+  border-bottom: 2.5px solid #121316 !important;
+  padding: 18px 24px !important;
+}
+html.dark .modal-header,
+html.dark .dialog-header {
+  background-color: #1E2638 !important;
+  border-bottom: 2.5px solid #94A3B8 !important;
+}
+
+.modal-title,
+.dialog-title {
+  font-size: 19px !important;
+  font-weight: 900 !important;
+  color: #121316 !important;
+  letter-spacing: -0.02em !important;
+}
+html.dark .modal-title,
+html.dark .dialog-title {
+  color: #FFFFFF !important;
+}
+
+.dialog-close-btn {
+  border: 2px solid #121316 !important;
+  background-color: #FFFFFF !important;
+  color: #121316 !important;
+  border-radius: 10px !important;
+  box-shadow: 2px 2px 0px #121316 !important;
+  padding: 6px !important;
+  transition: all 0.14s ease !important;
+}
+.dialog-close-btn:hover {
+  background-color: #FF3B30 !important;
+  color: #FFFFFF !important;
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0px #121316 !important;
+}
+.dialog-close-btn:hover * {
+  color: #FFFFFF !important;
+}
+
+.modal-body,
+.dialog-body {
+  padding: 22px 24px !important;
+  color: #121316 !important;
+}
+html.dark .modal-body,
+html.dark .dialog-body {
+  color: #F1F5F9 !important;
+}
+
+.modal-footer,
+.dialog-footer {
+  background-color: #F5F2EB !important;
+  border-top: 2.5px solid #121316 !important;
+  padding: 16px 24px !important;
+}
+html.dark .modal-footer,
+html.dark .dialog-footer {
+  background-color: #131720 !important;
+  border-top: 2.5px solid #475569 !important;
+}
+
+/* 弹窗和详情页内部的子区块（例如 bg-gray-50 / bg-gray-100 / rounded-lg border-gray-200 的参数详情卡片）自动 Neo-Lab 化 */
+:is(.modal-body, .dialog-body, main) :is(
+  div.rounded-lg.border,
+  div.rounded-xl.border,
+  div.rounded-2xl.border,
+  div.bg-gray-50.rounded-lg,
+  div.bg-gray-50.rounded-xl,
+  div.bg-gray-100.rounded-lg,
+  div.bg-gray-100.rounded-xl
+):not(.card):not(.stat-card):not(.input):not(.select-dropdown-portal) {
+  border: 2px solid #121316 !important;
+  border-radius: 13px !important;
+  box-shadow: 3px 3px 0px rgba(18, 19, 22, 0.16) !important;
+}
+html.dark :is(.modal-body, .dialog-body, main) :is(
+  div.rounded-lg.border,
+  div.rounded-xl.border,
+  div.rounded-2xl.border,
+  div.bg-gray-50.rounded-lg,
+  div.bg-gray-50.rounded-xl,
+  div.bg-gray-100.rounded-lg,
+  div.bg-gray-100.rounded-xl
+):not(.card):not(.stat-card):not(.input):not(.select-dropdown-portal) {
+  background-color: #1E2433 !important;
+  border-color: #94A3B8 !important;
+  color: #F8FAFC !important;
+}
+
+/* 10. 下拉菜单 (.dropdown / .dropdown-item) 与标签页 (.tabs / .tab) */
+.dropdown {
+  background-color: #FFFFFF !important;
+  border: 2.5px solid #121316 !important;
+  border-radius: 14px !important;
+  box-shadow: 5px 5px 0px #121316 !important;
+  padding: 6px !important;
+}
+html.dark .dropdown {
+  background-color: #181C26 !important;
+  border-color: #E2E8F0 !important;
+  box-shadow: 5px 5px 0px #000000 !important;
+}
+
+.dropdown-item {
+  border-radius: 9px !important;
+  font-weight: 800 !important;
+  color: #121316 !important;
+  transition: all 0.12s ease !important;
+}
+html.dark .dropdown-item {
+  color: #F8FAFC !important;
+}
+.dropdown-item:hover {
+  background-color: #CCFF00 !important;
+  color: #121316 !important;
+}
+.dropdown-item:hover * {
+  color: #121316 !important;
+}
+
+.tabs {
+  border-bottom: 2.5px solid #121316 !important;
+  gap: 6px !important;
+}
+html.dark .tabs {
+  border-bottom-color: #94A3B8 !important;
+}
+
+.tab {
+  font-weight: 800 !important;
+  color: #5E6577 !important;
+  border-radius: 10px 10px 0 0 !important;
+  padding: 10px 16px !important;
+}
+html.dark .tab {
+  color: #94A3B8 !important;
+}
+.tab:hover:not(.tab-active) {
+  color: #121316 !important;
+  background-color: #EDF4FF !important;
+}
+html.dark .tab:hover:not(.tab-active) {
+  color: #FFFFFF !important;
+  background-color: #252E42 !important;
+}
+.tab-active,
+html.dark .tab-active {
+  background-color: #CCFF00 !important;
+  color: #121316 !important;
+  border: 2px solid #121316 !important;
+  border-bottom: none !important;
+  font-weight: 900 !important;
+}
+.tab-active *,
+html.dark .tab-active * {
+  color: #121316 !important;
+}
+
+/* 11. 深色模式精修：清爽深邃工业蓝黑底色，彻底杜绝恶心大面积荧光绿与白底白字 */
+html.dark body,
+html.dark #app {
+  background-color: #0F1218 !important;
+  color: #F8FAFC !important;
+}
+
+/* 划选文字高亮：暗黑模式下为极光深蓝底配白字，不再亮瞎眼 */
+html.dark ::selection {
+  background-color: #2563EB !important;
+  color: #FFFFFF !important;
+}
+html.dark ::-moz-selection {
+  background-color: #2563EB !important;
+  color: #FFFFFF !important;
+}
+
+/* 深色模式下的白色残留类自动映射为干净深蓝碳灰，绝不大面积泛绿 */
+html.dark :is(.bg-white, .bg-gray-50, .bg-slate-50):not(.stat-icon):not(.badge):not(.btn-primary):not([class*="dark:bg-"]) {
+  background-color: #181C26 !important;
+  color: #F8FAFC !important;
+}
+
+html.dark :is(.bg-primary-50, .bg-blue-50):not(.stat-icon):not(.badge):not(.btn-primary) {
+  background-color: #1E293B !important;
+  color: #93C5FD !important;
+}
+
+/* 深色模式下分段选择器/Tab选中态：精致的深空极光蓝高亮，对比鲜明 */
+html.dark :is([aria-selected="true"], [aria-current="page"], .tab-active):not(.sidebar-link-active) {
+  background-color: #2563EB !important;
+  color: #FFFFFF !important;
+  border-color: #3B82F6 !important;
+  box-shadow: 2px 2px 0px #000000 !important;
+  font-weight: 800 !important;
+}
+html.dark :is([aria-selected="true"], [aria-current="page"], .tab-active):not(.sidebar-link-active) * {
+  color: #FFFFFF !important;
+}
+
+/* 侧边栏菜单选中态在深色模式下使用精致深海蓝 + 冰蓝边框，克制雅致 */
+html.dark .sidebar-link-active {
+  background-color: #1D283A !important;
+  color: #60A5FA !important;
+  border: 2px solid #3B82F6 !important;
+  box-shadow: 2.5px 2.5px 0px #000000 !important;
+}
+html.dark .sidebar-link-active * {
+  color: #93C5FD !important;
+}
+html.dark .sidebar-link-active > svg {
+  background-color: #2563EB !important;
+  border-color: #3B82F6 !important;
+  color: #FFFFFF !important;
+}
+html.dark :is(
+  [aria-selected="true"],
+  [aria-current="page"],
+  .bg-white:not(.dark\:bg-dark-800):not(.dark\:bg-dark-900):not(.dark\:bg-dark-700):not(.card):not(.modal-content):not(.dialog-container):not(.sidebar):not(.table-container):not(.dropdown)
+) * {
+  color: #121316 !important;
+}
+
+/* 分段切换胶囊（如 日/周/月 切换、Tab 胶囊切换中常见的 bg-white shadow-sm 激活按钮）在亮/暗模式下一律变为 #CCFF00 荧光黄 + 粗黑框 */
+button.bg-white.shadow-sm,
+button.bg-white.shadow {
+  background-color: #CCFF00 !important;
+  color: #121316 !important;
+  border: 2px solid #121316 !important;
+  box-shadow: 2px 2px 0px #121316 !important;
+  font-weight: 900 !important;
+}
+button.bg-white.shadow-sm *,
+button.bg-white.shadow * {
+  color: #121316 !important;
+}
+
+/* 开关 Switch 工业机械感改造 */
+.switch {
+  border: 2px solid #121316 !important;
+}
+.switch-checked {
+  background-color: #00C896 !important;
+}
+.switch-thumb {
+  border: 1.5px solid #121316 !important;
+}
+
+html.dark .btn-primary,
+html.dark button.bg-primary-600,
+html.dark button.bg-primary-500,
+html.dark a.btn-primary {
+  background-color: #2563EB !important;
+  color: #FFFFFF !important;
+  border-color: #60A5FA !important;
+  box-shadow: 4px 4px 0px #000000 !important;
+}
+html.dark .btn-primary *,
+html.dark button.bg-primary-600 *,
+html.dark button.bg-primary-500 *,
+html.dark a.btn-primary * {
+  color: #FFFFFF !important;
+}
+html.dark .btn-primary:hover:not(:disabled),
+html.dark button.bg-primary-600:hover:not(:disabled),
+html.dark button.bg-primary-500:hover:not(:disabled) {
+  background-color: #3B82F6 !important;
+  color: #FFFFFF !important;
+  box-shadow: 5.5px 5.5px 0px #000000 !important;
+}
+html.dark .dropdown-item:hover {
+  background-color: #2563EB !important;
+  color: #FFFFFF !important;
+}
+html.dark .dropdown-item:hover * {
+  color: #FFFFFF !important;
+}
+html.dark button.bg-white.shadow-sm,
+html.dark button.bg-white.shadow {
+  background-color: #2563EB !important;
+  color: #FFFFFF !important;
+  border-color: #60A5FA !important;
+  box-shadow: 2px 2px 0px #000000 !important;
+}
+html.dark button.bg-white.shadow-sm *,
+html.dark button.bg-white.shadow * {
+  color: #FFFFFF !important;
+}
+
+/* ==========================================================================
+   NEO-LAB DEEP UNIFICATION (Tabs, Independent Pages, Metrics & Dashboard)
+   ========================================================================== */
+
+/* 1. 系统设置与所有页面的顶部 Tab 机械切换槽风格彻底统一 */
+.settings-tabs-shell,
+[class*="tabs-shell"] {
+  border: 2.5px solid #121316 !important;
+  border-radius: 18px !important;
+  background-color: #FFFFFF !important;
+  box-shadow: 4px 4px 0px #121316 !important;
+  padding: 8px !important;
+  margin-bottom: 24px !important;
+}
+html.dark .settings-tabs-shell,
+html.dark [class*="tabs-shell"] {
+  border-color: #E2E8F0 !important;
+  background-color: #181C26 !important;
+  box-shadow: 4px 4px 0px #000000 !important;
+}
+
+.settings-tab,
+.settings-tabs button {
+  border-radius: 12px !important;
+  padding: 10px 18px !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  color: #3F4654 !important;
+  border: 2px solid transparent !important;
+  background: transparent !important;
+  transition: all 0.15s ease !important;
+}
+html.dark .settings-tab,
+html.dark .settings-tabs button {
+  color: #CBD5E1 !important;
+}
+
+.settings-tab:hover:not(.settings-tab-active),
+.settings-tabs button:hover:not(.settings-tab-active) {
+  background-color: #EDF4FF !important;
+  color: #121316 !important;
+  border-color: #121316 !important;
+}
+html.dark .settings-tab:hover:not(.settings-tab-active),
+html.dark .settings-tabs button:hover:not(.settings-tab-active) {
+  background-color: #262E42 !important;
+  color: #FFFFFF !important;
+  border-color: #60A5FA !important;
+}
+
+.settings-tab-active,
+.settings-tabs button.settings-tab-active {
+  background-color: #CCFF00 !important;
+  color: #121316 !important;
+  border: 2px solid #121316 !important;
+  box-shadow: 2.5px 2.5px 0px #121316 !important;
+  font-weight: 900 !important;
+}
+.settings-tab-active *,
+.settings-tabs button.settings-tab-active * {
+  color: #121316 !important;
+}
+html.dark .settings-tab-active,
+html.dark .settings-tabs button.settings-tab-active {
+  background-color: #2563EB !important;
+  color: #FFFFFF !important;
+  border-color: #60A5FA !important;
+  box-shadow: 2.5px 2.5px 0px #000000 !important;
+}
+html.dark .settings-tab-active *,
+html.dark .settings-tabs button.settings-tab-active * {
+  color: #FFFFFF !important;
+}
+
+/* 2. 所有数据统计组件 (Dashboard / Stat Cards / KPI / Charts) 风格统一 */
+:is(.grid-cols-2, .grid-cols-3, .grid-cols-4) > div.card,
+:is(.grid-cols-2, .grid-cols-3, .grid-cols-4) > div[class*="card"] {
+  border: 2.5px solid #121316 !important;
+  border-radius: 18px !important;
+  box-shadow: 5px 5px 0px #121316 !important;
+  background-color: #FFFFFF !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+}
+:is(.grid-cols-2, .grid-cols-3, .grid-cols-4) > div.card:hover,
+:is(.grid-cols-2, .grid-cols-3, .grid-cols-4) > div[class*="card"]:hover {
+  transform: translate(-2px, -2px) !important;
+  box-shadow: 7px 7px 0px #121316 !important;
+}
+html.dark :is(.grid-cols-2, .grid-cols-3, .grid-cols-4) > div.card,
+html.dark :is(.grid-cols-2, .grid-cols-3, .grid-cols-4) > div[class*="card"] {
+  border-color: #E2E8F0 !important;
+  background-color: #181C26 !important;
+  box-shadow: 5px 5px 0px #000000 !important;
+}
+
+/* 统计卡片内大号数字强制等宽工业字体 */
+:is(.stat-card, div.card) :is(p.text-xl, p.text-2xl, p.text-3xl, .stat-value) {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.02em !important;
+}
+
+/* 图表容器 (Echarts / Chart.js 等图表包裹层) 粗黑边框微立体化 */
+div[class*="chart"],
+div:has(> canvas),
+div:has(> .echarts) {
+  border-radius: 16px !important;
+}
+
+/* 3. 独立页面 (KeyUsageView, LegalDocumentView, NotFoundView 等) 统一 */
+.neo-independent-page {
+  font-family: 'Plus Jakarta Sans', 'PingFang SC', sans-serif !important;
+}
+.neo-independent-page .card,
+.neo-independent-page div.rounded-2xl {
+  border: 2.5px solid #121316 !important;
+  box-shadow: 5px 5px 0px #121316 !important;
+}
+html.dark .neo-independent-page .card,
+html.dark .neo-independent-page div.rounded-2xl {
+  border-color: #E2E8F0 !important;
+  background-color: #181C26 !important;
+  box-shadow: 5px 5px 0px #000000 !important;
 }

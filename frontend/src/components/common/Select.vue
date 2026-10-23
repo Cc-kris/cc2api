@@ -431,115 +431,167 @@ onUnmounted(() => {
 
 <style scoped>
 .select-trigger {
-  @apply flex w-full items-center justify-between gap-2;
-  @apply rounded-xl px-4 py-2.5 text-sm;
-  @apply bg-white dark:bg-dark-800;
-  @apply border border-gray-200 dark:border-dark-600;
-  @apply text-gray-900 dark:text-gray-100;
-  @apply transition-all duration-200;
-  @apply focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30;
-  @apply hover:border-gray-300 dark:hover:border-dark-500;
+  @apply relative w-full flex items-center justify-between gap-2;
+  @apply px-3.5 py-2.5 rounded-xl text-sm font-bold;
+  background-color: #FFFFFF;
+  border: 2px solid #121316;
+  color: #121316;
+  box-shadow: 2.5px 2.5px 0px #121316;
+  @apply transition-all duration-150;
+  @apply focus:outline-none;
   @apply cursor-pointer;
+}
+:global(.dark) .select-trigger {
+  background-color: #181C26;
+  border-color: #E2E8F0;
+  color: #F8FAFC;
+  box-shadow: 2.5px 2.5px 0px #000000;
+}
+
+.select-trigger:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 3.5px 3.5px 0px #121316;
+  background-color: #F8FAFF;
+}
+:global(.dark) .select-trigger:hover:not(:disabled) {
+  background-color: #242B3D;
+  box-shadow: 3.5px 3.5px 0px #000000;
 }
 
 .select-trigger-open {
-  @apply border-primary-500 ring-2 ring-primary-500/30;
+  border-color: #2563EB !important;
+  box-shadow: 3.5px 3.5px 0px #2563EB !important;
 }
 
 .select-trigger-error {
-  @apply border-red-500 focus:border-red-500 focus:ring-red-500/30;
+  border-color: #FF3B30 !important;
+  box-shadow: 3px 3px 0px #FF3B30 !important;
 }
 
 .select-trigger-disabled {
-  @apply cursor-not-allowed bg-gray-100 opacity-60 dark:bg-dark-900;
+  @apply opacity-55 cursor-not-allowed;
+  background-color: #F1F5F9;
+}
+:global(.dark) .select-trigger-disabled {
+  background-color: #0F172A;
 }
 
 .select-value {
-  @apply flex-1 truncate text-left;
+  @apply truncate text-left flex-1 font-bold;
+  color: inherit;
 }
 
 .select-icon {
-  @apply flex-shrink-0 text-gray-400 dark:text-dark-400;
+  @apply flex-shrink-0 flex items-center;
+  color: #121316;
+}
+:global(.dark) .select-icon {
+  color: #F8FAFC;
+}
+
+.select-dropdown-portal {
+  @apply w-full rounded-xl overflow-hidden;
+  background-color: #FFFFFF;
+  border: 2.5px solid #121316;
+  box-shadow: 6px 6px 0px #121316;
+}
+:global(.dark) .select-dropdown-portal {
+  background-color: #181C26;
+  border-color: #E2E8F0;
+  box-shadow: 6px 6px 0px #000000;
+}
+
+.select-search {
+  @apply flex items-center gap-2 px-3 py-2.5;
+  border-bottom: 2px solid #121316;
+  background-color: #F4F7FF;
+}
+:global(.dark) .select-search {
+  border-bottom-color: #475569;
+  background-color: #111520;
+}
+
+.select-search-input {
+  @apply w-full bg-transparent text-sm font-bold;
+  color: #121316;
+  @apply placeholder-gray-500;
+  @apply focus:outline-none;
+}
+:global(.dark) .select-search-input {
+  color: #F8FAFC;
+}
+
+.select-options {
+  @apply max-h-60 overflow-y-auto p-1.5;
+}
+
+.select-group-header {
+  @apply px-3 py-1.5 text-[11px] font-black tracking-wider uppercase;
+  font-family: 'JetBrains Mono', monospace;
+  color: #5E6577;
+}
+:global(.dark) .select-group-header {
+  color: #94A3B8;
+}
+
+.select-option {
+  @apply flex items-center justify-between gap-2 px-3 py-2.5 cursor-pointer rounded-lg my-0.5;
+  @apply text-sm font-bold;
+  color: #121316;
+  border: 1.5px solid transparent;
+  @apply transition-all duration-100;
+}
+:global(.dark) .select-option {
+  color: #F8FAFC;
+}
+
+.select-option:hover:not(.select-option-disabled):not(.select-option-selected),
+.select-option-focused:not(.select-option-disabled):not(.select-option-selected) {
+  background-color: #EDF4FF;
+  color: #121316;
+  border-color: #121316;
+}
+:global(.dark) .select-option:hover:not(.select-option-disabled):not(.select-option-selected),
+:global(.dark) .select-option-focused:not(.select-option-disabled):not(.select-option-selected) {
+  background-color: #262E42;
+  color: #FFFFFF;
+  border-color: #94A3B8;
+}
+
+/* 选中项：无论亮色还是深色，一律采用首页标志性的荧光黄绿底 #CCFF00 + 纯黑字 #121316 + 粗黑框，绝不出现白底白字！ */
+.select-option-selected {
+  background-color: #CCFF00 !important;
+  color: #121316 !important;
+  border: 2px solid #121316 !important;
+  box-shadow: 2px 2px 0px #121316 !important;
+  font-weight: 900 !important;
+}
+.select-option-selected * {
+  color: #121316 !important;
+}
+
+.select-option-disabled {
+  @apply opacity-45 cursor-not-allowed;
+}
+
+.select-option-label {
+  @apply truncate;
+}
+
+.select-empty {
+  @apply px-4 py-8 text-center text-sm font-bold;
+  color: #5E6577;
 }
 </style>
 
-<style>
-.select-dropdown-portal {
-  @apply w-max min-w-[200px];
-  @apply bg-white dark:bg-dark-800;
-  @apply rounded-xl;
-  @apply border border-gray-200 dark:border-dark-700;
-  @apply shadow-lg shadow-black/10 dark:shadow-black/30;
-  @apply overflow-hidden;
-  pointer-events: auto !important;
+<style scoped>
+:global(.dark) .select-option-selected {
+  background-color: #2563EB !important;
+  color: #FFFFFF !important;
+  border-color: #60A5FA !important;
+  box-shadow: 2px 2px 0px #000000 !important;
 }
-
-.select-dropdown-portal .select-search {
-  @apply flex items-center gap-2 px-3 py-2;
-  @apply border-b border-gray-100 dark:border-dark-700;
-}
-
-.select-dropdown-portal .select-search-input {
-  @apply flex-1 bg-transparent text-sm;
-  @apply text-gray-900 dark:text-gray-100;
-  @apply placeholder:text-gray-400 dark:placeholder:text-dark-400;
-  @apply focus:outline-none;
-}
-
-.select-dropdown-portal .select-options {
-  @apply max-h-60 overflow-y-auto py-1 outline-none;
-}
-
-.select-dropdown-portal .select-option {
-  @apply flex items-center justify-between gap-2;
-  @apply px-4 py-2.5 text-sm;
-  @apply text-gray-700 dark:text-gray-300;
-  @apply cursor-pointer transition-colors duration-150;
-  @apply hover:bg-gray-50 dark:hover:bg-dark-700;
-  pointer-events: auto !important;
-}
-
-.select-dropdown-portal .select-option-selected {
-  @apply bg-primary-50 dark:bg-primary-900/20;
-  @apply text-primary-700 dark:text-primary-300;
-}
-
-.select-dropdown-portal .select-option-focused {
-  @apply bg-gray-100 dark:bg-dark-700;
-}
-
-.select-dropdown-portal .select-option-disabled {
-  @apply cursor-not-allowed opacity-40;
-}
-
-.select-dropdown-portal .select-option-group {
-  @apply cursor-default select-none;
-  @apply bg-gray-50 dark:bg-dark-900;
-  @apply text-[11px] font-bold uppercase tracking-wider;
-  @apply text-gray-500 dark:text-gray-400;
-}
-
-.select-dropdown-portal .select-option-group:hover {
-  @apply bg-gray-50 dark:bg-dark-900;
-}
-
-.select-dropdown-portal .select-option-label {
-  @apply flex-1 min-w-0 truncate text-left;
-}
-
-.select-dropdown-portal .select-empty {
-  @apply px-4 py-8 text-center text-sm;
-  @apply text-gray-500 dark:text-dark-400;
-}
-
-.select-dropdown-enter-active,
-.select-dropdown-leave-active {
-  transition: all 0.2s ease;
-}
-
-.select-dropdown-enter-from,
-.select-dropdown-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
+:global(.dark) .select-option-selected * {
+  color: #FFFFFF !important;
 }
 </style>

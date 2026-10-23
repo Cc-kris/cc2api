@@ -1,12 +1,10 @@
 <template>
-  <div class="relative flex min-h-screen flex-col bg-gray-50 dark:bg-dark-950">
+  <div class="neo-independent-page relative flex min-h-screen flex-col bg-[#F5F2EB] dark:bg-[#0F1218]">
     <!-- Header (same pattern as HomeView) -->
-    <header class="relative z-20 px-6 py-4">
+    <header class="relative z-20 border-b-2 border-[#121316] bg-white/95 px-6 py-4 dark:border-[#E2E8F0] dark:bg-[#181C26]">
       <nav class="mx-auto flex max-w-6xl items-center justify-between">
-        <router-link to="/home" class="flex items-center gap-3">
-          <div class="h-10 w-10 overflow-hidden rounded-xl shadow-md">
-            <img :src="siteLogo || '/logo.png'" alt="Logo" class="h-full w-full object-contain" />
-          </div>
+        <router-link to="/" class="flex items-center gap-3">
+          <div class="flex h-10 w-11 items-center justify-center rounded-xl border-2 border-[#121316] bg-[#121316] font-mono text-xs font-black text-[#CCFF00] shadow-[2.5px_2.5px_0_#2563EB]">CCAI</div>
           <span class="text-lg font-semibold tracking-tight text-gray-900 dark:text-white">{{ siteName }}</span>
         </router-link>
         <div class="flex items-center gap-3">
@@ -428,8 +426,7 @@ const appStore = useAppStore()
 
 // ==================== Site Settings (same as HomeView) ====================
 
-const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'Sub2API')
-const siteLogo = computed(() => appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '')
+const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'CCAI')
 const docUrl = computed(() => appStore.cachedPublicSettings?.doc_url || appStore.docUrl || '')
 const githubUrl = 'https://github.com/Wei-Shaw/sub2api'
 

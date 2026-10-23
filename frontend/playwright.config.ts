@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test'
 
 const baseURL = process.env.E2E_BASE_URL || 'http://127.0.0.1:3000'
 const useExternalServer = process.env.PLAYWRIGHT_EXTERNAL_SERVER === '1'
+const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH
 
 export default defineConfig({
   testDir: './e2e',
@@ -33,15 +34,15 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] }
+      use: { ...devices['Desktop Chrome'], ...(executablePath ? { launchOptions: { executablePath } } : {}) }
     },
     {
       name: 'tablet-chrome',
-      use: { ...devices['Desktop Chrome'], viewport: { width: 1024, height: 768 }, isMobile: false }
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1024, height: 768 }, isMobile: false, ...(executablePath ? { launchOptions: { executablePath } } : {}) }
     },
     {
       name: 'mobile-chrome',
-      use: { ...devices['Pixel 7'] }
+      use: { ...devices['Pixel 7'], ...(executablePath ? { launchOptions: { executablePath } } : {}) }
     },
     {
       name: 'webkit-desktop',

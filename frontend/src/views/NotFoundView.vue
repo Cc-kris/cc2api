@@ -1,6 +1,6 @@
 <template>
   <div
-    class="relative flex min-h-screen items-center justify-center overflow-hidden bg-gray-50 px-4 dark:bg-dark-950"
+    class="neo-independent-page relative flex min-h-screen items-center justify-center overflow-hidden bg-[#F5F2EB] px-4 dark:bg-[#0F1218]"
   >
     <!-- Background Decoration -->
     <div class="pointer-events-none absolute inset-0 overflow-hidden">
@@ -21,10 +21,10 @@
           >
           <div class="absolute inset-0 flex items-center justify-center">
             <div
-              class="flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 shadow-lg shadow-primary-500/30"
+              class="flex h-24 w-24 items-center justify-center rounded-2xl border-3 border-[#121316] bg-[#CCFF00] text-[#121316] shadow-[6px_6px_0_#121316] dark:border-[#60A5FA] dark:bg-[#2563EB] dark:text-white"
             >
               <svg
-                class="h-12 w-12 text-white"
+                class="h-12 w-12 text-[#121316] dark:text-white"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -47,7 +47,7 @@
           {{ t('errors.pageNotFound') }}
         </h1>
         <p class="text-gray-500 dark:text-dark-400">
-          The page you are looking for doesn't exist or has been moved.
+          {{ t('errors.pageNotFoundDescription') }}
         </p>
       </div>
 
@@ -55,23 +55,23 @@
       <div class="flex flex-col justify-center gap-3 sm:flex-row">
         <button @click="goBack" class="btn btn-secondary">
           <Icon name="arrowLeft" size="md" class="mr-2" />
-          Go Back
+          {{ t('errors.goBack') }}
         </button>
-        <router-link to="/dashboard" class="btn btn-primary">
+        <router-link to="/" class="btn btn-primary">
           <Icon name="home" size="md" class="mr-2" />
-          Go to Dashboard
+          {{ t('errors.goHome') }}
         </router-link>
       </div>
 
       <!-- Help Link -->
       <p class="mt-8 text-sm text-gray-400 dark:text-dark-500">
-        Need help?
-        <a
-          href="#"
+        {{ t('errors.needHelp') }}
+        <router-link
+          to="/docs"
           class="text-primary-600 transition-colors hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
         >
-          Contact support
-        </a>
+          {{ t('common.contactSupport') }}
+        </router-link>
       </p>
     </div>
   </div>

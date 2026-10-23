@@ -121,6 +121,10 @@ export default defineConfig(({ mode }) => {
         '/setup': {
           target: backendUrl,
           changeOrigin: true
+        },
+        '/media': {
+          target: backendUrl,
+          changeOrigin: true
         }
       }
     }

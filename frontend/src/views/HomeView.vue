@@ -46,8 +46,14 @@
           </div>
         </div>
 
+        <div class="hidden items-center gap-7 text-sm font-medium text-gray-600 md:flex dark:text-dark-300">
+          <a href="#features" class="transition-colors hover:text-primary-500">核心特性</a>
+          <a v-if="docUrl" :href="docUrl" class="transition-colors hover:text-primary-500">{{ t('home.docs') }}</a>
+          <a href="#flagship" class="transition-colors hover:text-primary-500">旗舰板块</a>
+        </div>
+
         <!-- Nav Actions -->
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2">
           <!-- Language Switcher -->
           <LocaleSwitcher />
 
@@ -114,20 +120,22 @@
     <main class="relative z-10 flex-1 px-6 py-16">
       <div class="mx-auto max-w-6xl">
         <!-- Hero Section - Left/Right Layout -->
-        <div class="mb-12 flex flex-col items-center justify-between gap-12 lg:flex-row lg:gap-16">
+        <div class="mb-16 flex flex-col items-center justify-between gap-12 lg:flex-row lg:gap-16">
           <!-- Left: Text Content -->
           <div class="flex-1 text-center lg:text-left">
-            <h1
-              class="mb-4 text-4xl font-bold text-gray-900 dark:text-white md:text-5xl lg:text-6xl"
-            >
-              {{ siteName }}
+            <div class="mb-5 inline-flex items-center gap-2 rounded-full border border-primary-200/70 bg-white/70 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-primary-600 shadow-sm backdrop-blur dark:border-primary-800/70 dark:bg-dark-800/70 dark:text-primary-300">
+              <span class="h-2 w-2 animate-pulse rounded-full bg-primary-500"></span>
+              CCAI · 高性能 API 网关
+            </div>
+            <h1 class="hero-title mb-5 text-4xl font-bold text-gray-900 dark:text-white md:text-5xl lg:text-7xl">
+              {{ siteName }}<span class="text-primary-500">.</span>
             </h1>
             <p class="mb-8 text-lg text-gray-600 dark:text-dark-300 md:text-xl">
               {{ siteSubtitle }}
             </p>
 
             <!-- CTA Button -->
-            <div>
+            <div class="flex flex-wrap items-center justify-center gap-3 lg:justify-start">
               <router-link
                 :to="isAuthenticated ? dashboardPath : '/login'"
                 class="btn btn-primary px-8 py-3 text-base shadow-lg shadow-primary-500/30"
@@ -135,11 +143,31 @@
                 {{ isAuthenticated ? t('home.goToDashboard') : t('home.getStarted') }}
                 <Icon name="arrowRight" size="md" class="ml-2" :stroke-width="2" />
               </router-link>
+              <a v-if="docUrl" :href="docUrl" class="btn btn-secondary px-6 py-3 text-base">
+                {{ t('home.docs') }}
+                <Icon name="book" size="md" />
+              </a>
             </div>
           </div>
 
           <!-- Right: Terminal Animation -->
-          <div class="flex flex-1 justify-center lg:justify-end">
+          <div class="hero-art flex flex-1 justify-center lg:justify-end">
+            <div class="hero-orbit orbit-one"></div><div class="hero-orbit orbit-two"></div>
+            <div class="hero-card">
+              <svg viewBox="0 0 560 420" role="img" aria-label="CCAI network visualization" class="h-auto w-full">
+                <defs>
+                  <linearGradient id="ccaiGlow" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#2dd4bf"/><stop offset="1" stop-color="#6366f1"/></linearGradient>
+                  <filter id="ccaiShadow"><feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#0f172a" flood-opacity=".32"/></filter>
+                </defs>
+                <rect width="560" height="420" rx="28" fill="#0b1220"/>
+                <circle cx="280" cy="205" r="116" fill="url(#ccaiGlow)" opacity=".16"/>
+                <g stroke="#67e8f9" stroke-opacity=".5" stroke-width="1.5"><path d="M92 108L210 178L280 88L365 178L470 112M110 304L210 230L280 320L365 232L465 300M210 178L210 230M365 178L365 232M280 88V320"/></g>
+                <g fill="#0f172a" stroke="#5eead4" stroke-width="2" filter="url(#ccaiShadow)"><circle cx="92" cy="108" r="16"/><circle cx="470" cy="112" r="16"/><circle cx="110" cy="304" r="16"/><circle cx="465" cy="300" r="16"/><circle cx="280" cy="88" r="19"/><circle cx="280" cy="320" r="19"/><circle cx="210" cy="205" r="23"/><circle cx="365" cy="205" r="23"/></g>
+                <circle cx="280" cy="205" r="52" fill="url(#ccaiGlow)" filter="url(#ccaiShadow)"/><text x="280" y="213" text-anchor="middle" fill="white" font-size="22" font-family="Inter, sans-serif" font-weight="700">CCAI</text>
+                <g fill="#cbd5e1" font-size="11" font-family="ui-monospace, monospace"><text x="56" y="78">OPENAI</text><text x="430" y="78">GEMINI</text><text x="72" y="340">CLAUDE</text><text x="425" y="340">GROK</text></g>
+              </svg>
+              <div class="hero-card-glass"><span class="h-2 w-2 rounded-full bg-emerald-400"></span><span>All systems operational</span><span class="ml-auto font-mono text-emerald-300">99.99%</span></div>
+            </div>
             <div class="terminal-container">
               <div class="terminal-window">
                 <!-- Window header -->
@@ -157,10 +185,10 @@
                     <span class="code-prompt">$</span>
                     <span class="code-cmd">curl</span>
                     <span class="code-flag">-X POST</span>
-                    <span class="code-url">/v1/messages</span>
+                    <span class="code-url">https://api.cc-ai.xyz/v1/chat/completions</span>
                   </div>
                   <div class="code-line line-2">
-                    <span class="code-comment"># Routing to upstream...</span>
+                    <span class="code-comment"># 智能路由至最优上游...</span>
                   </div>
                   <div class="code-line line-3">
                     <span class="code-success">200 OK</span>
@@ -177,30 +205,24 @@
         </div>
 
         <!-- Feature Tags - Centered -->
-        <div class="mb-12 flex flex-wrap items-center justify-center gap-4 md:gap-6">
+        <div id="features" class="mb-12 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div
             class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 bg-white/80 px-5 py-2.5 shadow-sm backdrop-blur-sm dark:border-dark-700/50 dark:bg-dark-800/80"
           >
             <Icon name="swap" size="sm" class="text-primary-500" />
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">{{
-              t('home.tags.subscriptionToApi')
-            }}</span>
+            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">订阅转标准 API</span>
           </div>
           <div
             class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 bg-white/80 px-5 py-2.5 shadow-sm backdrop-blur-sm dark:border-dark-700/50 dark:bg-dark-800/80"
           >
             <Icon name="shield" size="sm" class="text-primary-500" />
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">{{
-              t('home.tags.stickySession')
-            }}</span>
+            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">会话粘性路由</span>
           </div>
           <div
             class="inline-flex items-center gap-2.5 rounded-full border border-gray-200/50 bg-white/80 px-5 py-2.5 shadow-sm backdrop-blur-sm dark:border-dark-700/50 dark:bg-dark-800/80"
           >
             <Icon name="chart" size="sm" class="text-primary-500" />
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">{{
-              t('home.tags.realtimeBilling')
-            }}</span>
+            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">实时计费统计</span>
           </div>
         </div>
 
@@ -215,11 +237,9 @@
             >
               <Icon name="server" size="lg" class="text-white" />
             </div>
-            <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
-              {{ t('home.features.unifiedGateway') }}
-            </h3>
+            <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">统一网关接入</h3>
             <p class="text-sm leading-relaxed text-gray-600 dark:text-dark-400">
-              {{ t('home.features.unifiedGatewayDesc') }}
+              一个地址接入全部主流模型，OpenAI 兼容格式，零迁移成本。
             </p>
           </div>
 
@@ -244,11 +264,9 @@
                 />
               </svg>
             </div>
-            <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
-              {{ t('home.features.multiAccount') }}
-            </h3>
+            <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">多账号负载均衡</h3>
             <p class="text-sm leading-relaxed text-gray-600 dark:text-dark-400">
-              {{ t('home.features.multiAccountDesc') }}
+              账号池智能调度，自动故障转移，配额利用率最大化。
             </p>
           </div>
 
@@ -273,100 +291,99 @@
                 />
               </svg>
             </div>
-            <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
-              {{ t('home.features.balanceQuota') }}
-            </h3>
+            <h3 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">余额与配额管理</h3>
             <p class="text-sm leading-relaxed text-gray-600 dark:text-dark-400">
-              {{ t('home.features.balanceQuotaDesc') }}
+              实时扣费、明细可查，团队额度灵活分配。
             </p>
           </div>
         </div>
 
-        <!-- Supported Providers -->
-        <div class="mb-8 text-center">
-          <h2 class="mb-3 text-2xl font-bold text-gray-900 dark:text-white">
-            {{ t('home.providers.title') }}
-          </h2>
+        <!-- Quick Access: API endpoint & key -->
+        <div id="providers" class="mb-8 text-center">
+          <h2 class="mb-3 text-2xl font-bold text-gray-900 dark:text-white">快速接入</h2>
           <p class="text-sm text-gray-600 dark:text-dark-400">
-            {{ t('home.providers.description') }}
+            统一接口地址，一个 Key 调用全部模型
           </p>
         </div>
 
-        <div class="mb-16 flex flex-wrap items-center justify-center gap-4">
-          <!-- Claude - Supported -->
-          <div
-            class="flex items-center gap-2 rounded-xl border border-primary-200 bg-white/60 px-5 py-3 ring-1 ring-primary-500/20 backdrop-blur-sm dark:border-primary-800 dark:bg-dark-800/60"
-          >
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-500"
-            >
-              <span class="text-xs font-bold text-white">C</span>
+        <div class="mb-16 mx-auto max-w-3xl">
+          <div class="rounded-2xl border border-gray-200/50 bg-white/70 p-6 shadow-sm backdrop-blur-sm dark:border-dark-700/50 dark:bg-dark-800/70">
+            <div class="mb-4">
+              <p class="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">API 地址</p>
+              <code class="block w-full rounded-lg bg-gray-100 px-4 py-2.5 font-mono text-sm text-gray-800 dark:bg-dark-900 dark:text-dark-100">https://api.cc-ai.xyz/v1</code>
             </div>
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">{{ t('home.providers.claude') }}</span>
-            <span
-              class="rounded bg-primary-100 px-1.5 py-0.5 text-[10px] font-medium text-primary-600 dark:bg-primary-900/30 dark:text-primary-400"
-              >{{ t('home.providers.supported') }}</span
-            >
+            <div>
+              <p class="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-dark-400">API Key 示例</p>
+              <code class="block w-full rounded-lg bg-gray-100 px-4 py-2.5 font-mono text-sm text-gray-800 dark:bg-dark-900 dark:text-dark-100">cc-ai-pro-sk-xxxxxxxx</code>
+            </div>
           </div>
-          <!-- GPT - Supported -->
-          <div
-            class="flex items-center gap-2 rounded-xl border border-primary-200 bg-white/60 px-5 py-3 ring-1 ring-primary-500/20 backdrop-blur-sm dark:border-primary-800 dark:bg-dark-800/60"
-          >
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-green-500 to-green-600"
-            >
-              <span class="text-xs font-bold text-white">G</span>
+        </div>
+
+        <!-- Flagship Section: clients (left 4) vs flagship models (right 4) -->
+        <div id="flagship" class="mb-8 text-center">
+          <h2 class="mb-3 text-2xl font-bold text-gray-900 dark:text-white">旗舰板块</h2>
+          <p class="text-sm text-gray-600 dark:text-dark-400">
+            主流客户端全面适配 · 一线旗舰模型全覆盖
+          </p>
+        </div>
+
+        <div class="mb-16 grid gap-6 md:grid-cols-2">
+          <!-- Left wing: client integrations (4) -->
+          <div class="rounded-2xl border border-gray-200/50 bg-white/60 p-6 backdrop-blur-sm dark:border-dark-700/50 dark:bg-dark-800/60">
+            <h3 class="mb-4 text-center text-lg font-semibold text-gray-900 dark:text-white">客户端接入</h3>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <!-- Client 1 -->
+              <div class="rounded-xl border border-gray-200/50 bg-white/70 p-4 dark:border-dark-700/50 dark:bg-dark-800/70">
+                <div class="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500 to-sky-600 text-sm font-bold text-white">聊</div>
+                <p class="text-sm font-semibold text-gray-800 dark:text-dark-100">Chat / WebUI</p>
+                <p class="text-xs leading-relaxed text-gray-500 dark:text-dark-400">任意 OpenAI 兼容聊天界面即插即用</p>
+              </div>
+              <!-- Client 2 -->
+              <div class="rounded-xl border border-gray-200/50 bg-white/70 p-4 dark:border-dark-700/50 dark:bg-dark-800/70">
+                <div class="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 text-sm font-bold text-white">码</div>
+                <p class="text-sm font-semibold text-gray-800 dark:text-dark-100">Coding IDE</p>
+                <p class="text-xs leading-relaxed text-gray-500 dark:text-dark-400">各类编程助手插件无缝接入编码工作流</p>
+              </div>
+              <!-- Client 3 -->
+              <div class="rounded-xl border border-gray-200/50 bg-white/70 p-4 dark:border-dark-700/50 dark:bg-dark-800/70">
+                <div class="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-violet-600 text-sm font-bold text-white">流</div>
+                <p class="text-sm font-semibold text-gray-800 dark:text-dark-100">Workflow Agent</p>
+                <p class="text-xs leading-relaxed text-gray-500 dark:text-dark-400">自动化 Agent 与工作流引擎标准调用</p>
+              </div>
+              <!-- Client 4 -->
+              <div class="rounded-xl border border-gray-200/50 bg-white/70 p-4 dark:border-dark-700/50 dark:bg-dark-800/70">
+                <div class="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 text-sm font-bold text-white">开</div>
+                <p class="text-sm font-semibold text-gray-800 dark:text-dark-100">API / SDK</p>
+                <p class="text-xs leading-relaxed text-gray-500 dark:text-dark-400">OpenAI 兼容接口，全语言 SDK 直接调用</p>
+              </div>
             </div>
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">GPT</span>
-            <span
-              class="rounded bg-primary-100 px-1.5 py-0.5 text-[10px] font-medium text-primary-600 dark:bg-primary-900/30 dark:text-primary-400"
-              >{{ t('home.providers.supported') }}</span
-            >
           </div>
-          <!-- Gemini - Supported -->
-          <div
-            class="flex items-center gap-2 rounded-xl border border-primary-200 bg-white/60 px-5 py-3 ring-1 ring-primary-500/20 backdrop-blur-sm dark:border-primary-800 dark:bg-dark-800/60"
-          >
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600"
-            >
-              <span class="text-xs font-bold text-white">G</span>
+
+          <!-- Right wing: flagship models (4 + 4) -->
+          <div class="rounded-2xl border border-primary-200/60 bg-white/60 p-6 ring-1 ring-primary-500/20 backdrop-blur-sm dark:border-primary-800/60 dark:bg-dark-800/60">
+            <h3 class="mb-4 text-center text-lg font-semibold text-gray-900 dark:text-white">旗舰模型</h3>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <!-- Coding flagship -->
+              <div class="rounded-xl border border-primary-100 bg-white/70 p-4 dark:border-primary-900/40 dark:bg-dark-800/70">
+                <p class="mb-3 text-xs font-bold uppercase tracking-wider text-primary-600 dark:text-primary-300">编程旗舰</p>
+                <ul class="space-y-1.5 text-sm text-gray-700 dark:text-dark-200">
+                  <li class="flex items-start gap-1.5"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-400"></span><span><b>the model 5.5</b><span class="ml-1 text-xs text-gray-500 dark:text-dark-400">编码能力天花板</span></span></li>
+                  <li class="flex items-start gap-1.5"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-400"></span><span><b>Claude opus 4.7</b><span class="ml-1 text-xs text-gray-500 dark:text-dark-400">复杂工程重构首选</span></span></li>
+                  <li class="flex items-start gap-1.5"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-400"></span><span><b>gpt-6-astra</b><span class="ml-1 text-xs text-gray-500 dark:text-dark-400">全栈生成一气呵成</span></span></li>
+                  <li class="flex items-start gap-1.5"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-400"></span><span><b>gemini 4 argon</b><span class="ml-1 text-xs text-gray-500 dark:text-dark-400">长上下文代码理解</span></span></li>
+                </ul>
+              </div>
+              <!-- Top-tier flagship -->
+              <div class="rounded-xl border border-primary-100 bg-white/70 p-4 dark:border-primary-900/40 dark:bg-dark-800/70">
+                <p class="mb-3 text-xs font-bold uppercase tracking-wider text-primary-600 dark:text-primary-300">顶流旗舰</p>
+                <ul class="space-y-1.5 text-sm text-gray-700 dark:text-dark-200">
+                  <li class="flex items-start gap-1.5"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400"></span><span><b>gpt-6.1-sol</b><span class="ml-1 text-xs text-gray-500 dark:text-dark-400">推理与创作双优</span></span></li>
+                  <li class="flex items-start gap-1.5"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400"></span><span><b>gemini 4 argon</b><span class="ml-1 text-xs text-gray-500 dark:text-dark-400">多模态全能选手</span></span></li>
+                  <li class="flex items-start gap-1.5"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400"></span><span><b>Kimi-k3</b><span class="ml-1 text-xs text-gray-500 dark:text-dark-400">超长文本处理专家</span></span></li>
+                  <li class="flex items-start gap-1.5"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400"></span><span><b>Grok 4.7</b><span class="ml-1 text-xs text-gray-500 dark:text-dark-400">实时信息快人一步</span></span></li>
+                </ul>
+              </div>
             </div>
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">{{ t('home.providers.gemini') }}</span>
-            <span
-              class="rounded bg-primary-100 px-1.5 py-0.5 text-[10px] font-medium text-primary-600 dark:bg-primary-900/30 dark:text-primary-400"
-              >{{ t('home.providers.supported') }}</span
-            >
-          </div>
-          <!-- Antigravity - Supported -->
-          <div
-            class="flex items-center gap-2 rounded-xl border border-primary-200 bg-white/60 px-5 py-3 ring-1 ring-primary-500/20 backdrop-blur-sm dark:border-primary-800 dark:bg-dark-800/60"
-          >
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-rose-500 to-pink-600"
-            >
-              <span class="text-xs font-bold text-white">A</span>
-            </div>
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">{{ t('home.providers.antigravity') }}</span>
-            <span
-              class="rounded bg-primary-100 px-1.5 py-0.5 text-[10px] font-medium text-primary-600 dark:bg-primary-900/30 dark:text-primary-400"
-              >{{ t('home.providers.supported') }}</span
-            >
-          </div>
-          <!-- More - Coming Soon -->
-          <div
-            class="flex items-center gap-2 rounded-xl border border-gray-200/50 bg-white/40 px-5 py-3 opacity-60 backdrop-blur-sm dark:border-dark-700/50 dark:bg-dark-800/40"
-          >
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-gray-500 to-gray-600"
-            >
-              <span class="text-xs font-bold text-white">+</span>
-            </div>
-            <span class="text-sm font-medium text-gray-700 dark:text-dark-200">{{ t('home.providers.more') }}</span>
-            <span
-              class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:bg-dark-700 dark:text-dark-400"
-              >{{ t('home.providers.soon') }}</span
-            >
           </div>
         </div>
       </div>
@@ -417,9 +434,9 @@ const authStore = useAuthStore()
 const appStore = useAppStore()
 
 // Site settings - directly from appStore (already initialized from injected config)
-const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'Sub2API')
+const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'CCAI')
 const siteLogo = computed(() => appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '')
-const siteSubtitle = computed(() => appStore.cachedPublicSettings?.site_subtitle || 'AI API Gateway Platform')
+const siteSubtitle = computed(() => appStore.cachedPublicSettings?.site_subtitle || '一站式大模型 API 聚合网关')
 const docUrl = computed(() => appStore.cachedPublicSettings?.doc_url || appStore.docUrl || '')
 const homeContent = computed(() => appStore.cachedPublicSettings?.home_content || '')
 
@@ -433,7 +450,7 @@ const isHomeContentUrl = computed(() => {
 const isDark = ref(document.documentElement.classList.contains('dark'))
 
 // GitHub URL
-const githubUrl = 'https://github.com/Wei-Shaw/sub2api'
+const githubUrl = 'https://cc-ai.xyz'
 
 // Auth state
 const isAuthenticated = computed(() => authStore.isAuthenticated)
@@ -481,6 +498,70 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.hero-title {
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+}
+
+.hero-art {
+  position: relative;
+  min-height: 430px;
+  width: min(100%, 560px);
+}
+
+.hero-card {
+  position: relative;
+  z-index: 2;
+  width: min(100%, 510px);
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 28px;
+  background: #0b1220;
+  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.28);
+}
+
+.hero-card-glass {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  left: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 10px 13px;
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(14px);
+  font-size: 12px;
+}
+
+.hero-orbit {
+  position: absolute;
+  z-index: 1;
+  border: 1px solid rgba(45, 212, 191, 0.24);
+  border-radius: 999px;
+  transform: rotate(-20deg);
+}
+
+.orbit-one { inset: 8% -8% 12% 8%; }
+.orbit-two { inset: -6% 10% 8% -6%; transform: rotate(35deg); border-color: rgba(99, 102, 241, 0.25); }
+
+.hero-art .terminal-container {
+  position: absolute;
+  z-index: 3;
+  right: -8px;
+  bottom: -34px;
+  transform: scale(0.72);
+  transform-origin: bottom right;
+}
+
+@media (max-width: 640px) {
+  .hero-art { min-height: 350px; }
+  .hero-art .terminal-container { right: -58px; bottom: -52px; transform: scale(0.52); }
+}
+
 /* Terminal Container */
 .terminal-container {
   position: relative;
