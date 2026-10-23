@@ -1,0 +1,27 @@
+{
+  "articleCategories": [
+    "架构与网关",
+    "客户端接入",
+    "模型评测与路由",
+    "成本与高可用",
+    "安全与合规"
+  ],
+  "newsCategories": [
+    "模型发布",
+    "工程架构",
+    "产品与生态",
+    "开发者工具",
+    "行业动态"
+  ],
+  "tags": [
+    "CCAI",
+    "API网关",
+    "Claude Code",
+    "Codex CLI",
+    "Prompt Caching",
+    "高可用",
+    "OpenAI",
+    "多模型路由"
+  ],
+  "updatedAt": "2026-10-22T08:24:56Z"
+}

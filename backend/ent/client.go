@@ -29,6 +29,17 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitordailyrollup"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorhistory"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorrequesttemplate"
+	"github.com/Wei-Shaw/sub2api/ent/contentanalyticsdaily"
+	"github.com/Wei-Shaw/sub2api/ent/contentanalyticsevent"
+	"github.com/Wei-Shaw/sub2api/ent/contentarticle"
+	"github.com/Wei-Shaw/sub2api/ent/contentauditlog"
+	"github.com/Wei-Shaw/sub2api/ent/contentautomationsetting"
+	"github.com/Wei-Shaw/sub2api/ent/contentfetchrun"
+	"github.com/Wei-Shaw/sub2api/ent/contentnewsitem"
+	"github.com/Wei-Shaw/sub2api/ent/contentnewssource"
+	"github.com/Wei-Shaw/sub2api/ent/contentslugredirect"
+	"github.com/Wei-Shaw/sub2api/ent/contenttranslation"
+	"github.com/Wei-Shaw/sub2api/ent/contenttranslationsetting"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/financealert"
 	"github.com/Wei-Shaw/sub2api/ent/financeasyncjob"
@@ -115,6 +126,28 @@ type Client struct {
 	ChannelMonitorHistory *ChannelMonitorHistoryClient
 	// ChannelMonitorRequestTemplate is the client for interacting with the ChannelMonitorRequestTemplate builders.
 	ChannelMonitorRequestTemplate *ChannelMonitorRequestTemplateClient
+	// ContentAnalyticsDaily is the client for interacting with the ContentAnalyticsDaily builders.
+	ContentAnalyticsDaily *ContentAnalyticsDailyClient
+	// ContentAnalyticsEvent is the client for interacting with the ContentAnalyticsEvent builders.
+	ContentAnalyticsEvent *ContentAnalyticsEventClient
+	// ContentArticle is the client for interacting with the ContentArticle builders.
+	ContentArticle *ContentArticleClient
+	// ContentAuditLog is the client for interacting with the ContentAuditLog builders.
+	ContentAuditLog *ContentAuditLogClient
+	// ContentAutomationSetting is the client for interacting with the ContentAutomationSetting builders.
+	ContentAutomationSetting *ContentAutomationSettingClient
+	// ContentFetchRun is the client for interacting with the ContentFetchRun builders.
+	ContentFetchRun *ContentFetchRunClient
+	// ContentNewsItem is the client for interacting with the ContentNewsItem builders.
+	ContentNewsItem *ContentNewsItemClient
+	// ContentNewsSource is the client for interacting with the ContentNewsSource builders.
+	ContentNewsSource *ContentNewsSourceClient
+	// ContentSlugRedirect is the client for interacting with the ContentSlugRedirect builders.
+	ContentSlugRedirect *ContentSlugRedirectClient
+	// ContentTranslation is the client for interacting with the ContentTranslation builders.
+	ContentTranslation *ContentTranslationClient
+	// ContentTranslationSetting is the client for interacting with the ContentTranslationSetting builders.
+	ContentTranslationSetting *ContentTranslationSettingClient
 	// ErrorPassthroughRule is the client for interacting with the ErrorPassthroughRule builders.
 	ErrorPassthroughRule *ErrorPassthroughRuleClient
 	// FinanceAlert is the client for interacting with the FinanceAlert builders.
@@ -238,6 +271,17 @@ func (c *Client) init() {
 	c.ChannelMonitorDailyRollup = NewChannelMonitorDailyRollupClient(c.config)
 	c.ChannelMonitorHistory = NewChannelMonitorHistoryClient(c.config)
 	c.ChannelMonitorRequestTemplate = NewChannelMonitorRequestTemplateClient(c.config)
+	c.ContentAnalyticsDaily = NewContentAnalyticsDailyClient(c.config)
+	c.ContentAnalyticsEvent = NewContentAnalyticsEventClient(c.config)
+	c.ContentArticle = NewContentArticleClient(c.config)
+	c.ContentAuditLog = NewContentAuditLogClient(c.config)
+	c.ContentAutomationSetting = NewContentAutomationSettingClient(c.config)
+	c.ContentFetchRun = NewContentFetchRunClient(c.config)
+	c.ContentNewsItem = NewContentNewsItemClient(c.config)
+	c.ContentNewsSource = NewContentNewsSourceClient(c.config)
+	c.ContentSlugRedirect = NewContentSlugRedirectClient(c.config)
+	c.ContentTranslation = NewContentTranslationClient(c.config)
+	c.ContentTranslationSetting = NewContentTranslationSettingClient(c.config)
 	c.ErrorPassthroughRule = NewErrorPassthroughRuleClient(c.config)
 	c.FinanceAlert = NewFinanceAlertClient(c.config)
 	c.FinanceAsyncJob = NewFinanceAsyncJobClient(c.config)
@@ -393,6 +437,17 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		ChannelMonitorDailyRollup:       NewChannelMonitorDailyRollupClient(cfg),
 		ChannelMonitorHistory:           NewChannelMonitorHistoryClient(cfg),
 		ChannelMonitorRequestTemplate:   NewChannelMonitorRequestTemplateClient(cfg),
+		ContentAnalyticsDaily:           NewContentAnalyticsDailyClient(cfg),
+		ContentAnalyticsEvent:           NewContentAnalyticsEventClient(cfg),
+		ContentArticle:                  NewContentArticleClient(cfg),
+		ContentAuditLog:                 NewContentAuditLogClient(cfg),
+		ContentAutomationSetting:        NewContentAutomationSettingClient(cfg),
+		ContentFetchRun:                 NewContentFetchRunClient(cfg),
+		ContentNewsItem:                 NewContentNewsItemClient(cfg),
+		ContentNewsSource:               NewContentNewsSourceClient(cfg),
+		ContentSlugRedirect:             NewContentSlugRedirectClient(cfg),
+		ContentTranslation:              NewContentTranslationClient(cfg),
+		ContentTranslationSetting:       NewContentTranslationSettingClient(cfg),
 		ErrorPassthroughRule:            NewErrorPassthroughRuleClient(cfg),
 		FinanceAlert:                    NewFinanceAlertClient(cfg),
 		FinanceAsyncJob:                 NewFinanceAsyncJobClient(cfg),
@@ -475,6 +530,17 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		ChannelMonitorDailyRollup:       NewChannelMonitorDailyRollupClient(cfg),
 		ChannelMonitorHistory:           NewChannelMonitorHistoryClient(cfg),
 		ChannelMonitorRequestTemplate:   NewChannelMonitorRequestTemplateClient(cfg),
+		ContentAnalyticsDaily:           NewContentAnalyticsDailyClient(cfg),
+		ContentAnalyticsEvent:           NewContentAnalyticsEventClient(cfg),
+		ContentArticle:                  NewContentArticleClient(cfg),
+		ContentAuditLog:                 NewContentAuditLogClient(cfg),
+		ContentAutomationSetting:        NewContentAutomationSettingClient(cfg),
+		ContentFetchRun:                 NewContentFetchRunClient(cfg),
+		ContentNewsItem:                 NewContentNewsItemClient(cfg),
+		ContentNewsSource:               NewContentNewsSourceClient(cfg),
+		ContentSlugRedirect:             NewContentSlugRedirectClient(cfg),
+		ContentTranslation:              NewContentTranslationClient(cfg),
+		ContentTranslationSetting:       NewContentTranslationSettingClient(cfg),
 		ErrorPassthroughRule:            NewErrorPassthroughRuleClient(cfg),
 		FinanceAlert:                    NewFinanceAlertClient(cfg),
 		FinanceAsyncJob:                 NewFinanceAsyncJobClient(cfg),
@@ -557,7 +623,11 @@ func (c *Client) Use(hooks ...Hook) {
 		c.AccountGroup, c.AccountUpstreamMultiplierChange, c.Announcement,
 		c.AnnouncementRead, c.AuthIdentity, c.AuthIdentityChannel, c.ChannelMonitor,
 		c.ChannelMonitorDailyRollup, c.ChannelMonitorHistory,
-		c.ChannelMonitorRequestTemplate, c.ErrorPassthroughRule, c.FinanceAlert,
+		c.ChannelMonitorRequestTemplate, c.ContentAnalyticsDaily,
+		c.ContentAnalyticsEvent, c.ContentArticle, c.ContentAuditLog,
+		c.ContentAutomationSetting, c.ContentFetchRun, c.ContentNewsItem,
+		c.ContentNewsSource, c.ContentSlugRedirect, c.ContentTranslation,
+		c.ContentTranslationSetting, c.ErrorPassthroughRule, c.FinanceAlert,
 		c.FinanceAsyncJob, c.FinanceBackfillJob, c.FinanceCalculationRevision,
 		c.FinanceDailyAggregate, c.FinanceExportJob, c.FinanceFXRateVersion, c.Group,
 		c.IdempotencyRecord, c.IdentityAdoptionDecision, c.PaymentAuditLog,
@@ -587,7 +657,11 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.AccountGroup, c.AccountUpstreamMultiplierChange, c.Announcement,
 		c.AnnouncementRead, c.AuthIdentity, c.AuthIdentityChannel, c.ChannelMonitor,
 		c.ChannelMonitorDailyRollup, c.ChannelMonitorHistory,
-		c.ChannelMonitorRequestTemplate, c.ErrorPassthroughRule, c.FinanceAlert,
+		c.ChannelMonitorRequestTemplate, c.ContentAnalyticsDaily,
+		c.ContentAnalyticsEvent, c.ContentArticle, c.ContentAuditLog,
+		c.ContentAutomationSetting, c.ContentFetchRun, c.ContentNewsItem,
+		c.ContentNewsSource, c.ContentSlugRedirect, c.ContentTranslation,
+		c.ContentTranslationSetting, c.ErrorPassthroughRule, c.FinanceAlert,
 		c.FinanceAsyncJob, c.FinanceBackfillJob, c.FinanceCalculationRevision,
 		c.FinanceDailyAggregate, c.FinanceExportJob, c.FinanceFXRateVersion, c.Group,
 		c.IdempotencyRecord, c.IdentityAdoptionDecision, c.PaymentAuditLog,
@@ -640,6 +714,28 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ChannelMonitorHistory.mutate(ctx, m)
 	case *ChannelMonitorRequestTemplateMutation:
 		return c.ChannelMonitorRequestTemplate.mutate(ctx, m)
+	case *ContentAnalyticsDailyMutation:
+		return c.ContentAnalyticsDaily.mutate(ctx, m)
+	case *ContentAnalyticsEventMutation:
+		return c.ContentAnalyticsEvent.mutate(ctx, m)
+	case *ContentArticleMutation:
+		return c.ContentArticle.mutate(ctx, m)
+	case *ContentAuditLogMutation:
+		return c.ContentAuditLog.mutate(ctx, m)
+	case *ContentAutomationSettingMutation:
+		return c.ContentAutomationSetting.mutate(ctx, m)
+	case *ContentFetchRunMutation:
+		return c.ContentFetchRun.mutate(ctx, m)
+	case *ContentNewsItemMutation:
+		return c.ContentNewsItem.mutate(ctx, m)
+	case *ContentNewsSourceMutation:
+		return c.ContentNewsSource.mutate(ctx, m)
+	case *ContentSlugRedirectMutation:
+		return c.ContentSlugRedirect.mutate(ctx, m)
+	case *ContentTranslationMutation:
+		return c.ContentTranslation.mutate(ctx, m)
+	case *ContentTranslationSettingMutation:
+		return c.ContentTranslationSetting.mutate(ctx, m)
 	case *ErrorPassthroughRuleMutation:
 		return c.ErrorPassthroughRule.mutate(ctx, m)
 	case *FinanceAlertMutation:
@@ -2909,6 +3005,1541 @@ func (c *ChannelMonitorRequestTemplateClient) mutate(ctx context.Context, m *Cha
 		return (&ChannelMonitorRequestTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown ChannelMonitorRequestTemplate mutation op: %q", m.Op())
+	}
+}
+
+// ContentAnalyticsDailyClient is a client for the ContentAnalyticsDaily schema.
+type ContentAnalyticsDailyClient struct {
+	config
+}
+
+// NewContentAnalyticsDailyClient returns a client for the ContentAnalyticsDaily from the given config.
+func NewContentAnalyticsDailyClient(c config) *ContentAnalyticsDailyClient {
+	return &ContentAnalyticsDailyClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `contentanalyticsdaily.Hooks(f(g(h())))`.
+func (c *ContentAnalyticsDailyClient) Use(hooks ...Hook) {
+	c.hooks.ContentAnalyticsDaily = append(c.hooks.ContentAnalyticsDaily, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `contentanalyticsdaily.Intercept(f(g(h())))`.
+func (c *ContentAnalyticsDailyClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ContentAnalyticsDaily = append(c.inters.ContentAnalyticsDaily, interceptors...)
+}
+
+// Create returns a builder for creating a ContentAnalyticsDaily entity.
+func (c *ContentAnalyticsDailyClient) Create() *ContentAnalyticsDailyCreate {
+	mutation := newContentAnalyticsDailyMutation(c.config, OpCreate)
+	return &ContentAnalyticsDailyCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ContentAnalyticsDaily entities.
+func (c *ContentAnalyticsDailyClient) CreateBulk(builders ...*ContentAnalyticsDailyCreate) *ContentAnalyticsDailyCreateBulk {
+	return &ContentAnalyticsDailyCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ContentAnalyticsDailyClient) MapCreateBulk(slice any, setFunc func(*ContentAnalyticsDailyCreate, int)) *ContentAnalyticsDailyCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ContentAnalyticsDailyCreateBulk{err: fmt.Errorf("calling to ContentAnalyticsDailyClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ContentAnalyticsDailyCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ContentAnalyticsDailyCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ContentAnalyticsDaily.
+func (c *ContentAnalyticsDailyClient) Update() *ContentAnalyticsDailyUpdate {
+	mutation := newContentAnalyticsDailyMutation(c.config, OpUpdate)
+	return &ContentAnalyticsDailyUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ContentAnalyticsDailyClient) UpdateOne(_m *ContentAnalyticsDaily) *ContentAnalyticsDailyUpdateOne {
+	mutation := newContentAnalyticsDailyMutation(c.config, OpUpdateOne, withContentAnalyticsDaily(_m))
+	return &ContentAnalyticsDailyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ContentAnalyticsDailyClient) UpdateOneID(id int64) *ContentAnalyticsDailyUpdateOne {
+	mutation := newContentAnalyticsDailyMutation(c.config, OpUpdateOne, withContentAnalyticsDailyID(id))
+	return &ContentAnalyticsDailyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ContentAnalyticsDaily.
+func (c *ContentAnalyticsDailyClient) Delete() *ContentAnalyticsDailyDelete {
+	mutation := newContentAnalyticsDailyMutation(c.config, OpDelete)
+	return &ContentAnalyticsDailyDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ContentAnalyticsDailyClient) DeleteOne(_m *ContentAnalyticsDaily) *ContentAnalyticsDailyDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ContentAnalyticsDailyClient) DeleteOneID(id int64) *ContentAnalyticsDailyDeleteOne {
+	builder := c.Delete().Where(contentanalyticsdaily.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ContentAnalyticsDailyDeleteOne{builder}
+}
+
+// Query returns a query builder for ContentAnalyticsDaily.
+func (c *ContentAnalyticsDailyClient) Query() *ContentAnalyticsDailyQuery {
+	return &ContentAnalyticsDailyQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeContentAnalyticsDaily},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ContentAnalyticsDaily entity by its id.
+func (c *ContentAnalyticsDailyClient) Get(ctx context.Context, id int64) (*ContentAnalyticsDaily, error) {
+	return c.Query().Where(contentanalyticsdaily.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ContentAnalyticsDailyClient) GetX(ctx context.Context, id int64) *ContentAnalyticsDaily {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ContentAnalyticsDailyClient) Hooks() []Hook {
+	return c.hooks.ContentAnalyticsDaily
+}
+
+// Interceptors returns the client interceptors.
+func (c *ContentAnalyticsDailyClient) Interceptors() []Interceptor {
+	return c.inters.ContentAnalyticsDaily
+}
+
+func (c *ContentAnalyticsDailyClient) mutate(ctx context.Context, m *ContentAnalyticsDailyMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ContentAnalyticsDailyCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ContentAnalyticsDailyUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ContentAnalyticsDailyUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ContentAnalyticsDailyDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ContentAnalyticsDaily mutation op: %q", m.Op())
+	}
+}
+
+// ContentAnalyticsEventClient is a client for the ContentAnalyticsEvent schema.
+type ContentAnalyticsEventClient struct {
+	config
+}
+
+// NewContentAnalyticsEventClient returns a client for the ContentAnalyticsEvent from the given config.
+func NewContentAnalyticsEventClient(c config) *ContentAnalyticsEventClient {
+	return &ContentAnalyticsEventClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `contentanalyticsevent.Hooks(f(g(h())))`.
+func (c *ContentAnalyticsEventClient) Use(hooks ...Hook) {
+	c.hooks.ContentAnalyticsEvent = append(c.hooks.ContentAnalyticsEvent, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `contentanalyticsevent.Intercept(f(g(h())))`.
+func (c *ContentAnalyticsEventClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ContentAnalyticsEvent = append(c.inters.ContentAnalyticsEvent, interceptors...)
+}
+
+// Create returns a builder for creating a ContentAnalyticsEvent entity.
+func (c *ContentAnalyticsEventClient) Create() *ContentAnalyticsEventCreate {
+	mutation := newContentAnalyticsEventMutation(c.config, OpCreate)
+	return &ContentAnalyticsEventCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ContentAnalyticsEvent entities.
+func (c *ContentAnalyticsEventClient) CreateBulk(builders ...*ContentAnalyticsEventCreate) *ContentAnalyticsEventCreateBulk {
+	return &ContentAnalyticsEventCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ContentAnalyticsEventClient) MapCreateBulk(slice any, setFunc func(*ContentAnalyticsEventCreate, int)) *ContentAnalyticsEventCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ContentAnalyticsEventCreateBulk{err: fmt.Errorf("calling to ContentAnalyticsEventClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ContentAnalyticsEventCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ContentAnalyticsEventCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ContentAnalyticsEvent.
+func (c *ContentAnalyticsEventClient) Update() *ContentAnalyticsEventUpdate {
+	mutation := newContentAnalyticsEventMutation(c.config, OpUpdate)
+	return &ContentAnalyticsEventUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ContentAnalyticsEventClient) UpdateOne(_m *ContentAnalyticsEvent) *ContentAnalyticsEventUpdateOne {
+	mutation := newContentAnalyticsEventMutation(c.config, OpUpdateOne, withContentAnalyticsEvent(_m))
+	return &ContentAnalyticsEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ContentAnalyticsEventClient) UpdateOneID(id int64) *ContentAnalyticsEventUpdateOne {
+	mutation := newContentAnalyticsEventMutation(c.config, OpUpdateOne, withContentAnalyticsEventID(id))
+	return &ContentAnalyticsEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ContentAnalyticsEvent.
+func (c *ContentAnalyticsEventClient) Delete() *ContentAnalyticsEventDelete {
+	mutation := newContentAnalyticsEventMutation(c.config, OpDelete)
+	return &ContentAnalyticsEventDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ContentAnalyticsEventClient) DeleteOne(_m *ContentAnalyticsEvent) *ContentAnalyticsEventDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ContentAnalyticsEventClient) DeleteOneID(id int64) *ContentAnalyticsEventDeleteOne {
+	builder := c.Delete().Where(contentanalyticsevent.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ContentAnalyticsEventDeleteOne{builder}
+}
+
+// Query returns a query builder for ContentAnalyticsEvent.
+func (c *ContentAnalyticsEventClient) Query() *ContentAnalyticsEventQuery {
+	return &ContentAnalyticsEventQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeContentAnalyticsEvent},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ContentAnalyticsEvent entity by its id.
+func (c *ContentAnalyticsEventClient) Get(ctx context.Context, id int64) (*ContentAnalyticsEvent, error) {
+	return c.Query().Where(contentanalyticsevent.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ContentAnalyticsEventClient) GetX(ctx context.Context, id int64) *ContentAnalyticsEvent {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ContentAnalyticsEventClient) Hooks() []Hook {
+	return c.hooks.ContentAnalyticsEvent
+}
+
+// Interceptors returns the client interceptors.
+func (c *ContentAnalyticsEventClient) Interceptors() []Interceptor {
+	return c.inters.ContentAnalyticsEvent
+}
+
+func (c *ContentAnalyticsEventClient) mutate(ctx context.Context, m *ContentAnalyticsEventMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ContentAnalyticsEventCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ContentAnalyticsEventUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ContentAnalyticsEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ContentAnalyticsEventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ContentAnalyticsEvent mutation op: %q", m.Op())
+	}
+}
+
+// ContentArticleClient is a client for the ContentArticle schema.
+type ContentArticleClient struct {
+	config
+}
+
+// NewContentArticleClient returns a client for the ContentArticle from the given config.
+func NewContentArticleClient(c config) *ContentArticleClient {
+	return &ContentArticleClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `contentarticle.Hooks(f(g(h())))`.
+func (c *ContentArticleClient) Use(hooks ...Hook) {
+	c.hooks.ContentArticle = append(c.hooks.ContentArticle, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `contentarticle.Intercept(f(g(h())))`.
+func (c *ContentArticleClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ContentArticle = append(c.inters.ContentArticle, interceptors...)
+}
+
+// Create returns a builder for creating a ContentArticle entity.
+func (c *ContentArticleClient) Create() *ContentArticleCreate {
+	mutation := newContentArticleMutation(c.config, OpCreate)
+	return &ContentArticleCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ContentArticle entities.
+func (c *ContentArticleClient) CreateBulk(builders ...*ContentArticleCreate) *ContentArticleCreateBulk {
+	return &ContentArticleCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ContentArticleClient) MapCreateBulk(slice any, setFunc func(*ContentArticleCreate, int)) *ContentArticleCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ContentArticleCreateBulk{err: fmt.Errorf("calling to ContentArticleClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ContentArticleCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ContentArticleCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ContentArticle.
+func (c *ContentArticleClient) Update() *ContentArticleUpdate {
+	mutation := newContentArticleMutation(c.config, OpUpdate)
+	return &ContentArticleUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ContentArticleClient) UpdateOne(_m *ContentArticle) *ContentArticleUpdateOne {
+	mutation := newContentArticleMutation(c.config, OpUpdateOne, withContentArticle(_m))
+	return &ContentArticleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ContentArticleClient) UpdateOneID(id int64) *ContentArticleUpdateOne {
+	mutation := newContentArticleMutation(c.config, OpUpdateOne, withContentArticleID(id))
+	return &ContentArticleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ContentArticle.
+func (c *ContentArticleClient) Delete() *ContentArticleDelete {
+	mutation := newContentArticleMutation(c.config, OpDelete)
+	return &ContentArticleDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ContentArticleClient) DeleteOne(_m *ContentArticle) *ContentArticleDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ContentArticleClient) DeleteOneID(id int64) *ContentArticleDeleteOne {
+	builder := c.Delete().Where(contentarticle.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ContentArticleDeleteOne{builder}
+}
+
+// Query returns a query builder for ContentArticle.
+func (c *ContentArticleClient) Query() *ContentArticleQuery {
+	return &ContentArticleQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeContentArticle},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ContentArticle entity by its id.
+func (c *ContentArticleClient) Get(ctx context.Context, id int64) (*ContentArticle, error) {
+	return c.Query().Where(contentarticle.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ContentArticleClient) GetX(ctx context.Context, id int64) *ContentArticle {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ContentArticleClient) Hooks() []Hook {
+	hooks := c.hooks.ContentArticle
+	return append(hooks[:len(hooks):len(hooks)], contentarticle.Hooks[:]...)
+}
+
+// Interceptors returns the client interceptors.
+func (c *ContentArticleClient) Interceptors() []Interceptor {
+	inters := c.inters.ContentArticle
+	return append(inters[:len(inters):len(inters)], contentarticle.Interceptors[:]...)
+}
+
+func (c *ContentArticleClient) mutate(ctx context.Context, m *ContentArticleMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ContentArticleCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ContentArticleUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ContentArticleUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ContentArticleDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ContentArticle mutation op: %q", m.Op())
+	}
+}
+
+// ContentAuditLogClient is a client for the ContentAuditLog schema.
+type ContentAuditLogClient struct {
+	config
+}
+
+// NewContentAuditLogClient returns a client for the ContentAuditLog from the given config.
+func NewContentAuditLogClient(c config) *ContentAuditLogClient {
+	return &ContentAuditLogClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `contentauditlog.Hooks(f(g(h())))`.
+func (c *ContentAuditLogClient) Use(hooks ...Hook) {
+	c.hooks.ContentAuditLog = append(c.hooks.ContentAuditLog, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `contentauditlog.Intercept(f(g(h())))`.
+func (c *ContentAuditLogClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ContentAuditLog = append(c.inters.ContentAuditLog, interceptors...)
+}
+
+// Create returns a builder for creating a ContentAuditLog entity.
+func (c *ContentAuditLogClient) Create() *ContentAuditLogCreate {
+	mutation := newContentAuditLogMutation(c.config, OpCreate)
+	return &ContentAuditLogCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ContentAuditLog entities.
+func (c *ContentAuditLogClient) CreateBulk(builders ...*ContentAuditLogCreate) *ContentAuditLogCreateBulk {
+	return &ContentAuditLogCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ContentAuditLogClient) MapCreateBulk(slice any, setFunc func(*ContentAuditLogCreate, int)) *ContentAuditLogCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ContentAuditLogCreateBulk{err: fmt.Errorf("calling to ContentAuditLogClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ContentAuditLogCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ContentAuditLogCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ContentAuditLog.
+func (c *ContentAuditLogClient) Update() *ContentAuditLogUpdate {
+	mutation := newContentAuditLogMutation(c.config, OpUpdate)
+	return &ContentAuditLogUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ContentAuditLogClient) UpdateOne(_m *ContentAuditLog) *ContentAuditLogUpdateOne {
+	mutation := newContentAuditLogMutation(c.config, OpUpdateOne, withContentAuditLog(_m))
+	return &ContentAuditLogUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ContentAuditLogClient) UpdateOneID(id int64) *ContentAuditLogUpdateOne {
+	mutation := newContentAuditLogMutation(c.config, OpUpdateOne, withContentAuditLogID(id))
+	return &ContentAuditLogUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ContentAuditLog.
+func (c *ContentAuditLogClient) Delete() *ContentAuditLogDelete {
+	mutation := newContentAuditLogMutation(c.config, OpDelete)
+	return &ContentAuditLogDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ContentAuditLogClient) DeleteOne(_m *ContentAuditLog) *ContentAuditLogDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ContentAuditLogClient) DeleteOneID(id int64) *ContentAuditLogDeleteOne {
+	builder := c.Delete().Where(contentauditlog.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ContentAuditLogDeleteOne{builder}
+}
+
+// Query returns a query builder for ContentAuditLog.
+func (c *ContentAuditLogClient) Query() *ContentAuditLogQuery {
+	return &ContentAuditLogQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeContentAuditLog},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ContentAuditLog entity by its id.
+func (c *ContentAuditLogClient) Get(ctx context.Context, id int64) (*ContentAuditLog, error) {
+	return c.Query().Where(contentauditlog.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ContentAuditLogClient) GetX(ctx context.Context, id int64) *ContentAuditLog {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ContentAuditLogClient) Hooks() []Hook {
+	return c.hooks.ContentAuditLog
+}
+
+// Interceptors returns the client interceptors.
+func (c *ContentAuditLogClient) Interceptors() []Interceptor {
+	return c.inters.ContentAuditLog
+}
+
+func (c *ContentAuditLogClient) mutate(ctx context.Context, m *ContentAuditLogMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ContentAuditLogCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ContentAuditLogUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ContentAuditLogUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ContentAuditLogDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ContentAuditLog mutation op: %q", m.Op())
+	}
+}
+
+// ContentAutomationSettingClient is a client for the ContentAutomationSetting schema.
+type ContentAutomationSettingClient struct {
+	config
+}
+
+// NewContentAutomationSettingClient returns a client for the ContentAutomationSetting from the given config.
+func NewContentAutomationSettingClient(c config) *ContentAutomationSettingClient {
+	return &ContentAutomationSettingClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `contentautomationsetting.Hooks(f(g(h())))`.
+func (c *ContentAutomationSettingClient) Use(hooks ...Hook) {
+	c.hooks.ContentAutomationSetting = append(c.hooks.ContentAutomationSetting, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `contentautomationsetting.Intercept(f(g(h())))`.
+func (c *ContentAutomationSettingClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ContentAutomationSetting = append(c.inters.ContentAutomationSetting, interceptors...)
+}
+
+// Create returns a builder for creating a ContentAutomationSetting entity.
+func (c *ContentAutomationSettingClient) Create() *ContentAutomationSettingCreate {
+	mutation := newContentAutomationSettingMutation(c.config, OpCreate)
+	return &ContentAutomationSettingCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ContentAutomationSetting entities.
+func (c *ContentAutomationSettingClient) CreateBulk(builders ...*ContentAutomationSettingCreate) *ContentAutomationSettingCreateBulk {
+	return &ContentAutomationSettingCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ContentAutomationSettingClient) MapCreateBulk(slice any, setFunc func(*ContentAutomationSettingCreate, int)) *ContentAutomationSettingCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ContentAutomationSettingCreateBulk{err: fmt.Errorf("calling to ContentAutomationSettingClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ContentAutomationSettingCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ContentAutomationSettingCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ContentAutomationSetting.
+func (c *ContentAutomationSettingClient) Update() *ContentAutomationSettingUpdate {
+	mutation := newContentAutomationSettingMutation(c.config, OpUpdate)
+	return &ContentAutomationSettingUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ContentAutomationSettingClient) UpdateOne(_m *ContentAutomationSetting) *ContentAutomationSettingUpdateOne {
+	mutation := newContentAutomationSettingMutation(c.config, OpUpdateOne, withContentAutomationSetting(_m))
+	return &ContentAutomationSettingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ContentAutomationSettingClient) UpdateOneID(id int64) *ContentAutomationSettingUpdateOne {
+	mutation := newContentAutomationSettingMutation(c.config, OpUpdateOne, withContentAutomationSettingID(id))
+	return &ContentAutomationSettingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ContentAutomationSetting.
+func (c *ContentAutomationSettingClient) Delete() *ContentAutomationSettingDelete {
+	mutation := newContentAutomationSettingMutation(c.config, OpDelete)
+	return &ContentAutomationSettingDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ContentAutomationSettingClient) DeleteOne(_m *ContentAutomationSetting) *ContentAutomationSettingDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ContentAutomationSettingClient) DeleteOneID(id int64) *ContentAutomationSettingDeleteOne {
+	builder := c.Delete().Where(contentautomationsetting.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ContentAutomationSettingDeleteOne{builder}
+}
+
+// Query returns a query builder for ContentAutomationSetting.
+func (c *ContentAutomationSettingClient) Query() *ContentAutomationSettingQuery {
+	return &ContentAutomationSettingQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeContentAutomationSetting},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ContentAutomationSetting entity by its id.
+func (c *ContentAutomationSettingClient) Get(ctx context.Context, id int64) (*ContentAutomationSetting, error) {
+	return c.Query().Where(contentautomationsetting.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ContentAutomationSettingClient) GetX(ctx context.Context, id int64) *ContentAutomationSetting {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ContentAutomationSettingClient) Hooks() []Hook {
+	return c.hooks.ContentAutomationSetting
+}
+
+// Interceptors returns the client interceptors.
+func (c *ContentAutomationSettingClient) Interceptors() []Interceptor {
+	return c.inters.ContentAutomationSetting
+}
+
+func (c *ContentAutomationSettingClient) mutate(ctx context.Context, m *ContentAutomationSettingMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ContentAutomationSettingCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ContentAutomationSettingUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ContentAutomationSettingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ContentAutomationSettingDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ContentAutomationSetting mutation op: %q", m.Op())
+	}
+}
+
+// ContentFetchRunClient is a client for the ContentFetchRun schema.
+type ContentFetchRunClient struct {
+	config
+}
+
+// NewContentFetchRunClient returns a client for the ContentFetchRun from the given config.
+func NewContentFetchRunClient(c config) *ContentFetchRunClient {
+	return &ContentFetchRunClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `contentfetchrun.Hooks(f(g(h())))`.
+func (c *ContentFetchRunClient) Use(hooks ...Hook) {
+	c.hooks.ContentFetchRun = append(c.hooks.ContentFetchRun, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `contentfetchrun.Intercept(f(g(h())))`.
+func (c *ContentFetchRunClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ContentFetchRun = append(c.inters.ContentFetchRun, interceptors...)
+}
+
+// Create returns a builder for creating a ContentFetchRun entity.
+func (c *ContentFetchRunClient) Create() *ContentFetchRunCreate {
+	mutation := newContentFetchRunMutation(c.config, OpCreate)
+	return &ContentFetchRunCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ContentFetchRun entities.
+func (c *ContentFetchRunClient) CreateBulk(builders ...*ContentFetchRunCreate) *ContentFetchRunCreateBulk {
+	return &ContentFetchRunCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ContentFetchRunClient) MapCreateBulk(slice any, setFunc func(*ContentFetchRunCreate, int)) *ContentFetchRunCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ContentFetchRunCreateBulk{err: fmt.Errorf("calling to ContentFetchRunClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ContentFetchRunCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ContentFetchRunCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ContentFetchRun.
+func (c *ContentFetchRunClient) Update() *ContentFetchRunUpdate {
+	mutation := newContentFetchRunMutation(c.config, OpUpdate)
+	return &ContentFetchRunUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ContentFetchRunClient) UpdateOne(_m *ContentFetchRun) *ContentFetchRunUpdateOne {
+	mutation := newContentFetchRunMutation(c.config, OpUpdateOne, withContentFetchRun(_m))
+	return &ContentFetchRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ContentFetchRunClient) UpdateOneID(id int64) *ContentFetchRunUpdateOne {
+	mutation := newContentFetchRunMutation(c.config, OpUpdateOne, withContentFetchRunID(id))
+	return &ContentFetchRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ContentFetchRun.
+func (c *ContentFetchRunClient) Delete() *ContentFetchRunDelete {
+	mutation := newContentFetchRunMutation(c.config, OpDelete)
+	return &ContentFetchRunDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ContentFetchRunClient) DeleteOne(_m *ContentFetchRun) *ContentFetchRunDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ContentFetchRunClient) DeleteOneID(id int64) *ContentFetchRunDeleteOne {
+	builder := c.Delete().Where(contentfetchrun.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ContentFetchRunDeleteOne{builder}
+}
+
+// Query returns a query builder for ContentFetchRun.
+func (c *ContentFetchRunClient) Query() *ContentFetchRunQuery {
+	return &ContentFetchRunQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeContentFetchRun},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ContentFetchRun entity by its id.
+func (c *ContentFetchRunClient) Get(ctx context.Context, id int64) (*ContentFetchRun, error) {
+	return c.Query().Where(contentfetchrun.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ContentFetchRunClient) GetX(ctx context.Context, id int64) *ContentFetchRun {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QuerySource queries the source edge of a ContentFetchRun.
+func (c *ContentFetchRunClient) QuerySource(_m *ContentFetchRun) *ContentNewsSourceQuery {
+	query := (&ContentNewsSourceClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(contentfetchrun.Table, contentfetchrun.FieldID, id),
+			sqlgraph.To(contentnewssource.Table, contentnewssource.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, contentfetchrun.SourceTable, contentfetchrun.SourceColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *ContentFetchRunClient) Hooks() []Hook {
+	return c.hooks.ContentFetchRun
+}
+
+// Interceptors returns the client interceptors.
+func (c *ContentFetchRunClient) Interceptors() []Interceptor {
+	return c.inters.ContentFetchRun
+}
+
+func (c *ContentFetchRunClient) mutate(ctx context.Context, m *ContentFetchRunMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ContentFetchRunCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ContentFetchRunUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ContentFetchRunUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ContentFetchRunDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ContentFetchRun mutation op: %q", m.Op())
+	}
+}
+
+// ContentNewsItemClient is a client for the ContentNewsItem schema.
+type ContentNewsItemClient struct {
+	config
+}
+
+// NewContentNewsItemClient returns a client for the ContentNewsItem from the given config.
+func NewContentNewsItemClient(c config) *ContentNewsItemClient {
+	return &ContentNewsItemClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `contentnewsitem.Hooks(f(g(h())))`.
+func (c *ContentNewsItemClient) Use(hooks ...Hook) {
+	c.hooks.ContentNewsItem = append(c.hooks.ContentNewsItem, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `contentnewsitem.Intercept(f(g(h())))`.
+func (c *ContentNewsItemClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ContentNewsItem = append(c.inters.ContentNewsItem, interceptors...)
+}
+
+// Create returns a builder for creating a ContentNewsItem entity.
+func (c *ContentNewsItemClient) Create() *ContentNewsItemCreate {
+	mutation := newContentNewsItemMutation(c.config, OpCreate)
+	return &ContentNewsItemCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ContentNewsItem entities.
+func (c *ContentNewsItemClient) CreateBulk(builders ...*ContentNewsItemCreate) *ContentNewsItemCreateBulk {
+	return &ContentNewsItemCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ContentNewsItemClient) MapCreateBulk(slice any, setFunc func(*ContentNewsItemCreate, int)) *ContentNewsItemCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ContentNewsItemCreateBulk{err: fmt.Errorf("calling to ContentNewsItemClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ContentNewsItemCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ContentNewsItemCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ContentNewsItem.
+func (c *ContentNewsItemClient) Update() *ContentNewsItemUpdate {
+	mutation := newContentNewsItemMutation(c.config, OpUpdate)
+	return &ContentNewsItemUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ContentNewsItemClient) UpdateOne(_m *ContentNewsItem) *ContentNewsItemUpdateOne {
+	mutation := newContentNewsItemMutation(c.config, OpUpdateOne, withContentNewsItem(_m))
+	return &ContentNewsItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ContentNewsItemClient) UpdateOneID(id int64) *ContentNewsItemUpdateOne {
+	mutation := newContentNewsItemMutation(c.config, OpUpdateOne, withContentNewsItemID(id))
+	return &ContentNewsItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ContentNewsItem.
+func (c *ContentNewsItemClient) Delete() *ContentNewsItemDelete {
+	mutation := newContentNewsItemMutation(c.config, OpDelete)
+	return &ContentNewsItemDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ContentNewsItemClient) DeleteOne(_m *ContentNewsItem) *ContentNewsItemDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ContentNewsItemClient) DeleteOneID(id int64) *ContentNewsItemDeleteOne {
+	builder := c.Delete().Where(contentnewsitem.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ContentNewsItemDeleteOne{builder}
+}
+
+// Query returns a query builder for ContentNewsItem.
+func (c *ContentNewsItemClient) Query() *ContentNewsItemQuery {
+	return &ContentNewsItemQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeContentNewsItem},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ContentNewsItem entity by its id.
+func (c *ContentNewsItemClient) Get(ctx context.Context, id int64) (*ContentNewsItem, error) {
+	return c.Query().Where(contentnewsitem.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ContentNewsItemClient) GetX(ctx context.Context, id int64) *ContentNewsItem {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QuerySource queries the source edge of a ContentNewsItem.
+func (c *ContentNewsItemClient) QuerySource(_m *ContentNewsItem) *ContentNewsSourceQuery {
+	query := (&ContentNewsSourceClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(contentnewsitem.Table, contentnewsitem.FieldID, id),
+			sqlgraph.To(contentnewssource.Table, contentnewssource.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, contentnewsitem.SourceTable, contentnewsitem.SourceColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *ContentNewsItemClient) Hooks() []Hook {
+	hooks := c.hooks.ContentNewsItem
+	return append(hooks[:len(hooks):len(hooks)], contentnewsitem.Hooks[:]...)
+}
+
+// Interceptors returns the client interceptors.
+func (c *ContentNewsItemClient) Interceptors() []Interceptor {
+	inters := c.inters.ContentNewsItem
+	return append(inters[:len(inters):len(inters)], contentnewsitem.Interceptors[:]...)
+}
+
+func (c *ContentNewsItemClient) mutate(ctx context.Context, m *ContentNewsItemMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ContentNewsItemCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ContentNewsItemUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ContentNewsItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ContentNewsItemDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ContentNewsItem mutation op: %q", m.Op())
+	}
+}
+
+// ContentNewsSourceClient is a client for the ContentNewsSource schema.
+type ContentNewsSourceClient struct {
+	config
+}
+
+// NewContentNewsSourceClient returns a client for the ContentNewsSource from the given config.
+func NewContentNewsSourceClient(c config) *ContentNewsSourceClient {
+	return &ContentNewsSourceClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `contentnewssource.Hooks(f(g(h())))`.
+func (c *ContentNewsSourceClient) Use(hooks ...Hook) {
+	c.hooks.ContentNewsSource = append(c.hooks.ContentNewsSource, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `contentnewssource.Intercept(f(g(h())))`.
+func (c *ContentNewsSourceClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ContentNewsSource = append(c.inters.ContentNewsSource, interceptors...)
+}
+
+// Create returns a builder for creating a ContentNewsSource entity.
+func (c *ContentNewsSourceClient) Create() *ContentNewsSourceCreate {
+	mutation := newContentNewsSourceMutation(c.config, OpCreate)
+	return &ContentNewsSourceCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ContentNewsSource entities.
+func (c *ContentNewsSourceClient) CreateBulk(builders ...*ContentNewsSourceCreate) *ContentNewsSourceCreateBulk {
+	return &ContentNewsSourceCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ContentNewsSourceClient) MapCreateBulk(slice any, setFunc func(*ContentNewsSourceCreate, int)) *ContentNewsSourceCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ContentNewsSourceCreateBulk{err: fmt.Errorf("calling to ContentNewsSourceClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ContentNewsSourceCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ContentNewsSourceCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ContentNewsSource.
+func (c *ContentNewsSourceClient) Update() *ContentNewsSourceUpdate {
+	mutation := newContentNewsSourceMutation(c.config, OpUpdate)
+	return &ContentNewsSourceUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ContentNewsSourceClient) UpdateOne(_m *ContentNewsSource) *ContentNewsSourceUpdateOne {
+	mutation := newContentNewsSourceMutation(c.config, OpUpdateOne, withContentNewsSource(_m))
+	return &ContentNewsSourceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ContentNewsSourceClient) UpdateOneID(id int64) *ContentNewsSourceUpdateOne {
+	mutation := newContentNewsSourceMutation(c.config, OpUpdateOne, withContentNewsSourceID(id))
+	return &ContentNewsSourceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ContentNewsSource.
+func (c *ContentNewsSourceClient) Delete() *ContentNewsSourceDelete {
+	mutation := newContentNewsSourceMutation(c.config, OpDelete)
+	return &ContentNewsSourceDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ContentNewsSourceClient) DeleteOne(_m *ContentNewsSource) *ContentNewsSourceDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ContentNewsSourceClient) DeleteOneID(id int64) *ContentNewsSourceDeleteOne {
+	builder := c.Delete().Where(contentnewssource.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ContentNewsSourceDeleteOne{builder}
+}
+
+// Query returns a query builder for ContentNewsSource.
+func (c *ContentNewsSourceClient) Query() *ContentNewsSourceQuery {
+	return &ContentNewsSourceQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeContentNewsSource},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ContentNewsSource entity by its id.
+func (c *ContentNewsSourceClient) Get(ctx context.Context, id int64) (*ContentNewsSource, error) {
+	return c.Query().Where(contentnewssource.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ContentNewsSourceClient) GetX(ctx context.Context, id int64) *ContentNewsSource {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryNewsItems queries the news_items edge of a ContentNewsSource.
+func (c *ContentNewsSourceClient) QueryNewsItems(_m *ContentNewsSource) *ContentNewsItemQuery {
+	query := (&ContentNewsItemClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(contentnewssource.Table, contentnewssource.FieldID, id),
+			sqlgraph.To(contentnewsitem.Table, contentnewsitem.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, contentnewssource.NewsItemsTable, contentnewssource.NewsItemsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryFetchRuns queries the fetch_runs edge of a ContentNewsSource.
+func (c *ContentNewsSourceClient) QueryFetchRuns(_m *ContentNewsSource) *ContentFetchRunQuery {
+	query := (&ContentFetchRunClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(contentnewssource.Table, contentnewssource.FieldID, id),
+			sqlgraph.To(contentfetchrun.Table, contentfetchrun.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, contentnewssource.FetchRunsTable, contentnewssource.FetchRunsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *ContentNewsSourceClient) Hooks() []Hook {
+	hooks := c.hooks.ContentNewsSource
+	return append(hooks[:len(hooks):len(hooks)], contentnewssource.Hooks[:]...)
+}
+
+// Interceptors returns the client interceptors.
+func (c *ContentNewsSourceClient) Interceptors() []Interceptor {
+	inters := c.inters.ContentNewsSource
+	return append(inters[:len(inters):len(inters)], contentnewssource.Interceptors[:]...)
+}
+
+func (c *ContentNewsSourceClient) mutate(ctx context.Context, m *ContentNewsSourceMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ContentNewsSourceCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ContentNewsSourceUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ContentNewsSourceUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ContentNewsSourceDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ContentNewsSource mutation op: %q", m.Op())
+	}
+}
+
+// ContentSlugRedirectClient is a client for the ContentSlugRedirect schema.
+type ContentSlugRedirectClient struct {
+	config
+}
+
+// NewContentSlugRedirectClient returns a client for the ContentSlugRedirect from the given config.
+func NewContentSlugRedirectClient(c config) *ContentSlugRedirectClient {
+	return &ContentSlugRedirectClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `contentslugredirect.Hooks(f(g(h())))`.
+func (c *ContentSlugRedirectClient) Use(hooks ...Hook) {
+	c.hooks.ContentSlugRedirect = append(c.hooks.ContentSlugRedirect, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `contentslugredirect.Intercept(f(g(h())))`.
+func (c *ContentSlugRedirectClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ContentSlugRedirect = append(c.inters.ContentSlugRedirect, interceptors...)
+}
+
+// Create returns a builder for creating a ContentSlugRedirect entity.
+func (c *ContentSlugRedirectClient) Create() *ContentSlugRedirectCreate {
+	mutation := newContentSlugRedirectMutation(c.config, OpCreate)
+	return &ContentSlugRedirectCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ContentSlugRedirect entities.
+func (c *ContentSlugRedirectClient) CreateBulk(builders ...*ContentSlugRedirectCreate) *ContentSlugRedirectCreateBulk {
+	return &ContentSlugRedirectCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ContentSlugRedirectClient) MapCreateBulk(slice any, setFunc func(*ContentSlugRedirectCreate, int)) *ContentSlugRedirectCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ContentSlugRedirectCreateBulk{err: fmt.Errorf("calling to ContentSlugRedirectClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ContentSlugRedirectCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ContentSlugRedirectCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ContentSlugRedirect.
+func (c *ContentSlugRedirectClient) Update() *ContentSlugRedirectUpdate {
+	mutation := newContentSlugRedirectMutation(c.config, OpUpdate)
+	return &ContentSlugRedirectUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ContentSlugRedirectClient) UpdateOne(_m *ContentSlugRedirect) *ContentSlugRedirectUpdateOne {
+	mutation := newContentSlugRedirectMutation(c.config, OpUpdateOne, withContentSlugRedirect(_m))
+	return &ContentSlugRedirectUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ContentSlugRedirectClient) UpdateOneID(id int64) *ContentSlugRedirectUpdateOne {
+	mutation := newContentSlugRedirectMutation(c.config, OpUpdateOne, withContentSlugRedirectID(id))
+	return &ContentSlugRedirectUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ContentSlugRedirect.
+func (c *ContentSlugRedirectClient) Delete() *ContentSlugRedirectDelete {
+	mutation := newContentSlugRedirectMutation(c.config, OpDelete)
+	return &ContentSlugRedirectDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ContentSlugRedirectClient) DeleteOne(_m *ContentSlugRedirect) *ContentSlugRedirectDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ContentSlugRedirectClient) DeleteOneID(id int64) *ContentSlugRedirectDeleteOne {
+	builder := c.Delete().Where(contentslugredirect.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ContentSlugRedirectDeleteOne{builder}
+}
+
+// Query returns a query builder for ContentSlugRedirect.
+func (c *ContentSlugRedirectClient) Query() *ContentSlugRedirectQuery {
+	return &ContentSlugRedirectQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeContentSlugRedirect},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ContentSlugRedirect entity by its id.
+func (c *ContentSlugRedirectClient) Get(ctx context.Context, id int64) (*ContentSlugRedirect, error) {
+	return c.Query().Where(contentslugredirect.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ContentSlugRedirectClient) GetX(ctx context.Context, id int64) *ContentSlugRedirect {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ContentSlugRedirectClient) Hooks() []Hook {
+	return c.hooks.ContentSlugRedirect
+}
+
+// Interceptors returns the client interceptors.
+func (c *ContentSlugRedirectClient) Interceptors() []Interceptor {
+	return c.inters.ContentSlugRedirect
+}
+
+func (c *ContentSlugRedirectClient) mutate(ctx context.Context, m *ContentSlugRedirectMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ContentSlugRedirectCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ContentSlugRedirectUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ContentSlugRedirectUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ContentSlugRedirectDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ContentSlugRedirect mutation op: %q", m.Op())
+	}
+}
+
+// ContentTranslationClient is a client for the ContentTranslation schema.
+type ContentTranslationClient struct {
+	config
+}
+
+// NewContentTranslationClient returns a client for the ContentTranslation from the given config.
+func NewContentTranslationClient(c config) *ContentTranslationClient {
+	return &ContentTranslationClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `contenttranslation.Hooks(f(g(h())))`.
+func (c *ContentTranslationClient) Use(hooks ...Hook) {
+	c.hooks.ContentTranslation = append(c.hooks.ContentTranslation, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `contenttranslation.Intercept(f(g(h())))`.
+func (c *ContentTranslationClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ContentTranslation = append(c.inters.ContentTranslation, interceptors...)
+}
+
+// Create returns a builder for creating a ContentTranslation entity.
+func (c *ContentTranslationClient) Create() *ContentTranslationCreate {
+	mutation := newContentTranslationMutation(c.config, OpCreate)
+	return &ContentTranslationCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ContentTranslation entities.
+func (c *ContentTranslationClient) CreateBulk(builders ...*ContentTranslationCreate) *ContentTranslationCreateBulk {
+	return &ContentTranslationCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ContentTranslationClient) MapCreateBulk(slice any, setFunc func(*ContentTranslationCreate, int)) *ContentTranslationCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ContentTranslationCreateBulk{err: fmt.Errorf("calling to ContentTranslationClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ContentTranslationCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ContentTranslationCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ContentTranslation.
+func (c *ContentTranslationClient) Update() *ContentTranslationUpdate {
+	mutation := newContentTranslationMutation(c.config, OpUpdate)
+	return &ContentTranslationUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ContentTranslationClient) UpdateOne(_m *ContentTranslation) *ContentTranslationUpdateOne {
+	mutation := newContentTranslationMutation(c.config, OpUpdateOne, withContentTranslation(_m))
+	return &ContentTranslationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ContentTranslationClient) UpdateOneID(id int64) *ContentTranslationUpdateOne {
+	mutation := newContentTranslationMutation(c.config, OpUpdateOne, withContentTranslationID(id))
+	return &ContentTranslationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ContentTranslation.
+func (c *ContentTranslationClient) Delete() *ContentTranslationDelete {
+	mutation := newContentTranslationMutation(c.config, OpDelete)
+	return &ContentTranslationDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ContentTranslationClient) DeleteOne(_m *ContentTranslation) *ContentTranslationDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ContentTranslationClient) DeleteOneID(id int64) *ContentTranslationDeleteOne {
+	builder := c.Delete().Where(contenttranslation.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ContentTranslationDeleteOne{builder}
+}
+
+// Query returns a query builder for ContentTranslation.
+func (c *ContentTranslationClient) Query() *ContentTranslationQuery {
+	return &ContentTranslationQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeContentTranslation},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ContentTranslation entity by its id.
+func (c *ContentTranslationClient) Get(ctx context.Context, id int64) (*ContentTranslation, error) {
+	return c.Query().Where(contenttranslation.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ContentTranslationClient) GetX(ctx context.Context, id int64) *ContentTranslation {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ContentTranslationClient) Hooks() []Hook {
+	hooks := c.hooks.ContentTranslation
+	return append(hooks[:len(hooks):len(hooks)], contenttranslation.Hooks[:]...)
+}
+
+// Interceptors returns the client interceptors.
+func (c *ContentTranslationClient) Interceptors() []Interceptor {
+	inters := c.inters.ContentTranslation
+	return append(inters[:len(inters):len(inters)], contenttranslation.Interceptors[:]...)
+}
+
+func (c *ContentTranslationClient) mutate(ctx context.Context, m *ContentTranslationMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ContentTranslationCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ContentTranslationUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ContentTranslationUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ContentTranslationDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ContentTranslation mutation op: %q", m.Op())
+	}
+}
+
+// ContentTranslationSettingClient is a client for the ContentTranslationSetting schema.
+type ContentTranslationSettingClient struct {
+	config
+}
+
+// NewContentTranslationSettingClient returns a client for the ContentTranslationSetting from the given config.
+func NewContentTranslationSettingClient(c config) *ContentTranslationSettingClient {
+	return &ContentTranslationSettingClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `contenttranslationsetting.Hooks(f(g(h())))`.
+func (c *ContentTranslationSettingClient) Use(hooks ...Hook) {
+	c.hooks.ContentTranslationSetting = append(c.hooks.ContentTranslationSetting, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `contenttranslationsetting.Intercept(f(g(h())))`.
+func (c *ContentTranslationSettingClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ContentTranslationSetting = append(c.inters.ContentTranslationSetting, interceptors...)
+}
+
+// Create returns a builder for creating a ContentTranslationSetting entity.
+func (c *ContentTranslationSettingClient) Create() *ContentTranslationSettingCreate {
+	mutation := newContentTranslationSettingMutation(c.config, OpCreate)
+	return &ContentTranslationSettingCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ContentTranslationSetting entities.
+func (c *ContentTranslationSettingClient) CreateBulk(builders ...*ContentTranslationSettingCreate) *ContentTranslationSettingCreateBulk {
+	return &ContentTranslationSettingCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ContentTranslationSettingClient) MapCreateBulk(slice any, setFunc func(*ContentTranslationSettingCreate, int)) *ContentTranslationSettingCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ContentTranslationSettingCreateBulk{err: fmt.Errorf("calling to ContentTranslationSettingClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ContentTranslationSettingCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ContentTranslationSettingCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ContentTranslationSetting.
+func (c *ContentTranslationSettingClient) Update() *ContentTranslationSettingUpdate {
+	mutation := newContentTranslationSettingMutation(c.config, OpUpdate)
+	return &ContentTranslationSettingUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ContentTranslationSettingClient) UpdateOne(_m *ContentTranslationSetting) *ContentTranslationSettingUpdateOne {
+	mutation := newContentTranslationSettingMutation(c.config, OpUpdateOne, withContentTranslationSetting(_m))
+	return &ContentTranslationSettingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ContentTranslationSettingClient) UpdateOneID(id int64) *ContentTranslationSettingUpdateOne {
+	mutation := newContentTranslationSettingMutation(c.config, OpUpdateOne, withContentTranslationSettingID(id))
+	return &ContentTranslationSettingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ContentTranslationSetting.
+func (c *ContentTranslationSettingClient) Delete() *ContentTranslationSettingDelete {
+	mutation := newContentTranslationSettingMutation(c.config, OpDelete)
+	return &ContentTranslationSettingDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ContentTranslationSettingClient) DeleteOne(_m *ContentTranslationSetting) *ContentTranslationSettingDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ContentTranslationSettingClient) DeleteOneID(id int64) *ContentTranslationSettingDeleteOne {
+	builder := c.Delete().Where(contenttranslationsetting.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ContentTranslationSettingDeleteOne{builder}
+}
+
+// Query returns a query builder for ContentTranslationSetting.
+func (c *ContentTranslationSettingClient) Query() *ContentTranslationSettingQuery {
+	return &ContentTranslationSettingQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeContentTranslationSetting},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ContentTranslationSetting entity by its id.
+func (c *ContentTranslationSettingClient) Get(ctx context.Context, id int64) (*ContentTranslationSetting, error) {
+	return c.Query().Where(contenttranslationsetting.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ContentTranslationSettingClient) GetX(ctx context.Context, id int64) *ContentTranslationSetting {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *ContentTranslationSettingClient) Hooks() []Hook {
+	return c.hooks.ContentTranslationSetting
+}
+
+// Interceptors returns the client interceptors.
+func (c *ContentTranslationSettingClient) Interceptors() []Interceptor {
+	return c.inters.ContentTranslationSetting
+}
+
+func (c *ContentTranslationSettingClient) mutate(ctx context.Context, m *ContentTranslationSettingMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ContentTranslationSettingCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ContentTranslationSettingUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ContentTranslationSettingUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ContentTranslationSettingDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ContentTranslationSetting mutation op: %q", m.Op())
 	}
 }
 
@@ -10166,14 +11797,18 @@ type (
 		APIKey, Account, AccountFinanceCounterSnapshot, AccountFinanceProfile,
 		AccountGroup, AccountUpstreamMultiplierChange, Announcement, AnnouncementRead,
 		AuthIdentity, AuthIdentityChannel, ChannelMonitor, ChannelMonitorDailyRollup,
-		ChannelMonitorHistory, ChannelMonitorRequestTemplate, ErrorPassthroughRule,
-		FinanceAlert, FinanceAsyncJob, FinanceBackfillJob, FinanceCalculationRevision,
-		FinanceDailyAggregate, FinanceExportJob, FinanceFXRateVersion, Group,
-		IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog, PaymentOrder,
-		PaymentProviderFeeEvent, PaymentProviderInstance, PendingAuthSession,
-		PromoCode, PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting,
-		SubscriptionPlan, SubscriptionRevenueRecognition, SystemModelPriceVersion,
-		TLSFingerprintProfile, UpstreamBalanceSnapshot, UpstreamBillReconciliation,
+		ChannelMonitorHistory, ChannelMonitorRequestTemplate, ContentAnalyticsDaily,
+		ContentAnalyticsEvent, ContentArticle, ContentAuditLog,
+		ContentAutomationSetting, ContentFetchRun, ContentNewsItem, ContentNewsSource,
+		ContentSlugRedirect, ContentTranslation, ContentTranslationSetting,
+		ErrorPassthroughRule, FinanceAlert, FinanceAsyncJob, FinanceBackfillJob,
+		FinanceCalculationRevision, FinanceDailyAggregate, FinanceExportJob,
+		FinanceFXRateVersion, Group, IdempotencyRecord, IdentityAdoptionDecision,
+		PaymentAuditLog, PaymentOrder, PaymentProviderFeeEvent,
+		PaymentProviderInstance, PendingAuthSession, PromoCode, PromoCodeUsage, Proxy,
+		RedeemCode, SecuritySecret, Setting, SubscriptionPlan,
+		SubscriptionRevenueRecognition, SystemModelPriceVersion, TLSFingerprintProfile,
+		UpstreamBalanceSnapshot, UpstreamBillReconciliation,
 		UpstreamCostSettlementInterval, UpstreamFinanceProtocol,
 		UpstreamFinanceProtocolVersion, UpstreamFinanceSyncRun, UpstreamFundEvent,
 		UpstreamModelPriceVersion, UpstreamWallet, UpstreamWalletAccount,
@@ -10186,14 +11821,18 @@ type (
 		APIKey, Account, AccountFinanceCounterSnapshot, AccountFinanceProfile,
 		AccountGroup, AccountUpstreamMultiplierChange, Announcement, AnnouncementRead,
 		AuthIdentity, AuthIdentityChannel, ChannelMonitor, ChannelMonitorDailyRollup,
-		ChannelMonitorHistory, ChannelMonitorRequestTemplate, ErrorPassthroughRule,
-		FinanceAlert, FinanceAsyncJob, FinanceBackfillJob, FinanceCalculationRevision,
-		FinanceDailyAggregate, FinanceExportJob, FinanceFXRateVersion, Group,
-		IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog, PaymentOrder,
-		PaymentProviderFeeEvent, PaymentProviderInstance, PendingAuthSession,
-		PromoCode, PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting,
-		SubscriptionPlan, SubscriptionRevenueRecognition, SystemModelPriceVersion,
-		TLSFingerprintProfile, UpstreamBalanceSnapshot, UpstreamBillReconciliation,
+		ChannelMonitorHistory, ChannelMonitorRequestTemplate, ContentAnalyticsDaily,
+		ContentAnalyticsEvent, ContentArticle, ContentAuditLog,
+		ContentAutomationSetting, ContentFetchRun, ContentNewsItem, ContentNewsSource,
+		ContentSlugRedirect, ContentTranslation, ContentTranslationSetting,
+		ErrorPassthroughRule, FinanceAlert, FinanceAsyncJob, FinanceBackfillJob,
+		FinanceCalculationRevision, FinanceDailyAggregate, FinanceExportJob,
+		FinanceFXRateVersion, Group, IdempotencyRecord, IdentityAdoptionDecision,
+		PaymentAuditLog, PaymentOrder, PaymentProviderFeeEvent,
+		PaymentProviderInstance, PendingAuthSession, PromoCode, PromoCodeUsage, Proxy,
+		RedeemCode, SecuritySecret, Setting, SubscriptionPlan,
+		SubscriptionRevenueRecognition, SystemModelPriceVersion, TLSFingerprintProfile,
+		UpstreamBalanceSnapshot, UpstreamBillReconciliation,
 		UpstreamCostSettlementInterval, UpstreamFinanceProtocol,
 		UpstreamFinanceProtocolVersion, UpstreamFinanceSyncRun, UpstreamFundEvent,
 		UpstreamModelPriceVersion, UpstreamWallet, UpstreamWalletAccount,

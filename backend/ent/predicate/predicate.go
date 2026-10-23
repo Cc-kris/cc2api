@@ -48,6 +48,39 @@ type ChannelMonitorHistory func(*sql.Selector)
 // ChannelMonitorRequestTemplate is the predicate function for channelmonitorrequesttemplate builders.
 type ChannelMonitorRequestTemplate func(*sql.Selector)
 
+// ContentAnalyticsDaily is the predicate function for contentanalyticsdaily builders.
+type ContentAnalyticsDaily func(*sql.Selector)
+
+// ContentAnalyticsEvent is the predicate function for contentanalyticsevent builders.
+type ContentAnalyticsEvent func(*sql.Selector)
+
+// ContentArticle is the predicate function for contentarticle builders.
+type ContentArticle func(*sql.Selector)
+
+// ContentAuditLog is the predicate function for contentauditlog builders.
+type ContentAuditLog func(*sql.Selector)
+
+// ContentAutomationSetting is the predicate function for contentautomationsetting builders.
+type ContentAutomationSetting func(*sql.Selector)
+
+// ContentFetchRun is the predicate function for contentfetchrun builders.
+type ContentFetchRun func(*sql.Selector)
+
+// ContentNewsItem is the predicate function for contentnewsitem builders.
+type ContentNewsItem func(*sql.Selector)
+
+// ContentNewsSource is the predicate function for contentnewssource builders.
+type ContentNewsSource func(*sql.Selector)
+
+// ContentSlugRedirect is the predicate function for contentslugredirect builders.
+type ContentSlugRedirect func(*sql.Selector)
+
+// ContentTranslation is the predicate function for contenttranslation builders.
+type ContentTranslation func(*sql.Selector)
+
+// ContentTranslationSetting is the predicate function for contenttranslationsetting builders.
+type ContentTranslationSetting func(*sql.Selector)
+
 // ErrorPassthroughRule is the predicate function for errorpassthroughrule builders.
 type ErrorPassthroughRule func(*sql.Selector)
 

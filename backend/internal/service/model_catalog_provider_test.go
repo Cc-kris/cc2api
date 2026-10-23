@@ -26,7 +26,8 @@ func (failingPricingRemoteClient) FetchHashText(context.Context, string) (string
 func TestPricingProviderForPlatform(t *testing.T) {
 	tests := map[string]string{
 		"openai": "openai", "anthropic": "anthropic", "gemini": "google",
-		"antigravity": "anthropic", "grok": "xai",
+		"antigravity": "anthropic", "grok": "xai", "seedace": "seedace",
+		"ollama": "ollama", "kimi": "moonshot", "zhipu": "zhipuai", "deepseek": "deepseek",
 	}
 	for platform, expected := range tests {
 		actual, ok := PricingProviderForPlatform(platform)

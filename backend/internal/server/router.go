@@ -2,6 +2,9 @@ package server
 
 import (
 	"context"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"time"
 
@@ -94,6 +97,16 @@ func registerRoutes(
 	routes.RegisterAdminRoutes(v1, h, adminAuth)
 	routes.RegisterGatewayRoutes(r, h, apiKeyAuth, apiKeyService, subscriptionService, opsService, settingService, cfg)
 	routes.RegisterPaymentRoutes(v1, h.Payment, h.PaymentWebhook, h.Admin.Payment, jwtAuth, adminAuth, settingService)
+	routes.RegisterPublicContentRoutes(v1, h, redisClient)
+	routes.RegisterPublicContentPageRoutes(r, h)
+
+	// 内容中心上传的图片：<DataDir>/media/content/<file> 直接托管为 /media/content/<file>
+	contentMediaDir := filepath.Join(cfg.Pricing.DataDir, "media", "content")
+	if err := os.MkdirAll(contentMediaDir, 0o755); err == nil {
+		r.Static("/media/content", contentMediaDir)
+	} else {
+		slog.Warn("content media dir unavailable", "dir", contentMediaDir, "error", err)
+	}
 
 	handler.RegisterPageRoutes(v1, cfg.Pricing.DataDir, gin.HandlerFunc(jwtAuth), gin.HandlerFunc(adminAuth), settingService)
 }

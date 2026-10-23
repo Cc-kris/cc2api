@@ -326,6 +326,8 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 
 		assert.Equal(t, http.StatusNotModified, w2.Code)
 		assert.Empty(t, w2.Body.String())
+		assert.Equal(t, robotsNoIndexHeader, w2.Header().Get("X-Robots-Tag"))
+
 	})
 
 	t.Run("sets_cache_control_header", func(t *testing.T) {
@@ -519,9 +521,47 @@ func TestFrontendServer_Middleware(t *testing.T) {
 
 				assert.Equal(t, http.StatusOK, w.Code)
 				assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
-				assert.Equal(t, robotsNoIndexHeader, w.Header().Get("X-Robots-Tag"))
+				if isIndexableFrontendRoute(req.URL.Path) {
+					assert.Equal(t, "index,follow", w.Header().Get("X-Robots-Tag"))
+				} else {
+					assert.Equal(t, robotsNoIndexHeader, w.Header().Get("X-Robots-Tag"))
+				}
 			})
 		}
+	})
+
+	t.Run("skips_registered_public_ssr_routes", func(t *testing.T) {
+		provider := &mockSettingsProvider{settings: map[string]string{"test": "value"}}
+		server, err := NewFrontendServer(provider)
+		require.NoError(t, err)
+
+		router := gin.New()
+		router.Use(server.Middleware())
+		for _, path := range []string{"/", "/news", "/news/:locale/:slug", "/articles", "/articles/:locale/:slug", "/docs", "/docs/*path"} {
+			router.GET(path, func(c *gin.Context) { c.String(http.StatusOK, "public SSR") })
+		}
+		for _, path := range []string{"/", "/news", "/news/zh-CN/update", "/articles", "/articles/zh-CN/guide", "/docs", "/docs/authentication"} {
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+			require.Equal(t, http.StatusOK, w.Code, path)
+			require.Equal(t, "public SSR", w.Body.String(), path)
+		}
+	})
+
+	t.Run("redirects_home_alias_to_canonical_root", func(t *testing.T) {
+		provider := &mockSettingsProvider{settings: map[string]string{"test": "value"}}
+		server, err := NewFrontendServer(provider)
+		require.NoError(t, err)
+		router := gin.New()
+		router.Use(server.Middleware())
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/home?utm_source=test", nil)
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusMovedPermanently, w.Code)
+		assert.Equal(t, "/?utm_source=test", w.Header().Get("Location"))
+		assert.Equal(t, "index,follow", w.Header().Get("X-Robots-Tag"))
 	})
 
 	t.Run("redirects_private_spa_routes_to_login", func(t *testing.T) {
@@ -536,9 +576,9 @@ func TestFrontendServer_Middleware(t *testing.T) {
 		router.Use(server.Middleware())
 
 		privatePaths := []string{
-			"/",
-			"/home",
 			"/dashboard",
+			"/model-square",
+			"/keys",
 			"/users/123",
 			"/settings/profile",
 			"/admin/dashboard",
@@ -632,19 +672,34 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 		assert.Contains(t, w.Header().Get("Content-Type"), "image/png")
 	})
 
-	t.Run("redirects_root_to_login", func(t *testing.T) {
+	t.Run("serves_root_as_indexable_public_route", func(t *testing.T) {
+		middleware := ServeEmbeddedFrontend()
+
+		router := gin.New()
+		router.Use(middleware)
+		router.GET("/", func(c *gin.Context) { c.String(http.StatusOK, "public SSR") })
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, "public SSR", w.Body.String())
+	})
+
+	t.Run("redirects_home_alias_to_canonical_root", func(t *testing.T) {
 		middleware := ServeEmbeddedFrontend()
 
 		router := gin.New()
 		router.Use(middleware)
 
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequest(http.MethodGet, "/home?utm_source=test", nil)
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusFound, w.Code)
-		assert.Equal(t, frontendLoginPath, w.Header().Get("Location"))
-		assert.Equal(t, robotsNoIndexHeader, w.Header().Get("X-Robots-Tag"))
+		assert.Equal(t, http.StatusMovedPermanently, w.Code)
+		assert.Equal(t, "/?utm_source=test", w.Header().Get("Location"))
+		assert.Equal(t, "index,follow", w.Header().Get("X-Robots-Tag"))
 	})
 
 	t.Run("serves_index_html_for_public_spa_routes", func(t *testing.T) {
@@ -663,7 +718,11 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 
 				assert.Equal(t, http.StatusOK, w.Code)
 				assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
-				assert.Equal(t, robotsNoIndexHeader, w.Header().Get("X-Robots-Tag"))
+				if isIndexableFrontendRoute(req.URL.Path) {
+					assert.Equal(t, "index,follow", w.Header().Get("X-Robots-Tag"))
+				} else {
+					assert.Equal(t, robotsNoIndexHeader, w.Header().Get("X-Robots-Tag"))
+				}
 			})
 		}
 	})
@@ -723,6 +782,16 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestServeEmbeddedFrontendWithoutPublicSSRServesSetupRoot(t *testing.T) {
+	r := gin.New()
+	r.Use(ServeEmbeddedFrontendWithoutPublicSSR())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
 }
 
 // Tests for HTMLCache

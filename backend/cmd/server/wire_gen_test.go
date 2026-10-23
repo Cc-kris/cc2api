@@ -83,6 +83,10 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 		nil, // customGroupUsageRollup
 		nil, // financeRuntime
 		nil, // upstreamFinanceSyncRuntime
+		nil, // contentNewsRuntime
+		nil, // contentArticleService
+		nil, // contentAnalyticsRuntime
+		nil, // contentAnalyticsHandler
 	)
 
 	require.NotPanics(t, func() {

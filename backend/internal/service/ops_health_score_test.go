@@ -560,4 +560,4 @@ func requireHealthReasonValue(t *testing.T, reasons []*OpsHealthScoreReason, cod
 
 func timePtr(v time.Time) *time.Time { return &v }
 
-func stringPtr(v string) *string { return &v }
+func testHealthStringPtr(v string) *string { return &v }

@@ -756,6 +756,451 @@ var (
 			},
 		},
 	}
+	// ContentAnalyticsDailyColumns holds the columns for the "content_analytics_daily" table.
+	ContentAnalyticsDailyColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "date", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "date"}},
+		{Name: "locale", Type: field.TypeString, Size: 16},
+		{Name: "content_type", Type: field.TypeString, Size: 24},
+		{Name: "content_id", Type: field.TypeInt64, Default: 0},
+		{Name: "page_path", Type: field.TypeString, Size: 512},
+		{Name: "placement", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "unique_visitors", Type: field.TypeInt, Default: 0},
+		{Name: "page_views", Type: field.TypeInt, Default: 0},
+		{Name: "reads", Type: field.TypeInt, Default: 0},
+		{Name: "impressions", Type: field.TypeInt, Default: 0},
+		{Name: "clicks", Type: field.TypeInt, Default: 0},
+		{Name: "avg_read_seconds", Type: field.TypeInt, Default: 0},
+		{Name: "ctr", Type: field.TypeFloat64, Default: 0},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// ContentAnalyticsDailyTable holds the schema information for the "content_analytics_daily" table.
+	ContentAnalyticsDailyTable = &schema.Table{
+		Name:       "content_analytics_daily",
+		Columns:    ContentAnalyticsDailyColumns,
+		PrimaryKey: []*schema.Column{ContentAnalyticsDailyColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "contentanalyticsdaily_date_locale_content_type_content_id_page_path_placement",
+				Unique:  true,
+				Columns: []*schema.Column{ContentAnalyticsDailyColumns[1], ContentAnalyticsDailyColumns[2], ContentAnalyticsDailyColumns[3], ContentAnalyticsDailyColumns[4], ContentAnalyticsDailyColumns[5], ContentAnalyticsDailyColumns[6]},
+			},
+			{
+				Name:    "contentanalyticsdaily_date_content_type_reads",
+				Unique:  false,
+				Columns: []*schema.Column{ContentAnalyticsDailyColumns[1], ContentAnalyticsDailyColumns[3], ContentAnalyticsDailyColumns[9]},
+			},
+		},
+	}
+	// ContentAnalyticsEventsColumns holds the columns for the "content_analytics_events" table.
+	ContentAnalyticsEventsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "event_id", Type: field.TypeString, Unique: true, Size: 128},
+		{Name: "event_name", Type: field.TypeString, Size: 32},
+		{Name: "content_type", Type: field.TypeString, Nullable: true, Size: 24},
+		{Name: "content_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "locale", Type: field.TypeString, Nullable: true, Size: 16},
+		{Name: "placement", Type: field.TypeString, Nullable: true, Size: 64},
+		{Name: "page_path", Type: field.TypeString, Size: 512},
+		{Name: "session_hash", Type: field.TypeString, Size: 128},
+		{Name: "referrer_host", Type: field.TypeString, Nullable: true, Size: 255},
+		{Name: "event_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "payload_json", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// ContentAnalyticsEventsTable holds the schema information for the "content_analytics_events" table.
+	ContentAnalyticsEventsTable = &schema.Table{
+		Name:       "content_analytics_events",
+		Columns:    ContentAnalyticsEventsColumns,
+		PrimaryKey: []*schema.Column{ContentAnalyticsEventsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "contentanalyticsevent_event_name_event_at",
+				Unique:  false,
+				Columns: []*schema.Column{ContentAnalyticsEventsColumns[2], ContentAnalyticsEventsColumns[10]},
+			},
+			{
+				Name:    "contentanalyticsevent_content_type_content_id_event_at",
+				Unique:  false,
+				Columns: []*schema.Column{ContentAnalyticsEventsColumns[3], ContentAnalyticsEventsColumns[4], ContentAnalyticsEventsColumns[10]},
+			},
+			{
+				Name:    "contentanalyticsevent_session_hash_event_at",
+				Unique:  false,
+				Columns: []*schema.Column{ContentAnalyticsEventsColumns[8], ContentAnalyticsEventsColumns[10]},
+			},
+		},
+	}
+	// ContentArticlesColumns holds the columns for the "content_articles" table.
+	ContentArticlesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "locale", Type: field.TypeString, Size: 16, Default: "zh-CN"},
+		{Name: "slug", Type: field.TypeString, Size: 80},
+		{Name: "title", Type: field.TypeString, Size: 300},
+		{Name: "excerpt", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "body_markdown", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "body_html", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "cover_image", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "cover_alt", Type: field.TypeString, Nullable: true, Size: 300},
+		{Name: "category", Type: field.TypeString, Nullable: true, Size: 80},
+		{Name: "tags", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "status", Type: field.TypeString, Size: 24, Default: "draft"},
+		{Name: "author_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "model", Type: field.TypeString, Nullable: true, Size: 200},
+		{Name: "seo_title", Type: field.TypeString, Nullable: true, Size: 300},
+		{Name: "seo_description", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "canonical_url", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "og_image", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "published_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "version", Type: field.TypeInt, Default: 1},
+	}
+	// ContentArticlesTable holds the schema information for the "content_articles" table.
+	ContentArticlesTable = &schema.Table{
+		Name:       "content_articles",
+		Columns:    ContentArticlesColumns,
+		PrimaryKey: []*schema.Column{ContentArticlesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "contentarticle_slug_locale",
+				Unique:  true,
+				Columns: []*schema.Column{ContentArticlesColumns[5], ContentArticlesColumns[4]},
+			},
+			{
+				Name:    "contentarticle_status_locale_published_at",
+				Unique:  false,
+				Columns: []*schema.Column{ContentArticlesColumns[14], ContentArticlesColumns[4], ContentArticlesColumns[21]},
+			},
+			{
+				Name:    "contentarticle_category",
+				Unique:  false,
+				Columns: []*schema.Column{ContentArticlesColumns[12]},
+			},
+		},
+	}
+	// ContentAuditLogsColumns holds the columns for the "content_audit_logs" table.
+	ContentAuditLogsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "actor_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "content_type", Type: field.TypeString, Size: 24},
+		{Name: "content_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "action", Type: field.TypeString, Size: 64},
+		{Name: "before_snapshot", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "after_snapshot", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "request_id", Type: field.TypeString, Nullable: true, Size: 128},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// ContentAuditLogsTable holds the schema information for the "content_audit_logs" table.
+	ContentAuditLogsTable = &schema.Table{
+		Name:       "content_audit_logs",
+		Columns:    ContentAuditLogsColumns,
+		PrimaryKey: []*schema.Column{ContentAuditLogsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "contentauditlog_content_type_content_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{ContentAuditLogsColumns[2], ContentAuditLogsColumns[3], ContentAuditLogsColumns[8]},
+			},
+			{
+				Name:    "contentauditlog_actor_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{ContentAuditLogsColumns[1], ContentAuditLogsColumns[8]},
+			},
+		},
+	}
+	// ContentAutomationSettingsColumns holds the columns for the "content_automation_settings" table.
+	ContentAutomationSettingsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "enabled", Type: field.TypeBool, Default: false},
+		{Name: "timezone", Type: field.TypeString, Size: 64, Default: "Asia/Shanghai"},
+		{Name: "fetch_cron", Type: field.TypeString, Size: 120, Default: "0 */15 * * * *"},
+		{Name: "publish_mode", Type: field.TypeString, Size: 24, Default: "manual_review"},
+		{Name: "daily_fetch_limit", Type: field.TypeInt, Default: 0},
+		{Name: "daily_publish_limit", Type: field.TypeInt, Default: 0},
+		{Name: "publish_start_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "time"}},
+		{Name: "publish_end_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "time"}},
+		{Name: "dedupe_window_hours", Type: field.TypeInt, Default: 24},
+		{Name: "target_locales", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// ContentAutomationSettingsTable holds the schema information for the "content_automation_settings" table.
+	ContentAutomationSettingsTable = &schema.Table{
+		Name:       "content_automation_settings",
+		Columns:    ContentAutomationSettingsColumns,
+		PrimaryKey: []*schema.Column{ContentAutomationSettingsColumns[0]},
+	}
+	// ContentFetchRunsColumns holds the columns for the "content_fetch_runs" table.
+	ContentFetchRunsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "trigger_type", Type: field.TypeString, Size: 24},
+		{Name: "status", Type: field.TypeString, Size: 24, Default: "queued"},
+		{Name: "started_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "finished_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "fetched_count", Type: field.TypeInt, Default: 0},
+		{Name: "created_count", Type: field.TypeInt, Default: 0},
+		{Name: "duplicate_count", Type: field.TypeInt, Default: 0},
+		{Name: "failed_count", Type: field.TypeInt, Default: 0},
+		{Name: "error_summary", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "task_key", Type: field.TypeString, Size: 200},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "source_id", Type: field.TypeInt64},
+	}
+	// ContentFetchRunsTable holds the schema information for the "content_fetch_runs" table.
+	ContentFetchRunsTable = &schema.Table{
+		Name:       "content_fetch_runs",
+		Columns:    ContentFetchRunsColumns,
+		PrimaryKey: []*schema.Column{ContentFetchRunsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "content_fetch_runs_content_news_sources_fetch_runs",
+				Columns:    []*schema.Column{ContentFetchRunsColumns[13]},
+				RefColumns: []*schema.Column{ContentNewsSourcesColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "contentfetchrun_source_id_task_key",
+				Unique:  true,
+				Columns: []*schema.Column{ContentFetchRunsColumns[13], ContentFetchRunsColumns[10]},
+			},
+			{
+				Name:    "contentfetchrun_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{ContentFetchRunsColumns[2], ContentFetchRunsColumns[11]},
+			},
+		},
+	}
+	// ContentNewsItemsColumns holds the columns for the "content_news_items" table.
+	ContentNewsItemsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "external_id", Type: field.TypeString, Nullable: true, Size: 512},
+		{Name: "source_canonical_url", Type: field.TypeString, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "slug", Type: field.TypeString, Size: 80},
+		{Name: "locale", Type: field.TypeString, Size: 16, Default: "zh-CN"},
+		{Name: "title", Type: field.TypeString, Size: 300},
+		{Name: "summary", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "body_html", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "body_text", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "body_source_type", Type: field.TypeString, Nullable: true, Size: 24},
+		{Name: "body_fetched_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "body_hash", Type: field.TypeString, Nullable: true, Size: 64},
+		{Name: "media_json", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "image_url", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "source_name", Type: field.TypeString, Nullable: true, Size: 120},
+		{Name: "original_published_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "published_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "status", Type: field.TypeString, Size: 24, Default: "draft"},
+		{Name: "publish_mode", Type: field.TypeString, Size: 24, Default: "manual"},
+		{Name: "seo_title", Type: field.TypeString, Nullable: true, Size: 300},
+		{Name: "seo_description", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "fetched_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "content_hash", Type: field.TypeString, Nullable: true, Size: 64},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "source_id", Type: field.TypeInt64},
+	}
+	// ContentNewsItemsTable holds the schema information for the "content_news_items" table.
+	ContentNewsItemsTable = &schema.Table{
+		Name:       "content_news_items",
+		Columns:    ContentNewsItemsColumns,
+		PrimaryKey: []*schema.Column{ContentNewsItemsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "content_news_items_content_news_sources_news_items",
+				Columns:    []*schema.Column{ContentNewsItemsColumns[28]},
+				RefColumns: []*schema.Column{ContentNewsSourcesColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "contentnewsitem_source_id_external_id",
+				Unique:  true,
+				Columns: []*schema.Column{ContentNewsItemsColumns[28], ContentNewsItemsColumns[4]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "external_id IS NOT NULL AND deleted_at IS NULL",
+				},
+			},
+			{
+				Name:    "contentnewsitem_source_canonical_url",
+				Unique:  false,
+				Columns: []*schema.Column{ContentNewsItemsColumns[5]},
+			},
+			{
+				Name:    "contentnewsitem_content_hash",
+				Unique:  false,
+				Columns: []*schema.Column{ContentNewsItemsColumns[25]},
+			},
+			{
+				Name:    "contentnewsitem_deleted_at",
+				Unique:  false,
+				Columns: []*schema.Column{ContentNewsItemsColumns[3]},
+			},
+			{
+				Name:    "contentnewsitem_status_locale_published_at",
+				Unique:  false,
+				Columns: []*schema.Column{ContentNewsItemsColumns[20], ContentNewsItemsColumns[7], ContentNewsItemsColumns[19]},
+			},
+			{
+				Name:    "contentnewsitem_slug_locale",
+				Unique:  true,
+				Columns: []*schema.Column{ContentNewsItemsColumns[6], ContentNewsItemsColumns[7]},
+			},
+		},
+	}
+	// ContentNewsSourcesColumns holds the columns for the "content_news_sources" table.
+	ContentNewsSourcesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "name", Type: field.TypeString, Size: 80},
+		{Name: "source_type", Type: field.TypeString, Size: 20, Default: "rss"},
+		{Name: "mapping_json", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "url", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "language", Type: field.TypeString, Size: 16, Default: "zh-CN"},
+		{Name: "category", Type: field.TypeString, Nullable: true, Size: 80},
+		{Name: "enabled", Type: field.TypeBool, Default: false},
+		{Name: "interval_minutes", Type: field.TypeInt, Default: 15},
+		{Name: "rate_limit_per_minute", Type: field.TypeInt, Default: 60},
+		{Name: "terms_confirmed_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "authorization_note", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "robots_policy", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "next_run_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "last_run_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "last_error", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "created_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// ContentNewsSourcesTable holds the schema information for the "content_news_sources" table.
+	ContentNewsSourcesTable = &schema.Table{
+		Name:       "content_news_sources",
+		Columns:    ContentNewsSourcesColumns,
+		PrimaryKey: []*schema.Column{ContentNewsSourcesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "contentnewssource_enabled",
+				Unique:  false,
+				Columns: []*schema.Column{ContentNewsSourcesColumns[10]},
+			},
+			{
+				Name:    "contentnewssource_language",
+				Unique:  false,
+				Columns: []*schema.Column{ContentNewsSourcesColumns[8]},
+			},
+			{
+				Name:    "contentnewssource_category",
+				Unique:  false,
+				Columns: []*schema.Column{ContentNewsSourcesColumns[9]},
+			},
+			{
+				Name:    "contentnewssource_next_run_at",
+				Unique:  false,
+				Columns: []*schema.Column{ContentNewsSourcesColumns[16]},
+			},
+			{
+				Name:    "contentnewssource_last_run_at",
+				Unique:  false,
+				Columns: []*schema.Column{ContentNewsSourcesColumns[17]},
+			},
+		},
+	}
+	// ContentSlugRedirectsColumns holds the columns for the "content_slug_redirects" table.
+	ContentSlugRedirectsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "content_type", Type: field.TypeString, Size: 24},
+		{Name: "content_id", Type: field.TypeInt64},
+		{Name: "locale", Type: field.TypeString, Size: 16},
+		{Name: "old_slug", Type: field.TypeString, Size: 80},
+		{Name: "new_slug", Type: field.TypeString, Size: 80},
+		{Name: "status_code", Type: field.TypeInt, Default: 301},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// ContentSlugRedirectsTable holds the schema information for the "content_slug_redirects" table.
+	ContentSlugRedirectsTable = &schema.Table{
+		Name:       "content_slug_redirects",
+		Columns:    ContentSlugRedirectsColumns,
+		PrimaryKey: []*schema.Column{ContentSlugRedirectsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "contentslugredirect_content_type_locale_old_slug",
+				Unique:  true,
+				Columns: []*schema.Column{ContentSlugRedirectsColumns[1], ContentSlugRedirectsColumns[3], ContentSlugRedirectsColumns[4]},
+			},
+		},
+	}
+	// ContentTranslationsColumns holds the columns for the "content_translations" table.
+	ContentTranslationsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "content_type", Type: field.TypeString, Size: 24},
+		{Name: "content_id", Type: field.TypeInt64},
+		{Name: "source_version", Type: field.TypeInt},
+		{Name: "source_locale", Type: field.TypeString, Size: 16},
+		{Name: "locale", Type: field.TypeString, Size: 16},
+		{Name: "slug", Type: field.TypeString, Size: 80},
+		{Name: "title", Type: field.TypeString, Size: 300},
+		{Name: "excerpt", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "body_markdown", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "body_html", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "seo_title", Type: field.TypeString, Nullable: true, Size: 300},
+		{Name: "seo_description", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "canonical_url", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "translation_model", Type: field.TypeString, Nullable: true, Size: 200},
+		{Name: "failure_code", Type: field.TypeString, Nullable: true, Size: 64},
+		{Name: "status", Type: field.TypeString, Size: 24, Default: "translation_draft"},
+		{Name: "reviewed_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "reviewed_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "published_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// ContentTranslationsTable holds the schema information for the "content_translations" table.
+	ContentTranslationsTable = &schema.Table{
+		Name:       "content_translations",
+		Columns:    ContentTranslationsColumns,
+		PrimaryKey: []*schema.Column{ContentTranslationsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "contenttranslation_content_type_content_id_locale_source_version",
+				Unique:  true,
+				Columns: []*schema.Column{ContentTranslationsColumns[4], ContentTranslationsColumns[5], ContentTranslationsColumns[8], ContentTranslationsColumns[6]},
+			},
+			{
+				Name:    "contenttranslation_status_locale_published_at",
+				Unique:  false,
+				Columns: []*schema.Column{ContentTranslationsColumns[19], ContentTranslationsColumns[8], ContentTranslationsColumns[22]},
+			},
+		},
+	}
+	// ContentTranslationSettingsColumns holds the columns for the "content_translation_settings" table.
+	ContentTranslationSettingsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "default_model", Type: field.TypeString, Nullable: true, Size: 200},
+		{Name: "source_locale", Type: field.TypeString, Size: 16, Default: "zh-CN"},
+		{Name: "target_locales", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "glossary", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "auto_create_draft", Type: field.TypeBool, Default: true},
+		{Name: "updated_by", Type: field.TypeInt64, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// ContentTranslationSettingsTable holds the schema information for the "content_translation_settings" table.
+	ContentTranslationSettingsTable = &schema.Table{
+		Name:       "content_translation_settings",
+		Columns:    ContentTranslationSettingsColumns,
+		PrimaryKey: []*schema.Column{ContentTranslationSettingsColumns[0]},
+	}
 	// ErrorPassthroughRulesColumns holds the columns for the "error_passthrough_rules" table.
 	ErrorPassthroughRulesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -2908,6 +3353,17 @@ var (
 		ChannelMonitorDailyRollupsTable,
 		ChannelMonitorHistoriesTable,
 		ChannelMonitorRequestTemplatesTable,
+		ContentAnalyticsDailyTable,
+		ContentAnalyticsEventsTable,
+		ContentArticlesTable,
+		ContentAuditLogsTable,
+		ContentAutomationSettingsTable,
+		ContentFetchRunsTable,
+		ContentNewsItemsTable,
+		ContentNewsSourcesTable,
+		ContentSlugRedirectsTable,
+		ContentTranslationsTable,
+		ContentTranslationSettingsTable,
 		ErrorPassthroughRulesTable,
 		FinanceAlertsTable,
 		FinanceAsyncJobsTable,
@@ -3014,6 +3470,41 @@ func init() {
 	}
 	ChannelMonitorRequestTemplatesTable.Annotation = &entsql.Annotation{
 		Table: "channel_monitor_request_templates",
+	}
+	ContentAnalyticsDailyTable.Annotation = &entsql.Annotation{
+		Table: "content_analytics_daily",
+	}
+	ContentAnalyticsEventsTable.Annotation = &entsql.Annotation{
+		Table: "content_analytics_events",
+	}
+	ContentArticlesTable.Annotation = &entsql.Annotation{
+		Table: "content_articles",
+	}
+	ContentAuditLogsTable.Annotation = &entsql.Annotation{
+		Table: "content_audit_logs",
+	}
+	ContentAutomationSettingsTable.Annotation = &entsql.Annotation{
+		Table: "content_automation_settings",
+	}
+	ContentFetchRunsTable.ForeignKeys[0].RefTable = ContentNewsSourcesTable
+	ContentFetchRunsTable.Annotation = &entsql.Annotation{
+		Table: "content_fetch_runs",
+	}
+	ContentNewsItemsTable.ForeignKeys[0].RefTable = ContentNewsSourcesTable
+	ContentNewsItemsTable.Annotation = &entsql.Annotation{
+		Table: "content_news_items",
+	}
+	ContentNewsSourcesTable.Annotation = &entsql.Annotation{
+		Table: "content_news_sources",
+	}
+	ContentSlugRedirectsTable.Annotation = &entsql.Annotation{
+		Table: "content_slug_redirects",
+	}
+	ContentTranslationsTable.Annotation = &entsql.Annotation{
+		Table: "content_translations",
+	}
+	ContentTranslationSettingsTable.Annotation = &entsql.Annotation{
+		Table: "content_translation_settings",
 	}
 	ErrorPassthroughRulesTable.Annotation = &entsql.Annotation{
 		Table: "error_passthrough_rules",

@@ -40,6 +40,8 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	if err != nil {
 		return nil, err
 	}
+	publicContentRepository := repository.NewPublicContentRepository(client)
+	publicContentService := service.NewPublicContentService(publicContentRepository)
 	db, err := repository.ProvideSQLDB(client)
 	if err != nil {
 		return nil, err
@@ -297,6 +299,24 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	contentModerationHashCache := repository.NewContentModerationHashCache(redisClient)
 	contentModerationService := service.NewContentModerationService(settingRepository, contentModerationRepository, contentModerationHashCache, groupRepository, userRepository, apiKeyAuthCacheInvalidator, emailService)
 	contentModerationHandler := admin.NewContentModerationHandler(contentModerationService)
+	contentNewsRepository := repository.NewContentNewsAdminRepository(client)
+	contentAuditRepository := repository.NewContentAuditRepository(client)
+	contentNewsService := service.NewContentNewsAdminService(contentNewsRepository, contentAuditRepository)
+	contentNewsHandler := admin.NewContentNewsHandler(contentNewsService)
+	contentNewsWorker := service.NewContentNewsWorker(contentNewsRepository, contentNewsRepository, contentNewsRepository, contentNewsRepository, nil)
+	contentNewsService.SetWorker(contentNewsWorker)
+	contentNewsRuntime := service.NewContentNewsRuntime(contentNewsWorker)
+	contentNewsRuntime.Start(context.Background())
+	contentArticleRepository := repository.NewContentArticleAdminRepository(client)
+	contentArticleCatalog := service.NewPricingServiceModelCatalog(pricingService)
+	contentArticleTasks := repository.NewContentWritingTaskRepository(client)
+	contentArticleService := service.NewContentArticleAdminService(contentArticleRepository, contentArticleCatalog, contentArticleTasks, contentAuditRepository)
+	contentArticleExecutor := service.NewGatewayContentWritingExecutor(gatewayService, nil)
+	contentArticleService.SetWritingExecutor(contentArticleExecutor)
+	contentArticleService.SetTranslationExecutor(contentArticleExecutor)
+	_ = contentArticleService.StartWritingWorker(context.Background(), time.Second)
+	contentArticleHandler := admin.NewContentArticleHandler(contentArticleService)
+	contentUploadHandler := admin.NewContentUploadHandler(configConfig)
 	paymentHandler := admin.NewPaymentHandler(paymentService, paymentConfigService)
 	affiliateHandler := admin.NewAffiliateHandler(affiliateService, adminService)
 	upstreamHandler := admin.NewUpstreamHandler(upstreamService)
@@ -316,7 +336,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	upstreamFinanceProtocolService := service.NewUpstreamFinanceProtocolService(upstreamFinanceProtocolRepository, upstreamFinanceHTTPExecutor)
 	accountService := service.NewAccountService(accountRepository, groupRepository)
 	upstreamFinanceProtocolHandler := admin.NewUpstreamFinanceProtocolHandler(upstreamFinanceProtocolService, accountService)
-	adminHandlers := handler.ProvideAdminHandlers(dashboardHandler, adminUserHandler, groupHandler, accountHandler, adminAnnouncementHandler, dataManagementHandler, backupHandler, oAuthHandler, openAIOAuthHandler, geminiOAuthHandler, antigravityOAuthHandler, grokOAuthHandler, proxyHandler, adminRedeemHandler, promoHandler, settingHandler, opsHandler, systemHandler, adminSubscriptionHandler, adminUsageHandler, financeHandler, userAttributeHandler, errorPassthroughHandler, tlsFingerprintProfileHandler, adminAPIKeyHandler, scheduledTestHandler, channelHandler, channelMonitorHandler, channelMonitorRequestTemplateHandler, contentModerationHandler, paymentHandler, affiliateHandler, upstreamHandler, upstreamWalletHandler, upstreamFinanceProtocolHandler)
+	adminHandlers := handler.ProvideAdminHandlers(dashboardHandler, adminUserHandler, groupHandler, accountHandler, adminAnnouncementHandler, dataManagementHandler, backupHandler, oAuthHandler, openAIOAuthHandler, geminiOAuthHandler, antigravityOAuthHandler, grokOAuthHandler, proxyHandler, adminRedeemHandler, promoHandler, settingHandler, opsHandler, systemHandler, adminSubscriptionHandler, adminUsageHandler, financeHandler, userAttributeHandler, errorPassthroughHandler, tlsFingerprintProfileHandler, adminAPIKeyHandler, scheduledTestHandler, channelHandler, channelMonitorHandler, channelMonitorRequestTemplateHandler, contentModerationHandler, contentNewsHandler, contentArticleHandler, contentUploadHandler, paymentHandler, affiliateHandler, upstreamHandler, upstreamWalletHandler, upstreamFinanceProtocolHandler)
 	usageRecordWorkerPool := service.NewUsageRecordWorkerPool(configConfig)
 	userMsgQueueCache := repository.NewUserMsgQueueCache(redisClient)
 	userMessageQueueService := service.ProvideUserMessageQueueService(userMsgQueueCache, rpmCache, configConfig)
@@ -333,9 +353,15 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	availableChannelHandler := handler.NewAvailableChannelHandler(channelService, apiKeyService, settingService)
 	modelSquareService := service.NewModelSquareService(groupRepository, accountRepository, userRepository, userGroupRateRepository, channelService, pricingService, modelPricingResolver, settingService, configConfig)
 	modelSquareHandler := handler.NewModelSquareHandler(modelSquareService, settingService)
+	publicContentHandler := handler.NewPublicContentHandler(publicContentService, configConfig)
+	contentAnalyticsRepository := repository.NewContentAnalyticsRepositoryWithTimezone(client, configConfig.Timezone)
+	contentAnalyticsService := service.NewContentAnalyticsService(contentAnalyticsRepository, configConfig.JWT.Secret)
+	contentAnalyticsHandler := handler.NewContentAnalyticsHandler(contentAnalyticsService)
+	contentAnalyticsRuntime := service.NewContentAnalyticsRuntime(contentAnalyticsService, configConfig.Timezone)
+	contentAnalyticsRuntime.Start(context.Background())
 	idempotencyCoordinator := service.ProvideIdempotencyCoordinator(idempotencyRepository, configConfig)
 	idempotencyCleanupService := service.ProvideIdempotencyCleanupService(idempotencyRepository, configConfig)
-	handlers := handler.ProvideHandlers(authHandler, userHandler, apiKeyHandler, usageHandler, redeemHandler, subscriptionHandler, announcementHandler, channelMonitorUserHandler, adminHandlers, gatewayHandler, openAIGatewayHandler, seedaceVideoHandler, userVideoGenerationHandler, handlerSettingHandler, totpHandler, handlerPaymentHandler, paymentWebhookHandler, availableChannelHandler, modelSquareHandler, idempotencyCoordinator, idempotencyCleanupService)
+	handlers := handler.ProvideHandlers(authHandler, userHandler, apiKeyHandler, usageHandler, redeemHandler, subscriptionHandler, announcementHandler, channelMonitorUserHandler, adminHandlers, gatewayHandler, openAIGatewayHandler, seedaceVideoHandler, userVideoGenerationHandler, handlerSettingHandler, totpHandler, handlerPaymentHandler, paymentWebhookHandler, availableChannelHandler, modelSquareHandler, publicContentHandler, contentAnalyticsHandler, idempotencyCoordinator, idempotencyCleanupService)
 	jwtAuthMiddleware := middleware.NewJWTAuthMiddleware(authService, userService)
 	adminAuthMiddleware := middleware.NewAdminAuthMiddleware(authService, userService, settingService)
 	apiKeyAuthMiddleware := middleware.NewAPIKeyAuthMiddleware(apiKeyService, subscriptionService, configConfig)
@@ -358,7 +384,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	financeRevenueRecognitionService := service.NewFinanceRevenueRecognitionService(financeRevenueRecognitionRepository, configConfig)
 	financeRuntime := service.ProvideFinanceRuntime(financeCatalogVersionSync, financeUsageScanner, financeAlertService, financeRevenueRecognitionService, financeBackfillService, financeExportService)
 	upstreamFinanceSyncRuntime := service.ProvideUpstreamFinanceSyncRuntime(upstreamFinanceSyncService, upstreamFinanceSyncRepository)
-	v3 := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, schedulerSnapshotService, tokenRefreshService, balanceLowNotifyScanner, accountExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, customGroupUsageRollup, financeRuntime, upstreamFinanceSyncRuntime)
+	v3 := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, schedulerSnapshotService, tokenRefreshService, balanceLowNotifyScanner, accountExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, customGroupUsageRollup, financeRuntime, upstreamFinanceSyncRuntime, contentNewsRuntime, contentArticleService, contentAnalyticsRuntime, contentAnalyticsHandler)
 	application := &Application{
 		Server:  httpServer,
 		Cleanup: v3,
@@ -418,6 +444,10 @@ func provideCleanup(
 	groupUsageRollup *service.CustomGroupUsageRollup,
 	financeRuntime *service.FinanceRuntime,
 	upstreamFinanceSyncRuntime *service.UpstreamFinanceSyncRuntime,
+	contentNewsRuntime *service.ContentNewsRuntime,
+	contentArticleService *service.ContentArticleAdminService,
+	contentAnalyticsRuntime *service.ContentAnalyticsRuntime,
+	contentAnalyticsHandler *handler.ContentAnalyticsHandler,
 ) func() {
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -429,6 +459,30 @@ func provideCleanup(
 		}
 
 		parallelSteps := []cleanupStep{
+			{"ContentAnalyticsHandler", func() error {
+				if contentAnalyticsHandler != nil {
+					return contentAnalyticsHandler.Stop(ctx)
+				}
+				return nil
+			}},
+			{"ContentAnalyticsRuntime", func() error {
+				if contentAnalyticsRuntime != nil {
+					contentAnalyticsRuntime.Stop(ctx)
+				}
+				return nil
+			}},
+			{"ContentArticleWritingWorker", func() error {
+				if contentArticleService != nil {
+					contentArticleService.StopWritingWorker(ctx)
+				}
+				return nil
+			}},
+			{"ContentNewsRuntime", func() error {
+				if contentNewsRuntime != nil {
+					contentNewsRuntime.Stop(ctx)
+				}
+				return nil
+			}},
 			{"CustomGroupUsageRollup", func() error {
 				if groupUsageRollup != nil {
 					groupUsageRollup.Stop()

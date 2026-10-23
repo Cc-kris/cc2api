@@ -36,6 +36,9 @@ type AdminHandlers struct {
 	ChannelMonitor          *admin.ChannelMonitorHandler
 	ChannelMonitorTemplate  *admin.ChannelMonitorRequestTemplateHandler
 	ContentModeration       *admin.ContentModerationHandler
+	ContentNews             *admin.ContentNewsHandler
+	ContentArticle          *admin.ContentArticleHandler
+	ContentUpload           *admin.ContentUploadHandler
 	Payment                 *admin.PaymentHandler
 	Affiliate               *admin.AffiliateHandler
 	Upstream                *admin.UpstreamHandler
@@ -64,6 +67,8 @@ type Handlers struct {
 	PaymentWebhook   *PaymentWebhookHandler
 	AvailableChannel *AvailableChannelHandler
 	ModelSquare      *ModelSquareHandler
+	PublicContent    *PublicContentHandler
+	ContentAnalytics *ContentAnalyticsHandler
 }
 
 // BuildInfo contains build-time information

@@ -95,6 +95,10 @@ func RegisterAdminRoutes(
 
 		// 风控中心
 		registerContentModerationRoutes(admin, h)
+		RegisterContentAdminRoutes(admin, h.Admin.ContentNews)
+		registerContentAnalyticsRoutes(admin, h.ContentAnalytics)
+		registerArticleAdminRoutes(admin, h.Admin.ContentArticle)
+		admin.POST("/content/upload", h.Admin.ContentUpload.UploadImage)
 
 		// 邀请返利（专属用户管理）
 		registerAffiliateRoutes(admin, h)

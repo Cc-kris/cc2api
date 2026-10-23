@@ -80,6 +80,31 @@ func (r *RateLimiter) Limit(key string, limit int, window time.Duration) gin.Han
 	return r.LimitWithOptions(key, limit, window, RateLimitOptions{})
 }
 
+// LimitGlobal applies one shared Redis budget to all callers. It is used for
+// anonymous ingestion endpoints where a per-IP budget alone is insufficient.
+func (r *RateLimiter) LimitGlobal(key string, limit int, window time.Duration, opts RateLimitOptions) gin.HandlerFunc {
+	failureMode := opts.FailureMode
+	if failureMode != RateLimitFailClose {
+		failureMode = RateLimitFailOpen
+	}
+	return func(c *gin.Context) {
+		count, _, err := rateLimitRun(c.Request.Context(), r.redis, r.prefix+key, windowTTLMillis(window))
+		if err != nil {
+			if failureMode == RateLimitFailClose {
+				abortRateLimit(c)
+				return
+			}
+			c.Next()
+			return
+		}
+		if count > int64(limit) {
+			abortRateLimit(c)
+			return
+		}
+		c.Next()
+	}
+}
+
 // LimitWithOptions 返回速率限制中间件（带可选配置）
 func (r *RateLimiter) LimitWithOptions(key string, limit int, window time.Duration, opts RateLimitOptions) gin.HandlerFunc {
 	failureMode := opts.FailureMode

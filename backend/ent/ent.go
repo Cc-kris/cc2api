@@ -26,6 +26,17 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitordailyrollup"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorhistory"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorrequesttemplate"
+	"github.com/Wei-Shaw/sub2api/ent/contentanalyticsdaily"
+	"github.com/Wei-Shaw/sub2api/ent/contentanalyticsevent"
+	"github.com/Wei-Shaw/sub2api/ent/contentarticle"
+	"github.com/Wei-Shaw/sub2api/ent/contentauditlog"
+	"github.com/Wei-Shaw/sub2api/ent/contentautomationsetting"
+	"github.com/Wei-Shaw/sub2api/ent/contentfetchrun"
+	"github.com/Wei-Shaw/sub2api/ent/contentnewsitem"
+	"github.com/Wei-Shaw/sub2api/ent/contentnewssource"
+	"github.com/Wei-Shaw/sub2api/ent/contentslugredirect"
+	"github.com/Wei-Shaw/sub2api/ent/contenttranslation"
+	"github.com/Wei-Shaw/sub2api/ent/contenttranslationsetting"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/financealert"
 	"github.com/Wei-Shaw/sub2api/ent/financeasyncjob"
@@ -149,6 +160,17 @@ func checkColumn(t, c string) error {
 			channelmonitordailyrollup.Table:       channelmonitordailyrollup.ValidColumn,
 			channelmonitorhistory.Table:           channelmonitorhistory.ValidColumn,
 			channelmonitorrequesttemplate.Table:   channelmonitorrequesttemplate.ValidColumn,
+			contentanalyticsdaily.Table:           contentanalyticsdaily.ValidColumn,
+			contentanalyticsevent.Table:           contentanalyticsevent.ValidColumn,
+			contentarticle.Table:                  contentarticle.ValidColumn,
+			contentauditlog.Table:                 contentauditlog.ValidColumn,
+			contentautomationsetting.Table:        contentautomationsetting.ValidColumn,
+			contentfetchrun.Table:                 contentfetchrun.ValidColumn,
+			contentnewsitem.Table:                 contentnewsitem.ValidColumn,
+			contentnewssource.Table:               contentnewssource.ValidColumn,
+			contentslugredirect.Table:             contentslugredirect.ValidColumn,
+			contenttranslation.Table:              contenttranslation.ValidColumn,
+			contenttranslationsetting.Table:       contenttranslationsetting.ValidColumn,
 			errorpassthroughrule.Table:            errorpassthroughrule.ValidColumn,
 			financealert.Table:                    financealert.ValidColumn,
 			financeasyncjob.Table:                 financeasyncjob.ValidColumn,

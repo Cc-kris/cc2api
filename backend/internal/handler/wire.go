@@ -57,6 +57,9 @@ func ProvideAdminHandlers(
 	channelMonitorHandler *admin.ChannelMonitorHandler,
 	channelMonitorTemplateHandler *admin.ChannelMonitorRequestTemplateHandler,
 	contentModerationHandler *admin.ContentModerationHandler,
+	contentNewsHandler *admin.ContentNewsHandler,
+	contentArticleHandler *admin.ContentArticleHandler,
+	contentUploadHandler *admin.ContentUploadHandler,
 	paymentHandler *admin.PaymentHandler,
 	affiliateHandler *admin.AffiliateHandler,
 	upstreamHandler *admin.UpstreamHandler,
@@ -94,6 +97,9 @@ func ProvideAdminHandlers(
 		ChannelMonitor:          channelMonitorHandler,
 		ChannelMonitorTemplate:  channelMonitorTemplateHandler,
 		ContentModeration:       contentModerationHandler,
+		ContentNews:             contentNewsHandler,
+		ContentArticle:          contentArticleHandler,
+		ContentUpload:           contentUploadHandler,
 		Payment:                 paymentHandler,
 		Affiliate:               affiliateHandler,
 		Upstream:                upstreamHandler,
@@ -158,6 +164,8 @@ func ProvideHandlers(
 	paymentWebhookHandler *PaymentWebhookHandler,
 	availableChannelHandler *AvailableChannelHandler,
 	modelSquareHandler *ModelSquareHandler,
+	publicContentHandler *PublicContentHandler,
+	contentAnalyticsHandler *ContentAnalyticsHandler,
 	_ *service.IdempotencyCoordinator,
 	_ *service.IdempotencyCleanupService,
 ) *Handlers {
@@ -181,6 +189,8 @@ func ProvideHandlers(
 		PaymentWebhook:   paymentWebhookHandler,
 		AvailableChannel: availableChannelHandler,
 		ModelSquare:      modelSquareHandler,
+		PublicContent:    publicContentHandler,
+		ContentAnalytics: contentAnalyticsHandler,
 	}
 }
 
@@ -205,6 +215,8 @@ var ProviderSet = wire.NewSet(
 	NewPaymentWebhookHandler,
 	NewAvailableChannelHandler,
 	NewModelSquareHandler,
+	NewPublicContentHandler,
+	NewContentAnalyticsHandler,
 
 	// Admin handlers
 	admin.NewDashboardHandler,
@@ -237,6 +249,9 @@ var ProviderSet = wire.NewSet(
 	admin.NewChannelMonitorHandler,
 	admin.NewChannelMonitorRequestTemplateHandler,
 	admin.NewContentModerationHandler,
+	admin.NewContentNewsHandler,
+	admin.NewContentArticleHandler,
+	admin.NewContentUploadHandler,
 	admin.NewPaymentHandler,
 	admin.NewAffiliateHandler,
 	admin.NewUpstreamHandler,

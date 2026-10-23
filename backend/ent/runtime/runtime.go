@@ -19,6 +19,17 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitordailyrollup"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorhistory"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorrequesttemplate"
+	"github.com/Wei-Shaw/sub2api/ent/contentanalyticsdaily"
+	"github.com/Wei-Shaw/sub2api/ent/contentanalyticsevent"
+	"github.com/Wei-Shaw/sub2api/ent/contentarticle"
+	"github.com/Wei-Shaw/sub2api/ent/contentauditlog"
+	"github.com/Wei-Shaw/sub2api/ent/contentautomationsetting"
+	"github.com/Wei-Shaw/sub2api/ent/contentfetchrun"
+	"github.com/Wei-Shaw/sub2api/ent/contentnewsitem"
+	"github.com/Wei-Shaw/sub2api/ent/contentnewssource"
+	"github.com/Wei-Shaw/sub2api/ent/contentslugredirect"
+	"github.com/Wei-Shaw/sub2api/ent/contenttranslation"
+	"github.com/Wei-Shaw/sub2api/ent/contenttranslationsetting"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/financealert"
 	"github.com/Wei-Shaw/sub2api/ent/financeasyncjob"
@@ -902,6 +913,694 @@ func init() {
 	channelmonitorrequesttemplate.DefaultBodyOverrideMode = channelmonitorrequesttemplateDescBodyOverrideMode.Default.(string)
 	// channelmonitorrequesttemplate.BodyOverrideModeValidator is a validator for the "body_override_mode" field. It is called by the builders before save.
 	channelmonitorrequesttemplate.BodyOverrideModeValidator = channelmonitorrequesttemplateDescBodyOverrideMode.Validators[0].(func(string) error)
+	contentanalyticsdailyFields := schema.ContentAnalyticsDaily{}.Fields()
+	_ = contentanalyticsdailyFields
+	// contentanalyticsdailyDescLocale is the schema descriptor for locale field.
+	contentanalyticsdailyDescLocale := contentanalyticsdailyFields[1].Descriptor()
+	// contentanalyticsdaily.LocaleValidator is a validator for the "locale" field. It is called by the builders before save.
+	contentanalyticsdaily.LocaleValidator = contentanalyticsdailyDescLocale.Validators[0].(func(string) error)
+	// contentanalyticsdailyDescContentType is the schema descriptor for content_type field.
+	contentanalyticsdailyDescContentType := contentanalyticsdailyFields[2].Descriptor()
+	// contentanalyticsdaily.ContentTypeValidator is a validator for the "content_type" field. It is called by the builders before save.
+	contentanalyticsdaily.ContentTypeValidator = contentanalyticsdailyDescContentType.Validators[0].(func(string) error)
+	// contentanalyticsdailyDescContentID is the schema descriptor for content_id field.
+	contentanalyticsdailyDescContentID := contentanalyticsdailyFields[3].Descriptor()
+	// contentanalyticsdaily.DefaultContentID holds the default value on creation for the content_id field.
+	contentanalyticsdaily.DefaultContentID = contentanalyticsdailyDescContentID.Default.(int64)
+	// contentanalyticsdailyDescPagePath is the schema descriptor for page_path field.
+	contentanalyticsdailyDescPagePath := contentanalyticsdailyFields[4].Descriptor()
+	// contentanalyticsdaily.PagePathValidator is a validator for the "page_path" field. It is called by the builders before save.
+	contentanalyticsdaily.PagePathValidator = contentanalyticsdailyDescPagePath.Validators[0].(func(string) error)
+	// contentanalyticsdailyDescPlacement is the schema descriptor for placement field.
+	contentanalyticsdailyDescPlacement := contentanalyticsdailyFields[5].Descriptor()
+	// contentanalyticsdaily.DefaultPlacement holds the default value on creation for the placement field.
+	contentanalyticsdaily.DefaultPlacement = contentanalyticsdailyDescPlacement.Default.(string)
+	// contentanalyticsdaily.PlacementValidator is a validator for the "placement" field. It is called by the builders before save.
+	contentanalyticsdaily.PlacementValidator = contentanalyticsdailyDescPlacement.Validators[0].(func(string) error)
+	// contentanalyticsdailyDescUniqueVisitors is the schema descriptor for unique_visitors field.
+	contentanalyticsdailyDescUniqueVisitors := contentanalyticsdailyFields[6].Descriptor()
+	// contentanalyticsdaily.DefaultUniqueVisitors holds the default value on creation for the unique_visitors field.
+	contentanalyticsdaily.DefaultUniqueVisitors = contentanalyticsdailyDescUniqueVisitors.Default.(int)
+	// contentanalyticsdailyDescPageViews is the schema descriptor for page_views field.
+	contentanalyticsdailyDescPageViews := contentanalyticsdailyFields[7].Descriptor()
+	// contentanalyticsdaily.DefaultPageViews holds the default value on creation for the page_views field.
+	contentanalyticsdaily.DefaultPageViews = contentanalyticsdailyDescPageViews.Default.(int)
+	// contentanalyticsdailyDescReads is the schema descriptor for reads field.
+	contentanalyticsdailyDescReads := contentanalyticsdailyFields[8].Descriptor()
+	// contentanalyticsdaily.DefaultReads holds the default value on creation for the reads field.
+	contentanalyticsdaily.DefaultReads = contentanalyticsdailyDescReads.Default.(int)
+	// contentanalyticsdailyDescImpressions is the schema descriptor for impressions field.
+	contentanalyticsdailyDescImpressions := contentanalyticsdailyFields[9].Descriptor()
+	// contentanalyticsdaily.DefaultImpressions holds the default value on creation for the impressions field.
+	contentanalyticsdaily.DefaultImpressions = contentanalyticsdailyDescImpressions.Default.(int)
+	// contentanalyticsdailyDescClicks is the schema descriptor for clicks field.
+	contentanalyticsdailyDescClicks := contentanalyticsdailyFields[10].Descriptor()
+	// contentanalyticsdaily.DefaultClicks holds the default value on creation for the clicks field.
+	contentanalyticsdaily.DefaultClicks = contentanalyticsdailyDescClicks.Default.(int)
+	// contentanalyticsdailyDescAvgReadSeconds is the schema descriptor for avg_read_seconds field.
+	contentanalyticsdailyDescAvgReadSeconds := contentanalyticsdailyFields[11].Descriptor()
+	// contentanalyticsdaily.DefaultAvgReadSeconds holds the default value on creation for the avg_read_seconds field.
+	contentanalyticsdaily.DefaultAvgReadSeconds = contentanalyticsdailyDescAvgReadSeconds.Default.(int)
+	// contentanalyticsdailyDescCtr is the schema descriptor for ctr field.
+	contentanalyticsdailyDescCtr := contentanalyticsdailyFields[12].Descriptor()
+	// contentanalyticsdaily.DefaultCtr holds the default value on creation for the ctr field.
+	contentanalyticsdaily.DefaultCtr = contentanalyticsdailyDescCtr.Default.(float64)
+	// contentanalyticsdailyDescUpdatedAt is the schema descriptor for updated_at field.
+	contentanalyticsdailyDescUpdatedAt := contentanalyticsdailyFields[13].Descriptor()
+	// contentanalyticsdaily.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	contentanalyticsdaily.DefaultUpdatedAt = contentanalyticsdailyDescUpdatedAt.Default.(func() time.Time)
+	// contentanalyticsdaily.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	contentanalyticsdaily.UpdateDefaultUpdatedAt = contentanalyticsdailyDescUpdatedAt.UpdateDefault.(func() time.Time)
+	contentanalyticseventFields := schema.ContentAnalyticsEvent{}.Fields()
+	_ = contentanalyticseventFields
+	// contentanalyticseventDescEventID is the schema descriptor for event_id field.
+	contentanalyticseventDescEventID := contentanalyticseventFields[0].Descriptor()
+	// contentanalyticsevent.EventIDValidator is a validator for the "event_id" field. It is called by the builders before save.
+	contentanalyticsevent.EventIDValidator = contentanalyticseventDescEventID.Validators[0].(func(string) error)
+	// contentanalyticseventDescEventName is the schema descriptor for event_name field.
+	contentanalyticseventDescEventName := contentanalyticseventFields[1].Descriptor()
+	// contentanalyticsevent.EventNameValidator is a validator for the "event_name" field. It is called by the builders before save.
+	contentanalyticsevent.EventNameValidator = contentanalyticseventDescEventName.Validators[0].(func(string) error)
+	// contentanalyticseventDescContentType is the schema descriptor for content_type field.
+	contentanalyticseventDescContentType := contentanalyticseventFields[2].Descriptor()
+	// contentanalyticsevent.ContentTypeValidator is a validator for the "content_type" field. It is called by the builders before save.
+	contentanalyticsevent.ContentTypeValidator = contentanalyticseventDescContentType.Validators[0].(func(string) error)
+	// contentanalyticseventDescLocale is the schema descriptor for locale field.
+	contentanalyticseventDescLocale := contentanalyticseventFields[4].Descriptor()
+	// contentanalyticsevent.LocaleValidator is a validator for the "locale" field. It is called by the builders before save.
+	contentanalyticsevent.LocaleValidator = contentanalyticseventDescLocale.Validators[0].(func(string) error)
+	// contentanalyticseventDescPlacement is the schema descriptor for placement field.
+	contentanalyticseventDescPlacement := contentanalyticseventFields[5].Descriptor()
+	// contentanalyticsevent.PlacementValidator is a validator for the "placement" field. It is called by the builders before save.
+	contentanalyticsevent.PlacementValidator = contentanalyticseventDescPlacement.Validators[0].(func(string) error)
+	// contentanalyticseventDescPagePath is the schema descriptor for page_path field.
+	contentanalyticseventDescPagePath := contentanalyticseventFields[6].Descriptor()
+	// contentanalyticsevent.PagePathValidator is a validator for the "page_path" field. It is called by the builders before save.
+	contentanalyticsevent.PagePathValidator = contentanalyticseventDescPagePath.Validators[0].(func(string) error)
+	// contentanalyticseventDescSessionHash is the schema descriptor for session_hash field.
+	contentanalyticseventDescSessionHash := contentanalyticseventFields[7].Descriptor()
+	// contentanalyticsevent.SessionHashValidator is a validator for the "session_hash" field. It is called by the builders before save.
+	contentanalyticsevent.SessionHashValidator = contentanalyticseventDescSessionHash.Validators[0].(func(string) error)
+	// contentanalyticseventDescReferrerHost is the schema descriptor for referrer_host field.
+	contentanalyticseventDescReferrerHost := contentanalyticseventFields[8].Descriptor()
+	// contentanalyticsevent.ReferrerHostValidator is a validator for the "referrer_host" field. It is called by the builders before save.
+	contentanalyticsevent.ReferrerHostValidator = contentanalyticseventDescReferrerHost.Validators[0].(func(string) error)
+	// contentanalyticseventDescCreatedAt is the schema descriptor for created_at field.
+	contentanalyticseventDescCreatedAt := contentanalyticseventFields[11].Descriptor()
+	// contentanalyticsevent.DefaultCreatedAt holds the default value on creation for the created_at field.
+	contentanalyticsevent.DefaultCreatedAt = contentanalyticseventDescCreatedAt.Default.(func() time.Time)
+	contentarticleMixin := schema.ContentArticle{}.Mixin()
+	contentarticleMixinHooks1 := contentarticleMixin[1].Hooks()
+	contentarticle.Hooks[0] = contentarticleMixinHooks1[0]
+	contentarticleMixinInters1 := contentarticleMixin[1].Interceptors()
+	contentarticle.Interceptors[0] = contentarticleMixinInters1[0]
+	contentarticleMixinFields0 := contentarticleMixin[0].Fields()
+	_ = contentarticleMixinFields0
+	contentarticleFields := schema.ContentArticle{}.Fields()
+	_ = contentarticleFields
+	// contentarticleDescCreatedAt is the schema descriptor for created_at field.
+	contentarticleDescCreatedAt := contentarticleMixinFields0[0].Descriptor()
+	// contentarticle.DefaultCreatedAt holds the default value on creation for the created_at field.
+	contentarticle.DefaultCreatedAt = contentarticleDescCreatedAt.Default.(func() time.Time)
+	// contentarticleDescUpdatedAt is the schema descriptor for updated_at field.
+	contentarticleDescUpdatedAt := contentarticleMixinFields0[1].Descriptor()
+	// contentarticle.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	contentarticle.DefaultUpdatedAt = contentarticleDescUpdatedAt.Default.(func() time.Time)
+	// contentarticle.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	contentarticle.UpdateDefaultUpdatedAt = contentarticleDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// contentarticleDescLocale is the schema descriptor for locale field.
+	contentarticleDescLocale := contentarticleFields[0].Descriptor()
+	// contentarticle.DefaultLocale holds the default value on creation for the locale field.
+	contentarticle.DefaultLocale = contentarticleDescLocale.Default.(string)
+	// contentarticle.LocaleValidator is a validator for the "locale" field. It is called by the builders before save.
+	contentarticle.LocaleValidator = contentarticleDescLocale.Validators[0].(func(string) error)
+	// contentarticleDescSlug is the schema descriptor for slug field.
+	contentarticleDescSlug := contentarticleFields[1].Descriptor()
+	// contentarticle.SlugValidator is a validator for the "slug" field. It is called by the builders before save.
+	contentarticle.SlugValidator = contentarticleDescSlug.Validators[0].(func(string) error)
+	// contentarticleDescTitle is the schema descriptor for title field.
+	contentarticleDescTitle := contentarticleFields[2].Descriptor()
+	// contentarticle.TitleValidator is a validator for the "title" field. It is called by the builders before save.
+	contentarticle.TitleValidator = func() func(string) error {
+		validators := contentarticleDescTitle.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(title string) error {
+			for _, fn := range fns {
+				if err := fn(title); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// contentarticleDescCoverAlt is the schema descriptor for cover_alt field.
+	contentarticleDescCoverAlt := contentarticleFields[7].Descriptor()
+	// contentarticle.CoverAltValidator is a validator for the "cover_alt" field. It is called by the builders before save.
+	contentarticle.CoverAltValidator = contentarticleDescCoverAlt.Validators[0].(func(string) error)
+	// contentarticleDescCategory is the schema descriptor for category field.
+	contentarticleDescCategory := contentarticleFields[8].Descriptor()
+	// contentarticle.CategoryValidator is a validator for the "category" field. It is called by the builders before save.
+	contentarticle.CategoryValidator = contentarticleDescCategory.Validators[0].(func(string) error)
+	// contentarticleDescStatus is the schema descriptor for status field.
+	contentarticleDescStatus := contentarticleFields[10].Descriptor()
+	// contentarticle.DefaultStatus holds the default value on creation for the status field.
+	contentarticle.DefaultStatus = contentarticleDescStatus.Default.(string)
+	// contentarticle.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	contentarticle.StatusValidator = func() func(string) error {
+		validators := contentarticleDescStatus.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(status string) error {
+			for _, fn := range fns {
+				if err := fn(status); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// contentarticleDescModel is the schema descriptor for model field.
+	contentarticleDescModel := contentarticleFields[12].Descriptor()
+	// contentarticle.ModelValidator is a validator for the "model" field. It is called by the builders before save.
+	contentarticle.ModelValidator = contentarticleDescModel.Validators[0].(func(string) error)
+	// contentarticleDescSeoTitle is the schema descriptor for seo_title field.
+	contentarticleDescSeoTitle := contentarticleFields[13].Descriptor()
+	// contentarticle.SeoTitleValidator is a validator for the "seo_title" field. It is called by the builders before save.
+	contentarticle.SeoTitleValidator = contentarticleDescSeoTitle.Validators[0].(func(string) error)
+	// contentarticleDescVersion is the schema descriptor for version field.
+	contentarticleDescVersion := contentarticleFields[18].Descriptor()
+	// contentarticle.DefaultVersion holds the default value on creation for the version field.
+	contentarticle.DefaultVersion = contentarticleDescVersion.Default.(int)
+	contentauditlogFields := schema.ContentAuditLog{}.Fields()
+	_ = contentauditlogFields
+	// contentauditlogDescContentType is the schema descriptor for content_type field.
+	contentauditlogDescContentType := contentauditlogFields[1].Descriptor()
+	// contentauditlog.ContentTypeValidator is a validator for the "content_type" field. It is called by the builders before save.
+	contentauditlog.ContentTypeValidator = contentauditlogDescContentType.Validators[0].(func(string) error)
+	// contentauditlogDescAction is the schema descriptor for action field.
+	contentauditlogDescAction := contentauditlogFields[3].Descriptor()
+	// contentauditlog.ActionValidator is a validator for the "action" field. It is called by the builders before save.
+	contentauditlog.ActionValidator = contentauditlogDescAction.Validators[0].(func(string) error)
+	// contentauditlogDescRequestID is the schema descriptor for request_id field.
+	contentauditlogDescRequestID := contentauditlogFields[6].Descriptor()
+	// contentauditlog.RequestIDValidator is a validator for the "request_id" field. It is called by the builders before save.
+	contentauditlog.RequestIDValidator = contentauditlogDescRequestID.Validators[0].(func(string) error)
+	// contentauditlogDescCreatedAt is the schema descriptor for created_at field.
+	contentauditlogDescCreatedAt := contentauditlogFields[7].Descriptor()
+	// contentauditlog.DefaultCreatedAt holds the default value on creation for the created_at field.
+	contentauditlog.DefaultCreatedAt = contentauditlogDescCreatedAt.Default.(func() time.Time)
+	contentautomationsettingFields := schema.ContentAutomationSetting{}.Fields()
+	_ = contentautomationsettingFields
+	// contentautomationsettingDescEnabled is the schema descriptor for enabled field.
+	contentautomationsettingDescEnabled := contentautomationsettingFields[0].Descriptor()
+	// contentautomationsetting.DefaultEnabled holds the default value on creation for the enabled field.
+	contentautomationsetting.DefaultEnabled = contentautomationsettingDescEnabled.Default.(bool)
+	// contentautomationsettingDescTimezone is the schema descriptor for timezone field.
+	contentautomationsettingDescTimezone := contentautomationsettingFields[1].Descriptor()
+	// contentautomationsetting.DefaultTimezone holds the default value on creation for the timezone field.
+	contentautomationsetting.DefaultTimezone = contentautomationsettingDescTimezone.Default.(string)
+	// contentautomationsetting.TimezoneValidator is a validator for the "timezone" field. It is called by the builders before save.
+	contentautomationsetting.TimezoneValidator = contentautomationsettingDescTimezone.Validators[0].(func(string) error)
+	// contentautomationsettingDescFetchCron is the schema descriptor for fetch_cron field.
+	contentautomationsettingDescFetchCron := contentautomationsettingFields[2].Descriptor()
+	// contentautomationsetting.DefaultFetchCron holds the default value on creation for the fetch_cron field.
+	contentautomationsetting.DefaultFetchCron = contentautomationsettingDescFetchCron.Default.(string)
+	// contentautomationsetting.FetchCronValidator is a validator for the "fetch_cron" field. It is called by the builders before save.
+	contentautomationsetting.FetchCronValidator = contentautomationsettingDescFetchCron.Validators[0].(func(string) error)
+	// contentautomationsettingDescPublishMode is the schema descriptor for publish_mode field.
+	contentautomationsettingDescPublishMode := contentautomationsettingFields[3].Descriptor()
+	// contentautomationsetting.DefaultPublishMode holds the default value on creation for the publish_mode field.
+	contentautomationsetting.DefaultPublishMode = contentautomationsettingDescPublishMode.Default.(string)
+	// contentautomationsetting.PublishModeValidator is a validator for the "publish_mode" field. It is called by the builders before save.
+	contentautomationsetting.PublishModeValidator = func() func(string) error {
+		validators := contentautomationsettingDescPublishMode.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(publish_mode string) error {
+			for _, fn := range fns {
+				if err := fn(publish_mode); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// contentautomationsettingDescDailyFetchLimit is the schema descriptor for daily_fetch_limit field.
+	contentautomationsettingDescDailyFetchLimit := contentautomationsettingFields[4].Descriptor()
+	// contentautomationsetting.DefaultDailyFetchLimit holds the default value on creation for the daily_fetch_limit field.
+	contentautomationsetting.DefaultDailyFetchLimit = contentautomationsettingDescDailyFetchLimit.Default.(int)
+	// contentautomationsettingDescDailyPublishLimit is the schema descriptor for daily_publish_limit field.
+	contentautomationsettingDescDailyPublishLimit := contentautomationsettingFields[5].Descriptor()
+	// contentautomationsetting.DefaultDailyPublishLimit holds the default value on creation for the daily_publish_limit field.
+	contentautomationsetting.DefaultDailyPublishLimit = contentautomationsettingDescDailyPublishLimit.Default.(int)
+	// contentautomationsettingDescDedupeWindowHours is the schema descriptor for dedupe_window_hours field.
+	contentautomationsettingDescDedupeWindowHours := contentautomationsettingFields[8].Descriptor()
+	// contentautomationsetting.DefaultDedupeWindowHours holds the default value on creation for the dedupe_window_hours field.
+	contentautomationsetting.DefaultDedupeWindowHours = contentautomationsettingDescDedupeWindowHours.Default.(int)
+	// contentautomationsettingDescCreatedAt is the schema descriptor for created_at field.
+	contentautomationsettingDescCreatedAt := contentautomationsettingFields[11].Descriptor()
+	// contentautomationsetting.DefaultCreatedAt holds the default value on creation for the created_at field.
+	contentautomationsetting.DefaultCreatedAt = contentautomationsettingDescCreatedAt.Default.(func() time.Time)
+	// contentautomationsettingDescUpdatedAt is the schema descriptor for updated_at field.
+	contentautomationsettingDescUpdatedAt := contentautomationsettingFields[12].Descriptor()
+	// contentautomationsetting.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	contentautomationsetting.DefaultUpdatedAt = contentautomationsettingDescUpdatedAt.Default.(func() time.Time)
+	// contentautomationsetting.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	contentautomationsetting.UpdateDefaultUpdatedAt = contentautomationsettingDescUpdatedAt.UpdateDefault.(func() time.Time)
+	contentfetchrunFields := schema.ContentFetchRun{}.Fields()
+	_ = contentfetchrunFields
+	// contentfetchrunDescTriggerType is the schema descriptor for trigger_type field.
+	contentfetchrunDescTriggerType := contentfetchrunFields[1].Descriptor()
+	// contentfetchrun.TriggerTypeValidator is a validator for the "trigger_type" field. It is called by the builders before save.
+	contentfetchrun.TriggerTypeValidator = func() func(string) error {
+		validators := contentfetchrunDescTriggerType.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(trigger_type string) error {
+			for _, fn := range fns {
+				if err := fn(trigger_type); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// contentfetchrunDescStatus is the schema descriptor for status field.
+	contentfetchrunDescStatus := contentfetchrunFields[2].Descriptor()
+	// contentfetchrun.DefaultStatus holds the default value on creation for the status field.
+	contentfetchrun.DefaultStatus = contentfetchrunDescStatus.Default.(string)
+	// contentfetchrun.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	contentfetchrun.StatusValidator = func() func(string) error {
+		validators := contentfetchrunDescStatus.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(status string) error {
+			for _, fn := range fns {
+				if err := fn(status); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// contentfetchrunDescFetchedCount is the schema descriptor for fetched_count field.
+	contentfetchrunDescFetchedCount := contentfetchrunFields[5].Descriptor()
+	// contentfetchrun.DefaultFetchedCount holds the default value on creation for the fetched_count field.
+	contentfetchrun.DefaultFetchedCount = contentfetchrunDescFetchedCount.Default.(int)
+	// contentfetchrunDescCreatedCount is the schema descriptor for created_count field.
+	contentfetchrunDescCreatedCount := contentfetchrunFields[6].Descriptor()
+	// contentfetchrun.DefaultCreatedCount holds the default value on creation for the created_count field.
+	contentfetchrun.DefaultCreatedCount = contentfetchrunDescCreatedCount.Default.(int)
+	// contentfetchrunDescDuplicateCount is the schema descriptor for duplicate_count field.
+	contentfetchrunDescDuplicateCount := contentfetchrunFields[7].Descriptor()
+	// contentfetchrun.DefaultDuplicateCount holds the default value on creation for the duplicate_count field.
+	contentfetchrun.DefaultDuplicateCount = contentfetchrunDescDuplicateCount.Default.(int)
+	// contentfetchrunDescFailedCount is the schema descriptor for failed_count field.
+	contentfetchrunDescFailedCount := contentfetchrunFields[8].Descriptor()
+	// contentfetchrun.DefaultFailedCount holds the default value on creation for the failed_count field.
+	contentfetchrun.DefaultFailedCount = contentfetchrunDescFailedCount.Default.(int)
+	// contentfetchrunDescTaskKey is the schema descriptor for task_key field.
+	contentfetchrunDescTaskKey := contentfetchrunFields[10].Descriptor()
+	// contentfetchrun.TaskKeyValidator is a validator for the "task_key" field. It is called by the builders before save.
+	contentfetchrun.TaskKeyValidator = contentfetchrunDescTaskKey.Validators[0].(func(string) error)
+	// contentfetchrunDescCreatedAt is the schema descriptor for created_at field.
+	contentfetchrunDescCreatedAt := contentfetchrunFields[11].Descriptor()
+	// contentfetchrun.DefaultCreatedAt holds the default value on creation for the created_at field.
+	contentfetchrun.DefaultCreatedAt = contentfetchrunDescCreatedAt.Default.(func() time.Time)
+	// contentfetchrunDescUpdatedAt is the schema descriptor for updated_at field.
+	contentfetchrunDescUpdatedAt := contentfetchrunFields[12].Descriptor()
+	// contentfetchrun.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	contentfetchrun.DefaultUpdatedAt = contentfetchrunDescUpdatedAt.Default.(func() time.Time)
+	// contentfetchrun.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	contentfetchrun.UpdateDefaultUpdatedAt = contentfetchrunDescUpdatedAt.UpdateDefault.(func() time.Time)
+	contentnewsitemMixin := schema.ContentNewsItem{}.Mixin()
+	contentnewsitemMixinHooks1 := contentnewsitemMixin[1].Hooks()
+	contentnewsitem.Hooks[0] = contentnewsitemMixinHooks1[0]
+	contentnewsitemMixinInters1 := contentnewsitemMixin[1].Interceptors()
+	contentnewsitem.Interceptors[0] = contentnewsitemMixinInters1[0]
+	contentnewsitemMixinFields0 := contentnewsitemMixin[0].Fields()
+	_ = contentnewsitemMixinFields0
+	contentnewsitemFields := schema.ContentNewsItem{}.Fields()
+	_ = contentnewsitemFields
+	// contentnewsitemDescCreatedAt is the schema descriptor for created_at field.
+	contentnewsitemDescCreatedAt := contentnewsitemMixinFields0[0].Descriptor()
+	// contentnewsitem.DefaultCreatedAt holds the default value on creation for the created_at field.
+	contentnewsitem.DefaultCreatedAt = contentnewsitemDescCreatedAt.Default.(func() time.Time)
+	// contentnewsitemDescUpdatedAt is the schema descriptor for updated_at field.
+	contentnewsitemDescUpdatedAt := contentnewsitemMixinFields0[1].Descriptor()
+	// contentnewsitem.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	contentnewsitem.DefaultUpdatedAt = contentnewsitemDescUpdatedAt.Default.(func() time.Time)
+	// contentnewsitem.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	contentnewsitem.UpdateDefaultUpdatedAt = contentnewsitemDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// contentnewsitemDescExternalID is the schema descriptor for external_id field.
+	contentnewsitemDescExternalID := contentnewsitemFields[1].Descriptor()
+	// contentnewsitem.ExternalIDValidator is a validator for the "external_id" field. It is called by the builders before save.
+	contentnewsitem.ExternalIDValidator = contentnewsitemDescExternalID.Validators[0].(func(string) error)
+	// contentnewsitemDescSlug is the schema descriptor for slug field.
+	contentnewsitemDescSlug := contentnewsitemFields[3].Descriptor()
+	// contentnewsitem.SlugValidator is a validator for the "slug" field. It is called by the builders before save.
+	contentnewsitem.SlugValidator = contentnewsitemDescSlug.Validators[0].(func(string) error)
+	// contentnewsitemDescLocale is the schema descriptor for locale field.
+	contentnewsitemDescLocale := contentnewsitemFields[4].Descriptor()
+	// contentnewsitem.DefaultLocale holds the default value on creation for the locale field.
+	contentnewsitem.DefaultLocale = contentnewsitemDescLocale.Default.(string)
+	// contentnewsitem.LocaleValidator is a validator for the "locale" field. It is called by the builders before save.
+	contentnewsitem.LocaleValidator = contentnewsitemDescLocale.Validators[0].(func(string) error)
+	// contentnewsitemDescTitle is the schema descriptor for title field.
+	contentnewsitemDescTitle := contentnewsitemFields[5].Descriptor()
+	// contentnewsitem.TitleValidator is a validator for the "title" field. It is called by the builders before save.
+	contentnewsitem.TitleValidator = func() func(string) error {
+		validators := contentnewsitemDescTitle.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(title string) error {
+			for _, fn := range fns {
+				if err := fn(title); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// contentnewsitemDescBodySourceType is the schema descriptor for body_source_type field.
+	contentnewsitemDescBodySourceType := contentnewsitemFields[9].Descriptor()
+	// contentnewsitem.BodySourceTypeValidator is a validator for the "body_source_type" field. It is called by the builders before save.
+	contentnewsitem.BodySourceTypeValidator = func() func(string) error {
+		validators := contentnewsitemDescBodySourceType.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(body_source_type string) error {
+			for _, fn := range fns {
+				if err := fn(body_source_type); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// contentnewsitemDescBodyHash is the schema descriptor for body_hash field.
+	contentnewsitemDescBodyHash := contentnewsitemFields[11].Descriptor()
+	// contentnewsitem.BodyHashValidator is a validator for the "body_hash" field. It is called by the builders before save.
+	contentnewsitem.BodyHashValidator = contentnewsitemDescBodyHash.Validators[0].(func(string) error)
+	// contentnewsitemDescSourceName is the schema descriptor for source_name field.
+	contentnewsitemDescSourceName := contentnewsitemFields[14].Descriptor()
+	// contentnewsitem.SourceNameValidator is a validator for the "source_name" field. It is called by the builders before save.
+	contentnewsitem.SourceNameValidator = contentnewsitemDescSourceName.Validators[0].(func(string) error)
+	// contentnewsitemDescStatus is the schema descriptor for status field.
+	contentnewsitemDescStatus := contentnewsitemFields[17].Descriptor()
+	// contentnewsitem.DefaultStatus holds the default value on creation for the status field.
+	contentnewsitem.DefaultStatus = contentnewsitemDescStatus.Default.(string)
+	// contentnewsitem.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	contentnewsitem.StatusValidator = func() func(string) error {
+		validators := contentnewsitemDescStatus.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(status string) error {
+			for _, fn := range fns {
+				if err := fn(status); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// contentnewsitemDescPublishMode is the schema descriptor for publish_mode field.
+	contentnewsitemDescPublishMode := contentnewsitemFields[18].Descriptor()
+	// contentnewsitem.DefaultPublishMode holds the default value on creation for the publish_mode field.
+	contentnewsitem.DefaultPublishMode = contentnewsitemDescPublishMode.Default.(string)
+	// contentnewsitem.PublishModeValidator is a validator for the "publish_mode" field. It is called by the builders before save.
+	contentnewsitem.PublishModeValidator = func() func(string) error {
+		validators := contentnewsitemDescPublishMode.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(publish_mode string) error {
+			for _, fn := range fns {
+				if err := fn(publish_mode); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// contentnewsitemDescSeoTitle is the schema descriptor for seo_title field.
+	contentnewsitemDescSeoTitle := contentnewsitemFields[19].Descriptor()
+	// contentnewsitem.SeoTitleValidator is a validator for the "seo_title" field. It is called by the builders before save.
+	contentnewsitem.SeoTitleValidator = contentnewsitemDescSeoTitle.Validators[0].(func(string) error)
+	// contentnewsitemDescContentHash is the schema descriptor for content_hash field.
+	contentnewsitemDescContentHash := contentnewsitemFields[22].Descriptor()
+	// contentnewsitem.ContentHashValidator is a validator for the "content_hash" field. It is called by the builders before save.
+	contentnewsitem.ContentHashValidator = contentnewsitemDescContentHash.Validators[0].(func(string) error)
+	contentnewssourceMixin := schema.ContentNewsSource{}.Mixin()
+	contentnewssourceMixinHooks1 := contentnewssourceMixin[1].Hooks()
+	contentnewssource.Hooks[0] = contentnewssourceMixinHooks1[0]
+	contentnewssourceMixinInters1 := contentnewssourceMixin[1].Interceptors()
+	contentnewssource.Interceptors[0] = contentnewssourceMixinInters1[0]
+	contentnewssourceMixinFields0 := contentnewssourceMixin[0].Fields()
+	_ = contentnewssourceMixinFields0
+	contentnewssourceFields := schema.ContentNewsSource{}.Fields()
+	_ = contentnewssourceFields
+	// contentnewssourceDescCreatedAt is the schema descriptor for created_at field.
+	contentnewssourceDescCreatedAt := contentnewssourceMixinFields0[0].Descriptor()
+	// contentnewssource.DefaultCreatedAt holds the default value on creation for the created_at field.
+	contentnewssource.DefaultCreatedAt = contentnewssourceDescCreatedAt.Default.(func() time.Time)
+	// contentnewssourceDescUpdatedAt is the schema descriptor for updated_at field.
+	contentnewssourceDescUpdatedAt := contentnewssourceMixinFields0[1].Descriptor()
+	// contentnewssource.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	contentnewssource.DefaultUpdatedAt = contentnewssourceDescUpdatedAt.Default.(func() time.Time)
+	// contentnewssource.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	contentnewssource.UpdateDefaultUpdatedAt = contentnewssourceDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// contentnewssourceDescName is the schema descriptor for name field.
+	contentnewssourceDescName := contentnewssourceFields[0].Descriptor()
+	// contentnewssource.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	contentnewssource.NameValidator = func() func(string) error {
+		validators := contentnewssourceDescName.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(name string) error {
+			for _, fn := range fns {
+				if err := fn(name); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// contentnewssourceDescSourceType is the schema descriptor for source_type field.
+	contentnewssourceDescSourceType := contentnewssourceFields[1].Descriptor()
+	// contentnewssource.DefaultSourceType holds the default value on creation for the source_type field.
+	contentnewssource.DefaultSourceType = contentnewssourceDescSourceType.Default.(string)
+	// contentnewssource.SourceTypeValidator is a validator for the "source_type" field. It is called by the builders before save.
+	contentnewssource.SourceTypeValidator = func() func(string) error {
+		validators := contentnewssourceDescSourceType.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(source_type string) error {
+			for _, fn := range fns {
+				if err := fn(source_type); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// contentnewssourceDescMappingJSON is the schema descriptor for mapping_json field.
+	contentnewssourceDescMappingJSON := contentnewssourceFields[2].Descriptor()
+	// contentnewssource.DefaultMappingJSON holds the default value on creation for the mapping_json field.
+	contentnewssource.DefaultMappingJSON = contentnewssourceDescMappingJSON.Default.(func() map[string]string)
+	// contentnewssourceDescURL is the schema descriptor for url field.
+	contentnewssourceDescURL := contentnewssourceFields[3].Descriptor()
+	// contentnewssource.URLValidator is a validator for the "url" field. It is called by the builders before save.
+	contentnewssource.URLValidator = contentnewssourceDescURL.Validators[0].(func(string) error)
+	// contentnewssourceDescLanguage is the schema descriptor for language field.
+	contentnewssourceDescLanguage := contentnewssourceFields[4].Descriptor()
+	// contentnewssource.DefaultLanguage holds the default value on creation for the language field.
+	contentnewssource.DefaultLanguage = contentnewssourceDescLanguage.Default.(string)
+	// contentnewssource.LanguageValidator is a validator for the "language" field. It is called by the builders before save.
+	contentnewssource.LanguageValidator = contentnewssourceDescLanguage.Validators[0].(func(string) error)
+	// contentnewssourceDescCategory is the schema descriptor for category field.
+	contentnewssourceDescCategory := contentnewssourceFields[5].Descriptor()
+	// contentnewssource.CategoryValidator is a validator for the "category" field. It is called by the builders before save.
+	contentnewssource.CategoryValidator = contentnewssourceDescCategory.Validators[0].(func(string) error)
+	// contentnewssourceDescEnabled is the schema descriptor for enabled field.
+	contentnewssourceDescEnabled := contentnewssourceFields[6].Descriptor()
+	// contentnewssource.DefaultEnabled holds the default value on creation for the enabled field.
+	contentnewssource.DefaultEnabled = contentnewssourceDescEnabled.Default.(bool)
+	// contentnewssourceDescIntervalMinutes is the schema descriptor for interval_minutes field.
+	contentnewssourceDescIntervalMinutes := contentnewssourceFields[7].Descriptor()
+	// contentnewssource.DefaultIntervalMinutes holds the default value on creation for the interval_minutes field.
+	contentnewssource.DefaultIntervalMinutes = contentnewssourceDescIntervalMinutes.Default.(int)
+	// contentnewssourceDescRateLimitPerMinute is the schema descriptor for rate_limit_per_minute field.
+	contentnewssourceDescRateLimitPerMinute := contentnewssourceFields[8].Descriptor()
+	// contentnewssource.DefaultRateLimitPerMinute holds the default value on creation for the rate_limit_per_minute field.
+	contentnewssource.DefaultRateLimitPerMinute = contentnewssourceDescRateLimitPerMinute.Default.(int)
+	contentslugredirectFields := schema.ContentSlugRedirect{}.Fields()
+	_ = contentslugredirectFields
+	// contentslugredirectDescContentType is the schema descriptor for content_type field.
+	contentslugredirectDescContentType := contentslugredirectFields[0].Descriptor()
+	// contentslugredirect.ContentTypeValidator is a validator for the "content_type" field. It is called by the builders before save.
+	contentslugredirect.ContentTypeValidator = contentslugredirectDescContentType.Validators[0].(func(string) error)
+	// contentslugredirectDescLocale is the schema descriptor for locale field.
+	contentslugredirectDescLocale := contentslugredirectFields[2].Descriptor()
+	// contentslugredirect.LocaleValidator is a validator for the "locale" field. It is called by the builders before save.
+	contentslugredirect.LocaleValidator = contentslugredirectDescLocale.Validators[0].(func(string) error)
+	// contentslugredirectDescOldSlug is the schema descriptor for old_slug field.
+	contentslugredirectDescOldSlug := contentslugredirectFields[3].Descriptor()
+	// contentslugredirect.OldSlugValidator is a validator for the "old_slug" field. It is called by the builders before save.
+	contentslugredirect.OldSlugValidator = contentslugredirectDescOldSlug.Validators[0].(func(string) error)
+	// contentslugredirectDescNewSlug is the schema descriptor for new_slug field.
+	contentslugredirectDescNewSlug := contentslugredirectFields[4].Descriptor()
+	// contentslugredirect.NewSlugValidator is a validator for the "new_slug" field. It is called by the builders before save.
+	contentslugredirect.NewSlugValidator = contentslugredirectDescNewSlug.Validators[0].(func(string) error)
+	// contentslugredirectDescStatusCode is the schema descriptor for status_code field.
+	contentslugredirectDescStatusCode := contentslugredirectFields[5].Descriptor()
+	// contentslugredirect.DefaultStatusCode holds the default value on creation for the status_code field.
+	contentslugredirect.DefaultStatusCode = contentslugredirectDescStatusCode.Default.(int)
+	// contentslugredirectDescCreatedAt is the schema descriptor for created_at field.
+	contentslugredirectDescCreatedAt := contentslugredirectFields[6].Descriptor()
+	// contentslugredirect.DefaultCreatedAt holds the default value on creation for the created_at field.
+	contentslugredirect.DefaultCreatedAt = contentslugredirectDescCreatedAt.Default.(func() time.Time)
+	contenttranslationMixin := schema.ContentTranslation{}.Mixin()
+	contenttranslationMixinHooks1 := contenttranslationMixin[1].Hooks()
+	contenttranslation.Hooks[0] = contenttranslationMixinHooks1[0]
+	contenttranslationMixinInters1 := contenttranslationMixin[1].Interceptors()
+	contenttranslation.Interceptors[0] = contenttranslationMixinInters1[0]
+	contenttranslationMixinFields0 := contenttranslationMixin[0].Fields()
+	_ = contenttranslationMixinFields0
+	contenttranslationFields := schema.ContentTranslation{}.Fields()
+	_ = contenttranslationFields
+	// contenttranslationDescCreatedAt is the schema descriptor for created_at field.
+	contenttranslationDescCreatedAt := contenttranslationMixinFields0[0].Descriptor()
+	// contenttranslation.DefaultCreatedAt holds the default value on creation for the created_at field.
+	contenttranslation.DefaultCreatedAt = contenttranslationDescCreatedAt.Default.(func() time.Time)
+	// contenttranslationDescUpdatedAt is the schema descriptor for updated_at field.
+	contenttranslationDescUpdatedAt := contenttranslationMixinFields0[1].Descriptor()
+	// contenttranslation.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	contenttranslation.DefaultUpdatedAt = contenttranslationDescUpdatedAt.Default.(func() time.Time)
+	// contenttranslation.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	contenttranslation.UpdateDefaultUpdatedAt = contenttranslationDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// contenttranslationDescContentType is the schema descriptor for content_type field.
+	contenttranslationDescContentType := contenttranslationFields[0].Descriptor()
+	// contenttranslation.ContentTypeValidator is a validator for the "content_type" field. It is called by the builders before save.
+	contenttranslation.ContentTypeValidator = contenttranslationDescContentType.Validators[0].(func(string) error)
+	// contenttranslationDescSourceVersion is the schema descriptor for source_version field.
+	contenttranslationDescSourceVersion := contenttranslationFields[2].Descriptor()
+	// contenttranslation.SourceVersionValidator is a validator for the "source_version" field. It is called by the builders before save.
+	contenttranslation.SourceVersionValidator = contenttranslationDescSourceVersion.Validators[0].(func(int) error)
+	// contenttranslationDescSourceLocale is the schema descriptor for source_locale field.
+	contenttranslationDescSourceLocale := contenttranslationFields[3].Descriptor()
+	// contenttranslation.SourceLocaleValidator is a validator for the "source_locale" field. It is called by the builders before save.
+	contenttranslation.SourceLocaleValidator = contenttranslationDescSourceLocale.Validators[0].(func(string) error)
+	// contenttranslationDescLocale is the schema descriptor for locale field.
+	contenttranslationDescLocale := contenttranslationFields[4].Descriptor()
+	// contenttranslation.LocaleValidator is a validator for the "locale" field. It is called by the builders before save.
+	contenttranslation.LocaleValidator = contenttranslationDescLocale.Validators[0].(func(string) error)
+	// contenttranslationDescSlug is the schema descriptor for slug field.
+	contenttranslationDescSlug := contenttranslationFields[5].Descriptor()
+	// contenttranslation.SlugValidator is a validator for the "slug" field. It is called by the builders before save.
+	contenttranslation.SlugValidator = contenttranslationDescSlug.Validators[0].(func(string) error)
+	// contenttranslationDescTitle is the schema descriptor for title field.
+	contenttranslationDescTitle := contenttranslationFields[6].Descriptor()
+	// contenttranslation.TitleValidator is a validator for the "title" field. It is called by the builders before save.
+	contenttranslation.TitleValidator = func() func(string) error {
+		validators := contenttranslationDescTitle.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(title string) error {
+			for _, fn := range fns {
+				if err := fn(title); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// contenttranslationDescSeoTitle is the schema descriptor for seo_title field.
+	contenttranslationDescSeoTitle := contenttranslationFields[10].Descriptor()
+	// contenttranslation.SeoTitleValidator is a validator for the "seo_title" field. It is called by the builders before save.
+	contenttranslation.SeoTitleValidator = contenttranslationDescSeoTitle.Validators[0].(func(string) error)
+	// contenttranslationDescTranslationModel is the schema descriptor for translation_model field.
+	contenttranslationDescTranslationModel := contenttranslationFields[13].Descriptor()
+	// contenttranslation.TranslationModelValidator is a validator for the "translation_model" field. It is called by the builders before save.
+	contenttranslation.TranslationModelValidator = contenttranslationDescTranslationModel.Validators[0].(func(string) error)
+	// contenttranslationDescFailureCode is the schema descriptor for failure_code field.
+	contenttranslationDescFailureCode := contenttranslationFields[14].Descriptor()
+	// contenttranslation.FailureCodeValidator is a validator for the "failure_code" field. It is called by the builders before save.
+	contenttranslation.FailureCodeValidator = contenttranslationDescFailureCode.Validators[0].(func(string) error)
+	// contenttranslationDescStatus is the schema descriptor for status field.
+	contenttranslationDescStatus := contenttranslationFields[15].Descriptor()
+	// contenttranslation.DefaultStatus holds the default value on creation for the status field.
+	contenttranslation.DefaultStatus = contenttranslationDescStatus.Default.(string)
+	// contenttranslation.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	contenttranslation.StatusValidator = func() func(string) error {
+		validators := contenttranslationDescStatus.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(status string) error {
+			for _, fn := range fns {
+				if err := fn(status); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	contenttranslationsettingFields := schema.ContentTranslationSetting{}.Fields()
+	_ = contenttranslationsettingFields
+	// contenttranslationsettingDescEnabled is the schema descriptor for enabled field.
+	contenttranslationsettingDescEnabled := contenttranslationsettingFields[0].Descriptor()
+	// contenttranslationsetting.DefaultEnabled holds the default value on creation for the enabled field.
+	contenttranslationsetting.DefaultEnabled = contenttranslationsettingDescEnabled.Default.(bool)
+	// contenttranslationsettingDescDefaultModel is the schema descriptor for default_model field.
+	contenttranslationsettingDescDefaultModel := contenttranslationsettingFields[1].Descriptor()
+	// contenttranslationsetting.DefaultModelValidator is a validator for the "default_model" field. It is called by the builders before save.
+	contenttranslationsetting.DefaultModelValidator = contenttranslationsettingDescDefaultModel.Validators[0].(func(string) error)
+	// contenttranslationsettingDescSourceLocale is the schema descriptor for source_locale field.
+	contenttranslationsettingDescSourceLocale := contenttranslationsettingFields[2].Descriptor()
+	// contenttranslationsetting.DefaultSourceLocale holds the default value on creation for the source_locale field.
+	contenttranslationsetting.DefaultSourceLocale = contenttranslationsettingDescSourceLocale.Default.(string)
+	// contenttranslationsetting.SourceLocaleValidator is a validator for the "source_locale" field. It is called by the builders before save.
+	contenttranslationsetting.SourceLocaleValidator = contenttranslationsettingDescSourceLocale.Validators[0].(func(string) error)
+	// contenttranslationsettingDescAutoCreateDraft is the schema descriptor for auto_create_draft field.
+	contenttranslationsettingDescAutoCreateDraft := contenttranslationsettingFields[5].Descriptor()
+	// contenttranslationsetting.DefaultAutoCreateDraft holds the default value on creation for the auto_create_draft field.
+	contenttranslationsetting.DefaultAutoCreateDraft = contenttranslationsettingDescAutoCreateDraft.Default.(bool)
+	// contenttranslationsettingDescCreatedAt is the schema descriptor for created_at field.
+	contenttranslationsettingDescCreatedAt := contenttranslationsettingFields[7].Descriptor()
+	// contenttranslationsetting.DefaultCreatedAt holds the default value on creation for the created_at field.
+	contenttranslationsetting.DefaultCreatedAt = contenttranslationsettingDescCreatedAt.Default.(func() time.Time)
+	// contenttranslationsettingDescUpdatedAt is the schema descriptor for updated_at field.
+	contenttranslationsettingDescUpdatedAt := contenttranslationsettingFields[8].Descriptor()
+	// contenttranslationsetting.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	contenttranslationsetting.DefaultUpdatedAt = contenttranslationsettingDescUpdatedAt.Default.(func() time.Time)
+	// contenttranslationsetting.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	contenttranslationsetting.UpdateDefaultUpdatedAt = contenttranslationsettingDescUpdatedAt.UpdateDefault.(func() time.Time)
 	errorpassthroughruleMixin := schema.ErrorPassthroughRule{}.Mixin()
 	errorpassthroughruleMixinFields0 := errorpassthroughruleMixin[0].Fields()
 	_ = errorpassthroughruleMixinFields0

@@ -177,6 +177,138 @@ func (f ChannelMonitorRequestTemplateFunc) Mutate(ctx context.Context, m ent.Mut
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ChannelMonitorRequestTemplateMutation", m)
 }
 
+// The ContentAnalyticsDailyFunc type is an adapter to allow the use of ordinary
+// function as ContentAnalyticsDaily mutator.
+type ContentAnalyticsDailyFunc func(context.Context, *ent.ContentAnalyticsDailyMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ContentAnalyticsDailyFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ContentAnalyticsDailyMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ContentAnalyticsDailyMutation", m)
+}
+
+// The ContentAnalyticsEventFunc type is an adapter to allow the use of ordinary
+// function as ContentAnalyticsEvent mutator.
+type ContentAnalyticsEventFunc func(context.Context, *ent.ContentAnalyticsEventMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ContentAnalyticsEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ContentAnalyticsEventMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ContentAnalyticsEventMutation", m)
+}
+
+// The ContentArticleFunc type is an adapter to allow the use of ordinary
+// function as ContentArticle mutator.
+type ContentArticleFunc func(context.Context, *ent.ContentArticleMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ContentArticleFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ContentArticleMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ContentArticleMutation", m)
+}
+
+// The ContentAuditLogFunc type is an adapter to allow the use of ordinary
+// function as ContentAuditLog mutator.
+type ContentAuditLogFunc func(context.Context, *ent.ContentAuditLogMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ContentAuditLogFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ContentAuditLogMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ContentAuditLogMutation", m)
+}
+
+// The ContentAutomationSettingFunc type is an adapter to allow the use of ordinary
+// function as ContentAutomationSetting mutator.
+type ContentAutomationSettingFunc func(context.Context, *ent.ContentAutomationSettingMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ContentAutomationSettingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ContentAutomationSettingMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ContentAutomationSettingMutation", m)
+}
+
+// The ContentFetchRunFunc type is an adapter to allow the use of ordinary
+// function as ContentFetchRun mutator.
+type ContentFetchRunFunc func(context.Context, *ent.ContentFetchRunMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ContentFetchRunFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ContentFetchRunMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ContentFetchRunMutation", m)
+}
+
+// The ContentNewsItemFunc type is an adapter to allow the use of ordinary
+// function as ContentNewsItem mutator.
+type ContentNewsItemFunc func(context.Context, *ent.ContentNewsItemMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ContentNewsItemFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ContentNewsItemMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ContentNewsItemMutation", m)
+}
+
+// The ContentNewsSourceFunc type is an adapter to allow the use of ordinary
+// function as ContentNewsSource mutator.
+type ContentNewsSourceFunc func(context.Context, *ent.ContentNewsSourceMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ContentNewsSourceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ContentNewsSourceMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ContentNewsSourceMutation", m)
+}
+
+// The ContentSlugRedirectFunc type is an adapter to allow the use of ordinary
+// function as ContentSlugRedirect mutator.
+type ContentSlugRedirectFunc func(context.Context, *ent.ContentSlugRedirectMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ContentSlugRedirectFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ContentSlugRedirectMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ContentSlugRedirectMutation", m)
+}
+
+// The ContentTranslationFunc type is an adapter to allow the use of ordinary
+// function as ContentTranslation mutator.
+type ContentTranslationFunc func(context.Context, *ent.ContentTranslationMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ContentTranslationFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ContentTranslationMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ContentTranslationMutation", m)
+}
+
+// The ContentTranslationSettingFunc type is an adapter to allow the use of ordinary
+// function as ContentTranslationSetting mutator.
+type ContentTranslationSettingFunc func(context.Context, *ent.ContentTranslationSettingMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ContentTranslationSettingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ContentTranslationSettingMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ContentTranslationSettingMutation", m)
+}
+
 // The ErrorPassthroughRuleFunc type is an adapter to allow the use of ordinary
 // function as ErrorPassthroughRule mutator.
 type ErrorPassthroughRuleFunc func(context.Context, *ent.ErrorPassthroughRuleMutation) (ent.Value, error)

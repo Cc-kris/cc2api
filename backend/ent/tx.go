@@ -42,6 +42,28 @@ type Tx struct {
 	ChannelMonitorHistory *ChannelMonitorHistoryClient
 	// ChannelMonitorRequestTemplate is the client for interacting with the ChannelMonitorRequestTemplate builders.
 	ChannelMonitorRequestTemplate *ChannelMonitorRequestTemplateClient
+	// ContentAnalyticsDaily is the client for interacting with the ContentAnalyticsDaily builders.
+	ContentAnalyticsDaily *ContentAnalyticsDailyClient
+	// ContentAnalyticsEvent is the client for interacting with the ContentAnalyticsEvent builders.
+	ContentAnalyticsEvent *ContentAnalyticsEventClient
+	// ContentArticle is the client for interacting with the ContentArticle builders.
+	ContentArticle *ContentArticleClient
+	// ContentAuditLog is the client for interacting with the ContentAuditLog builders.
+	ContentAuditLog *ContentAuditLogClient
+	// ContentAutomationSetting is the client for interacting with the ContentAutomationSetting builders.
+	ContentAutomationSetting *ContentAutomationSettingClient
+	// ContentFetchRun is the client for interacting with the ContentFetchRun builders.
+	ContentFetchRun *ContentFetchRunClient
+	// ContentNewsItem is the client for interacting with the ContentNewsItem builders.
+	ContentNewsItem *ContentNewsItemClient
+	// ContentNewsSource is the client for interacting with the ContentNewsSource builders.
+	ContentNewsSource *ContentNewsSourceClient
+	// ContentSlugRedirect is the client for interacting with the ContentSlugRedirect builders.
+	ContentSlugRedirect *ContentSlugRedirectClient
+	// ContentTranslation is the client for interacting with the ContentTranslation builders.
+	ContentTranslation *ContentTranslationClient
+	// ContentTranslationSetting is the client for interacting with the ContentTranslationSetting builders.
+	ContentTranslationSetting *ContentTranslationSettingClient
 	// ErrorPassthroughRule is the client for interacting with the ErrorPassthroughRule builders.
 	ErrorPassthroughRule *ErrorPassthroughRuleClient
 	// FinanceAlert is the client for interacting with the FinanceAlert builders.
@@ -285,6 +307,17 @@ func (tx *Tx) init() {
 	tx.ChannelMonitorDailyRollup = NewChannelMonitorDailyRollupClient(tx.config)
 	tx.ChannelMonitorHistory = NewChannelMonitorHistoryClient(tx.config)
 	tx.ChannelMonitorRequestTemplate = NewChannelMonitorRequestTemplateClient(tx.config)
+	tx.ContentAnalyticsDaily = NewContentAnalyticsDailyClient(tx.config)
+	tx.ContentAnalyticsEvent = NewContentAnalyticsEventClient(tx.config)
+	tx.ContentArticle = NewContentArticleClient(tx.config)
+	tx.ContentAuditLog = NewContentAuditLogClient(tx.config)
+	tx.ContentAutomationSetting = NewContentAutomationSettingClient(tx.config)
+	tx.ContentFetchRun = NewContentFetchRunClient(tx.config)
+	tx.ContentNewsItem = NewContentNewsItemClient(tx.config)
+	tx.ContentNewsSource = NewContentNewsSourceClient(tx.config)
+	tx.ContentSlugRedirect = NewContentSlugRedirectClient(tx.config)
+	tx.ContentTranslation = NewContentTranslationClient(tx.config)
+	tx.ContentTranslationSetting = NewContentTranslationSettingClient(tx.config)
 	tx.ErrorPassthroughRule = NewErrorPassthroughRuleClient(tx.config)
 	tx.FinanceAlert = NewFinanceAlertClient(tx.config)
 	tx.FinanceAsyncJob = NewFinanceAsyncJobClient(tx.config)

@@ -22,6 +22,17 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitordailyrollup"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorhistory"
 	"github.com/Wei-Shaw/sub2api/ent/channelmonitorrequesttemplate"
+	"github.com/Wei-Shaw/sub2api/ent/contentanalyticsdaily"
+	"github.com/Wei-Shaw/sub2api/ent/contentanalyticsevent"
+	"github.com/Wei-Shaw/sub2api/ent/contentarticle"
+	"github.com/Wei-Shaw/sub2api/ent/contentauditlog"
+	"github.com/Wei-Shaw/sub2api/ent/contentautomationsetting"
+	"github.com/Wei-Shaw/sub2api/ent/contentfetchrun"
+	"github.com/Wei-Shaw/sub2api/ent/contentnewsitem"
+	"github.com/Wei-Shaw/sub2api/ent/contentnewssource"
+	"github.com/Wei-Shaw/sub2api/ent/contentslugredirect"
+	"github.com/Wei-Shaw/sub2api/ent/contenttranslation"
+	"github.com/Wei-Shaw/sub2api/ent/contenttranslationsetting"
 	"github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule"
 	"github.com/Wei-Shaw/sub2api/ent/financealert"
 	"github.com/Wei-Shaw/sub2api/ent/financeasyncjob"
@@ -506,6 +517,303 @@ func (f TraverseChannelMonitorRequestTemplate) Traverse(ctx context.Context, q e
 		return f(ctx, q)
 	}
 	return fmt.Errorf("unexpected query type %T. expect *ent.ChannelMonitorRequestTemplateQuery", q)
+}
+
+// The ContentAnalyticsDailyFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ContentAnalyticsDailyFunc func(context.Context, *ent.ContentAnalyticsDailyQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ContentAnalyticsDailyFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ContentAnalyticsDailyQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ContentAnalyticsDailyQuery", q)
+}
+
+// The TraverseContentAnalyticsDaily type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseContentAnalyticsDaily func(context.Context, *ent.ContentAnalyticsDailyQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseContentAnalyticsDaily) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseContentAnalyticsDaily) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ContentAnalyticsDailyQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ContentAnalyticsDailyQuery", q)
+}
+
+// The ContentAnalyticsEventFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ContentAnalyticsEventFunc func(context.Context, *ent.ContentAnalyticsEventQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ContentAnalyticsEventFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ContentAnalyticsEventQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ContentAnalyticsEventQuery", q)
+}
+
+// The TraverseContentAnalyticsEvent type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseContentAnalyticsEvent func(context.Context, *ent.ContentAnalyticsEventQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseContentAnalyticsEvent) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseContentAnalyticsEvent) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ContentAnalyticsEventQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ContentAnalyticsEventQuery", q)
+}
+
+// The ContentArticleFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ContentArticleFunc func(context.Context, *ent.ContentArticleQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ContentArticleFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ContentArticleQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ContentArticleQuery", q)
+}
+
+// The TraverseContentArticle type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseContentArticle func(context.Context, *ent.ContentArticleQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseContentArticle) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseContentArticle) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ContentArticleQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ContentArticleQuery", q)
+}
+
+// The ContentAuditLogFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ContentAuditLogFunc func(context.Context, *ent.ContentAuditLogQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ContentAuditLogFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ContentAuditLogQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ContentAuditLogQuery", q)
+}
+
+// The TraverseContentAuditLog type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseContentAuditLog func(context.Context, *ent.ContentAuditLogQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseContentAuditLog) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseContentAuditLog) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ContentAuditLogQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ContentAuditLogQuery", q)
+}
+
+// The ContentAutomationSettingFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ContentAutomationSettingFunc func(context.Context, *ent.ContentAutomationSettingQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ContentAutomationSettingFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ContentAutomationSettingQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ContentAutomationSettingQuery", q)
+}
+
+// The TraverseContentAutomationSetting type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseContentAutomationSetting func(context.Context, *ent.ContentAutomationSettingQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseContentAutomationSetting) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseContentAutomationSetting) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ContentAutomationSettingQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ContentAutomationSettingQuery", q)
+}
+
+// The ContentFetchRunFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ContentFetchRunFunc func(context.Context, *ent.ContentFetchRunQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ContentFetchRunFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ContentFetchRunQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ContentFetchRunQuery", q)
+}
+
+// The TraverseContentFetchRun type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseContentFetchRun func(context.Context, *ent.ContentFetchRunQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseContentFetchRun) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseContentFetchRun) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ContentFetchRunQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ContentFetchRunQuery", q)
+}
+
+// The ContentNewsItemFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ContentNewsItemFunc func(context.Context, *ent.ContentNewsItemQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ContentNewsItemFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ContentNewsItemQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ContentNewsItemQuery", q)
+}
+
+// The TraverseContentNewsItem type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseContentNewsItem func(context.Context, *ent.ContentNewsItemQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseContentNewsItem) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseContentNewsItem) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ContentNewsItemQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ContentNewsItemQuery", q)
+}
+
+// The ContentNewsSourceFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ContentNewsSourceFunc func(context.Context, *ent.ContentNewsSourceQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ContentNewsSourceFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ContentNewsSourceQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ContentNewsSourceQuery", q)
+}
+
+// The TraverseContentNewsSource type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseContentNewsSource func(context.Context, *ent.ContentNewsSourceQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseContentNewsSource) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseContentNewsSource) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ContentNewsSourceQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ContentNewsSourceQuery", q)
+}
+
+// The ContentSlugRedirectFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ContentSlugRedirectFunc func(context.Context, *ent.ContentSlugRedirectQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ContentSlugRedirectFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ContentSlugRedirectQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ContentSlugRedirectQuery", q)
+}
+
+// The TraverseContentSlugRedirect type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseContentSlugRedirect func(context.Context, *ent.ContentSlugRedirectQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseContentSlugRedirect) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseContentSlugRedirect) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ContentSlugRedirectQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ContentSlugRedirectQuery", q)
+}
+
+// The ContentTranslationFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ContentTranslationFunc func(context.Context, *ent.ContentTranslationQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ContentTranslationFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ContentTranslationQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ContentTranslationQuery", q)
+}
+
+// The TraverseContentTranslation type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseContentTranslation func(context.Context, *ent.ContentTranslationQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseContentTranslation) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseContentTranslation) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ContentTranslationQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ContentTranslationQuery", q)
+}
+
+// The ContentTranslationSettingFunc type is an adapter to allow the use of ordinary function as a Querier.
+type ContentTranslationSettingFunc func(context.Context, *ent.ContentTranslationSettingQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f ContentTranslationSettingFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.ContentTranslationSettingQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.ContentTranslationSettingQuery", q)
+}
+
+// The TraverseContentTranslationSetting type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseContentTranslationSetting func(context.Context, *ent.ContentTranslationSettingQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseContentTranslationSetting) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseContentTranslationSetting) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.ContentTranslationSettingQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.ContentTranslationSettingQuery", q)
 }
 
 // The ErrorPassthroughRuleFunc type is an adapter to allow the use of ordinary function as a Querier.
@@ -1862,6 +2170,28 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.ChannelMonitorHistoryQuery, predicate.ChannelMonitorHistory, channelmonitorhistory.OrderOption]{typ: ent.TypeChannelMonitorHistory, tq: q}, nil
 	case *ent.ChannelMonitorRequestTemplateQuery:
 		return &query[*ent.ChannelMonitorRequestTemplateQuery, predicate.ChannelMonitorRequestTemplate, channelmonitorrequesttemplate.OrderOption]{typ: ent.TypeChannelMonitorRequestTemplate, tq: q}, nil
+	case *ent.ContentAnalyticsDailyQuery:
+		return &query[*ent.ContentAnalyticsDailyQuery, predicate.ContentAnalyticsDaily, contentanalyticsdaily.OrderOption]{typ: ent.TypeContentAnalyticsDaily, tq: q}, nil
+	case *ent.ContentAnalyticsEventQuery:
+		return &query[*ent.ContentAnalyticsEventQuery, predicate.ContentAnalyticsEvent, contentanalyticsevent.OrderOption]{typ: ent.TypeContentAnalyticsEvent, tq: q}, nil
+	case *ent.ContentArticleQuery:
+		return &query[*ent.ContentArticleQuery, predicate.ContentArticle, contentarticle.OrderOption]{typ: ent.TypeContentArticle, tq: q}, nil
+	case *ent.ContentAuditLogQuery:
+		return &query[*ent.ContentAuditLogQuery, predicate.ContentAuditLog, contentauditlog.OrderOption]{typ: ent.TypeContentAuditLog, tq: q}, nil
+	case *ent.ContentAutomationSettingQuery:
+		return &query[*ent.ContentAutomationSettingQuery, predicate.ContentAutomationSetting, contentautomationsetting.OrderOption]{typ: ent.TypeContentAutomationSetting, tq: q}, nil
+	case *ent.ContentFetchRunQuery:
+		return &query[*ent.ContentFetchRunQuery, predicate.ContentFetchRun, contentfetchrun.OrderOption]{typ: ent.TypeContentFetchRun, tq: q}, nil
+	case *ent.ContentNewsItemQuery:
+		return &query[*ent.ContentNewsItemQuery, predicate.ContentNewsItem, contentnewsitem.OrderOption]{typ: ent.TypeContentNewsItem, tq: q}, nil
+	case *ent.ContentNewsSourceQuery:
+		return &query[*ent.ContentNewsSourceQuery, predicate.ContentNewsSource, contentnewssource.OrderOption]{typ: ent.TypeContentNewsSource, tq: q}, nil
+	case *ent.ContentSlugRedirectQuery:
+		return &query[*ent.ContentSlugRedirectQuery, predicate.ContentSlugRedirect, contentslugredirect.OrderOption]{typ: ent.TypeContentSlugRedirect, tq: q}, nil
+	case *ent.ContentTranslationQuery:
+		return &query[*ent.ContentTranslationQuery, predicate.ContentTranslation, contenttranslation.OrderOption]{typ: ent.TypeContentTranslation, tq: q}, nil
+	case *ent.ContentTranslationSettingQuery:
+		return &query[*ent.ContentTranslationSettingQuery, predicate.ContentTranslationSetting, contenttranslationsetting.OrderOption]{typ: ent.TypeContentTranslationSetting, tq: q}, nil
 	case *ent.ErrorPassthroughRuleQuery:
 		return &query[*ent.ErrorPassthroughRuleQuery, predicate.ErrorPassthroughRule, errorpassthroughrule.OrderOption]{typ: ent.TypeErrorPassthroughRule, tq: q}, nil
 	case *ent.FinanceAlertQuery:

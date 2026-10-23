@@ -15,6 +15,11 @@ var platformPricingProvider = map[string]string{
 	PlatformGemini:      "google",
 	PlatformAntigravity: "anthropic",
 	"grok":              "xai",
+	PlatformSeedace:     "seedace",
+	PlatformOllama:      "ollama",
+	PlatformKimi:        "moonshot",
+	PlatformZhipu:       "zhipuai",
+	PlatformDeepSeek:    "deepseek",
 }
 
 func PricingProviderForPlatform(platform string) (string, bool) {

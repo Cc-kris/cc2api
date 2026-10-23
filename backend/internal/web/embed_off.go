@@ -43,6 +43,10 @@ func ServeEmbeddedFrontend() gin.HandlerFunc {
 	}
 }
 
+func ServeEmbeddedFrontendWithoutPublicSSR() gin.HandlerFunc {
+	return ServeEmbeddedFrontend()
+}
+
 func HasEmbeddedFrontend() bool {
 	return false
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func ptrString[T ~string](v T) *string {
+func testGroupPtrString[T ~string](v T) *string {
 	s := string(v)
 	return &s
 }
