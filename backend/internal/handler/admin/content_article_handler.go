@@ -568,20 +568,29 @@ func (h *ContentArticleHandler) CreateTranslationTask(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Locale         string `json:"locale" binding:"required"`
-		Model          string `json:"model" binding:"required"`
-		ProviderKeyRef string `json:"providerKeyRef"`
+		Locale         string   `json:"locale"`
+		Locales        []string `json:"locales"`
+		Model          string   `json:"model" binding:"required"`
+		ProviderKeyRef string   `json:"providerKeyRef"`
 	}
 	if e := c.ShouldBindJSON(&req); e != nil {
 		response.BadRequest(c, e.Error())
 		return
 	}
-	out, e := h.svc.CreateTranslationTask(contentMutationContext(c), id, req.Locale, req.Model, req.ProviderKeyRef)
+	locales := append([]string(nil), req.Locales...)
+	if strings.TrimSpace(req.Locale) != "" {
+		locales = append(locales, req.Locale)
+	}
+	out, e := h.svc.CreateTranslationTasks(contentMutationContext(c), id, locales, req.Model, req.ProviderKeyRef)
 	if e != nil {
 		response.ErrorFrom(c, e)
 		return
 	}
-	response.Accepted(c, out)
+	if len(out) == 1 {
+		response.Accepted(c, out[0])
+		return
+	}
+	response.Accepted(c, gin.H{"tasks": out})
 }
 
 // ListWritingTasks returns recent writing tasks (default kind=writing) for

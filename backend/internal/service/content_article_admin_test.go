@@ -393,6 +393,36 @@ func TestContentArticleTranslationWorkerBindsSourceVersion(t *testing.T) {
 	require.Contains(t, *got.Result, "translation:")
 }
 
+func TestContentArticleTranslationBatchDeduplicatesAndIsQueryable(t *testing.T) {
+	repo := &articleRepoStub{article: ContentArticle{ID: 7, Locale: "zh-CN", Status: domain.ContentStatusDraft, Version: 4}}
+	store := NewMemoryContentWritingTaskStore()
+	s := NewContentArticleAdminService(repo, nil, store)
+
+	tasks, err := s.CreateTranslationTasks(context.Background(), 7, []string{"en-US", "EN-us", "fr-FR"}, "model", "provider-ref")
+	require.NoError(t, err)
+	require.Len(t, tasks, 2)
+	require.Equal(t, "en-US", tasks[0].TargetLocale)
+	require.Equal(t, "fr-FR", tasks[1].TargetLocale)
+	for _, task := range tasks {
+		require.Equal(t, ContentTranslationKind, task.Kind)
+		require.Equal(t, 4, task.SourceVersion)
+		require.Equal(t, ContentWritingQueued, task.Status)
+		got, getErr := s.GetWritingTask(context.Background(), task.ID)
+		require.NoError(t, getErr)
+		require.Equal(t, task.TargetLocale, got.TargetLocale)
+		require.Equal(t, ContentWritingQueued, got.Status)
+	}
+
+	listed, err := s.ListWritingTasks(context.Background(), ContentTranslationKind, 10)
+	require.NoError(t, err)
+	require.Len(t, listed, 2)
+	_, err = s.CreateTranslationTasks(context.Background(), 7, nil, "model", "provider-ref")
+	require.ErrorIs(t, err, ErrContentArticleInvalid)
+	listed, err = s.ListWritingTasks(context.Background(), ContentTranslationKind, 10)
+	require.NoError(t, err)
+	require.Len(t, listed, 2)
+}
+
 func TestAIConfigRevisionRejectsStaleToken(t *testing.T) {
 	old := contentAIConfigPath
 	contentAIConfigPath = filepath.Join(t.TempDir(), "ai.json")

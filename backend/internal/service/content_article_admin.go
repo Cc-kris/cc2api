@@ -1914,26 +1914,75 @@ func (s *ContentArticleAdminService) CreateWritingTaskWithInput(ctx context.Cont
 // translation. A newer source edit therefore cannot overwrite this task's
 // target language version.
 func (s *ContentArticleAdminService) CreateTranslationTask(ctx context.Context, articleID int64, targetLocale, model, keyRef string) (*ContentWritingTask, error) {
-	if articleID <= 0 || strings.TrimSpace(targetLocale) == "" || strings.TrimSpace(model) == "" || strings.ContainsAny(keyRef, "\r\n") || looksLikeContentSecret(keyRef) {
+	out, err := s.CreateTranslationTasks(ctx, articleID, []string{targetLocale}, model, keyRef)
+	if err != nil {
+		return nil, err
+	}
+	if len(out) != 1 {
+		return nil, ErrContentArticleInvalid
+	}
+	return out[0], nil
+}
+
+// CreateTranslationTasks enqueues one independent translation task for each
+// selected locale. All locales are validated before the first task is stored,
+// so a malformed selection cannot leave a partially-created batch behind.
+func (s *ContentArticleAdminService) CreateTranslationTasks(ctx context.Context, articleID int64, targetLocales []string, model, keyRef string) ([]*ContentWritingTask, error) {
+	if articleID <= 0 || strings.TrimSpace(model) == "" || strings.ContainsAny(keyRef, "\r\n") || looksLikeContentSecret(keyRef) {
+		return nil, ErrContentArticleInvalid
+	}
+	locales := normalizeTranslationLocales(targetLocales)
+	if len(locales) == 0 {
 		return nil, ErrContentArticleInvalid
 	}
 	a, err := s.Get(ctx, articleID, false)
 	if err != nil {
 		return nil, err
 	}
-	if strings.EqualFold(strings.TrimSpace(a.Locale), strings.TrimSpace(targetLocale)) {
-		return nil, ErrContentArticleInvalid
+	for _, locale := range locales {
+		if strings.EqualFold(strings.TrimSpace(a.Locale), locale) {
+			return nil, ErrContentArticleInvalid
+		}
 	}
+
 	now := time.Now().UTC()
-	t := &ContentWritingTask{ID: fmt.Sprintf("ct-%d", now.UnixNano()), Kind: ContentTranslationKind, ArticleID: articleID, SourceVersion: a.Version, SourceLocale: a.Locale, TargetLocale: strings.TrimSpace(targetLocale), Model: strings.TrimSpace(model), ProviderKeyRef: strings.TrimSpace(keyRef), Status: ContentWritingQueued, CreatedAt: now, UpdatedAt: now}
-	if s.tasks == nil {
-		return t, nil
+	out := make([]*ContentWritingTask, 0, len(locales))
+	for i, locale := range locales {
+		taskID := fmt.Sprintf("ct-%d", now.UnixNano())
+		if i > 0 {
+			taskID = fmt.Sprintf("%s-%d", taskID, i)
+		}
+		t := &ContentWritingTask{ID: taskID, Kind: ContentTranslationKind, ArticleID: articleID, SourceVersion: a.Version, SourceLocale: a.Locale, TargetLocale: locale, Model: strings.TrimSpace(model), ProviderKeyRef: strings.TrimSpace(keyRef), Status: ContentWritingQueued, CreatedAt: now, UpdatedAt: now}
+		if s.tasks != nil {
+			t, err = s.tasks.Create(ctx, t)
+			if err != nil {
+				return nil, err
+			}
+			if err = s.auditWritingTask(ctx, "create_translation", t); err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, t)
 	}
-	out, err := s.tasks.Create(ctx, t)
-	if err == nil {
-		err = s.auditWritingTask(ctx, "create_translation", out)
+	return out, nil
+}
+
+func normalizeTranslationLocales(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		locale := domain.NormalizeContentLocale(strings.TrimSpace(value))
+		if locale == "" {
+			continue
+		}
+		key := strings.ToLower(locale)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, locale)
 	}
-	return out, err
+	return out
 }
 func (s *ContentArticleAdminService) GetWritingTask(ctx context.Context, id string) (*ContentWritingTask, error) {
 	if s.tasks == nil {
