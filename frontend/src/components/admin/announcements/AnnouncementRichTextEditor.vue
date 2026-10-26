@@ -83,6 +83,9 @@ const editorConfig = computed<Partial<IEditorConfig>>(() => ({
 
 function handleCreated(editor: IDomEditor) {
   editorRef.value = editor
+  const latestHtml = props.modelValue || '<p><br></p>'
+  htmlValue.value = latestHtml
+  if (editor.getHtml() !== latestHtml) editor.setHtml(latestHtml)
 }
 
 function handleChange() {
