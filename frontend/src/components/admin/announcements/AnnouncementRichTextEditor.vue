@@ -29,6 +29,8 @@ import { normalizeAnnouncementEditorHtml } from '@/utils/announcementContent'
 
 const props = defineProps<{
   modelValue: string
+  sessionKey?: string | number
+  placeholder?: string
 }>()
 
 const emit = defineEmits<{
@@ -37,13 +39,40 @@ const emit = defineEmits<{
 
 const editorRef = shallowRef<IDomEditor | null>(null)
 const htmlValue = ref(props.modelValue || '<p><br></p>')
+let syncedValue = props.modelValue || '<p><br></p>'
+let isDirty = false
+let applyingExternalValue = false
+
+function syncExternalValue(value: string | undefined) {
+  const next = value || '<p><br></p>'
+  syncedValue = next
+  if (next !== htmlValue.value) htmlValue.value = next
+
+  if (editorRef.value && editorRef.value.getHtml() !== next) {
+    applyingExternalValue = true
+    try {
+      editorRef.value.setHtml(next)
+    } finally {
+      applyingExternalValue = false
+    }
+  }
+}
 
 watch(
   () => props.modelValue,
   (next) => {
-    if (next !== htmlValue.value) {
-      htmlValue.value = next || '<p><br></p>'
+    if (!isDirty && normalizeAnnouncementEditorHtml(next || '<p><br></p>') !== normalizeAnnouncementEditorHtml(htmlValue.value)) {
+      syncExternalValue(next)
     }
+  }
+)
+
+watch(
+  () => props.sessionKey,
+  (next, previous) => {
+    if (next === previous) return
+    isDirty = false
+    syncExternalValue(props.modelValue)
   }
 )
 
@@ -52,7 +81,7 @@ const toolbarConfig: Partial<IToolbarConfig> = {
 }
 
 const editorConfig = computed<Partial<IEditorConfig>>(() => ({
-  placeholder: '请输入公告内容，可插入图片、视频链接和表格',
+  placeholder: props.placeholder || '请输入公告内容，可插入图片、视频链接和表格',
   MENU_CONF: {
     uploadImage: {
       maxFileSize: 2 * 1024 * 1024,
@@ -83,13 +112,25 @@ const editorConfig = computed<Partial<IEditorConfig>>(() => ({
 
 function handleCreated(editor: IDomEditor) {
   editorRef.value = editor
+  // Editor creation can finish after the async model value arrives. Replay the
+  // latest prop when creating the editor, rather than relying on v-model timing.
   const latestHtml = props.modelValue || '<p><br></p>'
   htmlValue.value = latestHtml
-  if (editor.getHtml() !== latestHtml) editor.setHtml(latestHtml)
+  if (editor.getHtml() !== latestHtml) {
+    applyingExternalValue = true
+    try {
+      editor.setHtml(latestHtml)
+    } finally {
+      applyingExternalValue = false
+    }
+  }
 }
 
 function handleChange() {
-  emit('update:modelValue', normalizeAnnouncementEditorHtml(htmlValue.value))
+  if (applyingExternalValue) return
+  const next = normalizeAnnouncementEditorHtml(htmlValue.value)
+  isDirty = next !== normalizeAnnouncementEditorHtml(syncedValue)
+  emit('update:modelValue', next)
 }
 
 function readFileAsDataURL(file: File): Promise<string> {

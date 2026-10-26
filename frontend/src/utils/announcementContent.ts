@@ -39,6 +39,7 @@ export function announcementEditorInitialHtml(content: string | null | undefined
   const raw = String(content || '')
   if (!raw.trim()) return '<p><br></p>'
   if (isRichAnnouncementContent(raw)) return sanitizeAnnouncementHtml(stripRichAnnouncementMarker(raw))
+  if (/<[a-z][\w:-]*(?:\s|\/?>)/i.test(raw)) return sanitizeAnnouncementHtml(raw)
   return sanitizeAnnouncementHtml(marked.parse(raw) as string)
 }
 

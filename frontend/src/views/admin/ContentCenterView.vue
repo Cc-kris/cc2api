@@ -156,7 +156,7 @@
         <div
           v-if="selectedNews.id"
           class="modal-backdrop z-overlay"
-          @click.self="selectedNews = {}"
+            @click.self="closeNewsEditor"
         >
           <div ref="newsEditorRef" class="news-editor news-editor-modal news-editor-flex">
           <div class="section-heading modal-fixed-header">
@@ -164,7 +164,7 @@
               <h2>新闻详情编辑</h2>
               <p class="muted">编辑抓取正文、摘要、分类标签和 SEO 字段后再发布。</p>
             </div>
-            <button class="link" @click="selectedNews = {}">关闭</button>
+            <button class="link" @click="closeNewsEditor">关闭</button>
           </div>
           <div class="modal-scroll-body">
           <div class="form-grid">
@@ -212,13 +212,17 @@
             </div>
             <div class="editor-main-col">
               <div class="editor-label">新闻正文（富文本）</div>
-              <AnnouncementRichTextEditor v-model="selectedNews.bodyHtml" placeholder="新闻正文..." />
+              <AnnouncementRichTextEditor
+                v-model="selectedNews.bodyHtml"
+                :session-key="`${selectedNews.id}:${newsEditorSession}`"
+                placeholder="新闻正文..."
+              />
             </div>
           </div>
           </div>
           <div class="form-actions modal-fixed-footer">
             <button class="button" @click="saveNews">保存新闻</button>
-            <button class="secondary-button" @click="selectedNews = {}">
+            <button class="secondary-button" @click="closeNewsEditor">
               取消
             </button>
           </div>
@@ -1436,6 +1440,8 @@ const newsPage = ref(1);
 const newsTotal = ref(0);
 const newsHasNext = ref(false);
 const selectedNews = ref<any>({});
+const newsEditorSession = ref(0);
+let newsEditRequest = 0;
 const newsEditorRef = ref<HTMLElement | null>(null);
 const selectedNewsIds = ref<number[]>([]);
 const allNewsSelected = ref(false);
@@ -2016,16 +2022,38 @@ async function loadBI() {
   rankings.value = unwrap(r.data);
   ctrRows.value = unwrap(c.data);
 }
+function closeNewsEditor() {
+  newsEditRequest += 1
+  newsEditorSession.value += 1
+  selectedNews.value = {}
+}
+
 async function editNews(item: any) {
+  const requestId = ++newsEditRequest
   try {
-    const { data } = await contentAPI.getNews(item.id);
-    selectedNews.value = data?.data || data || { ...item };
+    const { data } = await contentAPI.getNews(item.id)
+    if (requestId !== newsEditRequest) return
+    const detail = data?.data || data || { ...item }
+    const storedBody =
+      detail.bodyHtml || detail.bodyHTML || detail.bodyMarkdown || detail.body || detail.content || ""
+    selectedNews.value = {
+      ...detail,
+      bodyHtml: announcementEditorInitialHtml(String(storedBody)),
+    }
+    newsEditorSession.value += 1
   } catch {
-    selectedNews.value = { ...item };
-    errorMessage.value = "新闻详情加载失败，已显示列表数据";
+    if (requestId !== newsEditRequest) return
+    const storedBody =
+      item.bodyHtml || item.bodyHTML || item.bodyMarkdown || item.body || item.content || ""
+    selectedNews.value = {
+      ...item,
+      bodyHtml: announcementEditorInitialHtml(String(storedBody)),
+    }
+    newsEditorSession.value += 1
+    errorMessage.value = "新闻详情加载失败，已显示列表数据"
   }
-  await nextTick();
-  newsEditorRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
+  await nextTick()
+  newsEditorRef.value?.scrollIntoView({ behavior: "smooth", block: "start" })
 }
 function stripEditorHtml(html: string): string {
   const div = document.createElement("div");

@@ -6,9 +6,19 @@ vi.mock('@wangeditor/editor-for-vue', async () => {
   const { defineComponent, h } = await import('vue')
   return {
     Editor: defineComponent({
-      emits: ['onCreated', 'onChange'],
-      setup(_, { emit }) {
-        return () => h('button', { onClick: () => emit('onCreated', editorTestControl.editor) }, 'create editor')
+      props: { modelValue: { type: String, default: '' } },
+      emits: ['update:modelValue', 'onCreated', 'onChange'],
+      setup(props, { emit }) {
+        return () => h('div', [
+          h('textarea', {
+            value: props.modelValue,
+            onInput: (event: Event) => {
+              emit('update:modelValue', (event.target as HTMLTextAreaElement).value)
+              emit('onChange')
+            },
+          }),
+          h('button', { onClick: () => emit('onCreated', editorTestControl.editor) }, 'create editor'),
+        ])
       },
     }),
     Toolbar: defineComponent({ setup: () => () => h('div') }),
@@ -44,6 +54,21 @@ describe('announcementContent', () => {
     expect(editor.setHtml).toHaveBeenCalledWith(html)
     wrapper.unmount()
     editorTestControl.editor = null
+  })
+
+  it('keeps local edits when modelValue changes, then accepts content on a new editor session', async () => {
+    editorTestControl.editor = null
+    const wrapper = mount(AnnouncementRichTextEditor, {
+      props: { modelValue: '<p>saved</p>', sessionKey: 'news-1' },
+    })
+
+    await wrapper.get('textarea').setValue('<p>local edit</p>')
+    await wrapper.setProps({ modelValue: '<p>stale server value</p>' })
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('<p>local edit</p>')
+
+    await wrapper.setProps({ modelValue: '<p>next news</p>', sessionKey: 'news-2' })
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('<p>next news</p>')
+    wrapper.unmount()
   })
 
   it('renders historical markdown announcements', () => {
