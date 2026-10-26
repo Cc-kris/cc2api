@@ -24,6 +24,22 @@ vi.mock('@/stores', () => ({
   useAppStore: () => ({ showToast: api.showToast }),
 }))
 
+vi.mock('@/components/common/Pagination.vue', async () => {
+  const { defineComponent: component, h: createElement } = await import('vue')
+  return { default: component({
+    props: ['page', 'total', 'pageSize', 'showPageSizeSelector'],
+    emits: ['update:page'],
+    setup(props, { emit }) {
+      return () => createElement('button', {
+        type: 'button',
+        'data-test': 'next-page',
+        disabled: props.page * props.pageSize >= props.total,
+        onClick: () => emit('update:page', props.page + 1),
+      }, '下一页')
+    },
+  }) }
+})
+
 vi.mock('@/components/layout/AppLayout.vue', async () => {
   const { defineComponent: component, h: createElement } = await import('vue')
   return {
@@ -133,6 +149,23 @@ afterEach(() => {
 })
 
 describe('ContentCenterView news body editing integration', () => {
+  it('uses server pagination totals and requests the selected 20-item page', async () => {
+    api.listNews.mockImplementation(async (params: any) => response({
+      items: params.page === 2 ? [{ ...persistedNews, title: '第二页新闻' }] : [{ ...persistedNews }],
+      total: 45, page: params.page, page_size: 20, pages: 3,
+    }))
+    const wrapper = await mountContentCenter()
+    const requestsBefore = api.listNews.mock.calls.length
+
+    await wrapper.get('[data-test="next-page"]').trigger('click')
+    await flushPromises()
+
+    expect(api.listNews.mock.calls).toHaveLength(requestsBefore + 1)
+    expect(api.listNews.mock.calls.at(-1)?.[0]).toMatchObject({ page: 2, page_size: 20 })
+    expect(wrapper.text()).toContain('第二页新闻')
+    wrapper.unmount()
+  })
+
   it('loads, edits, saves, and reopens a 10,000-character rich body without truncation', async () => {
     const text = '长正文验证内容。'.repeat(1_250)
     expect(text.length).toBe(10_000)

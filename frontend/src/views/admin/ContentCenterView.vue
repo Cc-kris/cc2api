@@ -128,7 +128,9 @@
               </tr>
             </tbody>
           </table>
-          <p v-if="!news.length" class="empty">暂无新闻</p>
+          <p v-if="listState.news.loading" class="list-state" role="status">正在加载新闻…</p>
+          <p v-else-if="listState.news.error" class="list-state list-error" role="alert">{{ listState.news.error }} <button class="link" @click="loadNews()">重试</button></p>
+          <p v-else-if="!news.length" class="empty" role="status">暂无新闻</p>
           <div class="table-footer">
             <div class="bulk-actions">
               <button
@@ -146,11 +148,7 @@
                 批量删除
               </button>
             </div>
-            <div class="pagination">
-              <button class="link" :disabled="newsPage <= 1" @click="newsPage--; loadNews()">上一页</button>
-              <span class="page-info">第 {{ newsPage }} 页 · 共 {{ newsTotal }} 条</span>
-              <button class="link" :disabled="!newsHasNext" @click="newsPage++; loadNews()">下一页</button>
-            </div>
+            <Pagination v-if="newsTotal > 0" :page="newsPage" :total="newsTotal" :page-size="20" :show-page-size-selector="false" @update:page="loadNews" />
           </div>
         </div>
         <div
@@ -309,13 +307,12 @@
               </tr>
             </tbody>
           </table>
+          <p v-if="listState.sources.loading" class="list-state" role="status">正在加载新闻源…</p>
+          <p v-else-if="listState.sources.error" class="list-state list-error" role="alert">{{ listState.sources.error }} <button class="link" @click="loadSources()">重试</button></p>
+          <p v-else-if="!sources.length" class="empty" role="status">暂无新闻源</p>
           <div class="table-footer">
             <div></div>
-            <div class="pagination">
-              <button class="link" :disabled="sourcePage <= 1" @click="sourcePage--; loadSources()">上一页</button>
-              <span class="page-info">第 {{ sourcePage }} 页 · 共 {{ sourceTotal }} 条</span>
-              <button class="link" :disabled="!sourceHasNext" @click="sourcePage++; loadSources()">下一页</button>
-            </div>
+            <Pagination v-if="sourceTotal > 0" :page="sourcePage" :total="sourceTotal" :page-size="20" :show-page-size-selector="false" @update:page="loadSources" />
           </div>
         </div>
         <div v-if="selectedSource.id" class="news-editor">
@@ -405,13 +402,12 @@
               </tr>
             </tbody>
           </table>
+          <p v-if="listState.runs.loading" class="list-state" role="status">正在加载抓取任务…</p>
+          <p v-else-if="listState.runs.error" class="list-state list-error" role="alert">{{ listState.runs.error }} <button class="link" @click="loadRuns()">重试</button></p>
+          <p v-else-if="!runs.length" class="empty" role="status">暂无抓取任务</p>
           <div class="table-footer">
             <div></div>
-            <div class="pagination">
-              <button class="link" :disabled="runPage <= 1" @click="runPage--; loadRuns()">上一页</button>
-              <span class="page-info">第 {{ runPage }} 页 · 共 {{ runTotal }} 条</span>
-              <button class="link" :disabled="!runHasNext" @click="runPage++; loadRuns()">下一页</button>
-            </div>
+            <Pagination v-if="runTotal > 0" :page="runPage" :total="runTotal" :page-size="20" :show-page-size-selector="false" @update:page="loadRuns" />
           </div>
         </div>
       </div>
@@ -596,7 +592,9 @@
                 </tr>
               </tbody>
             </table>
-            <p v-if="!articles.length" class="empty">暂无文章</p>
+            <p v-if="listState.articles.loading" class="list-state" role="status">正在加载文章…</p>
+          <p v-else-if="listState.articles.error" class="list-state list-error" role="alert">{{ listState.articles.error }} <button class="link" @click="loadArticles()">重试</button></p>
+          <p v-else-if="!articles.length" class="empty" role="status">暂无文章</p>
             <div class="table-footer">
               <div class="bulk-actions">
                 <button
@@ -614,11 +612,7 @@
                   批量删除
                 </button>
               </div>
-              <div class="pagination">
-                <button class="link" :disabled="articlePage <= 1" @click="articlePage--; loadArticles()">上一页</button>
-                <span class="page-info">第 {{ articlePage }} 页 · 共 {{ articleTotal }} 条</span>
-                <button class="link" :disabled="!articleHasNext" @click="articlePage++; loadArticles()">下一页</button>
-              </div>
+              <Pagination v-if="articleTotal > 0" :page="articlePage" :total="articleTotal" :page-size="20" :show-page-size-selector="false" @update:page="loadArticles" />
             </div>
           </div>
 
@@ -1368,6 +1362,7 @@ import {
 import { Line as LineChart, Bar as BarChart, Doughnut as DoughnutChart } from "vue-chartjs";
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Tooltip, Legend, Filler);
 import contentAPI from "@/api/admin/content";
+import Pagination from "@/components/common/Pagination.vue";
 import { useAppStore } from "@/stores";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
@@ -1438,7 +1433,7 @@ const newsView = ref("items");
 const news = ref<any[]>([]);
 const newsPage = ref(1);
 const newsTotal = ref(0);
-const newsHasNext = ref(false);
+
 const selectedNews = ref<any>({});
 const newsEditorSession = ref(0);
 let newsEditRequest = 0;
@@ -1448,16 +1443,21 @@ const allNewsSelected = ref(false);
 const sources = ref<any[]>([]);
 const sourcePage = ref(1);
 const sourceTotal = ref(0);
-const sourceHasNext = ref(false);
+
 const selectedSource = ref<any>({});
 const runs = ref<any[]>([]);
 const runPage = ref(1);
 const runTotal = ref(0);
-const runHasNext = ref(false);
+
 const articles = ref<any[]>([]);
 const articlePage = ref(1);
 const articleTotal = ref(0);
-const articleHasNext = ref(false);
+type ContentListKey = "news" | "sources" | "runs" | "articles";
+const listState = ref<Record<ContentListKey, { loading: boolean; error: string }>>({
+  news: { loading: false, error: "" }, sources: { loading: false, error: "" },
+  runs: { loading: false, error: "" }, articles: { loading: false, error: "" },
+});
+
 const selectedArticleIds = ref<number[]>([]);
 const allArticlesSelected = ref(false);
 const trends = ref<any[]>([]);
@@ -1803,14 +1803,21 @@ const pageMeta = (v: any) => {
       (item) =>
         Array.isArray(item.items) ||
         typeof item.total === "number" ||
+        typeof item.page_size === "number" ||
+        typeof item.pageSize === "number" ||
         typeof item.hasNext === "boolean",
     ) || {};
   return {
     page: Number(payload.page || 1),
-    total: Number(payload.total || 0),
-    hasNext: Boolean(payload.hasNext),
+    total: Number(payload.total ?? 0),
   };
 };
+async function loadList(key: ContentListKey, request: () => Promise<void>) {
+  const state = listState.value[key]; state.loading = true; state.error = "";
+  try { await request(); }
+  catch (error) { state.error = error instanceof Error ? error.message : "列表加载失败"; }
+  finally { state.loading = false; }
+}
 const formatDate = (v: string) => (v ? new Date(v).toLocaleDateString() : "-");
 const formatDateTime = (v: string) =>
   v ? new Date(v).toLocaleString() : "-";
@@ -1860,6 +1867,7 @@ const parseMappingJSON = (raw: unknown): Record<string, string> => {
 async function loadNews(pageOrEvent: number | Event = newsPage.value) {
   const page = typeof pageOrEvent === "number" ? pageOrEvent : 1;
   newsPage.value = Math.max(1, page);
+  await loadList("news", async () => {
   const { data } = await contentAPI.listNews({
     page: newsPage.value,
     page_size: 20,
@@ -1873,9 +1881,9 @@ async function loadNews(pageOrEvent: number | Event = newsPage.value) {
   news.value = unwrap(data);
   const meta = pageMeta(data);
   newsTotal.value = meta.total;
-  newsHasNext.value = meta.hasNext;
   allNewsSelected.value = false;
   selectedNewsIds.value = [];
+  });
 }
 function toggleAllNews() {
   selectedNewsIds.value = allNewsSelected.value
@@ -1931,6 +1939,7 @@ async function bulkArticles(action: string) {
 }
 async function loadSources(page = sourcePage.value) {
   sourcePage.value = Math.max(1, page);
+  await loadList("sources", async () => {
   const { data } = await contentAPI.listSources({
     page: sourcePage.value,
     page_size: 20,
@@ -1939,10 +1948,11 @@ async function loadSources(page = sourcePage.value) {
   sources.value = unwrap(data);
   const meta = pageMeta(data);
   sourceTotal.value = meta.total;
-  sourceHasNext.value = meta.hasNext;
+  });
 }
 async function loadRuns(page = runPage.value) {
   runPage.value = Math.max(1, page);
+  await loadList("runs", async () => {
   const { data } = await contentAPI.listFetchRuns({
     page: runPage.value,
     page_size: 20,
@@ -1950,11 +1960,12 @@ async function loadRuns(page = runPage.value) {
   runs.value = unwrap(data);
   const meta = pageMeta(data);
   runTotal.value = meta.total;
-  runHasNext.value = meta.hasNext;
+  });
 }
 async function loadArticles(pageOrEvent: number | Event = articlePage.value) {
   const page = typeof pageOrEvent === "number" ? pageOrEvent : 1;
   articlePage.value = Math.max(1, page);
+  await loadList("articles", async () => {
   const { data } = await contentAPI.listArticles({
     page: articlePage.value,
     page_size: 20,
@@ -1982,9 +1993,9 @@ async function loadArticles(pageOrEvent: number | Event = articlePage.value) {
   }
   const meta = pageMeta(data);
   articleTotal.value = meta.total;
-  articleHasNext.value = meta.hasNext;
   allArticlesSelected.value = false;
   selectedArticleIds.value = [];
+  });
 }
 async function loadModels() {
   try {
@@ -3464,7 +3475,7 @@ td small {
 /* 新闻编辑面板改为浮层，避免出现在表格下方、视口外导致"点编辑没反应" */
 .news-editor.news-editor-modal {
   margin: 0;
-  width: min(1240px, calc(100vw - 48px));
+  width: min(880px, calc(100vw - 32px));
   max-height: 92vh;
   overflow-y: auto;
   text-align: left;
@@ -5078,5 +5089,12 @@ td.actions-cell .link {
   -webkit-box-orient: vertical;
   line-height: 1.45;
   word-break: break-word;
+}
+.list-state { margin: 12px 0; padding: 12px 16px; border-radius: 8px; background: #fff; color: #5E6577; }
+.list-error { color: #b42318; border: 1px solid #f3b7b2; }
+@media (max-width: 640px) {
+  .news-editor.news-editor-modal { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); box-sizing: border-box; }
+  .two-col-editor { grid-template-columns: minmax(0, 1fr); }
+  .modal-scroll-body { max-height: calc(100dvh - 180px); }
 }
 </style>
