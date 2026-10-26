@@ -17,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/robfig/cron/v3"
 )
 
 // The worker adapter deliberately reuses the admin repository so manual edits
@@ -25,6 +26,11 @@ func (r *contentNewsAdminRepository) ListDueNewsSources(ctx context.Context, now
 	if limit <= 0 {
 		return []service.ContentNewsSource{}, nil
 	}
+	policy, err := r.GetContentNewsWorkerPolicy(ctx)
+	if err != nil {
+		return nil, err
+	}
+	globalInterval := contentNewsGlobalIntervalMinutes(policy.FetchCron)
 	q := r.client.ContentNewsSource.Query().Where(
 		contentnewssource.EnabledEQ(true),
 		contentnewssource.Or(contentnewssource.NextRunAtIsNil(), contentnewssource.NextRunAtLTE(now)),
@@ -36,7 +42,34 @@ func (r *contentNewsAdminRepository) ListDueNewsSources(ctx context.Context, now
 	// Selection is intentionally read-only. The execution path performs the
 	// atomic source lease claim immediately before fetching, which avoids a
 	// queued run inheriting an already-expired scheduler lease.
-	return mapContentNewsSources(items), nil
+	sources := mapContentNewsSources(items)
+	for i := range sources {
+		if sources[i].IntervalMinutesOverride != nil {
+			sources[i].IntervalMinutes = *sources[i].IntervalMinutesOverride
+			continue
+		}
+		if globalInterval <= 0 {
+			return nil, errors.New("global content news fetch interval is invalid")
+		}
+		sources[i].IntervalMinutes = globalInterval
+	}
+	return sources, nil
+}
+
+func contentNewsGlobalIntervalMinutes(expr string) int {
+	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
+	schedule, err := parser.Parse(strings.TrimSpace(expr))
+	if err != nil {
+		return 0
+	}
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	first := schedule.Next(base)
+	second := schedule.Next(first)
+	minutes := int(second.Sub(first) / time.Minute)
+	if minutes <= 0 {
+		return 0
+	}
+	return minutes
 }
 
 func (r *contentNewsAdminRepository) ClaimNewsSourceLease(ctx context.Context, id int64, now time.Time) (*time.Time, error) {

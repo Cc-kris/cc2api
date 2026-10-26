@@ -177,6 +177,46 @@ func TestContentNewsAdminServiceAutomationCronAndDefaults(t *testing.T) {
 	}
 }
 
+func TestContentNewsAdminServiceNewsSourceIntervalInheritance(t *testing.T) {
+	ctx := context.Background()
+	globalMinutes, globalLabel := contentScheduleMinutes("0 */30 * * * *")
+	if globalMinutes != 30 || globalLabel != "每 30 分钟" {
+		t.Fatalf("unexpected global schedule: %d %q", globalMinutes, globalLabel)
+	}
+
+	inherited := &ContentNewsSource{IntervalMinutesOverride: nil}
+	applyNewsSchedule(inherited, globalMinutes, globalLabel, "0 */30 * * * *")
+	if inherited.IntervalMinutes != 30 || inherited.ScheduleMinutes != 30 || inherited.ScheduleLabel != "跟随全局（30 分钟）" {
+		t.Fatalf("NULL interval did not inherit global schedule: %#v", inherited)
+	}
+
+	explicitValue := 1440
+	explicit := &ContentNewsSource{IntervalMinutesOverride: &explicitValue}
+	applyNewsSchedule(explicit, globalMinutes, globalLabel, "0 */30 * * * *")
+	if explicit.IntervalMinutes != 1440 || explicit.ScheduleLabel != "每 1440 分钟" {
+		t.Fatalf("explicit interval was overwritten: %#v", explicit)
+	}
+
+	valid := &ContentNewsSource{Name: "Feed", SourceType: domain.ContentNewsSourceRSS, RateLimitPerMinute: 60}
+	if err := validateNewsSource(ctx, valid); err != nil {
+		t.Fatalf("NULL interval should be valid: %v", err)
+	}
+	for _, value := range []int{0, 14, 1441} {
+		invalid := *valid
+		invalid.IntervalMinutesOverride = &value
+		if err := validateNewsSource(ctx, &invalid); !errors.Is(err, ErrContentNewsInvalidInput) {
+			t.Fatalf("interval %d should be rejected, got %v", value, err)
+		}
+	}
+	for _, value := range []int{15, 1440} {
+		validExplicit := *valid
+		validExplicit.IntervalMinutesOverride = &value
+		if err := validateNewsSource(ctx, &validExplicit); err != nil {
+			t.Fatalf("interval %d should be accepted: %v", value, err)
+		}
+	}
+}
+
 func TestContentNewsAdminServiceValidatesFetchRun(t *testing.T) {
 	svc := NewContentNewsAdminService(&contentNewsAdminRepoStub{})
 	if _, err := svc.CreateFetchRun(context.Background(), &ContentFetchRun{SourceID: 1, TaskKey: "x", Status: "bogus"}); !errors.Is(err, ErrContentNewsInvalidInput) {
@@ -194,5 +234,57 @@ func TestContentNewsAdminServiceRetryOnlyTerminalRun(t *testing.T) {
 	out, err := svc.RetryFetchRun(context.Background(), 7)
 	if err != nil || out.Status != domain.ContentFetchQueued || out.SourceID != 2 {
 		t.Fatalf("unexpected retry run: %#v %v", out, err)
+	}
+}
+
+type contentNewsScheduleSourceStub struct {
+	nextRun *time.Time
+}
+
+func (s *contentNewsScheduleSourceStub) GetNewsSource(context.Context, int64, bool) (*ContentNewsSource, error) {
+	return nil, nil
+}
+func (s *contentNewsScheduleSourceStub) ListDueNewsSources(context.Context, time.Time, int) ([]ContentNewsSource, error) {
+	return nil, nil
+}
+func (s *contentNewsScheduleSourceStub) RecordNewsSourceFetch(_ context.Context, _ int64, _ time.Time, nextRun *time.Time, _ *string) error {
+	s.nextRun = nextRun
+	return nil
+}
+
+func TestContentNewsWorkerFinishRunUsesGlobalEffectiveIntervalForNullOverride(t *testing.T) {
+	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	sources := &contentNewsScheduleSourceStub{}
+	worker := &ContentNewsWorker{
+		sources: sources,
+		runs:    &contentNewsWorkerRunStub{},
+		now:     func() time.Time { return now },
+	}
+	globalInterval := 45
+	source := &ContentNewsSource{ID: 1, IntervalMinutes: globalInterval, IntervalMinutesOverride: nil}
+	if _, err := worker.finishRun(context.Background(), source, &ContentFetchRun{ID: 1}, now, nil); err != nil {
+		t.Fatalf("finishRun failed: %v", err)
+	}
+	if sources.nextRun == nil || !sources.nextRun.Equal(now.Add(45*time.Minute)) {
+		t.Fatalf("NULL override did not use effective global interval: got %v", sources.nextRun)
+	}
+}
+
+func TestContentNewsWorkerFinishRunOverrideWinsOverGlobalEffectiveInterval(t *testing.T) {
+	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	sources := &contentNewsScheduleSourceStub{}
+	worker := &ContentNewsWorker{
+		sources: sources,
+		runs:    &contentNewsWorkerRunStub{},
+		now:     func() time.Time { return now },
+	}
+	globalInterval := 45
+	override := 120
+	source := &ContentNewsSource{ID: 1, IntervalMinutes: globalInterval, IntervalMinutesOverride: &override}
+	if _, err := worker.finishRun(context.Background(), source, &ContentFetchRun{ID: 1}, now, nil); err != nil {
+		t.Fatalf("finishRun failed: %v", err)
+	}
+	if sources.nextRun == nil || !sources.nextRun.Equal(now.Add(120*time.Minute)) {
+		t.Fatalf("override did not win over effective global interval: got %v", sources.nextRun)
 	}
 }

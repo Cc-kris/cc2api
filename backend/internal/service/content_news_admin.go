@@ -26,30 +26,31 @@ var (
 )
 
 type ContentNewsSource struct {
-	ID                 int64             `json:"id"`
-	CreatedAt          time.Time         `json:"createdAt"`
-	UpdatedAt          time.Time         `json:"updatedAt"`
-	DeletedAt          *time.Time        `json:"deletedAt,omitempty"`
-	Name               string            `json:"name"`
-	SourceType         string            `json:"sourceType"`
-	MappingJSON        map[string]string `json:"mappingJson,omitempty"`
-	URL                *string           `json:"url,omitempty"`
-	Language           string            `json:"language"`
-	Category           *string           `json:"category,omitempty"`
-	Enabled            bool              `json:"enabled"`
-	IntervalMinutes    int               `json:"intervalMinutes"`
-	ScheduleMinutes    int               `json:"scheduleMinutes"`
-	ScheduleLabel      string            `json:"scheduleLabel,omitempty"`
-	FetchCron          string            `json:"fetchCron,omitempty"`
-	RateLimitPerMinute int               `json:"rateLimitPerMinute"`
-	TermsConfirmedAt   *time.Time        `json:"termsConfirmedAt,omitempty"`
-	AuthorizationNote  *string           `json:"authorizationNote,omitempty"`
-	RobotsPolicy       *string           `json:"robotsPolicy,omitempty"`
-	NextRunAt          *time.Time        `json:"nextRunAt,omitempty"`
-	LastRunAt          *time.Time        `json:"lastRunAt,omitempty"`
-	LastError          *string           `json:"lastError,omitempty"`
-	CreatedBy          *int64            `json:"createdBy,omitempty"`
-	UpdatedBy          *int64            `json:"updatedBy,omitempty"`
+	ID                      int64             `json:"id"`
+	CreatedAt               time.Time         `json:"createdAt"`
+	UpdatedAt               time.Time         `json:"updatedAt"`
+	DeletedAt               *time.Time        `json:"deletedAt,omitempty"`
+	Name                    string            `json:"name"`
+	SourceType              string            `json:"sourceType"`
+	MappingJSON             map[string]string `json:"mappingJson,omitempty"`
+	URL                     *string           `json:"url,omitempty"`
+	Language                string            `json:"language"`
+	Category                *string           `json:"category,omitempty"`
+	Enabled                 bool              `json:"enabled"`
+	IntervalMinutes         int               `json:"-"`
+	IntervalMinutesOverride *int              `json:"intervalMinutes"`
+	ScheduleMinutes         int               `json:"scheduleMinutes"`
+	ScheduleLabel           string            `json:"scheduleLabel,omitempty"`
+	FetchCron               string            `json:"fetchCron,omitempty"`
+	RateLimitPerMinute      int               `json:"rateLimitPerMinute"`
+	TermsConfirmedAt        *time.Time        `json:"termsConfirmedAt,omitempty"`
+	AuthorizationNote       *string           `json:"authorizationNote,omitempty"`
+	RobotsPolicy            *string           `json:"robotsPolicy,omitempty"`
+	NextRunAt               *time.Time        `json:"nextRunAt,omitempty"`
+	LastRunAt               *time.Time        `json:"lastRunAt,omitempty"`
+	LastError               *string           `json:"lastError,omitempty"`
+	CreatedBy               *int64            `json:"createdBy,omitempty"`
+	UpdatedBy               *int64            `json:"updatedBy,omitempty"`
 }
 
 type ContentNewsItem struct {
@@ -89,22 +90,22 @@ type ContentNewsItem struct {
 }
 
 type ContentAutomationSetting struct {
-	ID                int64      `json:"id"`
-	Enabled           bool       `json:"enabled"`
-	Timezone          string     `json:"timezone"`
-	FetchCron         string     `json:"fetchCron"`
-	PublishMode       string     `json:"publishMode"`
-	DailyFetchLimit   int        `json:"dailyFetchLimit"`
-	DailyPublishLimit int        `json:"dailyPublishLimit"`
-	PublishStartAt    *time.Time `json:"publishStartAt,omitempty"`
-	PublishEndAt      *time.Time `json:"publishEndAt,omitempty"`
-	DedupeWindowHours int        `json:"dedupeWindowHours"`
-	PublishWindowStart string    `json:"publishWindowStart"`
-	PublishWindowEnd   string    `json:"publishWindowEnd"`
-	TargetLocales     []string   `json:"targetLocales"`
-	UpdatedBy         *int64     `json:"updatedBy,omitempty"`
-	CreatedAt         time.Time  `json:"createdAt"`
-	UpdatedAt         time.Time  `json:"updatedAt"`
+	ID                 int64      `json:"id"`
+	Enabled            bool       `json:"enabled"`
+	Timezone           string     `json:"timezone"`
+	FetchCron          string     `json:"fetchCron"`
+	PublishMode        string     `json:"publishMode"`
+	DailyFetchLimit    int        `json:"dailyFetchLimit"`
+	DailyPublishLimit  int        `json:"dailyPublishLimit"`
+	PublishStartAt     *time.Time `json:"publishStartAt,omitempty"`
+	PublishEndAt       *time.Time `json:"publishEndAt,omitempty"`
+	DedupeWindowHours  int        `json:"dedupeWindowHours"`
+	PublishWindowStart string     `json:"publishWindowStart"`
+	PublishWindowEnd   string     `json:"publishWindowEnd"`
+	TargetLocales      []string   `json:"targetLocales"`
+	UpdatedBy          *int64     `json:"updatedBy,omitempty"`
+	CreatedAt          time.Time  `json:"createdAt"`
+	UpdatedAt          time.Time  `json:"updatedAt"`
 }
 
 // MarshalJSON emits the publish window bounds as "HH:MM" because the admin form
@@ -342,9 +343,14 @@ func (s *ContentNewsAdminService) decorateNewsSchedule(ctx context.Context, item
 
 func applyNewsSchedule(item *ContentNewsSource, minutes int, label, cronExpr string) {
 	item.ScheduleMinutes = minutes
-	item.ScheduleLabel = label
 	item.FetchCron = cronExpr
-	item.IntervalMinutes = minutes
+	if item.IntervalMinutesOverride == nil {
+		item.IntervalMinutes = minutes
+		item.ScheduleLabel = fmt.Sprintf("跟随全局（%d 分钟）", minutes)
+		return
+	}
+	item.IntervalMinutes = *item.IntervalMinutesOverride
+	item.ScheduleLabel = fmt.Sprintf("每 %d 分钟", item.IntervalMinutes)
 }
 
 // contentScheduleMinutes derives the effective interval from a cron expression.
@@ -797,8 +803,11 @@ func (s *ContentNewsAdminService) UpdateFetchRun(ctx context.Context, run *Conte
 }
 
 func validateNewsSource(ctx context.Context, source *ContentNewsSource) error {
+	if source == nil {
+		return ErrContentNewsInvalidInput
+	}
 	source.Language = domain.NormalizeContentLocale(source.Language)
-	if source == nil || strings.TrimSpace(source.Name) == "" || len(strings.TrimSpace(source.Name)) > 80 || !domain.IsContentNewsSourceType(strings.TrimSpace(source.SourceType)) {
+	if strings.TrimSpace(source.Name) == "" || len(strings.TrimSpace(source.Name)) > 80 || !domain.IsContentNewsSourceType(strings.TrimSpace(source.SourceType)) {
 		return ErrContentNewsInvalidInput
 	}
 	source.Name = strings.TrimSpace(source.Name)
@@ -807,7 +816,10 @@ func validateNewsSource(ctx context.Context, source *ContentNewsSource) error {
 	if source.Language == "" {
 		source.Language = "zh-CN"
 	}
-	if source.IntervalMinutes < 15 || source.RateLimitPerMinute <= 0 {
+	if source.IntervalMinutesOverride != nil && (*source.IntervalMinutesOverride < 15 || *source.IntervalMinutesOverride > 1440) {
+		return ErrContentNewsInvalidInput
+	}
+	if source.RateLimitPerMinute <= 0 {
 		return ErrContentNewsInvalidInput
 	}
 	if source.URL != nil && strings.TrimSpace(*source.URL) != "" {

@@ -188,7 +188,7 @@ func (w *ContentNewsWorker) RunDueFetches(ctx context.Context, maxSources int) (
 	runs := make([]ContentFetchRun, 0, len(sources))
 	var errs []error
 	for _, source := range sources {
-		run, runErr := w.RunSource(ctx, source.ID, domain.ContentFetchTriggerCron)
+		run, runErr := w.runSource(ctx, source.ID, domain.ContentFetchTriggerCron, "", nil, source.IntervalMinutes)
 		if run != nil {
 			runs = append(runs, *run)
 		}
@@ -203,7 +203,7 @@ func (w *ContentNewsWorker) RunDueFetches(ctx context.Context, maxSources int) (
 // recorded as a failed run; per-entry failures result in partial success when at
 // least one entry was saved.
 func (w *ContentNewsWorker) RunSource(ctx context.Context, sourceID int64, trigger string) (*ContentFetchRun, error) {
-	return w.runSource(ctx, sourceID, trigger, "", nil)
+	return w.runSource(ctx, sourceID, trigger, "", nil, 0)
 }
 
 // RunSourceWithTaskKey is used by manual/retry endpoints so the persisted
@@ -214,7 +214,7 @@ func (w *ContentNewsWorker) RunSourceWithTaskKey(ctx context.Context, sourceID i
 			return found, nil
 		}
 	}
-	return w.runSource(ctx, sourceID, trigger, strings.TrimSpace(taskKey), nil)
+	return w.runSource(ctx, sourceID, trigger, strings.TrimSpace(taskKey), nil, 0)
 }
 
 // EnqueueSource persists a queued run and returns immediately. A scheduler
@@ -308,10 +308,10 @@ func (w *ContentNewsWorker) runSourceForExistingRun(ctx context.Context, run *Co
 	// Existing queued rows are claimed before execution; runSourceWithTaskKey
 	// would create a second row, so reuse the persisted task key and cleanly
 	// execute through the same pipeline after the claim.
-	return w.runSource(ctx, run.SourceID, run.TriggerType, run.TaskKey, run)
+	return w.runSource(ctx, run.SourceID, run.TriggerType, run.TaskKey, run, 0)
 }
 
-func (w *ContentNewsWorker) runSource(ctx context.Context, sourceID int64, trigger, taskKey string, existing *ContentFetchRun) (*ContentFetchRun, error) {
+func (w *ContentNewsWorker) runSource(ctx context.Context, sourceID int64, trigger, taskKey string, existing *ContentFetchRun, scheduledInterval int) (*ContentFetchRun, error) {
 	if w == nil || w.sources == nil || w.runs == nil || w.items == nil || w.fetcher == nil {
 		return nil, errors.New("content news worker dependencies are required")
 	}
@@ -330,6 +330,24 @@ func (w *ContentNewsWorker) runSource(ctx context.Context, sourceID int64, trigg
 	}
 	if err := contentNewsSourceMayFetch(source); err != nil {
 		return nil, err
+	}
+	// A due-list adapter resolves the NULL override against global automation
+	// settings. Preserve that worker-internal value across this source reload.
+	// An explicit per-source override always wins, including queued/manual runs.
+	switch {
+	case source.IntervalMinutesOverride != nil:
+		source.IntervalMinutes = *source.IntervalMinutesOverride
+	case scheduledInterval > 0:
+		source.IntervalMinutes = scheduledInterval
+	case source.IntervalMinutes <= 0:
+		policy, policyErr := w.workerPolicy(ctx)
+		if policyErr != nil {
+			return nil, policyErr
+		}
+		source.IntervalMinutes, _ = contentScheduleMinutes(policy.FetchCron)
+	}
+	if source.IntervalMinutes <= 0 {
+		return nil, errors.New("effective content news fetch interval is invalid")
 	}
 	now := w.clock().UTC()
 	if claimer, ok := w.sources.(ContentNewsSourceLeaseClaimer); ok {
@@ -583,7 +601,11 @@ func (w *ContentNewsWorker) finishRun(ctx context.Context, source *ContentNewsSo
 		value := contentNewsSafeError(cause)
 		sourceErr = &value
 	}
-	nextRun := now.Add(time.Duration(source.IntervalMinutes) * time.Minute)
+	intervalMinutes := source.IntervalMinutes
+	if source.IntervalMinutesOverride != nil {
+		intervalMinutes = *source.IntervalMinutesOverride
+	}
+	nextRun := now.Add(time.Duration(intervalMinutes) * time.Minute)
 	if leaseRepo, ok := w.sources.(ContentNewsWorkerLeaseRepository); ok {
 		var leaseUntil *time.Time
 		if source.NextRunAt != nil {

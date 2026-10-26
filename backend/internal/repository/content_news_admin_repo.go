@@ -65,7 +65,10 @@ func (r *contentNewsAdminRepository) GetNewsSource(ctx context.Context, id int64
 }
 
 func (r *contentNewsAdminRepository) CreateNewsSource(ctx context.Context, source *service.ContentNewsSource) (*service.ContentNewsSource, error) {
-	b := r.client.ContentNewsSource.Create().SetName(source.Name).SetSourceType(source.SourceType).SetMappingJSON(source.MappingJSON).SetLanguage(source.Language).SetEnabled(source.Enabled).SetIntervalMinutes(source.IntervalMinutes).SetRateLimitPerMinute(source.RateLimitPerMinute)
+	b := r.client.ContentNewsSource.Create().SetName(source.Name).SetSourceType(source.SourceType).SetMappingJSON(source.MappingJSON).SetLanguage(source.Language).SetEnabled(source.Enabled).SetRateLimitPerMinute(source.RateLimitPerMinute)
+	if source.IntervalMinutesOverride != nil {
+		b.SetIntervalMinutes(*source.IntervalMinutesOverride)
+	}
 	if source.URL != nil {
 		b.SetURL(*source.URL)
 	}
@@ -105,7 +108,12 @@ func (r *contentNewsAdminRepository) CreateNewsSource(ctx context.Context, sourc
 }
 
 func (r *contentNewsAdminRepository) UpdateNewsSource(ctx context.Context, source *service.ContentNewsSource) (*service.ContentNewsSource, error) {
-	b := r.client.ContentNewsSource.UpdateOneID(source.ID).SetName(source.Name).SetSourceType(source.SourceType).SetMappingJSON(source.MappingJSON).SetLanguage(source.Language).SetEnabled(source.Enabled).SetIntervalMinutes(source.IntervalMinutes).SetRateLimitPerMinute(source.RateLimitPerMinute)
+	b := r.client.ContentNewsSource.UpdateOneID(source.ID).SetName(source.Name).SetSourceType(source.SourceType).SetMappingJSON(source.MappingJSON).SetLanguage(source.Language).SetEnabled(source.Enabled).SetRateLimitPerMinute(source.RateLimitPerMinute)
+	if source.IntervalMinutesOverride != nil {
+		b.SetIntervalMinutes(*source.IntervalMinutesOverride)
+	} else {
+		b.ClearIntervalMinutes()
+	}
 	setOrClearString(b.SetURL, b.ClearURL, source.URL)
 	setOrClearString(b.SetCategory, b.ClearCategory, source.Category)
 	setOrClearTime(b.SetTermsConfirmedAt, b.ClearTermsConfirmedAt, source.TermsConfirmedAt)
@@ -381,7 +389,11 @@ func (r *contentNewsAdminRepository) UpdateFetchRun(ctx context.Context, run *se
 }
 
 func mapContentNewsSource(m *dbent.ContentNewsSource) service.ContentNewsSource {
-	return service.ContentNewsSource{ID: m.ID, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt, DeletedAt: m.DeletedAt, Name: m.Name, SourceType: m.SourceType, MappingJSON: m.MappingJSON, URL: m.URL, Language: m.Language, Category: m.Category, Enabled: m.Enabled, IntervalMinutes: m.IntervalMinutes, RateLimitPerMinute: m.RateLimitPerMinute, TermsConfirmedAt: m.TermsConfirmedAt, AuthorizationNote: m.AuthorizationNote, RobotsPolicy: m.RobotsPolicy, NextRunAt: m.NextRunAt, LastRunAt: m.LastRunAt, LastError: m.LastError, CreatedBy: m.CreatedBy, UpdatedBy: m.UpdatedBy}
+	interval := 0
+	if m.IntervalMinutes != nil {
+		interval = *m.IntervalMinutes
+	}
+	return service.ContentNewsSource{ID: m.ID, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt, DeletedAt: m.DeletedAt, Name: m.Name, SourceType: m.SourceType, MappingJSON: m.MappingJSON, URL: m.URL, Language: m.Language, Category: m.Category, Enabled: m.Enabled, IntervalMinutes: interval, IntervalMinutesOverride: m.IntervalMinutes, RateLimitPerMinute: m.RateLimitPerMinute, TermsConfirmedAt: m.TermsConfirmedAt, AuthorizationNote: m.AuthorizationNote, RobotsPolicy: m.RobotsPolicy, NextRunAt: m.NextRunAt, LastRunAt: m.LastRunAt, LastError: m.LastError, CreatedBy: m.CreatedBy, UpdatedBy: m.UpdatedBy}
 }
 func mapContentNewsSources(items []*dbent.ContentNewsSource) []service.ContentNewsSource {
 	out := make([]service.ContentNewsSource, len(items))
