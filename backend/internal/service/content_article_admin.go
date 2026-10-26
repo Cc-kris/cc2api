@@ -3,6 +3,8 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -369,6 +371,137 @@ func (s *ContentArticleAdminService) UpdateAIProviderConfig(ctx context.Context,
 	return s.GetAIProviderConfig(ctx)
 }
 
+// AIConfigRevision returns a stable optimistic concurrency token for the current config set.
+func aiConfigHash(configs []ContentAIProviderConfig, def string) string {
+	for i := range configs {
+		configs[i].APIKey = ""
+		configs[i].APIKeyMasked = ""
+		configs[i].HasAPIKey = false
+	}
+	b, _ := json.Marshal(struct {
+		Configs []ContentAIProviderConfig `json:"configs"`
+		Default string                    `json:"default"`
+	}{configs, def})
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+func ListAIProviderConfigs() ([]ContentAIProviderConfig, string, string, error) {
+	configs, def, err := contentAIStore().LoadAll()
+	if err != nil {
+		return nil, "", "", err
+	}
+	for i := range configs {
+		configs[i].IsDefault = configs[i].ID == def
+		configs[i].APIKey = ""
+	}
+	return configs, def, aiConfigHash(configs, def), nil
+}
+func (s *ContentArticleAdminService) MutateAIProviderConfig(ctx context.Context, action, id, revision string, input ContentAIProviderConfig) error {
+	contentAIMu.Lock()
+	defer contentAIMu.Unlock()
+	configs, def, err := contentAIStore().LoadAll()
+	if err != nil {
+		return err
+	}
+	if revision == "" || revision != aiConfigHash(configs, def) {
+		return fmt.Errorf("AI config revision conflict")
+	}
+	switch action {
+	case "save":
+		if strings.TrimSpace(input.Label) == "" || len([]rune(input.Label)) > 50 {
+			return fmt.Errorf("invalid configuration label")
+		}
+		if input.ID == "" {
+			input.ID = fmt.Sprintf("cfg-%d", time.Now().UnixNano())
+		}
+		found := false
+		for i, c := range configs {
+			if c.ID == input.ID {
+				if input.APIKey == "" {
+					input.APIKey = c.APIKey
+				}
+				configs[i] = input
+				found = true
+			} else if strings.EqualFold(strings.TrimSpace(c.Label), strings.TrimSpace(input.Label)) {
+				return fmt.Errorf("duplicate configuration label")
+			}
+		}
+		if !found {
+			configs = append(configs, input)
+		}
+		if input.IsDefault || def == "" {
+			def = input.ID
+		}
+	case "default":
+		found := false
+		for _, c := range configs {
+			if c.ID == id {
+				found = true
+			}
+		}
+		if !found {
+			return fmt.Errorf("configuration not found")
+		}
+		def = id
+	case "delete":
+		if id == def {
+			return fmt.Errorf("model_in_use: default configuration cannot be deleted")
+		}
+		for _, c := range configs {
+			if c.ID == id {
+				for _, t := range []string{"writing", "translation"} {
+					tasks, e := s.ListWritingTasks(ctx, t, 200)
+					if e != nil {
+						return e
+					}
+					for _, task := range tasks {
+						if task.ProviderKeyRef == id && (task.Status == ContentWritingQueued || task.Status == ContentWritingRunning) {
+							return fmt.Errorf("model_in_use")
+						}
+					}
+				}
+				filtered := configs[:0]
+				for _, cfg := range configs {
+					if cfg.ID != id {
+						filtered = append(filtered, cfg)
+					}
+				}
+				configs = filtered
+				goto deleted
+			}
+		}
+		return fmt.Errorf("configuration not found")
+	deleted:
+	}
+	return contentAIStore().SaveAll(configs, def)
+}
+
+// TestAIProviderConnection performs a non-persistent minimal models request.
+func TestAIProviderConnection(ctx context.Context, baseURL, key string) (map[string]any, error) {
+	start := time.Now()
+	u := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if u == "" {
+		return nil, fmt.Errorf("baseUrl required")
+	}
+	req, e := http.NewRequestWithContext(ctx, http.MethodGet, u+"/models", nil)
+	if e != nil {
+		return nil, e
+	}
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	client := http.Client{Timeout: 8 * time.Second}
+	resp, e := client.Do(req)
+	elapsed := time.Since(start).Milliseconds()
+	if e != nil {
+		return map[string]any{"ok": false, "latencyMs": elapsed, "error": e.Error()}, nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return map[string]any{"ok": false, "latencyMs": elapsed, "error": resp.Status}, nil
+	}
+	return map[string]any{"ok": true, "latencyMs": elapsed}, nil
+}
 func (s *ContentArticleAdminService) FetchAIProviderModels(ctx context.Context, reqBaseURL, reqAPIKey string) ([]string, ContentAIProviderConfig, error) {
 	current, err := loadContentAIProviderConfigWithError()
 	if err != nil {

@@ -367,3 +367,10 @@ func TestContentArticleTranslationWorkerBindsSourceVersion(t *testing.T) {
 	require.Equal(t, ContentWritingSucceeded, got.Status)
 	require.Contains(t, *got.Result, "translation:")
 }
+
+func TestAIConfigRevisionRejectsStaleToken(t *testing.T) {
+	old := contentAIConfigPath
+	contentAIConfigPath = filepath.Join(t.TempDir(), "ai.json")
+	defer func() { contentAIConfigPath = old }()
+	require.ErrorContains(t, (&ContentArticleAdminService{}).MutateAIProviderConfig(context.Background(), "default", "missing", "stale", ContentAIProviderConfig{}), "revision conflict")
+}

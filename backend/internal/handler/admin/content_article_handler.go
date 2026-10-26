@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -417,6 +418,58 @@ func (h *ContentArticleHandler) FetchAIModels(c *gin.Context) {
 		"config": cfg,
 	})
 }
+func (h *ContentArticleHandler) ListAIConfigs(c *gin.Context) {
+	cs, d, r, e := service.ListAIProviderConfigs()
+	if e != nil {
+		response.ErrorFrom(c, e)
+		return
+	}
+	c.Header("ETag", r)
+	response.Success(c, gin.H{"configs": cs, "defaultId": d, "revision": r})
+}
+func (h *ContentArticleHandler) MutateAIConfig(c *gin.Context) {
+	var in service.ContentAIProviderConfig
+	if e := c.ShouldBindJSON(&in); e != nil {
+		response.BadRequest(c, e.Error())
+		return
+	}
+	action := c.Param("action")
+	id := c.Param("id")
+	if id == "" {
+		id = in.ID
+	}
+	if e := h.svc.MutateAIProviderConfig(c.Request.Context(), action, id, c.GetHeader("If-Match"), in); e != nil {
+		reason := "AI_CONFIG_CONFLICT"
+		if strings.Contains(e.Error(), "revision conflict") {
+			reason = "config_revision_conflict"
+		} else if strings.Contains(e.Error(), "model_in_use") {
+			reason = "model_in_use"
+		}
+		response.ErrorFrom(c, infraerrors.Conflict(reason, e.Error()))
+		return
+	}
+	if action == "delete" {
+		c.Status(204)
+		return
+	}
+	h.ListAIConfigs(c)
+}
+func (h *ContentArticleHandler) TestAIConfig(c *gin.Context) {
+	var in struct {
+		BaseURL string `json:"baseUrl"`
+		APIKey  string `json:"apiKey"`
+	}
+	if e := c.ShouldBindJSON(&in); e != nil {
+		response.BadRequest(c, e.Error())
+		return
+	}
+	out, e := service.TestAIProviderConnection(c.Request.Context(), in.BaseURL, in.APIKey)
+	if e != nil {
+		response.ErrorFrom(c, e)
+		return
+	}
+	response.Success(c, out)
+}
 func (h *ContentArticleHandler) GetTaxonomy(c *gin.Context) {
 	cfg, e := h.svc.GetTaxonomy(c.Request.Context())
 	if e != nil {
@@ -493,6 +546,7 @@ func (h *ContentArticleHandler) CreateTranslationTask(c *gin.Context) {
 	}
 	response.Accepted(c, out)
 }
+
 // ListWritingTasks returns recent writing tasks (default kind=writing) for
 // the AI studio task panel. Query params: kind, limit.
 func (h *ContentArticleHandler) ListWritingTasks(c *gin.Context) {

@@ -98,6 +98,9 @@ export const contentAdminAPI = {
     apiClient.get("/admin/content/articles/ai-config"),
   updateAIConfig: (body: unknown) =>
     apiClient.put("/admin/content/articles/ai-config", body),
+  listAIConfigs: () => apiClient.get("/admin/content/articles/ai-configs"),
+  mutateAIConfig: (action: string, body: unknown, revision: string) => apiClient.post(`/admin/content/articles/ai-configs/${action}`, body, { headers: { "If-Match": revision } }),
+  testAIConfig: (body: unknown) => apiClient.post("/admin/content/articles/ai-config-test", body),
   fetchAIModels: (body: unknown) =>
     apiClient.post("/admin/content/articles/ai-config/fetch-models", body),
   getTaxonomy: () =>
