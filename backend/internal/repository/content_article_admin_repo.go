@@ -528,7 +528,7 @@ func maxArticleVersion(v int) int {
 	return v
 }
 func mapContentArticle(m *dbent.ContentArticle) service.ContentArticle {
-	return service.ContentArticle{ID: m.ID, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt, DeletedAt: m.DeletedAt, Locale: m.Locale, Slug: m.Slug, Title: m.Title, Excerpt: m.Excerpt, BodyMarkdown: m.BodyMarkdown, BodyHTML: m.BodyHTML, CoverImage: m.CoverImage, CoverAlt: m.CoverAlt, Category: m.Category, Tags: append([]string(nil), m.Tags...), Status: m.Status, AuthorID: m.AuthorID, Model: m.Model, SeoTitle: m.SeoTitle, SeoDescription: m.SeoDescription, CanonicalURL: m.CanonicalURL, OgImage: m.OgImage, PublishedAt: m.PublishedAt, Version: m.Version}
+	return service.ContentArticle{ID: m.ID, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt, DeletedAt: m.DeletedAt, Locale: m.Locale, Slug: m.Slug, Title: m.Title, Excerpt: m.Excerpt, BodyMarkdown: m.BodyMarkdown, BodyHTML: m.BodyHTML, CoverImage: m.CoverImage, CoverAlt: m.CoverAlt, Category: m.Category, Tags: append([]string(nil), m.Tags...), Status: m.Status, AuthorID: m.AuthorID, Model: m.Model, SeoTitle: m.SeoTitle, SeoDescription: m.SeoDescription, CanonicalURL: m.CanonicalURL, OgImage: m.OgImage, PublishedAt: m.PublishedAt, FeaturedAt: m.FeaturedAt, Version: m.Version}
 }
 func mapContentArticles(xs []*dbent.ContentArticle) []service.ContentArticle {
 	out := make([]service.ContentArticle, 0, len(xs))
@@ -586,6 +586,9 @@ func setArticleOptional(b *dbent.ContentArticleCreate, a *service.ContentArticle
 	}
 	if a.PublishedAt != nil {
 		b.SetPublishedAt(*a.PublishedAt)
+	}
+	if a.FeaturedAt != nil {
+		b.SetFeaturedAt(*a.FeaturedAt)
 	}
 }
 func setArticleOptionalUpdate(b *dbent.ContentArticleUpdate, a *service.ContentArticle) {
@@ -653,6 +656,11 @@ func setArticleOptionalUpdate(b *dbent.ContentArticleUpdate, a *service.ContentA
 		b.SetPublishedAt(*a.PublishedAt)
 	} else {
 		b.ClearPublishedAt()
+	}
+	if a.FeaturedAt != nil {
+		b.SetFeaturedAt(*a.FeaturedAt)
+	} else {
+		b.ClearFeaturedAt()
 	}
 }
 func setTranslationOptional(b *dbent.ContentTranslationCreate, t *service.ContentTranslation) {

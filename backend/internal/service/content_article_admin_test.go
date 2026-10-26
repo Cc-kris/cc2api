@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -38,6 +40,9 @@ func TestContentArticleAuditCarriesActorAndPropagatesError(t *testing.T) {
 type articleRepoStub struct {
 	article  ContentArticle
 	expected int
+	articles []ContentArticle
+	updates  map[int64]ContentArticle
+	pages    []int
 }
 
 type contentWritingExecutorStub struct {
@@ -58,10 +63,37 @@ func (s contentTranslationExecutorStub) Translate(context.Context, *ContentWriti
 	return s.result, s.err
 }
 
-func (r *articleRepoStub) ListArticles(context.Context, ContentArticleFilters, int, int) ([]ContentArticle, int, error) {
-	return []ContentArticle{r.article}, 1, nil
+func (r *articleRepoStub) ListArticles(_ context.Context, _ ContentArticleFilters, page, size int) ([]ContentArticle, int, error) {
+	if len(r.articles) == 0 {
+		return []ContentArticle{r.article}, 1, nil
+	}
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 {
+		size = len(r.articles)
+	}
+	r.pages = append(r.pages, page)
+	start := (page - 1) * size
+	if start >= len(r.articles) {
+		return []ContentArticle{}, len(r.articles), nil
+	}
+	end := start + size
+	if end > len(r.articles) {
+		end = len(r.articles)
+	}
+	items := append([]ContentArticle(nil), r.articles[start:end]...)
+	return items, len(r.articles), nil
 }
-func (r *articleRepoStub) GetArticle(context.Context, int64, bool) (*ContentArticle, error) {
+func (r *articleRepoStub) GetArticle(_ context.Context, id int64, _ bool) (*ContentArticle, error) {
+	if len(r.articles) > 0 {
+		for i := range r.articles {
+			if r.articles[i].ID == id {
+				a := r.articles[i]
+				return &a, nil
+			}
+		}
+	}
 	a := r.article
 	return &a, nil
 }
@@ -73,6 +105,24 @@ func (r *articleRepoStub) CreateArticle(_ context.Context, a *ContentArticle) (*
 }
 func (r *articleRepoStub) UpdateArticle(_ context.Context, a *ContentArticle, expected int) (*ContentArticle, error) {
 	r.expected = expected
+	if len(r.articles) > 0 {
+		for i := range r.articles {
+			if r.articles[i].ID != a.ID {
+				continue
+			}
+			if expected != r.articles[i].Version {
+				return nil, ErrContentArticleConflict
+			}
+			a.Version++
+			r.articles[i] = *a
+			if r.updates == nil {
+				r.updates = make(map[int64]ContentArticle)
+			}
+			r.updates[a.ID] = *a
+			return a, nil
+		}
+		return nil, ErrContentArticleNotFound
+	}
 	if expected != r.article.Version {
 		return nil, ErrContentArticleConflict
 	}
@@ -102,6 +152,144 @@ func (r *articleRepoStub) UpdateTranslation(_ context.Context, t *ContentTransla
 	return t, nil
 }
 func (r *articleRepoStub) SoftDeleteTranslation(context.Context, int64, time.Time) error { return nil }
+
+func isolateContentTaxonomyForTest(t *testing.T, cfg ContentTaxonomyConfig) {
+	t.Helper()
+	contentTaxonomyMu.Lock()
+	originalPath := contentTaxonomyPath
+	contentTaxonomyPath = filepath.Join(t.TempDir(), "content_taxonomy.json")
+	contentTaxonomyMu.Unlock()
+	t.Cleanup(func() {
+		contentTaxonomyMu.Lock()
+		contentTaxonomyPath = originalPath
+		contentTaxonomyMu.Unlock()
+	})
+	require.NoError(t, saveContentTaxonomyConfig(cfg))
+}
+
+func TestContentArticleTaxonomyFeaturedMutationReconcilesLegacyState(t *testing.T) {
+	for _, action := range []string{"set", "unset"} {
+		t.Run(action, func(t *testing.T) {
+			isolateContentTaxonomyForTest(t, ContentTaxonomyConfig{
+				ArticleCategories: []string{"News"}, NewsCategories: []string{}, Tags: []string{}, FeaturedArticleIDs: []int64{7, 8, 7},
+			})
+			featuredAt := time.Now().UTC().Add(-time.Hour)
+			r := &articleRepoStub{article: ContentArticle{
+				ID: 7, Status: domain.ContentStatusPublished, Version: 1,
+				Tags: []string{"API", "精选", " legacy ", "精选"}, FeaturedAt: &featuredAt,
+			}}
+			s := NewContentArticleAdminService(r, nil, nil)
+			cfg, err := s.MutateTaxonomy(context.Background(), "featured_article", action, "7", "")
+			require.NoError(t, err)
+			require.Equal(t, []string{"API", " legacy "}, r.article.Tags)
+			require.Equal(t, []int64{8}, cfg.FeaturedArticleIDs)
+			if action == "set" {
+				require.NotNil(t, r.article.FeaturedAt)
+			} else {
+				require.Nil(t, r.article.FeaturedAt)
+			}
+			persisted, err := os.ReadFile(contentTaxonomyPath)
+			require.NoError(t, err)
+			require.NotContains(t, string(persisted), "featuredArticleIds\": [\n    7")
+			require.Equal(t, []int64{8}, loadContentTaxonomyConfig().FeaturedArticleIDs)
+		})
+	}
+}
+
+func TestContentArticleTaxonomyRenameAndDeleteTraverseAllPages(t *testing.T) {
+	for _, tc := range []struct {
+		scope, action string
+		category      bool
+	}{
+		{scope: "article_category", action: "rename", category: true},
+		{scope: "article_category", action: "delete", category: true},
+		{scope: "tag", action: "rename"},
+		{scope: "tag", action: "delete"},
+	} {
+		t.Run(tc.scope+"/"+tc.action, func(t *testing.T) {
+			cfg := ContentTaxonomyConfig{ArticleCategories: []string{"Old", "Other"}, NewsCategories: []string{}, Tags: []string{"OldTag", "OtherTag"}}
+			isolateContentTaxonomyForTest(t, cfg)
+			articles := make([]ContentArticle, 205)
+			for i := range articles {
+				art := ContentArticle{ID: int64(i + 1), Version: 1, Status: domain.ContentStatusDraft}
+				if tc.category {
+					value := "Other"
+					if i == 0 || i == len(articles)-1 {
+						value = "Old"
+					}
+					art.Category = &value
+				} else if i == 0 || i == len(articles)-1 {
+					art.Tags = []string{"OldTag", "OtherTag", "OldTag"}
+				} else {
+					art.Tags = []string{"OtherTag"}
+				}
+				articles[i] = art
+			}
+			r := &articleRepoStub{articles: articles}
+			s := NewContentArticleAdminService(r, nil, nil)
+			newName := "New"
+			if !tc.category {
+				newName = "NewTag"
+			}
+			_, err := s.MutateTaxonomy(context.Background(), tc.scope, tc.action, func() string {
+				if tc.category {
+					return "Old"
+				}
+				return "OldTag"
+			}(), newName)
+			require.NoError(t, err)
+			require.Equal(t, []int{1, 2}, r.pages, "must fetch every page before updating records")
+			require.Len(t, r.updates, 2, "first and last page records should both be reconciled")
+			for _, id := range []int64{1, 205} {
+				updated := r.updates[id]
+				if tc.category {
+					want := "Other"
+					if tc.action == "rename" {
+						want = newName
+					}
+					require.Equal(t, want, *updated.Category)
+				} else if tc.action == "rename" {
+					require.Equal(t, []string{"NewTag", "OtherTag"}, updated.Tags)
+				} else {
+					require.Equal(t, []string{"OtherTag"}, updated.Tags)
+				}
+			}
+		})
+	}
+}
+
+func TestContentArticleTaxonomyRejectsInvalidFeaturedAction(t *testing.T) {
+	r := &articleRepoStub{article: ContentArticle{ID: 1, Status: domain.ContentStatusPublished, Version: 1}}
+	s := NewContentArticleAdminService(r, nil, nil)
+	_, err := s.MutateTaxonomy(context.Background(), "featured_article", "delete", "1", "")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must be set or unset")
+	require.Equal(t, 0, r.expected, "invalid action must not update the article")
+}
+
+func TestContentArticleTaxonomyRejectsDraftFeaturedArticle(t *testing.T) {
+	r := &articleRepoStub{article: ContentArticle{ID: 1, Status: domain.ContentStatusDraft, Version: 1}}
+	s := NewContentArticleAdminService(r, nil, nil)
+	_, err := s.MutateTaxonomy(context.Background(), "featured_article", "set", "1", "")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "only published")
+	require.Nil(t, r.article.FeaturedAt)
+	require.Equal(t, 0, r.expected, "draft must not update the article")
+}
+
+func TestContentArticleTaxonomyPersistsFeaturedAtOnSetAndUnset(t *testing.T) {
+	isolateContentTaxonomyForTest(t, ContentTaxonomyConfig{ArticleCategories: []string{}, NewsCategories: []string{}, Tags: []string{}})
+	r := &articleRepoStub{article: ContentArticle{ID: 1, Status: domain.ContentStatusPublished, Version: 1}}
+	s := NewContentArticleAdminService(r, nil, nil)
+	_, err := s.MutateTaxonomy(context.Background(), "featured_article", "set", "1", "")
+	require.NoError(t, err)
+	require.NotNil(t, r.article.FeaturedAt)
+	require.False(t, r.article.IsFeatured, "repository state derives IsFeatured at read/decorate time")
+
+	_, err = s.MutateTaxonomy(context.Background(), "featured_article", "unset", "1", "")
+	require.NoError(t, err)
+	require.Nil(t, r.article.FeaturedAt)
+}
 
 func TestContentArticleAdminPublishRequiresSEOAndBody(t *testing.T) {
 	r := &articleRepoStub{article: ContentArticle{ID: 1, Locale: "zh-CN", Slug: "seo", Title: "SEO", Status: "draft", Version: 1}}

@@ -58,12 +58,10 @@ type ContentArticle struct {
 	CanonicalURL   *string    `json:"canonicalUrl,omitempty"`
 	OgImage        *string    `json:"ogImage,omitempty"`
 	PublishedAt    *time.Time `json:"publishedAt,omitempty"`
+	FeaturedAt     *time.Time `json:"featuredAt,omitempty"`
 	ReadCount      int        `json:"readCount"`
 	Version        int        `json:"version"`
-	// IsFeatured is a derived view flag (not a DB column): true when the
-	// article carries the 精选/featured tag or its ID is listed in the
-	// taxonomy FeaturedArticleIDs config. Admin list/detail decorate it so
-	// the UI can render a dedicated featured toggle (需求 C8/P2).
+	// IsFeatured is derived from FeaturedAt, the database source of truth.
 	IsFeatured bool `json:"isFeatured"`
 }
 
@@ -218,8 +216,8 @@ type ContentAIProviderConfig struct {
 }
 
 var (
-	contentAIMu     sync.RWMutex
-	contentAICache  *ContentAIProviderConfig
+	contentAIMu         sync.RWMutex
+	contentAICache      *ContentAIProviderConfig
 	contentAIConfigPath = filepath.Join("data", "content_ai_provider.json")
 )
 
@@ -452,7 +450,6 @@ func (s *ContentArticleAdminService) FetchAIProviderModels(ctx context.Context, 
 	return fetchedModels, resultCfg, nil
 }
 
-
 type ContentTaxonomyConfig struct {
 	ArticleCategories  []string `json:"articleCategories"`
 	NewsCategories     []string `json:"newsCategories"`
@@ -529,46 +526,70 @@ func (s *ContentArticleAdminService) GetTaxonomy(ctx context.Context) (ContentTa
 	return loadContentTaxonomyConfig(), nil
 }
 
-// isArticleFeatured reports whether an article is marked as featured: either
-// its tags contain 精选/featured, or its ID is present in the taxonomy
-// FeaturedArticleIDs config.
-func isArticleFeatured(a *ContentArticle, featuredIDs []int64) bool {
-	if a == nil {
-		return false
+const contentTaxonomyArticlePageSize = 200
+
+// listAllArticlesForTaxonomyMutation snapshots every article before any
+// category/tag update changes UpdatedAt and therefore the repository order.
+func (s *ContentArticleAdminService) listAllArticlesForTaxonomyMutation(ctx context.Context) ([]ContentArticle, error) {
+	if s.repo == nil {
+		return nil, nil
 	}
-	for _, t := range a.Tags {
-		trimmed := strings.TrimSpace(t)
-		if trimmed == "精选" || strings.EqualFold(trimmed, "featured") {
-			return true
+	all := make([]ContentArticle, 0)
+	page := 1
+	total := 0
+	for {
+		items, pageTotal, err := s.repo.ListArticles(ctx, ContentArticleFilters{IncludeDeleted: true}, page, contentTaxonomyArticlePageSize)
+		if err != nil {
+			return nil, err
 		}
-	}
-	for _, id := range featuredIDs {
-		if id == a.ID {
-			return true
+		if page == 1 || pageTotal > total {
+			total = pageTotal
 		}
+		all = append(all, items...)
+		if len(items) == 0 || len(items) < contentTaxonomyArticlePageSize || (total > 0 && len(all) >= total) {
+			break
+		}
+		page++
 	}
-	return false
+	return all, nil
 }
 
-// decorateFeatured flags IsFeatured on admin-facing payloads so list/detail
-// endpoints can expose the state without a dedicated DB column.
+func isArticleFeatured(a *ContentArticle, _ []int64) bool {
+	return a != nil && a.FeaturedAt != nil
+}
+
+// decorateFeatured exposes the persisted featured state on admin payloads.
 func (s *ContentArticleAdminService) decorateFeatured(a *ContentArticle) {
 	if a == nil {
 		return
 	}
-	a.IsFeatured = isArticleFeatured(a, loadContentTaxonomyConfig().FeaturedArticleIDs)
+	a.IsFeatured = isArticleFeatured(a, nil)
 }
 
 func (s *ContentArticleAdminService) MutateTaxonomy(ctx context.Context, scope, action, name, newName string) (ContentTaxonomyConfig, error) {
 	cfg := loadContentTaxonomyConfig()
+	cleanScope := strings.TrimSpace(scope)
+	cleanAction := strings.TrimSpace(action)
 	cleanName := strings.TrimSpace(name)
 	cleanNew := strings.TrimSpace(newName)
 	if cleanName == "" {
 		return cfg, errors.New("name is required")
 	}
+	if cleanScope == "featured_article" {
+		if cleanAction != "set" && cleanAction != "unset" {
+			return cfg, errors.New("invalid featured_article action: must be set or unset")
+		}
+	} else {
+		if cleanAction != "add" && cleanAction != "rename" && cleanAction != "delete" {
+			return cfg, errors.New("invalid taxonomy action")
+		}
+		if cleanAction == "rename" && cleanNew == "" {
+			return cfg, errors.New("newName is required for rename")
+		}
+	}
 
 	mutateSlice := func(list []string) []string {
-		switch action {
+		switch cleanAction {
 		case "add":
 			for _, item := range list {
 				if item == cleanName {
@@ -608,78 +629,78 @@ func (s *ContentArticleAdminService) MutateTaxonomy(ctx context.Context, scope, 
 		return list
 	}
 
-	switch scope {
+	switch cleanScope {
 	case "featured_article":
 		artID, parseErr := strconv.ParseInt(cleanName, 10, 64)
 		if parseErr != nil || artID <= 0 {
 			return cfg, errors.New("invalid article id for featured_article")
 		}
-		var isFeaturedNow bool
-		if s.repo != nil {
-			art, getErr := s.repo.GetArticle(ctx, artID, false)
-			if getErr == nil && art != nil {
-				tags := art.Tags
-				hasFeatured := false
-				newTags := make([]string, 0, len(tags))
-				for _, t := range tags {
-					trimmed := strings.TrimSpace(t)
-					if trimmed == "精选" || strings.EqualFold(trimmed, "featured") {
-						hasFeatured = true
-					} else {
-						newTags = append(newTags, t)
-					}
-				}
-				targetState := !hasFeatured
-				if action == "set" {
-					targetState = true
-				} else if action == "unset" {
-					targetState = false
-				}
-				if targetState {
-					newTags = append(newTags, "精选")
-				}
-				isFeaturedNow = targetState
-				artCopy := *art
-				artCopy.Tags = newTags
-				_, _ = s.repo.UpdateArticle(ctx, &artCopy, art.Version)
+		if s.repo == nil {
+			return cfg, errors.New("article repository unavailable")
+		}
+		art, getErr := s.repo.GetArticle(ctx, artID, false)
+		if getErr != nil {
+			return cfg, fmt.Errorf("get article for featured mutation: %w", getErr)
+		}
+		if art == nil {
+			return cfg, ErrContentArticleNotFound
+		}
+		if cleanAction == "set" && art.Status != domain.ContentStatusPublished {
+			return cfg, errors.New("only published articles can be featured")
+		}
+		artCopy := *art
+		if cleanAction == "set" {
+			now := time.Now().UTC()
+			artCopy.FeaturedAt = &now
+		} else {
+			artCopy.FeaturedAt = nil
+		}
+		// FeaturedAt is the only source of truth. Remove the legacy marker
+		// from the article and taxonomy snapshot whenever its featured state is
+		// explicitly reconciled.
+		artCopy.Tags = make([]string, 0, len(art.Tags))
+		for _, tag := range art.Tags {
+			if strings.TrimSpace(tag) != "精选" {
+				artCopy.Tags = append(artCopy.Tags, tag)
 			}
 		}
-		// Sync FeaturedArticleIDs in taxonomy config
-		newFeaturedIDs := make([]int64, 0, len(cfg.FeaturedArticleIDs))
+		featuredIDs := make([]int64, 0, len(cfg.FeaturedArticleIDs))
 		for _, id := range cfg.FeaturedArticleIDs {
 			if id != artID {
-				newFeaturedIDs = append(newFeaturedIDs, id)
+				featuredIDs = append(featuredIDs, id)
 			}
 		}
-		if isFeaturedNow {
-			newFeaturedIDs = append(newFeaturedIDs, artID)
+		cfg.FeaturedArticleIDs = featuredIDs
+		if _, updateErr := s.repo.UpdateArticle(ctx, &artCopy, art.Version); updateErr != nil {
+			return cfg, fmt.Errorf("update article featured state: %w", updateErr)
 		}
-		cfg.FeaturedArticleIDs = newFeaturedIDs
-		// 精选状态影响前台精选卡片，立即失效公开内容缓存。
 		InvalidatePublicContentCache()
 	case "article_category":
 		cfg.ArticleCategories = mutateSlice(cfg.ArticleCategories)
-		if (action == "rename" || action == "delete") && s.repo != nil {
+		if (cleanAction == "rename" || cleanAction == "delete") && s.repo != nil {
 			replacement := cleanNew
-			if action == "delete" {
+			if cleanAction == "delete" {
 				if len(cfg.ArticleCategories) > 0 {
 					replacement = cfg.ArticleCategories[0]
 				} else {
 					replacement = "未分类"
 				}
 			}
-			items, _, err := s.repo.ListArticles(ctx, ContentArticleFilters{IncludeDeleted: true}, 1, 200)
-			if err == nil {
-				for _, art := range items {
-					catVal := ""
-					if art.Category != nil {
-						catVal = strings.TrimSpace(*art.Category)
-					}
-					if catVal == cleanName {
-						artCopy := art
-						repCopy := replacement
-						artCopy.Category = &repCopy
-						_, _ = s.repo.UpdateArticle(ctx, &artCopy, art.Version)
+			items, err := s.listAllArticlesForTaxonomyMutation(ctx)
+			if err != nil {
+				return cfg, fmt.Errorf("list articles for category mutation: %w", err)
+			}
+			for _, art := range items {
+				catVal := ""
+				if art.Category != nil {
+					catVal = strings.TrimSpace(*art.Category)
+				}
+				if catVal == cleanName {
+					artCopy := art
+					repCopy := replacement
+					artCopy.Category = &repCopy
+					if _, updateErr := s.repo.UpdateArticle(ctx, &artCopy, art.Version); updateErr != nil {
+						return cfg, fmt.Errorf("update article category: %w", updateErr)
 					}
 				}
 			}
@@ -688,26 +709,29 @@ func (s *ContentArticleAdminService) MutateTaxonomy(ctx context.Context, scope, 
 		cfg.NewsCategories = mutateSlice(cfg.NewsCategories)
 	case "tag":
 		cfg.Tags = mutateSlice(cfg.Tags)
-		if (action == "rename" || action == "delete") && s.repo != nil {
-			items, _, err := s.repo.ListArticles(ctx, ContentArticleFilters{IncludeDeleted: true}, 1, 200)
-			if err == nil {
-				for _, art := range items {
-					changed := false
-					newTags := make([]string, 0, len(art.Tags))
-					for _, tg := range art.Tags {
-						if strings.TrimSpace(tg) == cleanName {
-							changed = true
-							if action == "rename" && cleanNew != "" && !slicesContains(newTags, cleanNew) {
-								newTags = append(newTags, cleanNew)
-							}
-						} else if !slicesContains(newTags, tg) {
-							newTags = append(newTags, tg)
+		if (cleanAction == "rename" || cleanAction == "delete") && s.repo != nil {
+			items, err := s.listAllArticlesForTaxonomyMutation(ctx)
+			if err != nil {
+				return cfg, fmt.Errorf("list articles for tag mutation: %w", err)
+			}
+			for _, art := range items {
+				changed := false
+				newTags := make([]string, 0, len(art.Tags))
+				for _, tg := range art.Tags {
+					if strings.TrimSpace(tg) == cleanName {
+						changed = true
+						if cleanAction == "rename" && !slicesContains(newTags, cleanNew) {
+							newTags = append(newTags, cleanNew)
 						}
+					} else if !slicesContains(newTags, tg) {
+						newTags = append(newTags, tg)
 					}
-					if changed {
-						artCopy := art
-						artCopy.Tags = newTags
-						_, _ = s.repo.UpdateArticle(ctx, &artCopy, art.Version)
+				}
+				if changed {
+					artCopy := art
+					artCopy.Tags = newTags
+					if _, updateErr := s.repo.UpdateArticle(ctx, &artCopy, art.Version); updateErr != nil {
+						return cfg, fmt.Errorf("update article tags: %w", updateErr)
 					}
 				}
 			}
@@ -731,7 +755,6 @@ func slicesContains(list []string, item string) bool {
 	}
 	return false
 }
-
 
 type GatewayContentWritingExecutor struct {
 	gateway *GatewayService
@@ -1183,9 +1206,8 @@ func (s *ContentArticleAdminService) List(ctx context.Context, f ContentArticleF
 	page, size = normalizeContentPage(page, size)
 	xs, total, e := s.repo.ListArticles(ctx, f, page, size)
 	if e == nil {
-		featuredIDs := loadContentTaxonomyConfig().FeaturedArticleIDs
 		for i := range xs {
-			xs[i].IsFeatured = isArticleFeatured(&xs[i], featuredIDs)
+			s.decorateFeatured(&xs[i])
 		}
 	}
 	return makeContentPage(xs, total, page, size), e
