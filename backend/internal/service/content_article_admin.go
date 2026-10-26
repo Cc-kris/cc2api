@@ -35,6 +35,10 @@ var (
 	ErrContentWritingTaskNotFound        = errors.New("content writing task not found")
 	ErrContentWritingExecutorMissing     = errors.New("content writing executor unavailable")
 	ErrContentTranslationExecutorMissing = errors.New("content translation executor unavailable")
+	ErrContentAIModelNotConfigured       = errors.New("model_not_configured")
+	ErrContentAIModelUnavailable         = errors.New("model_not_available")
+	ErrContentAIUnavailable              = errors.New("content AI provider unavailable")
+	ErrContentSEOResultInvalid           = errors.New("generated SEO result is outside the allowed boundaries")
 )
 
 type ContentArticle struct {
@@ -197,6 +201,22 @@ type ContentWritingResult struct {
 // provider call or storing credentials in the content module.
 type ContentWritingExecutor interface {
 	Generate(context.Context, *ContentWritingTask) (*ContentWritingResult, error)
+}
+
+type ContentSEOInput struct {
+	Title        string
+	BodyMarkdown string
+	BodyHTML     string
+}
+
+type ContentSEOResult struct {
+	Description string   `json:"description"`
+	Keywords    []string `json:"keywords"`
+	Model       string   `json:"model,omitempty"`
+}
+
+type ContentSEOExecutor interface {
+	GenerateSEO(context.Context, string, ContentSEOInput) (*ContentSEOResult, error)
 }
 
 type ContentTranslationExecutor interface {
@@ -902,6 +922,152 @@ func NewGatewayContentWritingExecutor(gateway *GatewayService, groupID *int64) *
 	return &GatewayContentWritingExecutor{gateway: gateway, groupID: groupID}
 }
 
+func (e *GatewayContentWritingExecutor) GenerateSEO(ctx context.Context, model string, input ContentSEOInput) (*ContentSEOResult, error) {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return nil, ErrContentAIModelNotConfigured
+	}
+	cfg, err := loadContentAIProviderConfigWithError()
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(cfg.DefaultModel) == "" || !strings.EqualFold(strings.TrimSpace(cfg.DefaultModel), model) {
+		return nil, ErrContentAIModelNotConfigured
+	}
+	if strings.TrimSpace(cfg.APIKey) == "" || strings.TrimSpace(cfg.BaseURL) == "" {
+		return nil, ErrContentAIUnavailable
+	}
+	endpoint := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
+	if strings.HasSuffix(endpoint, "/v1") {
+		endpoint += "/chat/completions"
+	} else if !strings.HasSuffix(endpoint, "/chat/completions") {
+		endpoint += "/v1/chat/completions"
+	}
+	prompt := buildContentSEOPrompt(input)
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		raw, err := doContentAIChatRequest(ctx, endpoint, cfg.APIKey, model, prompt, contentSEOSystemPrompt)
+		if err != nil {
+			return nil, err
+		}
+		result, parseErr := parseContentSEOResult(raw)
+		if parseErr == nil && validateContentSEOResult(result) == nil {
+			result.Model = model
+			return result, nil
+		}
+		if attempt == 0 {
+			prompt += "\n上次结果未通过校验，请重新生成；描述必须严格为 120-160 个 Unicode 字符，关键词必须为 5-8 个，并按 JSON 格式输出。"
+		}
+	}
+	return nil, ErrContentSEOResultInvalid
+}
+
+func buildContentSEOPrompt(input ContentSEOInput) string {
+	return fmt.Sprintf("为以下文章生成 SEO 描述与关键词。只允许输出 JSON：{\\\"description\\\":\\\"...\\\",\\\"keywords\\\":[\\\"...\\\"]}。描述控制在 120-160 个 Unicode 字符，关键词 5-8 个。标题：%s\\n正文：%s\\n%s", strings.TrimSpace(input.Title), strings.TrimSpace(input.BodyMarkdown), strings.TrimSpace(input.BodyHTML))
+}
+
+func parseContentSEOResult(raw []byte) (*ContentSEOResult, error) {
+	content, err := extractContentAIResponse(raw)
+	if err != nil {
+		return nil, err
+	}
+	var result ContentSEOResult
+	if err := json.Unmarshal([]byte(content), &result); err != nil {
+		return nil, errors.New("invalid generated SEO JSON")
+	}
+	return &result, nil
+}
+
+func validateContentSEOResult(result *ContentSEOResult) error {
+	if result == nil {
+		return ErrContentSEOResultInvalid
+	}
+	description := strings.TrimSpace(result.Description)
+	if length := len([]rune(description)); length < 120 || length > 160 {
+		return ErrContentSEOResultInvalid
+	}
+	keywords := make([]string, 0, len(result.Keywords))
+	seen := make(map[string]struct{}, len(result.Keywords))
+	for _, keyword := range result.Keywords {
+		keyword = strings.TrimSpace(keyword)
+		key := strings.ToLower(keyword)
+		if keyword == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		keywords = append(keywords, keyword)
+	}
+	if len(keywords) < 5 || len(keywords) > 8 {
+		return ErrContentSEOResultInvalid
+	}
+	result.Description = description
+	result.Keywords = keywords
+	return nil
+}
+
+func doContentAIChatRequest(ctx context.Context, endpoint, apiKey, model, prompt, systemPrompt string) ([]byte, error) {
+	payload := map[string]any{"model": model, "max_tokens": 1200, "messages": []map[string]string{{"role": "system", "content": systemPrompt}, {"role": "user", "content": prompt}}, "stream": false}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	resp, err := (&http.Client{Timeout: 65 * time.Second}).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("upstream AI status %d", resp.StatusCode)
+	}
+	return raw, nil
+}
+
+func extractContentAIResponse(raw []byte) (string, error) {
+	var envelope struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return "", err
+	}
+	var content string
+	if len(envelope.Choices) > 0 {
+		content = strings.TrimSpace(envelope.Choices[0].Message.Content)
+	}
+	if content == "" && len(envelope.Content) > 0 {
+		content = strings.TrimSpace(envelope.Content[0].Text)
+	}
+	content = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(content, "```json"), "```"))
+	if start, end := strings.IndexByte(content, '{'), strings.LastIndexByte(content, '}'); start >= 0 && end > start {
+		content = content[start : end+1]
+	}
+	if content == "" {
+		return "", errors.New("empty AI response")
+	}
+	return content, nil
+}
+
 func (e *GatewayContentWritingExecutor) Generate(ctx context.Context, task *ContentWritingTask) (*ContentWritingResult, error) {
 	if e == nil || task == nil {
 		return nil, ErrContentWritingExecutorMissing
@@ -1128,6 +1294,7 @@ func buildContentWritingPrompt(task *ContentWritingTask) string {
 }
 
 const contentWritingSystemPrompt = "你是 CCAI 的资深技术主编与 SEO 架构专家。不要长篇推理思考，立即直接输出合法的 JSON 对象（包含 slug, title, excerpt, body_markdown, seo_title, seo_description），不要输出 JSON 以外的任何文字。"
+const contentSEOSystemPrompt = "你是 SEO 编辑助手。只输出 JSON 对象，包含 description 字符串和 keywords 字符串数组。description 为 120-160 个 Unicode 字符，keywords 为 5-8 个不重复关键词。"
 
 func parseContentWritingResult(raw []byte) (*ContentWritingResult, error) {
 	var envelope struct {
@@ -1260,11 +1427,13 @@ type ContentArticleAdminService struct {
 	catalog             ContentModelCatalog
 	tasks               ContentWritingTaskStore
 	executor            ContentWritingExecutor
+	seoExecutor         ContentSEOExecutor
 	translationExecutor ContentTranslationExecutor
 	workerMu            sync.Mutex
 	workerCancel        context.CancelFunc
 	workerDone          chan struct{}
 	audit               ContentAuditLogger
+	defaultModel        string
 }
 
 type ContentAuditEntry struct {
@@ -1301,10 +1470,52 @@ func contentAuditActor(ctx context.Context) *int64 {
 
 func NewContentArticleAdminService(repo ContentArticleRepository, catalog ContentModelCatalog, tasks ContentWritingTaskStore, audit ...ContentAuditLogger) *ContentArticleAdminService {
 	s := &ContentArticleAdminService{repo: repo, catalog: catalog, tasks: tasks}
+	if cfg, err := loadContentAIProviderConfigWithError(); err == nil {
+		s.defaultModel = strings.TrimSpace(cfg.DefaultModel)
+	}
 	if len(audit) > 0 {
 		s.audit = audit[0]
 	}
 	return s
+}
+
+func (s *ContentArticleAdminService) GenerateSEO(ctx context.Context, input ContentSEOInput) (*ContentSEOResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if s == nil {
+		return nil, ErrContentAIModelNotConfigured
+	}
+	cfg, err := loadContentAIProviderConfigWithError()
+	if err != nil {
+		return nil, ErrContentAIModelNotConfigured
+	}
+	model := strings.TrimSpace(cfg.DefaultModel)
+	if model == "" {
+		return nil, ErrContentAIModelNotConfigured
+	}
+	s.workerMu.Lock()
+	executor := s.seoExecutor
+	if executor == nil {
+		executor = &GatewayContentWritingExecutor{}
+	}
+	s.workerMu.Unlock()
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		result, err := executor.GenerateSEO(ctx, model, input)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateContentSEOResult(result); err == nil {
+			result.Model = model
+			return result, nil
+		} else if attempt == 1 {
+			return nil, err
+		}
+	}
+	return nil, ErrContentSEOResultInvalid
 }
 
 func (s *ContentArticleAdminService) SetAuditLogger(a ContentAuditLogger) { s.audit = a }
@@ -1742,6 +1953,15 @@ func (s *ContentArticleAdminService) ListWritingTasks(ctx context.Context, kind 
 		limit = 50
 	}
 	return s.tasks.List(ctx, kind, limit)
+}
+
+func (s *ContentArticleAdminService) SetSEOExecutor(executor ContentSEOExecutor) {
+	if s == nil {
+		return
+	}
+	s.workerMu.Lock()
+	s.seoExecutor = executor
+	s.workerMu.Unlock()
 }
 
 func (s *ContentArticleAdminService) SetWritingExecutor(executor ContentWritingExecutor) {

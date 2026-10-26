@@ -174,6 +174,43 @@ func (h *ContentArticleHandler) Create(c *gin.Context) {
 	}
 	response.Created(c, out)
 }
+func (h *ContentArticleHandler) AutoFillSEO(c *gin.Context) {
+	id, ok := articleID(c)
+	if !ok {
+		return
+	}
+	article, err := h.svc.Get(contentMutationContext(c), id, false)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if article == nil || (article.BodyMarkdown == nil && article.BodyHTML == nil) || (article.BodyMarkdown != nil && strings.TrimSpace(*article.BodyMarkdown) == "" && (article.BodyHTML == nil || strings.TrimSpace(*article.BodyHTML) == "")) {
+		response.BadRequest(c, "article body is required")
+		return
+	}
+	result, err := h.svc.GenerateSEO(contentMutationContext(c), service.ContentSEOInput{Title: article.Title, BodyMarkdown: stringValue(article.BodyMarkdown), BodyHTML: stringValue(article.BodyHTML)})
+	if err != nil {
+		if errors.Is(err, service.ErrContentAIModelNotConfigured) {
+			c.JSON(400, gin.H{"code": 400, "reason": "model_not_configured", "message": "请先配置默认 AI 模型"})
+			return
+		}
+		if errors.Is(err, service.ErrContentSEOResultInvalid) {
+			response.BadRequest(c, err.Error())
+			return
+		}
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
 func (h *ContentArticleHandler) Update(c *gin.Context) {
 	id, ok := articleID(c)
 	if !ok {

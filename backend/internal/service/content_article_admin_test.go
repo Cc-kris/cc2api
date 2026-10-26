@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,6 +58,31 @@ func (s contentWritingExecutorStub) Generate(context.Context, *ContentWritingTas
 type contentTranslationExecutorStub struct {
 	result *ContentTranslation
 	err    error
+}
+
+type contentSEOExecutorStub struct {
+	results []*ContentSEOResult
+	errs    []error
+	models  []string
+	inputs  []ContentSEOInput
+	calls   int
+}
+
+func (s *contentSEOExecutorStub) GenerateSEO(ctx context.Context, model string, input ContentSEOInput) (*ContentSEOResult, error) {
+	s.calls++
+	s.models = append(s.models, model)
+	s.inputs = append(s.inputs, input)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	index := s.calls - 1
+	if index < len(s.errs) && s.errs[index] != nil {
+		return nil, s.errs[index]
+	}
+	if index < len(s.results) {
+		return s.results[index], nil
+	}
+	return nil, ErrContentSEOResultInvalid
 }
 
 func (s contentTranslationExecutorStub) Translate(context.Context, *ContentWritingTask, *ContentArticle) (*ContentTranslation, error) {
@@ -372,4 +398,41 @@ func TestAIConfigRevisionRejectsStaleToken(t *testing.T) {
 	contentAIConfigPath = filepath.Join(t.TempDir(), "ai.json")
 	defer func() { contentAIConfigPath = old }()
 	require.ErrorContains(t, (&ContentArticleAdminService{}).MutateAIProviderConfig(context.Background(), "default", "missing", "stale", ContentAIProviderConfig{}), "revision conflict")
+}
+
+func TestContentSEOValidationAndSingleBoundaryRetry(t *testing.T) {
+	oldPath := contentAIConfigPath
+	contentAIConfigPath = filepath.Join(t.TempDir(), "ai.json")
+	defer func() { contentAIConfigPath = oldPath }()
+	require.NoError(t, saveContentAIProviderConfig(ContentAIProviderConfig{ID: "default", Label: "Default", Provider: "custom", IsDefault: true, BaseURL: "https://example.test/v1", Models: []string{"seo-model"}, DefaultModel: "seo-model"}))
+	invalid := &ContentSEOResult{Description: string(make([]byte, 0)), Keywords: []string{"one"}}
+	invalid.Description = strings.Repeat("x", 119)
+	valid := &ContentSEOResult{Description: strings.Repeat("描述", 65), Keywords: []string{" one ", "two", "three", "four", "five"}}
+	exec := &contentSEOExecutorStub{results: []*ContentSEOResult{invalid, valid}}
+	svc := NewContentArticleAdminService(nil, nil, nil)
+	svc.SetSEOExecutor(exec)
+	got, err := svc.GenerateSEO(context.Background(), ContentSEOInput{Title: "title", BodyMarkdown: "body"})
+	require.NoError(t, err)
+	require.Equal(t, 2, exec.calls)
+	require.Equal(t, "seo-model", exec.models[0])
+	require.Len(t, []rune(got.Description), 130)
+	require.Equal(t, []string{"one", "two", "three", "four", "five"}, got.Keywords)
+}
+
+func TestContentSEORejectsMissingDefaultModelAndCancellation(t *testing.T) {
+	oldPath := contentAIConfigPath
+	contentAIConfigPath = filepath.Join(t.TempDir(), "ai.json")
+	defer func() { contentAIConfigPath = oldPath }()
+	require.NoError(t, NewContentAIConfigStore(contentAIConfigPath, nil).SaveAll(nil, ""))
+	exec := &contentSEOExecutorStub{}
+	svc := NewContentArticleAdminService(nil, nil, nil)
+	svc.SetSEOExecutor(exec)
+	_, err := svc.GenerateSEO(context.Background(), ContentSEOInput{BodyMarkdown: "body"})
+	require.ErrorIs(t, err, ErrContentAIModelNotConfigured)
+	require.Zero(t, exec.calls)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = svc.GenerateSEO(ctx, ContentSEOInput{BodyMarkdown: "body"})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Zero(t, exec.calls)
 }

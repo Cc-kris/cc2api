@@ -41,6 +41,8 @@ export const contentAdminAPI = {
     apiClient.post("/admin/content/articles", body),
   publishArticle: (id: number) =>
     apiClient.post(`/admin/content/articles/${id}/publish`),
+  autoFillSEO: (id: number) =>
+    apiClient.post(`/admin/content/articles/${id}/seo-autofill`),
   updateArticle: (id: number, body: unknown) =>
     apiClient.put(`/admin/content/articles/${id}`, body),
   unpublishArticle: (id: number) =>

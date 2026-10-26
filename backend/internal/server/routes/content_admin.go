@@ -71,6 +71,7 @@ func registerArticleAdminRoutes(admin *gin.RouterGroup, h *adminhandler.ContentA
 	content.POST("/translations/:translation_id/unpublish", h.UnpublishTranslation)
 	content.DELETE("/translations/:translation_id", h.DeleteTranslation)
 	content.GET("/:id", h.Get)
+	content.POST("/:id/seo-autofill", h.AutoFillSEO)
 	content.PUT("/:id", h.Update)
 	content.DELETE("/:id", h.Delete)
 	content.POST("/:id/publish", h.Publish)
