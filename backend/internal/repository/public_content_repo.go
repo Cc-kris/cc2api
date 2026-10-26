@@ -173,6 +173,23 @@ func (r *publicContentRepository) ListPublishedArticles(ctx context.Context, loc
 	return service.PublicArticlePage{Items: merged[offset:end], Total: total}, nil
 }
 
+func (r *publicContentRepository) ListFeaturedArticles(ctx context.Context, locale string, limit int) ([]service.PublicArticleListItem, error) {
+	client := clientFromContext(ctx, r.client)
+	if limit <= 0 || limit > service.MaxPublicFeaturedArticles {
+		return nil, service.ErrPublicContentRepositoryContract
+	}
+	predicates := publicArticlePredicates(locale)
+	predicates = append(predicates, contentarticle.FeaturedAtNotNil())
+	items, err := client.ContentArticle.Query().Where(predicates...).Order(
+		contentarticle.ByFeaturedAt(sql.OrderDesc()),
+		contentarticle.ByID(sql.OrderDesc()),
+	).Limit(limit).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return mapPublicArticlesList(items), nil
+}
+
 func (r *publicContentRepository) ListPublishedArticlesForSitemap(ctx context.Context) ([]service.PublicArticleListItem, error) {
 	client := clientFromContext(ctx, r.client)
 	items, err := client.ContentArticle.Query().Where(publicArticlePredicates("")...).Order(

@@ -749,77 +749,113 @@
           {{ errorMessage }}
         </div>
 
-        <template v-else-if="filteredItems.length > 0">
-          <!-- ========== 模式 A：深度解析（每一条均为单行通栏卡片 + 后台标记精选专属高辨识度特写样式） ========== -->
+        <template v-else-if="filteredItems.length > 0 || showFeaturedSection">
+          <!-- ========== 深度解析精选区：1 张大卡 + 最多 9 张小卡 ========== -->
+          <section
+            v-if="showFeaturedSection"
+            class="public-featured-section"
+            data-testid="featured-section"
+            aria-labelledby="featured-section-title"
+          >
+            <div class="public-featured-header">
+              <div>
+                <span id="featured-section-title" class="public-featured-title">
+                  {{ isZh ? '精选深度解析' : 'FEATURED DEEP DIVES' }}
+                </span>
+                <p class="public-featured-subtitle">
+                  {{ isZh ? '编辑部精选的技术洞察与实践。' : 'Editorial picks for practical engineering insight.' }}
+                </p>
+              </div>
+              <router-link to="/articles" class="public-featured-all-link">
+                {{ isZh ? '查看全部' : 'View all' }} →
+              </router-link>
+            </div>
+
+            <div class="public-featured-layout">
+              <router-link
+                v-if="featuredItems[0]"
+                :to="itemPath(featuredItems[0])"
+                class="public-featured-large"
+                data-testid="featured-large-card"
+              >
+                <div class="public-featured-cover public-featured-cover-large">
+                  <img
+                    v-if="featuredImage(featuredItems[0])"
+                    :src="featuredImage(featuredItems[0])"
+                    :alt="featuredItems[0].coverAlt || featuredItems[0].displayTitle || featuredItems[0].title"
+                    loading="lazy"
+                  />
+                  <span v-else class="public-featured-cover-placeholder" aria-hidden="true">✦</span>
+                  <span class="public-featured-badge">★ {{ isZh ? '编辑精选' : 'FEATURED' }}</span>
+                </div>
+                <div class="public-featured-large-body">
+                  <div class="public-featured-meta">
+                    <span>{{ featuredItems[0].displayCategory || featuredItems[0].category || 'CCAI' }}</span>
+                    <span>{{ estimateReadingTime(featuredItems[0].displaySummary || featuredItems[0].summary || featuredItems[0].excerpt || '') }} MIN READ</span>
+                  </div>
+                  <h2 class="public-featured-card-title public-featured-large-title">
+                    {{ featuredItems[0].displayTitle || featuredItems[0].title }}
+                  </h2>
+                  <p class="public-featured-large-summary">
+                    {{ featuredItems[0].displaySummary || featuredItems[0].summary || featuredItems[0].excerpt || '' }}
+                  </p>
+                  <div class="public-featured-tags">
+                    <span v-for="tag in getCleanItemTags(featuredItems[0]).slice(0, 3)" :key="tag">#{{ tag }}</span>
+                  </div>
+                </div>
+              </router-link>
+
+              <div class="public-featured-small-grid" data-testid="featured-small-grid">
+                <router-link
+                  v-for="item in featuredItems.slice(1, 10)"
+                  :key="item.id || item.slug"
+                  :to="itemPath(item)"
+                  class="public-featured-small"
+                >
+                  <div class="public-featured-cover public-featured-cover-small">
+                    <img
+                      v-if="featuredImage(item)"
+                      :src="featuredImage(item)"
+                      :alt="item.coverAlt || item.displayTitle || item.title"
+                      loading="lazy"
+                    />
+                    <span v-else class="public-featured-cover-placeholder" aria-hidden="true">✦</span>
+                  </div>
+                  <div class="public-featured-small-body">
+                    <span class="public-featured-small-category">{{ item.displayCategory || item.category || 'CCAI' }}</span>
+                    <h3 class="public-featured-card-title">{{ item.displayTitle || item.title }}</h3>
+                    <div class="public-featured-tags">
+                      <span v-for="tag in getCleanItemTags(item).slice(0, 2)" :key="tag">#{{ tag }}</span>
+                    </div>
+                  </div>
+                </router-link>
+              </div>
+            </div>
+          </section>
+
+          <!-- ========== 模式 A：深度解析文章列表 ========== -->
           <template v-if="kind === 'articles'">
             <div class="neo-articles-row-list">
               <router-link
-                v-for="(item, idx) in sortedArticleItems"
+                v-for="(item, idx) in pagedItems"
                 :key="item.id"
                 :to="itemPath(item)"
                 class="neo-article-row-card"
-                :class="{ 'is-featured-article': isItemFeatured(item) }"
               >
-                <!-- 精选文章专属左侧视觉铭牌 -->
-                <div v-if="isItemFeatured(item)" class="featured-row-emblem">
-                  <div class="featured-emblem-grid"></div>
-                  <div class="featured-crown-pill">
-                    <span class="crown-star">★</span>
-                    <span>{{ isZh ? '编辑精选' : 'FEATURED' }}</span>
-                  </div>
-                  <div class="featured-emblem-cat font-mono">
-                    {{ item.displayCategory || item.category || 'ARCHITECTURE' }}
-                  </div>
-                </div>
-
-                <!-- 普通文章左侧彩色强调色条 -->
-                <div v-else class="row-left-strip" :class="'strip-' + (idx % 3)"></div>
-
-                <!-- 中间核心内容区（单行通栏自适应） -->
+                <div class="row-left-strip" :class="'strip-' + (idx % 3)"></div>
                 <div class="article-row-main">
                   <div class="article-row-meta">
-                    <span v-if="isItemFeatured(item)" class="featured-inline-stamp">
-                      ★ {{ isZh ? '精选深度专栏' : 'EDITOR PICK' }}
-                    </span>
-                    <span class="meta-tag" :class="{ 'featured-meta-tag': isItemFeatured(item) }">
-                      {{ item.displayCategory || item.category || '架构与网关' }}
-                    </span>
-                    <span
-                      v-for="tg in getCleanItemTags(item).slice(0, 3)"
-                      :key="tg"
-                      class="article-row-tag"
-                      :class="{ 'featured-row-tag': isItemFeatured(item) }"
-                    >
-                      #{{ tg }}
-                    </span>
-                    <span class="meta-read font-mono">
-                      {{ estimateReadingTime(item.displaySummary || item.summary || item.excerpt || '') }} MIN READ
-                    </span>
-                    <span class="meta-date font-mono">
-                      {{ formatDate(item.publishedAt || item.createdAt) }}
-                    </span>
+                    <span class="meta-tag">{{ item.displayCategory || item.category || '架构与网关' }}</span>
+                    <span v-for="tg in getCleanItemTags(item).slice(0, 3)" :key="tg" class="article-row-tag">#{{ tg }}</span>
+                    <span class="meta-read font-mono">{{ estimateReadingTime(item.displaySummary || item.summary || item.excerpt || '') }} MIN READ</span>
+                    <span class="meta-date font-mono">{{ formatDate(item.publishedAt || item.createdAt) }}</span>
                   </div>
-
                   <h2 class="article-row-title">{{ item.displayTitle || item.title }}</h2>
-
-                  <p class="article-row-excerpt">
-                    {{ item.displaySummary || item.summary || item.excerpt || '' }}
-                  </p>
+                  <p class="article-row-excerpt">{{ item.displaySummary || item.summary || item.excerpt || '' }}</p>
                 </div>
-
-                <!-- 右侧动作与序号区 -->
                 <div class="article-row-aside">
-                  <span v-if="isItemFeatured(item)" class="featured-ribbon-code font-mono">
-                    ★ FEATURED
-                  </span>
-                  <span v-else class="article-row-index font-mono">
-                    #{{ String(idx + 1).padStart(2, '0') }}
-                  </span>
-
-                  <span class="article-row-cta" :class="{ 'featured-cta-pill': isItemFeatured(item) }">
-                    <span>{{ isZh ? (isItemFeatured(item) ? '阅读精选' : '阅读全文') : 'Read' }}</span>
-                    <span class="cta-arrow">→</span>
-                  </span>
+                  <span class="article-row-index font-mono">#{{ String(idx + 1).padStart(2, '0') }}</span>
+                  <span class="article-row-cta"><span>{{ isZh ? '阅读全文' : 'Read' }}</span><span class="cta-arrow">→</span></span>
                 </div>
               </router-link>
             </div>
@@ -1804,6 +1840,31 @@ const localizedPublicItems = computed(() => {
   return (publicItems.value || []).map((item) => localizeItem(item));
 });
 
+const featuredArticles = ref<any[]>([]);
+const featuredItems = computed(() => [...featuredArticles.value]
+  .sort((a: any, b: any) => {
+    const timeDiff = featuredSortTime(b) - featuredSortTime(a);
+    if (timeDiff !== 0) return timeDiff;
+    return Number(b?.id || 0) - Number(a?.id || 0);
+  })
+  .slice(0, 10));
+const showFeaturedSection = computed(() => (
+  kind.value === "articles" &&
+  currentPage.value === 1 &&
+  paginationEnabled.value &&
+  featuredItems.value.length > 0
+));
+
+function featuredImage(item: any): string {
+  return String(item?.coverImage || item?.imageUrl || item?.coverUrl || "").trim();
+}
+
+function featuredSortTime(item: any): number {
+  const raw = item?.featuredAt || item?.featured_at;
+  const timestamp = raw ? new Date(raw).getTime() : 0;
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
 const tocItems = computed(() => {
   const source = String(detail.value?.displayBodyHtml || detail.value?.bodyHtml || "");
   const headings: { id: string; text: string }[] = [];
@@ -1945,16 +2006,6 @@ function getCleanItemTags(item: any): string[] {
     .map((t: any) => String(t || '').trim())
     .filter((s: string) => s && s !== '精选' && s.toLowerCase() !== 'featured');
 }
-
-const sortedArticleItems = computed(() => {
-  const list = [...pagedItems.value];
-  return list.sort((a: any, b: any) => {
-    const fa = isItemFeatured(a) ? 1 : 0;
-    const fb = isItemFeatured(b) ? 1 : 0;
-    if (fa !== fb) return fb - fa;
-    return 0;
-  });
-});
 
 const featuredItem = computed(() => {
   if (currentPage.value !== 1) return null;
@@ -2245,6 +2296,26 @@ async function loadHomeHighlights() {
   }
 }
 
+async function loadFeaturedArticles(locales: string[]): Promise<any[]> {
+  if (kind.value !== "articles") return [];
+  const results = await Promise.allSettled(
+    locales.map((locale) => apiClient.get("/public/articles/featured", { params: { locale } }))
+  );
+  const merged: any[] = [];
+  const seen = new Set<string>();
+  for (const result of results) {
+    if (result.status !== "fulfilled") continue;
+    for (const item of extractListItems(result.value)) {
+      const key = String(item?.slug || item?.id || "");
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(localizeItem(item, "articles"));
+    }
+  }
+  if (merged.length > 0) return merged;
+  return localizedPublicItems.value.filter((item) => isItemFeatured(item));
+}
+
 async function loadPublicContent() {
   if (isHome.value) return;
   contentLoading.value = true;
@@ -2289,6 +2360,7 @@ async function loadPublicContent() {
       }
       const detailList = await listPromise;
       publicItems.value = detailList.items;
+      featuredArticles.value = [];
       if (loaded) {
         const rawBody = loaded.bodyHtml || loaded.bodyText || loaded.bodyMarkdown || "";
         if (rawBody) {
@@ -2303,6 +2375,7 @@ async function loadPublicContent() {
       detail.value = null;
       const listResult = await listPromise;
       publicItems.value = listResult.items;
+      featuredArticles.value = await loadFeaturedArticles(primaryLocales);
       pageWindowHasMore.value = listResult.hasMore;
       publicTotalCount.value = listResult.total || listResult.items.length;
       paginationReady.value = true;
@@ -5062,6 +5135,253 @@ watch([() => route.fullPath, isZh], () => {
   text-align: center;
   font-weight: 800;
   box-shadow: 4px 4px 0px #121316;
+}
+
+.public-featured-section {
+  --featured-surface: #FFFFFF;
+  --featured-ink: #121316;
+  --featured-muted: #5E6577;
+  --featured-border: #121316;
+  --featured-accent: #CCFF00;
+  margin: 0 0 34px;
+  color: var(--featured-ink);
+}
+
+.public-featured-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 0 0 16px;
+}
+
+.public-featured-title {
+  display: inline-block;
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: var(--featured-accent);
+  color: #121316;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: .02em;
+}
+
+.public-featured-subtitle {
+  margin: 8px 0 0;
+  color: var(--featured-muted);
+  font-size: 12px;
+}
+
+.public-featured-all-link {
+  color: var(--featured-ink);
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.public-featured-all-link:hover,
+.public-featured-all-link:focus-visible {
+  color: #2563EB;
+  text-decoration: underline;
+}
+
+.public-featured-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 2fr) minmax(0, 3fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.public-featured-large,
+.public-featured-small {
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--featured-ink);
+  background: var(--featured-surface);
+  border: 2px solid var(--featured-border);
+  border-radius: 16px;
+  box-shadow: 4px 4px 0 var(--featured-border);
+  text-decoration: none;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.public-featured-large:hover,
+.public-featured-large:focus-visible,
+.public-featured-small:hover,
+.public-featured-small:focus-visible {
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 7px 0 var(--featured-border);
+  outline: none;
+}
+
+.public-featured-large {
+  flex-direction: column;
+}
+
+.public-featured-small-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
+  gap: 14px;
+}
+
+.public-featured-small {
+  flex-direction: column;
+}
+
+.public-featured-cover {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex: 0 0 auto;
+  background: linear-gradient(135deg, #25304a, #121316);
+}
+
+.public-featured-cover-large {
+  aspect-ratio: 16 / 8;
+  width: 100%;
+}
+
+.public-featured-cover-small {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+}
+
+.public-featured-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.public-featured-cover-placeholder {
+  color: var(--featured-accent);
+  font-size: 34px;
+  line-height: 1;
+}
+
+.public-featured-badge {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--featured-accent);
+  color: #121316;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.public-featured-large-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 16px;
+}
+
+.public-featured-small-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 7px;
+  padding: 11px 12px 12px;
+}
+
+.public-featured-meta,
+.public-featured-small-category {
+  color: var(--featured-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.public-featured-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.public-featured-card-title {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--featured-ink) !important;
+  font-weight: 900;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.public-featured-large-title {
+  margin-top: 10px;
+  font-size: 21px;
+}
+
+.public-featured-large-summary {
+  display: -webkit-box;
+  margin: 9px 0 0;
+  overflow: hidden;
+  color: var(--featured-muted);
+  font-size: 13px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.public-featured-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: auto;
+  padding-top: 10px;
+  color: var(--featured-muted);
+  font-size: 10px;
+}
+
+@media (max-width: 1100px) {
+  .public-featured-layout {
+    grid-template-columns: minmax(240px, 1fr) minmax(0, 1.35fr);
+  }
+  .public-featured-small-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .public-featured-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .public-featured-layout {
+    grid-template-columns: 1fr;
+  }
+  .public-featured-small-grid {
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+  }
+  .public-featured-small {
+    display: grid;
+    grid-template-columns: 112px minmax(0, 1fr);
+    flex-direction: row;
+  }
+  .public-featured-cover-small {
+    height: 100%;
+    min-height: 94px;
+  }
+  .public-featured-large-title {
+    font-size: 18px;
+  }
+}
+
+:global(.dark) .public-featured-section {
+  --featured-surface: #1E2026;
+  --featured-ink: #E8EAED;
+  --featured-muted: #AEB4C0;
+  --featured-border: #0B0C0F;
 }
 
 </style>

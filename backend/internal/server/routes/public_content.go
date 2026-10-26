@@ -28,6 +28,7 @@ func RegisterPublicContentRoutes(v1 *gin.RouterGroup, h *handler.Handlers, redis
 	public.GET("/news", h.PublicContent.ListNews)
 	public.GET("/news/:locale/:slug", h.PublicContent.GetNews)
 	public.GET("/articles", h.PublicContent.ListArticles)
+	public.GET("/articles/featured", h.PublicContent.ListFeaturedArticles)
 	public.GET("/articles/:locale/:slug", h.PublicContent.GetArticle)
 }
 
