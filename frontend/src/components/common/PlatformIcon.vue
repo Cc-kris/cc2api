@@ -27,6 +27,22 @@
   <svg v-else-if="platform === 'seedace'" :class="sizeClass" viewBox="0 0 24 24" fill="currentColor">
     <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 18.5v-13Zm5.25 3.03v6.94c0 .59.65.94 1.14.61l5.08-3.47a.74.74 0 0 0 0-1.22L10.39 7.92a.74.74 0 0 0-1.14.61Z" />
   </svg>
+  <!-- Ollama logo -->
+  <svg v-else-if="platform === 'ollama'" :class="sizeClass" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2C8.5 2 5.8 3.9 4.7 6.4 3.3 6.2 2 7.2 2 8.8c0 1.2.8 2.2 1.9 2.6C3.4 12.5 3 13.7 3 15c0 4.4 4 8 9 8s9-3.6 9-8c0-1.3-.4-2.5-.9-3.6 1.1-.4 1.9-1.4 1.9-2.6 0-1.6-1.3-2.6-2.7-2.4C18.2 3.9 15.5 2 12 2Zm-3.2 7.5c.9 0 1.6.7 1.6 1.6s-.7 1.6-1.6 1.6-1.6-.7-1.6-1.6.7-1.6 1.6-1.6Zm6.4 0c.9 0 1.6.7 1.6 1.6s-.7 1.6-1.6 1.6-1.6-.7-1.6-1.6.7-1.6 1.6-1.6Z" />
+  </svg>
+  <!-- Kimi logo (moon crescent) -->
+  <svg v-else-if="platform === 'kimi'" :class="sizeClass" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-5.4-5.4c0-1.81.89-3.42 2.26-4.4A9.14 9.14 0 0 0 12 3Z" />
+  </svg>
+  <!-- Zhipu logo (sparkle) -->
+  <svg v-else-if="platform === 'zhipu'" :class="sizeClass" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M11 2l2.1 5.9 5.9 2.1-5.9 2.1L11 18l-2.1-5.9L3 10l5.9-2.1L11 2Zm7 12 1.2 3.3 3.3 1.2-3.3 1.2L18 23l-1.2-3.3-3.3-1.2 3.3-1.2L18 14Z" />
+  </svg>
+  <!-- DeepSeek logo (whale) -->
+  <svg v-else-if="platform === 'deepseek'" :class="sizeClass" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M21.5 9.5c-1.1.2-2.2 0-3.2-.4-.7-2.7-.5-5.6.8-8.1-1.5-.3-3 .2-4.2 1.2-1 .8-1.7 1.9-2.1 3.1-2.7.1-5.3 1-7.4 2.6C3.8 8.9 2.4 10 1.5 10c.9.1 1.8-.1 2.6-.6-.2.8-.3 1.6-.3 2.4 0 5 4 9 9 9s9-4 9-9c0-1.5-.4-2.9-1-4.2.3-.2.5-.5.7-2.1Z" transform="translate(0,1)" />
+  </svg>
   <!-- Fallback: generic platform icon -->
   <svg v-else :class="sizeClass" fill="currentColor" viewBox="0 0 24 24">
     <path
