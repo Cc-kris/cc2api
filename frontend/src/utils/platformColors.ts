@@ -5,7 +5,7 @@
  * instead of defining their own color mappings.
  */
 
-export type Platform = 'anthropic' | 'openai' | 'antigravity' | 'gemini' | 'seedace'
+export type Platform = 'anthropic' | 'openai' | 'antigravity' | 'gemini' | 'grok' | 'seedace' | 'ollama' | 'kimi' | 'zhipu' | 'deepseek'
 
 // ── Badge (bg + text + border, for inline badges with border) ───────
 const BADGE: Record<Platform, string> = {
@@ -14,6 +14,11 @@ const BADGE: Record<Platform, string> = {
   antigravity: 'bg-purple-500/10 text-purple-600 border-purple-500/30 dark:text-purple-400',
   gemini: 'bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400',
   seedace: 'bg-sky-500/10 text-sky-600 border-sky-500/30 dark:text-sky-400',
+  grok: 'bg-zinc-500/10 text-zinc-600 border-zinc-500/30 dark:text-zinc-400',
+  ollama: 'bg-neutral-500/10 text-neutral-600 border-neutral-500/30 dark:text-neutral-400',
+  kimi: 'bg-violet-500/10 text-violet-600 border-violet-500/30 dark:text-violet-400',
+  zhipu: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/30 dark:text-indigo-400',
+  deepseek: 'bg-teal-500/10 text-teal-600 border-teal-500/30 dark:text-teal-400',
 }
 const BADGE_DEFAULT = 'bg-slate-500/10 text-slate-600 border-slate-500/30 dark:text-slate-400'
 
@@ -24,6 +29,11 @@ const BADGE_LIGHT: Record<Platform, string> = {
   antigravity: 'bg-purple-500/10 text-purple-600 dark:bg-purple-500/10 dark:text-purple-300',
   gemini: 'bg-blue-500/10 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300',
   seedace: 'bg-sky-500/10 text-sky-600 dark:bg-sky-500/10 dark:text-sky-300',
+  grok: 'bg-zinc-500/10 text-zinc-600 dark:bg-zinc-500/10 dark:text-zinc-300',
+  ollama: 'bg-neutral-500/10 text-neutral-600 dark:bg-neutral-500/10 dark:text-neutral-300',
+  kimi: 'bg-violet-500/10 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300',
+  zhipu: 'bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300',
+  deepseek: 'bg-teal-500/10 text-teal-600 dark:bg-teal-500/10 dark:text-teal-300',
 }
 
 // ── Border ──────────────────────────────────────────────────────────
@@ -33,6 +43,11 @@ const BORDER: Record<Platform, string> = {
   antigravity: 'border-purple-500/20 dark:border-purple-500/20',
   gemini: 'border-blue-500/20 dark:border-blue-500/20',
   seedace: 'border-sky-500/20 dark:border-sky-500/20',
+  grok: 'border-zinc-500/20 dark:border-zinc-500/20',
+  ollama: 'border-neutral-500/20 dark:border-neutral-500/20',
+  kimi: 'border-violet-500/20 dark:border-violet-500/20',
+  zhipu: 'border-indigo-500/20 dark:border-indigo-500/20',
+  deepseek: 'border-teal-500/20 dark:border-teal-500/20',
 }
 const BORDER_DEFAULT = 'border-gray-200 dark:border-dark-700'
 
@@ -43,6 +58,11 @@ const ACCENT_BAR: Record<Platform, string> = {
   antigravity: 'bg-gradient-to-r from-purple-400 to-purple-500',
   gemini: 'bg-gradient-to-r from-blue-400 to-blue-500',
   seedace: 'bg-gradient-to-r from-sky-400 to-sky-500',
+  grok: 'bg-gradient-to-r from-zinc-400 to-zinc-500',
+  ollama: 'bg-gradient-to-r from-neutral-400 to-neutral-500',
+  kimi: 'bg-gradient-to-r from-violet-400 to-violet-500',
+  zhipu: 'bg-gradient-to-r from-indigo-400 to-indigo-500',
+  deepseek: 'bg-gradient-to-r from-teal-400 to-teal-500',
 }
 const ACCENT_BAR_DEFAULT = 'bg-gradient-to-r from-primary-400 to-primary-500'
 
@@ -53,6 +73,11 @@ const TEXT: Record<Platform, string> = {
   antigravity: 'text-purple-600 dark:text-purple-400',
   gemini: 'text-blue-600 dark:text-blue-400',
   seedace: 'text-sky-600 dark:text-sky-400',
+  grok: 'text-zinc-600 dark:text-zinc-400',
+  ollama: 'text-neutral-600 dark:text-neutral-400',
+  kimi: 'text-violet-600 dark:text-violet-400',
+  zhipu: 'text-indigo-600 dark:text-indigo-400',
+  deepseek: 'text-teal-600 dark:text-teal-400',
 }
 const TEXT_DEFAULT = 'text-primary-600 dark:text-primary-400'
 
@@ -63,6 +88,11 @@ const ICON: Record<Platform, string> = {
   antigravity: 'text-purple-500 dark:text-purple-400',
   gemini: 'text-blue-500 dark:text-blue-400',
   seedace: 'text-sky-500 dark:text-sky-400',
+  grok: 'text-zinc-500 dark:text-zinc-400',
+  ollama: 'text-neutral-500 dark:text-neutral-400',
+  kimi: 'text-violet-500 dark:text-violet-400',
+  zhipu: 'text-indigo-500 dark:text-indigo-400',
+  deepseek: 'text-teal-500 dark:text-teal-400',
 }
 const ICON_DEFAULT = 'text-primary-500 dark:text-primary-400'
 
@@ -73,6 +103,11 @@ const BUTTON: Record<Platform, string> = {
   antigravity: 'bg-purple-500 text-white hover:bg-purple-600 active:bg-purple-700 dark:bg-purple-500/80 dark:hover:bg-purple-500',
   gemini: 'bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700 dark:bg-blue-500/80 dark:hover:bg-blue-500',
   seedace: 'bg-sky-500 text-white hover:bg-sky-600 active:bg-sky-700 dark:bg-sky-500/80 dark:hover:bg-sky-500',
+  grok: 'bg-zinc-600 text-white hover:bg-zinc-700 active:bg-zinc-800 dark:bg-zinc-600/80 dark:hover:bg-zinc-600',
+  ollama: 'bg-neutral-600 text-white hover:bg-neutral-700 active:bg-neutral-800 dark:bg-neutral-600/80 dark:hover:bg-neutral-600',
+  kimi: 'bg-violet-500 text-white hover:bg-violet-600 active:bg-violet-700 dark:bg-violet-500/80 dark:hover:bg-violet-500',
+  zhipu: 'bg-indigo-500 text-white hover:bg-indigo-600 active:bg-indigo-700 dark:bg-indigo-500/80 dark:hover:bg-indigo-500',
+  deepseek: 'bg-teal-500 text-white hover:bg-teal-600 active:bg-teal-700 dark:bg-teal-500/80 dark:hover:bg-teal-500',
 }
 const BUTTON_DEFAULT = 'bg-primary-500 text-white hover:bg-primary-600 dark:bg-primary-600 dark:hover:bg-primary-500'
 
@@ -83,6 +118,11 @@ const DISCOUNT: Record<Platform, string> = {
   antigravity: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
   gemini: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
   seedace: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+  grok: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300',
+  ollama: 'bg-neutral-100 text-neutral-700 dark:bg-neutral-900/40 dark:text-neutral-300',
+  kimi: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+  zhipu: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
+  deepseek: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
 }
 const DISCOUNT_DEFAULT = 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
 
@@ -93,6 +133,11 @@ const GRADIENT: Record<Platform, string> = {
   antigravity: 'from-purple-500 to-purple-600',
   gemini: 'from-blue-500 to-blue-600',
   seedace: 'from-sky-500 to-sky-600',
+  grok: 'from-zinc-500 to-zinc-600',
+  ollama: 'from-neutral-500 to-neutral-600',
+  kimi: 'from-violet-500 to-violet-600',
+  zhipu: 'from-indigo-500 to-indigo-600',
+  deepseek: 'from-teal-500 to-teal-600',
 }
 const GRADIENT_DEFAULT = 'from-primary-500 to-primary-600'
 
@@ -103,6 +148,11 @@ const GRADIENT_TEXT: Record<Platform, string> = {
   antigravity: 'text-purple-100',
   gemini: 'text-blue-100',
   seedace: 'text-sky-100',
+  grok: 'text-zinc-100',
+  ollama: 'text-neutral-100',
+  kimi: 'text-violet-100',
+  zhipu: 'text-indigo-100',
+  deepseek: 'text-teal-100',
 }
 const GRADIENT_TEXT_DEFAULT = 'text-primary-100'
 
@@ -112,13 +162,18 @@ const GRADIENT_SUBTEXT: Record<Platform, string> = {
   antigravity: 'text-purple-200',
   gemini: 'text-blue-200',
   seedace: 'text-sky-200',
+  grok: 'text-zinc-200',
+  ollama: 'text-neutral-200',
+  kimi: 'text-violet-200',
+  zhipu: 'text-indigo-200',
+  deepseek: 'text-teal-200',
 }
 const GRADIENT_SUBTEXT_DEFAULT = 'text-primary-200'
 
 // ── Public API ──────────────────────────────────────────────────────
 
 function isPlatform(p: string): p is Platform {
-  return p === 'anthropic' || p === 'openai' || p === 'antigravity' || p === 'gemini' || p === 'seedace'
+  return p === 'anthropic' || p === 'openai' || p === 'antigravity' || p === 'gemini' || p === 'grok' || p === 'seedace' || p === 'ollama' || p === 'kimi' || p === 'zhipu' || p === 'deepseek'
 }
 
 export function platformBadgeClass(p: string): string {
@@ -171,7 +226,12 @@ export function platformLabel(p: string): string {
     case 'openai': return 'OpenAI'
     case 'antigravity': return 'Antigravity'
     case 'gemini': return 'Gemini'
+    case 'grok': return 'Grok'
     case 'seedace': return 'Seedace'
+    case 'ollama': return 'Ollama'
+    case 'kimi': return 'Kimi'
+    case 'zhipu': return 'Zhipu'
+    case 'deepseek': return 'DeepSeek'
     default: return p || 'API'
   }
 }
