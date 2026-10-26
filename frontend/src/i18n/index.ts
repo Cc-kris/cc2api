@@ -1,5 +1,6 @@
 import { createI18n } from 'vue-i18n'
 import { detectLocaleByIP } from './localeDetection'
+import contentV04Messages from './locales/contentV04'
 import {
   DEFAULT_LOCALE,
   availableLocales,
@@ -37,7 +38,10 @@ export async function loadLocaleMessages(locale: LocaleCode): Promise<void> {
   }
 
   const module = await getLocaleDefinition(locale).loader()
-  i18n.global.setLocaleMessage(locale, module.default as LocaleMessages)
+  i18n.global.setLocaleMessage(locale, {
+    ...(module.default as LocaleMessages),
+    ...contentV04Messages[locale]
+  })
   loadedLocales.add(locale)
 }
 
