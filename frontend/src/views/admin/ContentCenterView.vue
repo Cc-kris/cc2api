@@ -716,8 +716,8 @@
                       </label>
                     </div>
                     <div class="form-row">
-                      <label>标签 (逗号分隔)
-                        <input v-model="articleForm.tags" placeholder="ai, llm, tutorial" />
+                      <label>标签
+                        <TagInput v-model="articleTagsInput" :suggestions="taxonomy.tags" placeholder="输入或选择标签" />
                       </label>
                       <button
                         type="button"
@@ -760,8 +760,8 @@
                       </label>
                     </div>
                     <div class="form-row">
-                      <label>SEO 关键词 (Meta Keywords，逗号分隔)
-                        <input v-model="articleForm.seoKeywords" placeholder="由 SEO 自动化生成或手动填写" />
+                      <label>SEO 关键词
+                        <TagInput v-model="articleSeoKeywordsInput" placeholder="自动生成或手动添加" />
                       </label>
                     </div>
                     <!-- SERP 实时预览 -->
@@ -1381,6 +1381,7 @@ import contentAPI from "@/api/admin/content";
 import AIConfigPanel from "@/components/admin/content/AIConfigPanel.vue";
 import Pagination from "@/components/common/Pagination.vue";
 import Select from "@/components/common/Select.vue";
+import TagInput from "@/components/common/TagInput.vue";
 import { useAppStore } from "@/stores";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
@@ -1732,6 +1733,15 @@ const articleForm = ref<any>({
   canonicalUrl: "",
   ogImage: "",
   status: "draft",
+});
+
+const articleTagsInput = computed<string[]>({
+  get: () => String(articleForm.value.tags || "").split(/[,，]/).map((v: string) => v.trim()).filter(Boolean),
+  set: (values) => { articleForm.value.tags = values.join(", "); },
+});
+const articleSeoKeywordsInput = computed<string[]>({
+  get: () => String(articleForm.value.seoKeywords || "").split(/[,，]/).map((v: string) => v.trim()).filter(Boolean),
+  set: (values) => { articleForm.value.seoKeywords = values.join(", "); },
 });
 
 /* ==================== 文章编辑弹窗增强状态 ==================== */
