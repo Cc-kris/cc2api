@@ -11,6 +11,7 @@ func registerContentAnalyticsRoutes(admin *gin.RouterGroup, h *handler.ContentAn
 	bi := admin.Group("/bi/analytics")
 	bi.GET("", h.Query)
 	bi.GET("/overview", h.Overview)
+	bi.GET("/distribution", h.Distribution)
 	bi.GET("/trends", h.Trends)
 	bi.GET("/rankings", h.Rankings)
 	bi.GET("/click-through-rate", h.ClickThroughRate)

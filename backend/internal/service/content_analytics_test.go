@@ -14,9 +14,12 @@ import (
 )
 
 type analyticsRepoStub struct {
-	rows       []ContentAnalyticsDaily
-	aggregated bool
-	tz         string
+	rows                []ContentAnalyticsDaily
+	distributions       []ContentAnalyticsDistribution
+	distributionDim     string
+	distributionFilters ContentAnalyticsFilters
+	aggregated          bool
+	tz                  string
 }
 
 func (r *analyticsRepoStub) CreateEvent(context.Context, *ContentAnalyticsEvent) error { return nil }
@@ -26,6 +29,33 @@ func (r *analyticsRepoStub) ListDaily(context.Context, ContentAnalyticsFilters) 
 func (r *analyticsRepoStub) AggregateDaily(_ context.Context, _ time.Time, tz string) error {
 	r.aggregated, r.tz = true, tz
 	return nil
+}
+func (r *analyticsRepoStub) ContentAnalyticsDistribution(_ context.Context, dim string, f ContentAnalyticsFilters) ([]ContentAnalyticsDistribution, error) {
+	r.distributionDim, r.distributionFilters = dim, f
+	return append([]ContentAnalyticsDistribution(nil), r.distributions...), nil
+}
+
+func TestContentAnalyticsDistributionDimensionsAndFilters(t *testing.T) {
+	from := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC)
+	sourceID := int64(42)
+	filters := ContentAnalyticsFilters{From: &from, To: &to, Locale: "en-US", ContentType: "news", Placement: "home", SourceID: &sourceID}
+	repo := &analyticsRepoStub{distributions: []ContentAnalyticsDistribution{{Key: "direct", Count: 3, Ratio: 1}}}
+	svc := NewContentAnalyticsService(repo, "secret")
+	for _, dim := range []string{"category", "locale", "source", "referrer"} {
+		got, err := svc.Distribution(context.Background(), dim, filters)
+		if err != nil || len(got) != 1 || got[0].Key != "direct" || got[0].Count != 3 || repo.distributionDim != dim {
+			t.Fatalf("Distribution(%q) = %+v, %v", dim, got, err)
+		}
+		if repo.distributionFilters.From != &from || repo.distributionFilters.To != &to || repo.distributionFilters.Locale != filters.Locale || repo.distributionFilters.ContentType != filters.ContentType || repo.distributionFilters.Placement != filters.Placement || repo.distributionFilters.SourceID != &sourceID {
+			t.Fatalf("Distribution(%q) filters not forwarded: %+v", dim, repo.distributionFilters)
+		}
+	}
+	for _, dim := range []string{"", "unknown", "visitors"} {
+		if _, err := svc.Distribution(context.Background(), dim, filters); err == nil {
+			t.Errorf("Distribution(%q) accepted unsupported dimension", dim)
+		}
+	}
 }
 
 func TestContentAnalyticsAggregateUsesSiteTimezone(t *testing.T) {
@@ -57,6 +87,8 @@ func TestContentAnalyticsViewLifecycleValidation(t *testing.T) {
 		{"negative duration", "page_heartbeat", map[string]any{"view_id": "view-1", "duration_ms": float64(-1)}, true},
 		{"over four hours", "page_leave", map[string]any{"view_id": "view-1", "duration_ms": float64(maxAnalyticsViewDurationMS + 1)}, true},
 		{"fractional duration", "page_heartbeat", map[string]any{"view_id": "view-1", "duration_ms": 1.5}, true},
+		{"page view missing id", "page_view", map[string]any{}, true},
+		{"impression missing id", "content_impression", map[string]any{}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -179,6 +179,23 @@ func (h *ContentAnalyticsHandler) Query(c *gin.Context) {
 	response.Success(c, out)
 }
 
+func (h *ContentAnalyticsHandler) Distribution(c *gin.Context) {
+	f, ok := analyticsFilters(c)
+	if !ok {
+		return
+	}
+	out, err := h.svc.Distribution(c.Request.Context(), c.Query("dim"), f)
+	if err != nil {
+		if strings.Contains(err.Error(), "invalid analytics distribution dimension") {
+			response.BadRequest(c, "invalid dim")
+			return
+		}
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, out)
+}
+
 func (h *ContentAnalyticsHandler) Overview(c *gin.Context) {
 	f, ok := analyticsFilters(c)
 	if !ok {

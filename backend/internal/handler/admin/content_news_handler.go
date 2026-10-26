@@ -36,7 +36,7 @@ type contentNewsSourceRequest struct {
 	Language          string            `json:"language"`
 	Category          *string           `json:"category"`
 	Enabled           *bool             `json:"enabled"`
-	IntervalMinutes   int               `json:"intervalMinutes"`
+	IntervalMinutes   *int              `json:"intervalMinutes"`
 	RateLimitPerMin   int               `json:"rateLimitPerMinute"`
 	TermsConfirmedAt  *time.Time        `json:"termsConfirmedAt"`
 	AuthorizationNote *string           `json:"authorizationNote"`
@@ -640,15 +640,17 @@ func sourceFromRequest(req contentNewsSourceRequest) service.ContentNewsSource {
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
-	interval := req.IntervalMinutes
-	if interval == 0 {
-		interval = 15
+	interval := 15 // worker-safe fallback; repository persists NULL when override is nil
+	var override *int
+	if req.IntervalMinutes != nil {
+		interval = *req.IntervalMinutes
+		override = req.IntervalMinutes
 	}
 	rate := req.RateLimitPerMin
 	if rate == 0 {
 		rate = 60
 	}
-	return service.ContentNewsSource{Name: req.Name, SourceType: req.SourceType, MappingJSON: req.MappingJSON, URL: req.URL, Language: req.Language, Category: req.Category, Enabled: enabled, IntervalMinutes: interval, RateLimitPerMinute: rate, TermsConfirmedAt: req.TermsConfirmedAt, AuthorizationNote: req.AuthorizationNote, RobotsPolicy: req.RobotsPolicy}
+	return service.ContentNewsSource{Name: req.Name, SourceType: req.SourceType, MappingJSON: req.MappingJSON, URL: req.URL, Language: req.Language, Category: req.Category, Enabled: enabled, IntervalMinutes: interval, IntervalMinutesOverride: override, RateLimitPerMinute: rate, TermsConfirmedAt: req.TermsConfirmedAt, AuthorizationNote: req.AuthorizationNote, RobotsPolicy: req.RobotsPolicy}
 }
 func newsFromRequest(req contentNewsItemRequest) service.ContentNewsItem {
 	status := req.Status

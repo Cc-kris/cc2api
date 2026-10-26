@@ -55,7 +55,7 @@ func TestContentAnalyticsIngestReturnsBeforePersistenceCompletes(t *testing.T) {
 	repo := blockingAnalyticsRepo{started: make(chan struct{}), release: make(chan struct{})}
 	r := gin.New()
 	r.POST("/events", NewContentAnalyticsHandler(service.NewContentAnalyticsService(repo, "secret")).Ingest)
-	payload, _ := json.Marshal(map[string]any{"eventId": "evt-async-1", "eventName": "page_view", "pagePath": "/"})
+	payload, _ := json.Marshal(map[string]any{"eventId": "evt-async-1", "eventName": "page_view", "pagePath": "/", "payload": map[string]any{"view_id": "view-async-1"}})
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/events", strings.NewReader(string(payload))))
 	if rec.Code != http.StatusAccepted {
@@ -74,7 +74,7 @@ func TestContentAnalyticsIngestRetriesPersistenceFailure(t *testing.T) {
 	repo := &retryAnalyticsRepo{}
 	r := gin.New()
 	r.POST("/events", NewContentAnalyticsHandler(service.NewContentAnalyticsService(repo, "secret")).Ingest)
-	payload := `{"eventId":"evt-retry-1","eventName":"page_view","pagePath":"/"}`
+	payload := `{"eventId":"evt-retry-1","eventName":"page_view","pagePath":"/","payload":{"view_id":"view-retry-1"}}`
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/events", strings.NewReader(payload)))
 	if rec.Code != http.StatusAccepted {
@@ -99,7 +99,7 @@ func TestContentAnalyticsInvalidEventDoesNotConsumeRateLimit(t *testing.T) {
 		t.Fatalf("bad status=%d", bad.Code)
 	}
 	good := httptest.NewRecorder()
-	r.ServeHTTP(good, httptest.NewRequest(http.MethodPost, "/events", strings.NewReader(`{"eventId":"good","eventName":"page_view","pagePath":"/"}`)))
+	r.ServeHTTP(good, httptest.NewRequest(http.MethodPost, "/events", strings.NewReader(`{"eventId":"good","eventName":"page_view","pagePath":"/","payload":{"view_id":"view-good-1"}}`)))
 	if good.Code != http.StatusAccepted {
 		t.Fatalf("good status=%d", good.Code)
 	}
@@ -128,7 +128,7 @@ func TestContentAnalyticsHandlerRejectsIngestAfterStop(t *testing.T) {
 	r := gin.New()
 	r.POST("/events", h.Ingest)
 	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/events", strings.NewReader(`{"eventId":"after-stop","eventName":"page_view","pagePath":"/"}`)))
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/events", strings.NewReader(`{"eventId":"after-stop","eventName":"page_view","pagePath":"/","payload":{"view_id":"view-after-stop-1"}}`)))
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status=%d", rec.Code)
 	}

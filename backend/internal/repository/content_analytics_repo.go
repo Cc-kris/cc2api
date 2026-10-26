@@ -128,6 +128,82 @@ func (r *contentAnalyticsRepository) ListDaily(ctx context.Context, f service.Co
 	return out, nil
 }
 
+func (r *contentAnalyticsRepository) ContentAnalyticsDistribution(ctx context.Context, dim string, f service.ContentAnalyticsFilters) ([]service.ContentAnalyticsDistribution, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("analytics SQL repository is unavailable")
+	}
+	dimensionSQL := map[string]string{
+		"category": `COALESCE(NULLIF(BTRIM(a.category), ''), NULLIF(BTRIM(ns.category), ''), 'uncategorized')`,
+		"locale":   `COALESCE(NULLIF(BTRIM(e.locale), ''), 'unknown')`,
+		"source":   `COALESCE(NULLIF(BTRIM(ns.name), ''), 'unknown')`,
+		"referrer": `CASE WHEN COALESCE(BTRIM(e.referrer_host), '') = '' THEN 'direct'
+   WHEN LOWER(e.referrer_host) ~ '(google|bing|yahoo|duckduckgo|baidu|yandex)\.' THEN 'search'
+   WHEN LOWER(e.referrer_host) ~ '(facebook|instagram|twitter|x\.com|t\.co|linkedin|reddit|weibo|wechat|tiktok)\.' THEN 'social'
+   ELSE 'external' END`,
+	}
+	expression, ok := dimensionSQL[dim]
+	if !ok {
+		return nil, fmt.Errorf("invalid analytics distribution dimension")
+	}
+	clauses := []string{"e.event_name = 'content_read'"}
+	args := make([]any, 0, 8)
+	add := func(clause string, value any) {
+		args = append(args, value)
+		clauses = append(clauses, fmt.Sprintf(clause, len(args)))
+	}
+	if f.From != nil {
+		args = append(args, r.timezone, dateOnly(*f.From))
+		clauses = append(clauses, fmt.Sprintf("(e.event_at AT TIME ZONE $%d)::date >= $%d::date", len(args)-1, len(args)))
+	}
+	if f.To != nil {
+		args = append(args, r.timezone, dateOnly(*f.To))
+		clauses = append(clauses, fmt.Sprintf("(e.event_at AT TIME ZONE $%d)::date < ($%d::date + INTERVAL '1 day')", len(args)-1, len(args)))
+	}
+	if f.Locale != "" {
+		add("e.locale = $%d", strings.TrimSpace(f.Locale))
+	}
+	if f.ContentType != "" {
+		add("e.content_type = $%d", strings.TrimSpace(f.ContentType))
+	}
+	if f.Placement != "" {
+		add("e.placement = $%d", strings.TrimSpace(f.Placement))
+	}
+	if f.SourceID != nil {
+		add("(e.content_type = 'news' AND n.source_id = $%d)", *f.SourceID)
+	}
+	query := `SELECT ` + expression + ` AS dimension_key, COUNT(*)::integer AS event_count
+ FROM content_analytics_events e
+ LEFT JOIN content_articles a ON e.content_type = 'article' AND a.id = e.content_id
+ LEFT JOIN content_news_items n ON e.content_type = 'news' AND n.id = e.content_id
+ LEFT JOIN content_news_sources ns ON ns.id = n.source_id
+ WHERE ` + strings.Join(clauses, " AND ") + `
+ GROUP BY dimension_key ORDER BY event_count DESC, dimension_key ASC`
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]service.ContentAnalyticsDistribution, 0)
+	total := 0
+	for rows.Next() {
+		var item service.ContentAnalyticsDistribution
+		if err := rows.Scan(&item.Key, &item.Count); err != nil {
+			return nil, err
+		}
+		total += item.Count
+		out = append(out, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if total > 0 {
+		for i := range out {
+			out[i].Ratio = float64(out[i].Count) / float64(total)
+		}
+	}
+	return out, nil
+}
+
 func (r *contentAnalyticsRepository) CountDistinctVisitors(ctx context.Context, f service.ContentAnalyticsFilters) (int, error) {
 	if r == nil || r.db == nil {
 		return 0, errors.New("analytics SQL repository is unavailable")
@@ -283,7 +359,7 @@ WITH bounds AS (
         COUNT(*) FILTER (WHERE e.event_name = 'content_click')::integer AS clicks,
         COALESCE(ROUND(AVG(CASE
             WHEN e.event_name = 'content_read'
-             AND (e.payload_json->>'read_seconds') ~ '^[0-9]+(\\.[0-9]+)?$'
+             AND (e.payload_json->>'read_seconds') ~ '^[0-9]+(\.[0-9]+)?$'
             THEN (e.payload_json->>'read_seconds')::numeric
             ELSE NULL END))::integer, 0) AS read_seconds
     FROM events e
@@ -332,3 +408,4 @@ func dateOnly(t time.Time) time.Time {
 
 var _ service.ContentAnalyticsRepository = (*contentAnalyticsRepository)(nil)
 var _ service.ContentAnalyticsDistinctRepository = (*contentAnalyticsRepository)(nil)
+var _ service.ContentAnalyticsDistributionRepository = (*contentAnalyticsRepository)(nil)

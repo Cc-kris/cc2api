@@ -92,6 +92,12 @@ type ContentAnalyticsRanking struct {
 	AvgReadSeconds int     `json:"avgReadSeconds"`
 }
 
+type ContentAnalyticsDistribution struct {
+	Key   string  `json:"key"`
+	Count int     `json:"count"`
+	Ratio float64 `json:"ratio"`
+}
+
 type ContentAnalyticsCTR struct {
 	Placement   string  `json:"placement"`
 	Impressions int     `json:"impressions"`
@@ -110,6 +116,9 @@ type ContentAnalyticsRepository interface {
 	CreateEvent(context.Context, *ContentAnalyticsEvent) error
 	ListDaily(context.Context, ContentAnalyticsFilters) ([]ContentAnalyticsDaily, error)
 	AggregateDaily(context.Context, time.Time, string) error
+}
+type ContentAnalyticsDistributionRepository interface {
+	ContentAnalyticsDistribution(context.Context, string, ContentAnalyticsFilters) ([]ContentAnalyticsDistribution, error)
 }
 type ContentAnalyticsDistinctRepository interface {
 	CountDistinctVisitors(context.Context, ContentAnalyticsFilters) (int, error)
@@ -149,7 +158,10 @@ func validAnalyticsPayload(e *ContentAnalyticsEvent) bool {
 	if domain.ValidateAnalyticsPayload(legacy) != nil {
 		return false
 	}
-	return !viewLifecycleEvent(e.EventName) || analyticsViewID(e) != ""
+	if e.EventName == "page_view" || e.EventName == "content_impression" || viewLifecycleEvent(e.EventName) {
+		return analyticsViewID(e) != ""
+	}
+	return true
 }
 
 // PrepareEvent validates and enriches an event without performing I/O. It is
@@ -255,6 +267,20 @@ func validAnalyticsViewEvent(e *ContentAnalyticsEvent) bool {
 }
 func (s *ContentAnalyticsService) Query(ctx context.Context, f ContentAnalyticsFilters) ([]ContentAnalyticsDaily, error) {
 	return s.repo.ListDaily(ctx, f)
+}
+
+func (s *ContentAnalyticsService) Distribution(ctx context.Context, dim string, f ContentAnalyticsFilters) ([]ContentAnalyticsDistribution, error) {
+	dim = strings.ToLower(strings.TrimSpace(dim))
+	switch dim {
+	case "category", "locale", "source", "referrer":
+	default:
+		return nil, fmt.Errorf("invalid analytics distribution dimension")
+	}
+	repo, ok := s.repo.(ContentAnalyticsDistributionRepository)
+	if !ok {
+		return nil, errors.New("analytics distribution repository is unavailable")
+	}
+	return repo.ContentAnalyticsDistribution(ctx, dim, f)
 }
 
 // Aggregate recomputes the current and immediately previous local day. This
