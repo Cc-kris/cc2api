@@ -12,6 +12,7 @@ import (
 const (
 	DefaultPublicContentPageSize = 12
 	MaxPublicContentPageSize     = 100
+	MaxPublicFeaturedArticles    = 10
 )
 
 var ErrPublicContentNotFound = errors.New("public content not found")
@@ -135,6 +136,12 @@ type PublicArticlePage struct {
 	Page     int                     `json:"page"`
 	PageSize int                     `json:"pageSize"`
 	HasNext  bool                    `json:"hasNext"`
+}
+
+// PublicFeaturedArticlesRepository exposes only articles selected through the
+// featured_at source of truth. Implementations return at most the requested limit.
+type PublicFeaturedArticlesRepository interface {
+	ListFeaturedArticles(ctx context.Context, locale string, limit int) ([]PublicArticleListItem, error)
 }
 
 // PublicContentRepository is the narrow read port used by anonymous content
@@ -272,6 +279,33 @@ func (s *PublicContentService) ListArticles(ctx context.Context, locale string, 
 	}
 	result.Page, result.PageSize, result.HasNext = offset/limit+1, limit, result.Total > offset && result.Total-offset > len(result.Items)
 	return result, nil
+}
+
+// ListFeaturedArticles returns the selected public articles, newest selection first.
+// An empty slice is a valid result and lets clients hide the section entirely.
+func (s *PublicContentService) ListFeaturedArticles(ctx context.Context, locale string) ([]PublicArticleListItem, error) {
+	locale, err := normalizePublicLocale(locale)
+	if err != nil {
+		return nil, err
+	}
+	repo, ok := s.repo.(PublicFeaturedArticlesRepository)
+	if !ok {
+		return nil, ErrPublicContentRepositoryContract
+	}
+	items, err := repo.ListFeaturedArticles(ctx, locale, MaxPublicFeaturedArticles)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) > MaxPublicFeaturedArticles || !allPublicArticleListItemsValid(locale, items) {
+		return nil, ErrPublicContentRepositoryContract
+	}
+	for i := range items {
+		items[i].CoverImage = publicLocalMediaPath(items[i].CoverImage)
+	}
+	if items == nil {
+		items = []PublicArticleListItem{}
+	}
+	return items, nil
 }
 
 func (s *PublicContentService) GetArticle(ctx context.Context, locale, slug string) (*PublicArticle, error) {

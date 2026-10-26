@@ -70,6 +70,15 @@ func (h *PublicContentHandler) ListArticles(c *gin.Context) {
 	response.Success(c, data)
 }
 
+func (h *PublicContentHandler) ListFeaturedArticles(c *gin.Context) {
+	data, err := h.service.ListFeaturedArticles(c.Request.Context(), publicLocaleQuery(c))
+	if err != nil {
+		publicContentError(c, err)
+		return
+	}
+	response.Success(c, data)
+}
+
 func (h *PublicContentHandler) GetArticle(c *gin.Context) {
 	item, err := h.service.GetArticle(c.Request.Context(), c.Param("locale"), c.Param("slug"))
 	if err != nil {
