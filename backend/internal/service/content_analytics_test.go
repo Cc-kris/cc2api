@@ -2,9 +2,15 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	_ "github.com/lib/pq"
 )
 
 type analyticsRepoStub struct {
@@ -33,6 +39,110 @@ func TestContentAnalyticsAggregateUsesSiteTimezone(t *testing.T) {
 	}
 	if err := svc.Aggregate(context.Background(), time.Now(), "not/a-timezone"); err == nil {
 		t.Fatal("Aggregate() accepted invalid timezone")
+	}
+}
+
+func TestContentAnalyticsViewLifecycleValidation(t *testing.T) {
+	svc := NewContentAnalyticsService(&analyticsRepoStub{}, "secret")
+	cases := []struct {
+		name    string
+		event   string
+		payload map[string]any
+		wantErr bool
+	}{
+		{"heartbeat", "heartbeat", map[string]any{"view_id": "view-1", "duration_ms": float64(30_000)}, false},
+		{"leave", "page_leave", map[string]any{"viewId": "view-1", "duration_ms": float64(maxAnalyticsViewDurationMS)}, false},
+		{"missing view id", "page_heartbeat", map[string]any{"duration_ms": float64(30_000)}, true},
+		{"missing duration", "page_leave", map[string]any{"view_id": "view-1"}, true},
+		{"negative duration", "page_heartbeat", map[string]any{"view_id": "view-1", "duration_ms": float64(-1)}, true},
+		{"over four hours", "page_leave", map[string]any{"view_id": "view-1", "duration_ms": float64(maxAnalyticsViewDurationMS + 1)}, true},
+		{"fractional duration", "page_heartbeat", map[string]any{"view_id": "view-1", "duration_ms": 1.5}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := &ContentAnalyticsEvent{
+				EventID:   "event-" + tc.name,
+				EventName: tc.event,
+				PagePath:  "/articles/a",
+				EventAt:   time.Now().UTC(),
+				Payload:   tc.payload,
+			}
+			err := svc.PrepareEvent(e, "192.0.2.1", "test-agent")
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("PrepareEvent() error = %v, wantErr=%v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestContentAnalyticsViewDurationUsesLatestAndImpressionViewDeduplication(t *testing.T) {
+	dsn := os.Getenv("CONTENT_ANALYTICS_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set CONTENT_ANALYTICS_TEST_DSN to run PostgreSQL aggregation regression")
+	}
+	_, file, _, _ := runtime.Caller(0)
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+	source, err := os.ReadFile(filepath.Join(root, "internal/repository/content_analytics_repo.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const start, end = "const query = `", "\n\tif _, err := tx.ExecContext(ctx, query"
+	text := string(source)
+	i, j := strings.Index(text, start), strings.Index(text, end)
+	if i < 0 || j <= i {
+		t.Fatal("aggregate SQL not found")
+	}
+	query := strings.TrimSuffix(text[i+len(start):j], "`")
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	ddl := `CREATE TEMP TABLE content_analytics_events(event_id text, event_name text, event_at timestamptz,
+	 payload_json jsonb, session_hash text, locale text, content_type text, content_id bigint,
+	 page_path text, placement text);
+	 CREATE TEMP TABLE content_analytics_daily(date date, locale text, content_type text, content_id bigint,
+	 page_path text, placement text, unique_visitors integer, page_views integer, reads integer,
+	 impressions integer, clicks integer, avg_read_seconds integer, ctr double precision, updated_at timestamptz,
+	 UNIQUE(date,locale,content_type,content_id,page_path,placement));`
+	if _, err = tx.Exec(ddl); err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	rows := [][]any{
+		{"p1", "page_view", base, `{"view_id":"v1"}`}, {"p2", "page_view", base, `{"view_id":"v1"}`},
+		{"p3", "page_view", base, `{}`}, {"i1", "content_impression", base, `{"view_id":"v1"}`},
+		{"i2", "content_impression", base, `{"view_id":"v1"}`}, {"i3", "content_impression", base, `{}`},
+		{"h1", "heartbeat", base.Add(30 * time.Second), `{"view_id":"v2","duration_ms":90000}`},
+		{"h2", "heartbeat", base.Add(15 * time.Second), `{"view_id":"v2","duration_ms":60000}`},
+		{"h3", "heartbeat", base.Add(30 * time.Second), `{"view_id":"v2","duration_ms":45000}`},
+		{"h4", "heartbeat", base.Add(30 * time.Second), `{"view_id":"v2","duration_ms":70000}`},
+		{"l1", "page_leave", base, `{"view_id":"v2","duration_ms":20000}`},
+		{"l2", "page_leave", base.Add(time.Second), `{"view_id":"v2","duration_ms":25000}`},
+		{"z1", "heartbeat", base, `{"view_id":"v3","duration_ms":5000}`},
+		{"old", "heartbeat", base.Add(25 * time.Second), `{"view_id":"v4","duration_ms":120000}`},
+		{"tie-a", "heartbeat", base.Add(30 * time.Second), `{"view_id":"v4","duration_ms":45000}`},
+		{"tie-z", "heartbeat", base.Add(30 * time.Second), `{"view_id":"v4","duration_ms":70000}`},
+	}
+	for _, r := range rows {
+		if _, err = tx.Exec(`INSERT INTO content_analytics_events VALUES($1,$2,$3,$4,'s','en','article',1,'/p','home')`, r...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err = tx.Exec(query, base, "UTC"); err != nil {
+		t.Fatal(err)
+	}
+	var views, impressions, seconds int
+	if err = tx.QueryRow(`SELECT page_views, impressions, avg_read_seconds FROM content_analytics_daily WHERE date=$1`, base).Scan(&views, &impressions, &seconds); err != nil {
+		t.Fatal(err)
+	}
+	if views != 1 || impressions != 1 || seconds != 33 {
+		t.Fatalf("got page_views=%d impressions=%d avg_read_seconds=%d; want 1,1,33", views, impressions, seconds)
 	}
 }
 

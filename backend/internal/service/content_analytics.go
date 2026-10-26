@@ -123,16 +123,45 @@ func NewContentAnalyticsService(repo ContentAnalyticsRepository, secret string) 
 	return &ContentAnalyticsService{repo: repo, secret: []byte(secret)}
 }
 
+func viewLifecycleEvent(name string) bool {
+	return name == "heartbeat" || name == "page_heartbeat" || name == "page_leave"
+}
+
+func validAnalyticsPayload(e *ContentAnalyticsEvent) bool {
+	if e == nil {
+		return false
+	}
+	legacy := make(map[string]any, len(e.Payload))
+	for key, value := range e.Payload {
+		switch key {
+		case "view_id", "viewId":
+			if e.EventName != "page_view" && e.EventName != "content_impression" && !viewLifecycleEvent(e.EventName) {
+				return false
+			}
+		case "duration_ms":
+			if !viewLifecycleEvent(e.EventName) {
+				return false
+			}
+		default:
+			legacy[key] = value
+		}
+	}
+	if domain.ValidateAnalyticsPayload(legacy) != nil {
+		return false
+	}
+	return !viewLifecycleEvent(e.EventName) || analyticsViewID(e) != ""
+}
+
 // PrepareEvent validates and enriches an event without performing I/O. It is
 // used by the HTTP handler before enqueueing asynchronous persistence.
 func (s *ContentAnalyticsService) PrepareEvent(e *ContentAnalyticsEvent, ip, ua string) error {
-	if e == nil || !allowedAnalyticsEvent(e.EventName) || domain.ValidateAnalyticsPayload(e.Payload) != nil || strings.TrimSpace(e.EventID) == "" || strings.TrimSpace(e.EventID) != e.EventID || len(e.EventID) > 120 || strings.TrimSpace(e.PagePath) == "" || len(e.PagePath) > 2048 || strings.ContainsAny(e.PagePath, "\r\n") || !validAnalyticsDimensions(e) {
+	if e == nil || !allowedAnalyticsEvent(e.EventName) || !validAnalyticsPayload(e) || strings.TrimSpace(e.EventID) == "" || strings.TrimSpace(e.EventID) != e.EventID || len(e.EventID) > 120 || strings.TrimSpace(e.PagePath) == "" || len(e.PagePath) > 2048 || strings.ContainsAny(e.PagePath, "\r\n") || !validAnalyticsDimensions(e) {
 		return ErrContentAnalyticsInvalid
 	}
 	if e.EventAt.IsZero() {
 		e.EventAt = time.Now().UTC()
 	}
-	if e.EventAt.Before(time.Now().UTC().Add(-48*time.Hour)) || e.EventAt.After(time.Now().UTC().Add(10*time.Minute)) {
+	if e.EventAt.Before(time.Now().UTC().Add(-48*time.Hour)) || e.EventAt.After(time.Now().UTC().Add(10*time.Minute)) || !validAnalyticsViewEvent(e) {
 		return ErrContentAnalyticsInvalid
 	}
 	e.SessionHash = hashSession(s.secret, ip, ua)
@@ -166,11 +195,63 @@ func validAnalyticsDimensions(e *ContentAnalyticsEvent) bool {
 }
 func allowedAnalyticsEvent(v string) bool {
 	switch strings.TrimSpace(v) {
-	case "page_view", "content_impression", "content_click", "content_read", "toc_click":
+	case "page_view", "heartbeat", "page_heartbeat", "page_leave", "content_impression", "content_click", "content_read", "toc_click":
 		return true
 	default:
 		return false
 	}
+}
+
+const maxAnalyticsViewDurationMS = int64(4 * time.Hour / time.Millisecond)
+
+// analyticsViewID returns the stable browser view identifier used to collapse
+// heartbeat and leave events. Both spellings are accepted because payloads are
+// sent by clients using either Go/SQL or JSON naming conventions.
+func analyticsViewID(e *ContentAnalyticsEvent) string {
+	if e == nil {
+		return ""
+	}
+	for _, key := range []string{"view_id", "viewId"} {
+		if value, ok := e.Payload[key].(string); ok {
+			if value = strings.TrimSpace(value); value != "" {
+				return value
+			}
+		}
+	}
+	return ""
+}
+
+func analyticsDurationMS(e *ContentAnalyticsEvent) (int64, bool) {
+	if e == nil || e.Payload == nil {
+		return 0, false
+	}
+	value, ok := e.Payload["duration_ms"]
+	if !ok {
+		return 0, false
+	}
+	var duration int64
+	switch number := value.(type) {
+	case int:
+		duration = int64(number)
+	case int64:
+		duration = number
+	case float64:
+		if number != float64(int64(number)) {
+			return 0, false
+		}
+		duration = int64(number)
+	default:
+		return 0, false
+	}
+	return duration, duration >= 0 && duration <= maxAnalyticsViewDurationMS
+}
+
+func validAnalyticsViewEvent(e *ContentAnalyticsEvent) bool {
+	if !viewLifecycleEvent(e.EventName) {
+		return true
+	}
+	_, durationOK := analyticsDurationMS(e)
+	return analyticsViewID(e) != "" && durationOK
 }
 func (s *ContentAnalyticsService) Query(ctx context.Context, f ContentAnalyticsFilters) ([]ContentAnalyticsDaily, error) {
 	return s.repo.ListDaily(ctx, f)

@@ -240,7 +240,35 @@ func (r *contentAnalyticsRepository) AggregateDaily(ctx context.Context, now tim
 WITH bounds AS (
     SELECT (($1::timestamptz AT TIME ZONE $2)::date - 1) AS start_date,
            (($1::timestamptz AT TIME ZONE $2)::date + 1) AS end_date
-), aggregated AS (
+), events AS (
+    SELECT e.*,
+           COALESCE(NULLIF(BTRIM(e.payload_json->>'view_id'), ''), NULLIF(BTRIM(e.payload_json->>'viewId'), '')) AS view_id,
+           CASE
+             WHEN e.event_name IN ('heartbeat', 'page_heartbeat', 'page_leave')
+              AND (e.payload_json->>'duration_ms') ~ '^[0-9]+$'
+              AND (e.payload_json->>'duration_ms')::numeric BETWEEN 0 AND 14400000
+             THEN (e.payload_json->>'duration_ms')::numeric / 1000
+             ELSE NULL
+           END AS duration_seconds
+    FROM content_analytics_events e, bounds b
+    WHERE (e.event_at AT TIME ZONE $2)::date >= b.start_date
+      AND (e.event_at AT TIME ZONE $2)::date < b.end_date
+), view_durations AS (
+    SELECT DISTINCT ON (event_date, locale, content_type, content_id, page_path, placement, view_id)
+           event_date, locale, content_type, content_id, page_path, placement, duration_seconds
+    FROM (
+        SELECT (event_at AT TIME ZONE $2)::date AS event_date,
+               COALESCE(NULLIF(BTRIM(locale), ''), '') AS locale,
+               COALESCE(NULLIF(BTRIM(content_type), ''), '') AS content_type,
+               COALESCE(content_id, 0) AS content_id, page_path,
+               COALESCE(NULLIF(BTRIM(placement), ''), '') AS placement,
+               view_id, duration_seconds, event_name, event_at, event_id
+        FROM events
+        WHERE view_id IS NOT NULL AND duration_seconds IS NOT NULL
+    ) candidates
+    ORDER BY event_date, locale, content_type, content_id, page_path, placement, view_id,
+             (event_name = 'page_leave') DESC, event_at DESC, event_id DESC
+), event_metrics AS (
     SELECT
         (e.event_at AT TIME ZONE $2)::date AS date,
         COALESCE(NULLIF(BTRIM(e.locale), ''), '') AS locale,
@@ -249,23 +277,32 @@ WITH bounds AS (
         e.page_path,
         COALESCE(NULLIF(BTRIM(e.placement), ''), '') AS placement,
         COUNT(DISTINCT e.session_hash)::integer AS unique_visitors,
-        COUNT(*) FILTER (WHERE e.event_name = 'page_view')::integer AS page_views,
+        COUNT(DISTINCT CASE WHEN e.event_name = 'page_view' THEN e.view_id END)::integer AS page_views,
         COUNT(*) FILTER (WHERE e.event_name = 'content_read')::integer AS reads,
-        COUNT(*) FILTER (WHERE e.event_name = 'content_impression')::integer AS impressions,
+        COUNT(DISTINCT CASE WHEN e.event_name = 'content_impression' THEN e.view_id END)::integer AS impressions,
         COUNT(*) FILTER (WHERE e.event_name = 'content_click')::integer AS clicks,
         COALESCE(ROUND(AVG(CASE
             WHEN e.event_name = 'content_read'
              AND (e.payload_json->>'read_seconds') ~ '^[0-9]+(\\.[0-9]+)?$'
             THEN (e.payload_json->>'read_seconds')::numeric
-            ELSE NULL END))::integer, 0) AS avg_read_seconds,
-        CASE WHEN COUNT(*) FILTER (WHERE e.event_name = 'content_impression') > 0
-             THEN COUNT(*) FILTER (WHERE e.event_name = 'content_click')::double precision /
-                  COUNT(*) FILTER (WHERE e.event_name = 'content_impression')::double precision
-             ELSE 0 END AS ctr
-    FROM content_analytics_events e, bounds b
-    WHERE (e.event_at AT TIME ZONE $2)::date >= b.start_date
-      AND (e.event_at AT TIME ZONE $2)::date < b.end_date
+            ELSE NULL END))::integer, 0) AS read_seconds
+    FROM events e
     GROUP BY 1, 2, 3, 4, 5, 6
+), duration_metrics AS (
+    SELECT event_date AS date, locale, content_type, content_id, page_path, placement,
+           ROUND(AVG(duration_seconds))::integer AS view_seconds
+    FROM view_durations
+    GROUP BY 1, 2, 3, 4, 5, 6
+), aggregated AS (
+    SELECT
+        em.date, em.locale, em.content_type, em.content_id, em.page_path, em.placement,
+        em.unique_visitors, em.page_views, em.reads, em.impressions, em.clicks,
+        COALESCE(dm.view_seconds, em.read_seconds, 0) AS avg_read_seconds,
+        CASE WHEN em.impressions > 0 THEN em.clicks::double precision / em.impressions::double precision ELSE 0 END AS ctr
+    FROM event_metrics em
+    LEFT JOIN duration_metrics dm
+      ON dm.date = em.date AND dm.locale = em.locale AND dm.content_type = em.content_type
+     AND dm.content_id = em.content_id AND dm.page_path = em.page_path AND dm.placement = em.placement
 )
 INSERT INTO content_analytics_daily
     (date, locale, content_type, content_id, page_path, placement,
