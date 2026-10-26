@@ -75,6 +75,7 @@ describe('form controls', () => {
     const clear = wrapper.get('[aria-label="Clear selection"]')
     await clear.trigger('click')
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([[]])
+    wrapper.unmount()
 
     const loadingWrapper = mount(Select, {
       props: { modelValue: null, options, loading: true }
@@ -154,6 +155,32 @@ describe('form controls', () => {
     const available = document.body.querySelector('[role="option"]:last-child') as HTMLElement
     expect(trigger.attributes('aria-activedescendant')).toBe(available.id)
     expect(document.body.querySelector('[role="option"][aria-disabled="true"]')).not.toBeNull()
+    wrapper.unmount()
+  })
+
+  it('searchable Select keeps its combobox outside the labeled listbox', async () => {
+    const wrapper = mount(Select, {
+      attachTo: document.body,
+      props: {
+        modelValue: null,
+        options: [{ value: 'one', label: 'One' }],
+        searchable: true,
+        searchPlaceholder: 'Filter options'
+      }
+    })
+    await wrapper.get('button').trigger('click')
+    await nextTick()
+
+    const searchInput = document.body.querySelector('[role="combobox"]') as HTMLInputElement
+    const listbox = document.body.querySelector('[role="listbox"]') as HTMLElement
+    expect(searchInput).not.toBeNull()
+    expect(listbox).not.toBeNull()
+    expect(listbox.contains(searchInput)).toBe(false)
+    expect(searchInput.getAttribute('aria-label')).toBe('Filter options')
+    expect(searchInput.getAttribute('aria-controls')).toBe(listbox.id)
+    expect(listbox.getAttribute('aria-labelledby')).toBe(searchInput.id)
+    expect(searchInput.getAttribute('aria-activedescendant')).toBe(listbox.querySelector('[role="option"]')?.id)
+
     wrapper.unmount()
   })
 

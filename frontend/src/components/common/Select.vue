@@ -219,6 +219,7 @@ const emptyTextDisplay = computed(() => props.emptyText ?? t('common.noOptionsFo
 
 const triggerAccessibleLabel = computed(() => props.ariaLabel ?? t('common.selectOption'))
 const triggerId = `${instanceId}-trigger`
+const searchInputId = `${instanceId}-search`
 const listboxId = `${instanceId}-listbox`
 const optionId = (index: number) => `${instanceId}-option-${index}`
 const activeDescendantId = computed(() => {
