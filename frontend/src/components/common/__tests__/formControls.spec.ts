@@ -1,6 +1,8 @@
+import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
+import { flushPromises } from '@vue/test-utils'
 import Input from '@/components/common/Input.vue'
 import TextArea from '@/components/common/TextArea.vue'
 import Select from '@/components/common/Select.vue'
@@ -82,6 +84,86 @@ describe('form controls', () => {
     expect(loadingTrigger.attributes('aria-busy')).toBe('true')
     expect(loadingTrigger.get('[role="status"]').attributes('aria-label')).toBe('Loading')
     loadingWrapper.unmount()
+  })
+
+  it('non-searchable Select keeps trigger focus and exposes an accessible active option while navigating', async () => {
+    const adversarialOptions = [
+      { kind: 'group', label: 'Group heading' },
+      { value: 'disabled', label: 'Unavailable', disabled: true },
+      { value: 'first', label: 'First' },
+      { value: 'last', label: 'Last' }
+    ]
+    const wrapper = mount(Select, {
+      attachTo: document.body,
+      props: {
+        modelValue: null,
+        options: adversarialOptions,
+        searchable: false,
+        ariaLabel: 'Choose a value'
+      }
+    })
+    const trigger = wrapper.get('button')
+
+    expect(trigger.attributes('role')).toBe('combobox')
+    expect(trigger.attributes('aria-label')).toBe('Choose a value')
+    expect(trigger.attributes('aria-controls')).toBeTruthy()
+    trigger.element.focus()
+
+    await trigger.trigger('keydown', { key: 'ArrowDown' })
+    await nextTick()
+    const listbox = document.body.querySelector('[role="listbox"]') as HTMLElement
+    expect(listbox).not.toBeNull()
+    expect(listbox.getAttribute('aria-labelledby')).toBe(trigger.attributes('id'))
+    expect(trigger.element).toBe(document.activeElement)
+
+    const options = [...listbox.querySelectorAll('[role="option"]')]
+    expect(options.map((option) => option.textContent?.trim())).toEqual(['Unavailable', 'First', 'Last'])
+    expect(trigger.attributes('aria-activedescendant')).toBe(options[1].id)
+    expect(listbox.querySelector('[role="presentation"]')?.textContent?.trim()).toBe('Group heading')
+
+    await trigger.trigger('keydown', { key: 'ArrowDown' })
+    expect(trigger.attributes('aria-activedescendant')).toBe(options[2].id)
+    await trigger.trigger('keydown', { key: 'Enter' })
+    await nextTick()
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['last'])
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+    await flushPromises()
+    wrapper.unmount()
+  })
+
+  it('Select uses its localized fallback name and skips disabled/group entries for its active descendant', async () => {
+    const wrapper = mount(Select, {
+      props: {
+        modelValue: null,
+        options: [
+          { kind: 'group', label: 'Group heading' },
+          { value: 'disabled', label: 'Unavailable', disabled: true },
+          { value: 'available', label: 'Available' }
+        ],
+        searchable: false
+      }
+    })
+    const trigger = wrapper.get('button')
+    expect(trigger.attributes('aria-label')).toBe('common.selectOption')
+    await wrapper.setProps({ ariaLabelledby: 'external-label' })
+    expect(trigger.attributes('aria-labelledby')).toBe('external-label')
+    expect(trigger.attributes('aria-label')).toBeUndefined()
+
+    await trigger.trigger('keydown', { key: 'ArrowDown' })
+    await nextTick()
+    const available = document.body.querySelector('[role="option"]:last-child') as HTMLElement
+    expect(trigger.attributes('aria-activedescendant')).toBe(available.id)
+    expect(document.body.querySelector('[role="option"][aria-disabled="true"]')).not.toBeNull()
+    wrapper.unmount()
+  })
+
+  it('Select selected option uses the primary blue and high contrast foreground', () => {
+    const selectSource = readFileSync('src/components/common/Select.vue', 'utf8')
+    const selectedStyle = selectSource.match(/\.select-option-selected \{([\s\S]*?)\n\}/)?.[1]
+    expect(selectedStyle).toContain('background-color: #2563EB')
+    expect(selectedStyle).toContain('color: #FFFFFF')
+    expect(selectSource).toContain(':global(.dark) .select-option-selected')
+    expect(selectSource).not.toContain('#CCFF00')
   })
 
   it('Toggle emits only when enabled and exposes switch semantics', async () => {

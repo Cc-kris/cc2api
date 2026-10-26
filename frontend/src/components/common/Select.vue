@@ -3,20 +3,24 @@
     <button
       ref="triggerRef"
       type="button"
+      :id="triggerId"
       @click="toggle"
       :disabled="disabled || loading"
       :aria-expanded="isOpen"
       :aria-haspopup="'listbox'"
       :aria-busy="loading ? 'true' : undefined"
-      aria-label="Select option"
+      :role="isSearchable ? undefined : 'combobox'"
+      :aria-label="ariaLabelledby ? undefined : triggerAccessibleLabel"
+      :aria-labelledby="ariaLabelledby || undefined"
+      :aria-controls="listboxId"
+      :aria-activedescendant="!isSearchable ? activeDescendantId : undefined"
       :class="[
         'select-trigger',
         isOpen && 'select-trigger-open',
         error && 'select-trigger-error',
         disabled && 'select-trigger-disabled'
       ]"
-      @keydown.down.prevent="onTriggerKeyDown"
-      @keydown.up.prevent="onTriggerKeyDown"
+      @keydown="onTriggerKeyDown"
     >
       <span class="select-value">
         <slot name="selected" :option="selectedOption" :options="selectedOptions">
@@ -58,8 +62,6 @@
           class="select-dropdown-portal"
           :class="[instanceId]"
           :style="dropdownStyle"
-          role="listbox"
-          :aria-multiselectable="multiple ? 'true' : undefined"
           @click.stop
           @mousedown.stop
           @keydown="onDropdownKeyDown"
@@ -68,9 +70,16 @@
           <div v-if="isSearchable" class="select-search">
             <Icon name="search" size="sm" class="text-gray-400" />
             <input
+              :id="searchInputId"
               ref="searchInputRef"
               v-model="searchQuery"
               type="text"
+              role="combobox"
+              aria-autocomplete="list"
+              :aria-label="searchPlaceholderText"
+              :aria-expanded="isOpen"
+              :aria-controls="listboxId"
+              :aria-activedescendant="activeDescendantId"
               :placeholder="searchPlaceholderText"
               class="select-search-input"
               @click.stop
@@ -78,14 +87,23 @@
           </div>
 
           <!-- Options list -->
-          <div class="select-options" ref="optionsListRef">
+          <div
+            class="select-options"
+            ref="optionsListRef"
+            role="listbox"
+            :id="listboxId"
+            :aria-labelledby="isSearchable ? searchInputId : triggerId"
+            :aria-multiselectable="multiple ? 'true' : undefined"
+          >
             <div
               v-for="(option, index) in filteredOptions"
-              :key="`${typeof getOptionValue(option)}:${String(getOptionValue(option) ?? '')}`"
-              role="option"
-              :aria-selected="isSelected(option)"
-              :aria-disabled="isOptionDisabled(option)"
-              @click.stop="!isOptionDisabled(option) && selectOption(option)"
+              :key="optionId(index)"
+              :id="optionId(index)"
+              :role="isGroupHeaderOption(option) ? 'presentation' : 'option'"
+              :aria-selected="isGroupHeaderOption(option) ? undefined : isSelected(option)"
+              :aria-disabled="isGroupHeaderOption(option) ? undefined : isOptionDisabled(option)"
+              :aria-current="focusedIndex === index && !isGroupHeaderOption(option) ? 'true' : undefined"
+              @click.stop="!isOptionDisabled(option) && !isGroupHeaderOption(option) && selectOption(option)"
               @mouseenter="handleOptionMouseEnter(option, index)"
               :class="[
                 'select-option',
@@ -160,6 +178,8 @@ interface Props {
   multiple?: boolean
   clearable?: boolean
   loading?: boolean
+  ariaLabel?: string
+  ariaLabelledby?: string
 }
 
 type SelectValue = string | number | boolean | null
@@ -196,6 +216,17 @@ const triggerRect = ref<DOMRect | null>(null)
 const placeholderText = computed(() => props.placeholder ?? t('common.selectOption'))
 const searchPlaceholderText = computed(() => props.searchPlaceholder ?? t('common.searchPlaceholder'))
 const emptyTextDisplay = computed(() => props.emptyText ?? t('common.noOptionsFound'))
+
+const triggerAccessibleLabel = computed(() => props.ariaLabel ?? t('common.selectOption'))
+const triggerId = `${instanceId}-trigger`
+const listboxId = `${instanceId}-listbox`
+const optionId = (index: number) => `${instanceId}-option-${index}`
+const activeDescendantId = computed(() => {
+  const option = filteredOptions.value[focusedIndex.value]
+  return option && !isOptionDisabled(option) && !isGroupHeaderOption(option)
+    ? optionId(focusedIndex.value)
+    : undefined
+})
 
 const isSearchable = computed(() => {
   if (props.searchable === 'auto') return props.options.length > 5
@@ -309,7 +340,7 @@ const findNextEnabledIndex = (startIndex: number): number => {
   if (opts.length === 0) return -1
   for (let offset = 0; offset < opts.length; offset++) {
     const idx = (startIndex + offset) % opts.length
-    if (!isOptionDisabled(opts[idx])) return idx
+    if (!isOptionDisabled(opts[idx]) && !isGroupHeaderOption(opts[idx])) return idx
   }
   return -1
 }
@@ -319,7 +350,7 @@ const findPrevEnabledIndex = (startIndex: number): number => {
   if (opts.length === 0) return -1
   for (let offset = 0; offset < opts.length; offset++) {
     const idx = (startIndex - offset + opts.length) % opts.length
-    if (!isOptionDisabled(opts[idx])) return idx
+    if (!isOptionDisabled(opts[idx]) && !isGroupHeaderOption(opts[idx])) return idx
   }
   return -1
 }
@@ -367,10 +398,11 @@ watch(isOpen, (open) => {
       focusedIndex.value = -1
     } else {
       const selectedIdx = filteredOptions.value.findIndex(isSelected)
-      const initialIdx = selectedIdx >= 0 ? selectedIdx : 0
-      focusedIndex.value = isOptionDisabled(filteredOptions.value[initialIdx])
-        ? findNextEnabledIndex(initialIdx + 1)
-        : initialIdx
+      if (selectedIdx >= 0 && !isOptionDisabled(filteredOptions.value[selectedIdx]) && !isGroupHeaderOption(filteredOptions.value[selectedIdx])) {
+        focusedIndex.value = selectedIdx
+      } else {
+        focusedIndex.value = findNextEnabledIndex(selectedIdx >= 0 ? selectedIdx + 1 : 0)
+      }
     }
 
     if (isSearchable.value) {
@@ -411,33 +443,78 @@ const clearSelection = () => {
 }
 
 // Keyboards
-const onTriggerKeyDown = () => {
-  if (!isOpen.value) {
-    isOpen.value = true
+const onTriggerKeyDown = (event: KeyboardEvent) => {
+  if (isSearchable.value) {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      if (!isOpen.value) isOpen.value = true
+    }
+    return
+  }
+
+  switch (event.key) {
+    case 'ArrowDown':
+      event.preventDefault()
+      if (!isOpen.value) isOpen.value = true
+      else {
+        focusedIndex.value = findNextEnabledIndex(focusedIndex.value + 1)
+        if (focusedIndex.value >= 0) scrollToFocused()
+      }
+      break
+    case 'ArrowUp':
+      event.preventDefault()
+      if (!isOpen.value) isOpen.value = true
+      else {
+        focusedIndex.value = findPrevEnabledIndex(focusedIndex.value - 1)
+        if (focusedIndex.value >= 0) scrollToFocused()
+      }
+      break
+    case 'Enter':
+    case ' ': {
+      event.preventDefault()
+      if (!isOpen.value) {
+        isOpen.value = true
+      } else if (focusedIndex.value >= 0 && focusedIndex.value < filteredOptions.value.length) {
+        const option = filteredOptions.value[focusedIndex.value]
+        if (!isOptionDisabled(option) && !isGroupHeaderOption(option)) selectOption(option)
+      }
+      break
+    }
+    case 'Escape':
+      if (isOpen.value) {
+        event.preventDefault()
+        isOpen.value = false
+        triggerRef.value?.focus()
+      }
+      break
+    case 'Tab':
+      if (isOpen.value) isOpen.value = false
+      break
   }
 }
 
-const onDropdownKeyDown = (e: KeyboardEvent) => {
-  switch (e.key) {
+const onDropdownKeyDown = (event: KeyboardEvent) => {
+  if (!isSearchable.value) return
+  switch (event.key) {
     case 'ArrowDown':
-      e.preventDefault()
+      event.preventDefault()
       focusedIndex.value = findNextEnabledIndex(focusedIndex.value + 1)
       if (focusedIndex.value >= 0) scrollToFocused()
       break
     case 'ArrowUp':
-      e.preventDefault()
+      event.preventDefault()
       focusedIndex.value = findPrevEnabledIndex(focusedIndex.value - 1)
       if (focusedIndex.value >= 0) scrollToFocused()
       break
     case 'Enter':
-      e.preventDefault()
+      event.preventDefault()
       if (focusedIndex.value >= 0 && focusedIndex.value < filteredOptions.value.length) {
         const opt = filteredOptions.value[focusedIndex.value]
-        if (!isOptionDisabled(opt)) selectOption(opt)
+        if (!isOptionDisabled(opt) && !isGroupHeaderOption(opt)) selectOption(opt)
       }
       break
     case 'Escape':
-      e.preventDefault()
+      event.preventDefault()
       isOpen.value = false
       triggerRef.value?.focus()
       break
@@ -568,11 +645,6 @@ onUnmounted(() => {
   z-index: 1;
 }
 
-
-  @apply truncate;
-}
-
-
 .select-icon {
   @apply flex-shrink-0 flex items-center;
   color: #121316;
@@ -650,16 +722,16 @@ onUnmounted(() => {
   border-color: #94A3B8;
 }
 
-/* 选中项：无论亮色还是深色，一律采用首页标志性的荧光黄绿底 #CCFF00 + 纯黑字 #121316 + 粗黑框，绝不出现白底白字！ */
+/* Selected options use the product's primary blue with high-contrast white text in both themes. */
 .select-option-selected {
-  background-color: #CCFF00 !important;
-  color: #121316 !important;
-  border: 2px solid #121316 !important;
+  background-color: #2563EB !important;
+  color: #FFFFFF !important;
+  border: 2px solid #1D4ED8 !important;
   box-shadow: 2px 2px 0px #121316 !important;
   font-weight: 900 !important;
 }
 .select-option-selected * {
-  color: #121316 !important;
+  color: #FFFFFF !important;
 }
 
 .select-option-disabled {
@@ -680,8 +752,7 @@ onUnmounted(() => {
 :global(.dark) .select-option-selected {
   background-color: #2563EB !important;
   color: #FFFFFF !important;
-  border-color: #60A5FA !important;
-  box-shadow: 2px 2px 0px #000000 !important;
+  border-color: #1D4ED8 !important;
 }
 :global(.dark) .select-option-selected * {
   color: #FFFFFF !important;
