@@ -1,12 +1,14 @@
 <template>
   <button
     type="button"
+    :disabled="disabled"
     @click="toggle"
-    class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-dark-800"
+    class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-dark-800"
     :class="[modelValue ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600']"
     role="switch"
-  :aria-checked="modelValue"
-  :aria-label="ariaLabel"
+    :aria-checked="modelValue"
+    :aria-disabled="disabled ? 'true' : undefined"
+    :aria-label="ariaLabel"
     :title="ariaLabel"
   >
     <span
@@ -21,15 +23,18 @@ import { computed } from 'vue'
 const props = defineProps<{
   modelValue: boolean
   ariaLabel?: string
+  disabled?: boolean
 }>()
 
 const ariaLabel = computed(() => props.ariaLabel?.trim() || 'Toggle setting')
+const disabled = computed(() => props.disabled === true)
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
 }>()
 
 function toggle() {
+  if (disabled.value) return
   emit('update:modelValue', !props.modelValue)
 }
 </script>

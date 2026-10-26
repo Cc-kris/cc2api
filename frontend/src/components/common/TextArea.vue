@@ -8,15 +8,16 @@
       <textarea
         :id="id"
         ref="textAreaRef"
-        :value="modelValue"
+        :value="modelValue ?? ''"
         :disabled="disabled"
         :required="required"
         :placeholder="placeholderText"
         :readonly="readonly"
         :rows="rows"
+        :aria-invalid="error ? 'true' : undefined"
         :class="[
-          'input w-full min-h-[80px] transition-all duration-200 resize-y',
-          error ? 'input-error ring-2 ring-red-500/20' : '',
+          'input w-full min-h-[96px] max-h-[400px] rounded-lg border-2 transition-all duration-200 resize-none overflow-y-auto',
+          error ? 'input-error border-red-500 ring-2 ring-red-500/20' : '',
           disabled ? 'cursor-not-allowed bg-gray-100 opacity-60 dark:bg-dark-900' : ''
         ]"
         @input="onInput"
@@ -36,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 interface Props {
   modelValue: string | null | undefined
@@ -68,10 +69,23 @@ const emit = defineEmits<{
 const textAreaRef = ref<HTMLTextAreaElement | null>(null)
 const placeholderText = computed(() => props.placeholder || '')
 
-const onInput = (event: Event) => {
-  const value = (event.target as HTMLTextAreaElement).value
-  emit('update:modelValue', value)
+const resizeTextArea = () => {
+  const element = textAreaRef.value
+  if (!element) return
+  element.style.height = 'auto'
+  const height = Math.min(Math.max(element.scrollHeight, 96), 400)
+  element.style.height = `${height}px`
+  element.style.overflowY = element.scrollHeight > 400 ? 'auto' : 'hidden'
 }
+
+const onInput = (event: Event) => {
+  const target = event.target as HTMLTextAreaElement
+  resizeTextArea()
+  emit('update:modelValue', target.value)
+}
+
+watch(() => props.modelValue, () => nextTick(resizeTextArea))
+onMounted(() => nextTick(resizeTextArea))
 
 // Expose focus method
 defineExpose({

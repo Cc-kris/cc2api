@@ -4,9 +4,10 @@
       ref="triggerRef"
       type="button"
       @click="toggle"
-      :disabled="disabled"
+      :disabled="disabled || loading"
       :aria-expanded="isOpen"
-      :aria-haspopup="true"
+      :aria-haspopup="'listbox'"
+      :aria-busy="loading ? 'true' : undefined"
       aria-label="Select option"
       :class="[
         'select-trigger',
@@ -18,17 +19,34 @@
       @keydown.up.prevent="onTriggerKeyDown"
     >
       <span class="select-value">
-        <slot name="selected" :option="selectedOption">
-          {{ selectedLabel }}
+        <slot name="selected" :option="selectedOption" :options="selectedOptions">
+          <template v-if="multiple && selectedOptions.length">
+            <span class="select-multiple-summary">
+              {{ selectedOptions.length }} selected
+            </span>
+          </template>
+          <template v-else>{{ selectedLabel }}</template>
         </slot>
       </span>
-      <span class="select-icon">
-        <Icon
-          name="chevronDown"
-          size="md"
-          :class="['transition-transform duration-200', isOpen && 'rotate-180']"
-        />
+      <span class="select-actions">
+        <span v-if="loading" class="select-loading" role="status" aria-label="Loading"></span>
+        <span v-else class="select-icon">
+          <Icon
+            name="chevronDown"
+            size="md"
+            :class="['transition-transform duration-200', isOpen && 'rotate-180']"
+          />
+        </span>
       </span>
+    </button>
+    <button
+      v-if="clearable && hasValue && !disabled && !loading"
+      type="button"
+      class="select-clear select-clear-floating"
+      aria-label="Clear selection"
+      @click.stop="clearSelection"
+    >
+      <Icon name="x" size="sm" />
     </button>
 
     <!-- Teleport dropdown to body to escape stacking context -->
@@ -41,6 +59,7 @@
           :class="[instanceId]"
           :style="dropdownStyle"
           role="listbox"
+          :aria-multiselectable="multiple ? 'true' : undefined"
           @click.stop
           @mousedown.stop
           @keydown="onDropdownKeyDown"
@@ -95,7 +114,10 @@
             </div>
 
             <!-- Empty state -->
-            <div v-if="filteredOptions.length === 0" class="select-empty">
+            <div v-if="loading" class="select-empty" role="status">
+              Loading…
+            </div>
+            <div v-else-if="filteredOptions.length === 0" class="select-empty">
               {{ emptyTextDisplay }}
             </div>
           </div>
@@ -123,7 +145,7 @@ export interface SelectOption {
 }
 
 interface Props {
-  modelValue: string | number | boolean | null | undefined
+  modelValue: string | number | boolean | null | undefined | Array<string | number | boolean | null>
   options: SelectOption[] | Array<Record<string, unknown>>
   placeholder?: string
   disabled?: boolean
@@ -135,11 +157,16 @@ interface Props {
   labelKey?: string
   creatable?: boolean
   creatablePrefix?: string
+  multiple?: boolean
+  clearable?: boolean
+  loading?: boolean
 }
 
+type SelectValue = string | number | boolean | null
+
 interface Emits {
-  (e: 'update:modelValue', value: string | number | boolean | null): void
-  (e: 'change', value: string | number | boolean | null, option: SelectOption | null): void
+  (e: 'update:modelValue', value: SelectValue): void
+  (e: 'change', value: SelectValue, option: SelectOption | null): void
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -225,15 +252,25 @@ const isGroupHeaderOption = (option: any): boolean => {
 }
 
 const selectedOption = computed(() => {
+  if (props.multiple || Array.isArray(props.modelValue)) return null
   return props.options.find((opt) => getOptionValue(opt) === props.modelValue) || null
 })
+
+const selectedOptions = computed(() => {
+  const values = Array.isArray(props.modelValue) ? props.modelValue : []
+  return props.options.filter((option) => values.includes(getOptionValue(option)))
+})
+
+const hasValue = computed(() => Array.isArray(props.modelValue)
+  ? props.modelValue.length > 0
+  : props.modelValue !== null && props.modelValue !== undefined && props.modelValue !== '')
 
 const selectedLabel = computed(() => {
   if (selectedOption.value) {
     return getOptionLabel(selectedOption.value)
   }
   // In creatable mode, show the raw value if no matching option
-  if (props.creatable && props.modelValue) {
+  if (!props.multiple && props.creatable && props.modelValue) {
     return String(props.modelValue)
   }
   return placeholderText.value
@@ -261,7 +298,10 @@ const filteredOptions = computed(() => {
 })
 
 const isSelected = (option: any): boolean => {
-  return getOptionValue(option) === props.modelValue
+  const value = getOptionValue(option)
+  return Array.isArray(props.modelValue)
+    ? props.modelValue.some((selected) => selected === value)
+    : value === props.modelValue
 }
 
 const findNextEnabledIndex = (startIndex: number): number => {
@@ -349,10 +389,25 @@ watch(isOpen, (open) => {
 
 const selectOption = (option: any) => {
   const value = getOptionValue(option) ?? null
+  if (props.multiple) {
+    const currentValues = Array.isArray(props.modelValue) ? [...props.modelValue] : []
+    const selectedIndex = currentValues.findIndex((selected) => selected === value)
+    if (selectedIndex >= 0) currentValues.splice(selectedIndex, 1)
+    else currentValues.push(value)
+    emit('update:modelValue', currentValues as unknown as SelectValue)
+    emit('change', currentValues as unknown as SelectValue, option)
+    return
+  }
   emit('update:modelValue', value)
   emit('change', value, option)
   isOpen.value = false
   triggerRef.value?.focus()
+}
+
+const clearSelection = () => {
+  const value: SelectValue = props.multiple ? ([] as unknown as SelectValue) : null
+  emit('update:modelValue', value)
+  emit('change', value, null)
 }
 
 // Keyboards
@@ -431,7 +486,7 @@ onUnmounted(() => {
 
 <style scoped>
 .select-trigger {
-  @apply relative w-full flex items-center justify-between gap-2;
+  @apply relative w-full h-9 min-h-9 flex items-center justify-between gap-2 rounded-lg;
   @apply px-3.5 py-2.5 rounded-xl text-sm font-bold;
   background-color: #FFFFFF;
   border: 2px solid #121316;
@@ -480,6 +535,43 @@ onUnmounted(() => {
   @apply truncate text-left flex-1 font-bold;
   color: inherit;
 }
+
+.select-actions {
+  @apply flex flex-shrink-0 items-center gap-1;
+}
+
+.select-clear {
+  @apply inline-flex h-5 w-5 items-center justify-center rounded-full cursor-pointer;
+  color: #5E6577;
+}
+.select-clear:hover,
+.select-clear:focus-visible {
+  color: #121316;
+  background-color: #E2E8F0;
+  outline: 2px solid #2563EB;
+  outline-offset: 1px;
+}
+:global(.dark) .select-clear {
+  color: #CBD5E1;
+}
+:global(.dark) .select-clear:hover,
+:global(.dark) .select-clear:focus-visible {
+  color: #F8FAFC;
+  background-color: #334155;
+}
+
+.select-clear-floating {
+  position: absolute;
+  right: 2.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+}
+
+
+  @apply truncate;
+}
+
 
 .select-icon {
   @apply flex-shrink-0 flex items-center;

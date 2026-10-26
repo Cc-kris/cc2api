@@ -17,17 +17,18 @@
         :id="id"
         ref="inputRef"
         :type="type"
-        :value="modelValue"
+        :value="modelValue ?? ''"
         :disabled="disabled"
         :required="required"
         :placeholder="placeholderText"
         :autocomplete="autocomplete"
         :readonly="readonly"
+        :aria-invalid="error ? 'true' : undefined"
         :class="[
-          'input w-full transition-all duration-200',
+          'input h-9 w-full rounded-lg border-2 transition-all duration-200',
           $slots.prefix ? 'pl-11' : '',
           $slots.suffix ? 'pr-11' : '',
-          error ? 'input-error ring-2 ring-red-500/20' : '',
+          error ? 'input-error border-red-500 ring-2 ring-red-500/20' : '',
           disabled ? 'cursor-not-allowed bg-gray-100 opacity-60 dark:bg-dark-900' : ''
         ]"
         @input="onInput"
