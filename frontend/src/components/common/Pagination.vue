@@ -1,22 +1,24 @@
 <template>
   <div
+    role="navigation"
+    aria-label="Pagination"
     class="neo-pagination flex items-center justify-between rounded-2xl border-2 border-[#121316] bg-white px-4 py-3 shadow-[4px_4px_0_#121316] dark:border-[#E2E8F0] dark:bg-[#181C26] sm:px-6"
   >
     <div class="flex flex-1 items-center justify-between sm:hidden">
       <!-- Mobile pagination -->
       <button
-        @click="goToPage(page - 1)"
-        :disabled="page === 1"
+        @click="goToPage(currentPage - 1)"
+        :disabled="totalPages === 0 || currentPage <= 1"
         class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200 dark:hover:bg-dark-600"
       >
         {{ t('pagination.previous') }}
       </button>
       <span class="text-sm text-gray-700 dark:text-gray-300">
-        {{ t('pagination.pageOf', { page, total: totalPages }) }}
+        {{ t('pagination.pageOf', { page: currentPage, total: totalPages }) }}
       </span>
       <button
-        @click="goToPage(page + 1)"
-        :disabled="page === totalPages"
+        @click="goToPage(currentPage + 1)"
+        :disabled="totalPages === 0 || currentPage >= totalPages"
         class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-dark-600 dark:bg-dark-700 dark:text-gray-200 dark:hover:bg-dark-600"
       >
         {{ t('pagination.next') }}
@@ -32,7 +34,7 @@
           {{ t('pagination.to') }}
           <span class="font-medium">{{ toItem }}</span>
           {{ t('pagination.of') }}
-          <span class="font-medium">{{ total }}</span>
+          <span class="font-medium">{{ normalizedTotal }}</span>
           {{ t('pagination.results') }}
         </p>
 
@@ -74,8 +76,8 @@
       >
         <!-- Previous button -->
         <button
-          @click="goToPage(page - 1)"
-          :disabled="page === 1"
+          @click="goToPage(currentPage - 1)"
+          :disabled="totalPages === 0 || currentPage <= 1"
           class="neo-page-btn relative inline-flex items-center rounded-lg border-2 border-[#121316] bg-white px-2.5 py-1.5 text-sm font-extrabold text-[#121316] shadow-[2px_2px_0_#121316] transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:bg-[#EDF4FF] disabled:cursor-not-allowed disabled:opacity-45 dark:border-[#E2E8F0] dark:bg-[#222838] dark:text-[#F8FAFC] dark:hover:bg-[#2563EB] dark:hover:text-white"
           :aria-label="t('pagination.previous')"
         >
@@ -90,7 +92,7 @@
           :disabled="typeof pageNum !== 'number'"
           :class="[
             'neo-page-btn relative inline-flex items-center rounded-lg border-2 border-[#121316] px-3.5 py-1.5 font-mono text-sm font-extrabold transition-all',
-            pageNum === page
+            pageNum === currentPage
               ? 'z-10 bg-[#CCFF00] text-[#121316] dark:bg-[#2563EB] dark:text-white dark:border-[#60A5FA] font-black shadow-[2.5px_2.5px_0_#121316]'
               : 'bg-white text-[#121316] shadow-[2px_2px_0_#121316] hover:-translate-x-0.5 hover:-translate-y-0.5 hover:bg-[#EDF4FF] dark:border-[#E2E8F0] dark:bg-[#222838] dark:text-[#F8FAFC] dark:hover:bg-[#2563EB] dark:hover:text-white',
             typeof pageNum !== 'number' && 'cursor-default'
@@ -98,15 +100,15 @@
           :aria-label="
             typeof pageNum === 'number' ? t('pagination.goToPage', { page: pageNum }) : undefined
           "
-          :aria-current="pageNum === page ? 'page' : undefined"
+          :aria-current="pageNum === currentPage ? 'page' : undefined"
         >
           {{ pageNum }}
         </button>
 
         <!-- Next button -->
         <button
-          @click="goToPage(page + 1)"
-          :disabled="page === totalPages"
+          @click="goToPage(currentPage + 1)"
+          :disabled="totalPages === 0 || currentPage >= totalPages"
           class="neo-page-btn relative inline-flex items-center rounded-lg border-2 border-[#121316] bg-white px-2.5 py-1.5 text-sm font-extrabold text-[#121316] shadow-[2px_2px_0_#121316] transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:bg-[#EDF4FF] disabled:cursor-not-allowed disabled:opacity-45 dark:border-[#E2E8F0] dark:bg-[#222838] dark:text-[#F8FAFC] dark:hover:bg-[#2563EB] dark:hover:text-white"
           :aria-label="t('pagination.next')"
         >
@@ -149,17 +151,33 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<Emits>()
 
-const totalPages = computed(() => Math.ceil(props.total / props.pageSize))
+const totalPages = computed(() => {
+  const pageSize = Number.isFinite(props.pageSize) && props.pageSize > 0 ? props.pageSize : 1
+  const total = Number.isFinite(props.total) && props.total > 0 ? props.total : 0
+  return Math.ceil(total / pageSize)
+})
+const currentPage = computed(() => {
+  if (totalPages.value === 0) return 0
+  const requestedPage = Number.isFinite(props.page) ? Math.floor(props.page) : 1
+  return Math.min(Math.max(requestedPage, 1), totalPages.value)
+})
 
 const fromItem = computed(() => {
-  if (props.total === 0) return 0
-  return (props.page - 1) * props.pageSize + 1
+  if (totalPages.value === 0) return 0
+  return (currentPage.value - 1) * normalizedPageSize.value + 1
 })
 
 const toItem = computed(() => {
-  const to = props.page * props.pageSize
-  return to > props.total ? props.total : to
+  if (totalPages.value === 0) return 0
+  return Math.min(currentPage.value * normalizedPageSize.value, normalizedTotal.value)
 })
+
+const normalizedPageSize = computed(() =>
+  Number.isFinite(props.pageSize) && props.pageSize > 0 ? props.pageSize : 1
+)
+const normalizedTotal = computed(() =>
+  Number.isFinite(props.total) && props.total > 0 ? props.total : 0
+)
 
 const pageSizeSelectOptions = computed(() => {
   const options = Array.from(
@@ -191,8 +209,8 @@ const visiblePages = computed(() => {
     // Always show first page
     pages.push(1)
 
-    const start = Math.max(2, props.page - 2)
-    const end = Math.min(total - 1, props.page + 2)
+    const start = Math.max(2, currentPage.value - 2)
+    const end = Math.min(total - 1, currentPage.value + 2)
 
     // Add ellipsis before if needed
     if (start > 2) {
@@ -217,7 +235,7 @@ const visiblePages = computed(() => {
 })
 
 const goToPage = (newPage: number) => {
-  if (newPage >= 1 && newPage <= totalPages.value && newPage !== props.page) {
+  if (newPage >= 1 && newPage <= totalPages.value && newPage !== currentPage.value) {
     emit('update:page', newPage)
   }
 }
@@ -230,6 +248,10 @@ const handlePageSizeChange = (value: string | number | boolean | null) => {
 }
 
 const submitJump = () => {
+  if (totalPages.value === 0) {
+    jumpPage.value = ''
+    return
+  }
   const value = jumpPage.value.trim()
   if (!value) return
   const pageNum = Number.parseInt(value, 10)

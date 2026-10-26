@@ -5,36 +5,73 @@
         v-if="show"
         class="modal-overlay"
         :style="zIndexStyle"
-        :aria-labelledby="dialogId"
-        role="dialog"
-        aria-modal="true"
-        @click.self="handleClose"
+        role="presentation"
+        @click.self="handleOverlayClick"
       >
-        <!-- Modal panel -->
-        <div ref="dialogRef" :class="['modal-content', widthClasses]" @click.stop>
-          <!-- Header -->
-          <div class="modal-header">
-            <h3 :id="dialogId" class="modal-title">
-              {{ title }}
-            </h3>
+        <section
+          ref="dialogRef"
+          :class="['modal-content', `modal-width-${width}`]"
+          :style="panelStyle"
+          role="dialog"
+          :aria-modal="discardConfirmationOpen ? undefined : 'true'"
+          :aria-hidden="discardConfirmationOpen ? 'true' : undefined"
+          :inert="discardConfirmationOpen"
+          :aria-labelledby="dialogTitleId"
+          :aria-describedby="describedBy"
+          tabindex="-1"
+          @click.stop
+        >
+          <header class="modal-header">
+            <h2 :id="dialogTitleId" class="modal-title">{{ title }}</h2>
             <button
-              @click="emit('close')"
-              class="-mr-2 rounded-xl p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:text-dark-500 dark:hover:bg-dark-700 dark:hover:text-dark-300"
-              aria-label="Close modal"
+              type="button"
+              class="modal-close-button"
+              aria-label="Close dialog"
+              @click="requestClose"
             >
               <Icon name="x" size="md" />
             </button>
-          </div>
+          </header>
 
-          <!-- Body -->
           <div class="modal-body">
-            <slot></slot>
+            <slot />
           </div>
 
-          <!-- Footer -->
-          <div v-if="$slots.footer" class="modal-footer">
-            <slot name="footer"></slot>
-          </div>
+          <footer v-if="$slots.footer" class="modal-footer">
+            <slot name="footer" />
+          </footer>
+        </section>
+
+        <div
+          v-if="discardConfirmationOpen"
+          class="modal-discard-overlay"
+          @click.self="cancelDiscard"
+        >
+          <section
+            ref="confirmationRef"
+            class="modal-content modal-discard-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            :aria-labelledby="discardTitleId"
+            :aria-describedby="discardMessageId"
+            tabindex="-1"
+            @click.stop
+          >
+            <header class="modal-header">
+              <h2 :id="discardTitleId" class="modal-title">{{ discardTitle }}</h2>
+            </header>
+            <div class="modal-body">
+              <p :id="discardMessageId">{{ discardMessage }}</p>
+            </div>
+            <footer class="modal-footer modal-discard-actions">
+              <button ref="keepEditingButton" type="button" class="btn btn-secondary" @click="cancelDiscard">
+                {{ keepEditingText }}
+              </button>
+              <button type="button" class="btn btn-danger" @click="confirmDiscard">
+                {{ discardText }}
+              </button>
+            </footer>
+          </section>
         </div>
       </div>
     </Transition>
@@ -42,18 +79,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch, onMounted, onUnmounted, ref, nextTick } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, useId, watch } from 'vue'
 import Icon from '@/components/icons/Icon.vue'
 
-// 生成唯一ID以避免多个对话框时ID冲突
-let dialogIdCounter = 0
-const dialogId = `modal-title-${++dialogIdCounter}`
-
-// 焦点管理
-const dialogRef = ref<HTMLElement | null>(null)
-let previousActiveElement: HTMLElement | null = null
-
-type DialogWidth = 'narrow' | 'normal' | 'wide' | 'extra-wide' | 'full'
+// Existing call sites keep their width names; each is mapped to the v0.4 modal scale.
+type DialogWidth = 'narrow' | 'normal' | 'wide' | 'extra-wide' | 'full' | 'small' | 'medium' | 'large'
 
 interface Props {
   show: boolean
@@ -62,89 +92,290 @@ interface Props {
   closeOnEscape?: boolean
   closeOnClickOutside?: boolean
   zIndex?: number
-}
-
-interface Emits {
-  (e: 'close'): void
+  hasUnsavedChanges?: boolean
+  describedBy?: string
+  discardTitle?: string
+  discardMessage?: string
+  keepEditingText?: string
+  discardText?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   width: 'normal',
   closeOnEscape: true,
-  closeOnClickOutside: false,
-  zIndex: 50
+  closeOnClickOutside: true,
+  zIndex: 50,
+  hasUnsavedChanges: false,
+  discardTitle: 'Discard unsaved changes?',
+  discardMessage: 'You have unsaved changes. Do you want to discard them?',
+  keepEditingText: 'Keep editing',
+  discardText: 'Discard changes'
 })
 
-const emit = defineEmits<Emits>()
+const emit = defineEmits<{
+  (event: 'close'): void
+}>()
 
-// Custom z-index style (overrides the default z-50 from CSS)
-const zIndexStyle = computed(() => {
-  return props.zIndex !== 50 ? { zIndex: props.zIndex } : undefined
-})
+const dialogRef = ref<HTMLElement | null>(null)
+const confirmationRef = ref<HTMLElement | null>(null)
+const keepEditingButton = ref<HTMLButtonElement | null>(null)
+const discardConfirmationOpen = ref(false)
+const id = useId()
+const dialogTitleId = `dialog-title-${id}`
+const discardTitleId = `dialog-discard-title-${id}`
+const discardMessageId = `dialog-discard-message-${id}`
+let previousActiveElement: HTMLElement | null = null
+let focusBeforeConfirmation: HTMLElement | null = null
+let bodyLockHeld = false
 
-const widthClasses = computed(() => {
-  // Width guidance: narrow=confirm/short prompts, normal=standard forms,
-  // wide=multi-section forms or rich content, extra-wide=analytics/tables,
-  // full=full-screen or very dense layouts.
-  const widths: Record<DialogWidth, string> = {
-    narrow: 'max-w-md',
-    normal: 'max-w-lg',
-    wide: 'w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl',
-    'extra-wide': 'w-full sm:max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl',
-    full: 'w-[96vw] max-w-none'
+const widthPixels: Record<DialogWidth, string> = {
+  narrow: '400px',
+  small: '400px',
+  normal: '640px',
+  medium: '640px',
+  wide: '880px',
+  large: '880px',
+  'extra-wide': '880px',
+  full: 'calc(100vw - 32px)'
+}
+
+const zIndexStyle = computed(() => ({ zIndex: props.zIndex }))
+const panelStyle = computed(() => ({
+  '--dialog-width': widthPixels[props.width],
+  '--dialog-max-height': props.width === 'large' || props.width === 'wide' || props.width === 'extra-wide' || props.width === 'full'
+    ? 'min(90vh, 900px)'
+    : '85vh'
+}))
+
+const focusableSelector = [
+  'a[href]',
+  'area[href]',
+  'button:not([disabled])',
+  'input:not([disabled]):not([type="hidden"])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'iframe',
+  '[contenteditable="true"]',
+  '[tabindex]:not([tabindex="-1"])'
+].join(',')
+
+const currentFocusScope = () => discardConfirmationOpen.value ? confirmationRef.value : dialogRef.value
+
+const getFocusableElements = (scope: HTMLElement) =>
+  Array.from(scope.querySelectorAll<HTMLElement>(focusableSelector)).filter((element) => {
+    return !element.hasAttribute('hidden') && element.getAttribute('aria-hidden') !== 'true'
+  })
+
+const focusInitialElement = async () => {
+  await nextTick()
+  const scope = currentFocusScope()
+  if (!scope) return
+  const target = scope.querySelector<HTMLElement>(
+    '[autofocus], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled])'
+  ) ?? getFocusableElements(scope)[0] ?? scope
+  target.focus()
+}
+
+const requestClose = () => {
+  if (discardConfirmationOpen.value) return
+  if (props.hasUnsavedChanges) {
+    focusBeforeConfirmation = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    discardConfirmationOpen.value = true
+    void focusInitialElement()
+    return
   }
-  return widths[props.width]
-})
+  emit('close')
+}
 
-const handleClose = () => {
-  if (props.closeOnClickOutside) {
-    emit('close')
+const handleOverlayClick = () => {
+  if (!props.closeOnClickOutside) return
+  requestClose()
+}
+
+const cancelDiscard = () => {
+  discardConfirmationOpen.value = false
+  void nextTick(() => {
+    const target = focusBeforeConfirmation
+    if (target?.isConnected) target.focus()
+    else void focusInitialElement()
+    focusBeforeConfirmation = null
+  })
+}
+
+const confirmDiscard = () => {
+  discardConfirmationOpen.value = false
+  emit('close')
+}
+
+const handleKeydown = (event: KeyboardEvent) => {
+  if (!props.show) return
+  const scope = currentFocusScope()
+  if (!scope) return
+
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    if (discardConfirmationOpen.value) cancelDiscard()
+    else if (props.closeOnEscape) requestClose()
+    return
+  }
+
+  if (event.key !== 'Tab') return
+  const focusable = getFocusableElements(scope)
+  if (!focusable.length) {
+    event.preventDefault()
+    scope.focus()
+    return
+  }
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  const activeElement = document.activeElement
+  if (!scope.contains(activeElement)) {
+    event.preventDefault()
+    ;(event.shiftKey ? last : first).focus()
+  } else if (event.shiftKey && activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && activeElement === last) {
+    event.preventDefault()
+    first.focus()
   }
 }
 
-const handleEscape = (event: KeyboardEvent) => {
-  if (props.show && props.closeOnEscape && event.key === 'Escape') {
-    emit('close')
-  }
-}
-
-// Prevent body scroll when modal is open and manage focus
 watch(
   () => props.show,
   async (isOpen) => {
     if (isOpen) {
-      // 保存当前焦点元素
-      previousActiveElement = document.activeElement as HTMLElement
-      // 使用CSS类而不是直接操作style,更易于管理多个对话框
-      document.body.classList.add('modal-open')
-
-      // 等待DOM更新后设置焦点到对话框
-      await nextTick()
-      if (dialogRef.value) {
-        const firstFocusable = dialogRef.value.querySelector<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
-        firstFocusable?.focus()
+      previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
+      if (!bodyLockHeld && typeof document !== 'undefined') {
+        document.body.classList.add('modal-open')
+        bodyLockHeld = true
       }
+      await focusInitialElement()
     } else {
-      document.body.classList.remove('modal-open')
-      // 恢复之前的焦点
-      if (previousActiveElement && typeof previousActiveElement.focus === 'function') {
-        previousActiveElement.focus()
+      discardConfirmationOpen.value = false
+      if (bodyLockHeld && typeof document !== 'undefined') {
+        document.body.classList.remove('modal-open')
+        bodyLockHeld = false
       }
+      const target = previousActiveElement
       previousActiveElement = null
+      if (target?.isConnected) target.focus()
     }
   },
-  { immediate: true }
+  { immediate: true, flush: 'post' }
 )
 
-onMounted(() => {
-  document.addEventListener('keydown', handleEscape)
-})
-
+onMounted(() => document.addEventListener('keydown', handleKeydown))
 onUnmounted(() => {
-  document.removeEventListener('keydown', handleEscape)
-  // 确保组件卸载时移除滚动锁定
-  document.body.classList.remove('modal-open')
+  document.removeEventListener('keydown', handleKeydown)
+  if (bodyLockHeld) document.body.classList.remove('modal-open')
+  const target = previousActiveElement
+  previousActiveElement = null
+  bodyLockHeld = false
+  if (target?.isConnected) target.focus()
 })
 </script>
+
+<style scoped>
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 16px;
+  background: rgb(15 23 42 / 55%);
+}
+
+.modal-content {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  width: min(var(--dialog-width, 640px), calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: min(var(--dialog-max-height, 85vh), calc(100dvh - 32px));
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  margin: auto;
+}
+
+.modal-header,
+.modal-footer {
+  flex: 0 0 auto;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.modal-title {
+  min-width: 0;
+  margin: 0;
+}
+
+.modal-close-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.modal-close-button:focus-visible,
+.modal-discard-actions button:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.modal-discard-overlay {
+  position: fixed;
+  z-index: 1;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 16px;
+  background: rgb(15 23 42 / 48%);
+}
+
+.modal-discard-dialog {
+  --dialog-width: 400px;
+  --dialog-max-height: 85vh;
+}
+
+.modal-discard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-content {
+    scroll-behavior: auto;
+  }
+}
+</style>
