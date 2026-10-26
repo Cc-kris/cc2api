@@ -250,6 +250,12 @@ func (_c *ContentArticleCreate) SetNillableSeoDescription(v *string) *ContentArt
 	return _c
 }
 
+// SetSeoKeywords sets the "seo_keywords" field.
+func (_c *ContentArticleCreate) SetSeoKeywords(v []string) *ContentArticleCreate {
+	_c.mutation.SetSeoKeywords(v)
+	return _c
+}
+
 // SetCanonicalURL sets the "canonical_url" field.
 func (_c *ContentArticleCreate) SetCanonicalURL(v string) *ContentArticleCreate {
 	_c.mutation.SetCanonicalURL(v)
@@ -288,6 +294,20 @@ func (_c *ContentArticleCreate) SetPublishedAt(v time.Time) *ContentArticleCreat
 func (_c *ContentArticleCreate) SetNillablePublishedAt(v *time.Time) *ContentArticleCreate {
 	if v != nil {
 		_c.SetPublishedAt(*v)
+	}
+	return _c
+}
+
+// SetFeaturedAt sets the "featured_at" field.
+func (_c *ContentArticleCreate) SetFeaturedAt(v time.Time) *ContentArticleCreate {
+	_c.mutation.SetFeaturedAt(v)
+	return _c
+}
+
+// SetNillableFeaturedAt sets the "featured_at" field if the given value is not nil.
+func (_c *ContentArticleCreate) SetNillableFeaturedAt(v *time.Time) *ContentArticleCreate {
+	if v != nil {
+		_c.SetFeaturedAt(*v)
 	}
 	return _c
 }
@@ -537,6 +557,10 @@ func (_c *ContentArticleCreate) createSpec() (*ContentArticle, *sqlgraph.CreateS
 		_spec.SetField(contentarticle.FieldSeoDescription, field.TypeString, value)
 		_node.SeoDescription = &value
 	}
+	if value, ok := _c.mutation.SeoKeywords(); ok {
+		_spec.SetField(contentarticle.FieldSeoKeywords, field.TypeJSON, value)
+		_node.SeoKeywords = value
+	}
 	if value, ok := _c.mutation.CanonicalURL(); ok {
 		_spec.SetField(contentarticle.FieldCanonicalURL, field.TypeString, value)
 		_node.CanonicalURL = &value
@@ -548,6 +572,10 @@ func (_c *ContentArticleCreate) createSpec() (*ContentArticle, *sqlgraph.CreateS
 	if value, ok := _c.mutation.PublishedAt(); ok {
 		_spec.SetField(contentarticle.FieldPublishedAt, field.TypeTime, value)
 		_node.PublishedAt = &value
+	}
+	if value, ok := _c.mutation.FeaturedAt(); ok {
+		_spec.SetField(contentarticle.FieldFeaturedAt, field.TypeTime, value)
+		_node.FeaturedAt = &value
 	}
 	if value, ok := _c.mutation.Version(); ok {
 		_spec.SetField(contentarticle.FieldVersion, field.TypeInt, value)
@@ -881,6 +909,24 @@ func (u *ContentArticleUpsert) ClearSeoDescription() *ContentArticleUpsert {
 	return u
 }
 
+// SetSeoKeywords sets the "seo_keywords" field.
+func (u *ContentArticleUpsert) SetSeoKeywords(v []string) *ContentArticleUpsert {
+	u.Set(contentarticle.FieldSeoKeywords, v)
+	return u
+}
+
+// UpdateSeoKeywords sets the "seo_keywords" field to the value that was provided on create.
+func (u *ContentArticleUpsert) UpdateSeoKeywords() *ContentArticleUpsert {
+	u.SetExcluded(contentarticle.FieldSeoKeywords)
+	return u
+}
+
+// ClearSeoKeywords clears the value of the "seo_keywords" field.
+func (u *ContentArticleUpsert) ClearSeoKeywords() *ContentArticleUpsert {
+	u.SetNull(contentarticle.FieldSeoKeywords)
+	return u
+}
+
 // SetCanonicalURL sets the "canonical_url" field.
 func (u *ContentArticleUpsert) SetCanonicalURL(v string) *ContentArticleUpsert {
 	u.Set(contentarticle.FieldCanonicalURL, v)
@@ -932,6 +978,24 @@ func (u *ContentArticleUpsert) UpdatePublishedAt() *ContentArticleUpsert {
 // ClearPublishedAt clears the value of the "published_at" field.
 func (u *ContentArticleUpsert) ClearPublishedAt() *ContentArticleUpsert {
 	u.SetNull(contentarticle.FieldPublishedAt)
+	return u
+}
+
+// SetFeaturedAt sets the "featured_at" field.
+func (u *ContentArticleUpsert) SetFeaturedAt(v time.Time) *ContentArticleUpsert {
+	u.Set(contentarticle.FieldFeaturedAt, v)
+	return u
+}
+
+// UpdateFeaturedAt sets the "featured_at" field to the value that was provided on create.
+func (u *ContentArticleUpsert) UpdateFeaturedAt() *ContentArticleUpsert {
+	u.SetExcluded(contentarticle.FieldFeaturedAt)
+	return u
+}
+
+// ClearFeaturedAt clears the value of the "featured_at" field.
+func (u *ContentArticleUpsert) ClearFeaturedAt() *ContentArticleUpsert {
+	u.SetNull(contentarticle.FieldFeaturedAt)
 	return u
 }
 
@@ -1320,6 +1384,27 @@ func (u *ContentArticleUpsertOne) ClearSeoDescription() *ContentArticleUpsertOne
 	})
 }
 
+// SetSeoKeywords sets the "seo_keywords" field.
+func (u *ContentArticleUpsertOne) SetSeoKeywords(v []string) *ContentArticleUpsertOne {
+	return u.Update(func(s *ContentArticleUpsert) {
+		s.SetSeoKeywords(v)
+	})
+}
+
+// UpdateSeoKeywords sets the "seo_keywords" field to the value that was provided on create.
+func (u *ContentArticleUpsertOne) UpdateSeoKeywords() *ContentArticleUpsertOne {
+	return u.Update(func(s *ContentArticleUpsert) {
+		s.UpdateSeoKeywords()
+	})
+}
+
+// ClearSeoKeywords clears the value of the "seo_keywords" field.
+func (u *ContentArticleUpsertOne) ClearSeoKeywords() *ContentArticleUpsertOne {
+	return u.Update(func(s *ContentArticleUpsert) {
+		s.ClearSeoKeywords()
+	})
+}
+
 // SetCanonicalURL sets the "canonical_url" field.
 func (u *ContentArticleUpsertOne) SetCanonicalURL(v string) *ContentArticleUpsertOne {
 	return u.Update(func(s *ContentArticleUpsert) {
@@ -1380,6 +1465,27 @@ func (u *ContentArticleUpsertOne) UpdatePublishedAt() *ContentArticleUpsertOne {
 func (u *ContentArticleUpsertOne) ClearPublishedAt() *ContentArticleUpsertOne {
 	return u.Update(func(s *ContentArticleUpsert) {
 		s.ClearPublishedAt()
+	})
+}
+
+// SetFeaturedAt sets the "featured_at" field.
+func (u *ContentArticleUpsertOne) SetFeaturedAt(v time.Time) *ContentArticleUpsertOne {
+	return u.Update(func(s *ContentArticleUpsert) {
+		s.SetFeaturedAt(v)
+	})
+}
+
+// UpdateFeaturedAt sets the "featured_at" field to the value that was provided on create.
+func (u *ContentArticleUpsertOne) UpdateFeaturedAt() *ContentArticleUpsertOne {
+	return u.Update(func(s *ContentArticleUpsert) {
+		s.UpdateFeaturedAt()
+	})
+}
+
+// ClearFeaturedAt clears the value of the "featured_at" field.
+func (u *ContentArticleUpsertOne) ClearFeaturedAt() *ContentArticleUpsertOne {
+	return u.Update(func(s *ContentArticleUpsert) {
+		s.ClearFeaturedAt()
 	})
 }
 
@@ -1937,6 +2043,27 @@ func (u *ContentArticleUpsertBulk) ClearSeoDescription() *ContentArticleUpsertBu
 	})
 }
 
+// SetSeoKeywords sets the "seo_keywords" field.
+func (u *ContentArticleUpsertBulk) SetSeoKeywords(v []string) *ContentArticleUpsertBulk {
+	return u.Update(func(s *ContentArticleUpsert) {
+		s.SetSeoKeywords(v)
+	})
+}
+
+// UpdateSeoKeywords sets the "seo_keywords" field to the value that was provided on create.
+func (u *ContentArticleUpsertBulk) UpdateSeoKeywords() *ContentArticleUpsertBulk {
+	return u.Update(func(s *ContentArticleUpsert) {
+		s.UpdateSeoKeywords()
+	})
+}
+
+// ClearSeoKeywords clears the value of the "seo_keywords" field.
+func (u *ContentArticleUpsertBulk) ClearSeoKeywords() *ContentArticleUpsertBulk {
+	return u.Update(func(s *ContentArticleUpsert) {
+		s.ClearSeoKeywords()
+	})
+}
+
 // SetCanonicalURL sets the "canonical_url" field.
 func (u *ContentArticleUpsertBulk) SetCanonicalURL(v string) *ContentArticleUpsertBulk {
 	return u.Update(func(s *ContentArticleUpsert) {
@@ -1997,6 +2124,27 @@ func (u *ContentArticleUpsertBulk) UpdatePublishedAt() *ContentArticleUpsertBulk
 func (u *ContentArticleUpsertBulk) ClearPublishedAt() *ContentArticleUpsertBulk {
 	return u.Update(func(s *ContentArticleUpsert) {
 		s.ClearPublishedAt()
+	})
+}
+
+// SetFeaturedAt sets the "featured_at" field.
+func (u *ContentArticleUpsertBulk) SetFeaturedAt(v time.Time) *ContentArticleUpsertBulk {
+	return u.Update(func(s *ContentArticleUpsert) {
+		s.SetFeaturedAt(v)
+	})
+}
+
+// UpdateFeaturedAt sets the "featured_at" field to the value that was provided on create.
+func (u *ContentArticleUpsertBulk) UpdateFeaturedAt() *ContentArticleUpsertBulk {
+	return u.Update(func(s *ContentArticleUpsert) {
+		s.UpdateFeaturedAt()
+	})
+}
+
+// ClearFeaturedAt clears the value of the "featured_at" field.
+func (u *ContentArticleUpsertBulk) ClearFeaturedAt() *ContentArticleUpsertBulk {
+	return u.Update(func(s *ContentArticleUpsert) {
+		s.ClearFeaturedAt()
 	})
 }
 

@@ -154,6 +154,11 @@ func PublishedAt(v time.Time) predicate.ContentArticle {
 	return predicate.ContentArticle(sql.FieldEQ(FieldPublishedAt, v))
 }
 
+// FeaturedAt applies equality check predicate on the "featured_at" field. It's identical to FeaturedAtEQ.
+func FeaturedAt(v time.Time) predicate.ContentArticle {
+	return predicate.ContentArticle(sql.FieldEQ(FieldFeaturedAt, v))
+}
+
 // Version applies equality check predicate on the "version" field. It's identical to VersionEQ.
 func Version(v int) predicate.ContentArticle {
 	return predicate.ContentArticle(sql.FieldEQ(FieldVersion, v))
@@ -1274,6 +1279,16 @@ func SeoDescriptionContainsFold(v string) predicate.ContentArticle {
 	return predicate.ContentArticle(sql.FieldContainsFold(FieldSeoDescription, v))
 }
 
+// SeoKeywordsIsNil applies the IsNil predicate on the "seo_keywords" field.
+func SeoKeywordsIsNil() predicate.ContentArticle {
+	return predicate.ContentArticle(sql.FieldIsNull(FieldSeoKeywords))
+}
+
+// SeoKeywordsNotNil applies the NotNil predicate on the "seo_keywords" field.
+func SeoKeywordsNotNil() predicate.ContentArticle {
+	return predicate.ContentArticle(sql.FieldNotNull(FieldSeoKeywords))
+}
+
 // CanonicalURLEQ applies the EQ predicate on the "canonical_url" field.
 func CanonicalURLEQ(v string) predicate.ContentArticle {
 	return predicate.ContentArticle(sql.FieldEQ(FieldCanonicalURL, v))
@@ -1472,6 +1487,56 @@ func PublishedAtIsNil() predicate.ContentArticle {
 // PublishedAtNotNil applies the NotNil predicate on the "published_at" field.
 func PublishedAtNotNil() predicate.ContentArticle {
 	return predicate.ContentArticle(sql.FieldNotNull(FieldPublishedAt))
+}
+
+// FeaturedAtEQ applies the EQ predicate on the "featured_at" field.
+func FeaturedAtEQ(v time.Time) predicate.ContentArticle {
+	return predicate.ContentArticle(sql.FieldEQ(FieldFeaturedAt, v))
+}
+
+// FeaturedAtNEQ applies the NEQ predicate on the "featured_at" field.
+func FeaturedAtNEQ(v time.Time) predicate.ContentArticle {
+	return predicate.ContentArticle(sql.FieldNEQ(FieldFeaturedAt, v))
+}
+
+// FeaturedAtIn applies the In predicate on the "featured_at" field.
+func FeaturedAtIn(vs ...time.Time) predicate.ContentArticle {
+	return predicate.ContentArticle(sql.FieldIn(FieldFeaturedAt, vs...))
+}
+
+// FeaturedAtNotIn applies the NotIn predicate on the "featured_at" field.
+func FeaturedAtNotIn(vs ...time.Time) predicate.ContentArticle {
+	return predicate.ContentArticle(sql.FieldNotIn(FieldFeaturedAt, vs...))
+}
+
+// FeaturedAtGT applies the GT predicate on the "featured_at" field.
+func FeaturedAtGT(v time.Time) predicate.ContentArticle {
+	return predicate.ContentArticle(sql.FieldGT(FieldFeaturedAt, v))
+}
+
+// FeaturedAtGTE applies the GTE predicate on the "featured_at" field.
+func FeaturedAtGTE(v time.Time) predicate.ContentArticle {
+	return predicate.ContentArticle(sql.FieldGTE(FieldFeaturedAt, v))
+}
+
+// FeaturedAtLT applies the LT predicate on the "featured_at" field.
+func FeaturedAtLT(v time.Time) predicate.ContentArticle {
+	return predicate.ContentArticle(sql.FieldLT(FieldFeaturedAt, v))
+}
+
+// FeaturedAtLTE applies the LTE predicate on the "featured_at" field.
+func FeaturedAtLTE(v time.Time) predicate.ContentArticle {
+	return predicate.ContentArticle(sql.FieldLTE(FieldFeaturedAt, v))
+}
+
+// FeaturedAtIsNil applies the IsNil predicate on the "featured_at" field.
+func FeaturedAtIsNil() predicate.ContentArticle {
+	return predicate.ContentArticle(sql.FieldIsNull(FieldFeaturedAt))
+}
+
+// FeaturedAtNotNil applies the NotNil predicate on the "featured_at" field.
+func FeaturedAtNotNil() predicate.ContentArticle {
+	return predicate.ContentArticle(sql.FieldNotNull(FieldFeaturedAt))
 }
 
 // VersionEQ applies the EQ predicate on the "version" field.

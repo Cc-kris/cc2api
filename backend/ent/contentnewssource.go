@@ -39,7 +39,7 @@ type ContentNewsSource struct {
 	// Enabled holds the value of the "enabled" field.
 	Enabled bool `json:"enabled,omitempty"`
 	// IntervalMinutes holds the value of the "interval_minutes" field.
-	IntervalMinutes int `json:"interval_minutes,omitempty"`
+	IntervalMinutes *int `json:"interval_minutes,omitempty"`
 	// RateLimitPerMinute holds the value of the "rate_limit_per_minute" field.
 	RateLimitPerMinute int `json:"rate_limit_per_minute,omitempty"`
 	// TermsConfirmedAt holds the value of the "terms_confirmed_at" field.
@@ -198,7 +198,8 @@ func (_m *ContentNewsSource) assignValues(columns []string, values []any) error 
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field interval_minutes", values[i])
 			} else if value.Valid {
-				_m.IntervalMinutes = int(value.Int64)
+				_m.IntervalMinutes = new(int)
+				*_m.IntervalMinutes = int(value.Int64)
 			}
 		case contentnewssource.FieldRateLimitPerMinute:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -344,8 +345,10 @@ func (_m *ContentNewsSource) String() string {
 	builder.WriteString("enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Enabled))
 	builder.WriteString(", ")
-	builder.WriteString("interval_minutes=")
-	builder.WriteString(fmt.Sprintf("%v", _m.IntervalMinutes))
+	if v := _m.IntervalMinutes; v != nil {
+		builder.WriteString("interval_minutes=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("rate_limit_per_minute=")
 	builder.WriteString(fmt.Sprintf("%v", _m.RateLimitPerMinute))

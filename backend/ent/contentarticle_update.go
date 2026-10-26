@@ -330,6 +330,24 @@ func (_u *ContentArticleUpdate) ClearSeoDescription() *ContentArticleUpdate {
 	return _u
 }
 
+// SetSeoKeywords sets the "seo_keywords" field.
+func (_u *ContentArticleUpdate) SetSeoKeywords(v []string) *ContentArticleUpdate {
+	_u.mutation.SetSeoKeywords(v)
+	return _u
+}
+
+// AppendSeoKeywords appends value to the "seo_keywords" field.
+func (_u *ContentArticleUpdate) AppendSeoKeywords(v []string) *ContentArticleUpdate {
+	_u.mutation.AppendSeoKeywords(v)
+	return _u
+}
+
+// ClearSeoKeywords clears the value of the "seo_keywords" field.
+func (_u *ContentArticleUpdate) ClearSeoKeywords() *ContentArticleUpdate {
+	_u.mutation.ClearSeoKeywords()
+	return _u
+}
+
 // SetCanonicalURL sets the "canonical_url" field.
 func (_u *ContentArticleUpdate) SetCanonicalURL(v string) *ContentArticleUpdate {
 	_u.mutation.SetCanonicalURL(v)
@@ -387,6 +405,26 @@ func (_u *ContentArticleUpdate) SetNillablePublishedAt(v *time.Time) *ContentArt
 // ClearPublishedAt clears the value of the "published_at" field.
 func (_u *ContentArticleUpdate) ClearPublishedAt() *ContentArticleUpdate {
 	_u.mutation.ClearPublishedAt()
+	return _u
+}
+
+// SetFeaturedAt sets the "featured_at" field.
+func (_u *ContentArticleUpdate) SetFeaturedAt(v time.Time) *ContentArticleUpdate {
+	_u.mutation.SetFeaturedAt(v)
+	return _u
+}
+
+// SetNillableFeaturedAt sets the "featured_at" field if the given value is not nil.
+func (_u *ContentArticleUpdate) SetNillableFeaturedAt(v *time.Time) *ContentArticleUpdate {
+	if v != nil {
+		_u.SetFeaturedAt(*v)
+	}
+	return _u
+}
+
+// ClearFeaturedAt clears the value of the "featured_at" field.
+func (_u *ContentArticleUpdate) ClearFeaturedAt() *ContentArticleUpdate {
+	_u.mutation.ClearFeaturedAt()
 	return _u
 }
 
@@ -607,6 +645,17 @@ func (_u *ContentArticleUpdate) sqlSave(ctx context.Context) (_node int, err err
 	if _u.mutation.SeoDescriptionCleared() {
 		_spec.ClearField(contentarticle.FieldSeoDescription, field.TypeString)
 	}
+	if value, ok := _u.mutation.SeoKeywords(); ok {
+		_spec.SetField(contentarticle.FieldSeoKeywords, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedSeoKeywords(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, contentarticle.FieldSeoKeywords, value)
+		})
+	}
+	if _u.mutation.SeoKeywordsCleared() {
+		_spec.ClearField(contentarticle.FieldSeoKeywords, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.CanonicalURL(); ok {
 		_spec.SetField(contentarticle.FieldCanonicalURL, field.TypeString, value)
 	}
@@ -624,6 +673,12 @@ func (_u *ContentArticleUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if _u.mutation.PublishedAtCleared() {
 		_spec.ClearField(contentarticle.FieldPublishedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.FeaturedAt(); ok {
+		_spec.SetField(contentarticle.FieldFeaturedAt, field.TypeTime, value)
+	}
+	if _u.mutation.FeaturedAtCleared() {
+		_spec.ClearField(contentarticle.FieldFeaturedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Version(); ok {
 		_spec.SetField(contentarticle.FieldVersion, field.TypeInt, value)
@@ -952,6 +1007,24 @@ func (_u *ContentArticleUpdateOne) ClearSeoDescription() *ContentArticleUpdateOn
 	return _u
 }
 
+// SetSeoKeywords sets the "seo_keywords" field.
+func (_u *ContentArticleUpdateOne) SetSeoKeywords(v []string) *ContentArticleUpdateOne {
+	_u.mutation.SetSeoKeywords(v)
+	return _u
+}
+
+// AppendSeoKeywords appends value to the "seo_keywords" field.
+func (_u *ContentArticleUpdateOne) AppendSeoKeywords(v []string) *ContentArticleUpdateOne {
+	_u.mutation.AppendSeoKeywords(v)
+	return _u
+}
+
+// ClearSeoKeywords clears the value of the "seo_keywords" field.
+func (_u *ContentArticleUpdateOne) ClearSeoKeywords() *ContentArticleUpdateOne {
+	_u.mutation.ClearSeoKeywords()
+	return _u
+}
+
 // SetCanonicalURL sets the "canonical_url" field.
 func (_u *ContentArticleUpdateOne) SetCanonicalURL(v string) *ContentArticleUpdateOne {
 	_u.mutation.SetCanonicalURL(v)
@@ -1009,6 +1082,26 @@ func (_u *ContentArticleUpdateOne) SetNillablePublishedAt(v *time.Time) *Content
 // ClearPublishedAt clears the value of the "published_at" field.
 func (_u *ContentArticleUpdateOne) ClearPublishedAt() *ContentArticleUpdateOne {
 	_u.mutation.ClearPublishedAt()
+	return _u
+}
+
+// SetFeaturedAt sets the "featured_at" field.
+func (_u *ContentArticleUpdateOne) SetFeaturedAt(v time.Time) *ContentArticleUpdateOne {
+	_u.mutation.SetFeaturedAt(v)
+	return _u
+}
+
+// SetNillableFeaturedAt sets the "featured_at" field if the given value is not nil.
+func (_u *ContentArticleUpdateOne) SetNillableFeaturedAt(v *time.Time) *ContentArticleUpdateOne {
+	if v != nil {
+		_u.SetFeaturedAt(*v)
+	}
+	return _u
+}
+
+// ClearFeaturedAt clears the value of the "featured_at" field.
+func (_u *ContentArticleUpdateOne) ClearFeaturedAt() *ContentArticleUpdateOne {
+	_u.mutation.ClearFeaturedAt()
 	return _u
 }
 
@@ -1259,6 +1352,17 @@ func (_u *ContentArticleUpdateOne) sqlSave(ctx context.Context) (_node *ContentA
 	if _u.mutation.SeoDescriptionCleared() {
 		_spec.ClearField(contentarticle.FieldSeoDescription, field.TypeString)
 	}
+	if value, ok := _u.mutation.SeoKeywords(); ok {
+		_spec.SetField(contentarticle.FieldSeoKeywords, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedSeoKeywords(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, contentarticle.FieldSeoKeywords, value)
+		})
+	}
+	if _u.mutation.SeoKeywordsCleared() {
+		_spec.ClearField(contentarticle.FieldSeoKeywords, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.CanonicalURL(); ok {
 		_spec.SetField(contentarticle.FieldCanonicalURL, field.TypeString, value)
 	}
@@ -1276,6 +1380,12 @@ func (_u *ContentArticleUpdateOne) sqlSave(ctx context.Context) (_node *ContentA
 	}
 	if _u.mutation.PublishedAtCleared() {
 		_spec.ClearField(contentarticle.FieldPublishedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.FeaturedAt(); ok {
+		_spec.SetField(contentarticle.FieldFeaturedAt, field.TypeTime, value)
+	}
+	if _u.mutation.FeaturedAtCleared() {
+		_spec.ClearField(contentarticle.FieldFeaturedAt, field.TypeTime)
 	}
 	if value, ok := _u.mutation.Version(); ok {
 		_spec.SetField(contentarticle.FieldVersion, field.TypeInt, value)

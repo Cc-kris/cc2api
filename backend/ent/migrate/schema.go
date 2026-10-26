@@ -852,9 +852,11 @@ var (
 		{Name: "model", Type: field.TypeString, Nullable: true, Size: 200},
 		{Name: "seo_title", Type: field.TypeString, Nullable: true, Size: 300},
 		{Name: "seo_description", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "seo_keywords", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
 		{Name: "canonical_url", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "og_image", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "published_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "featured_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
 		{Name: "version", Type: field.TypeInt, Default: 1},
 	}
 	// ContentArticlesTable holds the schema information for the "content_articles" table.
@@ -871,7 +873,15 @@ var (
 			{
 				Name:    "contentarticle_status_locale_published_at",
 				Unique:  false,
-				Columns: []*schema.Column{ContentArticlesColumns[14], ContentArticlesColumns[4], ContentArticlesColumns[21]},
+				Columns: []*schema.Column{ContentArticlesColumns[14], ContentArticlesColumns[4], ContentArticlesColumns[22]},
+			},
+			{
+				Name:    "contentarticle_status_featured_at",
+				Unique:  false,
+				Columns: []*schema.Column{ContentArticlesColumns[14], ContentArticlesColumns[23]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "featured_at IS NOT NULL",
+				},
 			},
 			{
 				Name:    "contentarticle_category",
@@ -1070,7 +1080,7 @@ var (
 		{Name: "language", Type: field.TypeString, Size: 16, Default: "zh-CN"},
 		{Name: "category", Type: field.TypeString, Nullable: true, Size: 80},
 		{Name: "enabled", Type: field.TypeBool, Default: false},
-		{Name: "interval_minutes", Type: field.TypeInt, Default: 15},
+		{Name: "interval_minutes", Type: field.TypeInt, Nullable: true},
 		{Name: "rate_limit_per_minute", Type: field.TypeInt, Default: 60},
 		{Name: "terms_confirmed_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
 		{Name: "authorization_note", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},

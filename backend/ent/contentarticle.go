@@ -54,12 +54,16 @@ type ContentArticle struct {
 	SeoTitle *string `json:"seo_title,omitempty"`
 	// SeoDescription holds the value of the "seo_description" field.
 	SeoDescription *string `json:"seo_description,omitempty"`
+	// SeoKeywords holds the value of the "seo_keywords" field.
+	SeoKeywords []string `json:"seo_keywords,omitempty"`
 	// CanonicalURL holds the value of the "canonical_url" field.
 	CanonicalURL *string `json:"canonical_url,omitempty"`
 	// OgImage holds the value of the "og_image" field.
 	OgImage *string `json:"og_image,omitempty"`
 	// PublishedAt holds the value of the "published_at" field.
 	PublishedAt *time.Time `json:"published_at,omitempty"`
+	// FeaturedAt holds the value of the "featured_at" field.
+	FeaturedAt *time.Time `json:"featured_at,omitempty"`
 	// Version holds the value of the "version" field.
 	Version      int `json:"version,omitempty"`
 	selectValues sql.SelectValues
@@ -70,13 +74,13 @@ func (*ContentArticle) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case contentarticle.FieldTags:
+		case contentarticle.FieldTags, contentarticle.FieldSeoKeywords:
 			values[i] = new([]byte)
 		case contentarticle.FieldID, contentarticle.FieldAuthorID, contentarticle.FieldVersion:
 			values[i] = new(sql.NullInt64)
 		case contentarticle.FieldLocale, contentarticle.FieldSlug, contentarticle.FieldTitle, contentarticle.FieldExcerpt, contentarticle.FieldBodyMarkdown, contentarticle.FieldBodyHTML, contentarticle.FieldCoverImage, contentarticle.FieldCoverAlt, contentarticle.FieldCategory, contentarticle.FieldStatus, contentarticle.FieldModel, contentarticle.FieldSeoTitle, contentarticle.FieldSeoDescription, contentarticle.FieldCanonicalURL, contentarticle.FieldOgImage:
 			values[i] = new(sql.NullString)
-		case contentarticle.FieldCreatedAt, contentarticle.FieldUpdatedAt, contentarticle.FieldDeletedAt, contentarticle.FieldPublishedAt:
+		case contentarticle.FieldCreatedAt, contentarticle.FieldUpdatedAt, contentarticle.FieldDeletedAt, contentarticle.FieldPublishedAt, contentarticle.FieldFeaturedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -220,6 +224,14 @@ func (_m *ContentArticle) assignValues(columns []string, values []any) error {
 				_m.SeoDescription = new(string)
 				*_m.SeoDescription = value.String
 			}
+		case contentarticle.FieldSeoKeywords:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field seo_keywords", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.SeoKeywords); err != nil {
+					return fmt.Errorf("unmarshal field seo_keywords: %w", err)
+				}
+			}
 		case contentarticle.FieldCanonicalURL:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field canonical_url", values[i])
@@ -240,6 +252,13 @@ func (_m *ContentArticle) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.PublishedAt = new(time.Time)
 				*_m.PublishedAt = value.Time
+			}
+		case contentarticle.FieldFeaturedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field featured_at", values[i])
+			} else if value.Valid {
+				_m.FeaturedAt = new(time.Time)
+				*_m.FeaturedAt = value.Time
 			}
 		case contentarticle.FieldVersion:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -359,6 +378,9 @@ func (_m *ContentArticle) String() string {
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")
+	builder.WriteString("seo_keywords=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SeoKeywords))
+	builder.WriteString(", ")
 	if v := _m.CanonicalURL; v != nil {
 		builder.WriteString("canonical_url=")
 		builder.WriteString(*v)
@@ -371,6 +393,11 @@ func (_m *ContentArticle) String() string {
 	builder.WriteString(", ")
 	if v := _m.PublishedAt; v != nil {
 		builder.WriteString("published_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.FeaturedAt; v != nil {
+		builder.WriteString("featured_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")

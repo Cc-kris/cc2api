@@ -50,12 +50,16 @@ const (
 	FieldSeoTitle = "seo_title"
 	// FieldSeoDescription holds the string denoting the seo_description field in the database.
 	FieldSeoDescription = "seo_description"
+	// FieldSeoKeywords holds the string denoting the seo_keywords field in the database.
+	FieldSeoKeywords = "seo_keywords"
 	// FieldCanonicalURL holds the string denoting the canonical_url field in the database.
 	FieldCanonicalURL = "canonical_url"
 	// FieldOgImage holds the string denoting the og_image field in the database.
 	FieldOgImage = "og_image"
 	// FieldPublishedAt holds the string denoting the published_at field in the database.
 	FieldPublishedAt = "published_at"
+	// FieldFeaturedAt holds the string denoting the featured_at field in the database.
+	FieldFeaturedAt = "featured_at"
 	// FieldVersion holds the string denoting the version field in the database.
 	FieldVersion = "version"
 	// Table holds the table name of the contentarticle in the database.
@@ -83,9 +87,11 @@ var Columns = []string{
 	FieldModel,
 	FieldSeoTitle,
 	FieldSeoDescription,
+	FieldSeoKeywords,
 	FieldCanonicalURL,
 	FieldOgImage,
 	FieldPublishedAt,
+	FieldFeaturedAt,
 	FieldVersion,
 }
 
@@ -243,6 +249,11 @@ func ByOgImage(opts ...sql.OrderTermOption) OrderOption {
 // ByPublishedAt orders the results by the published_at field.
 func ByPublishedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPublishedAt, opts...).ToFunc()
+}
+
+// ByFeaturedAt orders the results by the featured_at field.
+func ByFeaturedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFeaturedAt, opts...).ToFunc()
 }
 
 // ByVersion orders the results by the version field.

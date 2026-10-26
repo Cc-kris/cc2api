@@ -388,10 +388,6 @@ func (_c *ContentNewsSourceCreate) defaults() error {
 		v := contentnewssource.DefaultEnabled
 		_c.mutation.SetEnabled(v)
 	}
-	if _, ok := _c.mutation.IntervalMinutes(); !ok {
-		v := contentnewssource.DefaultIntervalMinutes
-		_c.mutation.SetIntervalMinutes(v)
-	}
 	if _, ok := _c.mutation.RateLimitPerMinute(); !ok {
 		v := contentnewssource.DefaultRateLimitPerMinute
 		_c.mutation.SetRateLimitPerMinute(v)
@@ -446,9 +442,6 @@ func (_c *ContentNewsSourceCreate) check() error {
 	}
 	if _, ok := _c.mutation.Enabled(); !ok {
 		return &ValidationError{Name: "enabled", err: errors.New(`ent: missing required field "ContentNewsSource.enabled"`)}
-	}
-	if _, ok := _c.mutation.IntervalMinutes(); !ok {
-		return &ValidationError{Name: "interval_minutes", err: errors.New(`ent: missing required field "ContentNewsSource.interval_minutes"`)}
 	}
 	if _, ok := _c.mutation.RateLimitPerMinute(); !ok {
 		return &ValidationError{Name: "rate_limit_per_minute", err: errors.New(`ent: missing required field "ContentNewsSource.rate_limit_per_minute"`)}
@@ -522,7 +515,7 @@ func (_c *ContentNewsSourceCreate) createSpec() (*ContentNewsSource, *sqlgraph.C
 	}
 	if value, ok := _c.mutation.IntervalMinutes(); ok {
 		_spec.SetField(contentnewssource.FieldIntervalMinutes, field.TypeInt, value)
-		_node.IntervalMinutes = value
+		_node.IntervalMinutes = &value
 	}
 	if value, ok := _c.mutation.RateLimitPerMinute(); ok {
 		_spec.SetField(contentnewssource.FieldRateLimitPerMinute, field.TypeInt, value)
@@ -785,6 +778,12 @@ func (u *ContentNewsSourceUpsert) UpdateIntervalMinutes() *ContentNewsSourceUpse
 // AddIntervalMinutes adds v to the "interval_minutes" field.
 func (u *ContentNewsSourceUpsert) AddIntervalMinutes(v int) *ContentNewsSourceUpsert {
 	u.Add(contentnewssource.FieldIntervalMinutes, v)
+	return u
+}
+
+// ClearIntervalMinutes clears the value of the "interval_minutes" field.
+func (u *ContentNewsSourceUpsert) ClearIntervalMinutes() *ContentNewsSourceUpsert {
+	u.SetNull(contentnewssource.FieldIntervalMinutes)
 	return u
 }
 
@@ -1172,6 +1171,13 @@ func (u *ContentNewsSourceUpsertOne) AddIntervalMinutes(v int) *ContentNewsSourc
 func (u *ContentNewsSourceUpsertOne) UpdateIntervalMinutes() *ContentNewsSourceUpsertOne {
 	return u.Update(func(s *ContentNewsSourceUpsert) {
 		s.UpdateIntervalMinutes()
+	})
+}
+
+// ClearIntervalMinutes clears the value of the "interval_minutes" field.
+func (u *ContentNewsSourceUpsertOne) ClearIntervalMinutes() *ContentNewsSourceUpsertOne {
+	return u.Update(func(s *ContentNewsSourceUpsert) {
+		s.ClearIntervalMinutes()
 	})
 }
 
@@ -1754,6 +1760,13 @@ func (u *ContentNewsSourceUpsertBulk) AddIntervalMinutes(v int) *ContentNewsSour
 func (u *ContentNewsSourceUpsertBulk) UpdateIntervalMinutes() *ContentNewsSourceUpsertBulk {
 	return u.Update(func(s *ContentNewsSourceUpsert) {
 		s.UpdateIntervalMinutes()
+	})
+}
+
+// ClearIntervalMinutes clears the value of the "interval_minutes" field.
+func (u *ContentNewsSourceUpsertBulk) ClearIntervalMinutes() *ContentNewsSourceUpsertBulk {
+	return u.Update(func(s *ContentNewsSourceUpsert) {
+		s.ClearIntervalMinutes()
 	})
 }
 

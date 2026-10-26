@@ -1093,7 +1093,7 @@ func init() {
 	// contentarticle.SeoTitleValidator is a validator for the "seo_title" field. It is called by the builders before save.
 	contentarticle.SeoTitleValidator = contentarticleDescSeoTitle.Validators[0].(func(string) error)
 	// contentarticleDescVersion is the schema descriptor for version field.
-	contentarticleDescVersion := contentarticleFields[18].Descriptor()
+	contentarticleDescVersion := contentarticleFields[20].Descriptor()
 	// contentarticle.DefaultVersion holds the default value on creation for the version field.
 	contentarticle.DefaultVersion = contentarticleDescVersion.Default.(int)
 	contentauditlogFields := schema.ContentAuditLog{}.Fields()
@@ -1448,10 +1448,6 @@ func init() {
 	contentnewssourceDescEnabled := contentnewssourceFields[6].Descriptor()
 	// contentnewssource.DefaultEnabled holds the default value on creation for the enabled field.
 	contentnewssource.DefaultEnabled = contentnewssourceDescEnabled.Default.(bool)
-	// contentnewssourceDescIntervalMinutes is the schema descriptor for interval_minutes field.
-	contentnewssourceDescIntervalMinutes := contentnewssourceFields[7].Descriptor()
-	// contentnewssource.DefaultIntervalMinutes holds the default value on creation for the interval_minutes field.
-	contentnewssource.DefaultIntervalMinutes = contentnewssourceDescIntervalMinutes.Default.(int)
 	// contentnewssourceDescRateLimitPerMinute is the schema descriptor for rate_limit_per_minute field.
 	contentnewssourceDescRateLimitPerMinute := contentnewssourceFields[8].Descriptor()
 	// contentnewssource.DefaultRateLimitPerMinute holds the default value on creation for the rate_limit_per_minute field.

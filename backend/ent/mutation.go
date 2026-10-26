@@ -22592,38 +22592,41 @@ func (m *ContentAnalyticsEventMutation) ResetEdge(name string) error {
 // ContentArticleMutation represents an operation that mutates the ContentArticle nodes in the graph.
 type ContentArticleMutation struct {
 	config
-	op              Op
-	typ             string
-	id              *int64
-	created_at      *time.Time
-	updated_at      *time.Time
-	deleted_at      *time.Time
-	locale          *string
-	slug            *string
-	title           *string
-	excerpt         *string
-	body_markdown   *string
-	body_html       *string
-	cover_image     *string
-	cover_alt       *string
-	category        *string
-	tags            *[]string
-	appendtags      []string
-	status          *string
-	author_id       *int64
-	addauthor_id    *int64
-	model           *string
-	seo_title       *string
-	seo_description *string
-	canonical_url   *string
-	og_image        *string
-	published_at    *time.Time
-	version         *int
-	addversion      *int
-	clearedFields   map[string]struct{}
-	done            bool
-	oldValue        func(context.Context) (*ContentArticle, error)
-	predicates      []predicate.ContentArticle
+	op                 Op
+	typ                string
+	id                 *int64
+	created_at         *time.Time
+	updated_at         *time.Time
+	deleted_at         *time.Time
+	locale             *string
+	slug               *string
+	title              *string
+	excerpt            *string
+	body_markdown      *string
+	body_html          *string
+	cover_image        *string
+	cover_alt          *string
+	category           *string
+	tags               *[]string
+	appendtags         []string
+	status             *string
+	author_id          *int64
+	addauthor_id       *int64
+	model              *string
+	seo_title          *string
+	seo_description    *string
+	seo_keywords       *[]string
+	appendseo_keywords []string
+	canonical_url      *string
+	og_image           *string
+	published_at       *time.Time
+	featured_at        *time.Time
+	version            *int
+	addversion         *int
+	clearedFields      map[string]struct{}
+	done               bool
+	oldValue           func(context.Context) (*ContentArticle, error)
+	predicates         []predicate.ContentArticle
 }
 
 var _ ent.Mutation = (*ContentArticleMutation)(nil)
@@ -23551,6 +23554,71 @@ func (m *ContentArticleMutation) ResetSeoDescription() {
 	delete(m.clearedFields, contentarticle.FieldSeoDescription)
 }
 
+// SetSeoKeywords sets the "seo_keywords" field.
+func (m *ContentArticleMutation) SetSeoKeywords(s []string) {
+	m.seo_keywords = &s
+	m.appendseo_keywords = nil
+}
+
+// SeoKeywords returns the value of the "seo_keywords" field in the mutation.
+func (m *ContentArticleMutation) SeoKeywords() (r []string, exists bool) {
+	v := m.seo_keywords
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSeoKeywords returns the old "seo_keywords" field's value of the ContentArticle entity.
+// If the ContentArticle object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContentArticleMutation) OldSeoKeywords(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSeoKeywords is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSeoKeywords requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSeoKeywords: %w", err)
+	}
+	return oldValue.SeoKeywords, nil
+}
+
+// AppendSeoKeywords adds s to the "seo_keywords" field.
+func (m *ContentArticleMutation) AppendSeoKeywords(s []string) {
+	m.appendseo_keywords = append(m.appendseo_keywords, s...)
+}
+
+// AppendedSeoKeywords returns the list of values that were appended to the "seo_keywords" field in this mutation.
+func (m *ContentArticleMutation) AppendedSeoKeywords() ([]string, bool) {
+	if len(m.appendseo_keywords) == 0 {
+		return nil, false
+	}
+	return m.appendseo_keywords, true
+}
+
+// ClearSeoKeywords clears the value of the "seo_keywords" field.
+func (m *ContentArticleMutation) ClearSeoKeywords() {
+	m.seo_keywords = nil
+	m.appendseo_keywords = nil
+	m.clearedFields[contentarticle.FieldSeoKeywords] = struct{}{}
+}
+
+// SeoKeywordsCleared returns if the "seo_keywords" field was cleared in this mutation.
+func (m *ContentArticleMutation) SeoKeywordsCleared() bool {
+	_, ok := m.clearedFields[contentarticle.FieldSeoKeywords]
+	return ok
+}
+
+// ResetSeoKeywords resets all changes to the "seo_keywords" field.
+func (m *ContentArticleMutation) ResetSeoKeywords() {
+	m.seo_keywords = nil
+	m.appendseo_keywords = nil
+	delete(m.clearedFields, contentarticle.FieldSeoKeywords)
+}
+
 // SetCanonicalURL sets the "canonical_url" field.
 func (m *ContentArticleMutation) SetCanonicalURL(s string) {
 	m.canonical_url = &s
@@ -23698,6 +23766,55 @@ func (m *ContentArticleMutation) ResetPublishedAt() {
 	delete(m.clearedFields, contentarticle.FieldPublishedAt)
 }
 
+// SetFeaturedAt sets the "featured_at" field.
+func (m *ContentArticleMutation) SetFeaturedAt(t time.Time) {
+	m.featured_at = &t
+}
+
+// FeaturedAt returns the value of the "featured_at" field in the mutation.
+func (m *ContentArticleMutation) FeaturedAt() (r time.Time, exists bool) {
+	v := m.featured_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFeaturedAt returns the old "featured_at" field's value of the ContentArticle entity.
+// If the ContentArticle object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ContentArticleMutation) OldFeaturedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFeaturedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFeaturedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFeaturedAt: %w", err)
+	}
+	return oldValue.FeaturedAt, nil
+}
+
+// ClearFeaturedAt clears the value of the "featured_at" field.
+func (m *ContentArticleMutation) ClearFeaturedAt() {
+	m.featured_at = nil
+	m.clearedFields[contentarticle.FieldFeaturedAt] = struct{}{}
+}
+
+// FeaturedAtCleared returns if the "featured_at" field was cleared in this mutation.
+func (m *ContentArticleMutation) FeaturedAtCleared() bool {
+	_, ok := m.clearedFields[contentarticle.FieldFeaturedAt]
+	return ok
+}
+
+// ResetFeaturedAt resets all changes to the "featured_at" field.
+func (m *ContentArticleMutation) ResetFeaturedAt() {
+	m.featured_at = nil
+	delete(m.clearedFields, contentarticle.FieldFeaturedAt)
+}
+
 // SetVersion sets the "version" field.
 func (m *ContentArticleMutation) SetVersion(i int) {
 	m.version = &i
@@ -23788,7 +23905,7 @@ func (m *ContentArticleMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ContentArticleMutation) Fields() []string {
-	fields := make([]string, 0, 22)
+	fields := make([]string, 0, 24)
 	if m.created_at != nil {
 		fields = append(fields, contentarticle.FieldCreatedAt)
 	}
@@ -23843,6 +23960,9 @@ func (m *ContentArticleMutation) Fields() []string {
 	if m.seo_description != nil {
 		fields = append(fields, contentarticle.FieldSeoDescription)
 	}
+	if m.seo_keywords != nil {
+		fields = append(fields, contentarticle.FieldSeoKeywords)
+	}
 	if m.canonical_url != nil {
 		fields = append(fields, contentarticle.FieldCanonicalURL)
 	}
@@ -23851,6 +23971,9 @@ func (m *ContentArticleMutation) Fields() []string {
 	}
 	if m.published_at != nil {
 		fields = append(fields, contentarticle.FieldPublishedAt)
+	}
+	if m.featured_at != nil {
+		fields = append(fields, contentarticle.FieldFeaturedAt)
 	}
 	if m.version != nil {
 		fields = append(fields, contentarticle.FieldVersion)
@@ -23899,12 +24022,16 @@ func (m *ContentArticleMutation) Field(name string) (ent.Value, bool) {
 		return m.SeoTitle()
 	case contentarticle.FieldSeoDescription:
 		return m.SeoDescription()
+	case contentarticle.FieldSeoKeywords:
+		return m.SeoKeywords()
 	case contentarticle.FieldCanonicalURL:
 		return m.CanonicalURL()
 	case contentarticle.FieldOgImage:
 		return m.OgImage()
 	case contentarticle.FieldPublishedAt:
 		return m.PublishedAt()
+	case contentarticle.FieldFeaturedAt:
+		return m.FeaturedAt()
 	case contentarticle.FieldVersion:
 		return m.Version()
 	}
@@ -23952,12 +24079,16 @@ func (m *ContentArticleMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldSeoTitle(ctx)
 	case contentarticle.FieldSeoDescription:
 		return m.OldSeoDescription(ctx)
+	case contentarticle.FieldSeoKeywords:
+		return m.OldSeoKeywords(ctx)
 	case contentarticle.FieldCanonicalURL:
 		return m.OldCanonicalURL(ctx)
 	case contentarticle.FieldOgImage:
 		return m.OldOgImage(ctx)
 	case contentarticle.FieldPublishedAt:
 		return m.OldPublishedAt(ctx)
+	case contentarticle.FieldFeaturedAt:
+		return m.OldFeaturedAt(ctx)
 	case contentarticle.FieldVersion:
 		return m.OldVersion(ctx)
 	}
@@ -24095,6 +24226,13 @@ func (m *ContentArticleMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetSeoDescription(v)
 		return nil
+	case contentarticle.FieldSeoKeywords:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSeoKeywords(v)
+		return nil
 	case contentarticle.FieldCanonicalURL:
 		v, ok := value.(string)
 		if !ok {
@@ -24115,6 +24253,13 @@ func (m *ContentArticleMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPublishedAt(v)
+		return nil
+	case contentarticle.FieldFeaturedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFeaturedAt(v)
 		return nil
 	case contentarticle.FieldVersion:
 		v, ok := value.(int)
@@ -24213,6 +24358,9 @@ func (m *ContentArticleMutation) ClearedFields() []string {
 	if m.FieldCleared(contentarticle.FieldSeoDescription) {
 		fields = append(fields, contentarticle.FieldSeoDescription)
 	}
+	if m.FieldCleared(contentarticle.FieldSeoKeywords) {
+		fields = append(fields, contentarticle.FieldSeoKeywords)
+	}
 	if m.FieldCleared(contentarticle.FieldCanonicalURL) {
 		fields = append(fields, contentarticle.FieldCanonicalURL)
 	}
@@ -24221,6 +24369,9 @@ func (m *ContentArticleMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(contentarticle.FieldPublishedAt) {
 		fields = append(fields, contentarticle.FieldPublishedAt)
+	}
+	if m.FieldCleared(contentarticle.FieldFeaturedAt) {
+		fields = append(fields, contentarticle.FieldFeaturedAt)
 	}
 	return fields
 }
@@ -24269,6 +24420,9 @@ func (m *ContentArticleMutation) ClearField(name string) error {
 	case contentarticle.FieldSeoDescription:
 		m.ClearSeoDescription()
 		return nil
+	case contentarticle.FieldSeoKeywords:
+		m.ClearSeoKeywords()
+		return nil
 	case contentarticle.FieldCanonicalURL:
 		m.ClearCanonicalURL()
 		return nil
@@ -24277,6 +24431,9 @@ func (m *ContentArticleMutation) ClearField(name string) error {
 		return nil
 	case contentarticle.FieldPublishedAt:
 		m.ClearPublishedAt()
+		return nil
+	case contentarticle.FieldFeaturedAt:
+		m.ClearFeaturedAt()
 		return nil
 	}
 	return fmt.Errorf("unknown ContentArticle nullable field %s", name)
@@ -24340,6 +24497,9 @@ func (m *ContentArticleMutation) ResetField(name string) error {
 	case contentarticle.FieldSeoDescription:
 		m.ResetSeoDescription()
 		return nil
+	case contentarticle.FieldSeoKeywords:
+		m.ResetSeoKeywords()
+		return nil
 	case contentarticle.FieldCanonicalURL:
 		m.ResetCanonicalURL()
 		return nil
@@ -24348,6 +24508,9 @@ func (m *ContentArticleMutation) ResetField(name string) error {
 		return nil
 	case contentarticle.FieldPublishedAt:
 		m.ResetPublishedAt()
+		return nil
+	case contentarticle.FieldFeaturedAt:
+		m.ResetFeaturedAt()
 		return nil
 	case contentarticle.FieldVersion:
 		m.ResetVersion()
@@ -30459,7 +30622,7 @@ func (m *ContentNewsSourceMutation) IntervalMinutes() (r int, exists bool) {
 // OldIntervalMinutes returns the old "interval_minutes" field's value of the ContentNewsSource entity.
 // If the ContentNewsSource object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ContentNewsSourceMutation) OldIntervalMinutes(ctx context.Context) (v int, err error) {
+func (m *ContentNewsSourceMutation) OldIntervalMinutes(ctx context.Context) (v *int, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldIntervalMinutes is only allowed on UpdateOne operations")
 	}
@@ -30491,10 +30654,24 @@ func (m *ContentNewsSourceMutation) AddedIntervalMinutes() (r int, exists bool) 
 	return *v, true
 }
 
+// ClearIntervalMinutes clears the value of the "interval_minutes" field.
+func (m *ContentNewsSourceMutation) ClearIntervalMinutes() {
+	m.interval_minutes = nil
+	m.addinterval_minutes = nil
+	m.clearedFields[contentnewssource.FieldIntervalMinutes] = struct{}{}
+}
+
+// IntervalMinutesCleared returns if the "interval_minutes" field was cleared in this mutation.
+func (m *ContentNewsSourceMutation) IntervalMinutesCleared() bool {
+	_, ok := m.clearedFields[contentnewssource.FieldIntervalMinutes]
+	return ok
+}
+
 // ResetIntervalMinutes resets all changes to the "interval_minutes" field.
 func (m *ContentNewsSourceMutation) ResetIntervalMinutes() {
 	m.interval_minutes = nil
 	m.addinterval_minutes = nil
+	delete(m.clearedFields, contentnewssource.FieldIntervalMinutes)
 }
 
 // SetRateLimitPerMinute sets the "rate_limit_per_minute" field.
@@ -31526,6 +31703,9 @@ func (m *ContentNewsSourceMutation) ClearedFields() []string {
 	if m.FieldCleared(contentnewssource.FieldCategory) {
 		fields = append(fields, contentnewssource.FieldCategory)
 	}
+	if m.FieldCleared(contentnewssource.FieldIntervalMinutes) {
+		fields = append(fields, contentnewssource.FieldIntervalMinutes)
+	}
 	if m.FieldCleared(contentnewssource.FieldTermsConfirmedAt) {
 		fields = append(fields, contentnewssource.FieldTermsConfirmedAt)
 	}
@@ -31572,6 +31752,9 @@ func (m *ContentNewsSourceMutation) ClearField(name string) error {
 		return nil
 	case contentnewssource.FieldCategory:
 		m.ClearCategory()
+		return nil
+	case contentnewssource.FieldIntervalMinutes:
+		m.ClearIntervalMinutes()
 		return nil
 	case contentnewssource.FieldTermsConfirmedAt:
 		m.ClearTermsConfirmedAt()

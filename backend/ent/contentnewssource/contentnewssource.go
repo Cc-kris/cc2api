@@ -144,8 +144,6 @@ var (
 	CategoryValidator func(string) error
 	// DefaultEnabled holds the default value on creation for the "enabled" field.
 	DefaultEnabled bool
-	// DefaultIntervalMinutes holds the default value on creation for the "interval_minutes" field.
-	DefaultIntervalMinutes int
 	// DefaultRateLimitPerMinute holds the default value on creation for the "rate_limit_per_minute" field.
 	DefaultRateLimitPerMinute int
 )

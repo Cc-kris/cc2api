@@ -35,7 +35,7 @@ func (ContentNewsSource) Fields() []ent.Field {
 		field.String("language").MaxLen(16).Default("zh-CN"),
 		field.String("category").MaxLen(80).Optional().Nillable(),
 		field.Bool("enabled").Default(false),
-		field.Int("interval_minutes").Default(15),
+		field.Int("interval_minutes").Optional().Nillable(),
 		field.Int("rate_limit_per_minute").Default(60),
 		field.Time("terms_confirmed_at").Optional().Nillable().SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
 		field.String("authorization_note").Optional().Nillable().SchemaType(map[string]string{dialect.Postgres: "text"}),
@@ -155,9 +155,11 @@ func (ContentArticle) Fields() []ent.Field {
 		field.String("model").MaxLen(200).Optional().Nillable(),
 		field.String("seo_title").MaxLen(300).Optional().Nillable(),
 		field.String("seo_description").SchemaType(map[string]string{dialect.Postgres: "text"}).Optional().Nillable(),
+		field.JSON("seo_keywords", []string{}).Optional().SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
 		field.String("canonical_url").SchemaType(map[string]string{dialect.Postgres: "text"}).Optional().Nillable(),
 		field.String("og_image").SchemaType(map[string]string{dialect.Postgres: "text"}).Optional().Nillable(),
 		field.Time("published_at").Optional().Nillable().SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
+		field.Time("featured_at").Optional().Nillable().SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
 		field.Int("version").Default(1),
 	}
 }
@@ -166,6 +168,7 @@ func (ContentArticle) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("slug", "locale").Unique(),
 		index.Fields("status", "locale", "published_at"),
+		index.Fields("status", "featured_at").Annotations(entsql.IndexWhere("featured_at IS NOT NULL")),
 		index.Fields("category"),
 	}
 }

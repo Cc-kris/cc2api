@@ -675,6 +675,16 @@ func IntervalMinutesLTE(v int) predicate.ContentNewsSource {
 	return predicate.ContentNewsSource(sql.FieldLTE(FieldIntervalMinutes, v))
 }
 
+// IntervalMinutesIsNil applies the IsNil predicate on the "interval_minutes" field.
+func IntervalMinutesIsNil() predicate.ContentNewsSource {
+	return predicate.ContentNewsSource(sql.FieldIsNull(FieldIntervalMinutes))
+}
+
+// IntervalMinutesNotNil applies the NotNil predicate on the "interval_minutes" field.
+func IntervalMinutesNotNil() predicate.ContentNewsSource {
+	return predicate.ContentNewsSource(sql.FieldNotNull(FieldIntervalMinutes))
+}
+
 // RateLimitPerMinuteEQ applies the EQ predicate on the "rate_limit_per_minute" field.
 func RateLimitPerMinuteEQ(v int) predicate.ContentNewsSource {
 	return predicate.ContentNewsSource(sql.FieldEQ(FieldRateLimitPerMinute, v))

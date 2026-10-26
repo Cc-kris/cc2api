@@ -179,6 +179,12 @@ func (_u *ContentNewsSourceUpdate) AddIntervalMinutes(v int) *ContentNewsSourceU
 	return _u
 }
 
+// ClearIntervalMinutes clears the value of the "interval_minutes" field.
+func (_u *ContentNewsSourceUpdate) ClearIntervalMinutes() *ContentNewsSourceUpdate {
+	_u.mutation.ClearIntervalMinutes()
+	return _u
+}
+
 // SetRateLimitPerMinute sets the "rate_limit_per_minute" field.
 func (_u *ContentNewsSourceUpdate) SetRateLimitPerMinute(v int) *ContentNewsSourceUpdate {
 	_u.mutation.ResetRateLimitPerMinute()
@@ -577,6 +583,9 @@ func (_u *ContentNewsSourceUpdate) sqlSave(ctx context.Context) (_node int, err 
 	if value, ok := _u.mutation.AddedIntervalMinutes(); ok {
 		_spec.AddField(contentnewssource.FieldIntervalMinutes, field.TypeInt, value)
 	}
+	if _u.mutation.IntervalMinutesCleared() {
+		_spec.ClearField(contentnewssource.FieldIntervalMinutes, field.TypeInt)
+	}
 	if value, ok := _u.mutation.RateLimitPerMinute(); ok {
 		_spec.SetField(contentnewssource.FieldRateLimitPerMinute, field.TypeInt, value)
 	}
@@ -893,6 +902,12 @@ func (_u *ContentNewsSourceUpdateOne) SetNillableIntervalMinutes(v *int) *Conten
 // AddIntervalMinutes adds value to the "interval_minutes" field.
 func (_u *ContentNewsSourceUpdateOne) AddIntervalMinutes(v int) *ContentNewsSourceUpdateOne {
 	_u.mutation.AddIntervalMinutes(v)
+	return _u
+}
+
+// ClearIntervalMinutes clears the value of the "interval_minutes" field.
+func (_u *ContentNewsSourceUpdateOne) ClearIntervalMinutes() *ContentNewsSourceUpdateOne {
+	_u.mutation.ClearIntervalMinutes()
 	return _u
 }
 
@@ -1323,6 +1338,9 @@ func (_u *ContentNewsSourceUpdateOne) sqlSave(ctx context.Context) (_node *Conte
 	}
 	if value, ok := _u.mutation.AddedIntervalMinutes(); ok {
 		_spec.AddField(contentnewssource.FieldIntervalMinutes, field.TypeInt, value)
+	}
+	if _u.mutation.IntervalMinutesCleared() {
+		_spec.ClearField(contentnewssource.FieldIntervalMinutes, field.TypeInt)
 	}
 	if value, ok := _u.mutation.RateLimitPerMinute(); ok {
 		_spec.SetField(contentnewssource.FieldRateLimitPerMinute, field.TypeInt, value)
