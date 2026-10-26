@@ -206,8 +206,13 @@ type ContentTranslationExecutor interface {
 // (not a raw API key); an empty reference uses normal model scheduling.
 
 type ContentAIProviderConfig struct {
+	ID           string   `json:"id,omitempty"`
+	Label        string   `json:"label,omitempty"`
+	Provider     string   `json:"provider,omitempty"`
+	IsDefault    bool     `json:"isDefault,omitempty"`
 	BaseURL      string   `json:"baseUrl"`
 	APIKey       string   `json:"apiKey,omitempty"`
+	EncryptedKey string   `json:"-"`
 	APIKeyMasked string   `json:"apiKeyMasked,omitempty"`
 	HasAPIKey    bool     `json:"hasApiKey"`
 	DefaultModel string   `json:"defaultModel"`
@@ -217,14 +222,13 @@ type ContentAIProviderConfig struct {
 
 var (
 	contentAIMu         sync.RWMutex
-	contentAICache      *ContentAIProviderConfig
 	contentAIConfigPath = filepath.Join("data", "content_ai_provider.json")
 )
 
 func maskAPIKey(key string) string {
 	k := strings.TrimSpace(key)
 	if len(k) <= 8 {
-		if len(k) == 0 {
+		if k == "" {
 			return ""
 		}
 		return "sk-****"
@@ -232,106 +236,107 @@ func maskAPIKey(key string) string {
 	return k[:4] + "****" + k[len(k)-4:]
 }
 
-func loadContentAIProviderConfig() ContentAIProviderConfig {
-	contentAIMu.Lock()
-	defer contentAIMu.Unlock()
-	if contentAICache != nil {
-		cp := *contentAICache
-		cp.APIKeyMasked = maskAPIKey(cp.APIKey)
-		cp.HasAPIKey = strings.TrimSpace(cp.APIKey) != ""
-		return cp
-	}
+func contentAIStore() *ContentAIConfigStore {
+	return NewContentAIConfigStore(contentAIConfigPath, contentAIEncryptorFromEnv())
+}
 
-	cfg := ContentAIProviderConfig{
-		BaseURL:      "https://cc-ai.xyz/v1",
-		DefaultModel: "claude-opus-5.5",
-		Models: []string{
-			"claude-opus-5.5",
-			"claude-sonnet-4.6",
-			"claude-haiku-4.5",
-			"gpt-5.4",
-			"gpt-5.3-codex",
-			"grok-4.7",
-			"deepseek-reasoner",
-			"deepseek-chat",
-		},
+func loadContentAIProviderConfigWithError() (ContentAIProviderConfig, error) {
+	configs, defaultID, err := contentAIStore().LoadAll()
+	if err != nil {
+		return ContentAIProviderConfig{}, err
 	}
-
-	data, err := os.ReadFile(contentAIConfigPath)
-	if err == nil && len(data) > 0 {
-		var loaded ContentAIProviderConfig
-		if json.Unmarshal(data, &loaded) == nil && strings.TrimSpace(loaded.BaseURL) != "" {
-			cfg.BaseURL = strings.TrimSpace(loaded.BaseURL)
-			cfg.APIKey = strings.TrimSpace(loaded.APIKey)
-			if strings.TrimSpace(loaded.DefaultModel) != "" {
-				cfg.DefaultModel = strings.TrimSpace(loaded.DefaultModel)
-			}
-			if len(loaded.Models) > 0 {
-				cfg.Models = loaded.Models
-			}
-			cfg.UpdatedAt = loaded.UpdatedAt
+	if len(configs) == 0 && defaultID == "" {
+		return ContentAIProviderConfig{}, nil
+	}
+	for _, cfg := range configs {
+		if cfg.ID == defaultID {
+			cfg.IsDefault = true
+			cfg.APIKeyMasked = maskAPIKey(cfg.APIKey)
+			cfg.HasAPIKey = strings.TrimSpace(cfg.APIKey) != ""
+			return cfg, nil
 		}
 	}
-
-	contentAICache = &cfg
-	cp := *contentAICache
-	cp.APIKeyMasked = maskAPIKey(cp.APIKey)
-	cp.HasAPIKey = strings.TrimSpace(cp.APIKey) != ""
-	return cp
+	return ContentAIProviderConfig{}, errors.New("default AI config not found")
 }
 
 func saveContentAIProviderConfig(cfg ContentAIProviderConfig) error {
 	contentAIMu.Lock()
 	defer contentAIMu.Unlock()
-
-	existing := ContentAIProviderConfig{}
-	if contentAICache != nil {
-		existing = *contentAICache
-	}
-
-	cleanKey := strings.TrimSpace(cfg.APIKey)
-	if cleanKey == "" || strings.Contains(cleanKey, "****") {
-		cleanKey = existing.APIKey
-	}
-
-	cleanBaseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
-	if cleanBaseURL == "" {
-		cleanBaseURL = "https://cc-ai.xyz/v1"
-	}
-
-	models := cfg.Models
-	if len(models) == 0 && len(existing.Models) > 0 {
-		models = existing.Models
-	}
-
-	defModel := strings.TrimSpace(cfg.DefaultModel)
-	if defModel == "" && len(models) > 0 {
-		defModel = models[0]
-	}
-
-	saved := ContentAIProviderConfig{
-		BaseURL:      cleanBaseURL,
-		APIKey:       cleanKey,
-		DefaultModel: defModel,
-		Models:       models,
-		UpdatedAt:    time.Now().UTC().Format(time.RFC3339),
-	}
-
-	_ = os.MkdirAll(filepath.Dir(contentAIConfigPath), 0755)
-	raw, err := json.MarshalIndent(saved, "", "  ")
+	store := contentAIStore()
+	configs, defaultID, err := store.LoadAll()
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(contentAIConfigPath, raw, 0600); err != nil {
+	if cfg.ID == "" {
+		cfg.ID = defaultID
+		if cfg.ID == "" {
+			cfg.ID = fmt.Sprintf("config-%d", time.Now().UnixNano())
+		}
+	}
+	found := false
+	for i, existing := range configs {
+		if existing.ID != cfg.ID {
+			continue
+		}
+		found = true
+		if strings.TrimSpace(cfg.APIKey) == "" || strings.Contains(cfg.APIKey, "****") {
+			cfg.APIKey = existing.APIKey
+		}
+		if strings.TrimSpace(cfg.BaseURL) == "" {
+			cfg.BaseURL = existing.BaseURL
+		}
+		if len(cfg.Models) == 0 {
+			cfg.Models = existing.Models
+		}
+		if strings.TrimSpace(cfg.DefaultModel) == "" {
+			cfg.DefaultModel = existing.DefaultModel
+		}
+		if cfg.Label == "" {
+			cfg.Label = existing.Label
+		}
+		if cfg.Provider == "" {
+			cfg.Provider = existing.Provider
+		}
+		configs[i] = cfg
+		break
+	}
+	if !found {
+		if cfg.Label == "" {
+			cfg.Label = cfg.ID
+		}
+		if cfg.Provider == "" {
+			cfg.Provider = "custom"
+		}
+		configs = append(configs, cfg)
+	}
+	cfg.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = defaultContentAIConfig().BaseURL
+	}
+	if cfg.DefaultModel == "" && len(cfg.Models) > 0 {
+		cfg.DefaultModel = cfg.Models[0]
+	}
+	cfg.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	for i := range configs {
+		if configs[i].ID == cfg.ID {
+			configs[i] = cfg
+			break
+		}
+	}
+	if cfg.IsDefault || defaultID == "" {
+		defaultID = cfg.ID
+	}
+	if err := store.SaveAll(configs, defaultID); err != nil {
 		return err
 	}
-
-	contentAICache = &saved
 	return nil
 }
 
 func (s *ContentArticleAdminService) GetAIProviderConfig(ctx context.Context) (ContentAIProviderConfig, error) {
-	cfg := loadContentAIProviderConfig()
+	cfg, err := loadContentAIProviderConfigWithError()
+	if err != nil {
+		return ContentAIProviderConfig{}, err
+	}
 	// Auto-hydrate API key from active database account if empty
 	if strings.TrimSpace(cfg.APIKey) == "" && s.executor != nil {
 		if gwExec, ok := s.executor.(*GatewayContentWritingExecutor); ok && gwExec.gateway != nil && gwExec.gateway.accountRepo != nil {
@@ -345,7 +350,9 @@ func (s *ContentArticleAdminService) GetAIProviderConfig(ctx context.Context) (C
 						if u := strings.TrimRight(strings.TrimSpace(acc.GetOpenAIBaseURL()), "/"); u != "" {
 							cfg.BaseURL = u
 						}
-						_ = saveContentAIProviderConfig(cfg)
+						if err := saveContentAIProviderConfig(cfg); err != nil {
+							return ContentAIProviderConfig{}, err
+						}
 						break
 					}
 				}
@@ -363,7 +370,10 @@ func (s *ContentArticleAdminService) UpdateAIProviderConfig(ctx context.Context,
 }
 
 func (s *ContentArticleAdminService) FetchAIProviderModels(ctx context.Context, reqBaseURL, reqAPIKey string) ([]string, ContentAIProviderConfig, error) {
-	current := loadContentAIProviderConfig()
+	current, err := loadContentAIProviderConfigWithError()
+	if err != nil {
+		return nil, ContentAIProviderConfig{}, err
+	}
 	baseURL := strings.TrimRight(strings.TrimSpace(reqBaseURL), "/")
 	if baseURL == "" {
 		baseURL = current.BaseURL
@@ -444,9 +454,14 @@ func (s *ContentArticleAdminService) FetchAIProviderModels(ctx context.Context, 
 	if !slicesContains(fetchedModels, updated.DefaultModel) && len(fetchedModels) > 0 {
 		updated.DefaultModel = fetchedModels[0]
 	}
-	_ = saveContentAIProviderConfig(updated)
+	if err := saveContentAIProviderConfig(updated); err != nil {
+		return nil, ContentAIProviderConfig{}, err
+	}
 
-	resultCfg := loadContentAIProviderConfig()
+	resultCfg, err := loadContentAIProviderConfigWithError()
+	if err != nil {
+		return nil, ContentAIProviderConfig{}, err
+	}
 	return fetchedModels, resultCfg, nil
 }
 
@@ -773,7 +788,10 @@ func (e *GatewayContentWritingExecutor) Generate(ctx context.Context, task *Cont
 	prompt := buildContentWritingPrompt(task)
 
 	// Direct priority: if standalone AI Provider config is present, use it directly!
-	cfg := loadContentAIProviderConfig()
+	cfg, err := loadContentAIProviderConfigWithError()
+	if err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(cfg.BaseURL) != "" && strings.TrimSpace(cfg.APIKey) != "" {
 		endpoint := strings.TrimRight(cfg.BaseURL, "/")
 		if strings.HasSuffix(endpoint, "/v1") {
@@ -1516,7 +1534,10 @@ func (s *ContentArticleAdminService) Models(platform string) (ModelCatalogSnapsh
 				}
 			}
 		}
-		cfg := loadContentAIProviderConfig()
+		cfg, err := loadContentAIProviderConfigWithError()
+		if err != nil {
+			return ModelCatalogSnapshot{}, err
+		}
 		for _, m := range cfg.Models {
 			if _, ok := seen[m]; !ok {
 				seen[m] = struct{}{}
