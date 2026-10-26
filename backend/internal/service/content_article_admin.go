@@ -599,11 +599,10 @@ func (s *ContentArticleAdminService) FetchAIProviderModels(ctx context.Context, 
 }
 
 type ContentTaxonomyConfig struct {
-	ArticleCategories  []string `json:"articleCategories"`
-	NewsCategories     []string `json:"newsCategories"`
-	Tags               []string `json:"tags"`
-	FeaturedArticleIDs []int64  `json:"featuredArticleIds,omitempty"`
-	UpdatedAt          string   `json:"updatedAt,omitempty"`
+	ArticleCategories []string `json:"articleCategories"`
+	NewsCategories    []string `json:"newsCategories"`
+	Tags              []string `json:"tags"`
+	UpdatedAt         string   `json:"updatedAt,omitempty"`
 }
 
 var (
@@ -627,9 +626,6 @@ func loadContentTaxonomyConfig() ContentTaxonomyConfig {
 			}
 			if loaded.Tags == nil {
 				loaded.Tags = []string{}
-			}
-			if loaded.FeaturedArticleIDs == nil {
-				loaded.FeaturedArticleIDs = []int64{}
 			}
 			return loaded
 		}
@@ -812,13 +808,6 @@ func (s *ContentArticleAdminService) MutateTaxonomy(ctx context.Context, scope, 
 				artCopy.Tags = append(artCopy.Tags, tag)
 			}
 		}
-		featuredIDs := make([]int64, 0, len(cfg.FeaturedArticleIDs))
-		for _, id := range cfg.FeaturedArticleIDs {
-			if id != artID {
-				featuredIDs = append(featuredIDs, id)
-			}
-		}
-		cfg.FeaturedArticleIDs = featuredIDs
 		if _, updateErr := s.repo.UpdateArticle(ctx, &artCopy, art.Version); updateErr != nil {
 			return cfg, fmt.Errorf("update article featured state: %w", updateErr)
 		}

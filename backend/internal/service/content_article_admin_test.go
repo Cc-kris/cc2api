@@ -171,7 +171,7 @@ func TestContentArticleTaxonomyFeaturedMutationReconcilesLegacyState(t *testing.
 	for _, action := range []string{"set", "unset"} {
 		t.Run(action, func(t *testing.T) {
 			isolateContentTaxonomyForTest(t, ContentTaxonomyConfig{
-				ArticleCategories: []string{"News"}, NewsCategories: []string{}, Tags: []string{}, FeaturedArticleIDs: []int64{7, 8, 7},
+				ArticleCategories: []string{"News"}, NewsCategories: []string{}, Tags: []string{},
 			})
 			featuredAt := time.Now().UTC().Add(-time.Hour)
 			r := &articleRepoStub{article: ContentArticle{
@@ -179,10 +179,9 @@ func TestContentArticleTaxonomyFeaturedMutationReconcilesLegacyState(t *testing.
 				Tags: []string{"API", "精选", " legacy ", "精选"}, FeaturedAt: &featuredAt,
 			}}
 			s := NewContentArticleAdminService(r, nil, nil)
-			cfg, err := s.MutateTaxonomy(context.Background(), "featured_article", action, "7", "")
+			_, err := s.MutateTaxonomy(context.Background(), "featured_article", action, "7", "")
 			require.NoError(t, err)
 			require.Equal(t, []string{"API", " legacy "}, r.article.Tags)
-			require.Equal(t, []int64{8}, cfg.FeaturedArticleIDs)
 			if action == "set" {
 				require.NotNil(t, r.article.FeaturedAt)
 			} else {
@@ -190,8 +189,8 @@ func TestContentArticleTaxonomyFeaturedMutationReconcilesLegacyState(t *testing.
 			}
 			persisted, err := os.ReadFile(contentTaxonomyPath)
 			require.NoError(t, err)
-			require.NotContains(t, string(persisted), "featuredArticleIds\": [\n    7")
-			require.Equal(t, []int64{8}, loadContentTaxonomyConfig().FeaturedArticleIDs)
+			require.NotContains(t, string(persisted), "featuredArticleIds")
+			require.NotContains(t, string(persisted), "精选")
 		})
 	}
 }
