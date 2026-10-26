@@ -198,7 +198,7 @@ func (s *ContentAIConfigStore) save(configs []ContentAIProviderConfig, def strin
 	}
 	f := contentAIFile{Version: 2, DefaultID: def}
 	seen := map[string]bool{}
-	for i, c := range configs {
+	for _, c := range configs {
 		if strings.TrimSpace(c.ID) == "" {
 			return errors.New("AI config id must not be empty")
 		}
@@ -218,12 +218,6 @@ func (s *ContentAIConfigStore) save(configs []ContentAIProviderConfig, def strin
 			}
 		}
 		f.Configs = append(f.Configs, contentAIStored{c.ID, c.Label, c.Provider, c.BaseURL, c.EncryptedKey, c.DefaultModel, c.Models, c.UpdatedAt})
-	}
-	found := false
-	for _, c := range f.Configs {
-		if c.ID == f.DefaultID {
-			found = true
-		}
 	}
 	if len(f.Configs) == 0 {
 		if strings.TrimSpace(f.DefaultID) != "" {
