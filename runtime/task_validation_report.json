@@ -1,0 +1,153 @@
+{
+  "timestamp": "2026-10-26T18:30:54.325803",
+  "task_list_path": "/Users/mac/Documents/Dev/sub2apis/docs/v0.4/v0.4_task_list_20261026_v1.0.md",
+  "total_tasks": 35,
+  "verdict": "PASS",
+  "summary": {
+    "critical_issues": 0,
+    "major_issues": 0,
+    "minor_warnings": 23,
+    "total_issues": 0
+  },
+  "issues": [],
+  "warnings": [
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-002",
+      "message": "TASK-002: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-006",
+      "message": "TASK-006: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-007",
+      "message": "TASK-007: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-009",
+      "message": "TASK-009: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-012",
+      "message": "TASK-012: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-013",
+      "message": "TASK-013: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-016",
+      "message": "TASK-016: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-019",
+      "message": "TASK-019: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-020",
+      "message": "TASK-020: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-021",
+      "message": "TASK-021: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-022",
+      "message": "TASK-022: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-023",
+      "message": "TASK-023: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-024",
+      "message": "TASK-024: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-025",
+      "message": "TASK-025: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-026",
+      "message": "TASK-026: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-027",
+      "message": "TASK-027: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-028",
+      "message": "TASK-028: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-029",
+      "message": "TASK-029: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-030",
+      "message": "TASK-030: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-032",
+      "message": "TASK-032: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-033",
+      "message": "TASK-033: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-034",
+      "message": "TASK-034: 描述可能包含多个能力，建议检查是否需要拆分"
+    },
+    {
+      "level": "MINOR",
+      "rule": "SINGLE_CAPABILITY",
+      "task_id": "TASK-035",
+      "message": "TASK-035: 描述可能包含多个能力，建议检查是否需要拆分"
+    }
+  ]
+}

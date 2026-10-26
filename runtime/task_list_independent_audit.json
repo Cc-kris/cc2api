@@ -1,0 +1,18 @@
+{
+  "verdict": "PASS",
+  "timestamp": "2026-10-26T18:30:55.309109",
+  "task_list_path": "/Users/mac/Documents/Dev/sub2apis/docs/v0.4/v0.4_task_list_20261026_v1.0.md",
+  "sha256": "fd49e449ccded7bff792b88f214428ec50c9cdf93e200b3a89910c5de9e6626b",
+  "mtime": "2026-10-26T18:30:12.857254",
+  "tasks": 35,
+  "loc_max": 200,
+  "files_max": 5,
+  "requirements": "16/16",
+  "test_cases": "94/94",
+  "acceptance": "17/17",
+  "paths": "PASS",
+  "dag": "PASS",
+  "shared_file_overlap_pairs": 134,
+  "overlap_control": "PASS: global file mutex required by task list",
+  "official_report": "runtime/task_validation_report.json"
+}
