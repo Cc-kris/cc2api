@@ -1057,7 +1057,18 @@
 
       
 
-      <div class="ai-studio-grid">
+      <nav class="ai-subtabs" aria-label="AI 创作页面">
+        <button :class="{ active: aiStudioView === 'article' }" @click="aiStudioView = 'article'">文章生成</button>
+        <button :class="{ active: aiStudioView === 'config' }" @click="aiStudioView = 'config'">模型配置</button>
+      </nav>
+      <div v-show="aiStudioView === 'config'">
+        <AIConfigPanel @configs-updated="onAIConfigsUpdated" />
+      </div>
+      <div v-if="aiStudioView === 'article' && !aiConfigs.some((c: any) => c.isDefault)" class="ai-config-required" role="status">
+        <h3>请先配置模型</h3><p>设置默认模型后即可开始文章生成。</p>
+        <button class="button primary" @click="aiStudioView = 'config'">前往模型配置</button>
+      </div>
+      <div v-else-if="aiStudioView === 'article' && aiConfigs.some((c: any) => c.isDefault)" class="ai-studio-grid">
         <!-- 左侧：任务列表（纯列表+操作） -->
         <div class="ai-col ai-col-left">
           <div class="ai-col-header">
@@ -1117,10 +1128,15 @@
             </div>
             <div class="field-group">
               <label class="block-label">生成模型 <span class="required-star">*</span></label>
-              <select v-model="brief.model" class="ai-model-select">
-                <option value="" disabled>请选择模型</option>
-                <option v-for="m in aiModelOptions" :key="m" :value="m">{{ m }}</option>
-              </select>
+              <Select
+                :model-value="selectedAIModelKey"
+                :options="aiModelOptions"
+                value-key="value"
+                label-key="label"
+                aria-label="生成模型"
+                placeholder="请选择模型"
+                @update:model-value="selectAIModel"
+              />
               <small v-if="modelsLoadError" class="error-text">{{ modelsLoadError }}</small>
               <small v-else-if="!aiModelOptions.length" class="muted">模型列表为空，请检查 /admin/content/articles/models 接口</small>
             </div>
@@ -1362,7 +1378,9 @@ import {
 import { Line as LineChart, Bar as BarChart, Doughnut as DoughnutChart } from "vue-chartjs";
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Tooltip, Legend, Filler);
 import contentAPI from "@/api/admin/content";
+import AIConfigPanel from "@/components/admin/content/AIConfigPanel.vue";
 import Pagination from "@/components/common/Pagination.vue";
+import Select from "@/components/common/Select.vue";
 import { useAppStore } from "@/stores";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
@@ -1428,6 +1446,18 @@ async function runUiConfirm() {
 }
 
 const tabs = ["新闻动态", "深度解析", "AI 创作", "分类与标签", "BI 分析"];
+const aiStudioView = ref("article");
+const aiConfigs = ref<any[]>([]);
+function onAIConfigsUpdated(value: any[]) {
+  aiConfigs.value = value || [];
+  models.value = aiConfigs.value.flatMap((c: any) => (c.models || []).map((id: string) => ({ id, name: id })));
+  const def = aiConfigs.value.find((c: any) => c.isDefault);
+  if (def) {
+    brief.value.model = def.defaultModel || def.models?.[0] || "";
+    brief.value.providerKeyRef = def.id;
+    selectedAIModelKey.value = `${def.id}::${brief.value.model}`;
+  }
+}
 const current = ref("新闻动态");
 const newsView = ref("items");
 const news = ref<any[]>([]);
@@ -1522,7 +1552,21 @@ const allAvailableModels = computed(() => {
 });
 
 // AI 创作模型下拉改为跟随接口（历史硬编码 11 个名字多数在后端不存在）
-const aiModelOptions = computed(() => allAvailableModels.value.map((m: any) => m.id));
+const selectedAIModelKey = ref("");
+const aiModelOptions = computed(() => aiConfigs.value.flatMap((config: any) =>
+  (config.models?.length ? config.models : config.defaultModel ? [config.defaultModel] : []).map((model: string) => ({
+    value: `${config.id}::${model}`,
+    label: `${config.label || config.provider} · ${model}`,
+  })),
+));
+function selectAIModel(value: string | number | boolean | null) {
+  const selected = aiModelOptions.value.find((option: any) => option.value === value);
+  if (!selected) return;
+  const [configID, ...modelParts] = String(value).split("::");
+  brief.value.providerKeyRef = configID;
+  brief.value.model = modelParts.join("::");
+  selectedAIModelKey.value = String(value);
+}
 
 
 const translations = ref<any[]>([]);
@@ -2423,6 +2467,16 @@ function resetAiStudio() {
 
 async function createTask() {
   try {
+    const defaultConfig = aiConfigs.value.find((c: any) => c.isDefault);
+    if (!defaultConfig) { aiStudioView.value = "config"; return; }
+    const selected = aiModelOptions.value.find((option: any) => option.value === selectedAIModelKey.value);
+    if (selected) {
+      selectAIModel(selected.value);
+    } else {
+      brief.value.model = defaultConfig.defaultModel || defaultConfig.models?.[0] || "";
+      brief.value.providerKeyRef = defaultConfig.id;
+      selectedAIModelKey.value = `${defaultConfig.id}::${brief.value.model}`;
+    }
     const refNews = news.value.filter((item) =>
       selectedRefNewsIds.value.includes(item.id),
     );

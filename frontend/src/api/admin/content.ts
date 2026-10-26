@@ -98,8 +98,13 @@ export const contentAdminAPI = {
     apiClient.get("/admin/content/articles/ai-config"),
   updateAIConfig: (body: unknown) =>
     apiClient.put("/admin/content/articles/ai-config", body),
-  listAIConfigs: () => apiClient.get("/admin/content/articles/ai-configs"),
-  mutateAIConfig: (action: string, body: unknown, revision: string) => apiClient.post(`/admin/content/articles/ai-configs/${action}`, body, { headers: { "If-Match": revision } }),
+  listAIConfigs: () => apiClient.get<{
+    configs: Array<{ id: string; label: string; provider: string; baseUrl: string; defaultModel: string; models: string[]; isDefault: boolean; hasApiKey: boolean; apiKeyMasked?: string }>
+    defaultId: string
+    revision: string
+  }>("/admin/content/articles/ai-configs"),
+  mutateAIConfig: (action: "save" | "default" | "delete", body: unknown, revision: string) =>
+    apiClient.post(`/admin/content/articles/ai-configs/${action}`, body, { headers: { "If-Match": revision } }),
   testAIConfig: (body: unknown) => apiClient.post("/admin/content/articles/ai-config-test", body),
   fetchAIModels: (body: unknown) =>
     apiClient.post("/admin/content/articles/ai-config/fetch-models", body),
