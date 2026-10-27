@@ -39,11 +39,13 @@ func TestContentArticleAuditCarriesActorAndPropagatesError(t *testing.T) {
 }
 
 type articleRepoStub struct {
-	article  ContentArticle
-	expected int
-	articles []ContentArticle
-	updates  map[int64]ContentArticle
-	pages    []int
+	article          ContentArticle
+	news             *ContentNewsItem
+	savedTranslation *ContentTranslation
+	expected         int
+	articles         []ContentArticle
+	updates          map[int64]ContentArticle
+	pages            []int
 }
 
 type contentWritingExecutorStub struct {
@@ -58,6 +60,7 @@ func (s contentWritingExecutorStub) Generate(context.Context, *ContentWritingTas
 type contentTranslationExecutorStub struct {
 	result *ContentTranslation
 	err    error
+	source *ContentArticle
 }
 
 type contentSEOExecutorStub struct {
@@ -85,7 +88,8 @@ func (s *contentSEOExecutorStub) GenerateSEO(ctx context.Context, model string, 
 	return nil, ErrContentSEOResultInvalid
 }
 
-func (s contentTranslationExecutorStub) Translate(context.Context, *ContentWritingTask, *ContentArticle) (*ContentTranslation, error) {
+func (s *contentTranslationExecutorStub) Translate(_ context.Context, _ *ContentWritingTask, a *ContentArticle) (*ContentTranslation, error) {
+	s.source = a
 	return s.result, s.err
 }
 
@@ -172,7 +176,16 @@ func (r *articleRepoStub) GetTranslation(context.Context, int64, bool) (*Content
 	return nil, nil
 }
 func (r *articleRepoStub) CreateTranslation(_ context.Context, t *ContentTranslation) (*ContentTranslation, error) {
+	t.ID = 1
+	r.savedTranslation = t
 	return t, nil
+}
+func (r *articleRepoStub) GetNewsItem(_ context.Context, id int64, _ bool) (*ContentNewsItem, error) {
+	if r.news == nil || r.news.ID != id {
+		return nil, ErrContentNewsItemNotFound
+	}
+	n := *r.news
+	return &n, nil
 }
 func (r *articleRepoStub) UpdateTranslation(_ context.Context, t *ContentTranslation) (*ContentTranslation, error) {
 	return t, nil
@@ -382,7 +395,7 @@ func TestContentArticleTranslationWorkerBindsSourceVersion(t *testing.T) {
 	repo := &articleRepoStub{article: ContentArticle{ID: 7, Locale: "zh-CN", Slug: "source", Title: "Source", Status: domain.ContentStatusDraft, Version: 2, BodyMarkdown: stringPtr("body")}}
 	store := NewMemoryContentWritingTaskStore()
 	s := NewContentArticleAdminService(repo, nil, store)
-	s.SetTranslationExecutor(contentTranslationExecutorStub{result: &ContentTranslation{Title: "Translated", BodyMarkdown: stringPtr("translated"), Status: domain.ContentTranslationDraft}})
+	s.SetTranslationExecutor(&contentTranslationExecutorStub{result: &ContentTranslation{Title: "Translated", BodyMarkdown: stringPtr("translated"), Status: domain.ContentTranslationDraft}})
 	task, err := s.CreateTranslationTask(context.Background(), 7, "en-US", "model", "key-ref")
 	require.NoError(t, err)
 	require.Equal(t, 2, task.SourceVersion)
@@ -465,4 +478,56 @@ func TestContentSEORejectsMissingDefaultModelAndCancellation(t *testing.T) {
 	_, err = svc.GenerateSEO(ctx, ContentSEOInput{BodyMarkdown: "body"})
 	require.ErrorIs(t, err, context.Canceled)
 	require.Zero(t, exec.calls)
+}
+
+func TestContentNewsTranslationExecutionAndSourceSnapshot(t *testing.T) {
+	ctx := context.Background()
+	body, cover := "original news", "https://img.example/news.jpg"
+	news := &ContentNewsItem{ID: 42, Title: "Headline", BodyText: &body, Slug: "headline", Locale: "en", ImageURL: &cover}
+	repo := &articleRepoStub{news: news}
+	svc := NewContentArticleAdminService(repo, nil, nil)
+	svc.defaultModel = "model-a"
+	translatedBody := "translated news"
+	executor := &contentTranslationExecutorStub{result: &ContentTranslation{Locale: "ru", Slug: "headline", Title: "Заголовок", BodyMarkdown: &translatedBody, Status: domain.ContentTranslationDraft}}
+	svc.SetTranslationExecutor(executor)
+	task := &ContentWritingTask{ID: ContentNewsTranslationTaskID(news, "ru"), Kind: ContentTranslationKind, ContentType: "news", SourceVersion: ContentNewsSourceVersion(news), TargetLocale: "ru"}
+	store := NewMemoryContentWritingTaskStore()
+	_, err := store.Create(ctx, task)
+	require.NoError(t, err)
+	require.NoError(t, svc.executeTranslationTask(ctx, store, task))
+	persisted, err := store.Get(ctx, task.ID)
+	require.NoError(t, err)
+	t.Logf("news translation error=%q result=%+v", contentNewsStringValue(persisted.ErrorCode), persisted.Result)
+	require.Equal(t, ContentWritingSucceeded, persisted.Status)
+	require.NotNil(t, repo.savedTranslation)
+	require.Equal(t, "news", repo.savedTranslation.ContentType)
+	require.Equal(t, int64(42), repo.savedTranslation.ContentID)
+	require.Equal(t, task.SourceVersion, repo.savedTranslation.SourceVersion)
+	require.NotNil(t, executor.source)
+	require.Equal(t, cover, contentNewsStringValue(executor.source.CoverImage))
+
+	news.Title = "Edited after enqueue"
+	stale := &ContentWritingTask{ID: task.ID, Kind: ContentTranslationKind, ContentType: "news", SourceVersion: task.SourceVersion, TargetLocale: "ru", Model: "model-a"}
+	require.NoError(t, svc.executeTranslationTask(ctx, store, stale))
+	persistedStale, err := store.Get(ctx, stale.ID)
+	require.NoError(t, err)
+	require.Equal(t, ContentWritingFailed, persistedStale.Status)
+	require.Equal(t, "content_source_version_conflict", contentNewsStringValue(persistedStale.ErrorCode))
+}
+
+func TestContentNewsTranslationRequiresDefaultModel(t *testing.T) {
+	news := &ContentNewsItem{ID: 7, Title: "Headline"}
+	repo := &articleRepoStub{news: news}
+	svc := NewContentArticleAdminService(repo, nil, nil)
+	svc.defaultModel = ""
+	svc.SetTranslationExecutor(&contentTranslationExecutorStub{})
+	task := &ContentWritingTask{ID: ContentNewsTranslationTaskID(news, "fr"), Kind: ContentTranslationKind, ContentType: "news", SourceVersion: ContentNewsSourceVersion(news)}
+	failStore := NewMemoryContentWritingTaskStore()
+	_, err := failStore.Create(context.Background(), task)
+	require.NoError(t, err)
+	require.NoError(t, svc.executeTranslationTask(context.Background(), failStore, task))
+	persistedFailure, err := failStore.Get(context.Background(), task.ID)
+	require.NoError(t, err)
+	require.Equal(t, ContentWritingFailed, persistedFailure.Status)
+	require.Equal(t, "content_ai_model_not_configured", contentNewsStringValue(persistedFailure.ErrorCode))
 }

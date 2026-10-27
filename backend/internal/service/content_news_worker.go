@@ -8,6 +8,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"html"
 	"io"
 	"log/slog"
@@ -95,6 +96,13 @@ type ContentNewsWorkerItemRepository interface {
 	UpsertFetchedNewsItem(context.Context, *ContentNewsItem) (ContentNewsFetchItemResult, error)
 	CountAutoPublishedNews(context.Context, time.Time, time.Time) (int, error)
 	CountFetchedNews(context.Context, time.Time, time.Time) (int, error)
+}
+
+// ContentNewsTranslationTaskEnqueuer is optional so existing feed adapters and
+// unit repositories remain compatible. Implementations must enqueue one task
+// per normalized target locale and snapshot the fetched content hash.
+type ContentNewsTranslationTaskEnqueuer interface {
+	EnqueueNewsTranslationTasks(context.Context, *ContentNewsItem, []string) error
 }
 type ContentNewsQuotaRepository interface {
 	ReserveNewsQuota(context.Context, string, time.Time, int) (bool, error)
@@ -560,8 +568,19 @@ func (w *ContentNewsWorker) runSource(ctx context.Context, sourceID int64, trigg
 				}
 			}
 			run.DuplicateCount++
-		} else if result.Created {
+		}
+		if result.Created {
 			run.CreatedCount++
+			if policy != nil && policy.Enabled {
+				if enqueuer, ok := w.items.(ContentNewsTranslationTaskEnqueuer); ok {
+					locales := contentNewsTranslationLocales(item.Locale, policy.TargetLocales)
+					if len(locales) > 0 {
+						if taskErr := enqueuer.EnqueueNewsTranslationTasks(ctx, item, locales); taskErr != nil && firstErr == nil {
+							firstErr = taskErr
+						}
+					}
+				}
+			}
 			if !hasQuota && policy.DailyFetchLimit > 0 {
 				fetchedToday++
 			}
@@ -1035,6 +1054,54 @@ func contentNewsLocaleAllowed(locale string, target []string) bool {
 		}
 	}
 	return false
+}
+
+// contentNewsTranslationLocales canonicalizes and deduplicates configured
+// targets, excluding the source locale so a feed item is never translated into
+// its own language.
+// ContentNewsSourceVersion snapshots every translated source field. A news item
+// edited after enqueue must fail instead of silently translating newer content.
+func ContentNewsSourceVersion(item *ContentNewsItem) int {
+	if item == nil {
+		return 0
+	}
+	h := sha256.Sum256([]byte(strings.Join([]string{item.Title, contentNewsStringValue(item.Summary), contentNewsStringValue(item.BodyText), contentNewsStringValue(item.BodyHTML), item.Slug, item.Locale, contentNewsStringValue(item.ContentHash)}, "\x00")))
+	return int(crc32.ChecksumIEEE(h[:]) & 0x7fffffff)
+}
+
+func ContentNewsTranslationTaskID(item *ContentNewsItem, locale string) string {
+	return fmt.Sprintf("ct-news-%d-%08x-%s", item.ID, uint32(ContentNewsSourceVersion(item)), strings.ToLower(strings.TrimSpace(locale)))
+}
+func contentNewsTaskID(id string) (int64, error) {
+	parts := strings.Split(id, "-")
+	if len(parts) < 5 || parts[0] != "ct" || parts[1] != "news" {
+		return 0, ErrContentNewsItemNotFound
+	}
+	return strconv.ParseInt(parts[2], 10, 64)
+}
+func contentNewsStringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func contentNewsTranslationLocales(sourceLocale string, targets []string) []string {
+	sourceLocale = domain.NormalizeContentLocale(strings.TrimSpace(sourceLocale))
+	seen := make(map[string]struct{}, len(targets))
+	locales := make([]string, 0, len(targets))
+	for _, target := range targets {
+		locale := domain.NormalizeContentLocale(strings.TrimSpace(target))
+		if locale == "" || locale == sourceLocale {
+			continue
+		}
+		if _, exists := seen[locale]; exists {
+			continue
+		}
+		seen[locale] = struct{}{}
+		locales = append(locales, locale)
+	}
+	return locales
 }
 
 func contentNewsHash(value string) string {

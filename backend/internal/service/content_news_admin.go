@@ -216,6 +216,24 @@ func NewContentNewsAdminService(repo ContentNewsAdminRepository, audit ...Conten
 	return s
 }
 func (s *ContentNewsAdminService) SetAuditLogger(a ContentAuditLogger) { s.audit = a }
+func (s *ContentNewsAdminService) ListNewsTranslationTasks(ctx context.Context, newsID int64) ([]*ContentWritingTask, error) {
+	repo, ok := s.repo.(interface {
+		ListNewsTranslationTasks(context.Context, int64) ([]*ContentWritingTask, error)
+	})
+	if !ok {
+		return []*ContentWritingTask{}, nil
+	}
+	return repo.ListNewsTranslationTasks(ctx, newsID)
+}
+func (s *ContentNewsAdminService) GetNewsTranslationTask(ctx context.Context, newsID int64, taskID string) (*ContentWritingTask, error) {
+	repo, ok := s.repo.(interface {
+		GetNewsTranslationTask(context.Context, int64, string) (*ContentWritingTask, error)
+	})
+	if !ok {
+		return nil, ErrContentWritingTaskNotFound
+	}
+	return repo.GetNewsTranslationTask(ctx, newsID, taskID)
+}
 func (s *ContentNewsAdminService) auditNews(ctx context.Context, action string, before, after *ContentNewsItem) error {
 	if s == nil || s.audit == nil {
 		return nil

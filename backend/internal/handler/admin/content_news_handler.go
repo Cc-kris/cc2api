@@ -267,6 +267,31 @@ func (h *ContentNewsHandler) ListNews(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *ContentNewsHandler) ListNewsTranslationTasks(c *gin.Context) {
+	id, ok := contentID(c)
+	if !ok {
+		return
+	}
+	tasks, err := h.svc.ListNewsTranslationTasks(c.Request.Context(), id)
+	if err != nil {
+		writeContentNewsError(c, err)
+		return
+	}
+	response.Success(c, gin.H{"items": tasks, "total": len(tasks)})
+}
+func (h *ContentNewsHandler) GetNewsTranslationTask(c *gin.Context) {
+	id, ok := contentID(c)
+	if !ok {
+		return
+	}
+	task, err := h.svc.GetNewsTranslationTask(c.Request.Context(), id, c.Param("taskId"))
+	if err != nil {
+		writeContentNewsError(c, err)
+		return
+	}
+	response.Success(c, task)
+}
+
 func (h *ContentNewsHandler) BulkNews(c *gin.Context) {
 	var req struct {
 		IDs    []int64 `json:"ids" binding:"required"`

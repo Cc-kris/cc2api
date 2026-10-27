@@ -27,6 +27,8 @@ func RegisterContentAdminRoutes(admin *gin.RouterGroup, h *adminhandler.ContentN
 		news.POST("/bulk", h.BulkNews)
 		news.POST("", h.CreateNews)
 		news.GET("/:id", h.GetNews)
+		news.GET("/:id/translation-tasks", h.ListNewsTranslationTasks)
+		news.GET("/:id/translation-tasks/:taskId", h.GetNewsTranslationTask)
 		news.PUT("/:id", h.UpdateNews)
 		news.DELETE("/:id", h.DeleteNews)
 		news.POST("/:id/publish", h.PublishNews)

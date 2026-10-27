@@ -4,6 +4,7 @@ import (
 	"context"
 	stdsql "database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -234,6 +235,9 @@ func (r *contentNewsAdminRepository) UpsertFetchedNewsItem(ctx context.Context, 
 		}
 	}
 	created, err := r.CreateNewsItem(ctx, item)
+	if err == nil && created != nil {
+		*item = *created
+	}
 	if err != nil {
 		// A concurrent insert is an idempotent duplicate; the unique index is
 		// authoritative even when two workers race.
@@ -331,7 +335,49 @@ func (r *contentNewsAdminRepository) GetContentNewsWorkerPolicy(ctx context.Cont
 
 var _ service.ContentNewsWorkerSourceRepository = (*contentNewsAdminRepository)(nil)
 var _ service.ContentNewsWorkerFetchRunRepository = (*contentNewsAdminRepository)(nil)
+
+func (r *contentNewsAdminRepository) ListNewsTranslationTasks(ctx context.Context, newsID int64) ([]*service.ContentWritingTask, error) {
+	tasks, err := NewContentWritingTaskRepository(r.client).List(ctx, service.ContentTranslationKind, 200)
+	if err != nil {
+		return nil, err
+	}
+	prefix := fmt.Sprintf("ct-news-%d-", newsID)
+	out := make([]*service.ContentWritingTask, 0)
+	for _, task := range tasks {
+		if strings.HasPrefix(task.ID, prefix) {
+			out = append(out, task)
+		}
+	}
+	return out, nil
+}
+func (r *contentNewsAdminRepository) GetNewsTranslationTask(ctx context.Context, newsID int64, taskID string) (*service.ContentWritingTask, error) {
+	if !strings.HasPrefix(taskID, fmt.Sprintf("ct-news-%d-", newsID)) {
+		return nil, service.ErrContentWritingTaskNotFound
+	}
+	return NewContentWritingTaskRepository(r.client).Get(ctx, taskID)
+}
+
+func (r *contentNewsAdminRepository) EnqueueNewsTranslationTasks(ctx context.Context, item *service.ContentNewsItem, locales []string) error {
+	store := NewContentWritingTaskRepository(r.client)
+	for _, locale := range locales {
+		id := service.ContentNewsTranslationTaskID(item, locale)
+		if existing, err := store.Get(ctx, id); err == nil && existing != nil {
+			continue
+		}
+		now := time.Now().UTC()
+		_, err := store.Create(ctx, &service.ContentWritingTask{ID: id, Kind: service.ContentTranslationKind, ContentType: "news", Language: item.Locale, TargetLocale: locale, SourceVersion: service.ContentNewsSourceVersion(item), Topic: item.Title, Status: service.ContentWritingQueued, CreatedAt: now, UpdatedAt: now})
+		if err != nil {
+			if existing, getErr := store.Get(ctx, id); getErr == nil && existing != nil {
+				continue
+			}
+			return err
+		}
+	}
+	return nil
+}
+
 var _ service.ContentNewsWorkerItemRepository = (*contentNewsAdminRepository)(nil)
+var _ service.ContentNewsTranslationTaskEnqueuer = (*contentNewsAdminRepository)(nil)
 var _ service.ContentNewsWorkerPolicyRepository = (*contentNewsAdminRepository)(nil)
 
 // Keep the soft-delete mixin imported in this adapter's compilation unit when

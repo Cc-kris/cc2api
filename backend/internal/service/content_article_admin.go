@@ -1767,6 +1767,22 @@ func (s *ContentArticleAdminService) validateTranslationSource(ctx context.Conte
 	if s == nil || s.repo == nil || t == nil {
 		return ErrContentArticleInvalid
 	}
+	if t.ContentType == "news" {
+		getter, ok := s.repo.(interface {
+			GetNewsItem(context.Context, int64, bool) (*ContentNewsItem, error)
+		})
+		if !ok {
+			return ErrContentArticleInvalid
+		}
+		news, err := getter.GetNewsItem(ctx, t.ContentID, false)
+		if err != nil {
+			return err
+		}
+		if news == nil || news.ID != t.ContentID || ContentNewsSourceVersion(news) != t.SourceVersion || !strings.EqualFold(news.Locale, t.SourceLocale) {
+			return ErrContentArticleInvalid
+		}
+		return nil
+	}
 	article, err := s.repo.GetArticle(ctx, t.ContentID, false)
 	if err != nil {
 		return err
@@ -2269,12 +2285,40 @@ func (s *ContentArticleAdminService) executeTranslationTask(ctx context.Context,
 	if executor == nil {
 		return s.failWritingTask(ctx, q, t, "content_translation_unavailable", ErrContentTranslationExecutorMissing)
 	}
-	a, err := s.Get(ctx, t.ArticleID, false)
-	if err != nil {
-		return s.failWritingTask(ctx, q, t, "content_source_not_found", err)
+	if t.ContentType == "news" && strings.TrimSpace(t.Model) == "" {
+		if strings.TrimSpace(s.defaultModel) == "" {
+			return s.failWritingTask(ctx, q, t, "content_ai_model_not_configured", ErrContentArticleInvalid)
+		}
+		t.Model = s.defaultModel
 	}
-	if a.Version != t.SourceVersion {
-		return s.failWritingTask(ctx, q, t, "content_source_version_conflict", ErrContentArticleConflict)
+	var a *ContentArticle
+	var err error
+	contentType := "article"
+	if t.ContentType == "news" {
+		contentType = "news"
+		newsID, parseErr := contentNewsTaskID(t.ID)
+		getter, ok := s.repo.(interface {
+			GetNewsItem(context.Context, int64, bool) (*ContentNewsItem, error)
+		})
+		if parseErr != nil || !ok {
+			return s.failWritingTask(ctx, q, t, "content_source_not_found", ErrContentNewsItemNotFound)
+		}
+		n, getErr := getter.GetNewsItem(ctx, newsID, false)
+		if getErr != nil {
+			return s.failWritingTask(ctx, q, t, "content_source_not_found", getErr)
+		}
+		if ContentNewsSourceVersion(n) != t.SourceVersion {
+			return s.failWritingTask(ctx, q, t, "content_source_version_conflict", ErrContentArticleConflict)
+		}
+		a = &ContentArticle{ID: n.ID, Version: t.SourceVersion, Locale: n.Locale, Slug: n.Slug, Title: n.Title, Excerpt: n.Summary, BodyMarkdown: n.BodyText, BodyHTML: n.BodyHTML, SeoTitle: n.SeoTitle, SeoDescription: n.SeoDescription, CoverImage: n.ImageURL}
+	} else {
+		a, err = s.Get(ctx, t.ArticleID, false)
+		if err != nil {
+			return s.failWritingTask(ctx, q, t, "content_source_not_found", err)
+		}
+		if a.Version != t.SourceVersion {
+			return s.failWritingTask(ctx, q, t, "content_source_version_conflict", ErrContentArticleConflict)
+		}
 	}
 	translated, err := executor.Translate(ctx, t, a)
 	if err != nil {
@@ -2286,7 +2330,7 @@ func (s *ContentArticleAdminService) executeTranslationTask(ctx context.Context,
 	if translated == nil || strings.TrimSpace(translated.Title) == "" || (translated.BodyMarkdown == nil && translated.BodyHTML == nil) {
 		return s.failWritingTask(ctx, q, t, "content_translation_invalid_result", errors.New("empty translation"))
 	}
-	translated.ContentType, translated.ContentID, translated.SourceVersion = "article", a.ID, a.Version
+	translated.ContentType, translated.ContentID, translated.SourceVersion = contentType, a.ID, a.Version
 	translated.SourceLocale, translated.Locale = a.Locale, t.TargetLocale
 	translated.Status = domain.ContentTranslationDraft
 	translated.Slug = normalizeContentSlug(translated.Slug, firstNonEmptyString(translated.Title, a.Slug), t.ID)
@@ -2393,7 +2437,7 @@ func validateArticle(a *ContentArticle, publish bool) error {
 	return nil
 }
 func validateTranslation(t *ContentTranslation) error {
-	if t == nil || t.ID < 0 || strings.TrimSpace(t.ContentType) != "article" || t.ContentID <= 0 || t.SourceVersion <= 0 || strings.TrimSpace(t.SourceLocale) == "" || strings.TrimSpace(t.Locale) == "" || strings.EqualFold(strings.TrimSpace(t.SourceLocale), strings.TrimSpace(t.Locale)) || strings.TrimSpace(t.Slug) == "" || strings.TrimSpace(t.Title) == "" || !domain.IsContentTranslationStatus(t.Status) {
+	if t == nil || t.ID < 0 || (strings.TrimSpace(t.ContentType) != "article" && strings.TrimSpace(t.ContentType) != "news") || t.ContentID <= 0 || t.SourceVersion <= 0 || strings.TrimSpace(t.SourceLocale) == "" || strings.TrimSpace(t.Locale) == "" || strings.EqualFold(strings.TrimSpace(t.SourceLocale), strings.TrimSpace(t.Locale)) || strings.TrimSpace(t.Slug) == "" || strings.TrimSpace(t.Title) == "" || !domain.IsContentTranslationStatus(t.Status) {
 		return ErrContentArticleInvalid
 	}
 	if t.Status == domain.ContentTranslationPublished && (t.Excerpt == nil || strings.TrimSpace(*t.Excerpt) == "" || !hasNonEmptyTranslationBody(t) || t.SeoTitle == nil || t.SeoDescription == nil || strings.TrimSpace(*t.SeoTitle) == "" || strings.TrimSpace(*t.SeoDescription) == "") {

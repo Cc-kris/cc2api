@@ -354,6 +354,10 @@ func (r *contentArticleAdminRepository) populateArticleReadCounts(ctx context.Co
 	}
 	return nil
 }
+func (r *contentArticleAdminRepository) GetNewsItem(ctx context.Context, id int64, deleted bool) (*service.ContentNewsItem, error) {
+	return (&contentNewsAdminRepository{client: r.client}).GetNewsItem(ctx, id, deleted)
+}
+
 func (r *contentArticleAdminRepository) GetArticle(ctx context.Context, id int64, deleted bool) (*service.ContentArticle, error) {
 	qctx := ctx
 	if deleted {
