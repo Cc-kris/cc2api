@@ -227,3 +227,104 @@ func (r *errorPublicContentRepo) ListPublishedArticles(context.Context, string, 
 func (r *errorPublicContentRepo) GetPublishedArticle(context.Context, string, string) (*PublicArticle, error) {
 	return nil, r.err
 }
+
+// fallbackRepo models the editorial rule exercised by R9-03/R9-05: the URL
+// always carries the Chinese master slug, while translations live under their
+// own slug keyed by locale.
+type fallbackRepo struct {
+	news     map[string]PublicNews
+	articles map[string]PublicArticle
+}
+
+func fallbackKey(locale, slug string) string { return locale + "|" + slug }
+
+func (r *fallbackRepo) ListPublishedNews(context.Context, string, int, int) (PublicNewsPage, error) {
+	return PublicNewsPage{}, nil
+}
+
+func (r *fallbackRepo) GetPublishedNews(_ context.Context, locale, slug string) (*PublicNews, error) {
+	item, ok := r.news[fallbackKey(locale, slug)]
+	if !ok {
+		return nil, ErrPublicContentNotFound
+	}
+	return &item, nil
+}
+
+func (r *fallbackRepo) ListPublishedArticles(context.Context, string, int, int) (PublicArticlePage, error) {
+	return PublicArticlePage{}, nil
+}
+
+func (r *fallbackRepo) GetPublishedArticle(_ context.Context, locale, slug string) (*PublicArticle, error) {
+	item, ok := r.articles[fallbackKey(locale, slug)]
+	if !ok {
+		return nil, ErrPublicContentNotFound
+	}
+	return &item, nil
+}
+
+func TestPublicContentServiceFallsBackToChineseMaster(t *testing.T) {
+	repo := &fallbackRepo{news: map[string]PublicNews{
+		fallbackKey("zh-CN", "hello"): {
+			Locale: "zh-CN", Slug: "hello", Title: "中文标题", Summary: "摘要",
+			SourceName: "CCAI", BodyHTML: "<p>中文正文</p>",
+			Status: "published", PublishedAt: time.Now(),
+			Alternates: []PublicAlternate{{Locale: "en-US", Slug: "hello-en"}},
+		},
+	}}
+	svc := NewPublicContentService(repo)
+
+	item, err := svc.GetNews(context.Background(), "de", "hello")
+	require.NoError(t, err)
+	// The German URL has no published translation: Chinese body is served,
+	// the UI locale stays German and Fallback marks the substitution.
+	require.Equal(t, "zh-CN", item.Locale)
+	require.Equal(t, "de-DE", item.RequestedLocale)
+	require.Equal(t, "zh-CN", item.Fallback)
+	require.Equal(t, "中文标题", item.Title)
+	require.Contains(t, item.BodyHTML, "中文正文")
+
+	// An unsupported language still 404s rather than silently falling back.
+	_, err = svc.GetNews(context.Background(), "ko", "hello")
+	require.ErrorIs(t, err, ErrPublicContentLocale)
+}
+
+func TestPublicContentServiceResolvesTranslationByAlternateSlug(t *testing.T) {
+	repo := &fallbackRepo{articles: map[string]PublicArticle{
+		fallbackKey("zh-CN", "guide"): {
+			Locale: "zh-CN", Slug: "guide", Title: "指南", Excerpt: "摘要",
+			BodyHTML: "<p>正文</p>", Status: "published", PublishedAt: time.Now(),
+			Alternates: []PublicAlternate{{Locale: "de-DE", Slug: "anleitung"}},
+		},
+		fallbackKey("de-DE", "anleitung"): {
+			Locale: "de-DE", Slug: "anleitung", Title: "Anleitung", Excerpt: "Zusammenfassung",
+			BodyHTML: "<p>Text</p>", Status: "published", PublishedAt: time.Now(),
+		},
+	}}
+	svc := NewPublicContentService(repo)
+
+	item, err := svc.GetArticle(context.Background(), "de-DE", "guide")
+	require.NoError(t, err)
+	require.Equal(t, "de-DE", item.Locale)
+	require.Empty(t, item.Fallback, "a published translation must not be marked as fallback")
+	require.Equal(t, "Anleitung", item.Title)
+}
+
+func TestPublicContentFallbackDoesNotMaskMissingMaster(t *testing.T) {
+	svc := NewPublicContentService(&fallbackRepo{})
+	_, err := svc.GetArticle(context.Background(), "de", "nope")
+	require.ErrorIs(t, err, ErrPublicContentNotFound)
+}
+
+func TestPublicLocaleSegmentMapsToShortURLSegments(t *testing.T) {
+	for locale, want := range map[string]string{
+		"zh-CN": "zh", "zh": "zh", "en-US": "en", "en-us": "en",
+		"ru-RU": "ru", "fr": "fr", "de-DE": "de",
+	} {
+		segment, ok := PublicLocaleSegment(locale)
+		require.True(t, ok, locale)
+		require.Equal(t, want, segment, locale)
+	}
+	if _, ok := PublicLocaleSegment("ko"); ok {
+		t.Fatal("unsupported locale must not map to a segment")
+	}
+}

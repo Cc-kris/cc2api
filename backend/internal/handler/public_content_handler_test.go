@@ -114,7 +114,7 @@ func TestPublicContentHandlerHTMLIsPublicAndRedactsSourceLink(t *testing.T) {
 	r := newPublicContentHandlerTestRouter(&publicContentHandlerRepoStub{newsDetail: &service.PublicNews{
 		Locale: "zh-CN", Slug: "hello", Title: "<Hello>", Summary: "摘要", BodyHTML: "<p>正文</p>", SourceName: "CCAI", PublishedAt: time.Date(2026, 9, 9, 1, 2, 3, 0, time.UTC), Status: "published",
 	}})
-	req := httptest.NewRequest(http.MethodGet, "/news-html/zh-CN/hello", nil)
+	req := httptest.NewRequest(http.MethodGet, "/news-html/zh/hello", nil)
 	res := httptest.NewRecorder()
 	r.ServeHTTP(res, req)
 	require.Equal(t, http.StatusOK, res.Code)
@@ -134,13 +134,14 @@ func TestPublicContentHandlerArticleHTMLIncludesPublishedAlternates(t *testing.T
 		Alternates: []service.PublicAlternate{{Locale: "en-US", Slug: "guide-en"}},
 	}})
 	res := httptest.NewRecorder()
-	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/article-html/zh-CN/guide", nil))
+	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/article-html/zh/guide", nil))
 	require.Equal(t, http.StatusOK, res.Code)
 	body := res.Body.String()
-	require.Contains(t, body, `rel="alternate" hreflang="zh-CN"`)
-	require.Contains(t, body, `rel="alternate" hreflang="en-US"`)
+	require.Contains(t, body, `rel="alternate" hreflang="zh"`)
+	require.Contains(t, body, `rel="alternate" hreflang="en"`)
 	require.Contains(t, body, `rel="alternate" hreflang="x-default"`)
-	require.Contains(t, body, "/articles/en-US/guide-en")
+	require.Contains(t, body, "/articles/en/guide-en")
+	require.Contains(t, body, `rel="canonical" href="https://ccai.example/articles/zh/guide"`)
 }
 
 func TestPublicContentHandlerInternalErrorDoesNotLeak(t *testing.T) {
@@ -172,20 +173,29 @@ func TestPublicContentHandlerRendersCollectionsDocsAndSanitizedDetails(t *testin
 	}
 	r := newPublicContentHandlerTestRouter(repo)
 
-	for _, path := range []string{"/?locale=en-US", "/news-html?locale=en-US", "/articles-html?locale=en-US", "/docs?locale=en-US", "/docs/authentication?locale=en-US"} {
+	// Collection pages keep the stored BCP-47 tag in <html lang>; paths carry
+	// the short segment in canonical URLs and internal links (R12-05).
+	for path, wantLang := range map[string]string{
+		"/?locale=en-US":                   "en-US",
+		"/news-html?locale=en-US":          "en-US",
+		"/articles-html?locale=en-US":      "en-US",
+		"/docs?locale=en-US":               "en",
+		"/docs/authentication?locale=en-US": "en",
+	} {
 		res := httptest.NewRecorder()
 		r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, path, nil))
 		require.Equal(t, http.StatusOK, res.Code, path)
 		require.Equal(t, "index, follow", res.Header().Get("X-Robots-Tag"), path)
-		require.Contains(t, res.Body.String(), `lang="en-US"`, path)
+		require.Contains(t, res.Body.String(), `lang="`+wantLang+`"`, path)
 		require.Contains(t, res.Body.String(), `application/ld+json`, path)
 	}
 	res := httptest.NewRecorder()
 	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/news-html?locale=en-US", nil))
-	require.Contains(t, res.Body.String(), `<link rel="canonical" href="https://ccai.example/news?locale=en-US">`)
+	require.Contains(t, res.Body.String(), `<link rel="canonical" href="https://ccai.example/news?locale=en">`)
+	require.Contains(t, res.Body.String(), `href="/news/en/release"`)
 
 	res = httptest.NewRecorder()
-	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/news-html/en-US/release", nil))
+	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/news-html/en/release", nil))
 	require.Equal(t, http.StatusOK, res.Code)
 	body := res.Body.String()
 	require.Contains(t, body, `<p class="lead">Safe <strong>body</strong></p>`)
@@ -212,7 +222,7 @@ func TestSafePublicMediaURLOnlyAllowsControlledPaths(t *testing.T) {
 func TestPublicContentHandlerHTMLNotFoundIsNoIndex(t *testing.T) {
 	r := newPublicContentHandlerTestRouter(&publicContentHandlerRepoStub{err: service.ErrPublicContentNotFound})
 	res := httptest.NewRecorder()
-	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/news-html/zh-CN/missing", nil))
+	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/news-html/zh/missing", nil))
 	require.Equal(t, http.StatusNotFound, res.Code)
 	require.Equal(t, "noindex, nofollow, noarchive", res.Header().Get("X-Robots-Tag"))
 	require.Contains(t, res.Header().Get("Content-Type"), "text/html")
@@ -221,7 +231,7 @@ func TestPublicContentHandlerHTMLNotFoundIsNoIndex(t *testing.T) {
 func TestPublicContentHandlerHTMLGoneIsNoIndex(t *testing.T) {
 	r := newPublicContentHandlerTestRouter(&publicContentHandlerRepoStub{err: service.ErrPublicContentGone})
 	res := httptest.NewRecorder()
-	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/news-html/zh-CN/deleted", nil))
+	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/news-html/zh/deleted", nil))
 	require.Equal(t, http.StatusGone, res.Code)
 	require.Equal(t, "noindex, nofollow, noarchive", res.Header().Get("X-Robots-Tag"))
 	require.NotContains(t, res.Body.String(), "deleted")
@@ -254,4 +264,92 @@ func TestSafePublicImageURLRejectsCapturedRemoteImages(t *testing.T) {
 	require.Empty(t, safePublicImageURL("https://source.example/image.png"))
 	require.Empty(t, safePublicImageURL("http://127.0.0.1/image.png"))
 	require.Empty(t, safePublicImageURL(`/\\evil.example/image.png`))
+}
+
+func TestPublicContentHandlerRedirectsStoredLocaleToShortSegment(t *testing.T) {
+	r := newPublicContentHandlerTestRouter(&publicContentHandlerRepoStub{})
+	res := httptest.NewRecorder()
+	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/news-html/en-US/hello?page=2", nil))
+	require.Equal(t, http.StatusMovedPermanently, res.Code)
+	require.Equal(t, "/news/en/hello?page=2", res.Header().Get("Location"))
+
+	res = httptest.NewRecorder()
+	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/article-html/zh-CN/guide", nil))
+	require.Equal(t, http.StatusMovedPermanently, res.Code)
+	require.Equal(t, "/articles/zh/guide", res.Header().Get("Location"))
+
+	// Short segments and unsupported tags are not redirected.
+	res = httptest.NewRecorder()
+	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/news-html/zh/hello", nil))
+	require.NotEqual(t, http.StatusMovedPermanently, res.Code)
+}
+
+func TestPublicContentHandlerFallbackPageIsNoIndex(t *testing.T) {
+	r := newPublicContentHandlerTestRouter(&publicContentHandlerRepoStub{newsDetail: &service.PublicNews{
+		Locale: "zh-CN", RequestedLocale: "de-DE", Fallback: "zh-CN", Slug: "hello",
+		Title: "中文标题", Summary: "摘要", BodyHTML: "<p>中文正文</p>", SourceName: "CCAI",
+		PublishedAt: time.Now(), Status: "published",
+		Alternates: []service.PublicAlternate{{Locale: "en-US", Slug: "hello-en"}},
+	}})
+	res := httptest.NewRecorder()
+	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/news-html/de/hello", nil))
+	require.Equal(t, http.StatusOK, res.Code)
+	require.Equal(t, "noindex, follow", res.Header().Get("X-Robots-Tag"))
+	body := res.Body.String()
+	require.Contains(t, body, `<meta name="robots" content="noindex, follow">`)
+	require.Contains(t, body, `<html lang="de-DE">`)
+	require.Contains(t, body, "中文正文")
+	// Canonical points at the Chinese master, never at the untranslated URL.
+	require.Contains(t, body, `rel="canonical" href="https://ccai.example/news/zh/hello"`)
+	// hreflang only advertises Chinese and the published English translation.
+	require.Contains(t, body, `rel="alternate" hreflang="zh" href="https://ccai.example/news/zh/hello"`)
+	require.Contains(t, body, `rel="alternate" hreflang="en" href="https://ccai.example/news/en/hello-en"`)
+	require.Contains(t, body, `hreflang="x-default" href="https://ccai.example/news/zh/hello"`)
+	require.NotContains(t, body, `hreflang="de"`)
+}
+
+func TestPublicContentHandlerTranslatedPageStaysIndexable(t *testing.T) {
+	r := newPublicContentHandlerTestRouter(&publicContentHandlerRepoStub{articleDetail: &service.PublicArticle{
+		Locale: "en-US", RequestedLocale: "en-US", Slug: "guide-en",
+		Title: "Guide", Excerpt: "Excerpt", BodyHTML: "<p>body</p>", PublishedAt: time.Now(), Status: "published",
+		Alternates: []service.PublicAlternate{{Locale: "zh-CN", Slug: "guide"}},
+	}})
+	res := httptest.NewRecorder()
+	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/article-html/en/guide-en", nil))
+	require.Equal(t, http.StatusOK, res.Code)
+	require.Equal(t, "index, follow", res.Header().Get("X-Robots-Tag"))
+	body := res.Body.String()
+	require.Contains(t, body, `<meta name="robots" content="index, follow">`)
+	require.Contains(t, body, `rel="canonical" href="https://ccai.example/articles/en/guide-en"`)
+	require.Contains(t, body, `hreflang="zh" href="https://ccai.example/articles/zh/guide"`)
+	require.Contains(t, body, `hreflang="x-default" href="https://ccai.example/articles/zh/guide"`)
+}
+
+type publicSitemapRepoStub struct {
+	publicContentHandlerRepoStub
+}
+
+func (s *publicSitemapRepoStub) ListPublishedNewsForSitemap(context.Context) ([]service.PublicNewsListItem, error) {
+	return []service.PublicNewsListItem{{
+		Locale: "en-US", Slug: "release", Title: "Release", Summary: "Summary",
+		SourceName: "CCAI", PublishedAt: time.Now(), Status: "published",
+	}}, nil
+}
+
+func (s *publicSitemapRepoStub) ListPublishedArticlesForSitemap(context.Context) ([]service.PublicArticleListItem, error) {
+	return nil, nil
+}
+
+func TestPublicContentSitemapUsesShortLocaleSegments(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h := NewPublicContentHandler(service.NewPublicContentService(&publicSitemapRepoStub{}), &config.Config{Server: config.ServerConfig{FrontendURL: "https://ccai.example"}})
+	r.GET("/sitemap.xml", h.RenderSitemapXML)
+
+	res := httptest.NewRecorder()
+	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil))
+	require.Equal(t, http.StatusOK, res.Code)
+	body := res.Body.String()
+	require.Contains(t, body, "<loc>https://ccai.example/news/en/release</loc>")
+	require.NotContains(t, body, "/news/en-US/")
 }

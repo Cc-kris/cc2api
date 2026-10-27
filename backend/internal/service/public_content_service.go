@@ -60,7 +60,13 @@ type PublicNews struct {
 	SeoDescription      string            `json:"seoDescription,omitempty"`
 	Status              string            `json:"-"`
 	DeletedAt           *time.Time        `json:"-"`
-	Alternates          []PublicAlternate `json:"alternates,omitempty"`
+	// RequestedLocale is the URL locale the reader asked for; Locale is the
+	// language actually served. The renderer keeps UI chrome in RequestedLocale.
+	RequestedLocale string            `json:"-"`
+	// Fallback names the language served when the requested translation is
+	// missing (R9-03/R9-05). It drives noindex and the canonical target.
+	Fallback   string            `json:"fallback,omitempty"`
+	Alternates []PublicAlternate `json:"alternates,omitempty"`
 }
 
 type PublicNewsListItem struct {
@@ -109,6 +115,8 @@ type PublicArticle struct {
 	PublishedAt    time.Time         `json:"publishedAt"`
 	Status         string            `json:"-"`
 	DeletedAt      *time.Time        `json:"-"`
+	RequestedLocale string           `json:"-"`
+	Fallback       string            `json:"fallback,omitempty"`
 	Alternates     []PublicAlternate `json:"alternates,omitempty"`
 }
 
@@ -253,11 +261,37 @@ func (s *PublicContentService) GetNews(ctx context.Context, locale, slug string)
 		return nil, err
 	}
 	item, err := s.findPublishedNews(ctx, locale, slug)
+	if errors.Is(err, ErrPublicContentNotFound) {
+		item, err = s.fallbackPublishedNews(ctx, locale, slug)
+	}
 	if err != nil {
 		return nil, err
 	}
+	item.RequestedLocale = locale
 	item.ImageURL = publicMediaURL(item.ImageURL)
 	return item, nil
+}
+
+// fallbackPublishedNews serves the editorial Chinese master when the requested
+// locale has no published translation (R9-03/R9-05). Locale stays the master
+// language and Fallback marks the substitution for canonical/noindex.
+func (s *PublicContentService) fallbackPublishedNews(ctx context.Context, locale, slug string) (*PublicNews, error) {
+	if locale == PublicContentFallbackLocale {
+		return nil, ErrPublicContentNotFound
+	}
+	master, err := s.findPublishedNews(ctx, PublicContentFallbackLocale, slug)
+	if err != nil {
+		return nil, err
+	}
+	for _, alt := range master.Alternates {
+		if strings.EqualFold(alt.Locale, locale) {
+			if translated, tErr := s.findPublishedNews(ctx, locale, alt.Slug); tErr == nil {
+				return translated, nil
+			}
+		}
+	}
+	master.Fallback = PublicContentFallbackLocale
+	return master, nil
 }
 
 // findPublishedNews resolves a slug across locale aliases (zh vs zh-CN, en vs
@@ -340,9 +374,13 @@ func (s *PublicContentService) GetArticle(ctx context.Context, locale, slug stri
 		return nil, err
 	}
 	item, err := s.findPublishedArticle(ctx, locale, slug)
+	if errors.Is(err, ErrPublicContentNotFound) {
+		item, err = s.fallbackPublishedArticle(ctx, locale, slug)
+	}
 	if err != nil {
 		return nil, err
 	}
+	item.RequestedLocale = locale
 	item.CoverImage = publicMediaURL(item.CoverImage)
 	item.OgImage = publicMediaURL(item.OgImage)
 	item.CanonicalURL = ""
@@ -350,6 +388,28 @@ func (s *PublicContentService) GetArticle(ctx context.Context, locale, slug stri
 		item.Author = "CCAI 编辑部"
 	}
 	return item, nil
+}
+
+// fallbackPublishedArticle mirrors fallbackPublishedNews for articles: the
+// Chinese master is served when the requested locale has no published
+// translation, and Fallback records the substitution.
+func (s *PublicContentService) fallbackPublishedArticle(ctx context.Context, locale, slug string) (*PublicArticle, error) {
+	if locale == PublicContentFallbackLocale {
+		return nil, ErrPublicContentNotFound
+	}
+	master, err := s.findPublishedArticle(ctx, PublicContentFallbackLocale, slug)
+	if err != nil {
+		return nil, err
+	}
+	for _, alt := range master.Alternates {
+		if strings.EqualFold(alt.Locale, locale) {
+			if translated, tErr := s.findPublishedArticle(ctx, locale, alt.Slug); tErr == nil {
+				return translated, nil
+			}
+		}
+	}
+	master.Fallback = PublicContentFallbackLocale
+	return master, nil
 }
 
 func (s *PublicContentService) findPublishedArticle(ctx context.Context, locale, slug string) (*PublicArticle, error) {
@@ -463,6 +523,28 @@ func normalizePublicLocale(locale string) (string, error) {
 		return "", ErrPublicContentLocale
 	}
 	return canonical, nil
+}
+
+// publicContentURLSegments is the reverse of publicContentSupportedLocales:
+// canonical content locale -> short URL segment (R9-07/R12-05).
+var publicContentURLSegments = map[string]string{
+	PublicContentFallbackLocale: "zh",
+	"en-US":                     "en",
+	"ru-RU":                     "ru",
+	"fr-FR":                     "fr",
+	"de-DE":                     "de",
+}
+
+// PublicLocaleSegment maps any supported locale spelling onto the short URL
+// segment (and hreflang) used by public routes. The second result reports
+// whether the tag is a supported language; unsupported tags answer 404 instead
+// of being redirected.
+func PublicLocaleSegment(locale string) (string, bool) {
+	canonical, err := normalizePublicLocale(locale)
+	if err != nil {
+		return "", false
+	}
+	return publicContentURLSegments[canonical], true
 }
 
 func isPublicPublishedNews(item PublicNews) bool {

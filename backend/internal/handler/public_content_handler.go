@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -97,6 +98,9 @@ func (h *PublicContentHandler) GetArticle(c *gin.Context) {
 // RenderNewsHTML and RenderArticleHTML provide the server-rendered detail shell.
 // BodyHTML is trusted content produced by the publishing pipeline; all metadata is escaped.
 func (h *PublicContentHandler) RenderNewsHTML(c *gin.Context) {
+	if redirectPublicLocaleSegment(c, "/news") {
+		return
+	}
 	item, err := h.service.GetNews(c.Request.Context(), c.Param("locale"), c.Param("slug"))
 	if err != nil {
 		publicContentHTMLError(c, err)
@@ -106,12 +110,34 @@ func (h *PublicContentHandler) RenderNewsHTML(c *gin.Context) {
 }
 
 func (h *PublicContentHandler) RenderArticleHTML(c *gin.Context) {
+	if redirectPublicLocaleSegment(c, "/articles") {
+		return
+	}
 	item, err := h.service.GetArticle(c.Request.Context(), c.Param("locale"), c.Param("slug"))
 	if err != nil {
 		publicContentHTMLError(c, err)
 		return
 	}
 	renderArticleDocument(c, h.baseURL, item)
+}
+
+// redirectPublicLocaleSegment 301s stored/alias locale spellings (en-US,
+// zh-CN, en_us) to the canonical short segment and keeps the query string, so
+// each page has exactly one indexable URL (R12-05). Unsupported tags are left
+// alone and surface as 404 from the service.
+func redirectPublicLocaleSegment(c *gin.Context, prefix string) bool {
+	requested := c.Param("locale")
+	segment, ok := service.PublicLocaleSegment(requested)
+	if !ok || segment == requested {
+		return false
+	}
+	target := strings.TrimRight(prefix, "/") + "/" + segment + "/" + url.PathEscape(c.Param("slug"))
+	if rawQuery := c.Request.URL.RawQuery; rawQuery != "" {
+		target += "?" + rawQuery
+	}
+	c.Redirect(http.StatusMovedPermanently, target)
+	c.Abort()
+	return true
 }
 
 // RenderHomeHTML serves the anonymous public homepage. It intentionally uses
@@ -224,7 +250,11 @@ func (h *PublicContentHandler) RenderSitemapXML(c *gin.Context) {
 		if entry.Kind == "article" {
 			prefix = "/articles"
 		}
-		loc := publicAbsoluteURL(c, h.baseURL, publicContentPath(prefix, entry.Locale, entry.Slug), "")
+		segment, ok := service.PublicLocaleSegment(entry.Locale)
+		if !ok {
+			continue
+		}
+		loc := publicAbsoluteURL(c, h.baseURL, publicContentPath(prefix, segment, entry.Slug), "")
 		if !seenURLs[loc] {
 			seenURLs[loc] = true
 			urls = append(urls, publicSitemapURL{Loc: loc, LastMod: formatPublicTime(entry.LastModified)})

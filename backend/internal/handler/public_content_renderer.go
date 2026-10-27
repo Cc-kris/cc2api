@@ -41,6 +41,7 @@ type publicDetailView struct {
 	Nonce               string
 	Author              string
 	IsNews              bool
+	Robots              string
 	Alternates          []publicAlternateView
 }
 type publicAlternateView struct{ HrefLang, Href string }
@@ -123,6 +124,7 @@ var publicDetailTemplate = template.Must(template.New("public-detail").Parse(`<!
   <title>{{.Title}}</title>
   <meta name="description" content="{{.Description}}">
   <link rel="canonical" href="{{.Canonical}}">
+  <meta name="robots" content="{{.Robots}}">
   {{range .Alternates}}<link rel="alternate" hreflang="{{.HrefLang}}" href="{{.Href}}">{{end}}
   <meta property="og:type" content="{{if .IsNews}}article{{else}}article{{end}}">
   <meta property="og:title" content="{{.Title}}">
@@ -213,12 +215,18 @@ var publicDocsTemplate = template.Must(template.New("public-docs").Parse(`<!doct
 </html>`))
 
 func renderNewsDocument(c *gin.Context, baseURL string, item *service.PublicNews) {
+	requested := firstPublicNonEmpty(item.RequestedLocale, item.Locale)
+	seoLocale := requested
+	if item.Fallback != "" {
+		seoLocale = item.Fallback
+	}
 	view := publicDetailView{
-		Locale:      item.Locale,
+		Locale:      requested,
 		Title:       firstPublicNonEmpty(item.SeoTitle, item.Title),
 		Heading:     item.Title,
 		Description: firstPublicNonEmpty(item.SeoDescription, item.Summary),
-		Canonical:   publicAbsoluteURL(c, baseURL, publicContentPath("/news", item.Locale, item.Slug), ""),
+		Canonical:   publicAbsoluteURL(c, baseURL, publicContentPath("/news", publicLocaleSegment(seoLocale), item.Slug), ""),
+		Robots:      publicDetailRobots(item.Fallback),
 		ImageURL:    safePublicImageURL(item.ImageURL),
 		ImageAlt:    item.Title,
 		PublishedAt: formatPublicTime(item.PublishedAt),
@@ -227,21 +235,27 @@ func renderNewsDocument(c *gin.Context, baseURL string, item *service.PublicNews
 		Nonce:       middleware.GetNonceFromContext(c),
 		IsNews:      true,
 	}
-	view.Alternates = publicAlternateViews(c, baseURL, "/news", item.Locale, item.Slug, item.Alternates)
+	view.Alternates = publicAlternateViews(c, baseURL, "/news", seoLocale, item.Slug, item.Alternates)
 	if item.OriginalPublishedAt != nil {
 		view.OriginalPublishedAt = formatPublicTime(*item.OriginalPublishedAt)
 	}
 	view.JSONLD = publicJSONLD(newsJSONLD(item, view.Title, view.Description, view.Canonical))
-	renderPublicTemplate(c, publicDetailTemplate, view, publicHTMLCacheDetail)
+	renderPublicTemplate(c, publicDetailTemplate, view, publicHTMLCacheDetail, view.Robots)
 }
 
 func renderArticleDocument(c *gin.Context, baseURL string, item *service.PublicArticle) {
+	requested := firstPublicNonEmpty(item.RequestedLocale, item.Locale)
+	seoLocale := requested
+	if item.Fallback != "" {
+		seoLocale = item.Fallback
+	}
 	view := publicDetailView{
-		Locale:      item.Locale,
+		Locale:      requested,
 		Title:       firstPublicNonEmpty(item.SeoTitle, item.Title),
 		Heading:     item.Title,
 		Description: firstPublicNonEmpty(item.SeoDescription, item.Excerpt),
-		Canonical:   publicAbsoluteURL(c, baseURL, publicContentPath("/articles", item.Locale, item.Slug), ""),
+		Canonical:   publicAbsoluteURL(c, baseURL, publicContentPath("/articles", publicLocaleSegment(seoLocale), item.Slug), ""),
+		Robots:      publicDetailRobots(item.Fallback),
 		ImageURL:    safePublicImageURL(firstPublicNonEmpty(item.OgImage, item.CoverImage)),
 		ImageAlt:    item.CoverAlt,
 		PublishedAt: formatPublicTime(item.PublishedAt),
@@ -249,41 +263,52 @@ func renderArticleDocument(c *gin.Context, baseURL string, item *service.PublicA
 		Nonce:       middleware.GetNonceFromContext(c),
 		Author:      item.Author,
 	}
-	view.Alternates = publicAlternateViews(c, baseURL, "/articles", item.Locale, item.Slug, item.Alternates)
+	view.Alternates = publicAlternateViews(c, baseURL, "/articles", seoLocale, item.Slug, item.Alternates)
 	view.JSONLD = publicJSONLD(articleJSONLD(item, view.Title, view.Description, view.Canonical))
-	renderPublicTemplate(c, publicDetailTemplate, view, publicHTMLCacheDetail)
+	renderPublicTemplate(c, publicDetailTemplate, view, publicHTMLCacheDetail, view.Robots)
 }
 
-func publicAlternateViews(c *gin.Context, baseURL, prefix, currentLocale, currentSlug string, alternates []service.PublicAlternate) []publicAlternateView {
-	seen := map[string]bool{}
-	out := make([]publicAlternateView, 0, len(alternates)+1)
+// publicDetailRobots keeps fallback pages out of the index (R9-05) while
+// leaving translated and Chinese pages crawlable.
+func publicDetailRobots(fallback string) string {
+	if strings.TrimSpace(fallback) != "" {
+		return "noindex, follow"
+	}
+	return "index, follow"
+}
+
+// publicAlternateViews emits short-segment hreflang links. The canonical
+// language is always listed; the requested language is only listed when the
+// page really is that language, so a fallback page never advertises itself.
+func publicAlternateViews(c *gin.Context, baseURL, prefix, selfLocale, selfSlug string, alternates []service.PublicAlternate) []publicAlternateView {
+	seen := make(map[string]bool, len(alternates)+2)
+	out := make([]publicAlternateView, 0, len(alternates)+2)
 	add := func(locale, slug string) {
-		locale = strings.TrimSpace(locale)
-		slug = strings.TrimSpace(slug)
-		if locale == "" || slug == "" || seen[locale] {
+		locale, slug = strings.TrimSpace(locale), strings.TrimSpace(slug)
+		if locale == "" || slug == "" {
 			return
 		}
-		seen[locale] = true
-		out = append(out, publicAlternateView{HrefLang: locale, Href: publicAbsoluteURL(c, baseURL, publicContentPath(prefix, locale, slug), "")})
+		segment := publicLocaleSegment(locale)
+		if seen[segment] {
+			return
+		}
+		seen[segment] = true
+		out = append(out, publicAlternateView{HrefLang: segment, Href: publicAbsoluteURL(c, baseURL, publicContentPath(prefix, segment, slug), "")})
 	}
-	add(currentLocale, currentSlug)
+	add(selfLocale, selfSlug)
 	for _, a := range alternates {
 		add(a.Locale, a.Slug)
 	}
 	for _, candidate := range out {
-		if candidate.HrefLang == defaultPublicLocale {
-			// Reuse the published default-locale URL, including its translated slug.
-			out = append(out, publicAlternateView{HrefLang: "x-default", Href: candidate.Href})
-			return out
+		if candidate.HrefLang == "zh" {
+			return append(out, publicAlternateView{HrefLang: "x-default", Href: candidate.Href})
 		}
-	}
-	if currentLocale != "" {
-		out = append(out, publicAlternateView{HrefLang: "x-default", Href: publicAbsoluteURL(c, baseURL, publicContentPath(prefix, currentLocale, currentSlug), "")})
 	}
 	return out
 }
 
 func renderHomeDocument(c *gin.Context, baseURL, locale string, news service.PublicNewsPage, articles service.PublicArticlePage) {
+	locale = firstPublicNonEmpty(news.Locale, locale)
 	view := publicCollectionView{
 		Locale:       locale,
 		Title:        "CCAI | AI API 平台",
@@ -301,10 +326,11 @@ func renderHomeDocument(c *gin.Context, baseURL, locale string, news service.Pub
 		"url":        view.Canonical,
 		"inLanguage": locale,
 	})
-	renderPublicTemplate(c, publicCollectionTemplate, view, publicHTMLCacheCollection)
+	renderPublicTemplate(c, publicCollectionTemplate, view, publicHTMLCacheCollection, "index, follow")
 }
 
 func renderNewsListDocument(c *gin.Context, baseURL, locale string, page service.PublicNewsPage) {
+	locale = firstPublicNonEmpty(page.Locale, locale)
 	view := publicCollectionView{
 		Locale:      locale,
 		Title:       "CCAI 新闻",
@@ -325,7 +351,7 @@ func renderNewsListDocument(c *gin.Context, baseURL, locale string, page service
 		"url":        view.Canonical,
 		"inLanguage": locale,
 	})
-	renderPublicTemplate(c, publicCollectionTemplate, view, publicHTMLCacheCollection)
+	renderPublicTemplate(c, publicCollectionTemplate, view, publicHTMLCacheCollection, "index, follow")
 }
 
 func renderArticleListDocument(c *gin.Context, baseURL, locale string, page service.PublicArticlePage) {
@@ -349,7 +375,7 @@ func renderArticleListDocument(c *gin.Context, baseURL, locale string, page serv
 		"url":        view.Canonical,
 		"inLanguage": locale,
 	})
-	renderPublicTemplate(c, publicCollectionTemplate, view, publicHTMLCacheCollection)
+	renderPublicTemplate(c, publicCollectionTemplate, view, publicHTMLCacheCollection, "index, follow")
 }
 
 func renderDocsDocument(c *gin.Context, baseURL, locale, path string) {
@@ -358,7 +384,7 @@ func renderDocsDocument(c *gin.Context, baseURL, locale, path string) {
 		docPath += "/" + strings.Join(strings.Split(trimmed, "/"), "/")
 	}
 	view := publicDocsView{
-		Locale:      locale,
+		Locale:      publicLocaleSegment(locale),
 		Title:       "CCAI API 文档",
 		Description: "CCAI API 接入、认证和常用接口文档。",
 		Canonical:   publicAbsoluteURL(c, baseURL, docPath, canonicalLocaleQuery(locale)),
@@ -371,12 +397,12 @@ func renderDocsDocument(c *gin.Context, baseURL, locale, path string) {
 		"headline":    view.Title,
 		"description": view.Description,
 		"url":         view.Canonical,
-		"inLanguage":  locale,
+		"inLanguage":  view.Locale,
 	})
-	renderPublicTemplate(c, publicDocsTemplate, view, publicHTMLCacheCollection)
+	renderPublicTemplate(c, publicDocsTemplate, view, publicHTMLCacheCollection, "index, follow")
 }
 
-func renderPublicTemplate(c *gin.Context, tmpl *template.Template, data any, cacheControl string) {
+func renderPublicTemplate(c *gin.Context, tmpl *template.Template, data any, cacheControl, robots string) {
 	cacheKey := publicHTMLCacheKey(c.Request.URL)
 	nonce := middleware.GetNonceFromContext(c)
 	publicCacheEnabled := nonce != ""
@@ -385,7 +411,7 @@ func renderPublicTemplate(c *gin.Context, tmpl *template.Template, data any, cac
 	publicHTMLCache.RUnlock()
 	if publicCacheEnabled && hit && time.Now().Before(entry.expiresAt) {
 		body := bytes.ReplaceAll(entry.body, []byte(publicHTMLNoncePlaceholder), []byte(nonce))
-		c.Header("X-Robots-Tag", "index, follow")
+		c.Header("X-Robots-Tag", robots)
 		c.Header("Cache-Control", cacheControl)
 		c.Data(http.StatusOK, "text/html; charset=utf-8", body)
 		c.Abort()
@@ -415,7 +441,7 @@ func renderPublicTemplate(c *gin.Context, tmpl *template.Template, data any, cac
 		publicHTMLCache.Unlock()
 	}
 	body = bytes.ReplaceAll(body, []byte(publicHTMLNoncePlaceholder), []byte(nonce))
-	c.Header("X-Robots-Tag", "index, follow")
+	c.Header("X-Robots-Tag", robots)
 	c.Header("Cache-Control", cacheControl)
 	c.Data(http.StatusOK, "text/html; charset=utf-8", body)
 	c.Abort()
@@ -455,7 +481,7 @@ func newsListViews(items []service.PublicNewsListItem) []publicNewsListView {
 			SourceName:  item.SourceName,
 			PublishedAt: formatPublicTime(item.PublishedAt),
 			OriginalAt:  formatOptionalPublicTime(item.OriginalPublishedAt),
-			URL:         publicContentPath("/news", item.Locale, item.Slug),
+			URL:         publicContentPath("/news", publicLocaleSegment(item.Locale), item.Slug),
 			ImageURL:    safePublicImageURL(item.ImageURL),
 		})
 	}
@@ -469,7 +495,7 @@ func articleListViews(items []service.PublicArticleListItem) []publicArticleList
 			Title:       item.Title,
 			Excerpt:     item.Excerpt,
 			PublishedAt: formatPublicTime(item.PublishedAt),
-			URL:         publicContentPath("/articles", item.Locale, item.Slug),
+			URL:         publicContentPath("/articles", publicLocaleSegment(item.Locale), item.Slug),
 			ImageURL:    safePublicImageURL(item.CoverImage),
 			ImageAlt:    item.CoverAlt,
 		})
@@ -481,11 +507,26 @@ func publicContentPath(prefix, locale, slug string) string {
 	return strings.TrimRight(prefix, "/") + "/" + url.PathEscape(locale) + "/" + url.PathEscape(slug)
 }
 
+// longLocaleSegment maps a supported locale onto the short public URL segment
+// (R9-07); unknown values are passed through lowercased so they still 404.
+func publicLocaleSegment(locale string) string {
+	if segment, ok := service.PublicLocaleSegment(locale); ok {
+		return segment
+	}
+	if trimmed := strings.ToLower(strings.TrimSpace(locale)); trimmed != "" {
+		return strings.SplitN(trimmed, "-", 2)[0]
+	}
+	return "zh"
+}
+
+// canonicalLocaleQuery keeps list/home canonical URLs short-segmented
+// (?locale=en) instead of echoing the stored spelling (?locale=en-US).
 func canonicalLocaleQuery(locale string) string {
-	if strings.TrimSpace(locale) == "" || locale == defaultPublicLocale {
+	segment := publicLocaleSegment(locale)
+	if segment == "zh" {
 		return ""
 	}
-	return url.Values{"locale": {locale}}.Encode()
+	return url.Values{"locale": {segment}}.Encode()
 }
 
 func publicAbsoluteURL(c *gin.Context, configuredBase, path, rawQuery string) string {
