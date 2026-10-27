@@ -43,8 +43,39 @@ type publicDetailView struct {
 	IsNews              bool
 	Robots              string
 	Alternates          []publicAlternateView
+	Chrome              publicChromeView
 }
 type publicAlternateView struct{ HrefLang, Href string }
+
+// publicChromeView carries the locale-aware chrome (navigation and field
+// labels) of the server-rendered public documents. The content itself may
+// still be the Chinese master when no translation exists, but the surrounding
+// interface must follow the requested language (R9-03).
+type publicChromeView struct {
+	News                string
+	Articles            string
+	Docs                string
+	Source              string
+	Author              string
+	Published           string
+	OriginalPublished   string
+}
+
+var publicChromeBySegment = map[string]publicChromeView{
+	"zh": {News: "新闻", Articles: "文章", Docs: "API 文档", Source: "来源：", Author: "作者：", Published: "发布时间：", OriginalPublished: "原始发布时间："},
+	"en": {News: "News", Articles: "Articles", Docs: "API Docs", Source: "Source: ", Author: "Author: ", Published: "Published: ", OriginalPublished: "Originally published: "},
+	"ru": {News: "Новости", Articles: "Статьи", Docs: "Документация API", Source: "Источник: ", Author: "Автор: ", Published: "Опубликовано: ", OriginalPublished: "Первая публикация: "},
+	"fr": {News: "Actualités", Articles: "Articles", Docs: "Documentation API", Source: "Source : ", Author: "Auteur : ", Published: "Publié le : ", OriginalPublished: "Publication initiale : "},
+	"de": {News: "Nachrichten", Articles: "Artikel", Docs: "Dokumentation", Source: "Quelle: ", Author: "Autor: ", Published: "Veröffentlicht: ", OriginalPublished: "Ursprünglich veröffentlicht: "},
+	"ja": {News: "ニュース", Articles: "記事", Docs: "API ドキュメント", Source: "出典：", Author: "著者：", Published: "公開日：", OriginalPublished: "初回公開日："},
+}
+
+func publicChrome(locale string) publicChromeView {
+	if chrome, ok := publicChromeBySegment[publicLocaleSegment(locale)]; ok {
+		return chrome
+	}
+	return publicChromeBySegment["en"]
+}
 
 const publicHTMLNoncePlaceholder = "__CCAI_PUBLIC_NONCE__"
 
@@ -102,6 +133,7 @@ type publicCollectionView struct {
 	PageSize     int
 	Total        int
 	HasNext      bool
+	Chrome       publicChromeView
 }
 
 type publicDocsView struct {
@@ -112,6 +144,7 @@ type publicDocsView struct {
 	JSONLD      template.JS
 	Nonce       string
 	Path        string
+	Chrome      publicChromeView
 }
 
 var publicClassPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,80}$`)
@@ -138,15 +171,15 @@ var publicDetailTemplate = template.Must(template.New("public-detail").Parse(`<!
   <script nonce="{{.Nonce}}" type="application/ld+json">{{.JSONLD}}</script>
 </head>
 <body>
-  <header><a href="/">CCAI</a><nav><a href="/news?locale={{.Locale}}">新闻</a><a href="/articles?locale={{.Locale}}">文章</a><a href="/docs?locale={{.Locale}}">API 文档</a></nav></header>
+  <header><a href="/">CCAI</a><nav><a href="/news?locale={{.Locale}}">{{.Chrome.News}}</a><a href="/articles?locale={{.Locale}}">{{.Chrome.Articles}}</a><a href="/docs?locale={{.Locale}}">{{.Chrome.Docs}}</a></nav></header>
   <main>
     <article>
       <h1>{{.Heading}}</h1>
       <p class="summary">{{.Description}}</p>
-      {{if .SourceName}}<p class="source">来源：{{.SourceName}}</p>{{end}}
-      {{if .Author}}<p class="author">作者：{{.Author}}</p>{{end}}
-      {{if .OriginalPublishedAt}}<time datetime="{{.OriginalPublishedAt}}">原始发布时间：{{.OriginalPublishedAt}}</time>{{end}}
-      <time datetime="{{.PublishedAt}}">发布时间：{{.PublishedAt}}</time>
+      {{if .SourceName}}<p class="source">{{.Chrome.Source}}{{.SourceName}}</p>{{end}}
+      {{if .Author}}<p class="author">{{.Chrome.Author}}{{.Author}}</p>{{end}}
+      {{if .OriginalPublishedAt}}<time datetime="{{.OriginalPublishedAt}}">{{.Chrome.OriginalPublished}}{{.OriginalPublishedAt}}</time>{{end}}
+      <time datetime="{{.PublishedAt}}">{{.Chrome.Published}}{{.PublishedAt}}</time>
       <section class="content">{{.Body}}</section>
     </article>
   </main>
@@ -172,7 +205,7 @@ var publicCollectionTemplate = template.Must(template.New("public-collection").P
   <script nonce="{{.Nonce}}" type="application/ld+json">{{.JSONLD}}</script>
 </head>
 <body>
-  <header><a href="/">CCAI</a><nav><a href="/news?locale={{.Locale}}">新闻</a><a href="/articles?locale={{.Locale}}">文章</a><a href="/docs?locale={{.Locale}}">API 文档</a></nav></header>
+  <header><a href="/">CCAI</a><nav><a href="/news?locale={{.Locale}}">{{.Chrome.News}}</a><a href="/articles?locale={{.Locale}}">{{.Chrome.Articles}}</a><a href="/docs?locale={{.Locale}}">{{.Chrome.Docs}}</a></nav></header>
   <main>
     {{if eq .Kind "home"}}
     <section class="hero"><p class="eyebrow">CCAI</p><h1>面向开发者的 AI API 平台</h1><p>统一接入 CCAI 当前可用模型，公开获取新闻、文章和 API 文档。</p><p><a href="/login">登录控制台</a><a href="/docs?locale={{.Locale}}">查看 API 文档</a></p></section>
@@ -209,7 +242,7 @@ var publicDocsTemplate = template.Must(template.New("public-docs").Parse(`<!doct
   <script nonce="{{.Nonce}}" type="application/ld+json">{{.JSONLD}}</script>
 </head>
 <body>
-  <header><a href="/">CCAI</a><nav><a href="/news?locale={{.Locale}}">新闻</a><a href="/articles?locale={{.Locale}}">文章</a></nav></header>
+  <header><a href="/">CCAI</a><nav><a href="/news?locale={{.Locale}}">{{.Chrome.News}}</a><a href="/articles?locale={{.Locale}}">{{.Chrome.Articles}}</a></nav></header>
   <main><article><h1>CCAI API 文档</h1><p>通过兼容 OpenAI 的接口访问 CCAI 当前可用模型。模型广场和密钥管理仅在登录后的控制台提供。</p><h2>基础地址</h2><pre><code>/v1</code></pre><h2>认证</h2><p>在请求头中使用你在控制台创建的 API Key：<code>Authorization: Bearer YOUR_API_KEY</code></p><h2>常用接口</h2><ul><li><code>POST /v1/chat/completions</code>：对话补全</li><li><code>POST /v1/responses</code>：Responses API</li><li><code>GET /api/v1/public/news</code>：公开新闻数据</li><li><code>GET /api/v1/public/articles</code>：公开文章数据</li></ul>{{if .Path}}<p>当前文档路径：<code>{{.Path}}</code></p>{{end}}</article></main>
 </body>
 </html>`))
@@ -233,9 +266,10 @@ func renderNewsDocument(c *gin.Context, baseURL string, item *service.PublicNews
 		SourceName:  strings.TrimSpace(item.SourceName),
 		Body:        sanitizePublicBody(item.BodyHTML),
 		Nonce:       middleware.GetNonceFromContext(c),
+		Chrome:      publicChrome(requested),
 		IsNews:      true,
 	}
-	view.Alternates = publicAlternateViews(c, baseURL, "/news", seoLocale, item.Slug, item.Alternates)
+	view.Alternates = publicAlternateViews(c, baseURL, "/news", seoLocale, item.Slug, item.Alternates, false)
 	if item.OriginalPublishedAt != nil {
 		view.OriginalPublishedAt = formatPublicTime(*item.OriginalPublishedAt)
 	}
@@ -261,9 +295,10 @@ func renderArticleDocument(c *gin.Context, baseURL string, item *service.PublicA
 		PublishedAt: formatPublicTime(item.PublishedAt),
 		Body:        sanitizePublicBody(item.BodyHTML),
 		Nonce:       middleware.GetNonceFromContext(c),
+		Chrome:      publicChrome(requested),
 		Author:      item.Author,
 	}
-	view.Alternates = publicAlternateViews(c, baseURL, "/articles", seoLocale, item.Slug, item.Alternates)
+	view.Alternates = publicAlternateViews(c, baseURL, "/articles", seoLocale, item.Slug, item.Alternates, true)
 	view.JSONLD = publicJSONLD(articleJSONLD(item, view.Title, view.Description, view.Canonical))
 	renderPublicTemplate(c, publicDetailTemplate, view, publicHTMLCacheDetail, view.Robots)
 }
@@ -280,7 +315,7 @@ func publicDetailRobots(fallback string) string {
 // publicAlternateViews emits short-segment hreflang links. The canonical
 // language is always listed; the requested language is only listed when the
 // page really is that language, so a fallback page never advertises itself.
-func publicAlternateViews(c *gin.Context, baseURL, prefix, selfLocale, selfSlug string, alternates []service.PublicAlternate) []publicAlternateView {
+func publicAlternateViews(c *gin.Context, baseURL, prefix, selfLocale, selfSlug string, alternates []service.PublicAlternate, ensureChineseMaster bool) []publicAlternateView {
 	seen := make(map[string]bool, len(alternates)+2)
 	out := make([]publicAlternateView, 0, len(alternates)+2)
 	add := func(locale, slug string) {
@@ -299,6 +334,12 @@ func publicAlternateViews(c *gin.Context, baseURL, prefix, selfLocale, selfSlug 
 	for _, a := range alternates {
 		add(a.Locale, a.Slug)
 	}
+	// Every translated page shares the public slug of its Chinese master, so the
+	// canonical zh URL is always addressable and must be advertised: without it
+	// search engines never learn the master version of a translated article.
+	if ensureChineseMaster && !seen["zh"] {
+		add("zh-CN", selfSlug)
+	}
 	for _, candidate := range out {
 		if candidate.HrefLang == "zh" {
 			return append(out, publicAlternateView{HrefLang: "x-default", Href: candidate.Href})
@@ -316,6 +357,7 @@ func renderHomeDocument(c *gin.Context, baseURL, locale string, news service.Pub
 		Canonical:    canonicalPublicCollectionURL(c, baseURL, locale, ""),
 		Kind:         "home",
 		Nonce:        middleware.GetNonceFromContext(c),
+		Chrome:       publicChrome(locale),
 		NewsItems:    newsListViews(news.Items),
 		ArticleItems: articleListViews(articles.Items),
 	}
@@ -338,6 +380,7 @@ func renderNewsListDocument(c *gin.Context, baseURL, locale string, page service
 		Canonical:   canonicalPublicCollectionURL(c, baseURL, locale, "/news"),
 		Kind:        "news",
 		Nonce:       middleware.GetNonceFromContext(c),
+		Chrome:      publicChrome(locale),
 		NewsItems:   newsListViews(page.Items),
 		Page:        page.Page,
 		PageSize:    page.PageSize,
@@ -362,6 +405,7 @@ func renderArticleListDocument(c *gin.Context, baseURL, locale string, page serv
 		Canonical:    canonicalPublicCollectionURL(c, baseURL, locale, "/articles"),
 		Kind:         "articles",
 		Nonce:        middleware.GetNonceFromContext(c),
+		Chrome:       publicChrome(locale),
 		ArticleItems: articleListViews(page.Items),
 		Page:         page.Page,
 		PageSize:     page.PageSize,
@@ -390,6 +434,7 @@ func renderDocsDocument(c *gin.Context, baseURL, locale, path string) {
 		Canonical:   publicAbsoluteURL(c, baseURL, docPath, canonicalLocaleQuery(locale)),
 		Path:        strings.Trim(path, "/"),
 		Nonce:       middleware.GetNonceFromContext(c),
+		Chrome:      publicChrome(locale),
 	}
 	view.JSONLD = publicJSONLD(map[string]any{
 		"@context":    "https://schema.org",

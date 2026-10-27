@@ -5415,9 +5415,18 @@ watch([() => route.fullPath, isZh], () => {
   color: #2563EB;
 }
 @media (max-width: 900px) {
+  /* minmax(0,1fr) 而非 1fr：1fr 的隐式 min-width:auto 会被卡片内长 URL/长单词的
+     min-content（WebKit 实测 315.7px > 容器 232px）撑破，造成 390px 下 1~2px 横向滚动 */
   .detail-prev-next-grid,
   .more-related-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .more-related-card {
+    min-width: 0;
+  }
+  .more-card-title,
+  .more-card-excerpt {
+    overflow-wrap: anywhere;
   }
 }
 
@@ -5806,6 +5815,61 @@ watch([() => route.fullPath, isZh], () => {
 :global(.dark) .cover-placeholder {
   color: #6B7280;
   background: repeating-linear-gradient(135deg, #1E2026 0 12px, #23262E 12px 24px);
+}
+
+/* TASK-033 D3：窄视口（手机宽度，含桌面窗口缩到 390px）页头改为可换行流式布局。
+   原三列 grid（1fr auto 1fr）在 390px 下最小内容宽 563px，硬撑出 599px 横向滚动条。 */
+@media (max-width: 767px) {
+  .neo-sub-header-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    padding: 12px 16px;
+  }
+  .sub-header-left {
+    flex: 0 1 auto;
+    min-width: 0;
+    gap: 8px;
+  }
+  /* 类型指示胶囊与中心分段导航语义重复，窄屏隐藏以给导航让出宽度 */
+  .sub-nav-indicator,
+  .sub-nav-divider {
+    display: none;
+  }
+  .sub-segmented-nav {
+    flex: 0 0 auto;
+    margin-left: auto;
+    box-shadow: 3px 3px 0px #121316;
+  }
+  .seg-item {
+    padding: 6px 10px;
+  }
+  .cta-wrap {
+    flex: 0 1 auto;
+    margin-left: auto;
+    gap: 8px;
+  }
+  .nav-home-btn {
+    padding: 0 10px;
+    font-size: 12px;
+  }
+  .lang-menu {
+    left: auto;
+    right: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .seg-code {
+    display: none;
+  }
+  .seg-item {
+    font-size: 12px;
+  }
+  .brand {
+    font-size: 18px;
+  }
 }
 
 </style>

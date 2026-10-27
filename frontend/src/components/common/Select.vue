@@ -391,6 +391,29 @@ const toggle = () => {
   isOpen.value = !isOpen.value
 }
 
+const closeOnEscape = () => {
+  isOpen.value = false
+  triggerRef.value?.focus({ preventScroll: true })
+}
+
+// Safari(WebKit) 下鼠标点击 <button> 不会让按钮获得焦点，trigger/dropdown 上的 keydown 收不到事件，
+// 所以在打开态监听 document 的 keydown（捕获阶段）：无论焦点在页面何处，Escape 都能关闭下拉；
+// 捕获阶段先于外层对话框的冒泡监听执行，并吞掉这次按键，避免连带关闭对话框。
+const handleDocumentKeyDown = (event: KeyboardEvent) => {
+  if (!isOpen.value || event.key !== 'Escape') return
+  event.preventDefault()
+  event.stopPropagation()
+  closeOnEscape()
+}
+
+const addDocumentKeyDown = () => {
+  document.addEventListener('keydown', handleDocumentKeyDown, true)
+}
+
+const removeDocumentKeyDown = () => {
+  document.removeEventListener('keydown', handleDocumentKeyDown, true)
+}
+
 watch(isOpen, (open) => {
   if (open) {
     calculateDropdownPosition()
@@ -412,11 +435,13 @@ watch(isOpen, (open) => {
     // Add scroll listener to update position
     window.addEventListener('scroll', updateTriggerRect, { capture: true, passive: true })
     window.addEventListener('resize', calculateDropdownPosition)
+    addDocumentKeyDown()
   } else {
     searchQuery.value = ''
     focusedIndex.value = -1
     window.removeEventListener('scroll', updateTriggerRect, { capture: true })
     window.removeEventListener('resize', calculateDropdownPosition)
+    removeDocumentKeyDown()
   }
 })
 
@@ -557,6 +582,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
+  removeDocumentKeyDown()
   window.removeEventListener('scroll', updateTriggerRect, { capture: true })
   window.removeEventListener('resize', calculateDropdownPosition)
 })

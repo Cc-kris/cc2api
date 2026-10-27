@@ -46,12 +46,14 @@
             v-model="newsSearch"
             placeholder="搜索标题或摘要"
             @keyup.enter="loadNews"
-          /><select v-model="newsStatus" @change="loadNews">
-            <option value="">全部状态</option>
-            <option value="published">已发布</option>
-            <option value="draft">草稿</option>
-            <option value="pending_review">待审核</option></select
-          ><input
+          /><Select
+            v-model="newsStatus"
+            :options="newsStatusOptions"
+            class="toolbar-select"
+            aria-label="新闻状态"
+            data-test="news-status"
+            @change="onNewsStatusSelect"
+          /><input
             v-model="newsLocale"
             placeholder="语言"
             @keyup.enter="loadNews"
@@ -275,11 +277,13 @@
             placeholder="公开 RSS/Atom/JSON URL（必填）"
             @input="sourceFormErrors.url = ''"
             @blur="validateSourceField('url')"
-          /><select v-model="sourceForm.sourceType">
-            <option value="rss">RSS</option>
-            <option value="atom">Atom</option>
-            <option value="public_json">Public JSON</option></select
-          ><input
+          /><Select
+            v-model="sourceForm.sourceType"
+            :options="sourceTypeOptions"
+            class="toolbar-select"
+            aria-label="新闻源类型"
+            data-test="news-source-type"
+          /><input
             v-model.number="sourceForm.intervalMinutes"
             class="interval-input"
             type="number"
@@ -466,10 +470,12 @@
           <label>时区<input v-model="automation.timezone" /></label
           ><label>Cron<input v-model="automation.fetchCron" /></label
           ><label
-            >发布模式<select v-model="automation.publishMode">
-              <option value="manual_review">人工审核</option>
-              <option value="auto_publish">自动发布</option>
-            </select></label
+            >发布模式<Select
+              v-model="automation.publishMode"
+              :options="publishModeOptions"
+              aria-label="发布模式"
+              data-test="automation-publish-mode"
+            /></label
           ><label
             >每日抓取上限（0=不限）<input
               v-model.number="automation.dailyFetchLimit"
@@ -547,18 +553,22 @@
             class="search-input"
             @keyup.enter="loadArticles"
           />
-          <select v-model="articleStatus" @change="loadArticles">
-            <option value="">全部状态</option>
-            <option value="published">已发布</option>
-            <option value="draft">草稿</option>
-            <option value="pending_review">待审核</option>
-          </select>
-          <select v-model="articleModel" @change="loadArticles">
-            <option value="">全部模型</option>
-            <option v-for="m in articleModelFilterOptions" :key="m" :value="m">
-              {{ m }}
-            </option>
-          </select>
+          <Select
+            v-model="articleStatus"
+            :options="articleStatusOptions"
+            class="toolbar-select"
+            aria-label="文章状态"
+            data-test="article-status"
+            @change="onArticleFilterSelect"
+          />
+          <Select
+            v-model="articleModel"
+            :options="articleModelSelectOptions"
+            class="toolbar-select"
+            aria-label="文章模型"
+            data-test="article-model"
+            @change="onArticleFilterSelect"
+          />
           <small v-if="modelsLoadError" class="error-text">{{ modelsLoadError }}</small>
           <input v-model="articleLocale" placeholder="语言 (zh-CN)" @keyup.enter="loadArticles" style="width: 110px;" />
           <input v-model="articleCategory" placeholder="分类" @keyup.enter="loadArticles" style="width: 100px;" />
@@ -773,10 +783,13 @@
                     <div class="form-row">
                       <label>分类
                         <div class="select-with-create">
-                          <select v-model="articleForm.category">
-                            <option value="">未分类</option>
-                            <option v-for="c in taxonomy.articleCategories" :key="c" :value="c">{{ c }}</option>
-                          </select>
+                          <Select
+                            v-model="articleForm.category"
+                            :options="articleCategorySelectOptions"
+                            class="w-full"
+                            aria-label="文章分类"
+                            data-test="article-category"
+                          />
                           <button
                             type="button"
                             class="mini-create-btn"
@@ -1289,10 +1302,13 @@
             <div class="form-row-grid">
               <div class="field-group">
                 <label class="block-label">目标语言</label>
-                <select v-model="brief.language" class="ai-select">
-                  <option value="zh-CN">中文</option>
-                  <option value="en-US">English</option>
-                </select>
+                <Select
+                  v-model="brief.language"
+                  :options="briefLanguageOptions"
+                  class="ai-select"
+                  aria-label="目标语言"
+                  data-test="brief-language"
+                />
               </div>
               <div class="field-group">
                 <label class="block-label">期望生成字数</label>
@@ -2038,6 +2054,45 @@ const articleModelFilterOptions = computed(() => {
   }
   return out;
 });
+
+// R15-01/AC-14：内容中心所有下拉统一走 common/Select，禁止浏览器原生 select
+const newsStatusOptions = computed(() => [
+  { value: "", label: "全部状态" },
+  { value: "published", label: "已发布" },
+  { value: "draft", label: "草稿" },
+  { value: "pending_review", label: "待审核" },
+]);
+const articleStatusOptions = computed(() => newsStatusOptions.value);
+const sourceTypeOptions = computed(() => [
+  { value: "rss", label: "RSS" },
+  { value: "atom", label: "Atom" },
+  { value: "public_json", label: "Public JSON" },
+]);
+const publishModeOptions = computed(() => [
+  { value: "manual_review", label: "人工审核" },
+  { value: "auto_publish", label: "自动发布" },
+]);
+const articleModelSelectOptions = computed(() => [
+  { value: "", label: "全部模型" },
+  ...articleModelFilterOptions.value.map((model) => ({ value: model, label: model })),
+]);
+const articleCategorySelectOptions = computed(() => [
+  { value: "", label: "未分类" },
+  ...(taxonomy.value.articleCategories || []).map((category: string) => ({
+    value: category,
+    label: category,
+  })),
+]);
+const briefLanguageOptions = computed(() => [
+  { value: "zh-CN", label: "中文" },
+  { value: "en-US", label: "English" },
+]);
+function onNewsStatusSelect() {
+  void loadNews(1);
+}
+function onArticleFilterSelect() {
+  void loadArticles(1);
+}
 const articleAuthorId = ref("");
 const articleFrom = ref("");
 const articleTo = ref("");
@@ -5459,9 +5514,19 @@ td.actions-cell .link {
   gap: 6px;
   align-items: center;
 }
-.select-with-create select {
+.select-with-create > .relative {
   flex: 1;
   min-width: 0;
+}
+/* R15：工具栏内的 common/Select 与输入框等高，不撑破工具栏 */
+.toolbar-select {
+  flex: 0 0 auto;
+  width: 140px;
+}
+.toolbar-select :deep(.select-trigger) {
+  height: 38px;
+  padding-block: 0;
+  font-size: 13px;
 }
 .mini-create-btn {
   white-space: nowrap;

@@ -158,6 +158,46 @@ describe('form controls', () => {
     wrapper.unmount()
   })
 
+  it('Escape closes an open Select without relying on focus inside the component (Safari mouse click)', async () => {
+    const wrapper = mount(Select, {
+      attachTo: document.body,
+      props: { modelValue: 'one', options, ariaLabel: 'Pick a value' }
+    })
+    const trigger = wrapper.get('button')
+    const outerHandler = vi.fn()
+
+    try {
+      // Safari：鼠标点击 <button> 不会让它获得焦点，焦点仍留在 body 上
+      await trigger.trigger('click')
+      await nextTick()
+      expect(trigger.attributes('aria-expanded')).toBe('true')
+      expect(document.body.querySelector('[role="listbox"]')).not.toBeNull()
+
+      ;(document.activeElement as HTMLElement | null)?.blur()
+      expect(document.activeElement).toBe(document.body)
+
+      // 外层（如 BaseDialog）的冒泡监听不应被连带触发
+      document.addEventListener('keydown', outerHandler)
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+      await nextTick()
+
+      expect(trigger.attributes('aria-expanded'), '无焦点时 Escape 也能关闭').toBe('false')
+      expect(wrapper.emitted('update:modelValue'), 'Escape 不改变已选值').toBeUndefined()
+      expect(document.activeElement, '关闭后焦点回到 trigger').toBe(trigger.element)
+      expect(outerHandler, 'Escape 被下拉消费，不外泄给外层').not.toHaveBeenCalled()
+
+      // 已关闭时再次 Escape 不应做任何事，也不拦截页面的其它键盘监听
+      outerHandler.mockClear()
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+      await nextTick()
+      expect(outerHandler, '关闭态不再消费 Escape').toHaveBeenCalledTimes(1)
+    } finally {
+      document.removeEventListener('keydown', outerHandler)
+      wrapper.unmount()
+      await flushPromises()
+    }
+  })
+
   it('searchable Select keeps its combobox outside the labeled listbox', async () => {
     const wrapper = mount(Select, {
       attachTo: document.body,

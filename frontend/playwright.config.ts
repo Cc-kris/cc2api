@@ -1,8 +1,10 @@
 import { defineConfig, devices } from '@playwright/test'
 
-const baseURL = process.env.E2E_BASE_URL || 'http://127.0.0.1:3000'
+const baseURL = process.env.E2E_BASE_URL || 'http://127.0.0.1:3100'
 const useExternalServer = process.env.PLAYWRIGHT_EXTERNAL_SERVER === '1'
 const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH
+// 真实 Edge（非 Playwright 打包）可通过 PLAYWRIGHT_EDGE_EXECUTABLE_PATH 指定；未设置时回退 channel: 'msedge'
+const edgeExecutablePath = process.env.PLAYWRIGHT_EDGE_EXECUTABLE_PATH
 
 export default defineConfig({
   testDir: './e2e',
@@ -26,7 +28,7 @@ export default defineConfig({
   webServer: useExternalServer
     ? undefined
     : {
-        command: 'pnpm run dev -- --host 127.0.0.1',
+        command: 'pnpm run dev -- --host 127.0.0.1 --port 3100',
         url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000
@@ -51,6 +53,17 @@ export default defineConfig({
     {
       name: 'webkit-mobile',
       use: { ...devices['iPhone 13'], browserName: 'webkit' }
-    }
+    },
+    // 第三浏览器 Edge：仅在本机安装时启用（E2E_EDGE=1），CI 无 Edge 不阻塞；
+    // 指定 PLAYWRIGHT_EDGE_EXECUTABLE_PATH 时用真实 Edge 二进制，否则回退 Playwright 的 channel: 'msedge'
+    ...(process.env.E2E_EDGE === '1'
+      ? [{
+          name: 'msedge',
+          use: {
+            ...devices['Desktop Edge'],
+            ...(edgeExecutablePath ? { launchOptions: { executablePath: edgeExecutablePath } } : { channel: 'msedge' })
+          }
+        }]
+      : [])
   ]
 })

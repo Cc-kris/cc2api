@@ -13,6 +13,7 @@ const { api, editorControl } = vi.hoisted(() => ({
     analyticsCTR: vi.fn(),
     analyticsDistribution: vi.fn(),
     analyticsExport: vi.fn(),
+    listAIConfigs: vi.fn(),
   },
   editorControl: { editor: null as any },
 }))
@@ -103,6 +104,7 @@ import { createI18n } from 'vue-i18n'
 import contentV04Messages from '@/i18n/locales/contentV04'
 import Select from '@/components/common/Select.vue'
 import ContentCenterView from '../ContentCenterView.vue'
+import AIConfigPanel from '@/components/admin/content/AIConfigPanel.vue'
 
 const persistedNews = {
   id: 1381,
@@ -532,6 +534,105 @@ describe('ContentCenterView news body editing integration', () => {
     localeSelect!.vm.$emit('update:modelValue', 'zh')
     await flushPromises()
     expect((api.analyticsTrends.mock.calls.at(-1)?.[0] as any).locale).toBe('zh')
+    wrapper.unmount()
+  })
+})
+
+// R15-01/AC-14：内容中心所有下拉必须走 common/Select，不得渲染浏览器原生 select
+describe('R15 内容中心下拉统一为 common/Select（AC-14）', () => {
+  const selectByTest = (wrapper: ReturnType<typeof mount>, name: string) =>
+    wrapper.findAllComponents(Select).find((s) => s.attributes('data-test') === name)
+
+  const clickButton = async (wrapper: ReturnType<typeof mount>, text: string) => {
+    const button = wrapper.findAll('button').find((b) => b.text().trim() === text)
+    expect(button, `${text} 按钮应存在`).toBeTruthy()
+    await button!.trigger('click')
+    await flushPromises()
+  }
+
+  it('新闻动态/新闻源/自动化设置/深度解析/AI 创作与文章编辑弹窗均无原生 select', async () => {
+    ;(api as any).listArticles = vi.fn(async () =>
+      response({
+        items: [
+          {
+            id: 501,
+            version: 1,
+            title: '文章A',
+            slug: 'article-a',
+            locale: 'zh-CN',
+            status: 'draft',
+            summary: '',
+            readCount: 0,
+            publishedAt: null,
+            tags: [],
+            model: 'gpt-4o',
+            category: '科技',
+          },
+        ],
+        total: 1,
+      }),
+    )
+    // AI 创作面板需存在默认模型配置才渲染（AIConfigPanel 挂载时拉取）
+    ;(api as any).listAIConfigs.mockImplementation(async () =>
+      response({
+        configs: [
+          { id: 1, label: '默认', provider: 'openai', baseUrl: 'https://api.openai.com/v1', isDefault: true, defaultModel: 'gpt-4o', models: ['gpt-4o'] },
+        ],
+      }),
+    )
+    const wrapper = await mountContentCenter()
+
+    // 新闻动态 → 已抓取新闻
+    expect(wrapper.findAll('select')).toHaveLength(0)
+    expect(selectByTest(wrapper, 'news-status'), '新闻状态下拉应为 common/Select').toBeTruthy()
+
+    // 新闻源
+    await clickButton(wrapper, '新闻源')
+    expect(wrapper.findAll('select')).toHaveLength(0)
+    expect(selectByTest(wrapper, 'news-source-type'), '新闻源类型应为 common/Select').toBeTruthy()
+
+    // 自动化设置
+    await clickButton(wrapper, '自动化设置')
+    expect(wrapper.findAll('select')).toHaveLength(0)
+    expect(selectByTest(wrapper, 'automation-publish-mode'), '发布模式应为 common/Select').toBeTruthy()
+
+    // 深度解析（文章筛选 + 文章编辑弹窗）
+    await clickButton(wrapper, '深度解析')
+    expect(wrapper.findAll('select')).toHaveLength(0)
+    expect(selectByTest(wrapper, 'article-status'), '文章状态下拉应为 common/Select').toBeTruthy()
+    expect(selectByTest(wrapper, 'article-model'), '文章模型下拉应为 common/Select').toBeTruthy()
+    await clickButton(wrapper, '编辑')
+    expect(wrapper.findAll('select')).toHaveLength(0)
+    expect(selectByTest(wrapper, 'article-category'), '文章分类应为 common/Select').toBeTruthy()
+
+    // AI 创作（brief 面板需存在默认模型配置才渲染）
+    const configPanel = wrapper.findComponent(AIConfigPanel)
+    if (configPanel.exists()) {
+      configPanel.vm.$emit('configs-updated', [
+        { id: 1, name: '默认', isDefault: true, defaultModel: 'gpt-4o', models: ['gpt-4o'] },
+      ])
+      await flushPromises()
+    }
+    await clickButton(wrapper, 'AI 创作')
+    expect(wrapper.findAll('select')).toHaveLength(0)
+    expect(selectByTest(wrapper, 'brief-language'), 'AI brief 语言应为 common/Select').toBeTruthy()
+
+    wrapper.unmount()
+  })
+
+  it('新闻状态经 common/Select 选择后按 status 重新请求列表', async () => {
+    const wrapper = await mountContentCenter()
+    const requestsBefore = api.listNews.mock.calls.length
+    const statusSelect = selectByTest(wrapper, 'news-status')
+    expect(statusSelect).toBeTruthy()
+
+    statusSelect!.vm.$emit('update:modelValue', 'published')
+    statusSelect!.vm.$emit('change', 'published', { value: 'published', label: '已发布' })
+    await flushPromises()
+
+    expect(api.listNews.mock.calls.length).toBe(requestsBefore + 1)
+    expect(api.listNews.mock.calls.at(-1)?.[0]).toMatchObject({ status: 'published', page: 1 })
+    expect((statusSelect!.vm as any).modelValue).toBe('published')
     wrapper.unmount()
   })
 })
