@@ -702,6 +702,9 @@
                 :key="rel.id || rel.slug"
                 :to="itemPath(rel)"
                 class="more-related-card"
+                data-analytics-placement="article_detail_related"
+                :data-analytics-id="rel.id"
+                @click="trackPlacementClick('article_detail_related', rel)"
               >
                 <div class="more-card-meta font-mono">
                   <span class="more-card-cat">{{ rel.displayCategory || rel.category || 'CCAI' }}</span>
@@ -831,6 +834,9 @@
                 :to="itemPath(featuredItems[0])"
                 class="public-featured-large"
                 data-testid="featured-large-card"
+                data-analytics-placement="home_hero"
+                :data-analytics-id="featuredItems[0].id"
+                @click="trackPlacementClick('home_hero', featuredItems[0])"
               >
                 <div class="public-featured-cover public-featured-cover-large">
                   <img
@@ -865,6 +871,9 @@
                   :key="item.id || item.slug"
                   :to="itemPath(item)"
                   class="public-featured-small"
+                  data-analytics-placement="home_hero"
+                  :data-analytics-id="item.id"
+                  @click="trackPlacementClick('home_hero', item)"
                 >
                   <div class="public-featured-cover public-featured-cover-small">
                     <img
@@ -895,6 +904,9 @@
                 :key="item.id"
                 :to="itemPath(item)"
                 class="neo-article-row-card"
+                data-analytics-placement="articles_list"
+                :data-analytics-id="item.id"
+                @click="trackPlacementClick('articles_list', item)"
               >
                 <div class="row-left-strip" :class="'strip-' + (idx % 3)"></div>
                 <div class="article-row-main">
@@ -922,6 +934,9 @@
               v-if="featuredItem"
               :to="itemPath(featuredItem)"
               class="neo-news-spotlight"
+              data-analytics-placement="news_list"
+              :data-analytics-id="featuredItem.id"
+              @click="trackPlacementClick('news_list', featuredItem)"
             >
               <div class="spotlight-badge-col">
                 <span class="live-pill">
@@ -969,6 +984,9 @@
                 :key="item.id"
                 :to="itemPath(item)"
                 class="timeline-news-card"
+                data-analytics-placement="news_list"
+                :data-analytics-id="item.id"
+                @click="trackPlacementClick('news_list', item)"
               >
                 <div class="timeline-rail">
                   <span class="timeline-node"></span>
@@ -1085,6 +1103,8 @@ import { apiClient } from '@/api/client'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { availableLocales, setLocale, type LocaleCode } from '@/i18n'
+import { createContentAnalyticsTracker, referrerHostOf } from '@/utils/contentAnalyticsV04'
+import { postPublicAnalyticsEvent } from '@/api/publicAnalyticsV04'
 import {
   buildLocaleSwitchTarget,
   initLocaleSync,
@@ -1865,6 +1885,8 @@ onMounted(() => {
   })
   document.addEventListener('click', closeLocaleMenuOnOutsideClick)
   document.addEventListener('keydown', closeLocaleMenuOnEscape)
+  document.addEventListener('visibilitychange', handleAnalyticsVisibility)
+  window.addEventListener('pagehide', handleAnalyticsPageHide)
 })
 
 onBeforeUnmount(() => {
@@ -1874,6 +1896,12 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', closeLocaleMenuOnEscape)
   window.removeEventListener('resize', resizeCanvas)
   window.removeEventListener('keydown', onKeyDown)
+  document.removeEventListener('visibilitychange', handleAnalyticsVisibility)
+  window.removeEventListener('pagehide', handleAnalyticsPageHide)
+  publicImpressionObserver?.disconnect()
+  publicImpressionObserver = null
+  publicAnalytics.leave()
+  publicAnalytics.dispose()
   if (chargeDoneTimer) clearTimeout(chargeDoneTimer)
   if (fireworkInterval) clearInterval(fireworkInterval)
   if (rafId) cancelAnimationFrame(rafId)
@@ -2367,23 +2395,65 @@ function jumpToHeading(id: string) {
   headings[index]?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function trackPublicEvent(eventName: string, extra: Record<string, any> = {}) {
-  try {
-    const contentType = kind.value === "articles" ? "article" : "news";
-    const payload = extra.payload || {};
-    void apiClient.post("/public/analytics/events", {
-      eventId: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-      eventName,
-      contentType,
-      contentId: detail.value?.id || extra.contentId || undefined,
-      locale: detail.value?.locale || String(route.params.locale || (isZh.value ? "zh-CN" : "en-US")),
-      pagePath: window.location.pathname,
-      placement: extra.placement || (route.params.slug ? `${contentType}_detail` : `${contentType}_list`),
-      payload
-    }).catch(() => {});
-  } catch {
-    // ignore analytics errors
+// BI tracking: one tracker per view; every send is fire-and-forget so a slow
+// or failing collector can never block clicks, navigation or rendering (R11-06).
+const publicAnalytics = createContentAnalyticsTracker({
+  send: (event) => postPublicAnalyticsEvent(event)
+})
+let publicImpressionObserver: IntersectionObserver | null = null
+
+function startPublicView() {
+  if (typeof window === 'undefined') return
+  const contentType = kind.value === "news" ? "news" : "article";
+  const rawId = Number(detail.value?.id);
+  publicAnalytics.start({
+    contentType,
+    contentId: Number.isFinite(rawId) && rawId > 0 ? rawId : undefined,
+    locale: String(route.params.locale || (isZh.value ? "zh-CN" : "en-US")),
+    pagePath: window.location.pathname + window.location.search,
+    referrerHost: referrerHostOf(document.referrer, window.location.host)
+  });
+  void nextTick(observePublicPlacements);
+}
+
+// Exposure is measured once per placement+content: the observer unobserves as
+// soon as the card is half visible, and the tracker de-duplicates as well.
+function observePublicPlacements() {
+  publicImpressionObserver?.disconnect();
+  if (typeof IntersectionObserver === "undefined") return;
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const el = entry.target as HTMLElement;
+      const placement = el.dataset.analyticsPlacement;
+      const contentId = Number(el.dataset.analyticsId);
+      if (!placement) continue;
+      publicAnalytics.impression(placement, Number.isFinite(contentId) && contentId > 0 ? contentId : undefined);
+      observer.unobserve(el);
+    }
+  }, { threshold: 0.5 });
+  publicImpressionObserver = observer;
+  document
+    .querySelectorAll<HTMLElement>("[data-analytics-placement]")
+    .forEach((el) => observer.observe(el));
+}
+
+function trackPlacementClick(placement: string, item?: { id?: number | string } | null) {
+  const contentId = Number(item?.id);
+  publicAnalytics.click(placement, Number.isFinite(contentId) && contentId > 0 ? contentId : undefined);
+}
+
+function handleAnalyticsVisibility() {
+  if (document.visibilityState === "hidden") {
+    publicAnalytics.heartbeat();
+    publicAnalytics.pause();
+  } else {
+    publicAnalytics.resume();
   }
+}
+
+function handleAnalyticsPageHide() {
+  publicAnalytics.leave();
 }
 
 function extractListItems(res: any): any[] {
@@ -2586,7 +2656,7 @@ async function loadPublicContent() {
         detail.value = localizeItem(loaded);
         // 请求语言无译文时回退到内容自身语言展示，但保留 URL 前缀（分享链接不被改写）
         updateSeoMetadata();
-        trackPublicEvent("page_view");
+        startPublicView();
       }
     } else {
       detail.value = null;
@@ -2609,7 +2679,7 @@ async function loadPublicContent() {
         void router.replace({ path: route.path, query }).catch(() => {});
       }
       updateSeoMetadata();
-      trackPublicEvent("page_view");
+      startPublicView();
     }
   } catch (err: any) {
     console.warn("Public content load note:", err?.message);
@@ -2619,6 +2689,8 @@ async function loadPublicContent() {
 }
 
 watch([() => route.fullPath, isZh], () => {
+  // Close the old view first so its duration/leave are not lost on navigation.
+  publicAnalytics.leave()
   if (!isHome.value) {
     void loadPublicContent();
   } else {
