@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
@@ -195,6 +197,20 @@ type PublicSitemapEntry struct {
 
 type PublicContentService struct {
 	repo PublicContentRepository
+
+	cacheOnce sync.Once
+	caches    *publicContentCaches
+}
+
+// publicCaches lazily builds this instance's snapshot caches so zero-value
+// services (constructed as struct literals in tests) still get caching.
+func (s *PublicContentService) publicCaches() *publicContentCaches {
+	s.cacheOnce.Do(func() {
+		if s.caches == nil {
+			s.caches = newPublicContentCaches()
+		}
+	})
+	return s.caches
 }
 
 func NewPublicContentService(repo PublicContentRepository) *PublicContentService {
@@ -237,6 +253,14 @@ func (s *PublicContentService) ListNews(ctx context.Context, locale string, page
 	if err != nil {
 		return PublicNewsPage{}, err
 	}
+	// Capture the published snapshot before the cache lookup and the fallback
+	// query so a write-back can only claim the version this read really saw.
+	snapshot := PublicContentCacheVersion()
+	cacheKey := publicContentCacheKeyFor("/news/page", locale,
+		"page="+strconv.Itoa(offset/limit+1), "size="+strconv.Itoa(limit))
+	if cached, ok := s.publicCaches().newsPage.Get(cacheKey); ok {
+		return cached, nil
+	}
 	result, err := s.repo.ListPublishedNews(ctx, locale, limit, offset)
 	if err != nil {
 		return PublicNewsPage{}, err
@@ -252,6 +276,7 @@ func (s *PublicContentService) ListNews(ctx context.Context, locale string, page
 	result.HasNext = result.Page < result.TotalPages
 	result.Locale = locale
 	result.Fallback = publicFallbackLocale(locale)
+	s.publicCaches().newsPage.Put(cacheKey, snapshot, clonePublicNewsPage(result))
 	return result, nil
 }
 
@@ -259,6 +284,11 @@ func (s *PublicContentService) GetNews(ctx context.Context, locale, slug string)
 	locale, slug, err := normalizePublicContentKey(locale, slug)
 	if err != nil {
 		return nil, err
+	}
+	snapshot := PublicContentCacheVersion()
+	cacheKey := publicContentCacheKeyFor("/news/detail", locale, "slug="+slug)
+	if cached, ok := s.publicCaches().newsDetail.Get(cacheKey); ok {
+		return &cached, nil
 	}
 	item, err := s.findPublishedNews(ctx, locale, slug)
 	if errors.Is(err, ErrPublicContentNotFound) {
@@ -269,6 +299,7 @@ func (s *PublicContentService) GetNews(ctx context.Context, locale, slug string)
 	}
 	item.RequestedLocale = locale
 	item.ImageURL = publicMediaURL(item.ImageURL)
+	s.publicCaches().newsDetail.Put(cacheKey, snapshot, clonePublicNews(*item))
 	return item, nil
 }
 
@@ -323,6 +354,12 @@ func (s *PublicContentService) ListArticles(ctx context.Context, locale string, 
 	if err != nil {
 		return PublicArticlePage{}, err
 	}
+	snapshot := PublicContentCacheVersion()
+	cacheKey := publicContentCacheKeyFor("/articles/page", locale,
+		"page="+strconv.Itoa(offset/limit+1), "size="+strconv.Itoa(limit))
+	if cached, ok := s.publicCaches().articlePage.Get(cacheKey); ok {
+		return cached, nil
+	}
 	result, err := s.repo.ListPublishedArticles(ctx, locale, limit, offset)
 	if err != nil {
 		return PublicArticlePage{}, err
@@ -338,6 +375,7 @@ func (s *PublicContentService) ListArticles(ctx context.Context, locale string, 
 	result.HasNext = result.Page < result.TotalPages
 	result.Locale = locale
 	result.Fallback = publicFallbackLocale(locale)
+	s.publicCaches().articlePage.Put(cacheKey, snapshot, clonePublicArticlePage(result))
 	return result, nil
 }
 
@@ -352,6 +390,11 @@ func (s *PublicContentService) ListFeaturedArticles(ctx context.Context, locale 
 	if !ok {
 		return nil, ErrPublicContentRepositoryContract
 	}
+	snapshot := PublicContentCacheVersion()
+	cacheKey := publicContentCacheKeyFor("/articles/featured", locale)
+	if cached, ok := s.publicCaches().featured.Get(cacheKey); ok {
+		return cached, nil
+	}
 	items, err := repo.ListFeaturedArticles(ctx, locale, MaxPublicFeaturedArticles)
 	if err != nil {
 		return nil, err
@@ -365,6 +408,7 @@ func (s *PublicContentService) ListFeaturedArticles(ctx context.Context, locale 
 	if items == nil {
 		items = []PublicArticleListItem{}
 	}
+	s.publicCaches().featured.Put(cacheKey, snapshot, clonePublicArticleList(items))
 	return items, nil
 }
 
@@ -372,6 +416,11 @@ func (s *PublicContentService) GetArticle(ctx context.Context, locale, slug stri
 	locale, slug, err := normalizePublicContentKey(locale, slug)
 	if err != nil {
 		return nil, err
+	}
+	snapshot := PublicContentCacheVersion()
+	cacheKey := publicContentCacheKeyFor("/articles/detail", locale, "slug="+slug)
+	if cached, ok := s.publicCaches().articleDetail.Get(cacheKey); ok {
+		return &cached, nil
 	}
 	item, err := s.findPublishedArticle(ctx, locale, slug)
 	if errors.Is(err, ErrPublicContentNotFound) {
@@ -387,6 +436,7 @@ func (s *PublicContentService) GetArticle(ctx context.Context, locale, slug stri
 	if strings.TrimSpace(item.Author) == "" {
 		item.Author = "CCAI 编辑部"
 	}
+	s.publicCaches().articleDetail.Put(cacheKey, snapshot, clonePublicArticle(*item))
 	return item, nil
 }
 
