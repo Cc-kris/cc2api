@@ -63,6 +63,12 @@ export const contentAdminAPI = {
     apiClient.post(`/admin/content/articles/translations/${id}/unpublish`),
   createTranslationTask: (id: number, body: unknown) =>
     apiClient.post(`/admin/content/articles/${id}/translations/tasks`, body),
+  deleteTranslation: (id: number) =>
+    apiClient.delete(`/admin/content/articles/translations/${id}`),
+  listNewsTranslationTasks: (id: number) =>
+    apiClient.get(`/admin/content/news/${id}/translation-tasks`),
+  getNewsTranslationTask: (id: number, taskId: string) =>
+    apiClient.get(`/admin/content/news/${id}/translation-tasks/${taskId}`),
   analytics: (params?: Record<string, unknown>) =>
     apiClient.get("/admin/bi/analytics", { params }),
   analyticsOverview: (params?: Record<string, unknown>) =>

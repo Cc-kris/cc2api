@@ -80,6 +80,7 @@
                 <th>标题</th>
                 <th>来源</th>
                 <th>状态</th>
+                <th>译文</th>
                 <th>发布时间</th>
                 <th>操作</th>
               </tr>
@@ -111,6 +112,18 @@
                 <td>{{ item.sourceName || "-" }}</td>
                 <td>
                   <span class="status">{{ item.status }}</span>
+                </td>
+                <td class="trans-cell">
+                  <template v-if="newsTranslationSummary(item.id).length">
+                    <span
+                      v-for="t in newsTranslationSummary(item.id)"
+                      :key="t.id || t.targetLocale"
+                      class="trans-chip-mini"
+                      :class="'chip-' + translationStatusKey(t.status)"
+                      :title="t.errorCode ? '错误：' + t.errorCode : ''"
+                    >{{ localeShort(t.targetLocale) }}·{{ translationStatusText(t.status) }}</span>
+                  </template>
+                  <span v-else class="muted">未翻译</span>
                 </td>
                 <td>{{ formatDate(item.publishedAt) }}</td>
                 <td class="actions-cell actions-sticky">
@@ -218,6 +231,27 @@
             </div>
           </div>
           </div>
+          <div class="news-translation-panel">
+            <div class="config-title">译文任务</div>
+            <div v-if="newsTranslationTasks.length" class="news-translation-tasks">
+              <div
+                v-for="task in newsTranslationTasks"
+                :key="task.id"
+                class="news-translation-task"
+              >
+                <span class="task-locale">{{ localeShort(task.targetLocale || task.locale) }}</span>
+                <span class="task-status" :class="'chip-' + translationStatusKey(task.status)">
+                  {{ translationStatusText(task.status) }}
+                </span>
+                <small v-if="task.errorCode || task.error" class="task-error">
+                  {{ task.errorCode || task.error }}
+                </small>
+              </div>
+            </div>
+            <small v-else class="muted">
+              暂无新闻译文任务；新闻的自动翻译由「自动化设置 → 目标语言」驱动。
+            </small>
+          </div>
           <div class="form-actions modal-fixed-footer">
             <button class="button" @click="saveNews">保存新闻</button>
             <button class="secondary-button" @click="closeNewsEditor">
@@ -245,7 +279,17 @@
             <option value="rss">RSS</option>
             <option value="atom">Atom</option>
             <option value="public_json">Public JSON</option></select
-          ><button
+          ><input
+            v-model.number="sourceForm.intervalMinutes"
+            class="interval-input"
+            type="number"
+            min="1"
+            placeholder="抓取间隔（分钟）"
+            title="抓取间隔（分钟，默认 15）"
+          /><label class="inline-check">
+            <input v-model="sourceForm.enabled" type="checkbox" />
+            <span>创建后立即启用</span>
+          </label><button
             class="button"
             :disabled="sourceCreateDisabled"
             :title="sourceCreateBlockedReason"
@@ -452,11 +496,24 @@
               min="1"
               :class="{ 'input-invalid': automationErrors.dedupeWindowHours }"
               @input="automationErrors.dedupeWindowHours = ''" /></label
-          ><label
-            >目标语言<input
-              v-model="automation.targetLocalesText"
-              placeholder="zh-CN,en-US"
-          /></label>
+          ><label class="target-locales-label"
+            >目标语言（中文为源语言）
+            <div class="locale-checkbox-group">
+              <label
+                v-for="loc in ADMIN_TARGET_LOCALES"
+                :key="loc.value"
+                class="locale-checkbox"
+              >
+                <input
+                  v-model="automationTargetLocales"
+                  type="checkbox"
+                  :value="loc.value"
+                />
+                <span>{{ loc.label }}</span>
+              </label>
+            </div>
+            <small class="muted">新闻抓取后自动按勾选语言生成译文任务；未勾选则不翻译。</small></label
+          >
         </div>
         <div v-if="automationErrors.dedupeWindowHours" class="field-errors">
           <small class="error-text">{{ automationErrors.dedupeWindowHours }}</small>
@@ -530,6 +587,7 @@
                   <th>标题</th>
                   <th>语言</th>
                   <th>状态</th>
+                  <th>译文</th>
                   <th>精选</th>
                   <th>阅读数</th>
                   <th>发布时间</th>
@@ -552,6 +610,18 @@
                   </td>
                   <td><span class="locale-tag">{{ item.locale }}</span></td>
                   <td><span class="status">{{ item.status }}</span></td>
+                  <td class="trans-cell">
+                    <template v-if="articleTranslationSummary(item.id).length">
+                      <span
+                        v-for="t in articleTranslationSummary(item.id)"
+                        :key="t.id || t.locale"
+                        class="trans-chip-mini"
+                        :class="'chip-' + translationStatusKey(t.status)"
+                        :title="t.errorCode ? '错误：' + t.errorCode : ''"
+                      >{{ localeShort(t.locale) }}·{{ translationStatusText(t.status) }}</span>
+                    </template>
+                    <span v-else class="muted">未翻译</span>
+                  </td>
                   <td class="featured-cell" @click.stop>
                     <input
                       type="checkbox"
@@ -877,28 +947,103 @@
                   <small>为海外用户构建多语言版本，支持一键 AI 全自动互译</small>
                 </div>
                 <div class="translation-actions">
-                  <select v-model="translationLocale" class="locale-select">
-                    <option value="en-US">English (en-US)</option>
-                    <option value="zh-CN">简体中文 (zh-CN)</option>
-                    <option value="ja-JP">日本語 (ja-JP)</option>
-                    <option value="ko-KR">한국어 (ko-KR)</option>
-                  </select>
-                  <button class="button" @click="saveTranslation">保存译文</button>
-                  <button class="secondary-button sparkle-btn" @click="generateTranslation">✨ AI 智能翻译</button>
+                  <button type="button" class="secondary-button" @click="selectedArticleLocales = ADMIN_TARGET_LOCALES.map((l) => l.value)">
+                    全选语言
+                  </button>
+                  <button type="button" class="secondary-button" @click="selectedArticleLocales = []">
+                    清空
+                  </button>
+                  <button
+                    v-if="translationForm.id"
+                    type="button"
+                    class="secondary-button"
+                    @click="saveTranslation"
+                  >
+                    保存当前译文
+                  </button>
+                  <button
+                    type="button"
+                    class="button primary sparkle-btn"
+                    :disabled="translationBusy || !selectedArticleLocales.length"
+                    @click="generateSelectedTranslations"
+                  >
+                    ✨ 生成所选语言译文（{{ selectedArticleLocales.length }}）
+                  </button>
                 </div>
               </div>
-              <div v-if="translations.length" class="translations-chips">
+              <div class="locale-checkboxes" role="group" aria-label="目标语言">
+                <label v-for="l in ADMIN_TARGET_LOCALES" :key="l.value" class="locale-checkbox">
+                  <input
+                    v-model="selectedArticleLocales"
+                    type="checkbox"
+                    :value="l.value"
+                    :data-locale="l.value"
+                  />
+                  <span>{{ l.label }}</span>
+                  <small>{{ l.value }}</small>
+                </label>
+              </div>
+              <div class="translation-rows">
                 <div
-                  v-for="t in translations"
-                  :key="t.id"
-                  class="trans-chip"
+                  v-for="l in ADMIN_TARGET_LOCALES"
+                  :key="'trans-row-' + l.value"
+                  class="translation-row"
+                  :data-locale="l.value"
                 >
+                  <span class="trans-locale">{{ l.label }} <small>{{ l.value }}</small></span>
+                  <span
+                    class="status-badge"
+                    :class="'badge-' + translationStatusKey(translationFor(l.value)?.status)"
+                  >{{ translationStatusText(translationFor(l.value)?.status) }}</span>
+                  <span v-if="translationFor(l.value)?.errorCode" class="error-text">
+                    {{ translationFor(l.value)?.errorCode }}
+                  </span>
+                  <template v-if="translationFor(l.value)">
+                    <button
+                      v-if="translationFor(l.value).status === 'published'"
+                      type="button"
+                      class="link-action text-amber-600"
+                      @click="unpublishTranslation(translationFor(l.value))"
+                    >下架</button>
+                    <button
+                      v-else
+                      type="button"
+                      class="link-action text-blue-600"
+                      @click="publishTranslation(translationFor(l.value))"
+                    >发布</button>
+                    <button
+                      v-if="translationFor(l.value).status !== 'published'"
+                      type="button"
+                      class="link-action danger"
+                      :disabled="translationBusy"
+                      @click="cancelTranslation(l.value)"
+                    >取消</button>
+                    <button
+                      type="button"
+                      class="link-action"
+                      @click="editTranslation(translationFor(l.value))"
+                    >编辑</button>
+                  </template>
+                  <button
+                    v-else
+                    type="button"
+                    class="link-action"
+                    :disabled="translationBusy"
+                    @click="generateTranslationFor(l.value)"
+                  >{{ translationBusy ? "处理中…" : "重试/翻译" }}</button>
+                </div>
+              </div>
+              <div v-if="otherTranslations.length" class="translations-chips">
+                <div v-for="t in otherTranslations" :key="t.id" class="trans-chip">
                   <span class="trans-chip-title" @click="editTranslation(t)">🌐 {{ t.locale }} - {{ t.title || '无标题' }}</span>
-                  <span class="status-badge" :class="'badge-' + t.status">{{ t.status }}</span>
+                  <span class="status-badge" :class="'badge-' + translationStatusKey(t.status)">{{ translationStatusText(t.status) }}</span>
                   <button v-if="t.status !== 'published'" type="button" class="link-action text-blue-600" @click="publishTranslation(t)">发布</button>
                   <button v-else type="button" class="link-action text-amber-600" @click="unpublishTranslation(t)">下架</button>
                 </div>
               </div>
+              <small class="translation-hint muted">
+                中文为源语言；勾选语言后生成会逐语言创建真实翻译任务，状态实时来自译文记录。
+              </small>
             </div>
           </div>
           <div class="modal-drawer-footer">
@@ -1571,7 +1716,80 @@ function selectAIModel(value: string | number | boolean | null) {
 
 
 const translations = ref<any[]>([]);
-const translationLocale = ref("en-US");
+// 管理端多语言目标（中文为源语言，不在此列）
+const ADMIN_TARGET_LOCALES = [
+  { value: "en-US", label: "English" },
+  { value: "ru-RU", label: "Русский" },
+  { value: "fr-FR", label: "Français" },
+  { value: "de-DE", label: "Deutsch" },
+];
+const selectedArticleLocales = ref<string[]>([]);
+const translationBusy = ref(false);
+const articleTranslationSummaries = ref<Record<number, any[]>>({});
+const newsTranslationSummaries = ref<Record<number, any[]>>({});
+const newsTranslationTasks = ref<any[]>([]);
+const TRANSLATION_STATUS_TEXT: Record<string, string> = {
+  draft: "待发布",
+  review: "待发布",
+  published: "已发布",
+  unpublished: "已下架",
+  deleted: "已删除",
+  pending: "处理中",
+  queued: "排队中",
+  running: "翻译中",
+  in_progress: "翻译中",
+  succeeded: "已完成",
+  success: "已完成",
+  failed: "失败",
+  error: "失败",
+  cancelled: "已取消",
+  canceled: "已取消",
+};
+function translationStatusKey(status?: string) {
+  const raw = String(status || "").toLowerCase();
+  if (!raw) return "none";
+  if (["queued", "pending"].includes(raw)) return "queued";
+  if (["running", "in_progress"].includes(raw)) return "running";
+  if (["published", "succeeded", "success"].includes(raw)) return "success";
+  if (["failed", "error"].includes(raw)) return "failed";
+  if (["draft", "review"].includes(raw)) return "draft";
+  if (["cancelled", "canceled", "deleted", "unpublished"].includes(raw)) return "cancelled";
+  return "draft";
+}
+function translationStatusText(status?: string) {
+  const raw = String(status || "").toLowerCase();
+  if (!raw) return "未翻译";
+  return TRANSLATION_STATUS_TEXT[raw] || raw;
+}
+function localeShort(locale?: string) {
+  const key = String(locale || "").toLowerCase();
+  if (key.startsWith("en")) return "EN";
+  if (key.startsWith("ru")) return "RU";
+  if (key.startsWith("fr")) return "FR";
+  if (key.startsWith("de")) return "DE";
+  if (key.startsWith("zh")) return "ZH";
+  return String(locale || "").toUpperCase() || "?";
+}
+function translationFor(locale: string) {
+  return translations.value.find(
+    (t: any) => String(t.locale) === locale && String(t.status) !== "deleted",
+  );
+}
+const otherTranslations = computed(() =>
+  translations.value.filter(
+    (t: any) =>
+      String(t.status) !== "deleted" &&
+      !ADMIN_TARGET_LOCALES.some((l) => l.value === String(t.locale)),
+  ),
+);
+function articleTranslationSummary(id: number) {
+  return (articleTranslationSummaries.value[id] || []).filter(
+    (t: any) => String(t.status) !== "deleted",
+  );
+}
+function newsTranslationSummary(id: number) {
+  return newsTranslationSummaries.value[id] || [];
+}
 const translationForm = ref<any>({
   id: 0,
   title: "",
@@ -1616,7 +1834,14 @@ const articleFrom = ref("");
 const articleTo = ref("");
 const articleMinReads = ref("");
 const articleMaxReads = ref("");
-const sourceForm = ref<any>({ name: "", url: "", sourceType: "rss", mappingJsonText: "" });
+const sourceForm = ref<any>({
+  name: "",
+  url: "",
+  sourceType: "rss",
+  mappingJsonText: "",
+  intervalMinutes: 15,
+  enabled: true,
+});
 const sourceFormErrors = ref<{ name: string; url: string }>({ name: "", url: "" });
 // S5：字段级校验（红字提示 + 提交按钮禁用）
 function validateSourceField(field: "name" | "url") {
@@ -1685,6 +1910,7 @@ const automation = ref<any>({
   targetLocalesText: "zh-CN",
 });
 const automationErrors = ref<{ dedupeWindowHours: string }>({ dedupeWindowHours: "" });
+const automationTargetLocales = ref<string[]>([]);
 const brief = ref<any>({
   topic: "",
   model: "",
@@ -1938,6 +2164,7 @@ async function loadNews(pageOrEvent: number | Event = newsPage.value) {
   allNewsSelected.value = false;
   selectedNewsIds.value = [];
   });
+  void loadNewsTranslationSummaries(news.value);
 }
 function toggleAllNews() {
   selectedNewsIds.value = allNewsSelected.value
@@ -2050,6 +2277,7 @@ async function loadArticles(pageOrEvent: number | Event = articlePage.value) {
   allArticlesSelected.value = false;
   selectedArticleIds.value = [];
   });
+  void loadArticleTranslationSummaries(articles.value);
 }
 async function loadModels() {
   try {
@@ -2073,6 +2301,13 @@ async function loadModels() {
 async function loadTranslations(id: number) {
   const { data } = await contentAPI.listTranslations(id);
   translations.value = unwrap(data);
+  // 勾选态 = 已存在译文的语言（删除态除外），保证 UI 与真实数据一致
+  const existing = translations.value
+    .filter((t: any) => String(t.status) !== "deleted")
+    .map((t: any) => String(t.locale));
+  selectedArticleLocales.value = ADMIN_TARGET_LOCALES.map((l) => l.value).filter((v) =>
+    existing.includes(v),
+  );
 }
 async function loadBI() {
   const params = { ...biFilters.value };
@@ -2091,6 +2326,7 @@ function closeNewsEditor() {
   newsEditRequest += 1
   newsEditorSession.value += 1
   selectedNews.value = {}
+  newsTranslationTasks.value = []
 }
 
 async function editNews(item: any) {
@@ -2119,6 +2355,7 @@ async function editNews(item: any) {
   }
   await nextTick()
   newsEditorRef.value?.scrollIntoView({ behavior: "smooth", block: "start" })
+  void loadNewsTranslationTasks(Number(item.id))
 }
 function stripEditorHtml(html: string): string {
   const div = document.createElement("div");
@@ -2188,6 +2425,15 @@ async function loadAutomation() {
       : payload.targetLocalesText ||
         (Array.isArray(payload.TargetLocales) ? payload.TargetLocales.join(",") : "zh-CN"),
   };
+  const raw = Array.isArray(payload.targetLocales)
+    ? payload.targetLocales
+    : String(
+        payload.targetLocalesText ||
+          (Array.isArray(payload.TargetLocales) ? payload.TargetLocales.join(",") : ""),
+      ).split(/[,，]/);
+  automationTargetLocales.value = ADMIN_TARGET_LOCALES.map((l) => l.value).filter((v) =>
+    raw.map((x: any) => String(x).trim()).includes(v),
+  );
 }
 
 // ---- 新闻行的发表 / 删除：必须走 /admin/content/news 接口（新闻与文章是两套表） ----
@@ -2253,15 +2499,24 @@ async function createSource() {
       url,
       mappingJson,
       language: "zh-CN",
-      enabled: true,
-      intervalMinutes: 15,
+      enabled: sourceForm.value.enabled !== false,
+      intervalMinutes: Number(sourceForm.value.intervalMinutes) > 0 ? Number(sourceForm.value.intervalMinutes) : 15,
       rateLimitPerMinute: 60,
       authorizationNote: "公开 feed，已获授权",
       robotsPolicy: "遵守 robots 规则",
     });
-    sourceForm.value = { name: "", url: "", sourceType: "rss", mappingJsonText: "" };
+    const createdInterval = Number(sourceForm.value.intervalMinutes) > 0 ? Number(sourceForm.value.intervalMinutes) : 15;
+    const createdEnabled = sourceForm.value.enabled !== false;
+    sourceForm.value = {
+      name: "",
+      url: "",
+      sourceType: "rss",
+      mappingJsonText: "",
+      intervalMinutes: 15,
+      enabled: true,
+    };
     await loadSources();
-    toast("success", "新闻源已创建（默认启用，每 15 分钟抓取）");
+    toast("success", `新闻源已创建（${createdEnabled ? "已启用" : "已停用"}，每 ${createdInterval} 分钟抓取）`);
   }, "新闻源创建失败");
 }
 async function toggleSource(s: any) {
@@ -2352,10 +2607,10 @@ async function saveAutomation() {
     publishStartAt: String(automation.value.publishWindowStart || ""),
     publishEndAt: String(automation.value.publishWindowEnd || ""),
     dedupeWindowHours: dedupe,
-    targetLocales: String(automation.value.targetLocalesText || "")
-      .split(/[,，]/)
-      .map((v: string) => v.trim())
-      .filter(Boolean),
+    targetLocales: automationTargetLocales.value.length
+      ? [...automationTargetLocales.value]
+      : [],
+    targetLocalesText: automationTargetLocales.value.join(","),
   };
   await runAdmin(async () => {
     await contentAPI.updateAutomation(body);
@@ -2802,14 +3057,116 @@ async function unpublishTranslation(item: any) {
     errorMessage.value = "译文下架失败";
   }
 }
-async function generateTranslation() {
-  if (!articleForm.value.id) return;
-  await contentAPI.createTranslationTask(articleForm.value.id, {
-    locale: translationLocale.value,
-    model: brief.value.model,
-    providerKeyRef: brief.value.providerKeyRef,
-  });
-  await loadTranslations(articleForm.value.id);
+async function resolveTranslationModel(): Promise<{ model: string; providerKeyRef: string } | null> {
+  const current = String(brief.value.model || "").trim();
+  if (current) {
+    return { model: current, providerKeyRef: brief.value.providerKeyRef || "" };
+  }
+  try {
+    const { data } = await contentAPI.getAIConfig();
+    const cfg: any = data?.data || data || {};
+    const model = String(cfg.defaultModel || cfg.model || "").trim();
+    if (model) {
+      brief.value.model = model;
+      brief.value.providerKeyRef = cfg.providerKeyRef || brief.value.providerKeyRef || "";
+      return { model, providerKeyRef: brief.value.providerKeyRef || "" };
+    }
+  } catch {
+    // 读取默认模型失败时走下方统一提示
+  }
+  return null;
+}
+async function createTranslationTasks(locales: string[]) {
+  const articleId = articleForm.value.id;
+  if (!articleId || !locales.length) return;
+  const resolved = await resolveTranslationModel();
+  if (!resolved?.model) {
+    toast("error", "请先在 AI 创作区选择模型，再生成译文");
+    return;
+  }
+  translationBusy.value = true;
+  try {
+    await contentAPI.createTranslationTask(articleId, {
+      locales,
+      model: resolved.model,
+      providerKeyRef: resolved.providerKeyRef,
+    });
+    await loadTranslations(articleId);
+    toast("success", `已提交 ${locales.length} 个语言的翻译任务`);
+  } catch {
+    toast("error", "翻译任务创建失败，请检查模型配置");
+  } finally {
+    translationBusy.value = false;
+  }
+}
+async function generateSelectedTranslations() {
+  const locales = selectedArticleLocales.value.filter(Boolean);
+  if (!locales.length) {
+    toast("warning", "请先勾选目标语言");
+    return;
+  }
+  await createTranslationTasks(locales);
+}
+async function generateTranslationFor(locale: string) {
+  await createTranslationTasks([locale]);
+}
+async function cancelTranslation(locale: string) {
+  const row = translationFor(locale);
+  if (!row?.id) return;
+  translationBusy.value = true;
+  try {
+    await contentAPI.deleteTranslation(row.id);
+    await loadTranslations(articleForm.value.id);
+    toast("success", `已取消 ${locale} 译文`);
+  } catch {
+    toast("error", "取消译文失败（已发布译文需先下架）");
+  } finally {
+    translationBusy.value = false;
+  }
+}
+async function loadArticleTranslationSummaries(list: any[]) {
+  const rows = await Promise.all(
+    list.slice(0, 24).map(async (item: any) => {
+      if (!item?.id) return [0, []] as [number, any[]];
+      try {
+        const { data } = await contentAPI.listTranslations(item.id);
+        return [item.id, unwrap(data)] as [number, any[]];
+      } catch {
+        return [item.id, []] as [number, any[]];
+      }
+    }),
+  );
+  const next: Record<number, any[]> = {};
+  for (const [id, items] of rows) if (id) next[id] = items;
+  articleTranslationSummaries.value = next;
+}
+async function loadNewsTranslationSummaries(list: any[]) {
+  const rows = await Promise.all(
+    list.slice(0, 24).map(async (item: any) => {
+      if (!item?.id) return [0, []] as [number, any[]];
+      try {
+        const { data } = await contentAPI.listNewsTranslationTasks(item.id);
+        return [item.id, unwrap(data)] as [number, any[]];
+      } catch {
+        return [item.id, []] as [number, any[]];
+      }
+    }),
+  );
+  const next: Record<number, any[]> = {};
+  for (const [id, items] of rows) if (id) next[id] = items;
+  newsTranslationSummaries.value = next;
+}
+async function loadNewsTranslationTasks(id: number) {
+  if (!id) {
+    newsTranslationTasks.value = [];
+    return;
+  }
+  try {
+    const { data } = await contentAPI.listNewsTranslationTasks(id);
+    newsTranslationTasks.value = unwrap(data);
+  } catch {
+    newsTranslationTasks.value = [];
+  }
 }
 async function openGeneratedArticle() {
   const r = writingTaskResult.value;

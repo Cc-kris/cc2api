@@ -2097,3 +2097,76 @@ html.dark .neo-independent-page div.rounded-2xl {
 
 /* Content Center AI model configuration */
 .ai-subtabs,.ai-config-panel header,.ai-config-actions,.ai-config-list li{display:flex;align-items:center;gap:12px}.ai-subtabs{margin:16px 0}.ai-subtabs button{padding:8px 14px;border:1px solid #cbd5e1;border-radius:8px;background:transparent}.ai-subtabs button.active{background:#2563eb;color:#fff}.ai-config-panel{padding:20px;border:1px solid #cbd5e1;border-radius:12px}.ai-config-panel header{justify-content:space-between}.ai-config-panel header p{margin:4px 0;color:#64748b}.ai-config-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:20px 0}.ai-config-form label{display:grid;gap:6px}.ai-config-form input,.ai-config-form select,.ai-config-form textarea{width:100%;padding:8px;border:1px solid #94a3b8;border-radius:6px}.ai-config-form .models-field,.ai-config-form .ai-config-actions{grid-column:1/-1}.ai-config-actions{flex-wrap:wrap}.ai-config-list{padding:0;list-style:none}.ai-config-list li{justify-content:space-between;padding:12px 0;border-top:1px solid #e2e8f0}.ai-config-list li>div:first-child{display:grid;gap:4px}.ai-config-list span,.ai-config-list small{color:#64748b}.ai-config-required{padding:32px;text-align:center;border:1px dashed #94a3b8;border-radius:12px}.ai-config-required p{color:#64748b}@media(max-width:640px){.ai-config-form{grid-template-columns:1fr}.ai-config-form .models-field,.ai-config-form .ai-config-actions{grid-column:auto}.ai-config-list li{align-items:flex-start;flex-direction:column}}
+
+/* ===== TASK-020 多语言译文状态 / 语言勾选 ===== */
+.trans-cell { white-space: normal; min-width: 130px; }
+.trans-cell .muted,
+.translation-hint.muted { color: #94a3b8; font-size: 12px; }
+.trans-chip-mini,
+.trans-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin: 1px 4px 1px 0;
+  padding: 1px 7px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  line-height: 18px;
+  background: #f8fafc;
+  color: #334155;
+}
+.trans-chip-mini.chip-queued, .trans-chip.chip-queued,
+.task-status.chip-queued { border-color: #cbd5e1; background: #f1f5f9; color: #475569; }
+.trans-chip-mini.chip-running, .trans-chip.chip-running,
+.task-status.chip-running { border-color: #f59e0b; background: #fef3c7; color: #92400e; }
+.trans-chip-mini.chip-success, .trans-chip.chip-success,
+.task-status.chip-success { border-color: #10b981; background: #d1fae5; color: #065f46; }
+.trans-chip-mini.chip-failed, .trans-chip.chip-failed,
+.task-status.chip-failed { border-color: #ef4444; background: #fee2e2; color: #991b1b; }
+.trans-chip-mini.chip-cancelled, .trans-chip.chip-cancelled,
+.task-status.chip-cancelled { border-color: #cbd5e1; background: #e2e8f0; color: #475569; }
+.trans-chip-mini.chip-draft, .trans-chip.chip-draft,
+.task-status.chip-draft { border-color: #93c5fd; background: #dbeafe; color: #1e40af; }
+
+.locale-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+.locale-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1.5px solid #121316;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+.locale-checkbox input { width: 14px; height: 14px; margin: 0; }
+.target-locales-label { display: grid; gap: 4px; }
+
+.inline-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.interval-input { max-width: 150px; }
+
+.news-translation-panel {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1.5px dashed #94a3b8;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.news-translation-tasks { display: grid; gap: 6px; margin: 8px 0 4px; }
+.news-translation-task { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.news-translation-task .task-locale { font-family: 'JetBrains Mono', monospace; min-width: 52px; }
+.news-translation-task .task-error { color: #b91c1c; }
+.translation-pending-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 4px;
+}

@@ -219,4 +219,143 @@ describe('ContentCenterView news body editing integration', () => {
     expect((wrapper.get('[data-test="news-rich-editor"]').element as HTMLTextAreaElement).value).toBe(amendedHtml)
     wrapper.unmount()
   })
+  it('文章列表按语言展示译文状态，弹窗可按勾选语言批量创建翻译任务', async () => {
+    const article = { id: 501, title: '多语言验收文章', slug: 'multi-lang-501', locale: 'zh-CN', status: 'published', version: 3 }
+    api.listArticles = vi.fn(() => response({ items: [article], total: 1 }))
+    api.listTranslations = vi.fn((id: number) => response({
+      items: id === 501
+        ? [
+            { id: 11, articleId: 501, locale: 'en-US', status: 'published' },
+            { id: 12, articleId: 501, locale: 'ru-RU', status: 'failed', errorCode: 'llm_timeout' },
+          ]
+        : [],
+    }))
+    api.getAIConfig = vi.fn(() => response({ defaultModel: 'gpt-4o-mini', providerKeyRef: 'default' }))
+    api.createTranslationTask = vi.fn(() => response({ id: 'task-1' }))
+
+    const wrapper = await mountContentCenter()
+    const articleTab = wrapper.findAll('button').find((b) => b.text().trim() === '深度解析')
+    expect(articleTab, 'article tab should exist').toBeTruthy()
+    await articleTab!.trigger('click')
+    await flushPromises()
+
+    const listText = wrapper.text()
+    expect(listText).toContain('EN·已发布')
+    expect(listText).toContain('RU·失败')
+
+    const editButton = wrapper.findAll('button').find((b) => b.text().trim() === '编辑')
+    await editButton!.trigger('click')
+    await flushPromises()
+
+    const localeBoxes = wrapper.findAll('input[data-locale]')
+    expect(localeBoxes.length).toBe(4)
+    const locales = localeBoxes.map((box) => box.attributes('data-locale'))
+    expect(locales).toEqual(['en-US', 'ru-RU', 'fr-FR', 'de-DE'])
+    expect(localeBoxes[0].element as HTMLInputElement).toHaveProperty('checked', true)
+    expect(localeBoxes[2].element as HTMLInputElement).toHaveProperty('checked', false)
+
+    await localeBoxes[2].setValue(true)
+    await localeBoxes[3].setValue(true)
+    await flushPromises()
+
+    const generateButton = wrapper.findAll('button').find((b) => b.text().includes('生成所选语言译文'))
+    expect(generateButton, 'generate selected locales button should exist').toBeTruthy()
+    expect(generateButton!.text()).toContain('4')
+    await generateButton!.trigger('click')
+    await flushPromises()
+
+    expect(api.createTranslationTask).toHaveBeenCalledTimes(1)
+    const [articleId, body] = api.createTranslationTask.mock.calls[0]
+    expect(articleId).toBe(501)
+    expect(body.locales).toEqual(['en-US', 'ru-RU', 'fr-FR', 'de-DE'])
+    expect(body.model).toBe('gpt-4o-mini')
+    wrapper.unmount()
+  })
+
+  it('自动化设置用语言勾选组保存目标语言数组', async () => {
+    api.getAutomation = vi.fn(() => response({ targetLocales: ['en-US'], dedupeWindowHours: 24 }))
+    api.updateAutomation = vi.fn(() => response({}))
+
+    const wrapper = await mountContentCenter()
+    const automationTab = wrapper.findAll('button').find((b) => b.text().trim() === '自动化设置')
+    expect(automationTab, 'automation tab should exist').toBeTruthy()
+    await automationTab!.trigger('click')
+    await flushPromises()
+
+    const group = wrapper.get('.locale-checkbox-group')
+    const boxes = group.findAll('input[type="checkbox"]')
+    expect(boxes.length).toBe(4)
+    expect((boxes[0].element as HTMLInputElement).checked).toBe(true)
+    expect((boxes[2].element as HTMLInputElement).checked).toBe(false)
+
+    await boxes[2].setValue(true)
+    await flushPromises()
+
+    const saveButton = wrapper.findAll('button').find((b) => b.text().trim() === '保存自动化设置')
+    await saveButton!.trigger('click')
+    await flushPromises()
+
+    expect(api.updateAutomation).toHaveBeenCalledTimes(1)
+    const body = api.updateAutomation.mock.calls[0][0]
+    expect(body.targetLocales).toEqual(['en-US', 'fr-FR'])
+    expect(body.targetLocalesText).toBe('en-US,fr-FR')
+    wrapper.unmount()
+  })
+
+  it('新闻源创建提交真实抓取间隔与启用状态', async () => {
+    api.createSource = vi.fn(() => response({ id: 9 }))
+
+    const wrapper = await mountContentCenter()
+    const sourcesTab = wrapper.findAll('button').find((b) => b.text().trim() === '新闻源')
+    expect(sourcesTab, 'sources tab should exist').toBeTruthy()
+    await sourcesTab!.trigger('click')
+    await flushPromises()
+
+    const nameInput = wrapper.findAll('input').find((i) => i.attributes('placeholder') === '来源名称（必填）')
+    const urlInput = wrapper.findAll('input').find((i) => i.attributes('placeholder') === '公开 RSS/Atom/JSON URL（必填）')
+    expect(nameInput, 'name input should exist').toBeTruthy()
+    expect(urlInput, 'url input should exist').toBeTruthy()
+    await nameInput!.setValue('验收科技源')
+    await urlInput!.setValue('https://example.com/feed.xml')
+
+    const intervalInput = wrapper.get('input.interval-input')
+    await intervalInput.setValue('45')
+    const enabledCheckbox = wrapper.get('.inline-check input[type="checkbox"]')
+    expect((enabledCheckbox.element as HTMLInputElement).checked).toBe(true)
+    await enabledCheckbox.setValue(false)
+
+    const createButton = wrapper.findAll('button').find((b) => b.text().trim() === '新增新闻源')
+    expect(createButton, 'create source button should exist').toBeTruthy()
+    await createButton!.trigger('click')
+    await flushPromises()
+
+    expect(api.createSource).toHaveBeenCalledTimes(1)
+    const payload = api.createSource.mock.calls[0][0]
+    expect(payload.name).toBe('验收科技源')
+    expect(payload.url).toBe('https://example.com/feed.xml')
+    expect(payload.intervalMinutes).toBe(45)
+    expect(payload.enabled).toBe(false)
+    wrapper.unmount()
+  })
+  it('新闻编辑弹窗展示自动翻译任务状态与失败原因', async () => {
+    api.listNewsTranslationTasks = vi.fn((id: number) => response({
+      items: id === 1381
+        ? [
+            { id: 'nt-1', targetLocale: 'en-US', status: 'succeeded' },
+            { id: 'nt-2', targetLocale: 'ru-RU', status: 'failed', errorCode: 'llm_rate_limited' },
+          ]
+        : [],
+    }))
+
+    const wrapper = await mountContentCenter()
+    await openNewsEditor(wrapper)
+
+    const text = wrapper.text()
+    expect(text).toContain('译文任务')
+    expect(text).toContain('EN已完成')
+    expect(text).toContain('RU失败')
+    expect(text).toContain('llm_rate_limited')
+    expect(api.listNewsTranslationTasks).toHaveBeenCalledWith(1381)
+    wrapper.unmount()
+  })
 })
