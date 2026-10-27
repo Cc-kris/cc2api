@@ -1,0 +1,13 @@
+
+Running 9 tests using 5 workers
+
+[1/9] [chromium] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布
+[2/9] [webkit-desktop] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布
+[3/9] [webkit-desktop] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布
+[4/9] [chromium] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布
+[5/9] [chromium] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布
+[6/9] [msedge] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布
+[7/9] [webkit-desktop] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布
+[8/9] [msedge] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布
+[9/9] [msedge] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布
+  9 passed (1.1s)

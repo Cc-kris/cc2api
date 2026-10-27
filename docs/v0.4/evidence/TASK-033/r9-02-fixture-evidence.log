@@ -1,0 +1,10 @@
+create article 201 id=164 version=1
+publish article 200 version=2
+create translation 201 id=25 sourceVersion=2 status=translation_draft
+publish translation 200
+[CURRENT] GET /articles/en/e2e-r9-02-evidence-1793097174 200 canonical=['https://ccai.xyz/articles/en/e2e-r9-02-evidence-1793097174'] robots=['index, follow'] en_body=True zh_body=False
+unpublish article 200 version=3
+republish article 200 version=4
+[DB] translation status=published sourceVersion=2 article version=4
+[STALE] GET /articles/en/e2e-r9-02-evidence-1793097174 200 canonical=['https://ccai.xyz/articles/zh/e2e-r9-02-evidence-1793097174'] robots=['noindex, follow'] en_body=False zh_body=True
+cleanup article 204 (soft delete)

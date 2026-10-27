@@ -1,0 +1,16 @@
+
+Running 12 tests using 5 workers
+
+[1/12] [webkit-desktop] › e2e/content-public-v04.spec.ts:77:1 › R9-03 无 JS 原文 HTML：en 英文正文，de 中文正文且德语界面
+[2/12] [webkit-desktop] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布
+[3/12] [webkit-desktop] › e2e/content-public-v04.spec.ts:88:1 › R9-04 有效译文 self-canonical / index / hreflang 含中文与 x-default
+[4/12] [webkit-desktop] › e2e/content-public-v04.spec.ts:103:1 › R9-05 无译文 de：canonical 指中文、noindex、不进 hreflang/sitemap
+[5/12] [webkit-desktop] › e2e/content-public-v04.spec.ts:17:1 › R7-02 译文列表继承原文封面，不因翻译丢失
+[6/12] [webkit-desktop] › e2e/content-public-v04.spec.ts:119:1 › R9-07 长码 locale 301 到短码并保留查询参数
+[7/12] [webkit-desktop] › e2e/content-public-v04.spec.ts:111:1 › R9-06 中文 self-canonical，sitemap 含中文与有效译文
+[8/12] [webkit-desktop] › e2e/content-public-v04.spec.ts:130:1 › R9-08 无前缀旧详情 301 中文，非法语言 404
+[9/12] [webkit-desktop] › e2e/content-public-v04.spec.ts:139:1 › R12-01 无前缀入口恒 301 中文，忽略 cookie 语言
+[10/12] [webkit-desktop] › e2e/content-public-v04.spec.ts:147:1 › R12-02 URL 语言优先于 cookie 与 localStorage
+[11/12] [webkit-desktop] › e2e/content-public-v04.spec.ts:155:1 › R12-05 长码 301 短码，非法 locale 404 且不跳登录
+[12/12] [webkit-desktop] › e2e/content-public-v04.spec.ts:168:1 › R12-06 五语言前缀路由 SSR 200，不被嵌入中间件打进 SPA 登录
+  12 passed (612ms)
