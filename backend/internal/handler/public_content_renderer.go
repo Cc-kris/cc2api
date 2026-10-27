@@ -313,7 +313,7 @@ func renderHomeDocument(c *gin.Context, baseURL, locale string, news service.Pub
 		Locale:       locale,
 		Title:        "CCAI | AI API 平台",
 		Description:  "CCAI 提供统一的 AI API 接入、模型服务、新闻、文章与开发者文档。",
-		Canonical:    publicAbsoluteURL(c, baseURL, "/", canonicalLocaleQuery(locale)),
+		Canonical:    canonicalPublicCollectionURL(c, baseURL, locale, ""),
 		Kind:         "home",
 		Nonce:        middleware.GetNonceFromContext(c),
 		NewsItems:    newsListViews(news.Items),
@@ -335,7 +335,7 @@ func renderNewsListDocument(c *gin.Context, baseURL, locale string, page service
 		Locale:      locale,
 		Title:       "CCAI 新闻",
 		Description: "CCAI 新闻与 AI 行业动态，展示标题、摘要、发布时间和来源。",
-		Canonical:   publicAbsoluteURL(c, baseURL, "/news", canonicalLocaleQuery(locale)),
+		Canonical:   canonicalPublicCollectionURL(c, baseURL, locale, "/news"),
 		Kind:        "news",
 		Nonce:       middleware.GetNonceFromContext(c),
 		NewsItems:   newsListViews(page.Items),
@@ -359,7 +359,7 @@ func renderArticleListDocument(c *gin.Context, baseURL, locale string, page serv
 		Locale:       locale,
 		Title:        "CCAI 文章",
 		Description:  "CCAI 技术文章、产品实践与 AI 开发者内容。",
-		Canonical:    publicAbsoluteURL(c, baseURL, "/articles", canonicalLocaleQuery(locale)),
+		Canonical:    canonicalPublicCollectionURL(c, baseURL, locale, "/articles"),
 		Kind:         "articles",
 		Nonce:        middleware.GetNonceFromContext(c),
 		ArticleItems: articleListViews(page.Items),
@@ -521,6 +521,17 @@ func publicLocaleSegment(locale string) string {
 
 // canonicalLocaleQuery keeps list/home canonical URLs short-segmented
 // (?locale=en) instead of echoing the stored spelling (?locale=en-US).
+func canonicalPublicCollectionURL(c *gin.Context, baseURL, locale, suffix string) string {
+	segment, ok := service.PublicLocaleSegment(locale)
+	if !ok {
+		segment = "zh"
+	}
+	if suffix == "" {
+		suffix = "/"
+	}
+	return publicAbsoluteURL(c, baseURL, "/"+segment+suffix, "")
+}
+
 func canonicalLocaleQuery(locale string) string {
 	segment := publicLocaleSegment(locale)
 	if segment == "zh" {

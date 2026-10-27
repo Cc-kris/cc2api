@@ -360,9 +360,54 @@ func isPublicSSRRoute(path string) bool {
 	if normalized == "/" || normalized == "/news" || normalized == "/articles" || normalized == "/docs" || normalized == "/robots.txt" || normalized == "/sitemap.xml" {
 		return true
 	}
-	return strings.HasPrefix(normalized, "/news/") ||
+	if strings.HasPrefix(normalized, "/news/") ||
 		strings.HasPrefix(normalized, "/articles/") ||
-		strings.HasPrefix(normalized, "/docs/")
+		strings.HasPrefix(normalized, "/docs/") {
+		return true
+	}
+	// Language-prefixed pages (`/zh/`, `/en/news`, `/ru/articles`, ...) must
+	// reach the Gin SSR handlers instead of the SPA/login branch (R12-06).
+	return isPublicLocalePrefixedRoute(normalized)
+}
+
+// isPublicLocalePrefixedRoute matches `/<lang>` and `/<lang>/{news,articles,docs}`.
+// The first segment only has to *look* like a language tag: unsupported tags
+// (e.g. `/xx/news`) are deliberately admitted so the router can answer 404
+// instead of redirecting the crawler to login (R12-05).
+func isPublicLocalePrefixedRoute(normalized string) bool {
+	segments := strings.Split(strings.TrimPrefix(normalized, "/"), "/")
+	if len(segments) == 0 || !looksLikeLocaleTag(segments[0]) {
+		return false
+	}
+	if len(segments) == 1 {
+		return true
+	}
+	switch segments[1] {
+	case "news", "articles", "docs":
+		return true
+	default:
+		return false
+	}
+}
+
+// looksLikeLocaleTag accepts `xx` and `xx-YY`/`xx_YY` shapes (zh, en, zh-CN,
+// en_US, ...) without validating the language against the supported set.
+func looksLikeLocaleTag(segment string) bool {
+	parts := strings.FieldsFunc(segment, func(r rune) bool { return r == '-' || r == '_' })
+	if len(parts) != 1 && len(parts) != 2 {
+		return false
+	}
+	for _, part := range parts {
+		if len(part) != 2 {
+			return false
+		}
+		for _, r := range part {
+			if !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func shouldRedirectFrontendRouteToLogin(path string) bool {

@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -176,10 +178,10 @@ func TestPublicContentHandlerRendersCollectionsDocsAndSanitizedDetails(t *testin
 	// Collection pages keep the stored BCP-47 tag in <html lang>; paths carry
 	// the short segment in canonical URLs and internal links (R12-05).
 	for path, wantLang := range map[string]string{
-		"/?locale=en-US":                   "en-US",
-		"/news-html?locale=en-US":          "en-US",
-		"/articles-html?locale=en-US":      "en-US",
-		"/docs?locale=en-US":               "en",
+		"/?locale=en-US":                    "en-US",
+		"/news-html?locale=en-US":           "en-US",
+		"/articles-html?locale=en-US":       "en-US",
+		"/docs?locale=en-US":                "en",
 		"/docs/authentication?locale=en-US": "en",
 	} {
 		res := httptest.NewRecorder()
@@ -191,7 +193,7 @@ func TestPublicContentHandlerRendersCollectionsDocsAndSanitizedDetails(t *testin
 	}
 	res := httptest.NewRecorder()
 	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/news-html?locale=en-US", nil))
-	require.Contains(t, res.Body.String(), `<link rel="canonical" href="https://ccai.example/news?locale=en">`)
+	require.Contains(t, res.Body.String(), `<link rel="canonical" href="https://ccai.example/en/news">`)
 	require.Contains(t, res.Body.String(), `href="/news/en/release"`)
 
 	res = httptest.NewRecorder()
@@ -352,4 +354,64 @@ func TestPublicContentSitemapUsesShortLocaleSegments(t *testing.T) {
 	body := res.Body.String()
 	require.Contains(t, body, "<loc>https://ccai.example/news/en/release</loc>")
 	require.NotContains(t, body, "/news/en-US/")
+}
+
+func newPublicContentCachingRouter(repo *publicContentHandlerRepoStub) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set(middleware.CSPNonceKey, "test-nonce")
+		c.Next()
+	})
+	h := NewPublicContentHandler(service.NewPublicContentService(repo), &config.Config{Server: config.ServerConfig{FrontendURL: "https://ccai.example"}})
+	r.GET("/article-html/:locale/:slug", h.RenderArticleHTML)
+	r.GET("/news-html", h.RenderNewsListHTML)
+	return r
+}
+
+func TestPublicContentTranslationInvalidationClearsRenderedCache(t *testing.T) {
+	// R9-10: 译文发布/下线后，已渲染的 SSR 文档不能继续服务旧内容。
+	repo := &publicContentHandlerRepoStub{articleDetail: &service.PublicArticle{
+		Locale: "en-US", RequestedLocale: "en-US", Slug: "guide-en",
+		Title: "Before publish", Excerpt: "Excerpt", BodyHTML: "<p>old</p>",
+		PublishedAt: time.Now(), Status: "published",
+	}}
+	r := newPublicContentCachingRouter(repo)
+
+	first := httptest.NewRecorder()
+	r.ServeHTTP(first, httptest.NewRequest(http.MethodGet, "/article-html/en/guide-en", nil))
+	require.Equal(t, http.StatusOK, first.Code)
+	require.Contains(t, first.Body.String(), "Before publish")
+
+	// 同一 URL 的第二次请求命中进程内渲染缓存（证明缓存确实生效）。
+	repo.articleDetail.Title = "Ignored while cached"
+	cached := httptest.NewRecorder()
+	r.ServeHTTP(cached, httptest.NewRequest(http.MethodGet, "/article-html/en/guide-en", nil))
+	require.Contains(t, cached.Body.String(), "Before publish")
+
+	versionBefore := service.PublicContentCacheVersion()
+	service.InvalidatePublicContentCache()
+
+	repo.articleDetail.Title = "After publish"
+	after := httptest.NewRecorder()
+	r.ServeHTTP(after, httptest.NewRequest(http.MethodGet, "/article-html/en/guide-en", nil))
+	require.Equal(t, http.StatusOK, after.Code)
+	require.Contains(t, after.Body.String(), "After publish")
+	require.NotContains(t, after.Body.String(), "Before publish")
+	require.Greater(t, service.PublicContentCacheVersion(), versionBefore)
+	require.Contains(t, service.PublicContentCacheKey("/articles", "en-US"), "v="+strconv.FormatUint(service.PublicContentCacheVersion(), 10))
+}
+
+func TestPublicContentListCacheUsesVersionedKey(t *testing.T) {
+	// 版本号参与缓存键：同一路径在同一版本下复用，版本推进后换键。
+	repo := &publicContentHandlerRepoStub{news: service.PublicNewsPage{Total: 1, Locale: "zh-CN"}}
+	r := newPublicContentCachingRouter(repo)
+	first := httptest.NewRecorder()
+	r.ServeHTTP(first, httptest.NewRequest(http.MethodGet, "/news-html", nil))
+	require.Equal(t, http.StatusOK, first.Code)
+
+	key := service.PublicContentCacheKey("/news", "zh-CN")
+	version := service.PublicContentCacheVersion()
+	require.Contains(t, key, "?locale=zh-CN&v="+strconv.FormatUint(version, 10))
+	require.NotEqual(t, key, service.PublicContentCacheKey("/news", "en-US"))
 }
