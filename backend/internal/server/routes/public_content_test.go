@@ -68,6 +68,43 @@ func getPublicPath(r *gin.Engine, path string, withCookie bool) *httptest.Respon
 	return res
 }
 
+type analyticsRouteRepoStub struct {
+	events []*service.ContentAnalyticsEvent
+}
+
+func (s *analyticsRouteRepoStub) CreateEvent(_ context.Context, e *service.ContentAnalyticsEvent) error {
+	s.events = append(s.events, e)
+	return nil
+}
+func (s *analyticsRouteRepoStub) ListDaily(context.Context, service.ContentAnalyticsFilters) ([]service.ContentAnalyticsDaily, error) {
+	return nil, nil
+}
+func (s *analyticsRouteRepoStub) AggregateDaily(context.Context, time.Time, string) error { return nil }
+
+// SEC-01: raw referrer URL (may carry tokens) is rejected and never echoed; only the host is stored.
+func TestPublicAnalyticsIngestStoresReferrerHostOnly(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &analyticsRouteRepoStub{}
+	r := gin.New()
+	RegisterPublicContentRoutes(r.Group("/api/v1"), &handler.Handlers{
+		ContentAnalytics: handler.NewContentAnalyticsHandler(service.NewContentAnalyticsService(repo, "secret")),
+	})
+
+	raw := `{"eventId":"e1","eventName":"page_view","pagePath":"/","payload":{"referrer":"https://evil.example/s?token=SECRET123"}}`
+	bad := httptest.NewRecorder()
+	r.ServeHTTP(bad, httptest.NewRequest(http.MethodPost, "/api/v1/public/analytics/events", strings.NewReader(raw)))
+	require.Equal(t, http.StatusBadRequest, bad.Code, bad.Body.String())
+	require.NotContains(t, bad.Body.String(), "SECRET123")
+
+	ok := httptest.NewRecorder()
+	r.ServeHTTP(ok, httptest.NewRequest(http.MethodPost, "/api/v1/public/analytics/events", strings.NewReader(
+		`{"eventId":"e2","eventName":"page_view","pagePath":"/","referrerHost":"evil.example","payload":{"view_id":"v2"}}`)))
+	require.Equal(t, http.StatusAccepted, ok.Code, ok.Body.String())
+	require.Eventually(t, func() bool { return len(repo.events) == 1 }, 2*time.Second, 10*time.Millisecond)
+	require.NotNil(t, repo.events[0].ReferrerHost)
+	require.Equal(t, "evil.example", *repo.events[0].ReferrerHost)
+}
+
 func TestRegisterPublicContentRoutes(t *testing.T) {
 	stub := &publicRouteRepoStub{newsTotal: 41}
 	r := newPublicContentTestEngine(t, stub)
