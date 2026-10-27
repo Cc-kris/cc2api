@@ -119,10 +119,10 @@
   }
 
   .btn-success {
-    @apply bg-gradient-to-r from-emerald-500 to-emerald-600;
-    @apply text-white shadow-md shadow-emerald-500/25;
-    @apply hover:from-emerald-600 hover:to-emerald-700 hover:shadow-lg hover:shadow-emerald-500/30;
-    @apply dark:shadow-emerald-500/20;
+    @apply bg-gradient-to-r from-[#15803D] to-[#166534];
+    @apply text-white shadow-md shadow-black/25;
+    @apply hover:from-[#166534] hover:to-[#14532D] hover:shadow-lg hover:shadow-black/30;
+    @apply dark:shadow-black/20;
   }
 
   .btn-warning {
@@ -140,10 +140,10 @@
   }
 
   .btn-airwallex {
-    @apply bg-[#14171A] text-white shadow-md shadow-emerald-500/20;
-    @apply hover:bg-[#20252a] hover:shadow-lg hover:shadow-emerald-500/25;
-    @apply dark:bg-[#7AF0C4] dark:text-gray-950 dark:shadow-emerald-500/20;
-    @apply dark:hover:bg-[#62d9ad];
+    @apply bg-[#14171A] text-white shadow-md shadow-black/20;
+    @apply hover:bg-[#20252a] hover:shadow-lg hover:shadow-black/25;
+    @apply dark:bg-[#60A5FA] dark:text-[#121316] dark:shadow-black/20;
+    @apply dark:hover:bg-[#3B82F6];
   }
 
   .btn-alipay {
@@ -281,7 +281,7 @@
   }
 
   .stat-icon-success {
-    @apply bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400;
+    @apply bg-[#DCFCE7] text-[#15803D] dark:bg-[#15803D]/20 dark:text-[#4ADE80];
   }
 
   .stat-icon-warning {
@@ -305,7 +305,7 @@
   }
 
   .stat-trend-up {
-    @apply text-emerald-600 dark:text-emerald-400;
+    @apply text-[#15803D] dark:text-[#4ADE80];
   }
 
   .stat-trend-down {
@@ -354,7 +354,7 @@
   }
 
   .badge-success {
-    @apply bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400;
+    @apply bg-[#DCFCE7] text-[#15803D] dark:bg-[#15803D]/20 dark:text-[#4ADE80];
   }
 
   .badge-warning {
@@ -526,7 +526,7 @@
   }
 
   .toast-success {
-    @apply border-l-emerald-500;
+    @apply border-l-[#15803D];
   }
 
   .toast-error {
@@ -726,8 +726,8 @@
   }
 
   .tour-success-box {
-    @apply rounded-md border-l-4 border-emerald-500 bg-emerald-50 px-3 py-2 text-xs text-emerald-900;
-    @apply dark:border-emerald-400 dark:bg-emerald-950/40 dark:text-emerald-200;
+    @apply rounded-md border-l-4 border-[#15803D] bg-[#F0FDF4] px-3 py-2 text-xs text-[#166534];
+    @apply dark:border-[#4ADE80] dark:bg-[#15803D]/20 dark:text-[#BBF7D0];
   }
 
   .tour-warning-box {
@@ -788,7 +788,7 @@
   --neolab-ink: #121316;
   --neolab-muted: #5E6577;
   --neolab-blue: #2563EB;
-  --neolab-mint: #00C896;
+  --neolab-mint: #2563EB;
   --neolab-lime: #CCFF00;
   --neolab-red: #FF3B30;
   --neolab-shadow: 4px 4px 0px #121316;
@@ -1050,8 +1050,8 @@ textarea.input {
   color: #1D4ED8 !important;
 }
 .badge-success {
-  background-color: #D1FAE5 !important;
-  color: #047857 !important;
+  background-color: #DCFCE7 !important;
+  color: #15803D !important;
 }
 .badge-warning {
   background-color: #FEF3C7 !important;
@@ -1097,7 +1097,7 @@ textarea.input {
   --neo-muted: #5E6577;
   --neo-blue: #2563EB;
   --neo-lime: #CCFF00;
-  --neo-mint: #00C896;
+  --neo-mint: #2563EB;
   --neo-red: #FF3B30;
   --neo-amber: #FF9500;
 }
@@ -1307,11 +1307,10 @@ button.bg-red-500 {
   font-weight: 900 !important;
 }
 .btn-success,
-button.bg-emerald-600,
-button.bg-green-600 {
-  background-color: #00C896 !important;
+button.bg-success {
+  background-color: #15803D !important;
   background-image: none !important;
-  color: #121316 !important;
+  color: #FFFFFF !important;
   border: 2px solid #121316 !important;
   box-shadow: 3px 3px 0px #121316 !important;
   font-weight: 900 !important;
@@ -1405,7 +1404,7 @@ html.dark .input-label {
   color: #121316 !important;
 }
 .stat-icon-primary { background-color: #DBEAFE !important; }
-.stat-icon-success { background-color: #D1FAE5 !important; }
+.stat-icon-success { background-color: #DCFCE7 !important; }
 .stat-icon-warning { background-color: #FEF3C7 !important; }
 .stat-icon-danger  { background-color: #FFE4E1 !important; }
 
@@ -1437,9 +1436,9 @@ html.dark .input-label {
   background-color: #DBEAFE !important;
 }
 :is(
-  div[class*="bg-emerald-50"], div[class*="bg-emerald-100"], div[class*="bg-green-50"], div[class*="bg-green-100"], div[class*="bg-teal-50"], div[class*="bg-teal-100"]
+  div[class*="bg-success-soft"]
 ):has(> svg) {
-  background-color: #D1FAE5 !important;
+  background-color: #DCFCE7 !important;
 }
 :is(
   div[class*="bg-amber-50"], div[class*="bg-amber-100"], div[class*="bg-yellow-50"], div[class*="bg-yellow-100"], div[class*="bg-orange-50"], div[class*="bg-orange-100"]
@@ -1565,8 +1564,8 @@ html.dark .sidebar-link-active > svg {
   color: #1E40AF !important;
 }
 .badge-success {
-  background-color: #D1FAE5 !important;
-  color: #065F46 !important;
+  background-color: #DCFCE7 !important;
+  color: #166534 !important;
 }
 .badge-warning {
   background-color: #FEF3C7 !important;
@@ -1922,7 +1921,7 @@ button.bg-white.shadow * {
   border: 2px solid #121316 !important;
 }
 .switch-checked {
-  background-color: #00C896 !important;
+  background-color: #2563EB !important;
 }
 .switch-thumb {
   border: 1.5px solid #121316 !important;
@@ -2122,7 +2121,7 @@ html.dark .neo-independent-page div.rounded-2xl {
 .trans-chip-mini.chip-running, .trans-chip.chip-running,
 .task-status.chip-running { border-color: #f59e0b; background: #fef3c7; color: #92400e; }
 .trans-chip-mini.chip-success, .trans-chip.chip-success,
-.task-status.chip-success { border-color: #10b981; background: #d1fae5; color: #065f46; }
+.task-status.chip-success { border-color: #16A34A; background: #DCFCE7; color: #15803D; }
 .trans-chip-mini.chip-failed, .trans-chip.chip-failed,
 .task-status.chip-failed { border-color: #ef4444; background: #fee2e2; color: #991b1b; }
 .trans-chip-mini.chip-cancelled, .trans-chip.chip-cancelled,
@@ -2170,3 +2169,40 @@ html.dark .neo-independent-page div.rounded-2xl {
   gap: 6px;
   margin: 6px 0 4px;
 }
+
+/* ===== TASK-030 neo-lab v0.4：token 收口 + 原生控件归一 ===== */
+:root {
+  --v04-primary: #2563EB; --v04-primary-hover: #1D4ED8; --v04-accent: #CCFF00;
+  --v04-ink: #121316; --v04-muted: #6B7280; --v04-line: #E5E7EB;
+  --v04-surface: #FFFFFF; --v04-success: #16A34A; --v04-danger: #DC2626;
+}
+html.dark {
+  --v04-page: #121316; --v04-surface: #1F2937; --v04-ink: #F2F3F5;
+  --v04-muted: #9CA3AF; --v04-line: #374151; --v04-success: #4ADE80; --v04-link: #60A5FA;
+}
+/* 原生下拉：去默认箭头，统一 12px 自定义箭头 + 焦点环 */
+select:not([multiple]) {
+  -webkit-appearance: none; appearance: none; min-height: 36px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 12px 8px;
+  padding-right: 36px !important;
+}
+html.dark select:not([multiple]) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%239CA3AF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-color: #1F2937 !important; border-color: #374151 !important; color: #F2F3F5 !important;
+}
+select:not([multiple]):focus-visible, select:not([multiple]):focus {
+  border-color: var(--v04-primary) !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35) !important; outline: none !important;
+}
+select:not([multiple]) option { background: #FFFFFF; color: #121316; }
+html.dark select:not([multiple]) option { background: #1F2937; color: #F2F3F5; }
+select[multiple] { padding: 6px; border-radius: 8px; }
+/* 输入框：2px 四边描边 + 8px 圆角，禁止下划线形态 */
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):not([type='submit']):not([type='button']),
+textarea, .input { border-style: solid; border-width: 2px; border-radius: 8px; }
+input:focus-visible:not([type='checkbox']):not([type='radio']), textarea:focus-visible, .input:focus-visible {
+  outline: 2px solid var(--v04-primary); outline-offset: 2px;
+}
+/* 表格分隔线保留（R15-02） */
+.table th, .table td { border-bottom-width: 1px; border-bottom-style: solid; }

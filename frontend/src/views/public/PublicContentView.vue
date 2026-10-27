@@ -239,7 +239,7 @@
                 <div>
                   <div class="core-top-row">
                     <span class="core-badge good">⚡ CCAI</span>
-                    <span class="core-status-dot" style="color: #059669">
+                    <span class="core-status-dot" style="color: #16A34A">
                       {{ hoveredIdx !== null ? '● 200 OK' : (isZh ? '● 统一入口' : '● One endpoint') }}
                     </span>
                   </div>
@@ -1417,7 +1417,7 @@ function spawnBoxPerimeterFireworks(idx: number, mode: 'chaos' | 'order') {
 
   const palette =
     mode === 'order'
-      ? ['#CCFF00', '#00C896', '#2563EB', '#FF2D55', '#F59E0B', '#A855F7', '#38BDF8']
+      ? ['#CCFF00', '#60A5FA', '#2563EB', '#FF2D55', '#F59E0B', '#A855F7', '#38BDF8']
       : ['#FF3B30', '#FF9500', '#121316']
 
   const count = mode === 'order' ? 36 : 24
@@ -1486,10 +1486,10 @@ async function morphTo(targetMode: 'chaos' | 'order') {
   const fromPalette =
     targetMode === 'order'
       ? ['#FFFFFF', '#FFE4E1', '#FF3B30', '#FF9500', '#121316']
-      : ['#FFFFFF', '#CCFF00', '#2563EB', '#00C896', '#121316']
+      : ['#FFFFFF', '#CCFF00', '#2563EB', '#60A5FA', '#121316']
   const toPalette =
     targetMode === 'order'
-      ? ['#FFFFFF', '#CCFF00', '#2563EB', '#00C896', '#D1FAE5']
+      ? ['#FFFFFF', '#CCFF00', '#2563EB', '#60A5FA', '#DBEAFE']
       : ['#FFFFFF', '#FFE4E1', '#FF3B30', '#FF9500', '#FFF5F5']
 
   pieces = []
@@ -1748,7 +1748,7 @@ function renderLines() {
       const y2 = rRect.top + rRect.height / 2 - gRect.top
       const d = `M ${x1} ${y1} C ${(x1 + x2) / 2} ${y1}, ${(x1 + x2) / 2} ${y2}, ${x2} ${y2}`
       const isBoost = activeIdx === i
-      appendOrderFiber(svg, d, '#00C896', isBoost ? '0.22s' : `${0.8 + i * 0.1}s`, isBoost)
+      appendOrderFiber(svg, d, '#60A5FA', isBoost ? '0.22s' : `${0.8 + i * 0.1}s`, isBoost)
     })
   }
 }
@@ -2709,7 +2709,7 @@ watch([() => route.fullPath, isZh], () => {
   --chaos-red: #FF3B30;
   --chaos-amber: #FF9500;
   --order-blue: #2563EB;
-  --order-mint: #00C896;
+  --order-mint: #2563EB;
   --order-lime: #CCFF00;
   --border-w: 2.5px;
   --shadow-hard: 5px 5px 0px #121316;
@@ -3118,7 +3118,7 @@ watch([() => route.fullPath, isZh], () => {
   background: linear-gradient(90deg, #FF3B30, #FF9500, #FF1E00);
 }
 .mode-order .charge-bar-fill {
-  background: linear-gradient(90deg, #2563EB, #00C896, #CCFF00);
+  background: linear-gradient(90deg, #1D4ED8, #60A5FA, #CCFF00);
 }
 
 /* 当处于 3s 充能阶段时：整张卡片高频震颤摇晃 + 全卡片流光灌满！ */
@@ -3365,8 +3365,8 @@ watch([() => route.fullPath, isZh], () => {
   color: var(--chaos-red);
 }
 .mode-order .u-tag {
-  background: #D1FAE5;
-  color: #047857;
+  background: #DCFCE7;
+  color: #15803D;
 }
 
 
@@ -3874,7 +3874,7 @@ watch([() => route.fullPath, isZh], () => {
   border: 1.5px solid #121316;
 }
 .nav-dot.dot-live {
-  background: #00C896;
+  background: #2563EB;
 }
 .nav-dot.dot-doc {
   background: #2563EB;
@@ -3888,7 +3888,7 @@ watch([() => route.fullPath, isZh], () => {
   --chaos-red: #FF3B30;
   --chaos-amber: #FF9500;
   --order-blue: #2563EB;
-  --order-emerald: #00C896;
+  --order-accent: #2563EB;
   --order-lime: #CCFF00;
   --border-w: 2.5px;
   position: relative;
@@ -3965,7 +3965,7 @@ watch([() => route.fullPath, isZh], () => {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #00C896;
+  background: #2563EB;
   box-shadow: 0 0 6px rgba(0, 200, 150, 0.8);
 }
 
@@ -4862,7 +4862,7 @@ watch([() => route.fullPath, isZh], () => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #00C896;
+  background: #2563EB;
 }
 .read-more-pill {
   background: #121316;
@@ -4885,7 +4885,7 @@ watch([() => route.fullPath, isZh], () => {
   border: 1.5px solid #121316;
 }
 .strip-0 { background: #CCFF00; }
-.strip-1 { background: #00C896; }
+.strip-1 { background: #2563EB; }
 .strip-2 { background: #2563EB; }
 
 .meta-read {
@@ -4999,7 +4999,7 @@ watch([() => route.fullPath, isZh], () => {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #00C896;
+  background: #2563EB;
   border: 2px solid #121316;
 }
 .timeline-date-col {

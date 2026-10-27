@@ -1775,7 +1775,7 @@ const REFERRER_KEYS = ["direct", "search", "social", "external"];
 const referrerLabel = (key: string) =>
   REFERRER_KEYS.includes(key) ? t(`contentV04.analytics.referrers.${key}`) : key || "—";
 
-const CHART_PALETTE = ["#6366F1", "#10B981", "#F59E0B", "#EC4899", "#8B5CF6", "#06B6D4", "#EF4444", "#84CC16"];
+const CHART_PALETTE = ["#6366F1", "#2563EB", "#F59E0B", "#EC4899", "#8B5CF6", "#06B6D4", "#EF4444", "#0EA5E9"];
 
 const articleTopRows = computed(() =>
   rankings.value.filter((r: any) => r.contentType === "article").slice(0, 10),
@@ -1800,7 +1800,7 @@ const trendChartData = computed(() => ({
   datasets: [
     { label: t("contentV04.analytics.visitors"), data: trends.value.map((r: any) => r.uniqueVisitors || 0), borderColor: "#6366F1", backgroundColor: "rgba(99,102,241,0.1)", fill: true, tension: 0.4 },
     { label: t("contentV04.analytics.views"), data: trends.value.map((r: any) => r.pageViews || 0), borderColor: "#F59E0B", backgroundColor: "rgba(245,158,11,0.1)", fill: true, tension: 0.4 },
-    { label: t("contentV04.analytics.reads"), data: trends.value.map((r: any) => r.reads || 0), borderColor: "#10B981", backgroundColor: "rgba(16,185,129,0.1)", fill: true, tension: 0.4 },
+    { label: t("contentV04.analytics.reads"), data: trends.value.map((r: any) => r.reads || 0), borderColor: "#2563EB", backgroundColor: "rgba(37,99,235,0.12)", fill: true, tension: 0.4 },
   ],
 }));
 
@@ -1822,7 +1822,7 @@ const publishingChartData = computed(() => ({
   labels: trends.value.map((r: any) => formatDate(r.date)),
   datasets: [
     { label: t("contentV04.content.articles"), data: trends.value.map((r: any) => r.publishedArticles || 0), backgroundColor: "#6366F1", borderRadius: 6 },
-    { label: t("contentV04.content.news"), data: trends.value.map((r: any) => r.publishedNews || 0), backgroundColor: "#10B981", borderRadius: 6 },
+    { label: t("contentV04.content.news"), data: trends.value.map((r: any) => r.publishedNews || 0), backgroundColor: "#2563EB", borderRadius: 6 },
   ],
 }));
 
@@ -3975,8 +3975,8 @@ td small {
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
   font-weight: 800;
-  color: #047857;
-  background: #D1FAE5;
+  color: #15803D;
+  background: #DCFCE7;
   border: 1.5px solid #121316;
   padding: 3px 9px;
   border-radius: 6px;
@@ -4274,7 +4274,7 @@ td.actions-cell .link {
   box-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
 .metric-card.metric-views { background: linear-gradient(135deg, #1D4ED8 0%, #3B82F6 100%); }
-.metric-card.metric-reads { background: linear-gradient(135deg, #065F46 0%, #10B981 100%); }
+.metric-card.metric-reads { background: linear-gradient(135deg, #1D4ED8 0%, #2563EB 100%); }
 .metric-card.metric-uv { background: linear-gradient(135deg, #5B21B6 0%, #8B5CF6 100%); }
 .metric-card.metric-ctr { background: linear-gradient(135deg, #B45309 0%, #F59E0B 100%); }
 .metric-icon {
