@@ -1,0 +1,19 @@
+# github.com/Wei-Shaw/sub2api/internal/server
+package github.com/Wei-Shaw/sub2api/internal/server
+	imports github.com/Wei-Shaw/sub2api/internal/handler
+	imports github.com/Wei-Shaw/sub2api/ent
+	imports encoding/json/jsontext: build constraints exclude all Go files in /Users/mac/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/encoding/json/jsontext
+FAIL	github.com/Wei-Shaw/sub2api/internal/server [setup failed]
+# github.com/Wei-Shaw/sub2api/internal/server/routes
+package github.com/Wei-Shaw/sub2api/internal/server
+	imports github.com/Wei-Shaw/sub2api/internal/handler
+	imports github.com/Wei-Shaw/sub2api/ent
+	imports encoding/json/jsontext: build constraints exclude all Go files in /Users/mac/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/encoding/json/jsontext
+FAIL	github.com/Wei-Shaw/sub2api/internal/server/routes [setup failed]
+# github.com/Wei-Shaw/sub2api/internal/handler/admin
+package github.com/Wei-Shaw/sub2api/internal/server
+	imports github.com/Wei-Shaw/sub2api/internal/handler
+	imports github.com/Wei-Shaw/sub2api/ent
+	imports encoding/json/jsontext: build constraints exclude all Go files in /Users/mac/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/encoding/json/jsontext
+FAIL	github.com/Wei-Shaw/sub2api/internal/handler/admin [setup failed]
+FAIL

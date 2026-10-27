@@ -1,0 +1,449 @@
+go test -tags=unit ./...
+?   	github.com/Wei-Shaw/sub2api/cmd/jwtgen	[no test files]
+ok  	github.com/Wei-Shaw/sub2api/cmd/server	(cached)
+?   	github.com/Wei-Shaw/sub2api/ent	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/account	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/accountfinancecountersnapshot	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/accountfinanceprofile	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/accountgroup	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/accountupstreammultiplierchange	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/announcement	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/announcementread	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/apikey	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/authidentity	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/authidentitychannel	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/channelmonitor	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/channelmonitordailyrollup	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/channelmonitorhistory	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/channelmonitorrequesttemplate	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/contentanalyticsdaily	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/contentanalyticsevent	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/contentarticle	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/contentauditlog	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/contentautomationsetting	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/contentfetchrun	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/contentnewsitem	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/contentnewssource	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/contentslugredirect	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/contenttranslation	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/contenttranslationsetting	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/enttest	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/errorpassthroughrule	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/financealert	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/financeasyncjob	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/financebackfilljob	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/financecalculationrevision	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/financedailyaggregate	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/financeexportjob	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/financefxrateversion	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/group	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/hook	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/idempotencyrecord	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/identityadoptiondecision	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/intercept	[no test files]
+ok  	github.com/Wei-Shaw/sub2api/ent/migrate	(cached)
+?   	github.com/Wei-Shaw/sub2api/ent/paymentauditlog	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/paymentorder	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/paymentproviderfeeevent	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/paymentproviderinstance	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/pendingauthsession	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/predicate	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/promocode	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/promocodeusage	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/proxy	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/redeemcode	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/runtime	[no test files]
+ok  	github.com/Wei-Shaw/sub2api/ent/schema	4.303s
+?   	github.com/Wei-Shaw/sub2api/ent/schema/mixins	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/securitysecret	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/setting	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/subscriptionplan	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/subscriptionrevenuerecognition	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/systemmodelpriceversion	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/tlsfingerprintprofile	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/upstreambalancesnapshot	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/upstreambillreconciliation	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/upstreamcostsettlementinterval	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/upstreamfinanceprotocol	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/upstreamfinanceprotocolversion	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/upstreamfinancesyncrun	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/upstreamfundevent	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/upstreammodelpriceversion	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/upstreamwallet	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/upstreamwalletaccount	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/usagecleanuptask	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/usagecostsettlementallocation	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/usagefinancecostsegment	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/usagefinancerecord	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/usagelog	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/usagerevenueallocation	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/usageupstreamattempt	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/user	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/userallowedgroup	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/userattributedefinition	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/userattributevalue	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/userplatformquota	[no test files]
+?   	github.com/Wei-Shaw/sub2api/ent/usersubscription	[no test files]
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+--- FAIL: TestLoadDefaultDatabaseSSLMode (0.00s)
+    config_test.go:427: Database.SSLMode = "disable", want "prefer"
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN url uses http scheme; use https in production to avoid token leakage field=test
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+2026/10/27 18:39:13 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:13 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/config	0.573s
+ok  	github.com/Wei-Shaw/sub2api/internal/domain	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/handler	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/handler/admin	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/handler/dto	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/handler/quotaview	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/middleware	(cached)
+?   	github.com/Wei-Shaw/sub2api/internal/model	[no test files]
+ok  	github.com/Wei-Shaw/sub2api/internal/payment	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/payment/provider	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/antigravity	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/apicompat	(cached)
+?   	github.com/Wei-Shaw/sub2api/internal/pkg/claude	[no test files]
+?   	github.com/Wei-Shaw/sub2api/internal/pkg/contentmd	[no test files]
+?   	github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey	[no test files]
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/errors	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/gemini	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/geminicli	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/googleapi	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/httpclient	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/httputil	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/ip	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/logger	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/oauth	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/openai	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/pagination	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/proxyurl	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/proxyutil	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/response	(cached)
+?   	github.com/Wei-Shaw/sub2api/internal/pkg/sysutil	[no test files]
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/timezone	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/usagestats	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/websearch	(cached)
+ok  	github.com/Wei-Shaw/sub2api/internal/pkg/xai	(cached)
+make: *** [test-unit] Terminated: 15

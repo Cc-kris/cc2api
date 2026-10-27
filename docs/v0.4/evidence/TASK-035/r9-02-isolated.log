@@ -1,0 +1,36 @@
+
+Running 1 test using 1 worker
+
+  ✘  1 [chromium] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布 (452ms)
+
+
+  1) [chromium] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布 ─────────
+
+    Error: 已发布译文数量
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      52 |     }
+      53 |   }
+    > 54 |   expect(checked, '已发布译文数量').toBeGreaterThan(0)
+         |                              ^
+      55 | })
+      56 |
+      57 | test('R9-03 无 JS 原文 HTML：en 英文正文，de 中文正文且德语界面', async ({ request }) => {
+        at /Users/mac/Documents/Dev/sub2apis/frontend/e2e/content-public-v04.spec.ts:54:30
+
+    Error Context: test-results/playwright/content-public-v04-R9-02-仅匹配当前-source-version-的译文对外发布-chromium/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/playwright/content-public-v04-R9-02-仅匹配当前-source-version-的译文对外发布-chromium/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/playwright/content-public-v04-R9-02-仅匹配当前-source-version-的译文对外发布-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布 ──────────

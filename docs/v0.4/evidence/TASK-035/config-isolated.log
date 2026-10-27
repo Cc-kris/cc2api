@@ -1,0 +1,7 @@
+2026/10/27 18:39:01 WARN TOTP encryption key auto-generated. Consider setting a fixed key for production.
+2026/10/27 18:39:01 WARN security.url_allowlist.enabled=false; allowlist/SSRF checks disabled (minimal format validation only).
+--- FAIL: TestLoadDefaultDatabaseSSLMode (0.00s)
+    config_test.go:427: Database.SSLMode = "disable", want "prefer"
+FAIL
+FAIL	github.com/Wei-Shaw/sub2api/internal/config	0.391s
+FAIL

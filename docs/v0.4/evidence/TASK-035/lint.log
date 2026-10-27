@@ -1,0 +1,10 @@
+
+> sub2api-frontend@1.0.0 lint /Users/mac/Documents/Dev/sub2apis/frontend
+> eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix
+
+
+/Users/mac/Documents/Dev/sub2apis/frontend/e2e/content-browser-v04.spec.ts
+  6:7  warning  'COVERED' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 1 problem (0 errors, 1 warning)
+

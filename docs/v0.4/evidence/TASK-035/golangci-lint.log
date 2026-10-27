@@ -1,0 +1,11 @@
+internal/pkg/contentmd/markdown.go:9:2: could not import html (/opt/homebrew/Cellar/go/1.27.1/libexec/src/html/entity.go:7:8: could not import sync (/opt/homebrew/Cellar/go/1.27.1/libexec/src/sync/cond.go:8:2: could not import sync/atomic (-: could not load export data: internal error in importing "sync/atomic" (cannot decode "sync/atomic", export data version 4 is greater than maximum supported version 2); please report an issue))) (typecheck)
+	"html"
+	^
+internal/pkg/contentmd/markdown.go:10:2: could not import strconv (/opt/homebrew/Cellar/go/1.27.1/libexec/src/strconv/bytealg.go:9:8: could not import internal/bytealg (/opt/homebrew/Cellar/go/1.27.1/libexec/src/internal/bytealg/bytealg.go:8:2: could not import internal/cpu (-: could not load export data: internal error in importing "internal/cpu" (cannot decode "internal/cpu", export data version 4 is greater than maximum supported version 2); please report an issue))) (typecheck)
+	"strconv"
+	^
+internal/pkg/contentmd/markdown.go:11:2: could not import strings (/opt/homebrew/Cellar/go/1.27.1/libexec/src/strings/builder.go:8:2: could not import internal/abi (/opt/homebrew/Cellar/go/1.27.1/libexec/src/internal/abi/abi.go:8:2: could not import internal/goarch (-: could not load export data: internal error in importing "internal/goarch" (cannot decode "internal/goarch", export data version 4 is greater than maximum supported version 2); please report an issue))) (typecheck)
+	"strings"
+	^
+3 issues:
+* typecheck: 3

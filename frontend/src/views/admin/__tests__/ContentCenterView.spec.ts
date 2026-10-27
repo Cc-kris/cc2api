@@ -551,7 +551,7 @@ describe('R15 内容中心下拉统一为 common/Select（AC-14）', () => {
   }
 
   it('新闻动态/新闻源/自动化设置/深度解析/AI 创作与文章编辑弹窗均无原生 select', async () => {
-    ;(api as any).listArticles = vi.fn(async () =>
+    (api as any).listArticles = vi.fn(async () =>
       response({
         items: [
           {

@@ -1,0 +1,1 @@
+[main acceptance] No diagnostics after the explicit 10-minute timeout threshold; terminated wrapper PID 76927. No golangci PASS is claimed. Earlier concrete diagnostics are in golangci-content.log.

@@ -1,0 +1,224 @@
+
+> sub2api-frontend@1.0.0 lint:check /Users/mac/Documents/Dev/sub2apis/frontend
+> eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts
+
+
+/Users/mac/Documents/Dev/sub2apis/frontend/e2e/content-browser-v04.spec.ts
+  6:7  warning  'COVERED' is assigned a value but never used. Allowed unused vars must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 1 problem (0 errors, 1 warning)
+
+
+> sub2api-frontend@1.0.0 typecheck /Users/mac/Documents/Dev/sub2apis/frontend
+> vue-tsc --noEmit
+
+
+ RUN  v2.1.9 /Users/mac/Documents/Dev/sub2apis/frontend
+
+Browserslist: browsers data (caniuse-lite) is 10 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ✓ src/views/user/__tests__/PaymentResultView.spec.ts (12 tests) 47ms
+ ✓ src/components/user/profile/__tests__/ProfileInfoCard.spec.ts (6 tests) 52ms
+ ✓ src/views/user/__tests__/PaymentView.spec.ts (6 tests) 29ms
+ ✓ src/views/auth/__tests__/LinuxDoCallbackView.spec.ts (17 tests) 126ms
+ ✓ src/views/auth/__tests__/WechatCallbackView.spec.ts (25 tests) 159ms
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > does not render legacy visible payment method controls
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > links payment guidance to README sections instead of removed payment docs
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > does not submit legacy visible payment method settings
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > submits Anthropic cache TTL injection gateway setting
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > loads and submits the dedicated Model Square feature switch
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > loads and submits the Remote Compaction V2 rollback switch
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > loads and submits the Group Usage Rollup rollback switch
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > reloads the confirmed Group Usage Rollup value when a later save step fails
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > restores the prior Group Usage Rollup value when save and reload both fail
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > submits message cache_control rewrite and local response cache gateway settings
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > does not render cache management content inside general settings
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > loads and submits announcement translation settings without echoing the saved API key
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > submits Antigravity user agent version gateway setting
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > manages balance low notification excluded users
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > updates provider enablement immediately and reloads providers
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > renders advanced scheduler copy as local experimental gateway policy
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > passes translated upload and remove labels to the payment help image uploader
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > requires a reason before changing the sales pricing resolver state
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > does not submit sales pricing fields when the state is unchanged
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > submits the trimmed reason when sales pricing state changes
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > keeps the attempted sales pricing state and reason after a save failure
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > requires a reason before changing the OpenAI Team resolver state
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > submits the trimmed reason when the OpenAI Team resolver state changes
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView wechat connect controls > loads and echoes WeChat Connect fields from the backend payload
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView wechat connect controls > links GitHub OAuth Apps guide to GitHub developer settings
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView wechat connect controls > saves WeChat Connect fields using the backend contract and clears the secret after save
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView wechat connect controls > collapses auth source defaults until the source is enabled
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView wechat connect controls > preserves optional OIDC compatibility flags instead of forcing them on save
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView platform quota matrix > 从 baseSettings 加载默认平台配额数据并在 Users tab 渲染全平台行
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView platform quota matrix > 保存时 updateSettings payload 应包含嵌套 default_platform_quotas 对象（含全平台）
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView platform quota matrix > 加载后 form.default_platform_quotas 含全平台，从嵌套 JSON 正确读取数值
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView platform quota matrix > 空输入（v-model.number 产出 ""）在提交时清洗为 null 而非空字符串
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+ ✓ src/views/admin/__tests__/SettingsView.spec.ts (32 tests) 1032ms
+
+ Test Files  6 passed (6)
+      Tests  98 passed (98)
+   Start at  18:05:34
+   Duration  3.05s (transform 2.75s, setup 346ms, collect 6.24s, tests 1.45s, environment 2.14s, prepare 293ms)
+

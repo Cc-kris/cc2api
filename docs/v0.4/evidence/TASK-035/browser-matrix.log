@@ -1,0 +1,286 @@
+
+Running 192 tests using 1 worker
+
+  ✓    1 [chromium] › e2e/content-admin-v04.spec.ts:49:1 › R1-01 标签删除二次确认：取消不删，确认后删除并同步 taxonomy (6.1s)
+  ✓    2 [chromium] › e2e/content-admin-v04.spec.ts:70:1 › R1-02/R1-03 抓取间隔：空值存 NULL 继承全局，0/14/1441 拒绝，15/1440 通过 (489ms)
+  ✓    3 [chromium] › e2e/content-admin-v04.spec.ts:89:1 › R1-02 UI 回归：留空间隔显示“跟随全局”，独立间隔显示固定值（DEFECT-031-01 不得复现） (1.6s)
+  ✓    4 [chromium] › e2e/content-admin-v04.spec.ts:119:1 › R1-04 ≥1 万字正文保存回显不截断（HTML 源码回显 + 重新拉取） (3.2s)
+  ✓    5 [chromium] › e2e/content-admin-v04.spec.ts:138:1 › R2-01 1440/1024/390 视口无横向溢出，编辑弹窗宽度不超出视口 (3.0s)
+  ✓    6 [chromium] › e2e/content-admin-v04.spec.ts:151:1 › R5-01 组字阶段 Enter 不生成词条，组字结束后才生成 (1.6s)
+  ✓    7 [chromium] › e2e/content-admin-v04.spec.ts:172:1 › R6-01/R6-05 精选以 featured_at 为唯一真源：设置即写入时间，列表按时间倒序 (116ms)
+  ✓    8 [chromium] › e2e/content-admin-v04.spec.ts:200:1 › R10-06/R10-12 未配置加密/默认模型时返回明确错误且不落明文 Key (22ms)
+  ✓    9 [chromium] › e2e/content-admin-v04.spec.ts:214:1 › R9-01 翻译任务：缺模型被拒，指定模型后入队为 queued 而非假成功 (18ms)
+  ✓   10 [chromium] › e2e/content-browser-v04.spec.ts:15:1 › R7-01 列表封面桌面左图 240px/16:9、移动顶部通栏 16:9，详情封面 16:9 (873ms)
+  ✓   11 [chromium] › e2e/content-browser-v04.spec.ts:38:1 › R7-03 封面加载失败不出现破图，占位保留尺寸 (1.8s)
+  ✓   12 [chromium] › e2e/content-browser-v04.spec.ts:51:1 › R9-09 详情标题/阅读时间/推荐去重且不含自身 (619ms)
+  ✓   13 [chromium] › e2e/content-browser-v04.spec.ts:64:1 › R12-04 五语言切换跳对应短码前缀且不丢当前详情 (754ms)
+  ✓   14 [chromium] › e2e/content-browser-v04.spec.ts:77:1 › R13-01 精选 1 大 + 最多 9 小，三视口网格与无横向滚动 (1.3s)
+  ✓   15 [chromium] › e2e/content-browser-v04.spec.ts:93:1 › R13-02 精选徽章柠绿底深色字，暗色主题下仍一致 (560ms)
+  ✓   16 [chromium] › e2e/content-browser-v04.spec.ts:108:1 › R13-03 0 篇精选整段隐藏，长标题两行截断 (604ms)
+  ✓   17 [chromium] › e2e/content-browser-v04.spec.ts:118:1 › R14-01 公开四类页面双主题无 #10B981 旧绿渲染残留 (1.2s)
+  ✓   18 [chromium] › e2e/content-browser-v04.spec.ts:139:1 › R14-02 四类页面双主题三视口无横向滚动 (5.3s)
+  ✓   19 [chromium] › e2e/content-browser-v04.spec.ts:154:1 › R15-01/02 后台下拉、输入框、表格统一组件化 (2.3s)
+  ✓   20 [chromium] › e2e/content-browser-v04.spec.ts:314:1 › COMP-01 五语言×双主题×三视口冒烟无脚本错误 (5.9s)
+  ✓   21 [chromium] › e2e/content-public-v04.spec.ts:17:1 › R7-02 译文列表继承原文封面，不因翻译丢失 (25ms)
+  ✓   22 [chromium] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布 (360ms)
+  ✓   23 [chromium] › e2e/content-public-v04.spec.ts:57:1 › R9-03 无 JS 原文 HTML：en 英文正文，de 中文正文且德语界面 (6ms)
+  ✓   24 [chromium] › e2e/content-public-v04.spec.ts:68:1 › R9-04 有效译文 self-canonical / index / hreflang 含中文与 x-default (5ms)
+  ✓   25 [chromium] › e2e/content-public-v04.spec.ts:83:1 › R9-05 无译文 de：canonical 指中文、noindex、不进 hreflang/sitemap (12ms)
+  ✓   26 [chromium] › e2e/content-public-v04.spec.ts:91:1 › R9-06 中文 self-canonical，sitemap 含中文与有效译文 (10ms)
+  ✓   27 [chromium] › e2e/content-public-v04.spec.ts:99:1 › R9-07 长码 locale 301 到短码并保留查询参数 (2ms)
+  ✓   28 [chromium] › e2e/content-public-v04.spec.ts:110:1 › R9-08 无前缀旧详情 301 中文，非法语言 404 (3ms)
+  ✓   29 [chromium] › e2e/content-public-v04.spec.ts:119:1 › R12-01 无前缀入口恒 301 中文，忽略 cookie 语言 (4ms)
+  ✓   30 [chromium] › e2e/content-public-v04.spec.ts:127:1 › R12-02 URL 语言优先于 cookie 与 localStorage (3ms)
+  ✓   31 [chromium] › e2e/content-public-v04.spec.ts:135:1 › R12-05 长码 301 短码，非法 locale 404 且不跳登录 (8ms)
+  ✓   32 [chromium] › e2e/content-public-v04.spec.ts:148:1 › R12-06 五语言前缀路由 SSR 200，不被嵌入中间件打进 SPA 登录 (66ms)
+  ✓   33 [tablet-chrome] › e2e/content-admin-v04.spec.ts:49:1 › R1-01 标签删除二次确认：取消不删，确认后删除并同步 taxonomy (1.2s)
+  ✓   34 [tablet-chrome] › e2e/content-admin-v04.spec.ts:70:1 › R1-02/R1-03 抓取间隔：空值存 NULL 继承全局，0/14/1441 拒绝，15/1440 通过 (47ms)
+  ✓   35 [tablet-chrome] › e2e/content-admin-v04.spec.ts:89:1 › R1-02 UI 回归：留空间隔显示“跟随全局”，独立间隔显示固定值（DEFECT-031-01 不得复现） (887ms)
+  ✓   36 [tablet-chrome] › e2e/content-admin-v04.spec.ts:119:1 › R1-04 ≥1 万字正文保存回显不截断（HTML 源码回显 + 重新拉取） (1.3s)
+  ✓   37 [tablet-chrome] › e2e/content-admin-v04.spec.ts:138:1 › R2-01 1440/1024/390 视口无横向溢出，编辑弹窗宽度不超出视口 (1.8s)
+  ✓   38 [tablet-chrome] › e2e/content-admin-v04.spec.ts:151:1 › R5-01 组字阶段 Enter 不生成词条，组字结束后才生成 (884ms)
+  ✓   39 [tablet-chrome] › e2e/content-admin-v04.spec.ts:172:1 › R6-01/R6-05 精选以 featured_at 为唯一真源：设置即写入时间，列表按时间倒序 (66ms)
+  ✓   40 [tablet-chrome] › e2e/content-admin-v04.spec.ts:200:1 › R10-06/R10-12 未配置加密/默认模型时返回明确错误且不落明文 Key (18ms)
+  ✓   41 [tablet-chrome] › e2e/content-admin-v04.spec.ts:214:1 › R9-01 翻译任务：缺模型被拒，指定模型后入队为 queued 而非假成功 (25ms)
+  ✓   42 [tablet-chrome] › e2e/content-browser-v04.spec.ts:15:1 › R7-01 列表封面桌面左图 240px/16:9、移动顶部通栏 16:9，详情封面 16:9 (779ms)
+  ✓   43 [tablet-chrome] › e2e/content-browser-v04.spec.ts:38:1 › R7-03 封面加载失败不出现破图，占位保留尺寸 (1.6s)
+  ✓   44 [tablet-chrome] › e2e/content-browser-v04.spec.ts:51:1 › R9-09 详情标题/阅读时间/推荐去重且不含自身 (576ms)
+  ✓   45 [tablet-chrome] › e2e/content-browser-v04.spec.ts:64:1 › R12-04 五语言切换跳对应短码前缀且不丢当前详情 (825ms)
+  ✓   46 [tablet-chrome] › e2e/content-browser-v04.spec.ts:77:1 › R13-01 精选 1 大 + 最多 9 小，三视口网格与无横向滚动 (1.4s)
+  ✓   47 [tablet-chrome] › e2e/content-browser-v04.spec.ts:93:1 › R13-02 精选徽章柠绿底深色字，暗色主题下仍一致 (621ms)
+  ✓   48 [tablet-chrome] › e2e/content-browser-v04.spec.ts:108:1 › R13-03 0 篇精选整段隐藏，长标题两行截断 (852ms)
+  ✓   49 [tablet-chrome] › e2e/content-browser-v04.spec.ts:118:1 › R14-01 公开四类页面双主题无 #10B981 旧绿渲染残留 (1.5s)
+  ✓   50 [tablet-chrome] › e2e/content-browser-v04.spec.ts:139:1 › R14-02 四类页面双主题三视口无横向滚动 (5.7s)
+  ✓   51 [tablet-chrome] › e2e/content-browser-v04.spec.ts:154:1 › R15-01/02 后台下拉、输入框、表格统一组件化 (2.7s)
+  ✓   52 [tablet-chrome] › e2e/content-browser-v04.spec.ts:314:1 › COMP-01 五语言×双主题×三视口冒烟无脚本错误 (5.6s)
+  ✓   53 [tablet-chrome] › e2e/content-public-v04.spec.ts:17:1 › R7-02 译文列表继承原文封面，不因翻译丢失 (18ms)
+  ✓   54 [tablet-chrome] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布 (288ms)
+  ✓   55 [tablet-chrome] › e2e/content-public-v04.spec.ts:57:1 › R9-03 无 JS 原文 HTML：en 英文正文，de 中文正文且德语界面 (7ms)
+  ✓   56 [tablet-chrome] › e2e/content-public-v04.spec.ts:68:1 › R9-04 有效译文 self-canonical / index / hreflang 含中文与 x-default (8ms)
+  ✓   57 [tablet-chrome] › e2e/content-public-v04.spec.ts:83:1 › R9-05 无译文 de：canonical 指中文、noindex、不进 hreflang/sitemap (17ms)
+  ✓   58 [tablet-chrome] › e2e/content-public-v04.spec.ts:91:1 › R9-06 中文 self-canonical，sitemap 含中文与有效译文 (12ms)
+  ✓   59 [tablet-chrome] › e2e/content-public-v04.spec.ts:99:1 › R9-07 长码 locale 301 到短码并保留查询参数 (2ms)
+  ✓   60 [tablet-chrome] › e2e/content-public-v04.spec.ts:110:1 › R9-08 无前缀旧详情 301 中文，非法语言 404 (3ms)
+  ✓   61 [tablet-chrome] › e2e/content-public-v04.spec.ts:119:1 › R12-01 无前缀入口恒 301 中文，忽略 cookie 语言 (3ms)
+  ✓   62 [tablet-chrome] › e2e/content-public-v04.spec.ts:127:1 › R12-02 URL 语言优先于 cookie 与 localStorage (4ms)
+  ✓   63 [tablet-chrome] › e2e/content-public-v04.spec.ts:135:1 › R12-05 长码 301 短码，非法 locale 404 且不跳登录 (5ms)
+  ✓   64 [tablet-chrome] › e2e/content-public-v04.spec.ts:148:1 › R12-06 五语言前缀路由 SSR 200，不被嵌入中间件打进 SPA 登录 (78ms)
+  ✓   65 [mobile-chrome] › e2e/content-admin-v04.spec.ts:49:1 › R1-01 标签删除二次确认：取消不删，确认后删除并同步 taxonomy (920ms)
+  ✓   66 [mobile-chrome] › e2e/content-admin-v04.spec.ts:70:1 › R1-02/R1-03 抓取间隔：空值存 NULL 继承全局，0/14/1441 拒绝，15/1440 通过 (39ms)
+  ✓   67 [mobile-chrome] › e2e/content-admin-v04.spec.ts:89:1 › R1-02 UI 回归：留空间隔显示“跟随全局”，独立间隔显示固定值（DEFECT-031-01 不得复现） (696ms)
+  ✓   68 [mobile-chrome] › e2e/content-admin-v04.spec.ts:119:1 › R1-04 ≥1 万字正文保存回显不截断（HTML 源码回显 + 重新拉取） (1.1s)
+  ✓   69 [mobile-chrome] › e2e/content-admin-v04.spec.ts:138:1 › R2-01 1440/1024/390 视口无横向溢出，编辑弹窗宽度不超出视口 (1.6s)
+  ✓   70 [mobile-chrome] › e2e/content-admin-v04.spec.ts:151:1 › R5-01 组字阶段 Enter 不生成词条，组字结束后才生成 (829ms)
+  ✓   71 [mobile-chrome] › e2e/content-admin-v04.spec.ts:172:1 › R6-01/R6-05 精选以 featured_at 为唯一真源：设置即写入时间，列表按时间倒序 (41ms)
+  ✓   72 [mobile-chrome] › e2e/content-admin-v04.spec.ts:200:1 › R10-06/R10-12 未配置加密/默认模型时返回明确错误且不落明文 Key (8ms)
+  ✓   73 [mobile-chrome] › e2e/content-admin-v04.spec.ts:214:1 › R9-01 翻译任务：缺模型被拒，指定模型后入队为 queued 而非假成功 (9ms)
+  ✓   74 [mobile-chrome] › e2e/content-browser-v04.spec.ts:15:1 › R7-01 列表封面桌面左图 240px/16:9、移动顶部通栏 16:9，详情封面 16:9 (750ms)
+  ✓   75 [mobile-chrome] › e2e/content-browser-v04.spec.ts:38:1 › R7-03 封面加载失败不出现破图，占位保留尺寸 (1.6s)
+  ✓   76 [mobile-chrome] › e2e/content-browser-v04.spec.ts:51:1 › R9-09 详情标题/阅读时间/推荐去重且不含自身 (768ms)
+  ✓   77 [mobile-chrome] › e2e/content-browser-v04.spec.ts:64:1 › R12-04 五语言切换跳对应短码前缀且不丢当前详情 (1.3s)
+  ✓   78 [mobile-chrome] › e2e/content-browser-v04.spec.ts:77:1 › R13-01 精选 1 大 + 最多 9 小，三视口网格与无横向滚动 (1.4s)
+  ✓   79 [mobile-chrome] › e2e/content-browser-v04.spec.ts:93:1 › R13-02 精选徽章柠绿底深色字，暗色主题下仍一致 (698ms)
+  ✓   80 [mobile-chrome] › e2e/content-browser-v04.spec.ts:108:1 › R13-03 0 篇精选整段隐藏，长标题两行截断 (674ms)
+  ✓   81 [mobile-chrome] › e2e/content-browser-v04.spec.ts:118:1 › R14-01 公开四类页面双主题无 #10B981 旧绿渲染残留 (1.2s)
+  ✓   82 [mobile-chrome] › e2e/content-browser-v04.spec.ts:139:1 › R14-02 四类页面双主题三视口无横向滚动 (5.2s)
+  ✓   83 [mobile-chrome] › e2e/content-browser-v04.spec.ts:154:1 › R15-01/02 后台下拉、输入框、表格统一组件化 (2.1s)
+  ✓   84 [mobile-chrome] › e2e/content-browser-v04.spec.ts:314:1 › COMP-01 五语言×双主题×三视口冒烟无脚本错误 (5.7s)
+  ✓   85 [mobile-chrome] › e2e/content-public-v04.spec.ts:17:1 › R7-02 译文列表继承原文封面，不因翻译丢失 (15ms)
+  ✓   86 [mobile-chrome] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布 (269ms)
+  ✓   87 [mobile-chrome] › e2e/content-public-v04.spec.ts:57:1 › R9-03 无 JS 原文 HTML：en 英文正文，de 中文正文且德语界面 (6ms)
+  ✓   88 [mobile-chrome] › e2e/content-public-v04.spec.ts:68:1 › R9-04 有效译文 self-canonical / index / hreflang 含中文与 x-default (5ms)
+  ✓   89 [mobile-chrome] › e2e/content-public-v04.spec.ts:83:1 › R9-05 无译文 de：canonical 指中文、noindex、不进 hreflang/sitemap (11ms)
+  ✓   90 [mobile-chrome] › e2e/content-public-v04.spec.ts:91:1 › R9-06 中文 self-canonical，sitemap 含中文与有效译文 (10ms)
+  ✓   91 [mobile-chrome] › e2e/content-public-v04.spec.ts:99:1 › R9-07 长码 locale 301 到短码并保留查询参数 (2ms)
+  ✓   92 [mobile-chrome] › e2e/content-public-v04.spec.ts:110:1 › R9-08 无前缀旧详情 301 中文，非法语言 404 (3ms)
+  ✓   93 [mobile-chrome] › e2e/content-public-v04.spec.ts:119:1 › R12-01 无前缀入口恒 301 中文，忽略 cookie 语言 (3ms)
+  ✓   94 [mobile-chrome] › e2e/content-public-v04.spec.ts:127:1 › R12-02 URL 语言优先于 cookie 与 localStorage (4ms)
+  ✓   95 [mobile-chrome] › e2e/content-public-v04.spec.ts:135:1 › R12-05 长码 301 短码，非法 locale 404 且不跳登录 (6ms)
+  ✓   96 [mobile-chrome] › e2e/content-public-v04.spec.ts:148:1 › R12-06 五语言前缀路由 SSR 200，不被嵌入中间件打进 SPA 登录 (75ms)
+  ✓   97 [webkit-desktop] › e2e/content-admin-v04.spec.ts:49:1 › R1-01 标签删除二次确认：取消不删，确认后删除并同步 taxonomy (3.3s)
+  ✓   98 [webkit-desktop] › e2e/content-admin-v04.spec.ts:70:1 › R1-02/R1-03 抓取间隔：空值存 NULL 继承全局，0/14/1441 拒绝，15/1440 通过 (41ms)
+  ✓   99 [webkit-desktop] › e2e/content-admin-v04.spec.ts:89:1 › R1-02 UI 回归：留空间隔显示“跟随全局”，独立间隔显示固定值（DEFECT-031-01 不得复现） (756ms)
+  ✓  100 [webkit-desktop] › e2e/content-admin-v04.spec.ts:119:1 › R1-04 ≥1 万字正文保存回显不截断（HTML 源码回显 + 重新拉取） (1.2s)
+  ✓  101 [webkit-desktop] › e2e/content-admin-v04.spec.ts:138:1 › R2-01 1440/1024/390 视口无横向溢出，编辑弹窗宽度不超出视口 (1.6s)
+  ✓  102 [webkit-desktop] › e2e/content-admin-v04.spec.ts:151:1 › R5-01 组字阶段 Enter 不生成词条，组字结束后才生成 (930ms)
+  ✓  103 [webkit-desktop] › e2e/content-admin-v04.spec.ts:172:1 › R6-01/R6-05 精选以 featured_at 为唯一真源：设置即写入时间，列表按时间倒序 (68ms)
+  ✓  104 [webkit-desktop] › e2e/content-admin-v04.spec.ts:200:1 › R10-06/R10-12 未配置加密/默认模型时返回明确错误且不落明文 Key (12ms)
+  ✓  105 [webkit-desktop] › e2e/content-admin-v04.spec.ts:214:1 › R9-01 翻译任务：缺模型被拒，指定模型后入队为 queued 而非假成功 (14ms)
+  ✓  106 [webkit-desktop] › e2e/content-browser-v04.spec.ts:15:1 › R7-01 列表封面桌面左图 240px/16:9、移动顶部通栏 16:9，详情封面 16:9 (773ms)
+  ✓  107 [webkit-desktop] › e2e/content-browser-v04.spec.ts:38:1 › R7-03 封面加载失败不出现破图，占位保留尺寸 (1.6s)
+  ✓  108 [webkit-desktop] › e2e/content-browser-v04.spec.ts:51:1 › R9-09 详情标题/阅读时间/推荐去重且不含自身 (581ms)
+  ✓  109 [webkit-desktop] › e2e/content-browser-v04.spec.ts:64:1 › R12-04 五语言切换跳对应短码前缀且不丢当前详情 (829ms)
+  ✓  110 [webkit-desktop] › e2e/content-browser-v04.spec.ts:77:1 › R13-01 精选 1 大 + 最多 9 小，三视口网格与无横向滚动 (1.3s)
+  ✓  111 [webkit-desktop] › e2e/content-browser-v04.spec.ts:93:1 › R13-02 精选徽章柠绿底深色字，暗色主题下仍一致 (536ms)
+  ✓  112 [webkit-desktop] › e2e/content-browser-v04.spec.ts:108:1 › R13-03 0 篇精选整段隐藏，长标题两行截断 (668ms)
+  ✓  113 [webkit-desktop] › e2e/content-browser-v04.spec.ts:118:1 › R14-01 公开四类页面双主题无 #10B981 旧绿渲染残留 (1.4s)
+  ✓  114 [webkit-desktop] › e2e/content-browser-v04.spec.ts:139:1 › R14-02 四类页面双主题三视口无横向滚动 (5.2s)
+  ✓  115 [webkit-desktop] › e2e/content-browser-v04.spec.ts:154:1 › R15-01/02 后台下拉、输入框、表格统一组件化 (2.5s)
+  ✓  116 [webkit-desktop] › e2e/content-browser-v04.spec.ts:314:1 › COMP-01 五语言×双主题×三视口冒烟无脚本错误 (5.6s)
+  ✓  117 [webkit-desktop] › e2e/content-public-v04.spec.ts:17:1 › R7-02 译文列表继承原文封面，不因翻译丢失 (14ms)
+  ✘  118 [webkit-desktop] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布 (339ms)
+  ✓  119 [webkit-desktop] › e2e/content-public-v04.spec.ts:57:1 › R9-03 无 JS 原文 HTML：en 英文正文，de 中文正文且德语界面 (17ms)
+  ✓  120 [webkit-desktop] › e2e/content-public-v04.spec.ts:68:1 › R9-04 有效译文 self-canonical / index / hreflang 含中文与 x-default (8ms)
+  ✓  121 [webkit-desktop] › e2e/content-public-v04.spec.ts:83:1 › R9-05 无译文 de：canonical 指中文、noindex、不进 hreflang/sitemap (17ms)
+  ✓  122 [webkit-desktop] › e2e/content-public-v04.spec.ts:91:1 › R9-06 中文 self-canonical，sitemap 含中文与有效译文 (15ms)
+  ✓  123 [webkit-desktop] › e2e/content-public-v04.spec.ts:99:1 › R9-07 长码 locale 301 到短码并保留查询参数 (3ms)
+  ✓  124 [webkit-desktop] › e2e/content-public-v04.spec.ts:110:1 › R9-08 无前缀旧详情 301 中文，非法语言 404 (6ms)
+  ✓  125 [webkit-desktop] › e2e/content-public-v04.spec.ts:119:1 › R12-01 无前缀入口恒 301 中文，忽略 cookie 语言 (3ms)
+  ✓  126 [webkit-desktop] › e2e/content-public-v04.spec.ts:127:1 › R12-02 URL 语言优先于 cookie 与 localStorage (7ms)
+  ✓  127 [webkit-desktop] › e2e/content-public-v04.spec.ts:135:1 › R12-05 长码 301 短码，非法 locale 404 且不跳登录 (6ms)
+  ✓  128 [webkit-desktop] › e2e/content-public-v04.spec.ts:148:1 › R12-06 五语言前缀路由 SSR 200，不被嵌入中间件打进 SPA 登录 (87ms)
+  ✓  129 [webkit-mobile] › e2e/content-admin-v04.spec.ts:49:1 › R1-01 标签删除二次确认：取消不删，确认后删除并同步 taxonomy (1.3s)
+  ✓  130 [webkit-mobile] › e2e/content-admin-v04.spec.ts:70:1 › R1-02/R1-03 抓取间隔：空值存 NULL 继承全局，0/14/1441 拒绝，15/1440 通过 (43ms)
+  ✓  131 [webkit-mobile] › e2e/content-admin-v04.spec.ts:89:1 › R1-02 UI 回归：留空间隔显示“跟随全局”，独立间隔显示固定值（DEFECT-031-01 不得复现） (681ms)
+  ✓  132 [webkit-mobile] › e2e/content-admin-v04.spec.ts:119:1 › R1-04 ≥1 万字正文保存回显不截断（HTML 源码回显 + 重新拉取） (1.2s)
+  ✓  133 [webkit-mobile] › e2e/content-admin-v04.spec.ts:138:1 › R2-01 1440/1024/390 视口无横向溢出，编辑弹窗宽度不超出视口 (1.9s)
+  ✓  134 [webkit-mobile] › e2e/content-admin-v04.spec.ts:151:1 › R5-01 组字阶段 Enter 不生成词条，组字结束后才生成 (958ms)
+  ✓  135 [webkit-mobile] › e2e/content-admin-v04.spec.ts:172:1 › R6-01/R6-05 精选以 featured_at 为唯一真源：设置即写入时间，列表按时间倒序 (70ms)
+  ✓  136 [webkit-mobile] › e2e/content-admin-v04.spec.ts:200:1 › R10-06/R10-12 未配置加密/默认模型时返回明确错误且不落明文 Key (13ms)
+  ✓  137 [webkit-mobile] › e2e/content-admin-v04.spec.ts:214:1 › R9-01 翻译任务：缺模型被拒，指定模型后入队为 queued 而非假成功 (15ms)
+  ✓  138 [webkit-mobile] › e2e/content-browser-v04.spec.ts:15:1 › R7-01 列表封面桌面左图 240px/16:9、移动顶部通栏 16:9，详情封面 16:9 (671ms)
+  ✓  139 [webkit-mobile] › e2e/content-browser-v04.spec.ts:38:1 › R7-03 封面加载失败不出现破图，占位保留尺寸 (1.5s)
+  ✓  140 [webkit-mobile] › e2e/content-browser-v04.spec.ts:51:1 › R9-09 详情标题/阅读时间/推荐去重且不含自身 (527ms)
+  ✓  141 [webkit-mobile] › e2e/content-browser-v04.spec.ts:64:1 › R12-04 五语言切换跳对应短码前缀且不丢当前详情 (914ms)
+  ✓  142 [webkit-mobile] › e2e/content-browser-v04.spec.ts:77:1 › R13-01 精选 1 大 + 最多 9 小，三视口网格与无横向滚动 (1.3s)
+  ✓  143 [webkit-mobile] › e2e/content-browser-v04.spec.ts:93:1 › R13-02 精选徽章柠绿底深色字，暗色主题下仍一致 (461ms)
+  ✓  144 [webkit-mobile] › e2e/content-browser-v04.spec.ts:108:1 › R13-03 0 篇精选整段隐藏，长标题两行截断 (538ms)
+  ✓  145 [webkit-mobile] › e2e/content-browser-v04.spec.ts:118:1 › R14-01 公开四类页面双主题无 #10B981 旧绿渲染残留 (1.2s)
+  ✓  146 [webkit-mobile] › e2e/content-browser-v04.spec.ts:139:1 › R14-02 四类页面双主题三视口无横向滚动 (5.0s)
+  ✓  147 [webkit-mobile] › e2e/content-browser-v04.spec.ts:154:1 › R15-01/02 后台下拉、输入框、表格统一组件化 (2.4s)
+  ✓  148 [webkit-mobile] › e2e/content-browser-v04.spec.ts:314:1 › COMP-01 五语言×双主题×三视口冒烟无脚本错误 (7.0s)
+  ✓  149 [webkit-mobile] › e2e/content-public-v04.spec.ts:17:1 › R7-02 译文列表继承原文封面，不因翻译丢失 (113ms)
+  ✘  150 [webkit-mobile] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布 (2.8s)
+  ✓  151 [webkit-mobile] › e2e/content-public-v04.spec.ts:57:1 › R9-03 无 JS 原文 HTML：en 英文正文，de 中文正文且德语界面 (237ms)
+  ✓  152 [webkit-mobile] › e2e/content-public-v04.spec.ts:68:1 › R9-04 有效译文 self-canonical / index / hreflang 含中文与 x-default (385ms)
+  ✓  153 [webkit-mobile] › e2e/content-public-v04.spec.ts:83:1 › R9-05 无译文 de：canonical 指中文、noindex、不进 hreflang/sitemap (861ms)
+  ✓  154 [webkit-mobile] › e2e/content-public-v04.spec.ts:91:1 › R9-06 中文 self-canonical，sitemap 含中文与有效译文 (521ms)
+  ✓  155 [webkit-mobile] › e2e/content-public-v04.spec.ts:99:1 › R9-07 长码 locale 301 到短码并保留查询参数 (35ms)
+  ✓  156 [webkit-mobile] › e2e/content-public-v04.spec.ts:110:1 › R9-08 无前缀旧详情 301 中文，非法语言 404 (108ms)
+  ✓  157 [webkit-mobile] › e2e/content-public-v04.spec.ts:119:1 › R12-01 无前缀入口恒 301 中文，忽略 cookie 语言 (21ms)
+  ✓  158 [webkit-mobile] › e2e/content-public-v04.spec.ts:127:1 › R12-02 URL 语言优先于 cookie 与 localStorage (91ms)
+  ✓  159 [webkit-mobile] › e2e/content-public-v04.spec.ts:135:1 › R12-05 长码 301 短码，非法 locale 404 且不跳登录 (38ms)
+  ✓  160 [webkit-mobile] › e2e/content-public-v04.spec.ts:148:1 › R12-06 五语言前缀路由 SSR 200，不被嵌入中间件打进 SPA 登录 (3.4s)
+  ✓  161 [msedge] › e2e/content-admin-v04.spec.ts:49:1 › R1-01 标签删除二次确认：取消不删，确认后删除并同步 taxonomy (6.6s)
+  ✓  162 [msedge] › e2e/content-admin-v04.spec.ts:70:1 › R1-02/R1-03 抓取间隔：空值存 NULL 继承全局，0/14/1441 拒绝，15/1440 通过 (320ms)
+  ✓  163 [msedge] › e2e/content-admin-v04.spec.ts:89:1 › R1-02 UI 回归：留空间隔显示“跟随全局”，独立间隔显示固定值（DEFECT-031-01 不得复现） (3.6s)
+  ✓  164 [msedge] › e2e/content-admin-v04.spec.ts:119:1 › R1-04 ≥1 万字正文保存回显不截断（HTML 源码回显 + 重新拉取） (3.5s)
+  ✓  165 [msedge] › e2e/content-admin-v04.spec.ts:138:1 › R2-01 1440/1024/390 视口无横向溢出，编辑弹窗宽度不超出视口 (5.0s)
+  ✓  166 [msedge] › e2e/content-admin-v04.spec.ts:151:1 › R5-01 组字阶段 Enter 不生成词条，组字结束后才生成 (1.6s)
+  ✓  167 [msedge] › e2e/content-admin-v04.spec.ts:172:1 › R6-01/R6-05 精选以 featured_at 为唯一真源：设置即写入时间，列表按时间倒序 (478ms)
+  ✓  168 [msedge] › e2e/content-admin-v04.spec.ts:200:1 › R10-06/R10-12 未配置加密/默认模型时返回明确错误且不落明文 Key (449ms)
+  ✓  169 [msedge] › e2e/content-admin-v04.spec.ts:214:1 › R9-01 翻译任务：缺模型被拒，指定模型后入队为 queued 而非假成功 (301ms)
+  ✓  170 [msedge] › e2e/content-browser-v04.spec.ts:15:1 › R7-01 列表封面桌面左图 240px/16:9、移动顶部通栏 16:9，详情封面 16:9 (2.4s)
+  ✓  171 [msedge] › e2e/content-browser-v04.spec.ts:38:1 › R7-03 封面加载失败不出现破图，占位保留尺寸 (2.7s)
+  ✓  172 [msedge] › e2e/content-browser-v04.spec.ts:51:1 › R9-09 详情标题/阅读时间/推荐去重且不含自身 (675ms)
+  ✓  173 [msedge] › e2e/content-browser-v04.spec.ts:64:1 › R12-04 五语言切换跳对应短码前缀且不丢当前详情 (945ms)
+  ✓  174 [msedge] › e2e/content-browser-v04.spec.ts:77:1 › R13-01 精选 1 大 + 最多 9 小，三视口网格与无横向滚动 (1.4s)
+  ✓  175 [msedge] › e2e/content-browser-v04.spec.ts:93:1 › R13-02 精选徽章柠绿底深色字，暗色主题下仍一致 (564ms)
+  ✓  176 [msedge] › e2e/content-browser-v04.spec.ts:108:1 › R13-03 0 篇精选整段隐藏，长标题两行截断 (603ms)
+  ✓  177 [msedge] › e2e/content-browser-v04.spec.ts:118:1 › R14-01 公开四类页面双主题无 #10B981 旧绿渲染残留 (1.3s)
+  ✓  178 [msedge] › e2e/content-browser-v04.spec.ts:139:1 › R14-02 四类页面双主题三视口无横向滚动 (5.3s)
+  ✓  179 [msedge] › e2e/content-browser-v04.spec.ts:154:1 › R15-01/02 后台下拉、输入框、表格统一组件化 (2.4s)
+  ✓  180 [msedge] › e2e/content-browser-v04.spec.ts:314:1 › COMP-01 五语言×双主题×三视口冒烟无脚本错误 (5.9s)
+  ✓  181 [msedge] › e2e/content-public-v04.spec.ts:17:1 › R7-02 译文列表继承原文封面，不因翻译丢失 (20ms)
+  ✘  182 [msedge] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布 (305ms)
+  ✓  183 [msedge] › e2e/content-public-v04.spec.ts:57:1 › R9-03 无 JS 原文 HTML：en 英文正文，de 中文正文且德语界面 (22ms)
+  ✓  184 [msedge] › e2e/content-public-v04.spec.ts:68:1 › R9-04 有效译文 self-canonical / index / hreflang 含中文与 x-default (12ms)
+  ✓  185 [msedge] › e2e/content-public-v04.spec.ts:83:1 › R9-05 无译文 de：canonical 指中文、noindex、不进 hreflang/sitemap (22ms)
+  ✓  186 [msedge] › e2e/content-public-v04.spec.ts:91:1 › R9-06 中文 self-canonical，sitemap 含中文与有效译文 (17ms)
+  ✓  187 [msedge] › e2e/content-public-v04.spec.ts:99:1 › R9-07 长码 locale 301 到短码并保留查询参数 (3ms)
+  ✓  188 [msedge] › e2e/content-public-v04.spec.ts:110:1 › R9-08 无前缀旧详情 301 中文，非法语言 404 (6ms)
+  ✓  189 [msedge] › e2e/content-public-v04.spec.ts:119:1 › R12-01 无前缀入口恒 301 中文，忽略 cookie 语言 (4ms)
+  ✓  190 [msedge] › e2e/content-public-v04.spec.ts:127:1 › R12-02 URL 语言优先于 cookie 与 localStorage (9ms)
+  ✓  191 [msedge] › e2e/content-public-v04.spec.ts:135:1 › R12-05 长码 301 短码，非法 locale 404 且不跳登录 (6ms)
+  ✓  192 [msedge] › e2e/content-public-v04.spec.ts:148:1 › R12-06 五语言前缀路由 SSR 200，不被嵌入中间件打进 SPA 登录 (81ms)
+
+
+  1) [webkit-desktop] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布 ───
+
+    Error: 已发布译文数量
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      52 |     }
+      53 |   }
+    > 54 |   expect(checked, '已发布译文数量').toBeGreaterThan(0)
+         |                              ^
+      55 | })
+      56 |
+      57 | test('R9-03 无 JS 原文 HTML：en 英文正文，de 中文正文且德语界面', async ({ request }) => {
+        at /Users/mac/Documents/Dev/sub2apis/frontend/e2e/content-public-v04.spec.ts:54:30
+
+    Error Context: test-results/playwright/content-public-v04-R9-02-仅匹配当前-source-version-的译文对外发布-webkit-desktop/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/playwright/content-public-v04-R9-02-仅匹配当前-source-version-的译文对外发布-webkit-desktop/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/playwright/content-public-v04-R9-02-仅匹配当前-source-version-的译文对外发布-webkit-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-mobile] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布 ────
+
+    Error: 已发布译文数量
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      52 |     }
+      53 |   }
+    > 54 |   expect(checked, '已发布译文数量').toBeGreaterThan(0)
+         |                              ^
+      55 | })
+      56 |
+      57 | test('R9-03 无 JS 原文 HTML：en 英文正文，de 中文正文且德语界面', async ({ request }) => {
+        at /Users/mac/Documents/Dev/sub2apis/frontend/e2e/content-public-v04.spec.ts:54:30
+
+    Error Context: test-results/playwright/content-public-v04-R9-02-仅匹配当前-source-version-的译文对外发布-webkit-mobile/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/playwright/content-public-v04-R9-02-仅匹配当前-source-version-的译文对外发布-webkit-mobile/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/playwright/content-public-v04-R9-02-仅匹配当前-source-version-的译文对外发布-webkit-mobile/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [msedge] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布 ───────────
+
+    Error: 已发布译文数量
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      52 |     }
+      53 |   }
+    > 54 |   expect(checked, '已发布译文数量').toBeGreaterThan(0)
+         |                              ^
+      55 | })
+      56 |
+      57 | test('R9-03 无 JS 原文 HTML：en 英文正文，de 中文正文且德语界面', async ({ request }) => {
+        at /Users/mac/Documents/Dev/sub2apis/frontend/e2e/content-public-v04.spec.ts:54:30
+
+    Error Context: test-results/playwright/content-public-v04-R9-02-仅匹配当前-source-version-的译文对外发布-msedge/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/playwright/content-public-v04-R9-02-仅匹配当前-source-version-的译文对外发布-msedge/trace.zip
+    Usage:
+
+        pnpm exec playwright show-trace test-results/playwright/content-public-v04-R9-02-仅匹配当前-source-version-的译文对外发布-msedge/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3 failed
+    [webkit-desktop] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布 ────
+    [webkit-mobile] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布 ─────
+    [msedge] › e2e/content-public-v04.spec.ts:31:1 › R9-02 仅匹配当前 source_version 的译文对外发布 ────────────
+  189 passed (3.7m)

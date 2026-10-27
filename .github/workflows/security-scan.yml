@@ -9,6 +9,12 @@ on:
 permissions:
   contents: read
 
+# backend/go.mod requires go1.26.6 and imports encoding/json/v2, which needs the
+# jsonv2 GOEXPERIMENT; workflow-level env makes govulncheck (and any Go step)
+# resolve that dependency tree instead of failing on encoding/json/jsontext.
+env:
+  GOEXPERIMENT: "jsonv2"
+
 jobs:
   backend-security:
     runs-on: ubuntu-latest

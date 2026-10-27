@@ -1,0 +1,2021 @@
+
+> sub2api-frontend@1.0.0 test:run /Users/mac/Documents/Dev/sub2apis/frontend
+> vitest run
+
+
+ RUN  v2.1.9 /Users/mac/Documents/Dev/sub2apis/frontend
+
+ ✓ src/router/__tests__/guards.spec.ts (39 tests) 9ms
+Browserslist: browsers data (caniuse-lite) is 10 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ✓ src/components/account/__tests__/AccountUsageCell.spec.ts (13 tests) 154ms
+ ✓ src/views/admin/__tests__/ContentCenterView.spec.ts (12 tests) 706ms
+ ✓ src/components/user/profile/__tests__/ProfileIdentityBindingsSection.spec.ts (16 tests) 145ms
+ ✓ src/views/user/__tests__/UsageView.spec.ts (6 tests) 152ms
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > does not render legacy visible payment method controls
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > links payment guidance to README sections instead of removed payment docs
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+ ✓ src/views/auth/__tests__/OidcCallbackView.spec.ts (15 tests) 191ms
+ ✓ src/views/auth/__tests__/LinuxDoCallbackView.spec.ts (17 tests) 207ms
+ ✓ src/views/auth/__tests__/WechatCallbackView.spec.ts (25 tests) 264ms
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > does not submit legacy visible payment method settings
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > submits Anthropic cache TTL injection gateway setting
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+ ✓ src/views/admin/__tests__/UsersView.spec.ts (8 tests) 202ms
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > loads and submits the dedicated Model Square feature switch
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > loads and submits the Remote Compaction V2 rollback switch
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+ ✓ src/components/payment/__tests__/paymentFlow.spec.ts (21 tests) 5ms
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > loads and submits the Group Usage Rollup rollback switch
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+ ✓ src/components/account/__tests__/EditAccountModal.spec.ts (10 tests) 298ms
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > reloads the confirmed Group Usage Rollup value when a later save step fails
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/components/account/__tests__/BulkEditAccountModal.spec.ts > BulkEditAccountModal > 真实 API 返回 422 时保留已填写字段
+Error bulk updating accounts: { status: 422, message: '字段不适用' }
+
+ ✓ src/components/account/__tests__/BulkEditAccountModal.spec.ts (16 tests) 404ms
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > restores the prior Group Usage Rollup value when save and reload both fail
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > submits message cache_control rewrite and local response cache gateway settings
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > does not render cache management content inside general settings
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+ ✓ src/views/user/__tests__/PaymentResultView.spec.ts (12 tests) 107ms
+stderr | src/stores/__tests__/auth.spec.ts > useAuthStore > checkAuth > localStorage 中用户数据损坏时清除状态
+Failed to parse saved user data: SyntaxError: Unexpected token 'i', "invalid-json{{{" is not valid JSON
+    at JSON.parse (<anonymous>)
+    at Proxy.checkAuth (/Users/mac/Documents/Dev/sub2apis/frontend/src/stores/auth.ts:113:27)
+    at Proxy.wrappedAction (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/pinia@2.3.1_typescript@5.6.3_vue@3.5.26_typescript@5.6.3_/node_modules/pinia/dist/pinia.mjs:1399:26)
+    at /Users/mac/Documents/Dev/sub2apis/frontend/src/stores/__tests__/auth.spec.ts:193:13
+    at file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14
+    at file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11
+    at runWithTimeout (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+    at runTest (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:17)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at runSuite (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+
+ ✓ src/stores/__tests__/auth.spec.ts (21 tests) 57ms
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > loads and submits announcement translation settings without echoing the saved API key
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+ ✓ src/__tests__/integration/navigation.spec.ts (10 tests) 283ms
+ ✓ src/views/auth/__tests__/EmailVerifyView.spec.ts (7 tests) 158ms
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > submits Antigravity user agent version gateway setting
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > manages balance low notification excluded users
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+ ✓ src/views/admin/__tests__/FinanceStatsView.spec.ts (7 tests) 461ms
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > updates provider enablement immediately and reloads providers
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+ ✓ src/api/__tests__/settings.authSourceDefaults.spec.ts (13 tests) 18ms
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > renders advanced scheduler copy as local experimental gateway policy
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > passes translated upload and remove labels to the payment help image uploader
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > requires a reason before changing the sales pricing resolver state
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > does not submit sales pricing fields when the state is unchanged
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > submits the trimmed reason when sales pricing state changes
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > keeps the attempted sales pricing state and reason after a save failure
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+ ✓ src/components/account/__tests__/EditAccountModal.grokUpstream.spec.ts (11 tests) 509ms
+ ✓ src/components/common/__tests__/formControls.spec.ts (9 tests) 149ms
+ ✓ src/views/admin/ops/components/__tests__/OpsSettingsDialog.spec.ts (3 tests) 196ms
+ ✓ src/views/user/__tests__/PaymentView.spec.ts (6 tests) 51ms
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > requires a reason before changing the OpenAI Team resolver state
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+ ✓ src/components/admin/usage/__tests__/UsageTable.spec.ts (8 tests) 164ms
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView payment visible method controls > submits the trimmed reason when the OpenAI Team resolver state changes
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView wechat connect controls > loads and echoes WeChat Connect fields from the backend payload
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView wechat connect controls > links GitHub OAuth Apps guide to GitHub developer settings
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView wechat connect controls > saves WeChat Connect fields using the backend contract and clears the secret after save
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView wechat connect controls > collapses auth source defaults until the source is enabled
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+ ✓ src/stores/__tests__/app.spec.ts (22 tests) 44ms
+ ✓ src/components/keys/__tests__/UseKeyModal.spec.ts (8 tests) 116ms
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView wechat connect controls > preserves optional OIDC compatibility flags instead of forcing them on save
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView platform quota matrix > 从 baseSettings 加载默认平台配额数据并在 Users tab 渲染全平台行
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView platform quota matrix > 保存时 updateSettings payload 应包含嵌套 default_platform_quotas 对象（含全平台）
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView platform quota matrix > 加载后 form.default_platform_quotas 含全平台，从嵌套 JSON 正确读取数值
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+ ✓ src/i18n/__tests__/localeDetection.spec.ts (21 tests) 61ms
+stderr | src/views/admin/__tests__/SettingsView.spec.ts > admin SettingsView platform quota matrix > 空输入（v-model.number 产出 ""）在提交时清洗为 null 而非空字符串
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+ ✓ src/views/admin/__tests__/SettingsView.spec.ts (32 tests) 3672ms
+ ✓ src/components/user/profile/__tests__/ProfileAvatarCard.spec.ts (4 tests) 76ms
+ ✓ src/components/admin/user/__tests__/UserPlatformQuotaModal.spec.ts (11 tests) 248ms
+ ✓ src/components/model-square/__tests__/ModelSquareTable.spec.ts (5 tests) 101ms
+stderr | src/stores/__tests__/subscriptions.spec.ts > useSubscriptionStore > fetchActiveSubscriptions > API 错误时抛出异常
+Failed to fetch active subscriptions: Error: Network error
+    at /Users/mac/Documents/Dev/sub2apis/frontend/src/stores/__tests__/subscriptions.spec.ts:141:52
+    at file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14
+    at file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11
+    at runWithTimeout (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+    at runTest (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:17)
+    at processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at runSuite (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runSuite (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runSuite (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runFiles (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1262:5)
+
+ ✓ src/stores/__tests__/subscriptions.spec.ts (13 tests) 23ms
+ ✓ src/views/admin/__tests__/AccountsView.bulkEdit.spec.ts (3 tests) 88ms
+ ✓ src/views/auth/__tests__/OAuthCallbackView.spec.ts (6 tests) 62ms
+ ✓ src/views/auth/__tests__/LoginView.spec.ts (3 tests) 92ms
+ ✓ src/views/admin/ops/components/__tests__/OpsErrorScopeCharts.spec.ts (4 tests) 94ms
+ ✓ src/components/auth/__tests__/WechatOAuthSection.spec.ts (6 tests) 111ms
+stderr | src/composables/__tests__/useTableLoader.spec.ts > useTableLoader > 错误处理 > 非取消错误会被抛出
+Table load error: Error: Server error
+    at /Users/mac/Documents/Dev/sub2apis/frontend/src/composables/__tests__/useTableLoader.spec.ts:237:49
+    at file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14
+    at file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11
+    at runWithTimeout (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+    at runTest (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:17)
+    at runSuite (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runSuite (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runSuite (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runFiles (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1262:5)
+    at startTests (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1271:3)
+
+ ✓ src/composables/__tests__/useTableLoader.spec.ts (12 tests) 11ms
+ ✓ src/views/admin/__tests__/RiskControlView.spec.ts (2 tests) 189ms
+ ✓ src/api/__tests__/auth-oauth-adoption.spec.ts (13 tests) 19ms
+ ✓ src/utils/__tests__/contentAnalyticsV04.spec.ts (10 tests) 14ms
+ ✓ src/views/__tests__/KeyUsageView.spec.ts (1 test) 72ms
+ ✓ src/views/public/__tests__/PublicContentDetail.spec.ts (12 tests) 5ms
+ ✓ src/components/auth/__tests__/PendingOAuthCreateAccountForm.spec.ts (6 tests) 94ms
+ ✓ src/api/__tests__/client.spec.ts (10 tests) 120ms
+ ✓ src/components/payment/__tests__/PaymentProviderDialog.spec.ts (7 tests) 101ms
+ ✓ src/components/user/profile/__tests__/ProfileInfoCard.spec.ts (6 tests) 118ms
+ ✓ src/components/common/__tests__/dialogPagination.spec.ts (7 tests) 106ms
+stderr | src/views/admin/ops/components/__tests__/OpsOpenAITokenStatsCard.spec.ts > OpsOpenAITokenStatsCard > 接口异常时显示错误提示
+[OpsOpenAITokenStatsCard] Failed to load data Error: 加载失败
+    at /Users/mac/Documents/Dev/sub2apis/frontend/src/views/admin/ops/components/__tests__/OpsOpenAITokenStatsCard.spec.ts:217:47
+    at file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:146:14
+    at file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:533:11
+    at runWithTimeout (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:39:7)
+    at runTest (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1056:17)
+    at runSuite (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runSuite (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1205:15)
+    at runFiles (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1262:5)
+    at startTests (file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/@vitest+runner@2.1.9/node_modules/@vitest/runner/dist/index.js:1271:3)
+    at file:///Users/mac/Documents/Dev/sub2apis/frontend/node_modules/.pnpm/vitest@2.1.9_@types+node@20.19.27_jsdom@24.1.3/node_modules/vitest/dist/chunks/runBaseTests.3qpJUEJM.js:126:11
+
+ ✓ src/views/admin/ops/components/__tests__/OpsOpenAITokenStatsCard.spec.ts (5 tests) 71ms
+ ✓ src/utils/__tests__/seedaceVideo.spec.ts (12 tests) 12ms
+ ✓ src/components/__tests__/LoginForm.spec.ts (5 tests) 89ms
+ ✓ src/components/charts/__tests__/ModelDistributionChart.spec.ts (3 tests) 162ms
+ ✓ src/composables/__tests__/useRoutePrefetch.spec.ts (16 tests) 2741ms
+   ✓ useRoutePrefetch > requestIdleCallback 超时处理 > 超时后仍能正常执行预加载 2102ms
+ ✓ src/views/admin/__tests__/DashboardView.spec.ts (2 tests) 90ms
+ ✓ src/utils/__tests__/registrationEmailPolicy.spec.ts (13 tests) 9ms
+ ✓ src/components/__tests__/ApiKeyCreate.spec.ts (5 tests) 51ms
+ ✓ src/composables/__tests__/useNavigationLoading.spec.ts (11 tests) 4ms
+ ✓ src/views/admin/__tests__/RedeemView.batchUpdate.spec.ts (1 test) 58ms
+ ✓ src/components/__tests__/Dashboard.spec.ts (5 tests) 42ms
+ ✓ src/views/admin/ops/components/__tests__/OpsRequestDetailsModal.spec.ts (2 tests) 34ms
+ ✓ src/components/user/profile/__tests__/totp-timer-cleanup.spec.ts (4 tests) 106ms
+ ✓ src/components/admin/content/__tests__/AIConfigPanel.spec.ts (3 tests) 153ms
+ ✓ src/views/admin/__tests__/UsageView.spec.ts (1 test) 86ms
+ ✓ src/components/account/__tests__/AccountTestModal.spec.ts (2 tests) 134ms
+ ✓ src/composables/__tests__/useModelWhitelist.spec.ts (12 tests) 10ms
+ ✓ src/views/admin/ops/utils/__tests__/errorDetailResponse.spec.ts (7 tests) 1ms
+ ✓ src/composables/__tests__/useClipboard.spec.ts (8 tests) 18ms
+ ✓ src/utils/announcementContent.spec.ts (7 tests) 130ms
+ ✓ src/components/admin/account/__tests__/AccountTestModal.spec.ts (1 test) 91ms
+ ✓ src/views/admin/__tests__/ChannelMonitorView.grok.spec.ts (2 tests) 113ms
+ ✓ src/components/account/__tests__/AccountStatusIndicator.spec.ts (4 tests) 49ms
+ ✓ src/components/payment/__tests__/PaymentStatusPanel.spec.ts (3 tests) 89ms
+ ✓ src/views/admin/ops/components/__tests__/OpsErrorDetailsModal.spec.ts (2 tests) 28ms
+ ✓ src/views/auth/__tests__/WechatPaymentCallbackView.spec.ts (3 tests) 21ms
+ ✓ src/composables/__tests__/useForm.spec.ts (7 tests) 6ms
+ ✓ src/components/layout/__tests__/AppSidebar.spec.ts (7 tests) 5ms
+ ✓ src/views/admin/__tests__/AnnouncementsView.state.spec.ts (2 tests) 42ms
+ ✓ src/components/finance/__tests__/AccountFinanceSettings.spec.ts (4 tests) 71ms
+ ✓ src/views/user/__tests__/StripePaymentView.spec.ts (1 test) 55ms
+ ✓ src/views/user/__tests__/AirwallexPaymentView.spec.ts (2 tests) 41ms
+stderr | src/views/admin/__tests__/SettingsView.domain-limit.spec.ts > SettingsView registration domain limit > loads configured limit and toggles the per-domain input
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+stderr | src/views/admin/__tests__/SettingsView.domain-limit.spec.ts > SettingsView registration domain limit > associates visible numeric settings with explicit labels
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+ ✓ src/views/admin/__tests__/SettingsView.domain-limit.spec.ts (2 tests) 296ms
+ ✓ src/api/admin/__tests__/finance.spec.ts (5 tests) 7ms
+ ✓ src/api/__tests__/admin.users.spec.ts (2 tests) 10ms
+ ✓ src/components/admin/channel/__tests__/types.spec.ts (7 tests) 2ms
+ ✓ src/views/user/__tests__/paymentUx.spec.ts (9 tests) 2ms
+ ✓ src/components/charts/__tests__/TokenUsageTrend.spec.ts (3 tests) 40ms
+ ✓ src/components/charts/__tests__/GroupDistributionChart.spec.ts (2 tests) 91ms
+ ✓ src/components/auth/__tests__/EmailOAuthButtons.spec.ts (3 tests) 34ms
+ ✓ src/components/account/__tests__/CreateAccountModal.grok.spec.ts (5 tests) 3ms
+ ✓ src/views/user/__tests__/ModelSquareView.spec.ts (2 tests) 218ms
+ ✓ src/components/common/__tests__/PlatformTypeBadge.grok.spec.ts (4 tests) 43ms
+ ✓ src/i18n/__tests__/contentV04Locales.spec.ts (4 tests) 44ms
+ ✓ src/utils/__tests__/openaiWsMode.spec.ts (6 tests) 2ms
+ ✓ src/views/admin/__tests__/groupsMessagesDispatch.spec.ts (4 tests) 13ms
+ ✓ src/components/user/profile/__tests__/ProfilePasswordForm.spec.ts (2 tests) 62ms
+ ✓ src/utils/__tests__/embedded-url.spec.ts (5 tests) 10ms
+ ✓ src/components/common/__tests__/DateRangePicker.spec.ts (2 tests) 70ms
+ ✓ src/views/user/__tests__/ProfileView.spec.ts (1 test) 56ms
+ ✓ src/styleV04.spec.ts (5 tests) 7ms
+stderr | src/views/admin/__tests__/SettingsView.x-search.spec.ts > SettingsView X Search price > loads and saves the X Search price
+[Vue warn]: Failed to resolve component: router-link
+If this is a native custom element, make sure to exclude it from component resolution via compilerOptions.isCustomElement. 
+  at <SettingsView ref="VTU_COMPONENT" > 
+  at <VTUROOT>
+
+ ✓ src/views/admin/__tests__/SettingsView.x-search.spec.ts (1 test) 142ms
+ ✓ src/components/user/__tests__/UserPlatformQuotaCell.spec.ts (5 tests) 41ms
+ ✓ src/composables/__tests__/useOpenAIOAuth.spec.ts (3 tests) 2ms
+ ✓ src/composables/__tests__/useKeyedDebouncedSearch.spec.ts (3 tests) 6ms
+ ✓ src/utils/__tests__/tablePreferences.spec.ts (6 tests) 4ms
+ ✓ src/views/public/__tests__/PublicContentFeatured.spec.ts (4 tests) 4ms
+ ✓ src/components/common/__tests__/NavigationProgress.spec.ts (5 tests) 107ms
+ ✓ src/components/admin/announcements/__tests__/AnnouncementReadStatusDialog.spec.ts (1 test) 51ms
+ ✓ src/views/admin/__tests__/GroupsView.cnMessagesDispatch.spec.ts (4 tests) 3ms
+ ✓ src/components/common/__tests__/HelpTooltip.spec.ts (2 tests) 29ms
+ ✓ src/api/__tests__/settings.paymentVisibleMethods.spec.ts (3 tests) 1ms
+ ✓ src/components/payment/__tests__/providerConfig.spec.ts (6 tests) 6ms
+ ✓ src/components/common/__tests__/TagInput.spec.ts (3 tests) 64ms
+ ✓ src/utils/__tests__/ccswitchImport.spec.ts (4 tests) 6ms
+ ✓ src/composables/__tests__/useGrokOAuth.spec.ts (2 tests) 3ms
+ ✓ src/components/keys/__tests__/EndpointPopover.spec.ts (2 tests) 27ms
+ ✓ src/components/admin/usage/__tests__/UserTokenRanking.spec.ts (2 tests) 78ms
+ ✓ src/__tests__/integration/data-import.spec.ts (2 tests) 39ms
+ ✓ src/router/__tests__/wechat-route.spec.ts (2 tests) 197ms
+ ✓ src/components/account/__tests__/credentialsBuilder.spec.ts (6 tests) 3ms
+ ❯ src/i18n/__tests__/userLocaleParity.spec.ts (3 tests | 3 failed) 79ms
+   × user locale resources > de has the same user-facing keys and placeholders as English 35ms
+     → expected [ 'affiliate.codeCopied', …(1535) ] to deeply equal [ 'affiliate.codeCopied', …(1539) ]
+   × user locale resources > fr has the same user-facing keys and placeholders as English 31ms
+     → expected [ 'affiliate.codeCopied', …(1535) ] to deeply equal [ 'affiliate.codeCopied', …(1539) ]
+   × user locale resources > ru has the same user-facing keys and placeholders as English 11ms
+     → expected [ 'affiliate.codeCopied', …(1535) ] to deeply equal [ 'affiliate.codeCopied', …(1539) ]
+ ✓ src/__tests__/integration/proxy-data-import.spec.ts (2 tests) 110ms
+ ✓ src/components/model-square/__tests__/ModelSquarePriceCell.spec.ts (3 tests) 13ms
+ ✓ src/components/account/__tests__/UsageProgressBar.spec.ts (3 tests) 22ms
+ ✓ src/utils/__tests__/device.spec.ts (5 tests) 6ms
+ ✓ src/utils/__tests__/accountUsageRefresh.spec.ts (3 tests) 3ms
+ ✓ src/api/seedaceVideo.spec.ts (2 tests) 28ms
+ ✓ src/router/__tests__/modelSquareGuard.spec.ts (2 tests) 6ms
+ ✓ src/views/user/__tests__/paymentWechatResume.spec.ts (3 tests) 5ms
+ ✓ src/utils/__tests__/oauthAffiliate.spec.ts (3 tests) 12ms
+ ✓ src/components/payment/__tests__/SubscriptionPlanCard.spec.ts (2 tests) 53ms
+ ✓ src/components/admin/usage/__tests__/UsageLatencyHealth.spec.ts (3 tests) 44ms
+ ✓ src/utils/__tests__/usageServiceTier.spec.ts (5 tests) 1ms
+ ✓ src/components/account/__tests__/CodexIdentityMode.spec.ts (3 tests) 4ms
+ ✓ src/components/account/__tests__/GrokQuotaProbeCell.spec.ts (1 test) 25ms
+ ✓ src/i18n/__tests__/grokAccountLocales.spec.ts (2 tests) 5ms
+ ✓ src/api/__tests__/modelSquare.spec.ts (2 tests) 6ms
+ ✓ src/api/seedaceVideoHistory.spec.ts (2 tests) 20ms
+ ✓ src/components/account/__tests__/OllamaCloudUsageCell.spec.ts (2 tests) 67ms
+ ✓ src/components/account/__tests__/AccountUpstreamMultiplierHistory.spec.ts (1 test) 69ms
+ ✓ src/utils/__tests__/duration.spec.ts (2 tests) 1ms
+ ✓ src/views/admin/__tests__/UsageView.tabs.spec.ts (1 test) 2ms
+ ✓ src/utils/__tests__/authError.spec.ts (4 tests) 2ms
+ ✓ src/utils/__tests__/stableObjectKey.spec.ts (3 tests) 4ms
+ ✓ src/components/auth/__tests__/TotpLoginModal.spec.ts (1 test) 56ms
+ ✓ src/views/admin/__tests__/platformFilters.spec.ts (2 tests) 5ms
+ ✓ src/views/admin/__tests__/groupsSupportedModelScopes.spec.ts (4 tests) 1ms
+ ✓ src/api/__tests__/user.spec.ts (1 test) 83ms
+ ✓ src/router/__tests__/public-routes.spec.ts (11 tests) 4ms
+ ✓ src/api/__tests__/payment.spec.ts (2 tests) 4ms
+ ✓ src/api/__tests__/admin.grok.spec.ts (4 tests) 4ms
+ ✓ src/views/admin/__tests__/grokConfigurationFlow.spec.ts (3 tests) 6ms
+ ✓ src/components/account/__tests__/CreateAccountModal.domestic.spec.ts (2 tests) 2ms
+ ✓ src/components/account/__tests__/CnProviderModal.spec.ts (1 test) 1ms
+ ✓ src/utils/__tests__/formatCompactNumber.spec.ts (3 tests) 3ms
+ ✓ src/api/__tests__/settings.wechatConnect.spec.ts (2 tests) 1ms
+ ✓ src/components/layout/__tests__/AppHeader.roles.spec.ts (1 test) 1ms
+ ✓ src/views/admin/__tests__/GroupsView.pricing.spec.ts (1 test) 2ms
+ ✓ src/api/__tests__/channelMonitor.spec.ts (1 test) 4ms
+ ✓ src/i18n/__tests__/usageServiceTierLocales.spec.ts (2 tests) 2ms
+ ✓ src/views/admin/__tests__/ChannelsView.time-pricing.spec.ts (1 test) 6ms
+ ✓ src/views/admin/__tests__/GroupsView.usage-source.spec.ts (1 test) 2ms
+ ✓ src/components/admin/monitor/__tests__/MonitorFormDialog.passive.spec.ts (1 test) 1ms
+ ✓ src/views/admin/__tests__/OpsAIAnalysisView.tabs.spec.ts (1 test) 2ms
+ ✓ src/composables/__tests__/usePersistedPageSize.spec.ts (1 test) 2ms
+ ✓ src/components/admin/monitor/__tests__/MonitorFormDialog.account.spec.ts (1 test) 2ms
+ ✓ src/api/__tests__/admin.accounts.spec.ts (1 test) 3ms
+ ✓ src/views/admin/__tests__/UsageView.export.spec.ts (1 test) 10ms
+ ✓ src/views/admin/__tests__/UsageView.request-id.spec.ts (1 test) 1ms
+ ✓ src/components/payment/__tests__/currency.spec.ts (1 test) 17ms
+ ✓ src/utils/__tests__/formatters.spec.ts (1 test) 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/i18n/__tests__/userLocaleParity.spec.ts > user locale resources > de has the same user-facing keys and placeholders as English
+ FAIL  src/i18n/__tests__/userLocaleParity.spec.ts > user locale resources > fr has the same user-facing keys and placeholders as English
+ FAIL  src/i18n/__tests__/userLocaleParity.spec.ts > user locale resources > ru has the same user-facing keys and placeholders as English
+AssertionError: expected [ 'affiliate.codeCopied', …(1535) ] to deeply equal [ 'affiliate.codeCopied', …(1539) ]
+
+- Expected
++ Received
+
+  Array [
+    "affiliate.codeCopied",
+    "affiliate.copyCode",
+    "affiliate.copyLink",
+    "affiliate.description",
+    "affiliate.inviteLink",
+    "affiliate.invitees.columns.email",
+    "affiliate.invitees.columns.joinedAt",
+    "affiliate.invitees.columns.rebate",
+    "affiliate.invitees.columns.username",
+    "affiliate.invitees.empty",
+    "affiliate.invitees.title",
+    "affiliate.linkCopied",
+    "affiliate.loadFailed",
+    "affiliate.stats.availableQuota",
+    "affiliate.stats.frozenQuota",
+    "affiliate.stats.frozenQuotaHint",
+    "affiliate.stats.invitedUsers",
+    "affiliate.stats.rebateRate",
+    "affiliate.stats.rebateRateHint",
+    "affiliate.stats.totalQuota",
+    "affiliate.tips.line1",
+    "affiliate.tips.line2",
+    "affiliate.tips.line3",
+    "affiliate.tips.line4",
+    "affiliate.tips.title",
+    "affiliate.title",
+    "affiliate.transfer.button",
+    "affiliate.transfer.description",
+    "affiliate.transfer.empty",
+    "affiliate.transfer.success",
+    "affiliate.transfer.title",
+    "affiliate.transfer.transferring",
+    "affiliate.transferFailed",
+    "affiliate.yourCode",
+    "announcements.allMarkedAsRead",
+    "announcements.description",
+    "announcements.empty",
+    "announcements.emptyDescription",
+    "announcements.emptyUnread",
+    "announcements.endsAt",
+    "announcements.markAllRead",
+    "announcements.markRead",
+    "announcements.markReadHint",
+    "announcements.markedAsRead",
+    "announcements.newCount",
+    "announcements.read",
+    "announcements.readAt",
+    "announcements.readStatus",
+    "announcements.startsAt",
+    "announcements.title",
+    "announcements.total",
+    "announcements.unread",
+    "announcements.unreadOnly",
+    "announcements.viewAll",
+    "auth.accountCreatedSuccess",
+    "auth.agreement.acceptAndContinue",
+    "auth.agreement.loginRejectWarning",
+    "auth.agreement.loginRequiredWarning",
+    "auth.agreement.mustAgreeDescription",
+    "auth.agreement.mustAgreeTitle",
+    "auth.agreement.readAndAgree",
+    "auth.agreement.recent",
+    "auth.agreement.registerRejectWarning",
+    "auth.agreement.registerRequiredWarning",
+    "auth.agreement.reject",
+    "auth.agreement.relatedDocuments",
+    "auth.agreement.updateTitle",
+    "auth.agreement.updatedDescription",
+    "auth.agreement.viewTerms",
+    "auth.alreadyHaveAccount",
+    "auth.backToLogin",
+    "auth.backToRegistration",
+    "auth.clickToResend",
+    "auth.codeRequired",
+    "auth.codeSentSuccess",
+    "auth.completeVerification",
+    "auth.confirmPassword",
+    "auth.confirmPasswordPlaceholder",
+    "auth.confirmPasswordRequired",
+    "auth.continue",
+    "auth.createAccount",
+    "auth.createPasswordPlaceholder",
+    "auth.defaultSiteSubtitle",
+    "auth.dingtalk.backToLogin",
+    "auth.dingtalk.callbackHint",
+    "auth.dingtalk.callbackMissingToken",
+    "auth.dingtalk.callbackProcessing",
+    "auth.dingtalk.callbackTitle",
+    "auth.dingtalk.completeRegistration",
+    "auth.dingtalk.completeRegistrationFailed",
+    "auth.dingtalk.completing",
+    "auth.dingtalk.createAccountTitle",
+    "auth.dingtalk.error.corp_rejected",
+    "auth.dingtalk.error.csrf",
+    "auth.dingtalk.error.dingtalk_not_enabled",
+    "auth.dingtalk.error.invalid_state",
+    "auth.dingtalk.error.missing_browser_session",
+    "auth.dingtalk.error.missing_params",
+    "auth.dingtalk.error.provider_error",
+    "auth.dingtalk.error.retry",
+    "auth.dingtalk.error.session_error",
+    "auth.dingtalk.error.title",
+    "auth.dingtalk.error.upstream_error",
+    "auth.dingtalk.invalidPendingToken",
+    "auth.dingtalk.invitationRequired",
+    "auth.dingtalk.registrationDisabledRedirectToBind",
+    "auth.dingtalk.signIn",
+    "auth.dingtalkCallbackPageTitle",
+    "auth.dingtalkProviderName",
+    "auth.dontHaveAccount",
+    "auth.emailLabel",
+    "auth.emailOAuth.signIn",
+    "auth.emailPlaceholder",
+    "auth.emailRequired",
+    "auth.emailSuffixAllowedMore",
+    "auth.emailSuffixNotAllowed",
+    "auth.emailSuffixNotAllowedWithAllowed",
+    "auth.errors.USER_NOT_ACTIVE",
+    "auth.forgotPassword",
+    "auth.forgotPasswordHint",
+    "auth.forgotPasswordTitle",
+    "auth.hidePassword",
+    "auth.invalidCode",
+    "auth.invalidEmail",
+    "auth.invalidOrExpiredToken",
+    "auth.invalidResetLink",
+    "auth.invalidResetLinkHint",
+    "auth.invitationCodeInvalid",
+    "auth.invitationCodeInvalidCannotRegister",
+    "auth.invitationCodeLabel",
+    "auth.invitationCodePlaceholder",
+    "auth.invitationCodeRequired",
+    "auth.invitationCodeValid",
+    "auth.invitationCodeValidating",
+    "auth.linuxdo.backToLogin",
+    "auth.linuxdo.callbackHint",
+    "auth.linuxdo.callbackMissingToken",
+    "auth.linuxdo.callbackProcessing",
+    "auth.linuxdo.callbackTitle",
+    "auth.linuxdo.completeRegistration",
+    "auth.linuxdo.completeRegistrationFailed",
+    "auth.linuxdo.completing",
+    "auth.linuxdo.invalidPendingToken",
+    "auth.linuxdo.invitationRequired",
+    "auth.linuxdo.orContinue",
+    "auth.linuxdo.signIn",
+    "auth.linuxdoCallbackPageTitle",
+    "auth.loginFailed",
+    "auth.loginSuccess",
+    "auth.newPassword",
+    "auth.newPasswordPlaceholder",
+    "auth.oauth.callbackHint",
+    "auth.oauth.callbackTitle",
+    "auth.oauth.code",
+    "auth.oauth.fullUrl",
+    "auth.oauth.invalidCallbackHint",
+    "auth.oauth.invalidCallbackTitle",
+    "auth.oauth.state",
+    "auth.oauthCallbackPageTitle",
+    "auth.oauthFlow.avatarAlt",
+    "auth.oauthFlow.backToOptions",
+    "auth.oauthFlow.bindCurrentAccount",
+    "auth.oauthFlow.bindCurrentAccountDescription",
+    "auth.oauthFlow.bindCurrentAccountTitle",
+    "auth.oauthFlow.bindExistingAccount",
+    "auth.oauthFlow.bindLoginHint",
+    "auth.oauthFlow.bindSignInToExistingAccount",
+    "auth.oauthFlow.chooseAccountActionHint",
+    "auth.oauthFlow.chooseHowToContinue",
+    "auth.oauthFlow.createAccountHint",
+    "auth.oauthFlow.createNewAccount",
+    "auth.oauthFlow.logInAndBind",
+    "auth.oauthFlow.profileDetailsDescription",
+    "auth.oauthFlow.profileDetailsTitle",
+    "auth.oauthFlow.reviewProfileBeforeContinue",
+    "auth.oauthFlow.signInThenBindDescription",
+    "auth.oauthFlow.suggestedEmail",
+    "auth.oauthFlow.totpHint",
+    "auth.oauthFlow.useAvatar",
+    "auth.oauthFlow.useDifferentEmail",
+    "auth.oauthFlow.useDisplayName",
+    "auth.oauthFlow.verifyAndContinue",
+    "auth.oauthFlow.wechatAvailabilityUnknown",
+    "auth.oauthFlow.wechatBrowserOnly",
+    "auth.oauthFlow.wechatNativeAppRequired",
+    "auth.oauthFlow.wechatNotConfigured",
+    "auth.oauthFlow.wechatSystemBrowserOnly",
+    "auth.oauthFlow.yourAccount",
+    "auth.oauthOrContinue",
+    "auth.oidc.backToLogin",
+    "auth.oidc.callbackHint",
+    "auth.oidc.callbackMissingToken",
+    "auth.oidc.callbackProcessing",
+    "auth.oidc.callbackTitle",
+    "auth.oidc.completeRegistration",
+    "auth.oidc.completeRegistrationFailed",
+    "auth.oidc.completing",
+    "auth.oidc.invalidPendingToken",
+    "auth.oidc.invitationRequired",
+    "auth.oidc.signIn",
+    "auth.oidcCallbackPageTitle",
+    "auth.passwordHint",
+    "auth.passwordLabel",
+    "auth.passwordMinLength",
+    "auth.passwordPlaceholder",
+    "auth.passwordRequired",
+    "auth.passwordResetSuccess",
+    "auth.passwordResetSuccessHint",
+    "auth.passwordsDoNotMatch",
+    "auth.processing",
+    "auth.promoCodeAlreadyUsed",
+    "auth.promoCodeDisabled",
+    "auth.promoCodeExpired",
+    "auth.promoCodeInvalid",
+    "auth.promoCodeInvalidCannotRegister",
+    "auth.promoCodeLabel",
+    "auth.promoCodeMaxUsed",
+    "auth.promoCodeNotFound",
+    "auth.promoCodePlaceholder",
+    "auth.promoCodeValid",
+    "auth.promoCodeValidating",
+    "auth.registrationDisabled",
+    "auth.registrationFailed",
+    "auth.reloginRequired",
+    "auth.rememberMe",
+    "auth.rememberedPassword",
+    "auth.requestNewResetLink",
+    "auth.resendCode",
+    "auth.resendCountdown",
+    "auth.resetEmailSent",
+    "auth.resetEmailSentHint",
+    "auth.resetPassword",
+    "auth.resetPasswordFailed",
+    "auth.resetPasswordHint",
+    "auth.resetPasswordTitle",
+    "auth.resettingPassword",
+    "auth.sendCode",
+    "auth.sendCodeDesc",
+    "auth.sendCodeFailed",
+    "auth.sendResetLink",
+    "auth.sendResetLinkFailed",
+    "auth.sendingCode",
+    "auth.sendingResetLink",
+    "auth.sessionExpired",
+    "auth.sessionExpiredDesc",
+    "auth.showPassword",
+    "auth.signIn",
+    "auth.signInToAccount",
+    "auth.signUp",
+    "auth.signUpToStart",
+    "auth.signingIn",
+    "auth.turnstileExpired",
+    "auth.turnstileFailed",
+    "auth.verificationCode",
+    "auth.verificationCodeHint",
+    "auth.verifyAndCreate",
+    "auth.verifyFailed",
+    "auth.verifyYourEmail",
+    "auth.verifying",
+    "auth.wechatCallbackPageTitle",
+    "auth.wechatPayment.backToPayment",
+    "auth.wechatPayment.callbackMissingResumeToken",
+    "auth.wechatPayment.callbackProcessing",
+    "auth.wechatPayment.callbackTitle",
+    "auth.wechatPaymentCallbackPageTitle",
+    "auth.wechatProviderName",
+    "auth.welcomeBack",
+    "availableChannels.columns.description",
+    "availableChannels.columns.groups",
+    "availableChannels.columns.name",
+    "availableChannels.columns.platform",
+    "availableChannels.columns.supportedModels",
+    "availableChannels.description",
+    "availableChannels.empty",
+    "availableChannels.exclusive",
+    "availableChannels.exclusiveTooltip",
+    "availableChannels.noModels",
+    "availableChannels.noPricing",
+    "availableChannels.pricing.billingMode",
+    "availableChannels.pricing.billingModeImage",
+    "availableChannels.pricing.billingModePerRequest",
+    "availableChannels.pricing.billingModeToken",
+    "availableChannels.pricing.cacheReadPrice",
+    "availableChannels.pricing.cacheWritePrice",
+    "availableChannels.pricing.imageOutputPrice",
+    "availableChannels.pricing.inputPrice",
+    "availableChannels.pricing.intervals",
+    "availableChannels.pricing.outputPrice",
+    "availableChannels.pricing.perRequestPrice",
+    "availableChannels.pricing.unitPerMillion",
+    "availableChannels.pricing.unitPerRequest",
+    "availableChannels.public",
+    "availableChannels.publicTooltip",
+    "availableChannels.searchPlaceholder",
+    "availableChannels.title",
+    "channelStatus.allProviders",
+    "channelStatus.closeDetail",
+    "channelStatus.columns.availability7d",
+    "channelStatus.columns.groupName",
+    "channelStatus.columns.latency",
+    "channelStatus.columns.name",
+    "channelStatus.columns.primaryModel",
+    "channelStatus.columns.provider",
+    "channelStatus.description",
+    "channelStatus.detailColumns.availability15d",
+    "channelStatus.detailColumns.availability30d",
+    "channelStatus.detailColumns.availability7d",
+    "channelStatus.detailColumns.avgLatency7d",
+    "channelStatus.detailColumns.latestLatency",
+    "channelStatus.detailColumns.latestStatus",
+    "channelStatus.detailColumns.model",
+    "channelStatus.detailLoadError",
+    "channelStatus.detailTitle",
+    "channelStatus.empty.description",
+    "channelStatus.empty.title",
+    "channelStatus.loadError",
+    "channelStatus.overall.degraded",
+    "channelStatus.overall.operational",
+    "channelStatus.overall.unavailable",
+    "channelStatus.searchPlaceholder",
+    "channelStatus.title",
+    "channelStatus.windowTab.15d",
+    "channelStatus.windowTab.30d",
+    "channelStatus.windowTab.7d",
+    "common.actions",
+    "common.active",
+    "common.add",
+    "common.all",
+    "common.allRightsReserved",
+    "common.autoRefresh.countdown",
+    "common.autoRefresh.enable",
+    "common.autoRefresh.seconds",
+    "common.autoRefresh.title",
+    "common.available",
+    "common.back",
+    "common.balance",
+    "common.cacheManagement",
+    "common.cancel",
+    "common.changeLanguage",
+    "common.chooseFile",
+    "common.close",
+    "common.collapse",
+    "common.confirm",
+    "common.contactSupport",
+    "common.copied",
+    "common.copiedToClipboard",
+    "common.copy",
+    "common.copyFailed",
+    "common.create",
+    "common.critical",
+    "common.delete",
+    "common.deleted",
+    "common.deleting",
+    "common.disabled",
+    "common.edit",
+    "common.email",
+    "common.enabled",
+    "common.error",
+    "common.expand",
+    "common.export",
+    "common.filter",
+    "common.generalSettings",
+    "common.import",
+    "common.inactive",
+    "common.info",
+    "common.invalidEmail",
+    "common.justNow",
+    "common.loading",
+    "common.login",
+    "common.minutes",
+    "common.more",
+    "common.name",
+    "common.next",
+    "common.no",
+    "common.noData",
+    "common.noGroupsAvailable",
+    "common.noOptionsFound",
+    "common.none",
+    "common.notAvailable",
+    "common.now",
+    "common.optional",
+    "common.password",
+    "common.processing",
+    "common.refresh",
+    "common.register",
+    "common.reset",
+    "common.save",
+    "common.saved",
+    "common.saving",
+    "common.search",
+    "common.searchPlaceholder",
+    "common.selectAll",
+    "common.selectOption",
+    "common.selectedCount",
+    "common.settings",
+    "common.status",
+    "common.submit",
+    "common.submitting",
+    "common.success",
+    "common.time.countdown.daysHours",
+    "common.time.countdown.hoursMinutes",
+    "common.time.countdown.minutes",
+    "common.time.countdown.withSuffix",
+    "common.time.daysAgo",
+    "common.time.hoursAgo",
+    "common.time.justNow",
+    "common.time.minutesAgo",
+    "common.time.never",
+    "common.today",
+    "common.toggleMenu",
+    "common.tomorrow",
+    "common.total",
+    "common.unknown",
+    "common.unknownError",
+    "common.update",
+    "common.userMenu",
+    "common.verifying",
+    "common.view",
+    "common.warning",
+    "common.yes",
+    "customPage.copied",
+    "customPage.copy",
+    "customPage.copyFailed",
+    "customPage.notConfiguredDesc",
+    "customPage.notConfiguredTitle",
+    "customPage.notFoundDesc",
+    "customPage.notFoundTitle",
+    "customPage.openInNewTab",
+    "customPage.tableOfContents",
+    "customPage.title",
+    "dashboard.actual",
+    "dashboard.addBalanceWithCode",
+    "dashboard.apiKeys",
+    "dashboard.averageTime",
+    "dashboard.avgResponse",
+    "dashboard.balance",
+    "dashboard.cache",
+    "dashboard.cacheToday",
+    "dashboard.checkDetailedLogs",
+    "dashboard.createApiKey",
+    "dashboard.day",
+    "dashboard.generateNewKey",
+    "dashboard.granularity",
+    "dashboard.group",
+    "dashboard.groupDistribution",
+    "dashboard.hour",
+    "dashboard.input",
+    "dashboard.last7Days",
+    "dashboard.model",
+    "dashboard.modelDistribution",
+    "dashboard.noDataAvailable",
+    "dashboard.noGroup",
+    "dashboard.noUsageRecords",
+    "dashboard.output",
+    "dashboard.performance",
+    "dashboard.platformBreakdown",
+    "dashboard.platformBreakdownEmpty",
+    "dashboard.platformCount",
+    "dashboard.platformOther",
+    "dashboard.platformQuota.daily",
+    "dashboard.platformQuota.disabled",
+    "dashboard.platformQuota.monthly",
+    "dashboard.platformQuota.noLimit",
+    "dashboard.platformQuota.resetsAt",
+    "dashboard.platformQuota.title",
+    "dashboard.platformQuota.weekly",
+    "dashboard.quickActions",
+    "dashboard.recentUsage",
+    "dashboard.redeemCode",
+    "dashboard.requests",
+    "dashboard.standard",
+    "dashboard.startUsingApi",
+    "dashboard.timeRange",
+    "dashboard.title",
+    "dashboard.todayCost",
+    "dashboard.todayRequests",
+    "dashboard.todayTokens",
+    "dashboard.tokenUsageTrend",
+    "dashboard.tokens",
+    "dashboard.totalTokens",
+    "dashboard.viewAllUsage",
+    "dashboard.viewUsage",
+    "dashboard.welcomeMessage",
+    "dates.apply",
+    "dates.custom",
+    "dates.endDate",
+    "dates.last14Days",
+    "dates.last24Hours",
+    "dates.last30Days",
+    "dates.last7Days",
+    "dates.lastMonth",
+    "dates.lastWeek",
+    "dates.selectDateRange",
+    "dates.startDate",
+    "dates.thisMonth",
+    "dates.thisWeek",
+    "dates.today",
+    "dates.yesterday",
+    "empty.noData",
+    "errors.forbidden",
+-   "errors.goBack",
+-   "errors.goHome",
+-   "errors.needHelp",
+    "errors.networkError",
+    "errors.pageNotFound",
+-   "errors.pageNotFoundDescription",
+    "errors.serverError",
+    "errors.somethingWentWrong",
+    "errors.timeout",
+    "errors.tryAgain",
+    "errors.unauthorized",
+    "groups.subscription",
+    "keys.allGroups",
+    "keys.allStatus",
+    "keys.apiKey",
+    "keys.ccSwitchNotInstalled",
+    "keys.ccsClientSelect.claudeCode",
+    "keys.ccsClientSelect.claudeCodeDesc",
+    "keys.ccsClientSelect.description",
+    "keys.ccsClientSelect.geminiCli",
+    "keys.ccsClientSelect.geminiCliDesc",
+    "keys.ccsClientSelect.title",
+    "keys.clickToChangeGroup",
+    "keys.copied",
+    "keys.copyToClipboard",
+    "keys.createFirstKey",
+    "keys.createKey",
+    "keys.created",
+    "keys.currentExpiration",
+    "keys.customDate",
+    "keys.customKeyHint",
+    "keys.customKeyInvalidChars",
+    "keys.customKeyLabel",
+    "keys.customKeyPlaceholder",
+    "keys.customKeyRequired",
+    "keys.customKeyTooShort",
+    "keys.deleteConfirmMessage",
+    "keys.deleteKey",
+    "keys.description",
+    "keys.disable",
+    "keys.editKey",
+    "keys.enable",
+    "keys.endpoints.clickToCopy",
+    "keys.endpoints.copied",
+    "keys.endpoints.copiedHint",
+    "keys.endpoints.default",
+    "keys.endpoints.speedTest",
+    "keys.endpoints.title",
+    "keys.expiration",
+    "keys.expirationDate",
+    "keys.expirationDateHint",
+    "keys.expiresAt",
+    "keys.expiresInDays",
+    "keys.extendDays",
+    "keys.failedToChangeGroup",
+    "keys.failedToDelete",
+    "keys.failedToLoad",
+    "keys.failedToResetQuota",
+    "keys.failedToResetRateLimit",
+    "keys.failedToSave",
+    "keys.failedToUpdateStatus",
+    "keys.group",
+    "keys.groupChangedSuccess",
+    "keys.groupLabel",
+    "keys.groupRequired",
+    "keys.importToCcSwitch",
+    "keys.ipBlacklist",
+    "keys.ipBlacklistHint",
+    "keys.ipBlacklistPlaceholder",
+    "keys.ipRestriction",
+    "keys.ipRestrictionEnabled",
+    "keys.ipWhitelist",
+    "keys.ipWhitelistHint",
+    "keys.ipWhitelistPlaceholder",
+    "keys.keyCreatedSuccess",
+    "keys.keyDeletedSuccess",
+    "keys.keyDisabledSuccess",
+    "keys.keyEnabledSuccess",
+    "keys.keyUpdatedSuccess",
+    "keys.lastUsedAt",
+    "keys.nameLabel",
+    "keys.namePlaceholder",
+    "keys.noExpiration",
+    "keys.noGroup",
+    "keys.noGroupFound",
+    "keys.noKeysYet",
+    "keys.quota",
+    "keys.quotaAmount",
+    "keys.quotaAmountHint",
+    "keys.quotaAmountPlaceholder",
+    "keys.quotaLimit",
+    "keys.quotaResetSuccess",
+    "keys.quotaUsed",
+    "keys.rateLimit1d",
+    "keys.rateLimit5h",
+    "keys.rateLimit7d",
+    "keys.rateLimitColumn",
+    "keys.rateLimitHint",
+    "keys.rateLimitResetSuccess",
+    "keys.rateLimitSection",
+    "keys.rateLimitUsage",
+    "keys.reset",
+    "keys.resetNow",
+    "keys.resetQuotaConfirmMessage",
+    "keys.resetQuotaTitle",
+    "keys.resetQuotaUsed",
+    "keys.resetRateLimitConfirmMessage",
+    "keys.resetRateLimitTitle",
+    "keys.resetRateLimitUsage",
+    "keys.resetUsage",
+    "keys.saving",
+    "keys.searchGroup",
+    "keys.searchPlaceholder",
+    "keys.selectGroup",
+    "keys.selectStatus",
+    "keys.status.active",
+    "keys.status.expired",
+    "keys.status.inactive",
+    "keys.status.quota_exhausted",
+    "keys.statusLabel",
+    "keys.title",
+    "keys.today",
+    "keys.total",
+    "keys.usage",
+    "keys.useKey",
+    "keys.useKeyModal.antigravity.claudeCode",
+    "keys.useKeyModal.antigravity.claudeNote",
+    "keys.useKeyModal.antigravity.description",
+    "keys.useKeyModal.antigravity.geminiCli",
+    "keys.useKeyModal.antigravity.geminiNote",
+    "keys.useKeyModal.claudeSettingsHint",
+    "keys.useKeyModal.cliTabs.claudeCode",
+    "keys.useKeyModal.cliTabs.codexCli",
+    "keys.useKeyModal.cliTabs.codexCliWs",
+    "keys.useKeyModal.cliTabs.geminiCli",
+    "keys.useKeyModal.cliTabs.grokCli",
+    "keys.useKeyModal.cliTabs.opencode",
+    "keys.useKeyModal.copied",
+    "keys.useKeyModal.copy",
+    "keys.useKeyModal.description",
+    "keys.useKeyModal.gemini.description",
+    "keys.useKeyModal.gemini.modelComment",
+    "keys.useKeyModal.gemini.note",
+    "keys.useKeyModal.grok.claudeDescription",
+    "keys.useKeyModal.grok.claudeNote",
+    "keys.useKeyModal.grok.codexConfigTomlHint",
+    "keys.useKeyModal.grok.codexDescription",
+    "keys.useKeyModal.grok.codexNote",
+    "keys.useKeyModal.grok.codexNoteWindows",
+    "keys.useKeyModal.grok.configTomlHint",
+    "keys.useKeyModal.grok.description",
+    "keys.useKeyModal.grok.note",
+    "keys.useKeyModal.grok.noteWindows",
+    "keys.useKeyModal.noGroupDescription",
+    "keys.useKeyModal.noGroupTitle",
+    "keys.useKeyModal.note",
+    "keys.useKeyModal.openai.configTomlHint",
+    "keys.useKeyModal.openai.description",
+    "keys.useKeyModal.openai.note",
+    "keys.useKeyModal.openai.noteWindows",
+    "keys.useKeyModal.opencode.hint",
+    "keys.useKeyModal.opencode.subtitle",
+    "keys.useKeyModal.opencode.title",
+    "keys.useKeyModal.title",
+    "modelSquare.allLoaded",
+    "modelSquare.billingModes.image",
+    "modelSquare.billingModes.per_request",
+    "modelSquare.billingModes.per_second",
+    "modelSquare.billingModes.token",
+    "modelSquare.billingModes.video",
+    "modelSquare.catalogChanged",
+    "modelSquare.clearSearch",
+    "modelSquare.columns.billingMode",
+    "modelSquare.columns.cacheRead",
+    "modelSquare.columns.cacheWrite",
+    "modelSquare.columns.cacheWrite1h",
+    "modelSquare.columns.cacheWrite5m",
+    "modelSquare.columns.fast",
+    "modelSquare.columns.imageOutput",
+    "modelSquare.columns.input",
+    "modelSquare.columns.name",
+    "modelSquare.columns.output",
+    "modelSquare.columns.perRequest",
+    "modelSquare.columns.perSecond",
+    "modelSquare.columns.tiers",
+    "modelSquare.copyModel",
+    "modelSquare.custom",
+    "modelSquare.defaultMultiplier",
+    "modelSquare.description",
+    "modelSquare.free",
+    "modelSquare.loadFailed",
+    "modelSquare.modelCopied",
+    "modelSquare.modelCount",
+    "modelSquare.modelTable",
+    "modelSquare.multiplierPrice",
+    "modelSquare.myMultiplier",
+    "modelSquare.noGroups",
+    "modelSquare.noGroupsDescription",
+    "modelSquare.noModels",
+    "modelSquare.noModelsDescription",
+    "modelSquare.noSearchResults",
+    "modelSquare.noSearchResultsDescription",
+    "modelSquare.originalPrice",
+    "modelSquare.pricingSources.channel",
+    "modelSquare.pricingSources.mixed",
+    "modelSquare.pricingSources.system",
+    "modelSquare.publicGroups",
+    "modelSquare.searchGroups",
+    "modelSquare.searchModels",
+    "modelSquare.selectGroup",
+    "modelSquare.title",
+    "modelSquare.tokens",
+    "modelSquare.units.per_1m_cache_tokens",
+    "modelSquare.units.per_1m_tokens",
+    "modelSquare.units.per_image",
+    "modelSquare.units.per_request",
+    "modelSquare.units.per_second",
+    "modelSquare.updatedAt",
+    "modelSquare.viewFast",
+    "modelSquare.viewTiers",
+    "monitorCommon.availabilityPrefix",
+    "monitorCommon.dialogLatency",
+    "monitorCommon.endpointPing",
+    "monitorCommon.extraModelsCount",
+    "monitorCommon.extraModelsEmpty",
+    "monitorCommon.extraModelsHeader",
+    "monitorCommon.history60pts",
+    "monitorCommon.latencyEmpty",
+    "monitorCommon.maintenancePaused",
+    "monitorCommon.nextUpdateIn",
+    "monitorCommon.now",
+    "monitorCommon.past",
+    "monitorCommon.pollEvery",
+    "monitorCommon.providers.anthropic",
+    "monitorCommon.providers.antigravity",
+    "monitorCommon.providers.deepseek",
+    "monitorCommon.providers.gemini",
+    "monitorCommon.providers.grok",
+    "monitorCommon.providers.kimi",
+    "monitorCommon.providers.openai",
+    "monitorCommon.providers.zhipu",
+    "monitorCommon.quotaState.billing_observed",
+    "monitorCommon.quotaState.failed",
+    "monitorCommon.quotaState.fresh",
+    "monitorCommon.quotaState.observed",
+    "monitorCommon.quotaState.stale",
+    "monitorCommon.quotaState.unknown",
+    "monitorCommon.relativeDaysAgo",
+    "monitorCommon.relativeHoursAgo",
+    "monitorCommon.relativeMinutesAgo",
+    "monitorCommon.relativeSecondsAgo",
+    "monitorCommon.status.degraded",
+    "monitorCommon.status.error",
+    "monitorCommon.status.failed",
+    "monitorCommon.status.operational",
+    "monitorCommon.status.unknown",
+    "monitorCommon.updatedAt",
+    "nav.accounts",
+    "nav.affiliate",
+    "nav.affiliateInviteRecords",
+    "nav.affiliateManagement",
+    "nav.affiliateRebateRecords",
+    "nav.affiliateTransferRecords",
+    "nav.announcements",
+    "nav.apiKeys",
+    "nav.availableChannels",
+    "nav.buySubscription",
+    "nav.channelManagement",
+    "nav.channelMonitor",
+    "nav.channelPricing",
+    "nav.channelStatus",
+    "nav.channels",
+    "nav.collapse",
+    "nav.darkMode",
+    "nav.dashboard",
+    "nav.docs",
+    "nav.expand",
+    "nav.financeStats",
+    "nav.github",
+    "nav.groups",
+    "nav.lightMode",
+    "nav.logout",
+    "nav.modelSquare",
+    "nav.myAccount",
+    "nav.myOrders",
+    "nav.mySubscriptions",
+    "nav.ops",
+    "nav.orderManagement",
+    "nav.paymentConfig",
+    "nav.paymentDashboard",
+    "nav.paymentPlans",
+    "nav.profile",
+    "nav.promoCodes",
+    "nav.proxies",
+    "nav.redeem",
+    "nav.redeemCodes",
+    "nav.riskControl",
+    "nav.settings",
+    "nav.subscriptions",
+    "nav.usage",
+    "nav.users",
+    "nav.videoGeneration",
+    "pagination.goToPage",
+    "pagination.jumpAction",
+    "pagination.jumpPlaceholder",
+    "pagination.jumpTo",
+    "pagination.next",
+    "pagination.of",
+    "pagination.page",
+    "pagination.pageOf",
+    "pagination.perPage",
+    "pagination.previous",
+    "pagination.results",
+    "pagination.showing",
+    "pagination.to",
+    "payment.activeSubscription",
+    "payment.actualPay",
+    "payment.admin.allOrderTypes",
+    "payment.admin.allPaymentTypes",
+    "payment.admin.allStatuses",
+    "payment.admin.allowUserRefund",
+    "payment.admin.alreadyRefunded",
+    "payment.admin.approveRefund",
+    "payment.admin.auditLogs",
+    "payment.admin.avgAmount",
+    "payment.admin.balanceOrder",
+    "payment.admin.channelDescription",
+    "payment.admin.channelName",
+    "payment.admin.colUser",
+    "payment.admin.completedAt",
+    "payment.admin.confirmRefund",
+    "payment.admin.createChannel",
+    "payment.admin.createPlan",
+    "payment.admin.createProvider",
+    "payment.admin.daily",
+    "payment.admin.dailyLimit",
+    "payment.admin.dailyRevenue",
+    "payment.admin.dashboardDesc",
+    "payment.admin.dashboardTitle",
+    "payment.admin.daySuffix",
+    "payment.admin.days",
+    "payment.admin.deductBalance",
+    "payment.admin.deductBalanceHint",
+    "payment.admin.deleteChannel",
+    "payment.admin.deleteChannelConfirm",
+    "payment.admin.deletePlan",
+    "payment.admin.deletePlanConfirm",
+    "payment.admin.deleteProvider",
+    "payment.admin.deleteProviderConfirm",
+    "payment.admin.editChannel",
+    "payment.admin.editPlan",
+    "payment.admin.editProvider",
+    "payment.admin.expiresAt",
+    "payment.admin.features",
+    "payment.admin.featuresHint",
+    "payment.admin.featuresPlaceholder",
+    "payment.admin.feeRate",
+    "payment.admin.forSale",
+    "payment.admin.forceRefund",
+    "payment.admin.group",
+    "payment.admin.groupId",
+    "payment.admin.groupInfo",
+    "payment.admin.groupMissing",
+    "payment.admin.groupRequired",
+    "payment.admin.insufficientBalance",
+    "payment.admin.maxRefundable",
+    "payment.admin.monthly",
+    "payment.admin.monthlyLimit",
+    "payment.admin.months",
+    "payment.admin.noData",
+    "payment.admin.noDeduction",
+    "payment.admin.noProviders",
+    "payment.admin.noProvidersHint",
+    "payment.admin.offSale",
+    "payment.admin.onSale",
+    "payment.admin.operator",
+    "payment.admin.orderAmount",
+    "payment.admin.orderCancelled",
+    "payment.admin.orderCount",
+    "payment.admin.orderDetail",
+    "payment.admin.orderType",
+    "payment.admin.orders",
+    "payment.admin.originalPrice",
+    "payment.admin.paidAt",
+    "payment.admin.paymentConfigDesc",
+    "payment.admin.paymentConfigTitle",
+    "payment.admin.paymentDistribution",
+    "payment.admin.planDescription",
+    "payment.admin.planName",
+    "payment.admin.plansPageDesc",
+    "payment.admin.plansPageTitle",
+    "payment.admin.platform",
+    "payment.admin.price",
+    "payment.admin.priceRequired",
+    "payment.admin.providerConfig",
+    "payment.admin.providerKey",
+    "payment.admin.providerManagement",
+    "payment.admin.providerManagementDesc",
+    "payment.admin.providerName",
+    "payment.admin.rateMultiplier",
+    "payment.admin.rateMultiplierLabel",
+    "payment.admin.refund",
+    "payment.admin.refundAmount",
+    "payment.admin.refundEnabled",
+    "payment.admin.refundInfo",
+    "payment.admin.refundOrder",
+    "payment.admin.refundReason",
+    "payment.admin.refundReasonPlaceholder",
+    "payment.admin.refundRequestInfo",
+    "payment.admin.refundRequestReason",
+    "payment.admin.refundRequestedAt",
+    "payment.admin.refundRequestedBy",
+    "payment.admin.refundSuccess",
+    "payment.admin.retry",
+    "payment.admin.retryRefund",
+    "payment.admin.retrySuccess",
+    "payment.admin.revenue",
+    "payment.admin.searchOrders",
+    "payment.admin.searchUserSubs",
+    "payment.admin.selectGroup",
+    "payment.admin.selectProviderKey",
+    "payment.admin.sortOrder",
+    "payment.admin.subsStatus.active",
+    "payment.admin.subsStatus.expired",
+    "payment.admin.subsStatus.revoked",
+    "payment.admin.subscriptionOrder",
+    "payment.admin.supportedTypes",
+    "payment.admin.supportedTypesHint",
+    "payment.admin.tabPlanConfig",
+    "payment.admin.tabUserSubs",
+    "payment.admin.tabs.channels",
+    "payment.admin.tabs.orders",
+    "payment.admin.tabs.overview",
+    "payment.admin.tabs.plans",
+    "payment.admin.todayOrders",
+    "payment.admin.todayRevenue",
+    "payment.admin.topUsers",
+    "payment.admin.totalRevenue",
+    "payment.admin.unlimited",
+    "payment.admin.userBalance",
+    "payment.admin.validityDays",
+    "payment.admin.validityDaysRequired",
+    "payment.admin.validityUnit",
+    "payment.admin.weekly",
+    "payment.admin.weeklyLimit",
+    "payment.admin.weeks",
+    "payment.airwallexLoadFailed",
+    "payment.airwallexMissingParams",
+    "payment.airwallexPay",
+    "payment.amountLabel",
+    "payment.amountNoMethod",
+    "payment.amountTooHigh",
+    "payment.amountTooLow",
+    "payment.confirmCancel",
+    "payment.confirmSubscription",
+    "payment.createOrder",
+    "payment.creditedBalance",
+    "payment.currentBalance",
+    "payment.customAmount",
+    "payment.days",
+    "payment.enterAmount",
+    "payment.errors.BALANCE_NOT_ENOUGH",
+    "payment.errors.BALANCE_PAYMENT_DISABLED",
+    "payment.errors.CANCEL_RATE_LIMITED",
+    "payment.errors.CONFLICT",
+    "payment.errors.DAILY_LIMIT_EXCEEDED",
+    "payment.errors.FORBIDDEN",
+    "payment.errors.GROUP_NOT_FOUND",
+    "payment.errors.GROUP_TYPE_MISMATCH",
+    "payment.errors.INVALID_AMOUNT",
+    "payment.errors.INVALID_INPUT",
+    "payment.errors.INVALID_ORDER_TYPE",
+    "payment.errors.INVALID_STATUS",
+    "payment.errors.NOT_FOUND",
+    "payment.errors.NO_AVAILABLE_INSTANCE",
+    "payment.errors.PAYMENT_DISABLED",
+    "payment.errors.PAYMENT_GATEWAY_ERROR",
+    "payment.errors.PAYMENT_PROVIDER_CONFLICT",
+    "payment.errors.PAYMENT_PROVIDER_MISCONFIGURED",
+    "payment.errors.PENDING_ORDERS",
+    "payment.errors.PLAN_NOT_AVAILABLE",
+    "payment.errors.REFUND_AMOUNT_EXCEEDED",
+    "payment.errors.REFUND_FAILED",
+    "payment.errors.TOO_MANY_PENDING",
+    "payment.errors.USER_INACTIVE",
+    "payment.errors.WXPAY_CONFIG_INVALID_KEY",
+    "payment.errors.WXPAY_CONFIG_INVALID_KEY_LENGTH",
+    "payment.errors.WXPAY_CONFIG_MISSING_KEY",
+    "payment.errors.alipayDesktopQrHint",
+    "payment.errors.alipayDesktopUnavailable",
+    "payment.errors.alipayMobileOpenHint",
+    "payment.errors.alipayMobileUnavailable",
+    "payment.errors.cancelRateLimited",
+    "payment.errors.mobilePaymentFallbackToQr",
+    "payment.errors.tooManyPending",
+    "payment.errors.wechatH5NotAuthorized",
+    "payment.errors.wechatJsapiFailed",
+    "payment.errors.wechatJsapiUnavailable",
+    "payment.errors.wechatOpenInWeChatHint",
+    "payment.errors.wechatPaymentMpNotConfigured",
+    "payment.errors.wechatScanOnDesktopHint",
+    "payment.errors.wechatSwitchBrowserHint",
+    "payment.errors.wechatUnavailable",
+    "payment.fee",
+    "payment.groupFallback",
+    "payment.methods.airwallex",
+    "payment.methods.alipay",
+    "payment.methods.alipay_direct",
+    "payment.methods.card",
+    "payment.methods.easypay",
+    "payment.methods.link",
+    "payment.methods.stripe",
+    "payment.methods.wxpay",
+    "payment.methods.wxpay_direct",
+    "payment.months",
+    "payment.noActiveSubscription",
+    "payment.noPlans",
+    "payment.notAvailable",
+    "payment.oneMonth",
+    "payment.oneYear",
+    "payment.orders.actions",
+    "payment.orders.amount",
+    "payment.orders.baseAmount",
+    "payment.orders.cancel",
+    "payment.orders.createdAt",
+    "payment.orders.creditedAmount",
+    "payment.orders.empty",
+    "payment.orders.fee",
+    "payment.orders.includedInPayAmount",
+    "payment.orders.orderId",
+    "payment.orders.orderNo",
+    "payment.orders.orderType",
+    "payment.orders.payAmount",
+    "payment.orders.paymentMethod",
+    "payment.orders.requestRefund",
+    "payment.orders.status",
+    "payment.orders.title",
+    "payment.orders.userId",
+    "payment.paymentAmount",
+    "payment.paymentMethod",
+    "payment.perMonth",
+    "payment.perYear",
+    "payment.planCard.dailyLimit",
+    "payment.planCard.models",
+    "payment.planCard.monthlyLimit",
+    "payment.planCard.quota",
+    "payment.planCard.rate",
+    "payment.planCard.unlimited",
+    "payment.planCard.weeklyLimit",
+    "payment.planFeatures",
+    "payment.qr.cancelOrder",
+    "payment.qr.cancelled",
+    "payment.qr.cancelledDesc",
+    "payment.qr.expired",
+    "payment.qr.expiredDesc",
+    "payment.qr.expiresIn",
+    "payment.qr.openPayWindow",
+    "payment.qr.payInNewWindow",
+    "payment.qr.payInNewWindowHint",
+    "payment.qr.scanAlipay",
+    "payment.qr.scanAlipayHint",
+    "payment.qr.scanToPay",
+    "payment.qr.scanWxpay",
+    "payment.qr.scanWxpayHint",
+    "payment.qr.waitingPayment",
+    "payment.quickAmounts",
+    "payment.rechargeAccount",
+    "payment.rechargeRatePreview",
+    "payment.refundReason",
+    "payment.refundReasonPlaceholder",
+    "payment.renewNow",
+    "payment.result.backToRecharge",
+    "payment.result.failed",
+    "payment.result.processing",
+    "payment.result.processingHint",
+    "payment.result.subscriptionSuccess",
+    "payment.result.success",
+    "payment.result.viewOrders",
+    "payment.selectPlan",
+    "payment.status.cancelled",
+    "payment.status.completed",
+    "payment.status.expired",
+    "payment.status.failed",
+    "payment.status.paid",
+    "payment.status.partially_refunded",
+    "payment.status.pending",
+    "payment.status.recharging",
+    "payment.status.refund_failed",
+    "payment.status.refund_requested",
+    "payment.status.refunded",
+    "payment.status.refunding",
+    "payment.stripeLoadFailed",
+    "payment.stripeMissingParams",
+    "payment.stripeNotConfigured",
+    "payment.stripePay",
+    "payment.stripePopup.loadingQr",
+    "payment.stripePopup.qrFailed",
+    "payment.stripePopup.redirecting",
+    "payment.stripePopup.timeout",
+    "payment.stripeSuccessProcessing",
+    "payment.subscribeNow",
+    "payment.tabSubscribe",
+    "payment.tabTopUp",
+    "payment.title",
+    "payment.years",
+    "profile.accountBalance",
+    "profile.administrator",
+    "profile.authBindings.bindAction",
+    "profile.authBindings.bindSuccess",
+    "profile.authBindings.boundCount",
+    "profile.authBindings.codePlaceholder",
+    "profile.authBindings.codeSentTo",
+    "profile.authBindings.confirmEmailBindAction",
+    "profile.authBindings.confirmEmailReplaceAction",
+    "profile.authBindings.description",
+    "profile.authBindings.emailPlaceholder",
+    "profile.authBindings.hideEmailFormAction",
+    "profile.authBindings.manageEmailAction",
+    "profile.authBindings.notes.bindAnotherBeforeUnbind",
+    "profile.authBindings.notes.canUnbind",
+    "profile.authBindings.notes.emailManagedFromProfile",
+    "profile.authBindings.passwordPlaceholder",
+    "profile.authBindings.providers.dingtalk",
+    "profile.authBindings.providers.email",
+    "profile.authBindings.providers.linuxdo",
+    "profile.authBindings.providers.oidc",
+    "profile.authBindings.providers.wechat",
+    "profile.authBindings.replaceEmailPasswordPlaceholder",
+    "profile.authBindings.replaceSuccess",
+    "profile.authBindings.sendCodeAction",
+    "profile.authBindings.source.avatar",
+    "profile.authBindings.source.username",
+    "profile.authBindings.status.bound",
+    "profile.authBindings.status.notBound",
+    "profile.authBindings.title",
+    "profile.authBindings.unbindAction",
+    "profile.authBindings.unbindSuccess",
+    "profile.avatar.compressFailed",
+    "profile.avatar.compressTooLarge",
+    "profile.avatar.deleteSuccess",
+    "profile.avatar.description",
+    "profile.avatar.emptyDeleteHint",
+    "profile.avatar.gifTooLarge",
+    "profile.avatar.invalidType",
+    "profile.avatar.readFailed",
+    "profile.avatar.saveSuccess",
+    "profile.avatar.title",
+    "profile.avatar.uploadAction",
+    "profile.avatar.uploadHint",
+    "profile.avatar.uploadRequired",
+    "profile.balanceNotify.addEmail",
+    "profile.balanceNotify.codePlaceholder",
+    "profile.balanceNotify.codeSent",
+    "profile.balanceNotify.codeSentTo",
+    "profile.balanceNotify.description",
+    "profile.balanceNotify.emailAdded",
+    "profile.balanceNotify.emailDuplicate",
+    "profile.balanceNotify.emailPlaceholder",
+    "profile.balanceNotify.emailRemoved",
+    "profile.balanceNotify.enabled",
+    "profile.balanceNotify.enterCode",
+    "profile.balanceNotify.enterEmail",
+    "profile.balanceNotify.extraEmails",
+    "profile.balanceNotify.extraEmailsHint",
+    "profile.balanceNotify.maxEmailsReached",
+    "profile.balanceNotify.noExtraEmails",
+    "profile.balanceNotify.primaryEmail",
+    "profile.balanceNotify.removeEmail",
+    "profile.balanceNotify.removeSuccess",
+    "profile.balanceNotify.resend",
+    "profile.balanceNotify.sendCode",
+    "profile.balanceNotify.systemDefault",
+    "profile.balanceNotify.threshold",
+    "profile.balanceNotify.thresholdHint",
+    "profile.balanceNotify.thresholdPlaceholder",
+    "profile.balanceNotify.title",
+    "profile.balanceNotify.unverified",
+    "profile.balanceNotify.verified",
+    "profile.balanceNotify.verify",
+    "profile.balanceNotify.verifySuccess",
+    "profile.basicsDescription",
+    "profile.basicsTitle",
+    "profile.changePassword",
+    "profile.changePasswordButton",
+    "profile.changingPassword",
+    "profile.concurrencyLimit",
+    "profile.confirmNewPassword",
+    "profile.currentPassword",
+    "profile.description",
+    "profile.editProfile",
+    "profile.email",
+    "profile.enterUsername",
+    "profile.linkedProfileSources",
+    "profile.linkedProfileSourcesDescription",
+    "profile.memberSince",
+    "profile.newPassword",
+    "profile.overviewDescription",
+    "profile.overviewTitle",
+    "profile.passwordChangeFailed",
+    "profile.passwordChangeSuccess",
+    "profile.passwordHint",
+    "profile.passwordTooShort",
+    "profile.passwordsNotMatch",
+    "profile.role",
+    "profile.rpmLimit",
+    "profile.rpmUnlimited",
+    "profile.securityDescription",
+    "profile.securityTitle",
+    "profile.status",
+    "profile.title",
+    "profile.totp.codeSent",
+    "profile.totp.confirmDisable",
+    "profile.totp.description",
+    "profile.totp.disable",
+    "profile.totp.disableFailed",
+    "profile.totp.disableSuccess",
+    "profile.totp.disableTitle",
+    "profile.totp.disableWarning",
+    "profile.totp.emailCode",
+    "profile.totp.enable",
+    "profile.totp.enableSuccess",
+    "profile.totp.enabled",
+    "profile.totp.enabledAt",
+    "profile.totp.enterCode",
+    "profile.totp.enterEmailCode",
+    "profile.totp.enterPassword",
+    "profile.totp.featureDisabled",
+    "profile.totp.featureDisabledHint",
+    "profile.totp.loginFailed",
+    "profile.totp.loginHint",
+    "profile.totp.loginTitle",
+    "profile.totp.manualEntry",
+    "profile.totp.notEnabled",
+    "profile.totp.notEnabledHint",
+    "profile.totp.sendCode",
+    "profile.totp.sendCodeFailed",
+    "profile.totp.setupFailed",
+    "profile.totp.setupStep1",
+    "profile.totp.setupStep2",
+    "profile.totp.setupTitle",
+    "profile.totp.title",
+    "profile.totp.verify",
+    "profile.totp.verifyEmailFirst",
+    "profile.totp.verifyFailed",
+    "profile.totp.verifyPasswordFirst",
+    "profile.unknownRole",
+    "profile.updateFailed",
+    "profile.updateProfile",
+    "profile.updateSuccess",
+    "profile.updating",
+    "profile.user",
+    "profile.username",
+    "profile.usernameRequired",
+    "purchase.description",
+    "purchase.notConfiguredDesc",
+    "purchase.notConfiguredTitle",
+    "purchase.notEnabledDesc",
+    "purchase.notEnabledTitle",
+    "purchase.openInNewTab",
+    "purchase.title",
+    "redeem.aboutCodes",
+    "redeem.added",
+    "redeem.adminAdjustment",
+    "redeem.balanceAddedAdmin",
+    "redeem.balanceAddedAffiliate",
+    "redeem.balanceAddedRedeem",
+    "redeem.balanceDeductedAdmin",
+    "redeem.codeRedeemSuccess",
+    "redeem.codeRule1",
+    "redeem.codeRule2",
+    "redeem.codeRule3",
+    "redeem.codeRule4",
+    "redeem.concurrency",
+    "redeem.concurrencyAddedAdmin",
+    "redeem.concurrencyAddedRedeem",
+    "redeem.concurrencyReducedAdmin",
+    "redeem.concurrentRequests",
+    "redeem.currentBalance",
+    "redeem.days",
+    "redeem.description",
+    "redeem.failedToRedeem",
+    "redeem.historyWillAppear",
+    "redeem.newBalance",
+    "redeem.newConcurrency",
+    "redeem.pleaseEnterCode",
+    "redeem.recentActivity",
+    "redeem.redeemButton",
+    "redeem.redeemCodeHint",
+    "redeem.redeemCodeLabel",
+    "redeem.redeemCodePlaceholder",
+    "redeem.redeemFailed",
+    "redeem.redeemSuccess",
+    "redeem.redeeming",
+    "redeem.requests",
+    "redeem.subscriptionAssigned",
+    "redeem.subscriptionAssignedDesc",
+    "redeem.subscriptionDays",
+    "redeem.subscriptionRefreshFailed",
+    "redeem.title",
+    "subscriptionProgress.activeCount",
+    "subscriptionProgress.daily",
+    "subscriptionProgress.daysRemaining",
+    "subscriptionProgress.expired",
+    "subscriptionProgress.expiresToday",
+    "subscriptionProgress.expiresTomorrow",
+    "subscriptionProgress.monthly",
+    "subscriptionProgress.noSubscriptions",
+    "subscriptionProgress.title",
+    "subscriptionProgress.unlimited",
+    "subscriptionProgress.viewAll",
+    "subscriptionProgress.viewDetails",
+    "subscriptionProgress.weekly",
+    "table.collapseActions",
+    "table.expandActions",
+    "usage.accountBilled",
+    "usage.accountCost",
+    "usage.accountMultiplier",
+    "usage.actualCost",
+    "usage.allApiKeys",
+    "usage.apiKeyFilter",
+    "usage.avgDuration",
+    "usage.billed",
+    "usage.cacheRead",
+    "usage.cacheTtlOverridden1h",
+    "usage.cacheTtlOverridden5m",
+    "usage.cacheTtlOverriddenHint",
+    "usage.cacheTtlOverriddenLabel",
+    "usage.cacheWrite",
+    "usage.cancelExport",
+    "usage.cost",
+    "usage.costDetails",
+    "usage.description",
+    "usage.duration",
+    "usage.durationTotal",
+    "usage.endpoint",
+    "usage.endpointDistribution",
+    "usage.estimatedTime",
+    "usage.exportCancelled",
+    "usage.exportCsv",
+    "usage.exportExcel",
+    "usage.exportExcelFailed",
+    "usage.exportExcelSuccess",
+    "usage.exportFailed",
+    "usage.exportSuccess",
+    "usage.exportedCount",
+    "usage.exporting",
+    "usage.exportingProgress",
+    "usage.failedToLoad",
+    "usage.firstToken",
+    "usage.firstTokenShort",
+    "usage.imageBillingSize",
+    "usage.imageCount",
+    "usage.imageInputSize",
+    "usage.imageOutputSize",
+    "usage.imageSizeBreakdown",
+    "usage.imageSizeLegacyUnstandardized",
+    "usage.imageSizeNotRecorded",
+    "usage.imageSizeSource",
+    "usage.imageSizeSourceDefault",
+    "usage.imageSizeSourceInput",
+    "usage.imageSizeSourceLegacy",
+    "usage.imageSizeSourceMissing",
+    "usage.imageSizeSourceOutput",
+    "usage.imageSizeUnknown",
+    "usage.imageTotalPrice",
+    "usage.imageUnit",
+    "usage.imageUnitPrice",
+    "usage.in",
+    "usage.inSelectedRange",
+    "usage.inbound",
+    "usage.inboundEndpoint",
+    "usage.inputTokenPrice",
+    "usage.mapping",
+    "usage.model",
+    "usage.noDataToExport",
+    "usage.noRecords",
+    "usage.original",
+    "usage.out",
+    "usage.outputTokenPrice",
+    "usage.path",
+    "usage.perMillionTokens",
+    "usage.perRequest",
+    "usage.preparingExport",
+    "usage.rate",
+    "usage.reasoningEffort",
+    "usage.requestedModel",
+    "usage.serviceTier",
+    "usage.serviceTierFlex",
+    "usage.serviceTierPriority",
+    "usage.serviceTierStandard",
+    "usage.standardCost",
+    "usage.stream",
+    "usage.sync",
+    "usage.tabs.details",
+    "usage.tabs.errors",
+    "usage.tabs.errorsHint",
+    "usage.tabs.label",
+    "usage.tabs.openErrors",
+    "usage.tabs.ranking",
+    "usage.time",
+    "usage.timeRange",
+    "usage.title",
+    "usage.tokenDetails",
+    "usage.tokenRanking.empty",
+    "usage.tokenRanking.failed",
+    "usage.tokenRanking.range",
+    "usage.tokenRanking.title",
+    "usage.tokenRanking.user",
+    "usage.tokens",
+    "usage.totalCost",
+    "usage.totalRequests",
+    "usage.totalTokens",
+    "usage.type",
+    "usage.unitPrice",
+    "usage.unknown",
+    "usage.upstream",
+    "usage.upstreamEndpoint",
+    "usage.upstreamModel",
+    "usage.userAgent",
+    "usage.userBilled",
+    "usage.ws",
+    "userSubscriptions.daily",
+    "userSubscriptions.daysRemaining",
+    "userSubscriptions.description",
+    "userSubscriptions.expires",
+    "userSubscriptions.expiresOn",
+    "userSubscriptions.failedToLoad",
+    "userSubscriptions.monthly",
+    "userSubscriptions.noActiveSubscriptions",
+    "userSubscriptions.noActiveSubscriptionsDesc",
+    "userSubscriptions.noExpiration",
+    "userSubscriptions.quotaEndsIn",
+    "userSubscriptions.resetIn",
+    "userSubscriptions.status.active",
+    "userSubscriptions.status.expired",
+    "userSubscriptions.status.revoked",
+    "userSubscriptions.title",
+    "userSubscriptions.unlimited",
+    "userSubscriptions.unlimitedDesc",
+    "userSubscriptions.usage",
+    "userSubscriptions.usageOf",
+    "userSubscriptions.weekly",
+    "userSubscriptions.windowNotActive",
+    "version.currentVersion",
+    "version.latestVersion",
+    "version.noReleaseNotes",
+    "version.refresh",
+    "version.releaseNotes",
+    "version.restartNow",
+    "version.restartRequired",
+    "version.restarting",
+    "version.retry",
+    "version.sourceMode",
+    "version.sourceModeHint",
+    "version.upToDate",
+    "version.updateAvailable",
+    "version.updateComplete",
+    "version.updateFailed",
+    "version.updateNow",
+    "version.updating",
+    "version.viewChangelog",
+    "version.viewRelease",
+    "version.viewUpdate",
+    "videoGeneration.apiKeyLabel",
+    "videoGeneration.aspectRatioLabel",
+    "videoGeneration.audioLabel",
+    "videoGeneration.audioNeedsImage",
+    "videoGeneration.audioOptions.no",
+    "videoGeneration.audioOptions.yes",
+    "videoGeneration.description",
+    "videoGeneration.dialogDescription",
+    "videoGeneration.dialogTitle",
+    "videoGeneration.download",
+    "videoGeneration.durationLabel",
+    "videoGeneration.emptyConversation",
+    "videoGeneration.emptyHistory",
+    "videoGeneration.errors.apiKeyRequired",
+    "videoGeneration.errors.apiKeysLoadFailed",
+    "videoGeneration.errors.aspectRatioRequired",
+    "videoGeneration.errors.audioImageRequired",
+    "videoGeneration.errors.audioTypeInvalid",
+    "videoGeneration.errors.downloadFailed",
+    "videoGeneration.errors.durationRequired",
+    "videoGeneration.errors.fileReadFailed",
+    "videoGeneration.errors.firstFrameRequired",
+    "videoGeneration.errors.historyLoadFailed",
+    "videoGeneration.errors.historySaveFailed",
+    "videoGeneration.errors.imageTypeInvalid",
+    "videoGeneration.errors.lastFrameRequired",
+    "videoGeneration.errors.modelRequired",
+    "videoGeneration.errors.pollingTimeout",
+    "videoGeneration.errors.promptRequired",
+    "videoGeneration.errors.resolutionRequired",
+    "videoGeneration.errors.tooManyAudios",
+    "videoGeneration.errors.tooManyImages",
+    "videoGeneration.errors.tooManyVideos",
+    "videoGeneration.errors.unsupportedResolution",
+    "videoGeneration.errors.upstreamFailed",
+    "videoGeneration.errors.upstreamTaskMissing",
+    "videoGeneration.errors.videoReadFailed",
+    "videoGeneration.errors.videoTooLong",
+    "videoGeneration.expiryWarning",
+    "videoGeneration.frameModes.none",
+    "videoGeneration.frameModes.startEnd",
+    "videoGeneration.frameModes.startFrame",
+    "videoGeneration.frameReference",
+    "videoGeneration.generated",
+    "videoGeneration.generating",
+    "videoGeneration.generationCount",
+    "videoGeneration.generationFailed",
+    "videoGeneration.history",
+    "videoGeneration.lastGenerated",
+    "videoGeneration.loadingApiKeys",
+    "videoGeneration.modelLabel",
+    "videoGeneration.models.domestic",
+    "videoGeneration.models.international",
+    "videoGeneration.models.internationalFast",
+    "videoGeneration.newConversation",
+    "videoGeneration.noApiKeys",
+    "videoGeneration.polling",
+    "videoGeneration.promptPlaceholder",
+    "videoGeneration.referenceAudios",
+    "videoGeneration.referenceAudiosHint",
+    "videoGeneration.referenceImages",
+    "videoGeneration.referenceImagesHint",
+    "videoGeneration.referenceVideos",
+    "videoGeneration.referenceVideosHint",
+    "videoGeneration.remove",
+    "videoGeneration.resolutionLabel",
+    "videoGeneration.selectApiKey",
+    "videoGeneration.selectModel",
+    "videoGeneration.selectResolution",
+    "videoGeneration.submit",
+    "videoGeneration.title",
+    "videoGeneration.unnamedSession",
+    "videoGeneration.uploadFirstFrame",
+    "videoGeneration.uploadLastFrame",
+    "videoGeneration.uploadReferenceAudios",
+    "videoGeneration.uploadReferenceImages",
+    "videoGeneration.uploadReferenceVideos",
+  ]
+
+ ❯ src/i18n/__tests__/userLocaleParity.spec.ts:64:46
+     62|     it(`${localeCode} has the same user-facing keys and placeholders a…
+     63|       const translated = userMessages(locale)
+     64|       expect(Object.keys(translated).sort()).toEqual(Object.keys(sourc…
+       |                                              ^
+     65| 
+     66|       for (const key of Object.keys(source)) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ Test Files  1 failed | 168 passed (169)
+      Tests  3 failed | 941 passed (944)
+   Start at  17:59:33
+   Duration  22.38s (transform 21.57s, setup 14.34s, collect 57.26s, tests 17.78s, environment 65.92s, prepare 10.39s)
+
+ ELIFECYCLE  Command failed with exit code 1.

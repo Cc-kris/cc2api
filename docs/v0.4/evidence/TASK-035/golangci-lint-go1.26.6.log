@@ -1,0 +1,5 @@
+ent/mutation.go:7:2: could not import encoding/json/jsontext (-: build constraints exclude all Go files in /Users/mac/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/encoding/json/jsontext) (typecheck)
+	"encoding/json/jsontext"
+	^
+1 issues:
+* typecheck: 1

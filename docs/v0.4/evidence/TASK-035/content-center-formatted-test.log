@@ -1,0 +1,13 @@
+
+ RUN  v2.1.9 /Users/mac/Documents/Dev/sub2apis/frontend
+
+Browserslist: browsers data (caniuse-lite) is 10 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ✓ src/views/admin/__tests__/ContentCenterView.spec.ts (12 tests) 214ms
+
+ Test Files  1 passed (1)
+      Tests  12 passed (12)
+   Start at  18:45:56
+   Duration  1.32s (transform 327ms, setup 41ms, collect 359ms, tests 214ms, environment 281ms, prepare 41ms)
+

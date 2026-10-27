@@ -1,0 +1,11 @@
+internal/handler/quotaview/helpers.go:6:2: could not import time (/opt/homebrew/Cellar/go/1.27.1/libexec/src/time/format.go:8:2: could not import errors (/opt/homebrew/Cellar/go/1.27.1/libexec/src/errors/wrap.go:8:2: could not import internal/reflectlite (/opt/homebrew/Cellar/go/1.27.1/libexec/src/internal/reflectlite/swapper.go:8:2: could not import internal/goarch (-: could not load export data: internal error in importing "internal/goarch" (cannot decode "internal/goarch", export data version 4 is greater than maximum supported version 2); please report an issue)))) (typecheck)
+	"time"
+	^
+internal/handler/quotaview/helpers.go:9:2: could not import github.com/Wei-Shaw/sub2api/internal/service (internal/service/account.go:5:2: could not import encoding/json (/opt/homebrew/Cellar/go/1.27.1/libexec/src/encoding/json/v2_decode.go:13:2: could not import cmp (-: could not load export data: internal error in importing "cmp" (cannot decode "cmp", export data version 4 is greater than maximum supported version 2); please report an issue))) (typecheck)
+	"github.com/Wei-Shaw/sub2api/internal/service"
+	^
+internal/handler/quotaview/helpers_test.go:4:2: could not import testing (/opt/homebrew/Cellar/go/1.27.1/libexec/src/testing/allocs.go:8:2: could not import runtime (/opt/homebrew/Cellar/go/1.27.1/libexec/src/runtime/alg.go:8:2: could not import internal/abi (/opt/homebrew/Cellar/go/1.27.1/libexec/src/internal/abi/abi.go:8:2: could not import internal/goarch (-: could not load export data: internal error in importing "internal/goarch" (cannot decode "internal/goarch", export data version 4 is greater than maximum supported version 2); please report an issue)))) (typecheck)
+	"testing"
+	^
+3 issues:
+* typecheck: 3

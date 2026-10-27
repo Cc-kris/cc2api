@@ -1,0 +1,1 @@
+Full golangci-lint run ./... under Go 1.26.6/jsonv2 remained CPU-active for over 27 minutes without producing findings; terminated exact PID 66608 to release the singleton lock. Final gate uses content-owned packages with an explicit 10-minute timeout. CI workflow also has a 15-minute job limit.

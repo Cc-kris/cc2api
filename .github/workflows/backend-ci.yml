@@ -7,6 +7,12 @@ on:
 permissions:
   contents: read
 
+# backend/go.mod requires go1.26.6 and imports encoding/json/v2, which is only
+# available when the jsonv2 GOEXPERIMENT is enabled. Workflow-level env is
+# inherited by every job/step (setup-go, make test-*, golangci-lint).
+env:
+  GOEXPERIMENT: "jsonv2"
+
 jobs:
   test:
     runs-on: ubuntu-latest

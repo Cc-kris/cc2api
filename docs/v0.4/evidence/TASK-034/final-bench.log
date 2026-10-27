@@ -1,0 +1,18 @@
+/Users/mac/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+[ssr_detail_cold] n=300 p50=3.1 p95=4.2 p99=5.4 bytes=3050
+[ssr_detail_hot] n=300 p50=1.7 p95=2.4 p99=3.2 bytes=2994
+[ssr_detail_en_cold] n=300 p50=3.3 p95=4.5 p99=6.0 bytes=2950
+[ssr_list_cold] n=300 p50=41.7 p95=48.5 p99=55.5 bytes=4818
+[ssr_list_hot] n=300 p50=1.6 p95=2.2 p99=4.5 bytes=4818
+[ssr_articles_list_hot] n=300 p50=1.7 p95=2.3 p99=3.3 bytes=3342
+[bi_overview_1y] n=300 p50=318.1 p95=360.1 p99=402.9 bytes=228
+[bi_distribution_1y] n=300 p50=32.8 p95=35.5 p99=96.0 bytes=329
+[bi_distribution_source_1y] n=300 p50=89.1 p95=132.2 p99=156.6 bytes=393
+[admin_list_10k_ps1] n=20 p50=10.5 p95=11.2 bytes=2920
+[admin_list_10k_ps20] n=20 p50=10.5 p95=11.0 bytes=56502
+[admin_list_10k_page500_ps20] n=20 p50=101.9 p95=190.9 bytes=56478
+[admin_list_10k_search] n=20 p50=20.6 p95=21.0 bytes=56502
+[admin_list_10k_status_locale] n=20 p50=10.2 p95=28.8 bytes=56501
+[perf02_concurrency] n=200 p95=723.4 rps=45.5
+WROTE docs/v0.4/evidence/TASK-034/final.json

@@ -1,0 +1,1317 @@
+{
+  "base": "71abae438df91d9fd3371f5ebd1b5cc3cca1b561",
+  "head": "a6b7eaeb17e636c999b6b3193c0b887e7118a425",
+  "tasks": {
+    "TASK-001": {
+      "commit": "916fed7c8988b2e19df33d0ccfcbb1b780eea34b",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-001-a5/result.json",
+      "worker_result": {
+        "status": "completed_with_unrelated_test_failures",
+        "changed_files": [
+          "backend/internal/service/content_featured_backfill.go",
+          "backend/internal/service/content_featured_backfill_test.go",
+          "v04-task-001-a5/progress.md",
+          "v04-task-001-a5/result.json"
+        ],
+        "tests": [
+          {
+            "command": "GOTOOLCHAIN=local /opt/homebrew/bin/go test ./internal/service -run 'TestRunContentFeaturedBackfill|TestContentFeaturedBackfillSourceIDs' -count=1",
+            "result": "passed"
+          },
+          {
+            "command": "GOTOOLCHAIN=local /opt/homebrew/bin/go test -race ./internal/service -run 'TestRunContentFeaturedBackfill|TestContentFeaturedBackfillSourceIDs' -count=1",
+            "result": "passed"
+          },
+          {
+            "command": "GOTOOLCHAIN=local /opt/homebrew/bin/go test ./internal/service -count=1",
+            "result": "failed: 5 unrelated tests (Anthropic local-response-cache 2, Gemini cache-hit 2, OpenAI OAuth context-cancellation 1)"
+          },
+          {
+            "command": "git diff --check -- backend/internal/service/content_featured_backfill.go backend/internal/service/content_featured_backfill_test.go",
+            "result": "passed"
+          }
+        ],
+        "risks": [
+          "Full service package remains red due to five failures outside the backfill tests; see progress.md for failure groups.",
+          "Verification used sqlmock; no real PostgreSQL integration/crash-injection test was run.",
+          "backend/internal/service/content_article_admin.go was already modified before this task and was not edited; wire files were not edited."
+        ],
+        "summary": "Moved taxonomy/marker and database source reads under a transaction-scoped advisory lock. Added a durable pending snapshot protocol with atomic taxonomy writes and restart recovery for rollback, post-commit marker-write failure, no-op previous==target, and superseding manual selections. Added concurrency and recovery tests. Focused tests and focused race tests pass."
+      },
+      "evidence_dir": null,
+      "tcs": "R6-02～R6-05,R5-08,R11-02",
+      "acs": "AC-05,AC-06,AC-11"
+    },
+    "TASK-002": {
+      "commit": "b70548354ae2967d1b59ee17f75bad0d7ec75824",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-002-a1/result.json",
+      "worker_result": {
+        "status": "COMPLETED_WITH_RISKS",
+        "changed_files": [
+          "backend/internal/service/content_article_admin.go",
+          "backend/internal/service/content_article_admin_test.go"
+        ],
+        "tests": [
+          {
+            "command": "cd /Users/mac/Documents/Dev/sub2apis/backend && /opt/homebrew/bin/go test ./internal/service -run 'TestContentArticleTaxonomy' -count=1 -v",
+            "result": "PASS",
+            "details": "精选 set/unset 历史标签与 FeaturedArticleIDs 清理；类别/标签 rename/delete 遍历 205 篇文章两页。"
+          },
+          {
+            "command": "cd /Users/mac/Documents/Dev/sub2apis/backend && /opt/homebrew/bin/go test ./internal/service -run 'TestContentArticle(Admin|Taxonomy)' -count=1 -v",
+            "result": "PASS",
+            "details": "所有匹配的 Admin/Taxonomy 单测通过。"
+          },
+          {
+            "command": "cd /Users/mac/Documents/Dev/sub2apis/backend && /opt/homebrew/bin/go test ./internal/service -count=1",
+            "result": "FAIL_UNRELATED_EXISTING_FAILURES",
+            "details": [
+              "TestRunContentFeaturedBackfillSkipsCompletedMarker: unexpected transaction Begin after sqlmock expectations were fulfilled (content_featured_backfill_test.go:36).",
+              "TestGatewayService_AnthropicAPIKeyPassthrough_NonStreamingLocalResponseCacheHit: expected one upstream request, got two.",
+              "TestGatewayService_AnthropicAPIKeyPassthrough_StreamingLocalResponseCacheWritesOnlyCompleteStream: expected response cache entry, got none.",
+              "TestGeminiForwardNative_GenerateContentLocalResponseCacheHit: expected response cache entry, got none.",
+              "TestGeminiForwardNative_StreamGenerateContentLocalResponseCacheHit: expected one response cache entry, got none."
+            ]
+          },
+          {
+            "command": "git diff --check -- TASK-002 allowed files",
+            "result": "PASS"
+          }
+        ],
+        "risks": [
+          "完整 service 包测试仍被上述五个 backfill/cache 用例失败阻断；本次限定修改的实现与测试文件中，Admin/Taxonomy 定向用例全部通过。",
+          "仓库有大量既存的未提交任务改动；本次仅触碰 allowed_files 中 service/content_article_admin.go 与 service/content_article_admin_test.go，不提交 git commit。"
+        ],
+        "summary": "修复精选 set/unset 时 FeaturedAt 与旧精选标签、taxonomy FeaturedArticleIDs 的运行时收敛；类别/标签 rename/delete 先快照遍历所有分页文章再更新，避免更新时间改变分页排序造成遗漏。新增 set/unset 与 205 篇跨两页回归测试。"
+      },
+      "evidence_dir": null,
+      "tcs": "R1-01,R5-08,R6-05",
+      "acs": "AC-01,AC-05,AC-06"
+    },
+    "TASK-003": {
+      "commit": "8400282774ab6a7d0a787c3bf26f80c49c4d6f7a",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-003-a3/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "changed_files": [
+          "backend/internal/repository/content_news_admin_repo.go",
+          "backend/internal/service/content_news_admin.go",
+          "backend/internal/service/content_news_admin_test.go"
+        ],
+        "tests": [
+          {
+            "command": "/opt/homebrew/bin/go test ./internal/service -run 'TestContentNewsAdminService|TestContentNews' -count=1 -v",
+            "result": "PASS in a temporary copy of backend excluding the unrelated broken internal/service/content_analytics_test.go"
+          },
+          {
+            "command": "/opt/homebrew/bin/go test ./internal/service ./internal/repository -run '^$' -count=1",
+            "result": "PASS in the same temporary copy; both packages compiled"
+          },
+          {
+            "command": "/opt/homebrew/bin/go test ./internal/repository -run '^TestContentNews|^TestSafeContentNews' -count=1",
+            "result": "PASS (no matching repository tests were present)"
+          },
+          {
+            "command": "/opt/homebrew/bin/go test ./internal/service ./internal/repository",
+            "result": "BLOCKED by pre-existing unrelated internal/service/content_analytics_test.go unused imports; an earlier full run also hit unrelated repository test timeout"
+          }
+        ],
+        "commit_suggestion": "Do not commit; task constraint prohibits commits.",
+        "notes": "Removed the duplicate if/else bracket in the news admin repository. Create keeps interval_minutes NULL when intervalMinutesOverride is NULL; Update clears interval_minutes for NULL and preserves explicit values. Made news-source validation nil-safe, allowed NULL inheritance, and enforced explicit interval bounds 15..1440. Added regression coverage for NULL inheriting a 30-minute global cron, explicit 1440 remaining unchanged, and invalid/valid boundaries. Admin schedule decoration exposes NULL as following the global cron and explicit values unchanged. Worker files were not modified because they are outside allowed_files; therefore the existing worker adapter's separate internal fallback behavior remains a follow-up risk, while the admin API and persistence path are verified. No forbidden files were changed and git diff --check passed."
+      },
+      "evidence_dir": null,
+      "tcs": "R1-02,R1-03,R3-02",
+      "acs": "AC-01,AC-03"
+    },
+    "TASK-004": {
+      "commit": "944472cb92b95818442dac250e0f1d19b2717ac0",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-004-a1/result.json",
+      "worker_result": {
+        "status": "completed",
+        "changed_files": [
+          "frontend/src/components/admin/announcements/AnnouncementRichTextEditor.vue",
+          "frontend/src/views/admin/ContentCenterView.vue",
+          "frontend/src/utils/announcementContent.ts",
+          "frontend/src/utils/announcementContent.spec.ts",
+          "frontend/src/views/admin/__tests__/ContentCenterView.spec.ts"
+        ],
+        "tests": [
+          {
+            "command": "cd /Users/mac/Documents/Dev/sub2apis/frontend && pnpm exec vitest run src/utils/announcementContent.spec.ts src/views/admin/__tests__/ContentCenterView.spec.ts --reporter=dot",
+            "exit_code": 0,
+            "result": "2 test files passed; 9 tests passed. Covers delayed editor creation with 10,000-character content, dirty editor protection and session reset, ContentCenterView rich-body edit/save/reopen, and historical Markdown conversion/save."
+          },
+          {
+            "command": "cd /Users/mac/Documents/Dev/sub2apis/frontend && pnpm exec eslint src/components/admin/announcements/AnnouncementRichTextEditor.vue src/views/admin/ContentCenterView.vue src/utils/announcementContent.ts src/utils/announcementContent.spec.ts src/views/admin/__tests__/ContentCenterView.spec.ts",
+            "exit_code": 0,
+            "result": "ESLint passed for all five changed files."
+          },
+          {
+            "command": "cd /Users/mac/Documents/Dev/sub2apis/frontend && pnpm exec vue-tsc --noEmit",
+            "exit_code": 0,
+            "result": "Vue/TypeScript type check passed."
+          },
+          {
+            "command": "cd /Users/mac/Documents/Dev/sub2apis/frontend && pnpm run build",
+            "exit_code": 0,
+            "result": "Production build passed (vue-tsc -b and Vite build)."
+          },
+          {
+            "command": "cd /Users/mac/Documents/Dev/sub2apis && git diff --check",
+            "exit_code": 0,
+            "result": "No whitespace errors."
+          }
+        ],
+        "risks": [
+          "No real browser session or live database record (including id=1381) was used; ContentCenterView integration tests mount the real page/editor but mock the API boundary. The project acceptance note defers browser save/refresh/copy verification to overall acceptance.",
+          "Build emitted existing non-blocking warnings about stale Browserslist data, chunk sizes, mixed static/dynamic imports, and Node child-process deprecation."
+        ],
+        "summary": "Preserved the asynchronous wangEditor onCreated replay and added dirty/session protection against stale external modelValue overwrites. ContentCenterView now converts historical Markdown/rich/plain/native HTML bodies for editing, ignores stale detail responses, and resets the editor session for record changes. Added component regression and ContentCenterView integration coverage for 10,000-character rich text and historical Markdown save/reopen. No commit created."
+      },
+      "evidence_dir": null,
+      "tcs": "R1-04",
+      "acs": "AC-01,AC-02"
+    },
+    "TASK-005": {
+      "commit": "4f83c13ce368e216a3a30e2d3cdb72d46013d071",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-005-a2/result.json",
+      "worker_result": {
+        "status": "completed_with_known_external_blocker",
+        "task": "TASK-005",
+        "attempt": 2,
+        "changed_files": [
+          "frontend/src/components/common/Select.vue",
+          "frontend/src/components/common/__tests__/formControls.spec.ts"
+        ],
+        "tests": [
+          {
+            "command": "zsh -lc 'cd /Users/mac/Documents/Dev/sub2apis/frontend && pnpm exec vitest run src/components/common/__tests__/formControls.spec.ts --reporter=verbose'",
+            "status": "passed",
+            "result": "1 file, 8 tests passed; includes non-searchable keyboard navigation, disabled/group skipping, accessible names/active descendant, searchable combobox/listbox relationships, selected color, and existing controls."
+          },
+          {
+            "command": "zsh -lc 'cd /Users/mac/Documents/Dev/sub2apis/frontend && pnpm exec vite build'",
+            "status": "passed",
+            "result": "Production Vite build completed successfully. Existing dynamic-import/chunk-size and stale Browserslist data warnings were reported."
+          },
+          {
+            "command": "zsh -lc 'cd /Users/mac/Documents/Dev/sub2apis/frontend && pnpm build'",
+            "status": "blocked_by_existing_out_of_scope_error",
+            "result": "vue-tsc -b stopped at src/components/admin/announcements/AnnouncementRichTextEditor.vue:41:5: TS6133, syncedValue is declared but never read. No change made to that unrelated file."
+          },
+          {
+            "command": "git diff --check -- frontend/src/components/common/Select.vue frontend/src/components/common/__tests__/formControls.spec.ts",
+            "status": "passed",
+            "result": "No whitespace errors. Scoped status shows only the two intended files modified; generated build output is not reported as modified."
+          }
+        ],
+        "risks": [
+          "The combined pnpm build command remains blocked by an unrelated unused-variable TypeScript diagnostic in AnnouncementRichTextEditor.vue; Vite production bundling itself passes.",
+          "No real browser session or screenshot-based light/dark visual acceptance was performed; coverage is component/DOM-level plus source style assertions.",
+          "Vite reports existing chunk-size/dynamic-import and stale Browserslist warnings."
+        ],
+        "summary": "Resolved the Select review findings: removed the orphaned CSS declaration; added configurable and localized accessible names, trigger/search combobox/listbox relationships and active option IDs; kept the searchable combobox outside the listbox; implemented non-searchable trigger keyboard navigation with disabled/group entries skipped; and aligned selected styling to high-contrast primary blue/white in both themes. Added adversarial component regression tests. No commit created."
+      },
+      "evidence_dir": null,
+      "tcs": "R1-05,R1-06,R3-01,R4-01,R15-01,R15-02",
+      "acs": "AC-01,AC-03,AC-04,AC-17"
+    },
+    "TASK-006": {
+      "commit": "b8e2ff5ee5782ed1fb2857cfab435295802143d1",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-006-a1/result.json",
+      "worker_result": {
+        "status": "completed_with_blocker",
+        "changed_files": [
+          "frontend/src/components/common/BaseDialog.vue",
+          "frontend/src/components/common/__tests__/dialogPagination.spec.ts"
+        ],
+        "tests": [
+          {
+            "command": "zsh -lc 'cd frontend && pnpm exec vitest run src/components/common/__tests__/dialogPagination.spec.ts'",
+            "result": "PASS: 1 test file, 7 tests passed"
+          },
+          {
+            "command": "zsh -lc 'cd frontend && pnpm exec vue-tsc --noEmit -p tsconfig.json'",
+            "result": "BLOCKED: exit code 2; existing out-of-scope frontend/src/components/common/Select.vue:507 references undefined name e"
+          },
+          {
+            "command": "zsh -lc 'git diff --check -- frontend/src/components/common/BaseDialog.vue frontend/src/components/common/__tests__/dialogPagination.spec.ts'",
+            "result": "PASS: no whitespace errors"
+          }
+        ],
+        "risks": [
+          "vue-tsc remains blocked by the pre-existing unrelated Select.vue type error; Select.vue was not modified.",
+          "The repository contains unrelated working-tree changes that were left untouched.",
+          "No git commit was created."
+        ],
+        "summary": "Fixed the Review-confirmed BaseDialog regression by routing overlay self-clicks through closeOnClickOutside, while preserving the existing close button and Escape behavior. Added a regression test proving closeOnClickOutside=false does not emit close when the overlay is clicked."
+      },
+      "evidence_dir": null,
+      "tcs": "R1-06,R1-07,R2-01,R2-05",
+      "acs": "AC-01,AC-02"
+    },
+    "TASK-007": {
+      "commit": "158aefb0e119a2ed030937d916c9745bf835e9be",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-007-a1/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "changed_files": [
+          "frontend/src/views/admin/ContentCenterView.vue",
+          "frontend/src/views/admin/__tests__/ContentCenterView.spec.ts"
+        ],
+        "tests": [
+          {
+            "command": "zsh -lc 'cd frontend && pnpm exec vitest run src/views/admin/__tests__/ContentCenterView.spec.ts --reporter=verbose'",
+            "exit_code": 0,
+            "result": "1 test file passed; 3 tests passed, including server pagination requesting page=2 with page_size=20."
+          },
+          {
+            "command": "zsh -lc 'cd frontend && pnpm typecheck'",
+            "exit_code": 0,
+            "result": "vue-tsc --noEmit completed successfully."
+          },
+          {
+            "command": "git diff --check",
+            "exit_code": 0,
+            "result": "No whitespace errors."
+          }
+        ],
+        "commit_suggestion": "",
+        "notes": "Implemented shared server-side pagination for news, sources, fetch runs, and articles with a fixed page size of 20; added loading, retryable error, and empty states; set the news editor modal to 880px with a narrow-screen single-column layout. Live browser/database acceptance was not run; unrelated workspace changes were left untouched. Change size is 117 added/deleted lines combined, under the 200-line limit. No git commit command was issued during this task; at final verification HEAD was b8e2ff5ee (feat(content): add paged resilient admin lists), which contains these view and test changes."
+      },
+      "evidence_dir": null,
+      "tcs": "R1-05～R1-07,R2-01～R2-05,R4-02",
+      "acs": "AC-01,AC-02,AC-04"
+    },
+    "TASK-008": {
+      "commit": "d62372f9d46f7991d00247027fbffee4719a5eff",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-008-a3/result.json",
+      "worker_result": {
+        "status": "FAILED",
+        "changed_files": [
+          "backend/internal/service/content_ai_config.go",
+          "v04-task-008-a3/result.json"
+        ],
+        "tests": [
+          {
+            "command": "/opt/homebrew/bin/go test ./internal/service -run TestContentAIConfig -count=1",
+            "result": "FAILED (exit code 1)",
+            "details": "Go vet failed parsing backend/internal/service/content_news_admin_test.go:239: expected declaration, found 'package' (and 1 more errors)."
+          }
+        ],
+        "commit_suggestion": "",
+        "notes": "Removed unused found block and corrected the loop index usage in content_ai_config.go; gofmt verification passed. Test is blocked by a syntax error in content_news_admin_test.go, which was not modified."
+      },
+      "evidence_dir": null,
+      "tcs": "R10-01,R10-05～R10-07,R10-13",
+      "acs": "AC-10"
+    },
+    "TASK-009": {
+      "commit": "e8ce6007ad32ee8f2f6a700bdf21c1cff4052711",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-009-a1/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "changed_files": [
+          "backend/internal/handler/admin/content_article_handler.go",
+          "backend/internal/server/routes/content_admin.go",
+          "backend/internal/service/content_article_admin.go",
+          "backend/internal/service/content_article_admin_test.go",
+          "frontend/src/api/admin/content.ts"
+        ],
+        "tests": [
+          {
+            "command": "cd backend && /opt/homebrew/bin/go test -overlay <temporary-overlay> ./internal/service -run ^TestAIConfigRevisionRejectsStaleToken$ -count=1 -v",
+            "result": "PASS"
+          },
+          {
+            "command": "cd backend && /opt/homebrew/bin/go test -overlay <temporary-overlay> ./internal/handler/admin ./internal/server/routes -count=1",
+            "result": "PASS"
+          },
+          {
+            "command": "cd backend && /opt/homebrew/bin/go test ./internal/service ./internal/handler/admin ./internal/server/routes -count=1",
+            "result": "BLOCKED: pre-existing malformed backend/internal/service/content_news_admin_test.go (duplicate package declaration) and pre-existing unused local in disallowed backend/internal/service/content_ai_config.go; overlay package run additionally exposes existing service worker test panic."
+          },
+          {
+            "command": "git diff --check",
+            "result": "PASS"
+          }
+        ],
+        "commit_suggestion": "",
+        "notes": "增加配置列表及 revision/If-Match 乐观并发、save/default/delete、默认/任务引用删除保护、临时候选连通测试和前端 API。密钥不在列表返回，revision 哈希忽略明文/掩码字段。未提交。全量 service 测试受仓库既有工作区问题阻断；没有修改 allowed_files 外文件。"
+      },
+      "evidence_dir": null,
+      "tcs": "R10-01～R10-05,R10-08～R10-10",
+      "acs": "AC-10"
+    },
+    "TASK-010": {
+      "commit": "8f82897dd700706ab0c31f1814d9386e97ea90b4",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-010-a1/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "changed_files": [
+          "frontend/src/i18n/locales/contentV04.ts",
+          "frontend/src/i18n/index.ts",
+          "frontend/src/i18n/__tests__/contentV04Locales.spec.ts"
+        ],
+        "tests": [
+          {
+            "command": "export PATH=\"/opt/homebrew/bin:$PATH\"; ./node_modules/.bin/vitest run src/i18n/__tests__/contentV04Locales.spec.ts --reporter=verbose",
+            "result": "PASS",
+            "summary": "1 test file passed, 4 tests passed"
+          },
+          {
+            "command": "export PATH=\"/opt/homebrew/bin:$PATH\"; ./node_modules/.bin/vue-tsc --noEmit -p tsconfig.json",
+            "result": "PASS",
+            "summary": "TypeScript validation completed successfully"
+          }
+        ],
+        "commit_suggestion": "",
+        "notes": "Added the contentV04 five-language domain pack covering AI setup guidance, ten analytics dimensions, localized placements, language switching labels, and content statuses. Integrated the pack into lazy locale loading without replacing existing messages. Added structural, non-empty, localization, registry, and merge-preservation tests. No git commit made. pnpm/node were absent from PATH; validation used the installed /opt/homebrew/bin/node runtime and project-local binaries."
+      },
+      "evidence_dir": null,
+      "tcs": "R10-12,R11-04,R12-04,R14-02",
+      "acs": "AC-10,AC-11,AC-12,AC-14"
+    },
+    "TASK-011": {
+      "commit": "e28d858eebde21190e2c6cf792860737095e0840",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-011-a1/result.json",
+      "worker_result": {
+        "status": "PASS",
+        "changed_files": [
+          "frontend/src/components/admin/content/AIConfigPanel.vue",
+          "frontend/src/views/admin/ContentCenterView.vue",
+          "frontend/src/api/admin/content.ts",
+          "frontend/src/style.css",
+          "frontend/src/components/admin/content/__tests__/AIConfigPanel.spec.ts"
+        ],
+        "tests": [
+          {
+            "command": "zsh -lc 'cd /Users/mac/Documents/Dev/sub2apis/frontend && pnpm typecheck'",
+            "result": "PASS"
+          },
+          {
+            "command": "zsh -lc 'cd /Users/mac/Documents/Dev/sub2apis/frontend && pnpm exec vitest run src/components/admin/content/__tests__/AIConfigPanel.spec.ts --reporter=verbose'",
+            "result": "PASS: 3 tests"
+          },
+          {
+            "command": "git diff --check -- <authorized files>",
+            "result": "PASS"
+          }
+        ],
+        "commit_suggestion": "",
+        "notes": "AI Studio now includes model configuration management with revision-aware save/default/delete, masked-key-safe editing, model fetching and connection test. The writing-model selector binds the selected model to its provider configuration. No commit created."
+      },
+      "evidence_dir": null,
+      "tcs": "R10-01～R10-05,R10-08～R10-10,R10-12",
+      "acs": "AC-02,AC-10"
+    },
+    "TASK-012": {
+      "commit": "fef277f63138e98c0fd063cfe789a202f154bba7",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-012-a1/result.json",
+      "worker_result": {
+        "status": "PASS",
+        "changed_files": [
+          "backend/internal/handler/admin/content_article_handler.go",
+          "backend/internal/server/routes/content_admin.go",
+          "backend/internal/service/content_article_admin.go",
+          "backend/internal/service/content_article_admin_test.go",
+          "frontend/src/api/admin/content.ts"
+        ],
+        "tests": [
+          {
+            "command": "go test ./internal/service -run TestContentSEO|TestAIConfig -count=1",
+            "exit_code": 0
+          },
+          {
+            "command": "go test ./internal/handler/admin ./internal/server/routes -count=1",
+            "exit_code": 0
+          },
+          {
+            "command": "go build ./cmd/server",
+            "exit_code": 0
+          }
+        ],
+        "notes": "Verifier isolated empty v2 config fixture; production behavior and PRD assertions retained."
+      },
+      "evidence_dir": null,
+      "tcs": "R5-04～R5-07,R10-11,R10-12",
+      "acs": "AC-05,AC-10"
+    },
+    "TASK-013": {
+      "commit": "c845dc77cd65a280379af20d80adf4ecaf8ddceb",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-013-a3/result.json",
+      "worker_result": {
+        "status": "PASS",
+        "changed_files": [
+          "frontend/src/components/common/TagInput.vue",
+          "frontend/src/views/admin/ContentCenterView.vue",
+          "frontend/src/components/common/__tests__/TagInput.spec.ts"
+        ],
+        "tests": [
+          {
+            "command": "pnpm typecheck",
+            "exit_code": 0
+          },
+          {
+            "command": "vitest TagInput.spec.ts",
+            "exit_code": 0,
+            "tests": 3
+          }
+        ]
+      },
+      "evidence_dir": null,
+      "tcs": "R2-01,R5-01～R5-08,R10-11,R10-12",
+      "acs": "AC-02,AC-05,AC-10"
+    },
+    "TASK-014": {
+      "commit": "82b991b3da545283573d20c8b1861bd4107c5107",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-014-a2/result.json",
+      "worker_result": {
+        "task_id": "TASK-014",
+        "attempt": 2,
+        "status": "passed",
+        "requirements": [
+          "REQ-006"
+        ],
+        "acceptance": "AC-06",
+        "summary": "移除 taxonomy 中 FeaturedArticleIDs 并行真源，使 article FeaturedAt 成为唯一精选状态真源；保留迁移器的幂等标记、FeaturedAt 迁移及 ID/顺序对账。",
+        "changes": [
+          {
+            "file": "backend/internal/service/content_article_admin.go",
+            "details": [
+              "删除 ContentTaxonomyConfig.FeaturedArticleIDs 字段及加载初始化逻辑。",
+              "featured_article set/unset 仅更新文章 FeaturedAt 和清理旧精选标签，不再维护 taxonomy 精选 ID 快照。"
+            ]
+          },
+          {
+            "file": "backend/internal/service/content_article_admin_test.go",
+            "details": [
+              "更新精选 mutation 测试以验证 FeaturedAt 独立决定精选状态。",
+              "验证持久化 taxonomy 不再包含 featuredArticleIds 或精选标签。"
+            ]
+          }
+        ],
+        "verification": {
+          "working_directory": "/Users/mac/Documents/Dev/sub2apis/backend",
+          "commands": [
+            "/opt/homebrew/bin/go test ./internal/service -run 'TestContentArticleTaxonomyFeaturedMutationReconcilesLegacyState|TestContentArticleTaxonomyPersistsFeaturedAtOnSetAndUnset|TestRunContentFeaturedBackfill' -count=1",
+            "/opt/homebrew/bin/go test -tags=integration ./internal/repository -run 'TestContentCenterMigrationSchema' -count=1"
+          ],
+          "results": [
+            {
+              "package": "github.com/Wei-Shaw/sub2api/internal/service",
+              "result": "ok",
+              "duration": "0.821s"
+            },
+            {
+              "package": "github.com/Wei-Shaw/sub2api/internal/repository",
+              "result": "ok",
+              "duration": "0.679s"
+            }
+          ],
+          "exit_code": 0
+        },
+        "scope": {
+          "modified_files": [
+            "backend/internal/service/content_article_admin.go",
+            "backend/internal/service/content_article_admin_test.go"
+          ],
+          "other_allowed_files_modified": [],
+          "git_commit": false
+        },
+        "risks": [
+          "未运行未授权文件范围之外的全仓测试；本次真实目标测试及 integration migration schema 测试均通过。",
+          "旧 taxonomy JSON 中若仍存在 featuredArticleIds，读取时会被忽略；本次 mutation 持久化后的 taxonomy 不再写回该字段。"
+        ]
+      },
+      "evidence_dir": null,
+      "tcs": "R6-01～R6-05",
+      "acs": "AC-06"
+    },
+    "TASK-015": {
+      "commit": "abe897ce5f716bac236b8a9d229bfbd6b7527bc4",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-015-a2/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "changed_files": [
+          "backend/internal/service/public_content_service.go",
+          "backend/internal/repository/public_content_repo.go",
+          "backend/internal/handler/public_content_handler.go"
+        ],
+        "tests": [
+          {
+            "command": "/opt/homebrew/bin/go test ./internal/service -run 'TestPublicContent|TestNonExistent' -count=1",
+            "result": "PASS"
+          },
+          {
+            "command": "/opt/homebrew/bin/go test ./internal/repository -run 'TestPublicContent|TestNonExistent' -count=1",
+            "result": "PASS (no tests to run)"
+          },
+          {
+            "command": "/opt/homebrew/bin/go test ./internal/handler -run 'TestPublicContent|TestNonExistent' -count=1",
+            "result": "PASS"
+          }
+        ],
+        "commit_suggestion": "",
+        "notes": "公开精选查询已接入 service/repository/handler；repository 使用 featured_at DESC、id DESC，并限制前 10 条。已使用 /opt/homebrew/bin/gofmt。未提交 git。"
+      },
+      "evidence_dir": null,
+      "tcs": "R6-01,R13-03",
+      "acs": "AC-06,AC-13"
+    },
+    "TASK-016": {
+      "commit": "714e368d9a20753f6f5fd1856e737e107043c192",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-016-a1/result.json",
+      "worker_result": {
+        "status": "PASS",
+        "changed_files": [
+          "frontend/src/views/public/PublicContentView.vue",
+          "frontend/src/views/public/__tests__/PublicContentFeatured.spec.ts",
+          "backend/internal/repository/public_content_repo.go",
+          "backend/internal/server/routes/public_content.go"
+        ],
+        "tests": [
+          {
+            "command": "zsh -lc 'pnpm vitest run src/views/public/__tests__/PublicContentFeatured.spec.ts'",
+            "result": "PASS",
+            "evidence": "Test Files 1 passed; Tests 4 passed"
+          },
+          {
+            "command": "zsh -lc 'pnpm typecheck'",
+            "result": "PASS",
+            "evidence": "vue-tsc --noEmit exited 0"
+          },
+          {
+            "command": "git diff --check -- frontend/src/views/public/PublicContentView.vue frontend/src/views/public/__tests__/PublicContentFeatured.spec.ts",
+            "result": "PASS",
+            "evidence": "exited 0"
+          }
+        ],
+        "commit_suggestion": "",
+        "notes": "已实现精选区独立 1 大 + 最多 9 小、featuredAt DESC/ID DESC 排序、封面占位、两行标题截断、浅深主题 token，以及桌面 3×3/平板 2 列/移动单列响应式布局；0 条精选时区块隐藏。BLOCKED：前端请求 /public/articles/featured，但 backend/internal/server/routes/public_content.go 未注册该路由（handler/service 已存在）。按 allowed_files 约束未越界修改后端，因此生产环境精选唯一真源链路仍需补后端路由后才能完整验收。未提交 git commit。 Verifier registered the existing featured handler and reran backend routes/repository/build successfully."
+      },
+      "evidence_dir": null,
+      "tcs": "R13-01～R13-03",
+      "acs": "AC-13"
+    },
+    "TASK-017": {
+      "commit": "6c8a074ebaef023eb0b6f09a463cc3d9af17ef9c",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-017-a4/result.json",
+      "worker_result": {
+        "status": "FAILED",
+        "changed_files": [
+          "backend/internal/service/content_translation_test.go"
+        ],
+        "tests": [
+          {
+            "command": "go test ./internal/service -run TestContentTranslation -count=1",
+            "exit_code": 1,
+            "output": "go: updates to go.mod needed; to update it:\n\tgo mod tidy"
+          }
+        ],
+        "commit_suggestion": "",
+        "notes": "Retained SQLite regression test using enttest.Open with the official SQLite DSN; registered the sqlite3 driver using mattn/go-sqlite3. No business logic changed."
+      },
+      "evidence_dir": null,
+      "tcs": "R3-06,R9-01,R10-11,R10-12",
+      "acs": "AC-03,AC-09,AC-10"
+    },
+    "TASK-018": {
+      "commit": "5f2e2dacb7d45dfacfb5c0a804bd271cf6020541",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-018-a1/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "changed_files": [
+          "backend/internal/handler/admin/content_article_handler.go",
+          "backend/internal/service/content_article_admin.go",
+          "backend/internal/service/content_article_admin_test.go"
+        ],
+        "tests": [
+          {
+            "command": "/opt/homebrew/bin/go test ./internal/service -run 'TestContentArticleTranslation(BatchDeduplicatesAndIsQueryable|WorkerBindsSourceVersion)$' -count=1 -v",
+            "status": "PASS",
+            "result": "2 tests passed"
+          },
+          {
+            "command": "/opt/homebrew/bin/go test ./internal/handler/admin -count=1",
+            "status": "PASS"
+          },
+          {
+            "command": "/opt/homebrew/bin/go test ./internal/server/routes -count=1",
+            "status": "PASS"
+          },
+          {
+            "command": "/opt/homebrew/bin/go test ./internal/service ./internal/handler/admin ./internal/server/routes",
+            "status": "FAILED_EXISTING_TESTS",
+            "result": "handler/admin and server/routes passed; service package had unrelated existing account/upstream test failures"
+          }
+        ],
+        "commit_suggestion": "",
+        "notes": "TASK-018 implemented. The existing translation-task POST now accepts locale or locales, normalizes and de-duplicates selected locales, snapshots source article version, enqueues one independently queryable task per locale, and preserves single-locale response compatibility. Existing task GET/list routes remain the query interface. Added service coverage for batch de-duplication, source version, queued status, per-task lookup/listing, and empty selection rejection. No git commit created. Repository also contains unrelated pre-existing untracked files; they were not modified."
+      },
+      "evidence_dir": null,
+      "tcs": "R3-06,R9-01,R10-11,R10-12",
+      "acs": "AC-09,AC-10"
+    },
+    "TASK-019": {
+      "commit": "ccc930a09b52b2a76892edfc42ed85f8f811f771",
+      "acceptance_status": "PASS",
+      "worker_result_file": null,
+      "worker_result": null,
+      "evidence_dir": null,
+      "tcs": "R3-03～R3-08,R7-01,R9-01",
+      "acs": "AC-03,AC-07,AC-09"
+    },
+    "TASK-020": {
+      "commit": "6cf159170808392c7adeac6c1cf837f65aaa347f",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-020-a1/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "changed_files": [
+          "frontend/src/views/admin/ContentCenterView.vue",
+          "frontend/src/api/admin/content.ts",
+          "frontend/src/style.css",
+          "frontend/src/views/admin/__tests__/ContentCenterView.spec.ts"
+        ],
+        "tests": [
+          {
+            "command": "zsh -lc 'cd frontend && pnpm vitest run src/views/admin/__tests__/ContentCenterView.spec.ts'",
+            "status": "PASS",
+            "result": "7 tests passed (3 基线 + 4 新增: 文章语言勾选+批量建任务、列表译文 chip、自动化目标语言保存、新闻源间隔/启用创建、新闻译文任务面板)"
+          },
+          {
+            "command": "zsh -lc 'cd frontend && npx vue-tsc --noEmit -p tsconfig.json' (二次确认)",
+            "status": "PASS",
+            "result": "exited 0"
+          },
+          {
+            "command": "zsh -lc 'cd frontend && npx vue-tsc --noEmit -p tsconfig.json'",
+            "status": "PASS",
+            "result": "exited 0, no diagnostics"
+          },
+          {
+            "command": "zsh -lc 'cd frontend && pnpm vitest run'",
+            "status": "FAILED_EXISTING_TESTS",
+            "result": "165/166 files passed, 891/894 tests passed; 3 failures all in src/i18n/__tests__/userLocaleParity.spec.ts (videoGeneration.* key parity), unrelated to changed files"
+          },
+          {
+            "command": "zsh -lc 'cd /Users/mac/Documents/Dev/sub2apis && git diff --check -- <changed files>'",
+            "status": "PASS",
+            "result": "exited 0"
+          }
+        ],
+        "commit_suggestion": "feat(content-center): 多语言译文批量任务 + 语言勾选与新闻源抓取配置 UI (TASK-020)",
+        "notes": "实现：1) 文章编辑弹窗新增 4 语言（en-US/ru-RU/fr-FR/de-DE）勾选组、全选/清空、按勾选批量创建翻译任务（locales+model+providerKeyRef），逐语言展示状态 chip、失败重试、排队/翻译中取消、已发布下架（复用真实 contentAPI）；2) 深度解析文章列表新增译文状态列（EN·已发布 等），加载时并发拉取各文章译文并归一化；3) 新闻列表新增译文任务状态列（listNewsTranslationTasks + targetLocale/status），新闻编辑弹窗新增新闻译文任务面板与错误码提示，说明自动翻译由自动化目标语言驱动；4) 自动化设置的目标语言由逗号文本框改为 4 语言勾选组，双向同步 targetLocales/targetLocalesText；5) 新闻源创建表单新增抓取间隔与创建即启用开关，创建请求真实传 intervalMinutes/enabled（不再硬编码 15/true），成功后 toast 回显实际配置。新增 vitest 3 条真实用例：文章列表译文 chip + 勾选批量建任务参数、自动化目标语言保存数组、新闻源创建真实间隔/启用。风险/未完成：全量 vitest 有 3 条 i18n 语言包键对齐失败，属既有基线问题（未触碰 i18n 目录）；新闻源级 autoTranslate 勾选未做（后端当前仅消费全局 automation.targetLocales）。未执行 git commit。"
+      },
+      "evidence_dir": null,
+      "tcs": "R2-01,R3-03,R3-04,R3-06,R3-08,R9-01",
+      "acs": "AC-02,AC-03,AC-09"
+    },
+    "TASK-021": {
+      "commit": "01371048c69d40aaba7c96034a2435f2b9692b52",
+      "acceptance_status": "PASS",
+      "worker_result_file": null,
+      "worker_result": null,
+      "evidence_dir": null,
+      "tcs": "R2-03,R7-03,R8-01～R8-04,R9-02～R9-04,R12-05",
+      "acs": "AC-02,AC-07,AC-08,AC-09,AC-12"
+    },
+    "TASK-022": {
+      "commit": "5195065d5a04bfe82754a6d5fdfb2bf0ae08c904",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-022-a1/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "task": "TASK-022",
+        "commit": "16042f9562af5d7b2b7871c16bf90354ebc89989",
+        "review": "PASS",
+        "checks": [
+          {
+            "command": "go test ./internal/handler -run PublicContent -count=1",
+            "exit_code": 0
+          },
+          {
+            "command": "go test ./internal/service -run PublicContent\\|OpsSeo -count=1",
+            "exit_code": 0
+          },
+          {
+            "command": "go build ./cmd/server",
+            "exit_code": 0
+          }
+        ]
+      },
+      "evidence_dir": null,
+      "tcs": "R9-02～R9-07,R12-05",
+      "acs": "AC-09,AC-12"
+    },
+    "TASK-023": {
+      "commit": "78a3ef1d2842f3d33a83fd3bc914653a12b3602f",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-023-a1/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "changed_files": [
+          "backend/internal/server/routes/public_content.go",
+          "backend/internal/web/embed_on.go",
+          "backend/internal/service/content_public_cache.go",
+          "backend/internal/server/routes/public_content_test.go",
+          "backend/internal/handler/public_content_handler_test.go"
+        ],
+        "tests": [
+          {
+            "command": "go test -count=1 ./internal/server/routes/",
+            "result": "ok  github.com/Wei-Shaw/sub2api/internal/server/routes  2.766s",
+            "covers": "R8-01,R8-04,R12-01,R12-02,R12-05,R12-06(prefix routing/301/404/page clamp/version header)"
+          },
+          {
+            "command": "go test -count=1 ./internal/handler/",
+            "result": "ok  github.com/Wei-Shaw/sub2api/internal/handler  19.621s",
+            "covers": "R9-10(HTML cache invalidated after translation publish/unpublish), sitemap short-locale segments"
+          },
+          {
+            "command": "go test -tags embed ./internal/web/ -run TestProbeSSRRoute (临时探针，已在验证后删除)",
+            "result": "PASS",
+            "covers": "R12-06 isPublicSSRRoute 放行 /{lang}[/news|/articles|/*]，拒绝 /model-square、/zhx/news"
+          },
+          {
+            "command": "go build -tags embed ./... && go vet ./internal/server/routes/ ./internal/handler/ && gofmt -l",
+            "result": "clean (no output)",
+            "covers": "编译/静态检查/格式"
+          }
+        ],
+        "commit_suggestion": "feat(public-content): add localized SSR prefix routes with legacy 301 and cache versioning\n\n- routes: /{lang}, /{lang}/news, /{lang}/articles SSR pages; unsupported locale -> 404 noindex HTML; long/alias locale -> 301 short segment; legacy /,/news,/articles -> /zh/...\n- routes: legacy /news|/articles/{seg} resolves locale tags to prefix URLs, other segments -> /zh/{kind}/{slug}\n- routes: X-Public-Content-Version header + cache key carries snapshot version\n- service: PublicContentCacheVersion/PublicContentCacheKey + invalidator registry\n- web: isPublicSSRRoute whitelists localized prefixes so SPA auth branch is bypassed",
+        "notes": "1) 前缀列表 canonical 仍由 renderer 生成 `?locale=` 形式（backend/internal/handler/public_content_renderer.go 不在 allowed_files，未改）；如 PRD 要求 canonical 为 /{lang}/... 需另开任务或在 TASK-025/033 处理。2) SSR 层不写 cookie/localStorage：语言同步（R12-02 后半句）属前端任务，后端仅保证 URL 优先于 query/cookie。3) internal/service 包内 5 个既有失败（gateway local response cache）与本次改动无关，未触碰。4) 临时探针测试文件已删除，工作区仅保留上述 5 个改动文件。"
+      },
+      "evidence_dir": null,
+      "tcs": "R8-01,R8-04,R9-10,R12-01,R12-02,R12-05,R12-06",
+      "acs": "AC-08,AC-09,AC-12"
+    },
+    "TASK-024": {
+      "commit": "16042f9562af5d7b2b7871c16bf90354ebc89989",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-024-a1/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "changed_files": [
+          "frontend/src/views/public/PublicContentView.vue",
+          "frontend/src/views/public/__tests__/PublicContentDetail.spec.ts"
+        ],
+        "tests": [
+          {
+            "command": "npx vitest run src/views/public/__tests__",
+            "cwd": "frontend",
+            "result": "PASS",
+            "detail": "2 files / 16 tests passed (PublicContentFeatured 4, PublicContentDetail 12)"
+          },
+          {
+            "command": "npx vue-tsc --noEmit",
+            "cwd": "frontend",
+            "result": "PASS",
+            "detail": "no type errors"
+          },
+          {
+            "command": "npx vite build",
+            "cwd": "frontend",
+            "result": "PASS",
+            "detail": "built in 12.73s; only chunk-size warnings (pre-existing)"
+          }
+        ],
+        "commit_suggestion": "feat(public): 列表/详情封面 16:9、详情阅读信息与六条相关推荐排序 (TASK-024)",
+        "notes": "1) R7 封面：精选区沿用既有封面；新增 spotlight 与 timeline 卡片封面（.list-card-cover，桌面左侧固定 240px、16:9 object-fit: cover，<=900px 变顶部通栏并按 order:-1 上移）；详情页标题下新增 .article-cover（通栏、aspect-ratio 16:9、max-height 400px）。统一 .cover-placeholder（斜纹底+几何图形 SVG），图片加载失败经 @error 写入 brokenCovers，自动回退占位，避免破图/塌陷（R7-03/R7-04）。\n2) R9-09 推荐：新增纯函数 buildRelatedItems，固定 6 条；排序=共同标签数降序→发布时间降序→当前语言有译文优先→id 稳定兜底；不足时先同分类、再全站最新补齐；排除当前篇（id+slug）与非 published；全站候选仅 3 条时输出 3 条。moreRelatedItems 改为调用该函数（此前为 pool.slice(0,6)，无排序/无排除过滤）。上一篇/下一篇与 reading time 原样保留。\n3) R2-02：spotlight/timeline 标题 2 行 -webkit-line-clamp，timeline 新增标签行（最多 3 个、flex-wrap + overflow hidden，避免越界），封面固定宽高比避免布局跳动。\n4) 未改 frontend/src/style.css（封面样式写在组件 scoped style，避免与同页其它卡片全局类冲突；该文件在 allowed_files 内但非必需）。\n5) 规模：git diff 194 insertions / 5 deletions，未超 loc_limit 200。\n6) 验证方式说明：仓库现有 public 视图测试为源码契约断言（PublicContentFeatured.spec.ts 同风格）；本次排名逻辑用 typescript.transpileModule 从 SFC 抽取 buildRelatedItems 后在 vitest 中真实执行（非 mock），覆盖充足候选/标签优先/分类补齐/仅 3 条/排除当前篇/仅已发布 6 组用例。\n7) 未做浏览器 DOM 验收：本机 3000 端口为「无限画布」应用，sub2apis 前后端栈未运行，故未起栈做像素级校验；建议 M3 独立验证阶段在真实数据（有/无封面、坏图 URL）下补一次 DOM/视觉核对。\n8) vite build 会写入 backend/internal/web/dist（gitignored，未纳入改动）。"
+      },
+      "evidence_dir": null,
+      "tcs": "R2-02,R6-06,R7-01～R7-06,R8-01～R8-06,R9-08,R9-09",
+      "acs": "AC-02,AC-07,AC-08,AC-09"
+    },
+    "TASK-025": {
+      "commit": "f43beff123c90745420955ab0ff48181148ce49e",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-025-a2/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "changed_files": [
+          "frontend/src/i18n/localeDetection.ts",
+          "frontend/src/i18n/registry.ts",
+          "frontend/src/i18n/__tests__/localeDetection.spec.ts",
+          "frontend/src/views/public/PublicContentView.vue"
+        ],
+        "tests": [
+          {
+            "command": "/usr/local/bin/node ./node_modules/vitest/vitest.mjs run src/i18n/__tests__/localeDetection.spec.ts --reporter=verbose",
+            "cwd": "frontend",
+            "result": "PASS",
+            "detail": "1 file / 21 tests passed（含新增 R12-01~R12-04 共 12 条：路径识别与无前缀、URL>cookie>localStorage>浏览器 优先级、cookie+localStorage 双写与非法值剔除、storage 跨标签同步与 dispose、切换器 URL 保形/非内容页不跳转）"
+          },
+          {
+            "command": "/usr/local/bin/node ./node_modules/vue-tsc/bin/vue-tsc.js --noEmit",
+            "cwd": "frontend",
+            "result": "PASS",
+            "detail": "RC=0，无类型错误"
+          },
+          {
+            "command": "/usr/local/bin/node ./node_modules/vite/bin/vite.js build",
+            "cwd": "frontend",
+            "result": "PASS",
+            "detail": "RC=0，仅有既有的 chunk>500kB 与 import 边界告警；产物写入 backend/internal/web/dist（gitignored）"
+          },
+          {
+            "command": "/usr/local/bin/node ./node_modules/vitest/vitest.mjs run --reporter=dot",
+            "cwd": "frontend",
+            "result": "PARTIAL",
+            "detail": "166 files / 920 tests passed；1 file 3 tests failed：src/i18n/__tests__/userLocaleParity.spec.ts 报 de/fr/ru 缺 errors.goBack / errors.goHome / errors.needHelp / errors.pageNotFoundDescription（404 页文案，属 TASK-022/其他任务范围，本任务未触碰 locales 目录，为分支既有状态）"
+          }
+        ],
+        "commit_suggestion": "feat(public): 五语语言检测优先级、cookie 双写、跨标签同步与语言切换器下拉 (TASK-025)",
+        "notes": "1) 承接上一轮：localeDetection.ts（cookie→localStorage→navigator 逐级回落、resolveLocale、persistLocale 双写、buildLocaleSwitchTarget、initLocaleSync）、registry.ts（normalizeLocaleCode/别名/availableLocales 五语）与 PublicContentView.vue 切换器模板保持原实现不动，本轮只补齐缺口。\n2) 本轮补齐接线：onMounted 里 initLocaleSync((next)=>applySyncedLocale(next)) 注册并保存 dispose，同时注册 document click（点 .lang-switcher 之外关闭）与 keydown Escape 关闭；onBeforeUnmount 统一解绑，避免死代码与内存泄漏。此前这些函数只有定义、从未注册。\n3) 本轮补齐样式：在组件 <style scoped> 内新增 .lang-switcher/.lang-globe/.lang-caret/.lang-menu/.lang-option(.active)，沿用 --ink/--muted/--order-lime；未改 frontend/src/style.css（不在 allowed_files）。构建产物 backend/internal/web/dist/assets/PublicContentView-BWnaWrNQ.css 中已确认出现 .lang-switcher[data-v-03cd43a2]/.lang-menu[data-v-03cd43a2]/.lang-option[data-v-03cd43a2] 规则，证明样式真实随包发出。\n4) 本轮补测试：localeDetection.spec.ts 原有 5 条 IP 检测用例保留，新增 12 条覆盖 R12-01~R12-04；R12-01 无前缀路径不自行写入 URL（301 由服务端收口，客户端仅识别前缀路径），R12-02 优先级 URL>cookie>localStorage>浏览器并校验非法/大小写/下划线变体归一，R12-03 persistLocale 同时写 cookie 与 localStorage 且非法值不落盘，R12-04 切换器保留 slug 与查询串、非内容页返回 null 不跳转。\n5) 切换首屏口径：手动切换先 await setLocale 再 persistLocale 双写，然后 router.resolve 能命中则 SPA 内跳转，未注册的前缀首页/列表走 window.location.assign 整页跳转交给 SSR 输出，避免出现空白路由。\n6) 规模偏差（需知悉）：git diff 合计 563 insertions（localeDetection 194、PublicContentView 183、spec 154、registry 32）超出 loc_limit 180。超出主要来自上一轮已完成的检测/切换器实现与注释，本轮按要求未重写既有实现，只做接线（vue +10 行）、CSS（+45 行）与测试（+150 行）；若评审要求硬性卡 180，可后续单独做注释与冗余分支压缩，不影响行为。\n7) 未做浏览器端真实点击验收：sub2apis 前后端栈当前未运行，故以 vitest 真实执行（非 mock 断言的纯函数链路）+ vue-tsc + vite build + 产物 CSS 断言作为证据；建议独立验证阶段起栈后补一次点开下拉→选语言→URL/cookie/DOM 同步的目视核对。\n8) 未 git commit（按约束）。"
+      },
+      "evidence_dir": null,
+      "tcs": "R12-01～R12-04",
+      "acs": "AC-12"
+    },
+    "TASK-026": {
+      "commit": "11f2d7ced9d64128d672da9a67e5f83f2194abe6",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-026-a4/result.json",
+      "worker_result": {
+        "status": "FAILED",
+        "changed_files": [
+          "backend/internal/service/content_analytics_test.go"
+        ],
+        "tests": [
+          {
+            "command": "/opt/homebrew/bin/go test ./internal/service -count=1",
+            "cwd": "backend",
+            "status": "FAILED",
+            "exit_code": 1,
+            "failures": [
+              "TestGatewayService_AnthropicAPIKeyPassthrough_NonStreamingLocalResponseCacheHit",
+              "TestGatewayService_AnthropicAPIKeyPassthrough_StreamingLocalResponseCacheWritesOnlyCompleteStream",
+              "TestGeminiForwardNative_GenerateContentLocalResponseCacheHit",
+              "TestGeminiForwardNative_StreamGenerateContentLocalResponseCacheHit"
+            ],
+            "observed": "content_analytics_test.go 编译通过；失败均为 service 包中既有 local response cache 测试。"
+          }
+        ],
+        "commit_suggestion": "",
+        "notes": "已将 dsn 提升为测试函数作用域变量：dsn := os.Getenv(\"CONTENT_ANALYTICS_TEST_DSN\")，随后 if dsn == \"\"；已执行 gofmt。未修改生产代码，未提交。"
+      },
+      "evidence_dir": null,
+      "tcs": "R11-02,R11-03,R11-06",
+      "acs": "AC-11"
+    },
+    "TASK-027": {
+      "commit": "92273cf285bcba04a546274f58d579724a135428",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-027-a1/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "changed_files": [
+          "backend/internal/handler/content_analytics_handler.go",
+          "backend/internal/service/content_analytics.go",
+          "backend/internal/repository/content_analytics_repo.go",
+          "backend/internal/server/routes/content_analytics.go",
+          "backend/internal/service/content_analytics_test.go"
+        ],
+        "tests": [
+          {
+            "command": "/opt/homebrew/bin/go test ./internal/handler -run TestContentAnalytics -count=1",
+            "result": "PASS"
+          },
+          {
+            "command": "/opt/homebrew/bin/go test ./internal/service -run TestContentAnalytics -count=1",
+            "result": "PASS"
+          },
+          {
+            "command": "/opt/homebrew/bin/go test ./internal/repository ./internal/server/routes -run ^$ -count=1",
+            "result": "PASS (packages compile; no tests selected)"
+          },
+          {
+            "command": "git diff --check -- five allowed files",
+            "result": "PASS"
+          }
+        ],
+        "commit_suggestion": "",
+        "notes": "Added GET /api/v1/admin/bi/analytics/distribution for category/locale/source/referrer with date, locale, content type, placement and source filters. Preserves legacy page_view and content_impression payload compatibility (no view_id requirement). All focused analytics tests passed. Earlier broad service package run encountered an unrelated ContentNewsWorker panic; no unrelated files were modified."
+      },
+      "evidence_dir": null,
+      "tcs": "R11-01～R11-03,R11-05",
+      "acs": "AC-11"
+    },
+    "TASK-028": {
+      "commit": "b8affd9f2c96096f0e82d8c16f95fc0071feb5e1",
+      "acceptance_status": "PASS",
+      "worker_result_file": null,
+      "worker_result": null,
+      "evidence_dir": null,
+      "tcs": "R11-01～R11-03,R11-06",
+      "acs": "AC-11"
+    },
+    "TASK-029": {
+      "commit": "9c006a7e939fde3dbd63c3722771c940c9a10d31",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-029-a2/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "changed_files": [
+          "frontend/src/views/admin/ContentCenterView.vue",
+          "frontend/src/api/admin/content.ts",
+          "frontend/src/i18n/locales/contentV04.ts",
+          "frontend/src/views/admin/__tests__/ContentCenterView.spec.ts",
+          "frontend/vitest.config.ts",
+          "backend/internal/service/content_analytics.go",
+          "backend/internal/service/content_analytics_test.go",
+          "backend/internal/repository/content_analytics_repo.go",
+          "backend/internal/repository/content_analytics_publishing_repo_test.go"
+        ],
+        "tests": [
+          {
+            "cmd": "cd backend && go build ./...",
+            "result": "PASS"
+          },
+          {
+            "cmd": "cd backend && go test ./internal/service/... ./internal/repository/... ./internal/handler/... -run Analytics -count=1",
+            "result": "PASS (service/repository/handler ok)"
+          },
+          {
+            "cmd": "cd frontend && npx vitest run src/views/admin/__tests__/ContentCenterView.spec.ts src/i18n/__tests__/contentV04Locales.spec.ts",
+            "result": "PASS 13/13"
+          },
+          {
+            "cmd": "cd frontend && npx vue-tsc --noEmit",
+            "result": "PASS (exit 0)"
+          },
+          {
+            "cmd": "cd frontend && npx vitest run",
+            "result": "932 passed / 3 failed — 失败均为既有 src/i18n/__tests__/userLocaleParity.spec.ts(de/fr/ru 缺少 4 个用户端键，相关 locale 文件本次未改动)"
+          }
+        ],
+        "commit_suggestion": "feat(content-bi): 内容中心 BI tab 十维度图表 + 7/30/90 筛选与五语本地化",
+        "notes": "BI 放在内容中心 BI tab（未动财务页）。KPI 4 张（今日 UV/PV/阅读/平均 CTR）+ 两列 10 图：UV/PV/阅读趋势、文章 TOP10、新闻 TOP10、位置点击率、分类/语言/新闻源/来源渠道分布、平均阅读时长趋势、发布趋势（文章+新闻按日）。筛选：7/30/90/自定义 + 语言 + 位置，全部透传后端并触发重取。前端新增 contentAPI.analyticsDistribution；i18n 五语新增 last7Days/customRange/export/placements(5 位置名)/referrers(direct/search/social/external)，图表标题与数据集标签均走 t()，不展示原始代码。后端沿用既有 trends/rankings/CTR/distribution 契约，trends 增加 avgReadSeconds 加权均值与按日发布数（ent 查 published 且 deleted_at IS NULL，按 Asia/Shanghai 分桶）。测试契约：vitest 需 __INTLIFY_JIT_COMPILATION__ 才能解析真实文案，已在 vitest.config.ts 补 define（与 vite.config.ts 一致）；chart stub 渲染 labels/datasets 供断言。未做：真实浏览器 UI 走查、R11-05 一年数据性能压测（属 TASK-034）。"
+      },
+      "evidence_dir": null,
+      "tcs": "R11-01～R11-05,R14-02",
+      "acs": "AC-11,AC-14"
+    },
+    "TASK-030": {
+      "commit": "0ce18c4c4b3e5b5375a049af06e7caf3241f2151",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-030-a1/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "task_id": "TASK-030",
+        "attempt": 1,
+        "changed_files": [
+          "frontend/src/style.css",
+          "frontend/src/views/admin/ContentCenterView.vue",
+          "frontend/src/views/public/PublicContentView.vue",
+          "frontend/src/styleV04.spec.ts"
+        ],
+        "tests": [
+          {
+            "command": "./node_modules/.bin/vitest run src/styleV04.spec.ts --reporter=verbose",
+            "result": "passed",
+            "detail": "5/5：token 契约、旧绿零残留、选中/成功态、自定义下拉箭头+焦点环、无下划线输入框且表格行分隔线保留"
+          },
+          {
+            "command": "./node_modules/.bin/vitest run src/views/admin/__tests__/ContentCenterView.spec.ts src/views/admin/__tests__/FinanceStatsView.spec.ts src/views/public/__tests__/PublicContentFeatured.spec.ts src/views/public/__tests__/PublicContentDetail.spec.ts --reporter=dot",
+            "result": "passed",
+            "detail": "4 个既有视图用例文件 32/32 通过，无回归"
+          },
+          {
+            "command": "./node_modules/.bin/vue-tsc --noEmit -p tsconfig.json",
+            "result": "passed",
+            "detail": "类型检查 exit 0（tsconfig 按项目约定排除 *.spec.ts）"
+          },
+          {
+            "command": "./node_modules/.bin/vite build --outDir /tmp/task030-dist --emptyOutDir",
+            "result": "passed",
+            "detail": "真实生产构建成功（11.82s，exit 0），产物 CSS 中存在 select:not([multiple]) 规则；输出到 /tmp，未污染仓库"
+          },
+          {
+            "command": "grep -n -i -E 'emerald-|#10B981|#00C896|#059669|#047857|#065F46|#D1FAE5|#84CC16|rgba\\(?16, ?185, ?129' frontend/src/style.css frontend/src/views/admin/ContentCenterView.vue frontend/src/views/public/PublicContentView.vue frontend/src/views/admin/FinanceStatsView.vue",
+            "result": "passed",
+            "detail": "允许文件内 0 命中"
+          }
+        ],
+        "commit_suggestion": "style(v04): unify neo-lab tokens, purge legacy greens and normalize native controls",
+        "notes": "实施：1) style.css 末尾新增 --v04-* token（浅色/深色双主题），成功态改 #16A34A/#15803D、#4ADE80；btn-success、badge/toast/tour/chip-success、airwallex 阴影、button.bg-green、图标映射等全部去 emerald/#10B981/#00C896；2) 全局原生下拉 appearance:none + 12px SVG 箭头 + 蓝色焦点环 + 深色适配，输入框统一 2px 四边描边/8px 圆角/2px 蓝色 focus ring，表格分隔线显式保留；3) ContentCenterView 图表调色板/面积图/指标卡/状态标签改蓝系；4) PublicContentView 订单/鸣谢模块 #00C896 薄荷绿改 #2563EB/#60A5FA，成功点 #059669 改 #16A34A；5) 新增 src/styleV04.spec.ts 源码守卫，覆盖 R14-01/R15-01/R15-02 与 token 契约。改动统计：130 行新增 + 50 行删除 = 180 行（loc_limit 内）。FinanceStatsView 已无旧绿，无需改动。风险：frontend/src/composables、components、其他 admin/ops 视图中仍有 emerald-* 类名，均不在 allowed_files，未改动；R14-02 四类板块逐页双主题三视口截图走查未执行（当前环境仅做源码/构建级验证）。未 git commit。"
+      },
+      "evidence_dir": null,
+      "tcs": "R1-05,R2-04,R4-01,R14-01,R14-02,R15-01,R15-02",
+      "acs": "AC-01,AC-02,AC-04,AC-14,AC-17"
+    },
+    "TASK-031": {
+      "commit": "0dd4ca37a490e7baa5a89105ff21f4d30b8bda3c",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-031-a2/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "changed_files": [
+          "frontend/src/views/admin/ContentCenterView.vue",
+          "frontend/src/views/admin/__tests__/ContentCenterView.spec.ts",
+          "frontend/e2e/content-admin-v04.spec.ts",
+          "docs/v0.4/evidence/TASK-031/README.md"
+        ],
+        "tests": [
+          {
+            "name": "unit: ContentCenterView.spec.ts",
+            "command": "cd frontend && npx vitest run src/views/admin/__tests__/ContentCenterView.spec.ts",
+            "result": "10 passed"
+          },
+          {
+            "name": "typecheck: vue-tsc",
+            "command": "cd frontend && npx vue-tsc --noEmit",
+            "result": "passed (no errors)"
+          },
+          {
+            "name": "e2e: content-admin-v04.spec.ts (9 cases)",
+            "command": "cd frontend && PLAYWRIGHT_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' PLAYWRIGHT_EXTERNAL_SERVER=1 E2E_BASE_URL=http://127.0.0.1:3100 S2A_BASE_URL=http://127.0.0.1:3100 npx playwright test e2e/content-admin-v04.spec.ts --project=chromium --workers=1 --reporter=line",
+            "result": "9 passed (6.1s), EXIT=0"
+          },
+          {
+            "name": "negative-control: baseline code must fail regression",
+            "command": "git show HEAD:frontend/src/views/admin/ContentCenterView.vue > 工作区 → 跑单测与 E2E R1-02 UI → 还原",
+            "result": "baseline: 单测 1 failed + E2E R1-02 UI 1 failed；还原后 10 passed/passed，文件 md5 一致"
+          }
+        ],
+        "commit_suggestion": "fix(content): 源抓取间隔文案以 source.intervalMinutes 为准，NULL 显示“跟随全局（N 分钟）”；留空提交 NULL；补齐 v0.4 内容管理 E2E（9 条）与回归单测",
+        "notes": "DEFECT-031-01 已在源码层修复（sourceScheduleText 不再用全局 fetchCron 冒充源间隔，新增 globalFetchIntervalMinutes 解析 automation.fetchCron；创建源表单默认 null 并原样提交）。回归用例改为正常必须 PASS，并做了负向对照证明其在 baseline 上失败。E2E 侧修正三处测试自身问题（非产品缺陷）：driver.js 新手引导浮层遮挡弹窗按钮→openAdmin 预置“已看过引导”localStorage；newArticle 造数误用 language/summary 导致文章落 en-US 不进中文公共精选→改 locale/excerpt；“前台最多 10 条精选”断言从后台列表改到公共接口 /api/v1/public/articles/featured（MaxPublicFeaturedArticles=10 的唯一事实源）。证据见 docs/v0.4/evidence/TASK-031/README.md。未执行 git commit（约束要求）。改动行数在 180 行限制内（源码 36+/34-，单测 +47）。"
+      },
+      "evidence_dir": "docs/v0.4/evidence/TASK-031",
+      "tcs": "R1-01～R1-07,R2-01～R2-05,R3-01～R3-08,R5-01～R5-08,R6-01～R6-05,R9-01,R10-01～R10-13",
+      "acs": "AC-01～AC-06,AC-09,AC-10"
+    },
+    "TASK-032": {
+      "commit": "19e60dc592f2438773df42770d1dfb7107d2eaf3",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-032-a2/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "changed_files": [
+          "backend/internal/handler/admin/content_news_handler_test.go",
+          "backend/internal/server/routes/public_content_test.go",
+          "backend/internal/server/content_v04_security_test.go"
+        ],
+        "tests": [
+          {
+            "cmd": "cd backend && PATH=/opt/homebrew/bin:$PATH go test -tags=unit ./internal/handler/admin/ -run TestContentAIConfig -count=1 -v",
+            "result": "PASS - TestContentAIConfigNeverExposesOrStoresPlaintextKey now covers (a) PUT without TOTP_ENCRYPTION_KEY -> 503 encryption_not_configured, no plaintext echo, no file on disk; (b) initial PUT -> 200 and GET returns apiKeyMasked=sk-l****7890 with hasApiKey=true and no 'apiKey' field; (c) empty_update PUT {apiKey:\"\"} -> 200/200, mask still sk-l****7890, svc.GetAIProviderConfig().APIKey still exactly the original plaintext, disk still ciphertext; (d) masked_update PUT with the mask actually parsed out of the GET response -> same invariants. Mask value is round-tripped from GET (strings.Cut on \"apiKeyMasked\":\"...\"), not hardcoded."
+          },
+          {
+            "cmd": "cd backend && PATH=/opt/homebrew/bin:$PATH go test -tags=unit ./internal/server/ -run TestSensitiveContentEndpointsRejectAnonymousAndNonAdmin -count=1 -v",
+            "result": "PASS - 12 subtests (6 sensitive paths x anonymous=401 / non-admin=403), bodies still asserted free of apiKeyEncrypted/apiKey/sk-/referrer; unchanged from attempt 1"
+          },
+          {
+            "cmd": "cd backend && PATH=/opt/homebrew/bin:$PATH go test -tags=unit ./internal/server/ ./internal/server/routes/ ./internal/handler/admin/ -count=1",
+            "result": "ok internal/server 0.389s; ok internal/server/routes 2.329s; ok internal/handler/admin 0.590s (exit 0)"
+          },
+          {
+            "cmd": "mutation check: service merge condition forced to `if false` -> run admin test",
+            "result": "RED as expected: content_news_handler_test.go:59 empty_update: put=200 get=200 key must stay masked ... hasApiKey:false (proves the empty-key case can no longer silently wipe the stored key); source restored to baseline, git status clean"
+          },
+          {
+            "cmd": "mutation check: cfg.APIKeyMasked = cfg.APIKey in loadContentAIProviderConfigWithError -> run admin test",
+            "result": "RED as expected: apiKeyMasked:\"sk-live-SECRET-1234567890\" leaked in GET, assertion caught it (proves the masking assertion is live, not tautological); source restored, git status clean"
+          },
+          {
+            "cmd": "gofmt -l on the three changed files; git diff --numstat 0dd4ca37a -- <allowed files>",
+            "result": "gofmt clean (no output). Added lines: content_news_handler_test.go 54, public_content_test.go 37, content_v04_security_test.go 68 => 159 total, within loc_limit 160. api_contract_test.go and content_analytics_handler_test.go untouched."
+          }
+        ],
+        "commit_suggestion": "test(content): close R10-05 gap - assert empty and masked AI-config updates keep the stored key while remaining encrypted and unexposed (R10-05, R10-06)",
+        "notes": "1) The handoff gap is closed for real, not relaxed: the previous test only exercised the first write plus GET masking; it now performs two extra PUTs (apiKey=\"\" and the mask read back from GET) after the key is stored. 2) The masked_update case uses the mask parsed from the GET body instead of a hardcoded constant, so the test fails if GET stops returning the real mask (proved by mutation #3). 3) Assertions are the strong ones: response bodies contain no 'apiKey' key, no SECRET/plaintext, contain the exact mask sk-l****7890 and hasApiKey=true; svc.GetAIProviderConfig(ctx).APIKey is compared to the exact original plaintext (a masked string stored as the key would differ); the on-disk data/content_ai_provider.json is read and asserted not to contain the plaintext. 4) Two mutation runs were used to prove the new assertions can fail (merge disabled -> empty_update RED; mask replaced by plaintext -> mask leak RED), both reverted; service code is byte-identical to baseline (git status shows no changes under backend/internal/service). 5) Budget: 159 added lines <= 160; the existing 12 permission subtests and the referrer-host privacy assertion are untouched and still pass. 6) Only allowed_files were modified; pre-existing dirty/untracked files (frontend/playwright.config.ts, e2e specs, review dirs) were left as found. 7) No git commit performed per constraints."
+      },
+      "evidence_dir": null,
+      "tcs": "R10-05,R10-06,SEC-01",
+      "acs": "AC-10,AC-11,AC-16"
+    },
+    "TASK-033": {
+      "commit": "aaa0c652a1dbf9a174a4522270e8a9a21b53e974",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-033-a5/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "attempt": 6,
+        "task_id": "TASK-033",
+        "base_commit": "a6b7eaeb17e636c999b6b3193c0b887e7118a425",
+        "changed_files": [
+          "frontend/e2e/content-public-v04.spec.ts",
+          "docs/v0.4/evidence/TASK-033/README.md"
+        ],
+        "root_cause": "R9-02 是测试数据依赖，不是产品缺陷：旧用例只扫后台文章第 1 页前 100 条，取前 3 个 status=published 的译文做断言；样本集里没有已发布译文（或全部落后版本）时 checked 恒为 0，于是稳定报 “已发布译文数量 Expected >0 Received 0”。",
+        "fix": [
+          "改写为自包含夹具：管理员 API 建唯一 slug 文章（draft）→ publish（版本 +1）→ 建译文（sourceVersion=当前版本，status=translation_draft）→ publish 译文",
+          "当前版本分支精确断言：/articles/en/<slug> 渲染英文正文 + content=\"index, follow\" + self-canonical 指 .../articles/en/<slug>",
+          "用 unpublish→publish 各 +1 版本制造真实“译文仍 published 但 source_version 落后”状态（并非伪造），再断言 /articles/en/<slug> 回落：中文正文、content=\"noindex, follow\"、canonical 指 .../articles/zh/<slug>、且不含英文正文",
+          "断言“旧版本译文仍为 published 且 sourceVersion < 文章 version”（API 侧证），把「版本门禁生效」与「译文根本没发布」区分开，杜绝 checked>0 式假通过",
+          "slug 带时间戳+随机串，try/finally 删除译文与文章，并行 worker 不串扰、跑完不留活跃夹具",
+          "登录失败改为硬失败（不再 test.skip），避免用 skip 掩盖数据/权限问题"
+        ],
+        "tests": [
+          {
+            "cmd": "cd frontend && E2E_EDGE=1 pnpm exec playwright test e2e/content-public-v04.spec.ts -g \"R9-02\" --project=chromium --project=webkit-desktop --project=msedge --repeat-each=2 --reporter=line",
+            "result": "PASS 6/6 (873ms)，5 workers 并发",
+            "log": "docs/v0.4/evidence/TASK-033/r9-02-matrix.log"
+          },
+          {
+            "cmd": "cd frontend && E2E_EDGE=1 pnpm exec playwright test e2e/content-public-v04.spec.ts -g \"R9-02\" --project=chromium --project=webkit-desktop --project=msedge --repeat-each=3 --reporter=line",
+            "result": "PASS 9/9 (1.1s)，重复运行稳定",
+            "log": "docs/v0.4/evidence/TASK-033/r9-02-stability-x3.log"
+          },
+          {
+            "cmd": "cd frontend && E2E_EDGE=1 pnpm exec playwright test e2e/content-public-v04.spec.ts --project=chromium --reporter=line",
+            "result": "PASS 12/12 (474ms) 全文件 chromium",
+            "log": "docs/v0.4/evidence/TASK-033/full-file-chromium.log"
+          },
+          {
+            "cmd": "cd frontend && E2E_EDGE=1 pnpm exec playwright test e2e/content-public-v04.spec.ts --project=webkit-desktop --reporter=line",
+            "result": "PASS 12/12 (612ms) 全文件 webkit-desktop（额外加强）",
+            "log": "docs/v0.4/evidence/TASK-033/full-file-webkit-desktop.log"
+          },
+          {
+            "cmd": "python 一次性脚本：管理员 API 走完整夹具链路，打印 SSR canonical/robots/正文命中，并用 Postgres 直查译文状态",
+            "result": "当前版本 en+index+英文正文；版本推进后 zh+noindex+中文正文；清理 204；日志见文件",
+            "log": "docs/v0.4/evidence/TASK-033/r9-02-fixture-evidence.log"
+          },
+          {
+            "cmd": "Postgres 直查 content_articles / content_translations where slug like 'e2e-r9-02-%' and deleted_at is null",
+            "result": "0 条活跃残留（仅 12 条软删记录，status=deleted）"
+          }
+        ],
+        "verification": [
+          "R9-02 在 chromium / webkit-desktop / msedge 三引擎各重复 2 次与 3 次，全部通过（6/6、9/9），并发 5 workers，均 1 秒级完成",
+          "content-public-v04.spec.ts 全文件 chromium 12/12 通过，未回归其它公开站用例",
+          "夹具链路独立证据：CURRENT 状态 canonical=.../articles/en/<slug> robots=index, follow，英文正文命中、中文未命中；STALE 状态 canonical=.../articles/zh/<slug> robots=noindex, follow，中文正文命中、英文未命中；DB 侧证 status=published / sourceVersion=2 / article version=4",
+          "清理核对：全库 e2e-* 活跃文章与译文均为 0 条"
+        ],
+        "loc": {
+          "file_total_lines": 179,
+          "limit": 180,
+          "spec_diff": "47 insertions / 17 deletions"
+        },
+        "api_contract_findings": [
+          "译文 status 枚举为 translation_draft / translation_review / published / unpublished / deleted，没有 draft；传 draft 会被判 invalid content article input",
+          "直接以 published 创建译文会撞 DB 约束（published_at 必填），必须「先建 translation_draft → POST /translations/{id}/publish」",
+          "publish / unpublish 每次都 AddVersion(1)，故 unpublish→publish 是可靠的版本推进手段",
+          "POST translations 传非当前 sourceVersion 会被 validateTranslationSource 拒绝"
+        ],
+        "risks": [
+          "用例依赖管理员账号（S2A_E2E_EMAIL/S2A_E2E_PASSWORD，默认 e2e-task031@sub2api.local）；登录失败硬失败，换环境需注入 env",
+          "夹具在共享库中每次留下 1 条软删文章行（与产品删除语义一致），需要彻底清空需另设清理作业",
+          "用例依赖「publish/unpublish 各 +1 版本」的实现细节；若产品改为仅正文变更才递增版本，第 4 步需改走正文编辑触发",
+          "本次未重跑六项目全量矩阵（仅按要求跑该用例三引擎 + 全文件 chromium），全量结论以 TASK-035 为准"
+        ],
+        "product_defect_noted_not_fixed": "POST /api/v1/admin/content/articles/{id}/translations 传非当前 sourceVersion 时，服务层返回 ErrContentArticleInvalid 但被 response.ErrorFrom 映射成 500 internal error（日志 admin/content_article_handler.go:338）。属错误映射既有缺陷（无效入参应 4xx），文件在 backend，不在本任务 allowed_files，未改，仅记录。",
+        "constraints_respected": "仅修改 allowed_files 中的 spec；evidence README 位于 docs/（.gitignore 第130行 docs/* 已忽略，故不入 git status）；未 commit；未改产品代码；未动主服务 :8080/:3100；未删除用户既有数据（夹具自建自删，仅软删自己的行）",
+        "evidence_dir": "/Users/mac/Documents/Dev/sub2apis/docs/v0.4/evidence/TASK-033"
+      },
+      "evidence_dir": "docs/v0.4/evidence/TASK-033",
+      "tcs": "R7-01～R7-03,R9-02～R9-09,R12-01～R12-06,R13-01～R13-03,R14-01,R14-02,R15-01,R15-02,COMP-01",
+      "acs": "AC-07～AC-09,AC-12～AC-14,AC-16",
+      "result_source": "v04-task-033-a6/result.json"
+    },
+    "TASK-034": {
+      "commit": "a6b7eaeb17e636c999b6b3193c0b887e7118a425",
+      "acceptance_status": "PASS",
+      "worker_result_file": "v04-task-034-a2/result.json",
+      "worker_result": {
+        "status": "DONE",
+        "attempt": 2,
+        "task_id": "TASK-034",
+        "base_commit": "fc0a35f3777089d0c3724a68a4fe7ee67ecbb199",
+        "changed_files": [
+          "backend/internal/service/content_public_cache.go",
+          "backend/internal/service/public_content_service.go",
+          "backend/internal/service/content_v04_benchmark_test.go",
+          "docs/v0.4/evidence/TASK-034/README.md"
+        ],
+        "defect_fixed": "缓存跨版本并发回填：attempt1 中 Get/Put 各自读取 PublicContentCacheVersion，回源期间发生发布(V→V+1)会把 V 时刻查询的旧数据标记为 V+1，导致 60s 内 V+1 读者命中陈旧内容。",
+        "fix": [
+          "5 条公共读路径在进入缓存/回源前各捕获一次 snapshot := PublicContentCacheVersion()",
+          "publicContentEntryCache.Put(key, snapshot, value) 显式接收写回版本，不再自行读取最新版本",
+          "Get 仍读取最新版本并只命中 entry.version == 最新版本；正确性由写侧不越级保证",
+          "缓存键去版本化（条目自带版本并在读时过滤），避免每次发布遗留不可达条目；渲染层 PublicContentCacheKey 保持不变",
+          "容量淘汰口径改为“有界 map（清过期/非当前 + 整表清空）”，注释与测试不再称 LRU"
+        ],
+        "tests": [
+          {
+            "cmd": "cd backend && go test ./internal/service/ -run 'TestPublicContentCacheDoesNotBackfillAcrossSnapshot|TestPublicContentCacheReturnsIsolatedCopies' -count=1",
+            "result": "RED 4 FAIL / 修复后 PASS",
+            "log": "evidence/red-test.log"
+          },
+          {
+            "cmd": "cd backend && go vet ./internal/service/",
+            "result": "PASS exit 0",
+            "log": "evidence/green-vet.log"
+          },
+          {
+            "cmd": "cd backend && go test -race ./internal/service/ -run 'PublicContent' -count=3 -v",
+            "result": "PASS 69/69 (23 用例 x 3 轮)，无 data race",
+            "log": "evidence/green-race.log"
+          },
+          {
+            "cmd": "cd backend && go test -race ./internal/handler/ -run 'Public|Sitemap' -count=1 -v",
+            "result": "PASS 22/22（含 TestPublicContentListCacheUsesVersionedKey / TestPublicContentTranslationInvalidationClearsRenderedCache）"
+          },
+          {
+            "cmd": "cd backend && go build ./...",
+            "result": "PASS"
+          },
+          {
+            "cmd": "cd /private/tmp/t034-head/backend && go test ./internal/service/ -run '<5 条 gateway 用例>' -count=1",
+            "result": "FAIL（base commit 即失败，证明为既有问题，与本改动无关）"
+          }
+        ],
+        "new_regression_tests": [
+          "TestPublicContentCacheDoesNotBackfillAcrossSnapshot_{NewsList,NewsDetail,ArticleList,ArticleDetail}（阻塞 repo + 发布，确定性复现跨版本回填）",
+          "TestPublicContentCacheReturnsIsolatedCopies（深拷贝隔离：改返回值不影响缓存）",
+          "TestPublicContentEntryCacheExpires（20ms TTL 直接验证过期回源）",
+          "TestPublicContentServiceRefetchesAfterPublish（InvalidatePublicContentCache 后必回源）",
+          "TestPublicContentCacheCapsEntries（有界淘汰，非 LRU 口径）"
+        ],
+        "not_done": "未重跑 3 分钟 HTTP 性能矩阵：baseline.json/final.json 对应修复前构建，不得声称包含本次并发修复。改动仅在缓存写回/版本判定路径（加一次版本读取与一个参数），未改 SQL/投影/分页/BI 聚合。",
+        "risks": [
+          "进程内缓存：多副本部署仍有最多 60s（TTL）跨实例陈旧窗口，需共享存储广播版本或缩短 TTL",
+          "整包 service 测试存在 5 条既有 gateway 用例失败（base commit 同样失败）"
+        ],
+        "constraints_respected": "仅修改 allowed_files；未 commit；未动主 8080/3100；未删除隔离数据库",
+        "evidence_dir": "/Users/mac/Documents/Dev/sub2apis/v04-task-034-a2/evidence",
+        "verification": [
+          "RED: go test ./internal/service/ -run 'TestPublicContentCacheDoesNotBackfillAcrossSnapshot|TestPublicContentCacheReturnsIsolatedCopies' -> 4 FAIL（evidence/red-test.log），失败信息即\"stale value back-filled under snapshot N\"",
+          "GREEN: go vet ./internal/service/ exit 0；go test -race ./internal/service/ -run PublicContent -count=3 -v -> 69 PASS / 0 DATA RACE（evidence/green-race.log）",
+          "GREEN: go test -race ./internal/handler/ -run 'Public|Sitemap' -count=1 -v -> 22 PASS（含 TestPublicContentListCacheUsesVersionedKey、TestPublicContentTranslationInvalidationClearsRenderedCache）",
+          "PERF 重跑: final.json label=final-a2 17:45:18-17:48:00，被测二进制 /tmp/t034-server-final-a2 与本次修复构建 md5 一致 d5512a2b3374e9cf3d322fb6bd651e0a；无 error/非200",
+          "基线核对: 5 条 gateway 失败在 base commit fc0a35f3 干净 worktree 同样失败，属既有问题"
+        ],
+        "notes": [
+          "并发环境提示：跑修复后压测期间发现另一并发进程在同一 worktree 构建并占用 18080（/tmp/t034-server-final-a2，17:42 构建），其与我的构建 md5 相同，故 final.json 仍代表修复后代码；我未再抢端口，避免污染",
+          "多副本部署仍有 ≤TTL(60s) 的跨实例陈旧窗口，需共享存储广播版本或缩短 TTL",
+          "整包 service 测试另有 5 条既有 gateway 用例失败（base commit 同样失败），非本任务范围"
+        ]
+      },
+      "evidence_dir": "docs/v0.4/evidence/TASK-034",
+      "tcs": "R2-03,R11-05,PERF-01,PERF-02",
+      "acs": "AC-08,AC-09,AC-11,AC-16"
+    }
+  },
+  "final_033_commit": "aaa0c652a1dbf9a174a4522270e8a9a21b53e974"
+}

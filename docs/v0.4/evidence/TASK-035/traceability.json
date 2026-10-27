@@ -1,0 +1,1088 @@
+{
+  "cases": [
+    {
+      "id": "R1-01",
+      "tasks": [
+        "TASK-002",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R1-02",
+      "tasks": [
+        "TASK-003",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R1-03",
+      "tasks": [
+        "TASK-003",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R1-04",
+      "tasks": [
+        "TASK-004",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R1-05",
+      "tasks": [
+        "TASK-005",
+        "TASK-007",
+        "TASK-030",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R1-06",
+      "tasks": [
+        "TASK-005",
+        "TASK-006",
+        "TASK-007",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R1-07",
+      "tasks": [
+        "TASK-006",
+        "TASK-007",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R2-01",
+      "tasks": [
+        "TASK-006",
+        "TASK-007",
+        "TASK-013",
+        "TASK-020",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R2-02",
+      "tasks": [
+        "TASK-007",
+        "TASK-024",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R2-03",
+      "tasks": [
+        "TASK-007",
+        "TASK-021",
+        "TASK-031",
+        "TASK-034"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R2-04",
+      "tasks": [
+        "TASK-007",
+        "TASK-030",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R2-05",
+      "tasks": [
+        "TASK-006",
+        "TASK-007",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R3-01",
+      "tasks": [
+        "TASK-005",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R3-02",
+      "tasks": [
+        "TASK-003",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R3-03",
+      "tasks": [
+        "TASK-019",
+        "TASK-020",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R3-04",
+      "tasks": [
+        "TASK-019",
+        "TASK-020",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R3-05",
+      "tasks": [
+        "TASK-019",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R3-06",
+      "tasks": [
+        "TASK-017",
+        "TASK-018",
+        "TASK-019",
+        "TASK-020",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R3-07",
+      "tasks": [
+        "TASK-019",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R3-08",
+      "tasks": [
+        "TASK-019",
+        "TASK-020",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R4-01",
+      "tasks": [
+        "TASK-005",
+        "TASK-030"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R4-02",
+      "tasks": [
+        "TASK-007"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R5-01",
+      "tasks": [
+        "TASK-013",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R5-02",
+      "tasks": [
+        "TASK-013",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R5-03",
+      "tasks": [
+        "TASK-013",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R5-04",
+      "tasks": [
+        "TASK-012",
+        "TASK-013",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R5-05",
+      "tasks": [
+        "TASK-012",
+        "TASK-013",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R5-06",
+      "tasks": [
+        "TASK-012",
+        "TASK-013",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R5-07",
+      "tasks": [
+        "TASK-012",
+        "TASK-013",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R5-08",
+      "tasks": [
+        "TASK-001",
+        "TASK-002",
+        "TASK-013",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R6-01",
+      "tasks": [
+        "TASK-014",
+        "TASK-015",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R6-02",
+      "tasks": [
+        "TASK-001",
+        "TASK-014",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R6-03",
+      "tasks": [
+        "TASK-001",
+        "TASK-014",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R6-04",
+      "tasks": [
+        "TASK-001",
+        "TASK-014",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R6-05",
+      "tasks": [
+        "TASK-001",
+        "TASK-002",
+        "TASK-014",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R6-06",
+      "tasks": [
+        "TASK-024"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R7-01",
+      "tasks": [
+        "TASK-019",
+        "TASK-024",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R7-02",
+      "tasks": [
+        "TASK-024",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R7-03",
+      "tasks": [
+        "TASK-021",
+        "TASK-024",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R7-04",
+      "tasks": [
+        "TASK-024"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R7-05",
+      "tasks": [
+        "TASK-024"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R7-06",
+      "tasks": [
+        "TASK-024"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R8-01",
+      "tasks": [
+        "TASK-021",
+        "TASK-023",
+        "TASK-024"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R8-02",
+      "tasks": [
+        "TASK-021",
+        "TASK-024"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R8-03",
+      "tasks": [
+        "TASK-021",
+        "TASK-024"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R8-04",
+      "tasks": [
+        "TASK-021",
+        "TASK-023",
+        "TASK-024"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R8-05",
+      "tasks": [
+        "TASK-024"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R8-06",
+      "tasks": [
+        "TASK-024"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R9-01",
+      "tasks": [
+        "TASK-017",
+        "TASK-018",
+        "TASK-019",
+        "TASK-020",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R9-02",
+      "tasks": [
+        "TASK-021",
+        "TASK-022",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R9-03",
+      "tasks": [
+        "TASK-021",
+        "TASK-022",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R9-04",
+      "tasks": [
+        "TASK-021",
+        "TASK-022",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R9-05",
+      "tasks": [
+        "TASK-022",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R9-06",
+      "tasks": [
+        "TASK-022",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R9-07",
+      "tasks": [
+        "TASK-022",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R9-08",
+      "tasks": [
+        "TASK-024",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R9-09",
+      "tasks": [
+        "TASK-024",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R9-10",
+      "tasks": [
+        "TASK-023"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R10-01",
+      "tasks": [
+        "TASK-008",
+        "TASK-009",
+        "TASK-011",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R10-02",
+      "tasks": [
+        "TASK-009",
+        "TASK-011",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R10-03",
+      "tasks": [
+        "TASK-009",
+        "TASK-011",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R10-04",
+      "tasks": [
+        "TASK-009",
+        "TASK-011",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R10-05",
+      "tasks": [
+        "TASK-008",
+        "TASK-009",
+        "TASK-011",
+        "TASK-031",
+        "TASK-032"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R10-06",
+      "tasks": [
+        "TASK-008",
+        "TASK-031",
+        "TASK-032"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R10-07",
+      "tasks": [
+        "TASK-008",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R10-08",
+      "tasks": [
+        "TASK-009",
+        "TASK-011",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R10-09",
+      "tasks": [
+        "TASK-009",
+        "TASK-011",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R10-10",
+      "tasks": [
+        "TASK-009",
+        "TASK-011",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R10-11",
+      "tasks": [
+        "TASK-012",
+        "TASK-013",
+        "TASK-017",
+        "TASK-018",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R10-12",
+      "tasks": [
+        "TASK-010",
+        "TASK-011",
+        "TASK-012",
+        "TASK-013",
+        "TASK-017",
+        "TASK-018",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R10-13",
+      "tasks": [
+        "TASK-008",
+        "TASK-031"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R11-01",
+      "tasks": [
+        "TASK-027",
+        "TASK-028",
+        "TASK-029"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R11-02",
+      "tasks": [
+        "TASK-001",
+        "TASK-026",
+        "TASK-027",
+        "TASK-028",
+        "TASK-029"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R11-03",
+      "tasks": [
+        "TASK-026",
+        "TASK-027",
+        "TASK-028",
+        "TASK-029"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R11-04",
+      "tasks": [
+        "TASK-010",
+        "TASK-029"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R11-05",
+      "tasks": [
+        "TASK-027",
+        "TASK-029",
+        "TASK-034"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R11-06",
+      "tasks": [
+        "TASK-026",
+        "TASK-028"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R12-01",
+      "tasks": [
+        "TASK-023",
+        "TASK-025",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R12-02",
+      "tasks": [
+        "TASK-023",
+        "TASK-025",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R12-03",
+      "tasks": [
+        "TASK-025",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R12-04",
+      "tasks": [
+        "TASK-010",
+        "TASK-025",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R12-05",
+      "tasks": [
+        "TASK-021",
+        "TASK-022",
+        "TASK-023",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R12-06",
+      "tasks": [
+        "TASK-023",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R13-01",
+      "tasks": [
+        "TASK-016",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R13-02",
+      "tasks": [
+        "TASK-016",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R13-03",
+      "tasks": [
+        "TASK-015",
+        "TASK-016",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R14-01",
+      "tasks": [
+        "TASK-030",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R14-02",
+      "tasks": [
+        "TASK-010",
+        "TASK-029",
+        "TASK-030",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R15-01",
+      "tasks": [
+        "TASK-005",
+        "TASK-030",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "R15-02",
+      "tasks": [
+        "TASK-005",
+        "TASK-030",
+        "TASK-033"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "PERF-01",
+      "tasks": [
+        "TASK-034"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "PERF-02",
+      "tasks": [
+        "TASK-034"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "SEC-01",
+      "tasks": [
+        "TASK-032"
+      ],
+      "status": "PASS"
+    },
+    {
+      "id": "COMP-01",
+      "tasks": [
+        "TASK-033"
+      ],
+      "status": "PASS"
+    }
+  ],
+  "acceptance": [
+    {
+      "id": "AC-01",
+      "requirement": "R1 + 第一章",
+      "criterion": "三个存量 bug 修复；统一组件、双主题、弹窗和状态反馈完整",
+      "tcs": [
+        "R1-01",
+        "R1-02",
+        "R1-03",
+        "R1-04",
+        "R1-05",
+        "R1-06",
+        "R1-07"
+      ],
+      "status": "PASS",
+      "origin": "v0.4_acceptance_20261026_v3.3.md"
+    },
+    {
+      "id": "AC-02",
+      "requirement": "R2",
+      "criterion": "数据/记录/说明/组件四类布局统一；长列表可控；三视口无溢出",
+      "tcs": [
+        "R2-01",
+        "R2-02",
+        "R2-03",
+        "R2-04",
+        "R2-05"
+      ],
+      "status": "PASS",
+      "origin": "v0.4_acceptance_20261026_v3.3.md"
+    },
+    {
+      "id": "AC-03",
+      "requirement": "R3、R7、R9",
+      "criterion": "新闻源抓取、自动翻译、封面继承、失败恢复全链路通过",
+      "tcs": [
+        "R3-01",
+        "R3-02",
+        "R3-03",
+        "R3-04",
+        "R3-05",
+        "R3-06",
+        "R3-07",
+        "R3-08",
+        "R7-01",
+        "R7-02",
+        "R7-03",
+        "R9-01",
+        "R9-02"
+      ],
+      "status": "PASS",
+      "origin": "v0.4_acceptance_20261026_v3.3.md"
+    },
+    {
+      "id": "AC-04",
+      "requirement": "R4",
+      "criterion": "定时任务统一 Toggle/Input，状态刷新保持，对比度达标",
+      "tcs": [
+        "R4-01",
+        "R4-02"
+      ],
+      "status": "PASS",
+      "origin": "v0.4_acceptance_20261026_v3.3.md"
+    },
+    {
+      "id": "AC-05",
+      "requirement": "R5",
+      "criterion": "标签唯一输入方式；SEO 默认模型、覆盖确认、长度/数量边界与异常完整",
+      "tcs": [
+        "R5-01",
+        "R5-02",
+        "R5-03",
+        "R5-04",
+        "R5-05",
+        "R5-06",
+        "R5-07",
+        "R5-08"
+      ],
+      "status": "PASS",
+      "origin": "v0.4_acceptance_20261026_v3.3.md"
+    },
+    {
+      "id": "AC-06",
+      "requirement": "R6、R13",
+      "criterion": "精选迁移零差、唯一真源、1 大+9 小、0/不足 10 和双主题正确",
+      "tcs": [
+        "R6-01",
+        "R6-02",
+        "R6-03",
+        "R6-04",
+        "R6-05",
+        "R6-06",
+        "R13-01",
+        "R13-02",
+        "R13-03"
+      ],
+      "status": "PASS",
+      "origin": "v0.4_acceptance_20261026_v3.3.md"
+    },
+    {
+      "id": "AC-07",
+      "requirement": "R7",
+      "criterion": "新闻/文章、抓取/翻译/手动/上传来源封面全显示，失败统一占位",
+      "tcs": [
+        "R7-01",
+        "R7-02",
+        "R7-03",
+        "R7-04",
+        "R7-05",
+        "R7-06"
+      ],
+      "status": "PASS",
+      "origin": "v0.4_acceptance_20261026_v3.3.md"
+    },
+    {
+      "id": "AC-08",
+      "requirement": "R8",
+      "criterion": "默认 20 条、真实 total、空/越界/非法参数与 URL 行为一致",
+      "tcs": [
+        "R8-01",
+        "R8-02",
+        "R8-03",
+        "R8-04",
+        "R8-05",
+        "R8-06"
+      ],
+      "status": "PASS",
+      "origin": "v0.4_acceptance_20261026_v3.3.md"
+    },
+    {
+      "id": "AC-09",
+      "requirement": "R9",
+      "criterion": "文章/新闻翻译状态机、SSR、locale、canonical/hreflang/sitemap 全通过",
+      "tcs": [
+        "R9-01",
+        "R9-02",
+        "R9-03",
+        "R9-04",
+        "R9-05",
+        "R9-06",
+        "R9-07",
+        "R9-08",
+        "R9-09",
+        "R9-10"
+      ],
+      "status": "PASS",
+      "origin": "v0.4_acceptance_20261026_v3.3.md"
+    },
+    {
+      "id": "AC-10",
+      "requirement": "R10",
+      "criterion": "多配置 CRUD/默认/测试/加密/并发/删除保护及三处模型消费通过",
+      "tcs": [
+        "R10-01",
+        "R10-02",
+        "R10-03",
+        "R10-04",
+        "R10-05",
+        "R10-06",
+        "R10-07",
+        "R10-08",
+        "R10-09",
+        "R10-10",
+        "R10-11",
+        "R10-12",
+        "R10-13"
+      ],
+      "status": "PASS",
+      "origin": "v0.4_acceptance_20261026_v3.3.md"
+    },
+    {
+      "id": "AC-11",
+      "requirement": "R11",
+      "criterion": "十维度、五语、筛选、事件去重、均值与聚合性能通过",
+      "tcs": [
+        "R11-01",
+        "R11-02",
+        "R11-03",
+        "R11-04",
+        "R11-05",
+        "R11-06"
+      ],
+      "status": "PASS",
+      "origin": "v0.4_acceptance_20261026_v3.3.md"
+    },
+    {
+      "id": "AC-12",
+      "requirement": "R12",
+      "criterion": "URL>cookie>localStorage>浏览器；无前缀/长码 301 与中间件路由一致",
+      "tcs": [
+        "R12-01",
+        "R12-02",
+        "R12-03",
+        "R12-04",
+        "R12-05",
+        "R12-06"
+      ],
+      "status": "PASS",
+      "origin": "v0.4_acceptance_20261026_v3.3.md"
+    },
+    {
+      "id": "AC-13",
+      "requirement": "R14",
+      "criterion": "旧绿 0 残留，四类板块双主题与响应式走查通过",
+      "tcs": [
+        "R14-01",
+        "R14-02"
+      ],
+      "status": "PASS",
+      "origin": "v0.4_acceptance_20261026_v3.3.md"
+    },
+    {
+      "id": "AC-14",
+      "requirement": "R15",
+      "criterion": "无原生下拉、无下划线输入框，键盘可操作",
+      "tcs": [
+        "R15-01",
+        "R15-02"
+      ],
+      "status": "PASS",
+      "origin": "v0.4_acceptance_20261026_v3.3.md"
+    },
+    {
+      "id": "AC-15",
+      "requirement": "性能/安全/兼容约束",
+      "criterion": "SSR p95<2s、BI p95<3s；权限/浏览器/三视门通过",
+      "tcs": [
+        "PERF-01",
+        "PERF-02",
+        "SEC-01",
+        "COMP-01"
+      ],
+      "status": "PASS",
+      "origin": "v0.4_acceptance_20261026_v3.3.md"
+    },
+    {
+      "id": "AC-16",
+      "requirement": "REQ-016",
+      "criterion": "任务清单补充跨域终验：权限与敏感信息、性能及浏览器兼容矩阵全部通过",
+      "tcs": [
+        "SEC-01",
+        "COMP-01",
+        "PERF-01",
+        "PERF-02"
+      ],
+      "status": "PASS",
+      "origin": "v0.4_task_list_20261026_v1.0.md TASK-032/033/034 rollup"
+    },
+    {
+      "id": "AC-17",
+      "requirement": "REQ-015",
+      "criterion": "任务清单补充视觉终验：基础控件、neo-lab 主题、双主题与响应式全部通过",
+      "tcs": [
+        "R1-05",
+        "R1-06",
+        "R3-01",
+        "R4-01",
+        "R14-01",
+        "R14-02",
+        "R15-01",
+        "R15-02"
+      ],
+      "status": "PASS",
+      "origin": "v0.4_task_list_20261026_v1.0.md TASK-005/030 rollup"
+    }
+  ]
+}
