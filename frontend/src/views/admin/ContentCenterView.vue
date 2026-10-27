@@ -284,8 +284,8 @@
             class="interval-input"
             type="number"
             min="1"
-            placeholder="抓取间隔（分钟）"
-            title="抓取间隔（分钟，默认 15）"
+            :placeholder="'跟随全局（' + globalFetchIntervalMinutes() + ' 分钟）'"
+            title="抓取间隔（分钟；留空=继承全局）"
           /><label class="inline-check">
             <input v-model="sourceForm.enabled" type="checkbox" />
             <span>创建后立即启用</span>
@@ -372,7 +372,8 @@
               >间隔（分钟）<input
                 v-model.number="selectedSource.intervalMinutes"
                 type="number"
-                min="1" /></label
+                min="1"
+                :placeholder="'跟随全局（' + globalFetchIntervalMinutes() + ' 分钟）'" /></label
             ><label
               >每分钟速率<input
                 v-model.number="selectedSource.rateLimitPerMinute"
@@ -2047,7 +2048,8 @@ const sourceForm = ref<any>({
   url: "",
   sourceType: "rss",
   mappingJsonText: "",
-  intervalMinutes: 15,
+  // R1-02：留空 = 继承全局，默认不填任何值（PRD v3.3 L168）
+  intervalMinutes: null,
   enabled: true,
 });
 const sourceFormErrors = ref<{ name: string; url: string }>({ name: "", url: "" });
@@ -2072,33 +2074,21 @@ const sourceCreateBlockedReason = computed(() => {
   return "";
 });
 const sourceCreateDisabled = computed(() => !!sourceCreateBlockedReason.value);
-// 调度文案：源自己的 intervalMinutes 才是真实调度，之前误把全局 fetchCron 混进同一行（S6 互相矛盾）
-// S6：调度文案统一以 Cron 为准（不再写死 60 分钟/只读 intervalMinutes）
-function cronToScheduleText(cron: string): string {
-  const parts = String(cron || "").trim().split(/\s+/);
-  if (parts.length < 5) return "";
-  // 兼容 6 段（含秒，如 `0 */15 * * * *`）与 5 段标准 Cron
-  const hasSeconds = parts.length >= 6;
-  const [p0, p1, p2] = parts;
-  const min = hasSeconds ? p1 : p0;
-  const hour = hasSeconds ? p2 : p1;
-  // 0 */15 * * * *  → 每 15 分钟
-  const stepMin = min.match(/^\*\/(\d+)$/);
-  if (stepMin && (hour === "*" || hour === undefined)) return `每 ${stepMin[1]} 分钟抓取一次`;
-  const stepHour = hour && hour.match(/^\*\/(\d+)$/);
-  if (stepHour) return `每 ${stepHour[1]} 小时抓取一次`;
-  if (min === "*" && hour === "*") return "每分钟抓取一次";
-  if (hour === "*") return `每小时第 ${min} 分钟抓取一次`;
-  return `每天 ${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")} 抓取一次`;
+// R1-02/S6：全局抓取间隔（分钟），来自自动化设置 fetchCron，如 `0 */15 * * * *` → 15
+function globalFetchIntervalMinutes(): number {
+  const parts = String(automation.value?.fetchCron || "").trim().split(/\s+/);
+  // 兼容 6 段（含秒）与 5 段标准 Cron
+  const minuteField = parts.length >= 6 ? parts[1] : parts[0];
+  const step = String(minuteField || "").match(/^\*\/(\d+)$/);
+  const minutes = step ? Number(step[1]) : 0;
+  return minutes > 0 ? minutes : 15;
 }
+// 调度文案：源自身 intervalMinutes 才是真实调度；为 NULL 表示继承全局，
+// 必须显示“跟随全局（N 分钟）”，不得用全局 fetchCron/scheduleMinutes 冒充源自身间隔（PRD v3.3 L121）
 function sourceScheduleText(source: any) {
-  const fromCron = cronToScheduleText(source?.fetchCron || source?.cronExpression || "");
-  if (fromCron) return fromCron;
-  const minutes = Number(source?.intervalMinutes || source?.scheduleMinutes || 0);
+  const minutes = Number(source?.intervalMinutes ?? 0);
   if (minutes > 0) return `每 ${minutes} 分钟抓取一次`;
-  const label = String(source?.scheduleLabel || "").trim();
-  if (label) return label;
-  return "未设置抓取间隔";
+  return `跟随全局（${globalFetchIntervalMinutes()} 分钟）`;
 }
 // R3：抓取任务列表按 sourceId 查源名，避免只显示数字 ID
 function sourceName(id: any) {
@@ -2723,6 +2713,9 @@ async function createSource() {
   }
   await runAdmin(async () => {
     const mappingJson = parseMappingJSON(sourceForm.value.mappingJsonText);
+    // R1-02：留空必须提交 NULL（继承全局），不得用 15 覆盖（PRD v3.3 L121/L168）
+    const rawInterval = Number(sourceForm.value.intervalMinutes);
+    const intervalMinutes = Number.isFinite(rawInterval) && rawInterval > 0 ? rawInterval : null;
     await contentAPI.createSource({
       ...sourceForm.value,
       name,
@@ -2730,23 +2723,25 @@ async function createSource() {
       mappingJson,
       language: "zh-CN",
       enabled: sourceForm.value.enabled !== false,
-      intervalMinutes: Number(sourceForm.value.intervalMinutes) > 0 ? Number(sourceForm.value.intervalMinutes) : 15,
+      intervalMinutes,
       rateLimitPerMinute: 60,
       authorizationNote: "公开 feed，已获授权",
       robotsPolicy: "遵守 robots 规则",
     });
-    const createdInterval = Number(sourceForm.value.intervalMinutes) > 0 ? Number(sourceForm.value.intervalMinutes) : 15;
     const createdEnabled = sourceForm.value.enabled !== false;
     sourceForm.value = {
       name: "",
       url: "",
       sourceType: "rss",
       mappingJsonText: "",
-      intervalMinutes: 15,
+      intervalMinutes: null,
       enabled: true,
     };
     await loadSources();
-    toast("success", `新闻源已创建（${createdEnabled ? "已启用" : "已停用"}，每 ${createdInterval} 分钟抓取）`);
+    const scheduleText = intervalMinutes
+      ? `每 ${intervalMinutes} 分钟抓取`
+      : `跟随全局（${globalFetchIntervalMinutes()} 分钟）`;
+    toast("success", `新闻源已创建（${createdEnabled ? "已启用" : "已停用"}，${scheduleText}）`);
   }, "新闻源创建失败");
 }
 async function toggleSource(s: any) {
@@ -2768,7 +2763,14 @@ async function editSource(source: any) {
 async function saveSource() {
   if (!selectedSource.value.id) return;
   await runAdmin(async () => {
-    const payload = { ...selectedSource.value, mappingJson: parseMappingJSON(selectedSource.value.mappingJsonText) };
+    // R1-02：清空间隔后保存必须写回 NULL（继承全局），不能残留旧值或 0
+    const rawInterval = Number(selectedSource.value.intervalMinutes);
+    const intervalMinutes = Number.isFinite(rawInterval) && rawInterval > 0 ? rawInterval : null;
+    const payload = {
+      ...selectedSource.value,
+      intervalMinutes,
+      mappingJson: parseMappingJSON(selectedSource.value.mappingJsonText),
+    };
     await contentAPI.updateSource(
       selectedSource.value.id,
       payload,

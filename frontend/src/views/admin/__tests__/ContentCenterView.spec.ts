@@ -395,6 +395,53 @@ describe('ContentCenterView news body editing integration', () => {
     expect(payload.enabled).toBe(false)
     wrapper.unmount()
   })
+
+  // DEFECT-031-01 回归：留空 = 继承全局，必须显示“跟随全局（N 分钟）”，不得显示全局 fetchCron 冒充的固定值
+  it('新闻源留空间隔回显“跟随全局”，有独立间隔回显固定值，创建留空提交 NULL', async () => {
+    api.createSource = vi.fn(() => response({ id: 11 }))
+    api.listSources = vi.fn(() => response({
+      items: [
+        {
+          id: 11, name: '继承源', url: 'https://example.com/inherit.xml', sourceType: 'rss',
+          intervalMinutes: null, scheduleMinutes: 15, scheduleLabel: '跟随全局（15 分钟）',
+          fetchCron: '0 */15 * * * *', enabled: true,
+        },
+        {
+          id: 12, name: '固定源', url: 'https://example.com/fixed.xml', sourceType: 'rss',
+          intervalMinutes: 45, scheduleMinutes: 15, scheduleLabel: '每 45 分钟',
+          fetchCron: '0 */15 * * * *', enabled: true,
+        },
+      ],
+      total: 2, page: 1, page_size: 20,
+    }))
+
+    const wrapper = await mountContentCenter()
+    const sourcesTab = wrapper.findAll('button').find((b) => b.text().trim() === '新闻源')
+    await sourcesTab!.trigger('click')
+    await flushPromises()
+
+    const rows = wrapper.findAll('table tbody tr')
+    expect(rows).toHaveLength(2)
+    expect(rows[0].text(), 'NULL 间隔必须是跟随全局，而不是“每 15 分钟抓取一次”').toContain('跟随全局（15 分钟）')
+    expect(rows[0].text(), '不得把全局 fetchCron 当作源自身间隔').not.toContain('每 15 分钟抓取一次')
+    expect(rows[1].text()).toContain('每 45 分钟抓取一次')
+
+    const intervalInput = wrapper.get('input.interval-input')
+    expect((intervalInput.element as HTMLInputElement).value, '默认留空，表示继承全局').toBe('')
+    expect(intervalInput.attributes('placeholder')).toContain('跟随全局')
+
+    const nameInput = wrapper.findAll('input').find((i) => i.attributes('placeholder') === '来源名称（必填）')
+    const urlInput = wrapper.findAll('input').find((i) => i.attributes('placeholder') === '公开 RSS/Atom/JSON URL（必填）')
+    await nameInput!.setValue('留空间隔源')
+    await urlInput!.setValue('https://example.com/empty.xml')
+    const createButton = wrapper.findAll('button').find((b) => b.text().trim() === '新增新闻源')
+    await createButton!.trigger('click')
+    await flushPromises()
+
+    expect(api.createSource).toHaveBeenCalledTimes(1)
+    expect(api.createSource.mock.calls[0][0].intervalMinutes, '留空必须提交 NULL，不能被 15 覆盖').toBeNull()
+    wrapper.unmount()
+  })
   it('新闻编辑弹窗展示自动翻译任务状态与失败原因', async () => {
     api.listNewsTranslationTasks = vi.fn((id: number) => response({
       items: id === 1381
