@@ -45,6 +45,9 @@ func (h *PublicContentHandler) ListNews(c *gin.Context) {
 		publicContentError(c, err)
 		return
 	}
+	if redirectToLastPublicPage(c, page, data.TotalPages) {
+		return
+	}
 	response.Success(c, data)
 }
 
@@ -65,6 +68,9 @@ func (h *PublicContentHandler) ListArticles(c *gin.Context) {
 	data, err := h.service.ListArticles(c.Request.Context(), publicLocaleQuery(c), page, pageSize)
 	if err != nil {
 		publicContentError(c, err)
+		return
+	}
+	if redirectToLastPublicPage(c, page, data.TotalPages) {
 		return
 	}
 	response.Success(c, data)
@@ -138,6 +144,9 @@ func (h *PublicContentHandler) RenderNewsListHTML(c *gin.Context) {
 		publicContentHTMLError(c, err)
 		return
 	}
+	if redirectToLastPublicPage(c, page, items.TotalPages) {
+		return
+	}
 	renderNewsListDocument(c, h.baseURL, locale, items)
 }
 
@@ -152,6 +161,9 @@ func (h *PublicContentHandler) RenderArticleListHTML(c *gin.Context) {
 	items, err := h.service.ListArticles(c.Request.Context(), locale, page, pageSize)
 	if err != nil {
 		publicContentHTMLError(c, err)
+		return
+	}
+	if redirectToLastPublicPage(c, page, items.TotalPages) {
 		return
 	}
 	renderArticleListDocument(c, h.baseURL, locale, items)
@@ -240,19 +252,39 @@ func publicPageQuery(c *gin.Context) (int, int, bool) {
 
 func parsePublicPageQuery(c *gin.Context) (int, int, error) {
 	page, pageSize := 1, 0
-	var err error
+	// REQ-008: an unusable page number degrades to the first page instead of
+	// failing the request, while an unusable page_size stays a 400.
 	if raw := strings.TrimSpace(c.Query("page")); raw != "" {
-		page, err = strconv.Atoi(raw)
-	}
-	if err == nil {
-		if raw := strings.TrimSpace(c.Query("page_size")); raw != "" {
-			pageSize, err = strconv.Atoi(raw)
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed >= 1 {
+			page = parsed
 		}
 	}
-	if err != nil || page < 1 || pageSize < 0 || pageSize > service.MaxPublicContentPageSize {
-		return 0, 0, errors.New("invalid public content pagination parameters")
+	if raw := strings.TrimSpace(c.Query("page_size")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 0 || parsed > service.MaxPublicContentPageSize {
+			return 0, 0, errors.New("invalid public content pagination parameters")
+		}
+		pageSize = parsed
 	}
 	return page, pageSize, nil
+}
+
+// redirectToLastPublicPage answers 301 to the last existing page when a caller
+// asks past the end of a collection, preserving locale and page_size filters.
+// It reports false when no redirect was needed.
+func redirectToLastPublicPage(c *gin.Context, requestedPage, totalPages int) bool {
+	if totalPages <= 0 || requestedPage <= totalPages {
+		return false
+	}
+	query := c.Request.URL.Query()
+	query.Set("page", strconv.Itoa(totalPages))
+	target := c.Request.URL.Path
+	if encoded := query.Encode(); encoded != "" {
+		target += "?" + encoded
+	}
+	c.Redirect(http.StatusMovedPermanently, target)
+	c.Abort()
+	return true
 }
 
 func publicLocaleQuery(c *gin.Context) string {
@@ -268,6 +300,10 @@ func publicContentError(c *gin.Context, err error) {
 		return
 	}
 	if errors.Is(err, service.ErrPublicContentNotFound) {
+		response.Error(c, http.StatusNotFound, "content not found")
+		return
+	}
+	if errors.Is(err, service.ErrPublicContentLocale) {
 		response.Error(c, http.StatusNotFound, "content not found")
 		return
 	}
@@ -287,6 +323,10 @@ func publicContentHTMLError(c *gin.Context, err error) {
 		title = "内容已删除 | CCAI"
 		message = "该内容已被删除"
 	} else if errors.Is(err, service.ErrPublicContentNotFound) {
+		status = http.StatusNotFound
+		title = "内容未找到 | CCAI"
+		message = "找不到要查看的内容"
+	} else if errors.Is(err, service.ErrPublicContentLocale) {
 		status = http.StatusNotFound
 		title = "内容未找到 | CCAI"
 		message = "找不到要查看的内容"

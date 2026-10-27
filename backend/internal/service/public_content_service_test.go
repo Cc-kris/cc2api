@@ -81,6 +81,37 @@ func TestPublicContentServiceListMetadata(t *testing.T) {
 	require.Equal(t, 2, page.Page)
 	require.Equal(t, 12, page.PageSize)
 	require.False(t, page.HasNext)
+	// REQ-008: total_pages is derived from the merged total and reported to the
+	// client so it can redirect past-the-end pages.
+	require.Equal(t, 1, page.TotalPages)
+	require.Equal(t, "zh-CN", page.Locale)
+	require.Empty(t, page.Fallback)
+
+	// The base locale is the default page size, and non-base locales advertise
+	// the fallback they were served with.
+	require.Equal(t, 20, DefaultPublicContentPageSize)
+	fallbackPage, err := svc.ListNews(context.Background(), "en", 1, 0)
+	require.NoError(t, err)
+	require.Equal(t, 20, fallbackPage.PageSize)
+	require.Equal(t, "en-US", fallbackPage.Locale)
+	require.Equal(t, "zh-CN", fallbackPage.Fallback)
+}
+
+func TestPublicContentServiceRejectsUnsupportedLocale(t *testing.T) {
+	svc := NewPublicContentService(&publicContentRepoStub{})
+	for _, locale := range []string{"ja", "ja-JP", "xx-YY"} {
+		_, err := svc.ListNews(context.Background(), locale, 1, 20)
+		require.ErrorIs(t, err, ErrPublicContentLocale, locale)
+		_, err = svc.ListArticles(context.Background(), locale, 1, 20)
+		require.ErrorIs(t, err, ErrPublicContentLocale, locale)
+	}
+	// Short aliases resolve onto the canonical tags stored in the content tables.
+	canonical, err := normalizePublicLocale("zh")
+	require.NoError(t, err)
+	require.Equal(t, "zh-CN", canonical)
+	canonical, err = normalizePublicLocale("EN-us")
+	require.NoError(t, err)
+	require.Equal(t, "en-US", canonical)
 }
 
 func TestPublicContentServiceRejectsNonPublishedArticle(t *testing.T) {
@@ -153,7 +184,7 @@ func TestPublicContentProjectionDoesNotExposeInternalFields(t *testing.T) {
 	require.NotContains(t, string(listPayload), "bodyHtml")
 }
 
-func TestPublicContentProjectionRedactsRemoteMediaAndCanonicalURL(t *testing.T) {
+func TestPublicContentProjectionKeepsHTTPSMediaAndDropsUnsafeURLs(t *testing.T) {
 	publishedAt := time.Date(2026, 9, 9, 0, 0, 0, 0, time.UTC)
 	svc := NewPublicContentService(&publicContentRepoStub{
 		detailNews:     []PublicNews{{Locale: "zh-CN", Slug: "news", Title: "News", Summary: "Summary", SourceName: "Source", BodyHTML: "<p>body</p>", PublishedAt: publishedAt, Status: "published", ImageURL: `/\\evil.example/image.png`}},
@@ -165,7 +196,9 @@ func TestPublicContentProjectionRedactsRemoteMediaAndCanonicalURL(t *testing.T) 
 	require.Empty(t, news.ImageURL)
 	article, err := svc.GetArticle(context.Background(), "zh-CN", "article")
 	require.NoError(t, err)
-	require.Empty(t, article.CoverImage)
+	// R7: an admin-supplied HTTPS cover is a valid public image source.
+	require.Equal(t, "https://source.example/cover.png", article.CoverImage)
+	// Protocol-relative and non-http(s) URLs stay dropped.
 	require.Empty(t, article.OgImage)
 	require.Empty(t, article.CanonicalURL)
 	require.Equal(t, "CCAI 编辑部", article.Author)
@@ -174,7 +207,9 @@ func TestPublicContentProjectionRedactsRemoteMediaAndCanonicalURL(t *testing.T) 
 	require.NotContains(t, string(newsPayload), "source.example")
 	articlePayload, err := json.Marshal(article)
 	require.NoError(t, err)
-	require.NotContains(t, string(articlePayload), "source.example")
+	// The kept cover is the only source-host value allowed through, and the
+	// canonical/og projection stays server-side.
+	require.NotContains(t, string(articlePayload), "/og.png")
 	require.NotContains(t, string(articlePayload), "canonicalUrl")
 }
 

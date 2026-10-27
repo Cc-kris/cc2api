@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"net/url"
 	"strings"
 	"time"
 
@@ -10,14 +11,23 @@ import (
 )
 
 const (
-	DefaultPublicContentPageSize = 12
+	// DefaultPublicContentPageSize is the fixed public list page size (R8/REQ-008).
+	DefaultPublicContentPageSize = 20
 	MaxPublicContentPageSize     = 100
 	MaxPublicFeaturedArticles    = 10
+	// PublicContentFallbackLocale is the original editorial language. Requests in
+	// any other supported locale fall back to it when a translation is missing.
+	PublicContentFallbackLocale = "zh-CN"
 )
 
 var ErrPublicContentNotFound = errors.New("public content not found")
 var ErrPublicContentGone = errors.New("public content gone")
 var ErrPublicContentRepositoryContract = errors.New("public content repository contract violation")
+
+// ErrPublicContentLocale marks an unsupported locale tag. Anonymous endpoints
+// answer 404 for it (unknown languages are not crawlable content), while
+// malformed pagination still answers 400.
+var ErrPublicContentLocale = errors.New("invalid public content locale: unsupported locale")
 
 // PublicNews is the public projection of a published news item. It deliberately
 // excludes source URLs, source IDs, audit fields, and fetch diagnostics.
@@ -123,19 +133,27 @@ type PublicArticleListItem struct {
 }
 
 type PublicNewsPage struct {
-	Items    []PublicNewsListItem `json:"items"`
-	Total    int                  `json:"total"`
-	Page     int                  `json:"page"`
-	PageSize int                  `json:"pageSize"`
-	HasNext  bool                 `json:"hasNext"`
+	Items      []PublicNewsListItem `json:"items"`
+	Total      int                  `json:"total"`
+	Page       int                  `json:"page"`
+	PageSize   int                  `json:"pageSize"`
+	TotalPages int                  `json:"totalPages"`
+	HasNext    bool                 `json:"hasNext"`
+	Locale     string               `json:"locale"`
+	// Fallback names the locale used when a requested translation is missing.
+	// It is empty when the response is fully in the requested locale.
+	Fallback string `json:"fallback"`
 }
 
 type PublicArticlePage struct {
-	Items    []PublicArticleListItem `json:"items"`
-	Total    int                     `json:"total"`
-	Page     int                     `json:"page"`
-	PageSize int                     `json:"pageSize"`
-	HasNext  bool                    `json:"hasNext"`
+	Items      []PublicArticleListItem `json:"items"`
+	Total      int                     `json:"total"`
+	Page       int                     `json:"page"`
+	PageSize   int                     `json:"pageSize"`
+	TotalPages int                     `json:"totalPages"`
+	HasNext    bool                    `json:"hasNext"`
+	Locale     string                  `json:"locale"`
+	Fallback   string                  `json:"fallback"`
 }
 
 // PublicFeaturedArticlesRepository exposes only articles selected through the
@@ -190,12 +208,12 @@ func (s *PublicContentService) ListSitemapEntries(ctx context.Context) ([]Public
 	}
 	entries := make([]PublicSitemapEntry, 0, len(news)+len(articles))
 	for _, item := range news {
-		if strings.TrimSpace(item.Locale) != "" && isPublicPublishedNewsListItem(item, item.Locale) {
+		if strings.TrimSpace(item.Locale) != "" && isPublicPublishedNewsListItem(item) {
 			entries = append(entries, PublicSitemapEntry{Kind: "news", Locale: item.Locale, Slug: item.Slug, LastModified: item.PublishedAt})
 		}
 	}
 	for _, item := range articles {
-		if strings.TrimSpace(item.Locale) != "" && isPublicPublishedArticleListItem(item, item.Locale) {
+		if strings.TrimSpace(item.Locale) != "" && isPublicPublishedArticleListItem(item) {
 			entries = append(entries, PublicSitemapEntry{Kind: "article", Locale: item.Locale, Slug: item.Slug, LastModified: item.PublishedAt})
 		}
 	}
@@ -215,13 +233,17 @@ func (s *PublicContentService) ListNews(ctx context.Context, locale string, page
 	if err != nil {
 		return PublicNewsPage{}, err
 	}
-	if !allPublicNewsListItemsValid(locale, result.Items) {
+	if !allPublicNewsListItemsValid(result.Items) {
 		return PublicNewsPage{}, ErrPublicContentRepositoryContract
 	}
 	for i := range result.Items {
-		result.Items[i].ImageURL = publicLocalMediaPath(result.Items[i].ImageURL)
+		result.Items[i].ImageURL = publicMediaURL(result.Items[i].ImageURL)
 	}
-	result.Page, result.PageSize, result.HasNext = offset/limit+1, limit, result.Total > offset && result.Total-offset > len(result.Items)
+	result.TotalPages = publicTotalPages(result.Total, limit)
+	result.Page, result.PageSize = offset/limit+1, limit
+	result.HasNext = result.Page < result.TotalPages
+	result.Locale = locale
+	result.Fallback = publicFallbackLocale(locale)
 	return result, nil
 }
 
@@ -234,7 +256,7 @@ func (s *PublicContentService) GetNews(ctx context.Context, locale, slug string)
 	if err != nil {
 		return nil, err
 	}
-	item.ImageURL = publicLocalMediaPath(item.ImageURL)
+	item.ImageURL = publicMediaURL(item.ImageURL)
 	return item, nil
 }
 
@@ -271,13 +293,17 @@ func (s *PublicContentService) ListArticles(ctx context.Context, locale string, 
 	if err != nil {
 		return PublicArticlePage{}, err
 	}
-	if !allPublicArticleListItemsValid(locale, result.Items) {
+	if !allPublicArticleListItemsValid(result.Items) {
 		return PublicArticlePage{}, ErrPublicContentRepositoryContract
 	}
 	for i := range result.Items {
-		result.Items[i].CoverImage = publicLocalMediaPath(result.Items[i].CoverImage)
+		result.Items[i].CoverImage = publicMediaURL(result.Items[i].CoverImage)
 	}
-	result.Page, result.PageSize, result.HasNext = offset/limit+1, limit, result.Total > offset && result.Total-offset > len(result.Items)
+	result.TotalPages = publicTotalPages(result.Total, limit)
+	result.Page, result.PageSize = offset/limit+1, limit
+	result.HasNext = result.Page < result.TotalPages
+	result.Locale = locale
+	result.Fallback = publicFallbackLocale(locale)
 	return result, nil
 }
 
@@ -296,11 +322,11 @@ func (s *PublicContentService) ListFeaturedArticles(ctx context.Context, locale 
 	if err != nil {
 		return nil, err
 	}
-	if len(items) > MaxPublicFeaturedArticles || !allPublicArticleListItemsValid(locale, items) {
+	if len(items) > MaxPublicFeaturedArticles || !allPublicArticleListItemsValid(items) {
 		return nil, ErrPublicContentRepositoryContract
 	}
 	for i := range items {
-		items[i].CoverImage = publicLocalMediaPath(items[i].CoverImage)
+		items[i].CoverImage = publicMediaURL(items[i].CoverImage)
 	}
 	if items == nil {
 		items = []PublicArticleListItem{}
@@ -317,8 +343,8 @@ func (s *PublicContentService) GetArticle(ctx context.Context, locale, slug stri
 	if err != nil {
 		return nil, err
 	}
-	item.CoverImage = publicLocalMediaPath(item.CoverImage)
-	item.OgImage = publicLocalMediaPath(item.OgImage)
+	item.CoverImage = publicMediaURL(item.CoverImage)
+	item.OgImage = publicMediaURL(item.OgImage)
 	item.CanonicalURL = ""
 	if strings.TrimSpace(item.Author) == "" {
 		item.Author = "CCAI 编辑部"
@@ -343,15 +369,43 @@ func (s *PublicContentService) findPublishedArticle(ctx context.Context, locale,
 	return nil, ErrPublicContentNotFound
 }
 
-// publicLocalMediaPath prevents anonymous JSON clients from being given source
-// URLs or arbitrary remote media URLs. The fetch pipeline may expose only a
-// CCAI-owned local media path in the public projection.
-func publicLocalMediaPath(raw string) string {
+// publicMediaURL keeps the public projection safe while preserving the cover
+// contract from R7: admins may paste an HTTPS image URL or a CCAI-managed
+// same-origin path (uploaded files), and the SSR renderer emits it as <img>.
+// Relative, protocol-relative, http, data: and script URLs are dropped.
+func publicMediaURL(raw string) string {
 	raw = strings.TrimSpace(raw)
-	if raw == "" || strings.ContainsAny(raw, "\r\n\\") || !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") {
+	if raw == "" || strings.ContainsAny(raw, "\r\n\\\t ") {
 		return ""
 	}
-	return raw
+	lower := strings.ToLower(raw)
+	if strings.HasPrefix(lower, "https://") {
+		parsed, err := url.Parse(raw)
+		if err != nil || parsed.Host == "" || parsed.User != nil {
+			return ""
+		}
+		return raw
+	}
+	if strings.HasPrefix(raw, "/") && !strings.HasPrefix(raw, "//") {
+		return raw
+	}
+	return ""
+}
+
+func publicTotalPages(total, limit int) int {
+	if total <= 0 || limit <= 0 {
+		return 0
+	}
+	return (total + limit - 1) / limit
+}
+
+// publicFallbackLocale reports the locale used for missing translations. The
+// fallback locale itself never falls back, so it is left empty.
+func publicFallbackLocale(locale string) string {
+	if locale == "" || locale == PublicContentFallbackLocale {
+		return ""
+	}
+	return PublicContentFallbackLocale
 }
 
 func normalizePublicPage(page, pageSize int) (int, int, error) {
@@ -382,12 +436,33 @@ func normalizePublicContentKey(locale, slug string) (string, string, error) {
 	return locale, slug, nil
 }
 
+// publicContentSupportedLocales maps URL/query spellings onto the canonical
+// locale stored in the content tables. R12 keeps the site to these five
+// languages; anything else is not crawlable content and answers 404.
+var publicContentSupportedLocales = map[string]string{
+	"zh":      PublicContentFallbackLocale,
+	"zh-cn":   PublicContentFallbackLocale,
+	"zh-hans": PublicContentFallbackLocale,
+	"en":      "en-US",
+	"en-us":   "en-US",
+	"ru":      "ru-RU",
+	"ru-ru":   "ru-RU",
+	"fr":      "fr-FR",
+	"fr-fr":   "fr-FR",
+	"de":      "de-DE",
+	"de-de":   "de-DE",
+}
+
 func normalizePublicLocale(locale string) (string, error) {
 	locale = strings.TrimSpace(locale)
 	if locale == "" || len(locale) > 16 || strings.ContainsAny(locale, "/?#") {
 		return "", errors.New("invalid public content locale")
 	}
-	return locale, nil
+	canonical, ok := publicContentSupportedLocales[strings.ToLower(locale)]
+	if !ok {
+		return "", ErrPublicContentLocale
+	}
+	return canonical, nil
 }
 
 func isPublicPublishedNews(item PublicNews) bool {
@@ -404,32 +479,34 @@ func isPublicPublishedArticle(item PublicArticle) bool {
 		!item.PublishedAt.IsZero() && item.Status == domain.ContentStatusPublished && item.DeletedAt == nil
 }
 
-func isPublicPublishedNewsListItem(item PublicNewsListItem, locale string) bool {
-	return strings.TrimSpace(item.Locale) == locale && strings.TrimSpace(item.Slug) != "" &&
+func isPublicPublishedNewsListItem(item PublicNewsListItem) bool {
+	// Fallback rows legitimately carry another locale than the requested one,
+	// so the list contract validates the row itself, not the locale match.
+	return strings.TrimSpace(item.Locale) != "" && strings.TrimSpace(item.Slug) != "" &&
 		strings.TrimSpace(item.Title) != "" && strings.TrimSpace(item.Summary) != "" &&
 		strings.TrimSpace(item.SourceName) != "" && !item.PublishedAt.IsZero() &&
 		item.Status == domain.ContentStatusPublished && item.DeletedAt == nil
 }
 
-func isPublicPublishedArticleListItem(item PublicArticleListItem, locale string) bool {
-	return strings.TrimSpace(item.Locale) == locale && strings.TrimSpace(item.Slug) != "" &&
+func isPublicPublishedArticleListItem(item PublicArticleListItem) bool {
+	return strings.TrimSpace(item.Locale) != "" && strings.TrimSpace(item.Slug) != "" &&
 		strings.TrimSpace(item.Title) != "" && strings.TrimSpace(item.Excerpt) != "" &&
 		!item.PublishedAt.IsZero() &&
 		item.Status == domain.ContentStatusPublished && item.DeletedAt == nil
 }
 
-func allPublicNewsListItemsValid(locale string, items []PublicNewsListItem) bool {
+func allPublicNewsListItemsValid(items []PublicNewsListItem) bool {
 	for _, item := range items {
-		if !isPublicPublishedNewsListItem(item, locale) {
+		if !isPublicPublishedNewsListItem(item) {
 			return false
 		}
 	}
 	return true
 }
 
-func allPublicArticleListItemsValid(locale string, items []PublicArticleListItem) bool {
+func allPublicArticleListItemsValid(items []PublicArticleListItem) bool {
 	for _, item := range items {
-		if !isPublicPublishedArticleListItem(item, locale) {
+		if !isPublicPublishedArticleListItem(item) {
 			return false
 		}
 	}

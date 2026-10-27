@@ -4,6 +4,7 @@ import (
 	"context"
 	"html"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,20 +29,121 @@ func NewPublicContentRepository(client *dbent.Client) service.PublicContentRepos
 
 func (r *publicContentRepository) ListPublishedNews(ctx context.Context, locale string, limit, offset int) (service.PublicNewsPage, error) {
 	client := clientFromContext(ctx, r.client)
-	predicates := publicNewsPredicates(locale)
-	query := client.ContentNewsItem.Query().Where(predicates...).Order(
+	requested := strings.TrimSpace(locale)
+	predicates := publicNewsPredicates("")
+	if requested != "" {
+		predicates = append(predicates, contentnewsitem.LocaleIn(requested, service.PublicContentFallbackLocale))
+	}
+	rows, err := client.ContentNewsItem.Query().Where(predicates...).Order(
 		contentnewsitem.ByPublishedAt(sql.OrderDesc()),
 		contentnewsitem.ByID(sql.OrderDesc()),
-	).Limit(limit).Offset(offset)
-	items, err := query.All(ctx)
+	).Limit(publicContentMaxListCandidates + 1).All(ctx)
 	if err != nil {
 		return service.PublicNewsPage{}, err
 	}
-	total, err := client.ContentNewsItem.Query().Where(predicates...).Count(ctx)
-	if err != nil {
-		return service.PublicNewsPage{}, err
+	if len(rows) > publicContentMaxListCandidates {
+		return service.PublicNewsPage{}, service.ErrPublicContentRepositoryContract
 	}
-	return service.PublicNewsPage{Items: mapPublicNewsList(items), Total: total}, nil
+	items := publicNewsListItems(rows, requested)
+	total := len(items)
+	start, end := publicPageBounds(total, limit, offset)
+	return service.PublicNewsPage{Items: items[start:end], Total: total}, nil
+}
+
+func publicNewsMainContentKey(item *dbent.ContentNewsItem) string {
+	if canonical := strings.TrimSpace(item.SourceCanonicalURL); canonical != "" {
+		return "canonical:" + canonical
+	}
+	return "id:" + strconv.FormatInt(item.ID, 10)
+}
+
+// publicNewsRowPreferred ranks rows sharing a canonical URL: requested locale
+// beats the editorial fallback locale, then fresher rows win.
+func publicNewsRowPreferred(candidate, current *dbent.ContentNewsItem, requested string) bool {
+	score := func(item *dbent.ContentNewsItem) int {
+		if requested != "" && item.Locale == requested {
+			return 2
+		}
+		if item.Locale == service.PublicContentFallbackLocale {
+			return 1
+		}
+		return 0
+	}
+	if cs, ps := score(candidate), score(current); cs != ps {
+		return cs > ps
+	}
+	if candidate.PublishedAt == nil {
+		return false
+	}
+	if current.PublishedAt == nil {
+		return true
+	}
+	if !candidate.PublishedAt.Equal(*current.PublishedAt) {
+		return candidate.PublishedAt.After(*current.PublishedAt)
+	}
+	return candidate.ID > current.ID
+}
+
+// publicNewsListItems folds per-locale rows into one entry per main content
+// (source canonical URL), preferring the requested locale and then the
+// editorial fallback language, so list totals count stories rather than
+// locale variants. Items come back newest-first with deterministic ties.
+func publicNewsListItems(rows []*dbent.ContentNewsItem, requested string) []service.PublicNewsListItem {
+	chosen := make(map[string]*dbent.ContentNewsItem, len(rows))
+	order := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if row == nil {
+			continue
+		}
+		key := publicNewsMainContentKey(row)
+		current, seen := chosen[key]
+		if !seen {
+			chosen[key] = row
+			order = append(order, key)
+			continue
+		}
+		if publicNewsRowPreferred(row, current, requested) {
+			chosen[key] = row
+		}
+	}
+	items := make([]service.PublicNewsListItem, 0, len(order))
+	for _, key := range order {
+		mapped := mapPublicNewsList([]*dbent.ContentNewsItem{chosen[key]})
+		if len(mapped) == 0 {
+			continue
+		}
+		items = append(items, mapped[0])
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].PublishedAt.Equal(items[j].PublishedAt) {
+			if items[i].ID == items[j].ID {
+				return items[i].Slug < items[j].Slug
+			}
+			return items[i].ID > items[j].ID
+		}
+		return items[i].PublishedAt.After(items[j].PublishedAt)
+	})
+	return items
+}
+
+// publicArticleTranslationItem builds the public list row for a published
+// translation, borrowing cover/category/tags from the parent article. It
+// reports false when the translation is missing required SEO fields so the
+// caller keeps the base row rather than publishing a half-translated entry.
+func publicArticleTranslationItem(parent *dbent.ContentArticle, translation *dbent.ContentTranslation) (service.PublicArticleListItem, bool) {
+	if parent == nil || translation == nil {
+		return service.PublicArticleListItem{}, false
+	}
+	if publicDerefString(translation.Excerpt) == "" || publicDerefString(translation.SeoTitle) == "" || publicDerefString(translation.SeoDescription) == "" || (publicDerefString(translation.BodyHTML) == "" && publicDerefString(translation.BodyMarkdown) == "") {
+		return service.PublicArticleListItem{}, false
+	}
+	return service.PublicArticleListItem{
+		ID: translation.ID, Locale: translation.Locale, Slug: translation.Slug, Title: translation.Title,
+		Excerpt: publicDerefString(translation.Excerpt), CoverImage: publicDerefString(parent.CoverImage),
+		CoverAlt: publicDerefString(parent.CoverAlt), Category: publicDerefString(parent.Category),
+		Tags: append([]string(nil), parent.Tags...), PublishedAt: publicDerefTime(translation.PublishedAt),
+		Status: domain.ContentStatusPublished, DeletedAt: translation.DeletedAt,
+	}, true
 }
 
 func (r *publicContentRepository) ListPublishedNewsForSitemap(ctx context.Context) ([]service.PublicNewsListItem, error) {
@@ -115,62 +217,97 @@ func publishedArticleAlternates(ctx context.Context, client *dbent.Client, conte
 }
 
 func (r *publicContentRepository) ListPublishedArticles(ctx context.Context, locale string, limit, offset int) (service.PublicArticlePage, error) {
-	const maxArticleCandidates = 10000
 	client := clientFromContext(ctx, r.client)
-	predicates := publicArticlePredicates(locale)
-	items, err := client.ContentArticle.Query().Where(predicates...).Order(contentarticle.ByPublishedAt(sql.OrderDesc()), contentarticle.ByID(sql.OrderDesc())).Limit(maxArticleCandidates + 1).All(ctx)
+	requested := strings.TrimSpace(locale)
+	predicates := publicArticlePredicates("")
+	if requested != "" {
+		predicates = append(predicates, contentarticle.LocaleIn(requested, service.PublicContentFallbackLocale))
+	}
+	rows, err := client.ContentArticle.Query().Where(predicates...).Order(
+		contentarticle.ByPublishedAt(sql.OrderDesc()),
+		contentarticle.ByID(sql.OrderDesc()),
+	).Limit(publicContentMaxListCandidates + 1).All(ctx)
 	if err != nil {
 		return service.PublicArticlePage{}, err
 	}
-	if len(items) > maxArticleCandidates {
+	if len(rows) > publicContentMaxListCandidates {
 		return service.PublicArticlePage{}, service.ErrPublicContentRepositoryContract
 	}
-	translations, translationErr := client.ContentTranslation.Query().Where(contenttranslation.ContentTypeEQ("article"), contenttranslation.LocaleEQ(strings.TrimSpace(locale)), contenttranslation.StatusEQ(domain.ContentTranslationPublished), contenttranslation.DeletedAtIsNil(), contenttranslation.PublishedAtNotNil()).Limit(maxArticleCandidates + 1).All(ctx)
-	if translationErr != nil {
-		return service.PublicArticlePage{}, translationErr
-	}
-	if len(translations) > maxArticleCandidates {
-		return service.PublicArticlePage{}, service.ErrPublicContentRepositoryContract
-	}
-	merged := mapPublicArticlesList(items)
-	for _, item := range translations {
-		validTranslation, validationErr := publishedArticleTranslation(ctx, client, item.ContentID, item.SourceVersion)
-		if validationErr != nil {
-			return service.PublicArticlePage{}, validationErr
-		}
-		if !validTranslation {
+	// Key entries by parent article so a published translation replaces the
+	// fallback row instead of being counted twice.
+	entries := make(map[int64]service.PublicArticleListItem, len(rows))
+	order := make([]int64, 0, len(rows))
+	for _, row := range rows {
+		if row == nil {
 			continue
 		}
-		if publicDerefString(item.Excerpt) == "" || publicDerefString(item.SeoTitle) == "" || publicDerefString(item.SeoDescription) == "" || (publicDerefString(item.BodyHTML) == "" && publicDerefString(item.BodyMarkdown) == "") {
+		if _, seen := entries[row.ID]; seen {
 			continue
 		}
-		parent, parentErr := client.ContentArticle.Query().Where(contentarticle.IDEQ(item.ContentID)).Only(ctx)
-		if parentErr != nil {
-			if !dbent.IsNotFound(parentErr) {
-				return service.PublicArticlePage{}, parentErr
+		mapped := mapPublicArticlesList([]*dbent.ContentArticle{row})
+		if len(mapped) == 0 {
+			continue
+		}
+		entries[row.ID] = mapped[0]
+		order = append(order, row.ID)
+	}
+	if requested != "" && requested != service.PublicContentFallbackLocale {
+		translations, translationErr := client.ContentTranslation.Query().Where(
+			contenttranslation.ContentTypeEQ("article"),
+			contenttranslation.LocaleEQ(requested),
+			contenttranslation.StatusEQ(domain.ContentTranslationPublished),
+			contenttranslation.DeletedAtIsNil(),
+			contenttranslation.PublishedAtNotNil(),
+		).Limit(publicContentMaxListCandidates + 1).All(ctx)
+		if translationErr != nil {
+			return service.PublicArticlePage{}, translationErr
+		}
+		if len(translations) > publicContentMaxListCandidates {
+			return service.PublicArticlePage{}, service.ErrPublicContentRepositoryContract
+		}
+		for _, translation := range translations {
+			if _, tracked := entries[translation.ContentID]; !tracked {
+				continue
 			}
-			continue
-		}
-		merged = append(merged, service.PublicArticleListItem{ID: item.ID, Locale: item.Locale, Slug: item.Slug, Title: item.Title, Excerpt: publicDerefString(item.Excerpt), CoverImage: publicDerefString(parent.CoverImage), CoverAlt: publicDerefString(parent.CoverAlt), Category: publicDerefString(parent.Category), Tags: append([]string(nil), parent.Tags...), PublishedAt: publicDerefTime(item.PublishedAt), Status: domain.ContentStatusPublished, DeletedAt: item.DeletedAt})
-	}
-	sort.SliceStable(merged, func(i, j int) bool {
-		if merged[i].PublishedAt.Equal(merged[j].PublishedAt) {
-			if merged[i].ID == merged[j].ID {
-				return merged[i].Slug < merged[j].Slug
+			validTranslation, validationErr := publishedArticleTranslation(ctx, client, translation.ContentID, translation.SourceVersion)
+			if validationErr != nil {
+				return service.PublicArticlePage{}, validationErr
 			}
-			return merged[i].ID > merged[j].ID
+			if !validTranslation {
+				continue
+			}
+			parent, parentErr := client.ContentArticle.Query().Where(contentarticle.IDEQ(translation.ContentID)).Only(ctx)
+			if parentErr != nil {
+				if !dbent.IsNotFound(parentErr) {
+					return service.PublicArticlePage{}, parentErr
+				}
+				continue
+			}
+			entry, ok := publicArticleTranslationItem(parent, translation)
+			if !ok {
+				continue
+			}
+			entries[translation.ContentID] = entry
 		}
-		return merged[i].PublishedAt.After(merged[j].PublishedAt)
+	}
+	items := make([]service.PublicArticleListItem, 0, len(order))
+	for _, id := range order {
+		if entry, ok := entries[id]; ok {
+			items = append(items, entry)
+		}
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].PublishedAt.Equal(items[j].PublishedAt) {
+			if items[i].ID == items[j].ID {
+				return items[i].Slug < items[j].Slug
+			}
+			return items[i].ID > items[j].ID
+		}
+		return items[i].PublishedAt.After(items[j].PublishedAt)
 	})
-	total := len(merged)
-	if offset > total {
-		offset = total
-	}
-	end := offset + limit
-	if end > total {
-		end = total
-	}
-	return service.PublicArticlePage{Items: merged[offset:end], Total: total}, nil
+	total := len(items)
+	start, end := publicPageBounds(total, limit, offset)
+	return service.PublicArticlePage{Items: items[start:end], Total: total}, nil
 }
 
 func (r *publicContentRepository) ListFeaturedArticles(ctx context.Context, locale string, limit int) ([]service.PublicArticleListItem, error) {
@@ -511,6 +648,23 @@ func mapPublicArticlesList(items []*dbent.ContentArticle) []service.PublicArticl
 		})
 	}
 	return result
+}
+
+const publicContentMaxListCandidates = 10000
+
+// publicPageBounds clamps an offset/limit window to a total count.
+func publicPageBounds(total, limit, offset int) (int, int) {
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > total {
+		offset = total
+	}
+	end := offset + limit
+	if limit <= 0 || end > total {
+		end = total
+	}
+	return offset, end
 }
 
 func publicDerefString(value *string) string {
