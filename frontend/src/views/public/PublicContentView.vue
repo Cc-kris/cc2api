@@ -496,6 +496,14 @@
 
           <h1 class="article-headline">{{ detail.displayTitle || detail.title }}</h1>
 
+          <!-- R7：详情通栏封面，最高 400px、16:9 裁剪；缺失/加载失败统一占位，不留破图 -->
+          <figure class="article-cover" data-testid="detail-cover">
+            <img v-if="detailCover" :src="detailCover" :alt="coverAltOf(detail)" class="article-cover-img" loading="eager" decoding="async" @error="markCoverBroken(detail)" />
+            <div v-else class="cover-placeholder" role="img" :aria-label="isZh ? '暂无封面' : 'Cover unavailable'">
+              <svg viewBox="0 0 48 32" aria-hidden="true"><rect x="2" y="2" width="44" height="28" rx="4" /><circle cx="16" cy="12" r="3.5" /><path d="M6 26l11-9 8 6 7-5 10 8" /></svg>
+            </div>
+          </figure>
+
           <div class="article-author-bar">
             <div class="author-info">
               <span class="author-avatar">{{ (detail.author || detail.sourceName || 'C').slice(0, 1).toUpperCase() }}</span>
@@ -876,6 +884,12 @@
                 </span>
                 <span class="spotlight-date font-mono">{{ formatDate(featuredItem.publishedAt || featuredItem.createdAt) }}</span>
               </div>
+              <div class="list-card-cover spotlight-cover" data-testid="spotlight-cover">
+                <img v-if="contentCover(featuredItem)" :src="contentCover(featuredItem)" :alt="coverAltOf(featuredItem)" loading="lazy" decoding="async" @error="markCoverBroken(featuredItem)" />
+                <div v-else class="cover-placeholder" role="img" :aria-label="isZh ? '暂无封面' : 'Cover unavailable'">
+                  <svg viewBox="0 0 48 32" aria-hidden="true"><rect x="2" y="2" width="44" height="28" rx="4" /><circle cx="16" cy="12" r="3.5" /><path d="M6 26l11-9 8 6 7-5 10 8" /></svg>
+                </div>
+              </div>
               <div class="spotlight-main-col">
                 <div class="spotlight-meta">
                   <span class="meta-tag tag-lime">{{ featuredItem.displayCategory || featuredItem.category || featuredItem.sourceName || 'CCAI' }}</span>
@@ -918,11 +932,20 @@
                   <div class="tl-date">{{ formatDate(item.publishedAt || item.createdAt) }}</div>
                   <div class="tl-source">{{ item.displayCategory || item.category || item.sourceName || 'CCAI' }}</div>
                 </div>
+                <div class="list-card-cover timeline-cover" data-testid="list-card-cover">
+                  <img v-if="contentCover(item)" :src="contentCover(item)" :alt="coverAltOf(item)" loading="lazy" decoding="async" @error="markCoverBroken(item)" />
+                  <div v-else class="cover-placeholder" role="img" :aria-label="isZh ? '暂无封面' : 'Cover unavailable'">
+                    <svg viewBox="0 0 48 32" aria-hidden="true"><rect x="2" y="2" width="44" height="28" rx="4" /><circle cx="16" cy="12" r="3.5" /><path d="M6 26l11-9 8 6 7-5 10 8" /></svg>
+                  </div>
+                </div>
                 <div class="timeline-content-col">
                   <h3 class="tl-title">{{ item.displayTitle || item.title }}</h3>
                   <p class="tl-excerpt">
                     {{ item.displaySummary || item.summary || item.excerpt || '' }}
                   </p>
+                  <div v-if="getCleanItemTags(item).length" class="tl-tags">
+                    <span v-for="tg in getCleanItemTags(item).slice(0, 3)" :key="tg" class="tl-tag">#{{ tg }}</span>
+                  </div>
                   <div v-if="item.sourceUrl" style="margin-top: 6px;">
                     <a
                       :href="item.sourceUrl"
@@ -1859,6 +1882,87 @@ function featuredImage(item: any): string {
   return String(item?.coverImage || item?.imageUrl || item?.coverUrl || "").trim();
 }
 
+// 统一封面取址：coverImage 优先，其次历史字段/媒体 JSON；空值一律交给占位图
+function coverKeyOf(item: any): string {
+  const id = item?.id ?? item?.slug ?? "";
+  return String(id || item?.coverImage || item?.imageUrl || item?.coverUrl || "");
+}
+
+const brokenCovers = ref<Record<string, boolean>>({});
+
+function contentCover(item: any): string {
+  if (!item) return "";
+  if (brokenCovers.value[coverKeyOf(item)]) return "";
+  return String(
+    item.coverImage || item.imageUrl || item.coverUrl || item.mediaJson?.coverImage || ""
+  ).trim();
+}
+
+function markCoverBroken(item: any) {
+  if (!item) return;
+  brokenCovers.value = { ...brokenCovers.value, [coverKeyOf(item)]: true };
+}
+
+function coverAltOf(item: any): string {
+  return String(item?.coverAlt || item?.displayTitle || item?.title || "").trim();
+}
+
+// 相关推荐排序：共同标签数 → 发布时间 → 当前语言译文优先 → ID 稳定兜底
+function buildRelatedItems(pool: any[], current: any, zhMode: boolean, limit = 6): any[] {
+  if (!current) return [];
+  const curId = current.id;
+  const curSlug = String(current.slug || "");
+  const tagsOf = (item: any): string[] => (Array.isArray(item?.tags) ? item.tags : [])
+    .map((tag: any) => String(tag ?? "").trim().toLowerCase())
+    .filter(Boolean);
+  const curTags = tagsOf(current);
+  const curCategory = String(current.category || "").trim().toLowerCase();
+  const timeOf = (item: any): number => {
+    const raw = item?.publishedAt || item?.createdAt || item?.originalPublishedAt;
+    const stamp = raw ? new Date(raw).getTime() : 0;
+    return Number.isFinite(stamp) ? stamp : 0;
+  };
+  const hasLocaleCopy = (item: any): boolean => (
+    zhMode ? Boolean(item?.titleZh || item?.title) : Boolean(item?.titleEn)
+  );
+  const sharedTags = (item: any): number => {
+    const set = new Set(tagsOf(item));
+    return curTags.reduce((total, tag) => total + (set.has(tag) ? 1 : 0), 0);
+  };
+  const candidates = pool.filter((item: any) => {
+    if (!item) return false;
+    if (curSlug && String(item.slug || "") === curSlug) return false;
+    if (curId != null && item.id === curId) return false;
+    const status = String(item.status || "").toLowerCase();
+    return !status || status === "published";
+  });
+  const byPriority = (a: any, b: any): number => {
+    const tagDiff = sharedTags(b) - sharedTags(a);
+    if (tagDiff !== 0) return tagDiff;
+    const timeDiff = timeOf(b) - timeOf(a);
+    if (timeDiff !== 0) return timeDiff;
+    const localeDiff = Number(hasLocaleCopy(b)) - Number(hasLocaleCopy(a));
+    if (localeDiff !== 0) return localeDiff;
+    return Number(b?.id || 0) - Number(a?.id || 0);
+  };
+  const chosen: any[] = [];
+  const take = (list: any[]) => {
+    for (const item of list) {
+      if (chosen.length >= limit) return;
+      if (!chosen.includes(item)) chosen.push(item);
+    }
+  };
+  take(candidates.filter((item: any) => sharedTags(item) > 0).slice().sort(byPriority));
+  if (chosen.length < limit) {
+    take(candidates
+      .filter((item: any) => curCategory && String(item.category || "").trim().toLowerCase() === curCategory)
+      .slice()
+      .sort(byPriority));
+  }
+  if (chosen.length < limit) take(candidates.slice().sort(byPriority));
+  return chosen.slice(0, limit);
+}
+
 function featuredSortTime(item: any): number {
   const raw = item?.featuredAt || item?.featured_at;
   const timestamp = raw ? new Date(raw).getTime() : 0;
@@ -2046,13 +2150,16 @@ const nextItem = computed(() => {
   return null;
 });
 
+// R9-09：固定 6 条，先共同标签数、再发布时间；不足按分类、最新补齐；排除当前篇
 const moreRelatedItems = computed(() => {
-  const curSlug = String(detail.value?.slug || route.params.slug || "");
-  const curId = detail.value?.id;
-  return localizedPublicItems.value
-    .filter((item) => item.slug !== curSlug && (!curId || item.id !== curId))
-    .slice(0, 6);
+  const current = detail.value
+    ? { ...detail.value, slug: detail.value.slug || String(route.params.slug || "") }
+    : null;
+  if (!current) return [];
+  return buildRelatedItems(localizedPublicItems.value, current, isZh.value, 6);
 });
+
+const detailCover = computed(() => contentCover(detail.value));
 
 function updateSeoMetadata() {
   if (typeof document === "undefined") return;
@@ -5382,6 +5489,88 @@ watch([() => route.fullPath, isZh], () => {
   --featured-ink: #E8EAED;
   --featured-muted: #AEB4C0;
   --featured-border: #0B0C0F;
+}
+
+/* ==================== TASK-024 封面 · 阅读信息 · 相关推荐 ==================== */
+.article-cover {
+  display: flex;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 400px;
+  margin: 6px 0 26px;
+  border: 2.5px solid #121316;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #EEF2FA;
+  box-shadow: 5px 5px 0px #121316;
+}
+.article-cover-img,
+.list-card-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.cover-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: #9AA3B5;
+  background: repeating-linear-gradient(135deg, #F2F5FB 0 12px, #E8EEF8 12px 24px);
+}
+.cover-placeholder svg { width: 46px; max-height: 60%; }
+.cover-placeholder svg * { fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.list-card-cover {
+  flex: 0 0 240px;
+  width: 240px;
+  max-width: 240px;
+  aspect-ratio: 16 / 9;
+  align-self: center;
+  border: 2px solid #121316;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #EEF2FA;
+}
+/* 标题 2 行截断、标签不越界，避免布局跳动 */
+.spotlight-title,
+.tl-title,
+.tl-excerpt {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.tl-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; max-height: 22px; overflow: hidden; }
+.tl-tag {
+  font-size: 11px;
+  font-weight: 800;
+  color: #2563EB;
+  background: #EDF4FF;
+  border: 1.5px solid #121316;
+  border-radius: 6px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .article-cover { max-height: none; margin: 4px 0 20px; border-radius: 12px; }
+  .neo-news-spotlight { flex-direction: column; align-items: stretch; }
+  .list-card-cover { flex: 0 0 auto; width: 100%; max-width: none; }
+  .spotlight-cover,
+  .timeline-cover { order: -1; }
+}
+
+:global(.dark) .article-cover,
+:global(.dark) .list-card-cover {
+  background: #1E2026;
+  border-color: #0B0C0F;
+  box-shadow: 5px 5px 0px #0B0C0F;
+}
+:global(.dark) .cover-placeholder {
+  color: #6B7280;
+  background: repeating-linear-gradient(135deg, #1E2026 0 12px, #23262E 12px 24px);
 }
 
 </style>
