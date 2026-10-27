@@ -61,11 +61,34 @@
             <span>{{ isZh ? '深度解析' : 'Deep Dive' }}</span>
           </router-link>
 
-          <button type="button" class="lang-switch-btn" @click="toggleLocale">
-            <span :class="{ 'lang-active': isZh }">中</span>
-            <span class="lang-sep">/</span>
-            <span :class="{ 'lang-active': !isZh }">EN</span>
-          </button>
+          <div class="lang-switcher">
+            <button
+              type="button"
+              class="lang-switch-btn"
+              aria-haspopup="listbox"
+              :aria-expanded="localeMenuOpen"
+              :aria-label="currentLocaleName"
+              @click="toggleLocaleMenu"
+            >
+              <span class="lang-globe" aria-hidden="true">◎</span>
+              <span>{{ currentLocaleName }}</span>
+              <span class="lang-caret" aria-hidden="true">▾</span>
+            </button>
+            <ul v-if="localeMenuOpen" class="lang-menu" role="listbox">
+              <li v-for="option in availableLocales" :key="option.code">
+                <button
+                  type="button"
+                  class="lang-option"
+                  role="option"
+                  :aria-selected="option.code === locale"
+                  :class="{ active: option.code === locale }"
+                  @click="switchLocale(option.code)"
+                >
+                  {{ option.name }}
+                </button>
+              </li>
+            </ul>
+          </div>
 
           <router-link :to="consoleTarget" class="cta-btn">
             {{ isZh ? '进入控制台 →' : 'Console →' }}
@@ -460,11 +483,34 @@
           <span>{{ isZh ? '返回首页' : 'Home' }}</span>
         </router-link>
 
-        <button type="button" class="lang-switch-btn" @click="toggleLocale">
-          <span :class="{ 'lang-active': isZh }">中</span>
-          <span class="lang-sep">/</span>
-          <span :class="{ 'lang-active': !isZh }">EN</span>
-        </button>
+        <div class="lang-switcher">
+          <button
+            type="button"
+            class="lang-switch-btn"
+            aria-haspopup="listbox"
+            :aria-expanded="localeMenuOpen"
+            :aria-label="currentLocaleName"
+            @click="toggleLocaleMenu"
+          >
+            <span class="lang-globe" aria-hidden="true">◎</span>
+            <span>{{ currentLocaleName }}</span>
+            <span class="lang-caret" aria-hidden="true">▾</span>
+          </button>
+          <ul v-if="localeMenuOpen" class="lang-menu" role="listbox">
+            <li v-for="option in availableLocales" :key="option.code">
+              <button
+                type="button"
+                class="lang-option"
+                role="option"
+                :aria-selected="option.code === locale"
+                :class="{ active: option.code === locale }"
+                @click="switchLocale(option.code)"
+              >
+                {{ option.name }}
+              </button>
+            </li>
+          </ul>
+        </div>
 
         <router-link :to="consoleTarget" class="cta-btn">
           {{ isZh ? '进入控制台 →' : 'Console →' }}
@@ -1038,7 +1084,12 @@ import DOMPurify from 'dompurify'
 import { apiClient } from '@/api/client'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
-import { setLocale } from '@/i18n'
+import { availableLocales, setLocale, type LocaleCode } from '@/i18n'
+import {
+  buildLocaleSwitchTarget,
+  initLocaleSync,
+  persistLocale
+} from '@/i18n/localeDetection'
 
 marked.setOptions({
   breaks: true,
@@ -1053,19 +1104,68 @@ const { locale } = useI18n()
 
 const isZh = computed(() => locale.value.startsWith('zh'))
 
-async function toggleLocale() {
-  const next = isZh.value ? 'en' : 'zh'
-  await setLocale(next as any)
-  setTimeout(renderLines, 30)
-  // 主动切换语言时同步详情页 URL 前缀（深链加载不会自动改写 URL）
-  const slug = String(route.params.slug || '')
-  if (slug) {
-    const target = normalizePublicLocale(next === 'zh' ? 'zh-CN' : 'en-US')
-    await router.replace(`/${kind.value}/${target}/${slug}`).catch(() => {})
+// ==================== 语言切换器（R12-04：选项数量/顺序/名称与 registry 同源） ====================
+const localeMenuOpen = ref(false)
+const currentLocaleName = computed(
+  () => availableLocales.find((option) => option.code === locale.value)?.name ?? 'English'
+)
+
+function toggleLocaleMenu() {
+  localeMenuOpen.value = !localeMenuOpen.value
+}
+
+function closeLocaleMenuOnOutsideClick(event: MouseEvent) {
+  const target = event.target as Element | null
+  if (target?.closest?.('.lang-switcher')) {
+    return
+  }
+  localeMenuOpen.value = false
+}
+
+function closeLocaleMenuOnEscape(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    localeMenuOpen.value = false
   }
 }
 
-const isHome = computed(() => route.path === '/' || route.path === '')
+async function applySyncedLocale(next: LocaleCode) {
+  if (next === locale.value) {
+    return
+  }
+  await setLocale(next)
+  setTimeout(renderLines, 30)
+}
+
+let disposeLocaleSync: (() => void) | null = null
+
+async function switchLocale(code: LocaleCode) {
+  localeMenuOpen.value = false
+  if (code === locale.value) {
+    return
+  }
+  const queryIndex = route.fullPath.indexOf('?')
+  const search = queryIndex >= 0 ? route.fullPath.slice(queryIndex) : ''
+  const target = buildLocaleSwitchTarget(route.path, search, code)
+  await setLocale(code)
+  // 手动切换即双写 cookie + localStorage，SSR 下次首屏直接命中该语言
+  persistLocale(code)
+  setTimeout(renderLines, 30)
+  if (!target) {
+    return
+  }
+  const resolved = router.resolve(target)
+  if (resolved.name && resolved.name !== 'NotFound') {
+    await router.replace(target).catch(() => {})
+    return
+  }
+  // 前缀首页/列表由 SSR 路由承接，SPA 未注册，必须整页跳转交给服务端按 URL 输出
+  window.location.assign(target)
+}
+
+const isHome = computed(() => {
+  const path = route.path.replace(/^\/(en|zh|ru|fr|de)(?=\/|$)/, '') || '/'
+  return path === '/'
+})
 
 
 const consoleTarget = computed(() => {
@@ -1759,9 +1859,19 @@ onMounted(() => {
   window.addEventListener('resize', resizeCanvas)
   window.addEventListener('keydown', onKeyDown)
   setTimeout(renderLines, 80)
+  // R12-03/R12-04：URL > cookie > localStorage > 浏览器，跨标签用 storage 事件同步
+  disposeLocaleSync = initLocaleSync((next) => {
+    void applySyncedLocale(next)
+  })
+  document.addEventListener('click', closeLocaleMenuOnOutsideClick)
+  document.addEventListener('keydown', closeLocaleMenuOnEscape)
 })
 
 onBeforeUnmount(() => {
+  disposeLocaleSync?.()
+  disposeLocaleSync = null
+  document.removeEventListener('click', closeLocaleMenuOnOutsideClick)
+  document.removeEventListener('keydown', closeLocaleMenuOnEscape)
   window.removeEventListener('resize', resizeCanvas)
   window.removeEventListener('keydown', onKeyDown)
   if (chargeDoneTimer) clearTimeout(chargeDoneTimer)
@@ -2703,6 +2813,59 @@ watch([() => route.fullPath, isZh], () => {
   padding: 1px 5px;
   border-radius: 5px;
   border: 1.5px solid var(--ink);
+}
+
+/* ==================== 语言切换器下拉（R12-04：五语同源、键盘可操作） ==================== */
+.lang-switcher {
+  position: relative;
+  display: inline-flex;
+}
+.lang-globe {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--ink);
+}
+.lang-caret {
+  font-size: 9px;
+  line-height: 1;
+  color: var(--muted);
+}
+.lang-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  min-width: 156px;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+  background: #FFFFFF;
+  border: var(--border-w) solid var(--ink);
+  border-radius: 10px;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+.lang-option {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.lang-option:hover,
+.lang-option:focus-visible {
+  background: var(--order-lime);
+  outline: none;
+}
+.lang-option.active {
+  background: var(--order-lime);
 }
 
 .cta-btn {

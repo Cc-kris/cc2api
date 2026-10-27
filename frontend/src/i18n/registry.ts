@@ -25,6 +25,38 @@ export function isLocaleCode(value: string): value is LocaleCode {
   return localeDefinitionMap.has(value as LocaleCode)
 }
 
+// URL 前缀、cookie、localStorage 与浏览器语言可能带地区后缀（zh-CN、en-US…），
+// 统一归一化到短码，保证四处记忆与五语清单始终同源（R12-02/R12-03）。
+const localeAliases: Record<string, LocaleCode> = {
+  'zh-cn': 'zh',
+  'zh-hans': 'zh',
+  'zh-sg': 'zh',
+  'zh-tw': 'zh',
+  'zh-hk': 'zh',
+  'zh-hant': 'zh',
+  'en-us': 'en',
+  'en-gb': 'en',
+  'en-au': 'en',
+  'en-ca': 'en',
+  'ru-ru': 'ru',
+  'fr-fr': 'fr',
+  'fr-ca': 'fr',
+  'de-de': 'de',
+  'de-at': 'de',
+  'de-ch': 'de'
+}
+
+export function normalizeLocaleCode(value: string | null | undefined): LocaleCode | null {
+  const normalized = String(value ?? '').trim().replace(/_/g, '-').toLowerCase()
+  if (!normalized) {
+    return null
+  }
+  if (isLocaleCode(normalized)) {
+    return normalized
+  }
+  return localeAliases[normalized] ?? localeAliases[normalized.split('-')[0]] ?? null
+}
+
 export function getLocaleDefinition(locale: LocaleCode): LocaleDefinition {
   return localeDefinitionMap.get(locale) ?? localeDefinitionMap.get(DEFAULT_LOCALE)!
 }
