@@ -124,6 +124,8 @@ export const contentAdminAPI = {
     apiClient.get("/admin/bi/analytics/trends", { params }),
   analyticsCTR: (params?: Record<string, unknown>) =>
     apiClient.get("/admin/bi/analytics/click-through-rate", { params }),
+  analyticsDistribution: (dim: string, params?: Record<string, unknown>) =>
+    apiClient.get("/admin/bi/analytics/distribution", { params: { ...params, dim } }),
   analyticsExport: (params?: Record<string, unknown>) =>
     apiClient.get("/admin/bi/analytics/export.csv", {
       params,

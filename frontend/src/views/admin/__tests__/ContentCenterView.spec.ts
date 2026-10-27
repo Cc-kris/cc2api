@@ -7,6 +7,12 @@ const { api, editorControl } = vi.hoisted(() => ({
     getNews: vi.fn(),
     updateNews: vi.fn(),
     showToast: vi.fn(),
+    analyticsOverview: vi.fn(),
+    analyticsTrends: vi.fn(),
+    analyticsRankings: vi.fn(),
+    analyticsCTR: vi.fn(),
+    analyticsDistribution: vi.fn(),
+    analyticsExport: vi.fn(),
   },
   editorControl: { editor: null as any },
 }))
@@ -53,8 +59,15 @@ vi.mock('@/components/layout/AppLayout.vue', async () => {
 
 vi.mock('vue-chartjs', async () => {
   const { defineComponent: component, h: createElement } = await import('vue')
+  // 把图表 labels 渲染成可断言的文本，便于 UI 验收（真实 canvas 文本不可读）
   const ChartStub = component({
-    setup: () => () => createElement('div'),
+    props: { data: { type: Object, default: () => ({}) }, options: { type: Object, default: () => ({}) } },
+    setup(props) {
+      return () => createElement('div', { class: 'chart-stub' }, JSON.stringify({
+        labels: props.data?.labels || [],
+        datasets: (props.data as any)?.datasets?.map((d: any) => d.label) || [],
+      }))
+    },
   })
   return { Line: ChartStub, Bar: ChartStub, Doughnut: ChartStub }
 })
@@ -86,6 +99,9 @@ vi.mock('@wangeditor/editor-for-vue', async () => {
   }
 })
 
+import { createI18n } from 'vue-i18n'
+import contentV04Messages from '@/i18n/locales/contentV04'
+import Select from '@/components/common/Select.vue'
 import ContentCenterView from '../ContentCenterView.vue'
 
 const persistedNews = {
@@ -121,8 +137,21 @@ async function openNewsEditor(wrapper: ReturnType<typeof mount>) {
   return editor
 }
 
+function createTestI18n() {
+  return createI18n({
+    legacy: false,
+    locale: 'zh',
+    fallbackLocale: 'zh',
+    missingWarn: false,
+    fallbackWarn: false,
+    messages: { zh: contentV04Messages.zh },
+  })
+}
+
 async function mountContentCenter() {
-  const wrapper = mount(ContentCenterView)
+  const wrapper = mount(ContentCenterView, {
+    global: { plugins: [createTestI18n()] },
+  })
   await flushPromises()
   return wrapper
 }
@@ -137,6 +166,35 @@ beforeEach(() => {
     return response({ ...persistedNews })
   })
   api.showToast.mockReset()
+  api.analyticsOverview.mockReset().mockImplementation(async () =>
+    response({ uniqueVisitors: 12, pageViews: 34, reads: 21, impressions: 100, clicks: 7, ctr: 0.07 }),
+  )
+  api.analyticsTrends.mockReset().mockImplementation(async () =>
+    response([
+      { date: '2026-10-26', uniqueVisitors: 5, pageViews: 12, reads: 9, impressions: 40, clicks: 3, avgReadSeconds: 42.5, publishedArticles: 2, publishedNews: 1 },
+      { date: '2026-10-27', uniqueVisitors: 7, pageViews: 22, reads: 12, impressions: 60, clicks: 4, avgReadSeconds: 51.8, publishedArticles: 1, publishedNews: 3 },
+    ]),
+  )
+  api.analyticsRankings.mockReset().mockImplementation(async () =>
+    response({
+      items: [
+        { contentType: 'article', contentId: 1, title: '深度文章A', reads: 30 },
+        { contentType: 'news', contentId: 2, title: '新闻B', reads: 18 },
+      ],
+      total: 2,
+      page: 1,
+      page_size: 10,
+    }),
+  )
+  api.analyticsCTR.mockReset().mockImplementation(async () =>
+    response([{ placement: 'home_hero', impressions: 100, clicks: 9, ctr: 0.09 }]),
+  )
+  api.analyticsDistribution.mockReset().mockImplementation(async (dim: string) => {
+    if (dim === 'locale') return response([{ key: 'zh-CN', count: 8, ratio: 0.8 }])
+    if (dim === 'referrer') return response([{ key: 'search', count: 6, ratio: 0.6 }])
+    if (dim === 'source') return response([{ key: 'Reuters', count: 4, ratio: 0.4 }])
+    return response([{ key: '科技', count: 11, ratio: 1 }])
+  })
   editorControl.editor = makeEditor()
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
     configurable: true,
@@ -356,6 +414,77 @@ describe('ContentCenterView news body editing integration', () => {
     expect(text).toContain('RU失败')
     expect(text).toContain('llm_rate_limited')
     expect(api.listNewsTranslationTasks).toHaveBeenCalledWith(1381)
+    wrapper.unmount()
+  })
+
+  it('BI 分析：渲染 10 张图表、4 张今日 KPI，并以中文展示位置/来源代码', async () => {
+    const wrapper = await mountContentCenter()
+    const biTab = wrapper.findAll('button').find((b) => b.text().trim() === 'BI 分析')
+    expect(biTab, 'BI tab should exist').toBeTruthy()
+    await biTab!.trigger('click')
+    await flushPromises()
+
+    // 10 个维度图表卡片，标题全部为本地化文案
+    const cards = wrapper.findAll('.chart-card')
+    expect(cards).toHaveLength(10)
+    const titles = cards.map((c) => c.find('h3').text())
+    expect(titles).toEqual([
+      '访客、浏览与阅读趋势',
+      '文章阅读 TOP10',
+      '新闻阅读 TOP10',
+      '位置点击率',
+      '按分类阅读分布',
+      '按语言阅读分布',
+      '按新闻源阅读分布',
+      '来源渠道',
+      '平均阅读时长',
+      '发布趋势',
+    ])
+
+    // 4 张 KPI 卡
+    expect(wrapper.findAll('.metrics .metric-card')).toHaveLength(4)
+    const text = wrapper.text()
+    expect(text).toContain('今日 · 访客数（UV）')
+    expect(text).toContain('12')
+
+    // 代码值本地化：不出现 home_hero / search 原始代码
+    expect(text).toContain('首页精选位')
+    expect(text).toContain('搜索引擎')
+    expect(text).not.toContain('home_hero')
+    // 图例/数据集标签同样本地化（R11-04）
+    expect(text).toContain('访客数（UV）')
+    expect(text).toContain('新闻源')
+
+    // 四个分布维度按 dim 请求
+    const dims = Array.from(new Set(api.analyticsDistribution.mock.calls.map((call) => call[0]))).sort()
+    expect(dims).toEqual(['category', 'locale', 'referrer', 'source'])
+    wrapper.unmount()
+  })
+
+  it('BI 分析：切换到近 7 天会按 7 天窗口重新拉取数据并回传语言/位置筛选', async () => {
+    const wrapper = await mountContentCenter()
+    const biTab = wrapper.findAll('button').find((b) => b.text().trim() === 'BI 分析')
+    await biTab!.trigger('click')
+    await flushPromises()
+
+    const trendCallsBefore = api.analyticsTrends.mock.calls.length
+    const rangeSelect = wrapper.findAllComponents(Select)[0]
+    expect(rangeSelect, 'range select should exist').toBeTruthy()
+    rangeSelect.vm.$emit('update:modelValue', '7')
+    await flushPromises()
+
+    expect(api.analyticsTrends.mock.calls.length).toBe(trendCallsBefore + 1)
+    const params = api.analyticsTrends.mock.calls.at(-1)?.[0] as any
+    const spanDays = (Date.parse(params.to) - Date.parse(params.from)) / 86400000
+    expect(spanDays).toBe(6)
+
+    // 语言与位置筛选联动
+    const selects = wrapper.findAllComponents(Select)
+    const localeSelect = selects.find((s) => s.attributes('data-test') === 'bi-locale')
+    expect(localeSelect).toBeTruthy()
+    localeSelect!.vm.$emit('update:modelValue', 'zh')
+    await flushPromises()
+    expect((api.analyticsTrends.mock.calls.at(-1)?.[0] as any).locale).toBe('zh')
     wrapper.unmount()
   })
 })

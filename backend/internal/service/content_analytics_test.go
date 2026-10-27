@@ -218,3 +218,78 @@ func TestContentAnalyticsViewsComputeMetricsAndCSV(t *testing.T) {
 		t.Fatalf("CSV contains invalid fields: %s", csvText)
 	}
 }
+
+// publishingRepoStub adds the R11 #10 publishing counters on top of the plain
+// analytics stub, so Trends should merge them into the same daily rows.
+type publishingRepoStub struct {
+	*analyticsRepoStub
+	counts    map[string]ContentAnalyticsPublishCount
+	gotFrom   *time.Time
+	gotTo     *time.Time
+	gotLocale string
+}
+
+func (r *publishingRepoStub) CountPublishedByDay(_ context.Context, from, to *time.Time, locale string) (map[string]ContentAnalyticsPublishCount, error) {
+	r.gotFrom, r.gotTo, r.gotLocale = from, to, locale
+	return r.counts, nil
+}
+
+func TestContentAnalyticsTrendsWeightReadDurationAndPublishing(t *testing.T) {
+	day1 := time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC)
+	day2 := time.Date(2026, 10, 21, 0, 0, 0, 0, time.UTC)
+	base := &analyticsRepoStub{rows: []ContentAnalyticsDaily{
+		{Date: day1, Reads: 2, AvgReadSeconds: 30, PageViews: 4, Impressions: 10, Clicks: 2},
+		{Date: day1, Reads: 1, AvgReadSeconds: 90, PageViews: 1, Impressions: 0, Clicks: 0},
+		{Date: day2, Reads: 4, AvgReadSeconds: 45, PageViews: 5},
+	}}
+	locale := "zh"
+	repo := &publishingRepoStub{
+		analyticsRepoStub: base,
+		counts: map[string]ContentAnalyticsPublishCount{
+			"2026-10-21": {Articles: 1, News: 2},
+			"2026-10-22": {Articles: 3, News: 0},
+		},
+	}
+	from := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 10, 31, 0, 0, 0, 0, time.UTC)
+	svc := NewContentAnalyticsService(repo, "secret")
+
+	trends, err := svc.Trends(context.Background(), ContentAnalyticsFilters{From: &from, To: &to, Locale: locale})
+	if err != nil {
+		t.Fatalf("Trends() error = %v", err)
+	}
+	if repo.gotLocale != locale || repo.gotFrom == nil || !repo.gotFrom.Equal(from) {
+		t.Fatalf("publishing filters not forwarded: from=%v to=%v locale=%q", repo.gotFrom, repo.gotTo, repo.gotLocale)
+	}
+	if len(trends) != 3 {
+		t.Fatalf("expected three daily rows including publish-only day, got %+v", trends)
+	}
+	// Read-weighted mean: (30*2 + 90*1) / 3 == 50s, not the plain row average.
+	if trends[0].AvgReadSeconds != 50 {
+		t.Errorf("day1 avgReadSeconds = %d, want 50", trends[0].AvgReadSeconds)
+	}
+	if trends[0].Reads != 3 || trends[0].CTR != 0.2 {
+		t.Errorf("day1 aggregates = %+v", trends[0])
+	}
+	if trends[1].PublishedArticles != 1 || trends[1].PublishedNews != 2 {
+		t.Errorf("day2 publishing counts = %+v", trends[1])
+	}
+	if trends[1].AvgReadSeconds != 45 {
+		t.Errorf("day2 avgReadSeconds = %d, want 45", trends[1].AvgReadSeconds)
+	}
+	if trends[2].PublishedArticles != 3 || trends[2].Reads != 0 {
+		t.Errorf("publish-only day = %+v", trends[2])
+	}
+}
+
+func TestContentAnalyticsTrendsWithoutPublishingRepository(t *testing.T) {
+	repo := &analyticsRepoStub{rows: []ContentAnalyticsDaily{{Date: time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC), Reads: 2, AvgReadSeconds: 12}}}
+	svc := NewContentAnalyticsService(repo, "secret")
+	trends, err := svc.Trends(context.Background(), ContentAnalyticsFilters{})
+	if err != nil || len(trends) != 1 {
+		t.Fatalf("Trends() = %+v, %v", trends, err)
+	}
+	if trends[0].AvgReadSeconds != 12 || trends[0].PublishedArticles != 0 || trends[0].PublishedNews != 0 {
+		t.Fatalf("unexpected trend fields: %+v", trends[0])
+	}
+}

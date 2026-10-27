@@ -1399,86 +1399,136 @@
 
 <section v-else class="workspace">
       <div class="bi-toolbar">
-        <label
-          >开始日期<input v-model="biFilters.from" type="date" @change="loadBI"
-        /></label>
-        <label
-          >结束日期<input v-model="biFilters.to" type="date" @change="loadBI"
-        /></label>
-        <label
-          >语言<input
-            v-model="biFilters.locale"
-            placeholder="全部语言"
-            @change="loadBI"
-        /></label>
-        <label
-          >来源<select v-model="biFilters.source_id" @change="loadBI">
-            <option value="">全部来源</option>
-            <option
-              v-for="source in sources"
-              :key="source.id"
-              :value="String(source.id)"
-            >
-              {{ source.name }}
-            </option>
-          </select></label
-        >
-        <label
-          >内容类型<select v-model="biFilters.content_type" @change="loadBI">
-            <option value="">全部</option>
-            <option value="article">文章</option>
-            <option value="news">新闻</option>
-          </select></label
-        >
-        <label
-          >位置<input
-            v-model="biFilters.placement"
-            placeholder="全部位置"
-            @keyup.enter="loadBI"
-        /></label>
-        <button class="secondary-button" @click="exportBI">导出 CSV</button>
+        <label>
+          {{ t('contentV04.analytics.dateRange') }}
+          <Select v-model="biRange" :options="biRangeOptions" data-test="bi-range" />
+        </label>
+        <label v-if="biRange === 'custom'">
+          {{ t('contentV04.analytics.customRange') }}
+          <input v-model="biFilters.from" type="date" :max="biFilters.to" data-test="bi-from" @change="loadBI" />
+        </label>
+        <label v-if="biRange === 'custom'">
+          <span>&nbsp;</span>
+          <input v-model="biFilters.to" type="date" :min="biFilters.from" data-test="bi-to" @change="loadBI" />
+        </label>
+        <label>
+          {{ t('contentV04.analytics.locale') }}
+          <Select v-model="biFilters.locale" :options="biLocaleOptions" data-test="bi-locale" />
+        </label>
+        <label>
+          {{ t('contentV04.analytics.location') }}
+          <Select v-model="biFilters.placement" :options="biPlacementOptions" data-test="bi-placement" />
+        </label>
+        <button class="secondary-button" data-test="bi-export" @click="exportBI">
+          {{ t('contentV04.analytics.export') }}
+        </button>
       </div>
+
+      <p v-if="biError" class="bi-error" role="alert">
+        <span>{{ t('contentV04.analytics.failed') }}</span>
+        <button class="secondary-button" @click="loadBI">{{ t('contentV04.analytics.retry') }}</button>
+      </p>
+
       <div class="metrics">
         <div class="metric-card m-blue">
           <span class="metric-icon">👥</span>
-          <div class="metric-info"><small>访客</small><strong>{{ overview.uniqueVisitors || 0 }}</strong></div>
+          <div class="metric-info">
+            <small>{{ t('contentV04.analytics.today') }} · {{ t('contentV04.analytics.visitors') }}</small>
+            <strong>{{ todayStats.visitors }}</strong>
+          </div>
         </div>
         <div class="metric-card m-green">
           <span class="metric-icon">📄</span>
-          <div class="metric-info"><small>页面浏览</small><strong>{{ overview.pageViews || 0 }}</strong></div>
+          <div class="metric-info">
+            <small>{{ t('contentV04.analytics.today') }} · {{ t('contentV04.analytics.views') }}</small>
+            <strong>{{ todayStats.views }}</strong>
+          </div>
         </div>
         <div class="metric-card m-purple">
           <span class="metric-icon">📖</span>
-          <div class="metric-info"><small>内容阅读</small><strong>{{ overview.reads || 0 }}</strong></div>
+          <div class="metric-info">
+            <small>{{ t('contentV04.analytics.today') }} · {{ t('contentV04.analytics.reads') }}</small>
+            <strong>{{ todayStats.reads }}</strong>
+          </div>
         </div>
         <div class="metric-card m-amber">
           <span class="metric-icon">🎯</span>
-          <div class="metric-info"><small>点击率</small><strong>{{ ((overview.ctr || 0) * 100).toFixed(2) }}%</strong></div>
+          <div class="metric-info">
+            <small>{{ t('contentV04.analytics.ctr') }}</small>
+            <strong>{{ (todayStats.ctr * 100).toFixed(2) }}%</strong>
+          </div>
         </div>
       </div>
+
       <div class="chart-grid">
-        <div class="chart-card">
-          <h3>访问与阅读趋势</h3>
+        <div class="chart-card chart-wide">
+          <h3>{{ t('contentV04.analytics.trend') }}</h3>
           <div class="chart-box">
-            <LineChart :data="trendChartData" :options="trendChartOptions" />
+            <LineChart v-if="trends.length" :data="trendChartData" :options="trendChartOptions" />
+            <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
           </div>
         </div>
         <div class="chart-card">
-          <h3>文章阅读排行 TOP5</h3>
+          <h3>{{ t('contentV04.analytics.articleTop') }}</h3>
           <div class="chart-box">
-            <BarChart :data="articleRankingChartData" :options="horizontalBarOptions" />
+            <BarChart v-if="articleTopRows.length" :data="articleTopChartData" :options="horizontalBarOptions" />
+            <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
           </div>
         </div>
         <div class="chart-card">
-          <h3>新闻阅读占比</h3>
+          <h3>{{ t('contentV04.analytics.newsTop') }}</h3>
           <div class="chart-box">
-            <DoughnutChart :data="newsShareChartData" :options="doughnutOptions" />
+            <BarChart v-if="newsTopRows.length" :data="newsTopChartData" :options="horizontalBarOptions" />
+            <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
           </div>
         </div>
         <div class="chart-card">
-          <h3>点击率（按展示位置）</h3>
+          <h3>{{ t('contentV04.analytics.placementCtr') }}</h3>
           <div class="chart-box">
-            <BarChart :data="ctrChartData" :options="verticalBarOptions" />
+            <BarChart v-if="ctrRows.length" :data="ctrChartData" :options="verticalBarOptions" />
+            <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>{{ t('contentV04.analytics.category') }}</h3>
+          <div class="chart-box">
+            <DoughnutChart v-if="distributions.category.length" :data="categoryChartData" :options="doughnutOptions" />
+            <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>{{ t('contentV04.analytics.language') }}</h3>
+          <div class="chart-box">
+            <DoughnutChart v-if="distributions.locale.length" :data="localeChartData" :options="doughnutOptions" />
+            <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>{{ t('contentV04.analytics.source') }}</h3>
+          <div class="chart-box">
+            <DoughnutChart v-if="distributions.source.length" :data="sourceChartData" :options="doughnutOptions" />
+            <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>{{ t('contentV04.analytics.referrer') }}</h3>
+          <div class="chart-box">
+            <DoughnutChart v-if="distributions.referrer.length" :data="referrerChartData" :options="doughnutOptions" />
+            <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>{{ t('contentV04.analytics.duration') }}</h3>
+          <div class="chart-box">
+            <LineChart v-if="trends.length" :data="readSecondsChartData" :options="trendChartOptions" />
+            <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
+          </div>
+        </div>
+        <div class="chart-card chart-wide">
+          <h3>{{ t('contentV04.analytics.publishing') }}</h3>
+          <div class="chart-box">
+            <BarChart v-if="trends.length" :data="publishingChartData" :options="publishingBarOptions" />
+            <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
           </div>
         </div>
       </div>
@@ -1508,6 +1558,7 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import AnnouncementRichTextEditor from '@/components/admin/announcements/AnnouncementRichTextEditor.vue'
 import { announcementEditorInitialHtml, normalizeAnnouncementEditorHtml } from '@/utils/announcementContent'
 import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -1654,34 +1705,191 @@ const imageUploading = ref<"" | "coverImage" | "ogImage">("");
 let writingPollTimer: ReturnType<typeof setTimeout> | undefined;
 const models = ref<any[]>([]);
 
-// Chart.js data computed
+// ---- BI：筛选与图表 ----
+const { t } = useI18n({ useScope: "global" });
+const biRange = ref<"7" | "30" | "90" | "custom">("30");
+const biLoading = ref(false);
+const biError = ref("");
+const distributions = ref<{ category: any[]; locale: any[]; source: any[]; referrer: any[] }>({
+  category: [],
+  locale: [],
+  source: [],
+  referrer: [],
+});
+
+const isoDate = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const isoDaysAgo = (days: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return isoDate(d);
+};
+
+const biRangeOptions = computed(() => [
+  { value: "7", label: t("contentV04.analytics.last7Days") },
+  { value: "30", label: t("contentV04.analytics.last30Days") },
+  { value: "90", label: t("contentV04.analytics.last90Days") },
+  { value: "custom", label: t("contentV04.analytics.customRange") },
+]);
+
+const biLocaleOptions = computed(() => [
+  { value: "", label: t("contentV04.analytics.all") },
+  { value: "zh", label: t("contentV04.language.chinese") },
+  { value: "en", label: t("contentV04.language.english") },
+  { value: "ru", label: t("contentV04.language.russian") },
+  { value: "fr", label: t("contentV04.language.french") },
+  { value: "de", label: t("contentV04.language.german") },
+]);
+
+const PLACEMENT_KEYS: Record<string, string> = {
+  home_hero: "homeHero",
+  home_list: "homeList",
+  article_detail_related: "articleDetailRelated",
+  news_list: "newsList",
+  articles_list: "articlesList",
+};
+const biPlacementOptions = computed(() => [
+  { value: "", label: t("contentV04.analytics.all") },
+  ...Object.keys(PLACEMENT_KEYS).map((code) => ({
+    value: code,
+    label: t(`contentV04.analytics.placements.${PLACEMENT_KEYS[code]}`),
+  })),
+]);
+
+// 代码值统一走翻译键，禁止把接口原始代码直接给用户看（PRD 1.6）
+const placementLabel = (code: string) =>
+  PLACEMENT_KEYS[code] ? t(`contentV04.analytics.placements.${PLACEMENT_KEYS[code]}`) : code || "—";
+
+const LOCALE_KEYS: Record<string, string> = {
+  zh: "chinese",
+  en: "english",
+  ru: "russian",
+  fr: "french",
+  de: "german",
+};
+const localeLabel = (code: string) => {
+  const short = String(code || "").slice(0, 2).toLowerCase();
+  return LOCALE_KEYS[short] ? t(`contentV04.language.${LOCALE_KEYS[short]}`) : code || "—";
+};
+
+const REFERRER_KEYS = ["direct", "search", "social", "external"];
+const referrerLabel = (key: string) =>
+  REFERRER_KEYS.includes(key) ? t(`contentV04.analytics.referrers.${key}`) : key || "—";
+
+const CHART_PALETTE = ["#6366F1", "#10B981", "#F59E0B", "#EC4899", "#8B5CF6", "#06B6D4", "#EF4444", "#84CC16"];
+
+const articleTopRows = computed(() =>
+  rankings.value.filter((r: any) => r.contentType === "article").slice(0, 10),
+);
+const newsTopRows = computed(() => rankings.value.filter((r: any) => r.contentType === "news").slice(0, 10));
+
+const todayStats = computed(() => {
+  const today = isoDate(new Date());
+  const row = trends.value.find((r: any) => String(r.date || "").slice(0, 10) === today) as any;
+  const impressions = row?.impressions || 0;
+  const clicks = row?.clicks || 0;
+  return {
+    visitors: row?.uniqueVisitors || 0,
+    views: row?.pageViews || 0,
+    reads: row?.reads || 0,
+    ctr: impressions > 0 ? clicks / impressions : 0,
+  };
+});
+
 const trendChartData = computed(() => ({
   labels: trends.value.map((r: any) => formatDate(r.date)),
   datasets: [
-    { label: "页面浏览", data: trends.value.map((r: any) => r.pageViews || 0), borderColor: "#6366F1", backgroundColor: "rgba(99,102,241,0.1)", fill: true, tension: 0.4 },
-    { label: "内容阅读", data: trends.value.map((r: any) => r.reads || 0), borderColor: "#10B981", backgroundColor: "rgba(16,185,129,0.1)", fill: true, tension: 0.4 },
+    { label: t("contentV04.analytics.visitors"), data: trends.value.map((r: any) => r.uniqueVisitors || 0), borderColor: "#6366F1", backgroundColor: "rgba(99,102,241,0.1)", fill: true, tension: 0.4 },
+    { label: t("contentV04.analytics.views"), data: trends.value.map((r: any) => r.pageViews || 0), borderColor: "#F59E0B", backgroundColor: "rgba(245,158,11,0.1)", fill: true, tension: 0.4 },
+    { label: t("contentV04.analytics.reads"), data: trends.value.map((r: any) => r.reads || 0), borderColor: "#10B981", backgroundColor: "rgba(16,185,129,0.1)", fill: true, tension: 0.4 },
   ],
 }));
-const articleRankingChartData = computed(() => ({
-  labels: rankings.value.filter((r: any) => r.contentType === "article").slice(0, 5).map((r: any) => (r.title || r.pagePath || "").slice(0, 20)),
-  datasets: [{ label: "阅读数", data: rankings.value.filter((r: any) => r.contentType === "article").slice(0, 5).map((r: any) => r.reads || 0), backgroundColor: ["#6366F1", "#8B5CF6", "#EC4899", "#F59E0B", "#10B981"], borderRadius: 8 }],
+
+const readSecondsChartData = computed(() => ({
+  labels: trends.value.map((r: any) => formatDate(r.date)),
+  datasets: [
+    {
+      label: t("contentV04.analytics.duration"),
+      data: trends.value.map((r: any) => Number(Number(r.avgReadSeconds || 0).toFixed(1))),
+      borderColor: "#8B5CF6",
+      backgroundColor: "rgba(139,92,246,0.12)",
+      fill: true,
+      tension: 0.4,
+    },
+  ],
 }));
-const newsShareChartData = computed(() => {
-  const newsReads = rankings.value.filter((r: any) => r.contentType === "news").reduce((s: number, r: any) => s + (r.reads || 0), 0);
-  const articleReads = rankings.value.filter((r: any) => r.contentType === "article").reduce((s: number, r: any) => s + (r.reads || 0), 0);
-  return {
-    labels: ["新闻", "文章"],
-    datasets: [{ data: [newsReads, articleReads], backgroundColor: ["#6366F1", "#10B981"], borderWidth: 0 }],
-  };
-});
+
+const publishingChartData = computed(() => ({
+  labels: trends.value.map((r: any) => formatDate(r.date)),
+  datasets: [
+    { label: t("contentV04.content.articles"), data: trends.value.map((r: any) => r.publishedArticles || 0), backgroundColor: "#6366F1", borderRadius: 6 },
+    { label: t("contentV04.content.news"), data: trends.value.map((r: any) => r.publishedNews || 0), backgroundColor: "#10B981", borderRadius: 6 },
+  ],
+}));
+
+const articleTopChartData = computed(() => ({
+  labels: articleTopRows.value.map((r: any) => (r.title || r.pagePath || "").slice(0, 24)),
+  datasets: [
+    {
+      label: t("contentV04.analytics.reads"),
+      data: articleTopRows.value.map((r: any) => r.reads || 0),
+      backgroundColor: CHART_PALETTE[0],
+      borderRadius: 8,
+    },
+  ],
+}));
+
+const newsTopChartData = computed(() => ({
+  labels: newsTopRows.value.map((r: any) => (r.title || r.pagePath || "").slice(0, 24)),
+  datasets: [
+    {
+      label: t("contentV04.analytics.reads"),
+      data: newsTopRows.value.map((r: any) => r.reads || 0),
+      backgroundColor: CHART_PALETTE[1],
+      borderRadius: 8,
+    },
+  ],
+}));
+
 const ctrChartData = computed(() => ({
-  labels: ctrRows.value.map((r: any) => r.placement || "未标注"),
-  datasets: [{ label: "CTR %", data: ctrRows.value.map((r: any) => parseFloat(((r.ctr || 0) * 100).toFixed(2))), backgroundColor: "#F59E0B", borderRadius: 8 }],
+  labels: ctrRows.value.map((r: any) => placementLabel(r.placement)),
+  datasets: [
+    {
+      label: "CTR %",
+      data: ctrRows.value.map((r: any) => Number(((r.ctr || 0) * 100).toFixed(2))),
+      backgroundColor: "#F59E0B",
+      borderRadius: 8,
+    },
+  ],
 }));
+
+const distributionChart = (rows: any[], labeler: (key: string) => string) => ({
+  labels: rows.map((r: any) => labeler(r.key)),
+  datasets: [{ data: rows.map((r: any) => r.count || 0), backgroundColor: CHART_PALETTE, borderWidth: 0 }],
+});
+
+const categoryChartData = computed(() => distributionChart(distributions.value.category, (k) => k || "—"));
+const localeChartData = computed(() => distributionChart(distributions.value.locale, localeLabel));
+const sourceChartData = computed(() => distributionChart(distributions.value.source, (k) => k || "—"));
+const referrerChartData = computed(() => distributionChart(distributions.value.referrer, referrerLabel));
+
 const trendChartOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "top" as const } }, scales: { y: { beginAtZero: true } } };
-const horizontalBarOptions = { indexAxis: "y" as const, responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } };
+const horizontalBarOptions = { indexAxis: "y" as const, responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } };
 const doughnutOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom" as const } } };
 const verticalBarOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } };
+const publishingBarOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "top" as const } }, scales: { y: { beginAtZero: true } } };
+
+watch(biRange, (value) => {
+  if (value === "custom") return;
+  const days = Number(value);
+  biFilters.value.to = isoDate(new Date());
+  biFilters.value.from = isoDaysAgo(days - 1);
+  loadBI();
+});
+
+watch(
+  () => [biFilters.value.locale, biFilters.value.placement],
+  () => loadBI(),
+);
 // C3/D2：模型下拉不再回落硬编码假名；接口失败时为空列表 + 提示
 const modelsLoadError = ref("");
 const fallbackModels: Array<{ id: string; name: string }> = [];
@@ -2311,16 +2519,38 @@ async function loadTranslations(id: number) {
 }
 async function loadBI() {
   const params = { ...biFilters.value };
-  const [o, t, r, c] = await Promise.all([
-    contentAPI.analyticsOverview(params),
-    contentAPI.analyticsTrends(params),
-    contentAPI.analyticsRankings({ ...params, page: 1, page_size: 10 }),
-    contentAPI.analyticsCTR(params),
-  ]);
-  overview.value = o.data?.data || o.data || {};
-  trends.value = unwrap(t.data);
-  rankings.value = unwrap(r.data);
-  ctrRows.value = unwrap(c.data);
+  biLoading.value = true;
+  biError.value = "";
+  try {
+    const [overviewRes, trendsRes, rankingsRes, ctrRes, categoryRes, localeRes, sourceRes, referrerRes] = await Promise.all([
+      contentAPI.analyticsOverview(params),
+      contentAPI.analyticsTrends(params),
+      contentAPI.analyticsRankings({ ...params, page: 1, page_size: 10 }),
+      contentAPI.analyticsCTR(params),
+      contentAPI.analyticsDistribution("category", params),
+      contentAPI.analyticsDistribution("locale", params),
+      contentAPI.analyticsDistribution("source", params),
+      contentAPI.analyticsDistribution("referrer", params),
+    ]);
+    overview.value = overviewRes.data?.data || overviewRes.data || {};
+    trends.value = unwrap(trendsRes.data);
+    rankings.value = unwrap(rankingsRes.data);
+    ctrRows.value = unwrap(ctrRes.data);
+    distributions.value = {
+      category: unwrap(categoryRes.data),
+      locale: unwrap(localeRes.data),
+      source: unwrap(sourceRes.data),
+      referrer: unwrap(referrerRes.data),
+    };
+  } catch {
+    biError.value = t("contentV04.analytics.failed");
+    trends.value = [];
+    rankings.value = [];
+    ctrRows.value = [];
+    distributions.value = { category: [], locale: [], source: [], referrer: [] };
+  } finally {
+    biLoading.value = false;
+  }
 }
 function closeNewsEditor() {
   newsEditRequest += 1
@@ -5517,5 +5747,55 @@ td.actions-cell .link {
   .news-editor.news-editor-modal { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); box-sizing: border-box; }
   .two-col-editor { grid-template-columns: minmax(0, 1fr); }
   .modal-scroll-body { max-height: calc(100dvh - 180px); }
+  .chart-card.chart-wide { grid-column: span 1; }
+  .chart-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* BI 分析图表网格 */
+.chart-grid {
+  display: grid;
+  /* PRD：十张图两列排布，窄屏回落单列 */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.chart-card {
+  border: 2px solid #121316;
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 16px;
+  box-shadow: 4px 4px 0 #121316;
+  min-width: 0;
+}
+.chart-card.chart-wide {
+  grid-column: span 2;
+}
+.chart-card h3 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 800;
+}
+.chart-box {
+  position: relative;
+  height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.chart-box > canvas {
+  max-height: 260px;
+}
+.chart-empty {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+}
+.bi-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+  font-weight: 700;
+  color: #b91c1c;
 }
 </style>

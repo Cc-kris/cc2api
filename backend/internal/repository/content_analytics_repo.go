@@ -402,6 +402,79 @@ DO UPDATE SET
 	return tx.Commit()
 }
 
+// CountPublishedByDay reports how many articles and news items were published
+// per day inside the filter range (R11 dimension #10). Dates are bucketed in
+// the site timezone so they line up with the analytics daily aggregation.
+func (r *contentAnalyticsRepository) CountPublishedByDay(ctx context.Context, from, to *time.Time, locale string) (map[string]service.ContentAnalyticsPublishCount, error) {
+	if r == nil || r.client == nil {
+		return nil, errors.New("analytics repository is unavailable")
+	}
+	loc := time.UTC
+	if r.timezone != "" {
+		if parsed, err := time.LoadLocation(r.timezone); err == nil {
+			loc = parsed
+		}
+	}
+	prefix := strings.TrimSpace(locale)
+	if i := strings.IndexAny(prefix, "-_"); i > 0 {
+		prefix = prefix[:i]
+	}
+	out := make(map[string]service.ContentAnalyticsPublishCount)
+	bump := func(at time.Time, article bool) {
+		key := at.In(loc).Format("2006-01-02")
+		c := out[key]
+		if article {
+			c.Articles++
+		} else {
+			c.News++
+		}
+		out[key] = c
+	}
+
+	articleQuery := r.client.ContentArticle.Query().
+		Where(contentarticle.StatusEQ("published"), contentarticle.DeletedAtIsNil(), contentarticle.PublishedAtNotNil())
+	if from != nil {
+		articleQuery = articleQuery.Where(contentarticle.PublishedAtGTE(*from))
+	}
+	if to != nil {
+		articleQuery = articleQuery.Where(contentarticle.PublishedAtLTE(*to))
+	}
+	if prefix != "" {
+		articleQuery = articleQuery.Where(contentarticle.LocaleHasPrefix(prefix))
+	}
+	articles, err := articleQuery.Select(contentarticle.FieldPublishedAt).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, article := range articles {
+		if article.PublishedAt != nil {
+			bump(*article.PublishedAt, true)
+		}
+	}
+
+	newsQuery := r.client.ContentNewsItem.Query().
+		Where(contentnewsitem.StatusEQ("published"), contentnewsitem.DeletedAtIsNil(), contentnewsitem.PublishedAtNotNil())
+	if from != nil {
+		newsQuery = newsQuery.Where(contentnewsitem.PublishedAtGTE(*from))
+	}
+	if to != nil {
+		newsQuery = newsQuery.Where(contentnewsitem.PublishedAtLTE(*to))
+	}
+	if prefix != "" {
+		newsQuery = newsQuery.Where(contentnewsitem.LocaleHasPrefix(prefix))
+	}
+	news, err := newsQuery.Select(contentnewsitem.FieldPublishedAt).All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range news {
+		if item.PublishedAt != nil {
+			bump(*item.PublishedAt, false)
+		}
+	}
+	return out, nil
+}
+
 func dateOnly(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }

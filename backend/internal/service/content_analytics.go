@@ -77,6 +77,24 @@ type ContentAnalyticsTrend struct {
 	Impressions    int       `json:"impressions"`
 	Clicks         int       `json:"clicks"`
 	CTR            float64   `json:"ctr"`
+	// AvgReadSeconds is the read-weighted mean dwell time for the day (R11 #9).
+	AvgReadSeconds int `json:"avgReadSeconds"`
+	// Publishing counts come from the content tables, not from tracking (R11 #10).
+	PublishedArticles int `json:"publishedArticles"`
+	PublishedNews     int `json:"publishedNews"`
+}
+
+// ContentAnalyticsPublishCount is the number of items published on one day.
+type ContentAnalyticsPublishCount struct {
+	Articles int
+	News     int
+}
+
+// ContentAnalyticsPublishingRepository is implemented by repositories that can
+// report how much content was published per day. Kept separate so existing
+// analytics test doubles stay valid.
+type ContentAnalyticsPublishingRepository interface {
+	CountPublishedByDay(ctx context.Context, from, to *time.Time, locale string) (map[string]ContentAnalyticsPublishCount, error)
 }
 
 type ContentAnalyticsRanking struct {
@@ -339,6 +357,7 @@ func (s *ContentAnalyticsService) Trends(ctx context.Context, f ContentAnalytics
 		return nil, err
 	}
 	byDate := make(map[string]*ContentAnalyticsTrend)
+	weightedSeconds := make(map[string]int)
 	for _, row := range rows {
 		key := row.Date.Format("2006-01-02")
 		trend := byDate[key]
@@ -351,10 +370,35 @@ func (s *ContentAnalyticsService) Trends(ctx context.Context, f ContentAnalytics
 		trend.Reads += row.Reads
 		trend.Impressions += row.Impressions
 		trend.Clicks += row.Clicks
+		if row.Reads > 0 && row.AvgReadSeconds > 0 {
+			weightedSeconds[key] += row.AvgReadSeconds * row.Reads
+		}
+	}
+	published := map[string]ContentAnalyticsPublishCount{}
+	if publisher, ok := s.repo.(ContentAnalyticsPublishingRepository); ok {
+		counts, err := publisher.CountPublishedByDay(ctx, f.From, f.To, f.Locale)
+		if err != nil {
+			return nil, err
+		}
+		published = counts
+		// Keep the publishing series continuous even on days without traffic.
+		for key, count := range counts {
+			if count.Articles == 0 && count.News == 0 {
+				continue
+			}
+			if _, exists := byDate[key]; exists {
+				continue
+			}
+			day, parseErr := time.Parse("2006-01-02", key)
+			if parseErr != nil {
+				continue
+			}
+			byDate[key] = &ContentAnalyticsTrend{Date: day}
+		}
 	}
 	out := make([]ContentAnalyticsTrend, 0, len(byDate))
 	distinct, hasDistinct := s.repo.(ContentAnalyticsDistinctRepository)
-	for _, trend := range byDate {
+	for key, trend := range byDate {
 		if hasDistinct {
 			dayStart := trend.Date
 			dayEnd := dayStart.AddDate(0, 0, 1)
@@ -369,6 +413,13 @@ func (s *ContentAnalyticsService) Trends(ctx context.Context, f ContentAnalytics
 		}
 		if trend.Impressions > 0 {
 			trend.CTR = float64(trend.Clicks) / float64(trend.Impressions)
+		}
+		if trend.Reads > 0 {
+			trend.AvgReadSeconds = weightedSeconds[key] / trend.Reads
+		}
+		if count, ok := published[key]; ok {
+			trend.PublishedArticles = count.Articles
+			trend.PublishedNews = count.News
 		}
 		out = append(out, *trend)
 	}
