@@ -13,7 +13,7 @@ const bannedGreen = /emerald-|#10b981\b|#059669\b|#047857\b|#065f46\b|#d1fae5\b|
 
 describe("neo-lab v0.4 全站 token 与原生控件", () => {
   it("声明设计契约 token", () => {
-    const tokens = ["--v04-primary: #2563EB", "--v04-primary-hover: #1D4ED8", "--v04-accent: #CCFF00",
+    const tokens = ["--v04-primary: #CCFF00", "--v04-primary-hover: #D8FF33", "--v04-accent: #CCFF00",
       "--v04-surface: #FFFFFF", "--v04-success: #16A34A", "--v04-page: #121316", "--v04-surface: #1F2937", "--v04-link: #60A5FA"];
     tokens.forEach((t) => expect(css).toContain(t));
   });
@@ -24,7 +24,7 @@ describe("neo-lab v0.4 全站 token 与原生控件", () => {
     });
   });
   it("选中/成功态使用契约色", () => {
-    expect(css).toMatch(/\.switch-checked\s*\{[^}]*background-color:\s*#2563EB/i);
+    expect(css).toMatch(/\.switch-checked\s*\{[^}]*background-color:\s*#CCFF00/i);
     expect(css).toMatch(/\.task-status\.chip-success\s*\{[^}]*#16A34A/i);
   });
   it("原生下拉使用自定义箭头与焦点环", () => {
@@ -32,6 +32,15 @@ describe("neo-lab v0.4 全站 token 与原生控件", () => {
     expect(css).toMatch(/select:not\(\[multiple\]\)\s*\{[^}]*background-image:\s*url\("data:image\/svg\+xml/);
     const patterns = [/html\.dark select:not\(\[multiple\]\)/, /select:not\(\[multiple\]\):focus-visible/, /select:not\(\[multiple\]\) option\s*\{/];
     patterns.forEach((p) => expect(css).toMatch(p));
+  });
+  it("登录/404 与后台暗色动作按钮不回退为旧蓝白样式", () => {
+    const primary = css.match(/html\.dark \.btn-primary,\s*html\.dark button\.bg-primary-600,[\s\S]*?\{([^}]*)\}/);
+    expect(primary?.[1]).toContain("background-color: #CCFF00 !important");
+    expect(primary?.[1]).toContain("color: #121316 !important");
+    expect(primary?.[1]).toContain("border-color: #121316 !important");
+    const secondaryHover = css.match(/html\.dark \.btn-secondary:hover:not\(:disabled\),\s*html\.dark \.btn-ghost:hover:not\(:disabled\)\s*\{([^}]*)\}/);
+    expect(secondaryHover?.[1]).toContain("border-color: #E2E8F0 !important");
+    expect(css).toMatch(/html\.dark \.tab-active\s*\{[^}]*color:\s*#CCFF00/i);
   });
   it("输入框无下划线且表格分隔线保留", () => {
     const control = /(^|[\s,>+~(])(input|textarea|select)(?=[\s,.:#[>+~)]|$)/;

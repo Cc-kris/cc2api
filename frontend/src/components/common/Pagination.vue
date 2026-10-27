@@ -78,7 +78,7 @@
         <button
           @click="goToPage(currentPage - 1)"
           :disabled="totalPages === 0 || currentPage <= 1"
-          class="neo-page-btn relative inline-flex items-center rounded-lg border-2 border-[#121316] bg-white px-2.5 py-1.5 text-sm font-extrabold text-[#121316] shadow-[2px_2px_0_#121316] transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:bg-[#EDF4FF] disabled:cursor-not-allowed disabled:opacity-45 dark:border-[#E2E8F0] dark:bg-[#222838] dark:text-[#F8FAFC] dark:hover:bg-[#2563EB] dark:hover:text-white"
+          class="neo-page-btn relative inline-flex items-center rounded-lg border-2 border-[#121316] bg-white px-2.5 py-1.5 text-sm font-extrabold text-[#121316] shadow-[2px_2px_0_#121316] transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:bg-[#EDF4FF] disabled:cursor-not-allowed disabled:opacity-45 dark:border-[#E2E8F0] dark:bg-[#222838] dark:text-[#F8FAFC] dark:hover:bg-[#334155] dark:hover:text-white"
           :aria-label="t('pagination.previous')"
         >
           <Icon name="chevronLeft" size="md" />
@@ -93,8 +93,8 @@
           :class="[
             'neo-page-btn relative inline-flex items-center rounded-lg border-2 border-[#121316] px-3.5 py-1.5 font-mono text-sm font-extrabold transition-all',
             pageNum === currentPage
-              ? 'z-10 bg-[#CCFF00] text-[#121316] dark:bg-[#2563EB] dark:text-white dark:border-[#60A5FA] font-black shadow-[2.5px_2.5px_0_#121316]'
-              : 'bg-white text-[#121316] shadow-[2px_2px_0_#121316] hover:-translate-x-0.5 hover:-translate-y-0.5 hover:bg-[#EDF4FF] dark:border-[#E2E8F0] dark:bg-[#222838] dark:text-[#F8FAFC] dark:hover:bg-[#2563EB] dark:hover:text-white',
+              ? 'z-10 bg-[#CCFF00] text-[#121316] dark:bg-[#CCFF00] dark:text-[#121316] dark:border-[#121316] font-black shadow-[2.5px_2.5px_0_#121316]'
+              : 'bg-white text-[#121316] shadow-[2px_2px_0_#121316] hover:-translate-x-0.5 hover:-translate-y-0.5 hover:bg-[#EDF4FF] dark:border-[#E2E8F0] dark:bg-[#222838] dark:text-[#F8FAFC] dark:hover:bg-[#334155] dark:hover:text-white',
             typeof pageNum !== 'number' && 'cursor-default'
           ]"
           :aria-label="
@@ -109,7 +109,7 @@
         <button
           @click="goToPage(currentPage + 1)"
           :disabled="totalPages === 0 || currentPage >= totalPages"
-          class="neo-page-btn relative inline-flex items-center rounded-lg border-2 border-[#121316] bg-white px-2.5 py-1.5 text-sm font-extrabold text-[#121316] shadow-[2px_2px_0_#121316] transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:bg-[#EDF4FF] disabled:cursor-not-allowed disabled:opacity-45 dark:border-[#E2E8F0] dark:bg-[#222838] dark:text-[#F8FAFC] dark:hover:bg-[#2563EB] dark:hover:text-white"
+          class="neo-page-btn relative inline-flex items-center rounded-lg border-2 border-[#121316] bg-white px-2.5 py-1.5 text-sm font-extrabold text-[#121316] shadow-[2px_2px_0_#121316] transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:bg-[#EDF4FF] disabled:cursor-not-allowed disabled:opacity-45 dark:border-[#E2E8F0] dark:bg-[#222838] dark:text-[#F8FAFC] dark:hover:bg-[#334155] dark:hover:text-white"
           :aria-label="t('pagination.next')"
         >
           <Icon name="chevronRight" size="md" />

@@ -1081,10 +1081,14 @@ textarea.input {
   border-bottom: 2.5px solid #121316 !important;
 }
 .tab-active {
-  border-bottom-color: #2563EB !important;
+  border-bottom-color: #121316 !important;
   border-bottom-width: 3px !important;
-  color: #2563EB !important;
+  color: #121316 !important;
   font-weight: 900 !important;
+}
+html.dark .tab-active {
+  border-bottom-color: #CCFF00 !important;
+  color: #CCFF00 !important;
 }
 /* ==========================================================================
    CCAI NEO-LAB GLOBAL CONSOLE THEME (Aligned with Home Page 100%)
@@ -1286,9 +1290,9 @@ html.dark .btn-ghost {
 }
 html.dark .btn-secondary:hover:not(:disabled),
 html.dark .btn-ghost:hover:not(:disabled) {
-  background-color: #2563EB !important;
+  background-color: #334155 !important;
   color: #FFFFFF !important;
-  border-color: #60A5FA !important;
+  border-color: #E2E8F0 !important;
 }
 html.dark .btn-secondary:hover:not(:disabled) *,
 html.dark .btn-ghost:hover:not(:disabled) * {
@@ -1857,7 +1861,7 @@ html.dark ::-moz-selection {
 }
 
 /* 深色模式下的白色残留类自动映射为干净深蓝碳灰，绝不大面积泛绿 */
-html.dark :is(.bg-white, .bg-gray-50, .bg-slate-50):not(.stat-icon):not(.badge):not(.btn-primary):not([class*="dark:bg-"]) {
+html.dark :is(.bg-white, .bg-gray-50, .bg-slate-50):not(.stat-icon):not(.badge):not(.btn-primary):not(button.shadow-sm):not(button.shadow):not([class*="dark:bg-"]) {
   background-color: #181C26 !important;
   color: #F8FAFC !important;
 }
@@ -1869,14 +1873,14 @@ html.dark :is(.bg-primary-50, .bg-blue-50):not(.stat-icon):not(.badge):not(.btn-
 
 /* 深色模式下分段选择器/Tab选中态：精致的深空极光蓝高亮，对比鲜明 */
 html.dark :is([aria-selected="true"], [aria-current="page"], .tab-active):not(.sidebar-link-active) {
-  background-color: #2563EB !important;
-  color: #FFFFFF !important;
-  border-color: #3B82F6 !important;
+  background-color: #CCFF00 !important;
+  color: #121316 !important;
+  border-color: #121316 !important;
   box-shadow: 2px 2px 0px #000000 !important;
   font-weight: 800 !important;
 }
 html.dark :is([aria-selected="true"], [aria-current="page"], .tab-active):not(.sidebar-link-active) * {
-  color: #FFFFFF !important;
+  color: #121316 !important;
 }
 
 /* 侧边栏菜单选中态在深色模式下使用精致深海蓝 + 冰蓝边框，克制雅致 */
@@ -1921,32 +1925,34 @@ button.bg-white.shadow * {
   border: 2px solid #121316 !important;
 }
 .switch-checked {
-  background-color: #2563EB !important;
+  background-color: #CCFF00 !important;
 }
 .switch-thumb {
   border: 1.5px solid #121316 !important;
 }
 
+/* TASK-036: dark mode keeps the same primary-action language as light mode.
+   The previous blue/white override made Login and 404 look like the legacy UI. */
 html.dark .btn-primary,
 html.dark button.bg-primary-600,
 html.dark button.bg-primary-500,
 html.dark a.btn-primary {
-  background-color: #2563EB !important;
-  color: #FFFFFF !important;
-  border-color: #60A5FA !important;
+  background-color: #CCFF00 !important;
+  color: #121316 !important;
+  border-color: #121316 !important;
   box-shadow: 4px 4px 0px #000000 !important;
 }
 html.dark .btn-primary *,
 html.dark button.bg-primary-600 *,
 html.dark button.bg-primary-500 *,
 html.dark a.btn-primary * {
-  color: #FFFFFF !important;
+  color: #121316 !important;
 }
 html.dark .btn-primary:hover:not(:disabled),
 html.dark button.bg-primary-600:hover:not(:disabled),
 html.dark button.bg-primary-500:hover:not(:disabled) {
-  background-color: #3B82F6 !important;
-  color: #FFFFFF !important;
+  background-color: #D8FF33 !important;
+  color: #121316 !important;
   box-shadow: 5.5px 5.5px 0px #000000 !important;
 }
 html.dark .dropdown-item:hover {
@@ -1958,14 +1964,14 @@ html.dark .dropdown-item:hover * {
 }
 html.dark button.bg-white.shadow-sm,
 html.dark button.bg-white.shadow {
-  background-color: #2563EB !important;
-  color: #FFFFFF !important;
-  border-color: #60A5FA !important;
+  background-color: #CCFF00 !important;
+  color: #121316 !important;
+  border-color: #121316 !important;
   box-shadow: 2px 2px 0px #000000 !important;
 }
 html.dark button.bg-white.shadow-sm *,
 html.dark button.bg-white.shadow * {
-  color: #FFFFFF !important;
+  color: #121316 !important;
 }
 
 /* ==========================================================================
@@ -2015,7 +2021,7 @@ html.dark .settings-tab:hover:not(.settings-tab-active),
 html.dark .settings-tabs button:hover:not(.settings-tab-active) {
   background-color: #262E42 !important;
   color: #FFFFFF !important;
-  border-color: #60A5FA !important;
+  border-color: #E2E8F0 !important;
 }
 
 .settings-tab-active,
@@ -2032,14 +2038,14 @@ html.dark .settings-tabs button:hover:not(.settings-tab-active) {
 }
 html.dark .settings-tab-active,
 html.dark .settings-tabs button.settings-tab-active {
-  background-color: #2563EB !important;
-  color: #FFFFFF !important;
-  border-color: #60A5FA !important;
+  background-color: #CCFF00 !important;
+  color: #121316 !important;
+  border-color: #121316 !important;
   box-shadow: 2.5px 2.5px 0px #000000 !important;
 }
 html.dark .settings-tab-active *,
 html.dark .settings-tabs button.settings-tab-active * {
-  color: #FFFFFF !important;
+  color: #121316 !important;
 }
 
 /* 2. 所有数据统计组件 (Dashboard / Stat Cards / KPI / Charts) 风格统一 */
@@ -2172,7 +2178,7 @@ html.dark .neo-independent-page div.rounded-2xl {
 
 /* ===== TASK-030 neo-lab v0.4：token 收口 + 原生控件归一 ===== */
 :root {
-  --v04-primary: #2563EB; --v04-primary-hover: #1D4ED8; --v04-accent: #CCFF00;
+  --v04-primary: #CCFF00; --v04-primary-hover: #D8FF33; --v04-accent: #CCFF00;
   --v04-ink: #121316; --v04-muted: #6B7280; --v04-line: #E5E7EB;
   --v04-surface: #FFFFFF; --v04-success: #16A34A; --v04-danger: #DC2626;
 }
