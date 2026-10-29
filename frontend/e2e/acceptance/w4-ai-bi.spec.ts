@@ -282,6 +282,8 @@ test.describe('W4 AI 创作模型配置 + BI 分析（真实 E2E 验收）', () 
     c.check(saveReqs.length === 0, `51 字时仍发出了写请求：${JSON.stringify(saveReqs)}`)
 
     // (2) 与已有配置大小写不同重名
+    // 表单已脏，requestClose 会弹原生 confirm（未保存放弃吗）；不注册处理器 Playwright 默认取消 → 弹窗关不掉
+    page.once('dialog', (d) => void d.accept())
     await page.keyboard.press('Escape')
     await page.waitForTimeout(300)
     dlg = await openDialog(page)
@@ -585,15 +587,21 @@ test.describe('W4 AI 创作模型配置 + BI 分析（真实 E2E 验收）', () 
     c.note(`Esc 关闭：confirm=${JSON.stringify(warnEsc)}；可见=${await dlg.isVisible().catch(() => false)}`)
     c.check(!(await dlg.isVisible().catch(() => false)), 'Esc 未关闭弹窗')
 
-    // 3) 取消按钮
+    // 3) 取消按钮（同样会弹未保存确认，需接住并确认放弃）
     dlg = await dirty()
+    const warnCancel: string[] = []
+    page.once('dialog', (d) => {
+      warnCancel.push(d.message())
+      void d.accept()
+    })
     await dlg.locator('footer button', { hasText: /Cancel|取消/ }).first().click()
     await page.waitForTimeout(800)
     c.note(`取消按钮关闭：可见=${await dlg.isVisible().catch(() => false)}`)
     c.check(!(await dlg.isVisible().catch(() => false)), '点「取消」未关闭弹窗')
 
-    // 4) 点遮罩
+    // 4) 点遮罩（同样会弹未保存确认）
     dlg = await dirty()
+    page.once('dialog', (d) => void d.accept())
     const box = await dlg.boundingBox()
     if (box) await page.mouse.click(Math.max(2, box.x / 2), Math.min(box.y + 10, 890))
     await page.waitForTimeout(800)
@@ -955,7 +963,12 @@ test.describe('W4 AI 创作模型配置 + BI 分析（真实 E2E 验收）', () 
     c.note(`深色：html class = ${JSON.stringify(dark.htmlClass)}，卡片底色 ${dark.cardBg}，标题色 ${dark.titleColor}，正文底 ${dark.bodyBg}，对比度 ${darkRatio}`)
     c.check(/dark/.test(dark.htmlClass), '深色偏好下 html 未带 dark 类（主题未生效）')
     c.check(darkRatio >= 4.5, `深色标题对比度不足：${darkRatio}`)
-    c.check(dark.cardBg === light.cardBg && /rgb\(255, 255, 255\)/.test(dark.cardBg), `深色下卡片仍为纯白 ${dark.cardBg}，疑似未做深色适配`)
+    // 断言极性：只有「深色与浅色同色且为纯白」才算未适配。原写法把条件直接传给 check，
+    // 等价于要求深色卡片必须是纯白才通过，产品做对了反而判失败（条件恒假）。
+    c.check(
+      !(dark.cardBg === light.cardBg && /rgb\(255, 255, 255\)/.test(dark.cardBg)),
+      `深色下卡片仍为纯白 ${dark.cardBg}，疑似未做深色适配`
+    )
 
     await page.emulateMedia({ colorScheme: 'light' })
     c.finish()

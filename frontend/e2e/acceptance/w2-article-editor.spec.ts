@@ -367,7 +367,7 @@ test('AE-03 富文本工具栏 10 项 + 逐项生效', async ({ page }, info) =>
   }
 
   const tryCommand = async (label: string, expectPattern: RegExp) => {
-    const btn = toolbar.locator(`button[aria-label="${label}"]`)
+    const btn = toolbar.locator(`button[aria-label*="${label}"]`)
     if ((await btn.count()) === 0) return { label, skipped: true }
     await selectAllType(`acc ${label}`)
     await btn.click()

@@ -3,7 +3,6 @@
     <div class="admin-page">
     <div class="top-actions-bar">
       <div class="top-tabs-title">内容中心</div>
-      <button class="button" @click="refresh">刷新</button>
     </div>
     <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
     <div class="tabs">
@@ -137,7 +136,15 @@
                       rel="noopener noreferrer"
                     >原文</a>
                     <button type="button" class="link" @click="editNews(item)">编辑</button>
-                    <button type="button" class="link" @click="publishNews(item.id)" v-if="item.status !== 'published'">发表</button>
+                    <button
+                      v-if="item.status !== 'published'"
+                      type="button"
+                      class="link news-publish-btn"
+                      :disabled="!newsPublishable(item)"
+                      :title="newsPublishable(item) ? '发布这条新闻' : '需先补全正文、摘要与来源名后再发布'"
+                      :aria-label="newsPublishable(item) ? '发表' : '发表（需先补全正文、摘要与来源名）'"
+                      @click="publishNews(item.id)"
+                    >发表</button>
                     <button type="button" class="link danger" @click="deleteNews(item.id)">删除</button>
                   </td>
               </tr>
@@ -169,143 +176,232 @@
         <div
           v-if="selectedNews.id"
           class="modal-backdrop z-overlay"
-            @click.self="closeNewsEditor"
+            @click.self="requestCloseNewsEditor"
         >
-          <div ref="newsEditorRef" class="news-editor news-editor-modal news-editor-flex">
-          <div class="section-heading modal-fixed-header">
-            <div>
-              <h2>新闻详情编辑</h2>
-              <p class="muted">编辑抓取正文、摘要、分类标签和 SEO 字段后再发布。</p>
-            </div>
-            <button class="link" @click="closeNewsEditor">关闭</button>
-          </div>
-          <div class="modal-scroll-body">
-          <div class="form-grid">
-            <label
-              >标题<input v-model="selectedNews.title" maxlength="240"
-            /></label>
-            <label
-              >Slug<input v-model="selectedNews.slug" maxlength="240"
-            /></label>
-            <label>语言<input v-model="selectedNews.locale" /></label>
-            <label
-              >分类<input
-                v-model="selectedNews.category"
-                list="news-category-options"
-                placeholder="如 模型发布 / 工程架构"
-              /><datalist id="news-category-options">
-                <option v-for="c in taxonomy.newsCategories" :key="c" :value="c" />
-              </datalist></label>
-            <label
-              >标签<input
-                v-model="selectedNewsTagsText"
-                placeholder="多个标签用英文逗号分隔"
-            /></label>
-            <label
-              >原文链接<input
-                v-model="selectedNews.originalUrl"
-                placeholder="https://..."
-            /></label>
-            <label
-              >SEO 标题<input v-model="selectedNews.seoTitle" maxlength="160"
-            /></label>
-            <label
-              >SEO 描述<input
-                v-model="selectedNews.seoDescription"
-                maxlength="300"
-            /></label>
-            <label>来源名称<input v-model="selectedNews.sourceName" /></label>
-          </div>
-          <div class="two-col-editor">
-            <div class="editor-config-col">
-              <div class="config-block">
-                <div class="config-title">摘要</div>
-                <textarea v-model="selectedNews.summary" class="short-text" placeholder="摘要"></textarea>
+          <div ref="newsEditorRef" class="news-editor news-editor-modal" role="dialog" aria-modal="true" aria-labelledby="news-editor-title" @keydown.esc="requestCloseNewsEditor" @keydown.tab="trapNewsFocus" @input="newsFormTouched = true" @change="newsFormTouched = true" @click="newsFormTouched = true">
+            <div class="section-heading modal-fixed-header">
+              <div>
+                <h2 id="news-editor-title">新闻详情编辑</h2>
+                <p class="muted">编辑抓取正文、摘要、分类标签和 SEO 字段后再发布。</p>
               </div>
+              <button type="button" class="dialog-close" aria-label="关闭新闻编辑" @click="requestCloseNewsEditor">×</button>
             </div>
-            <div class="editor-main-col">
-              <div class="editor-label">新闻正文（富文本）</div>
-              <AnnouncementRichTextEditor
-                v-model="selectedNews.bodyHtml"
-                :session-key="`${selectedNews.id}:${newsEditorSession}`"
-                placeholder="新闻正文..."
-              />
-            </div>
-          </div>
-          </div>
-          <div class="news-translation-panel">
-            <div class="config-title">译文任务</div>
-            <div v-if="newsTranslationTasks.length" class="news-translation-tasks">
-              <div
-                v-for="task in newsTranslationTasks"
-                :key="task.id"
-                class="news-translation-task"
+
+            <!-- 译文任务：横向折叠条置于两栏之上，避免与正文编辑器在垂直方向重叠 -->
+            <div class="news-translation-panel">
+              <button
+                type="button"
+                class="news-trans-toggle"
+                :aria-expanded="newsTranslationOpen ? 'true' : 'false'"
+                @click="newsTranslationOpen = !newsTranslationOpen"
               >
-                <span class="task-locale">{{ localeShort(task.targetLocale || task.locale) }}</span>
-                <span class="task-status" :class="'chip-' + translationStatusKey(task.status)">
-                  {{ translationStatusText(task.status) }}
+                <span class="config-title">译文任务</span>
+                <span class="news-trans-summary">
+                  {{ newsTranslationTasks.length ? newsTranslationTasks.length + ' 个任务' : '暂无任务' }}
                 </span>
-                <small v-if="task.errorCode || task.error" class="task-error">
-                  {{ task.errorCode || task.error }}
+                <span class="news-trans-toggle-text">{{ newsTranslationOpen ? '收起' : '展开' }}</span>
+              </button>
+              <div v-if="newsTranslationOpen" class="news-translation-tasks">
+                <div
+                  v-for="task in newsTranslationTasks"
+                  :key="task.id"
+                  class="news-translation-task"
+                >
+                  <span class="task-locale">{{ localeShort(task.targetLocale || task.locale) }}</span>
+                  <span class="task-status" :class="'chip-' + translationStatusKey(task.status)">
+                    {{ translationStatusText(task.status) }}
+                  </span>
+                  <small v-if="task.errorCode || task.error" class="task-error">
+                    {{ task.errorCode || task.error }}
+                  </small>
+                </div>
+                <small v-if="!newsTranslationTasks.length" class="muted">
+                  暂无新闻译文任务；新闻的自动翻译由「自动化设置 → 目标语言」驱动。
                 </small>
               </div>
             </div>
-            <small v-else class="muted">
-              暂无新闻译文任务；新闻的自动翻译由「自动化设置 → 目标语言」驱动。
-            </small>
+
+            <div class="modal-scroll-body news-editor-body">
+              <div class="two-col-editor">
+                <div class="editor-config-col">
+                  <div class="form-grid">
+                    <label class="form-required-legend">必填项标有 *</label>
+                    <label
+                      >标题<input
+                        v-model="selectedNews.title"
+                        aria-label="标题"
+                        maxlength="240"
+                        :aria-invalid="newsTitleInvalid ? 'true' : undefined"
+                        @blur="newsTitleTouched = true"
+                    /></label>
+                    <small v-if="newsTitleInvalid" class="field-error">标题不能为空</small>
+                    <label
+                      >来源链接<input
+                        v-model="selectedNews.originalUrl"
+                        placeholder="https://..."
+                    /></label>
+                    <label
+                      >分类<input
+                        class="combo-trigger"
+                        readonly
+                        role="combobox"
+                        aria-haspopup="listbox"
+                        aria-label="分类"
+                        :aria-expanded="newsSelectOpen === 'category' ? 'true' : 'false'"
+                        :value="newsCategoryLabelText"
+                        @click="toggleNewsSelect('category')"
+                        @keydown.enter.prevent="toggleNewsSelect('category')"
+                      /><span
+                        v-if="newsSelectOpen === 'category'"
+                        class="combo-menu"
+                        role="listbox"
+                        aria-label="分类选项"
+                        ><button
+                          v-for="opt in newsCategorySelectOptions"
+                          :key="'news-cat-' + opt.value"
+                          type="button"
+                          class="combo-option"
+                          role="option"
+                          :aria-selected="selectedNews.category === opt.value ? 'true' : 'false'"
+                          @click.stop="selectedNews.category = opt.value; newsSelectOpen = ''"
+                        >
+                          {{ opt.label }}
+                        </button></span
+                      ></label
+                    >
+                    <label
+                      >标签<span class="tag-input" data-test="tag-input"
+                        ><span
+                          v-for="(tag, tagIndex) in newsTagChips"
+                          :key="'news-tag-' + tag"
+                          class="tag-chip"
+                          :data-tag="tag"
+                          ><span
+                            class="tag-remove"
+                            role="button"
+                            tabindex="0"
+                            :title="'移除标签 ' + tag"
+                            @click.stop="removeNewsTag(tagIndex)"
+                            @keydown.enter.prevent.stop="removeNewsTag(tagIndex)"
+                            @keydown.space.prevent.stop="removeNewsTag(tagIndex)"
+                          ></span></span
+                        ><input
+                          v-model="newsTagDraft"
+                          placeholder="输入标签后回车"
+                          list="news-tag-suggestions"
+                          @keydown.enter.prevent="commitNewsTag"
+                          @keydown.backspace="handleNewsTagBackspace"
+                      /></span></label>
+                    <datalist id="news-tag-suggestions">
+                      <option v-for="t in taxonomy.tags" :key="'news-tag-opt-' + t" :value="t"></option>
+                    </datalist>
+                    <label class="field-line">发布时间<input v-model="newsPublishedAtLocal" type="datetime-local" /></label>
+                    <label class="field-line"
+                      >封面图<input v-model="selectedNews.imageUrl" placeholder="https://... 建议 16:9"
+                    /></label>
+                    <label class="field-line"
+                      >摘要<textarea v-model="selectedNews.summary" rows="3" placeholder="用简洁段落概括新闻核心内容"></textarea>
+                    </label>
+                    <div class="config-block">
+                      <div class="config-title">同步语言</div>
+                      <div class="locale-checkboxes" role="group" aria-label="同步语言">
+                        <label
+                          v-for="l in ADMIN_TARGET_LOCALES"
+                          :key="'news-sync-' + l.value"
+                          class="locale-checkbox"
+                        >
+                          <input type="checkbox" :value="l.value" v-model="newsSyncLocales" />
+                          <span>{{ localeOptionLabel(l.value) }}</span>
+                        </label>
+                      </div>
+                    </div>
+                    <label
+                      >状态<input
+                        class="combo-trigger"
+                        readonly
+                        role="combobox"
+                        aria-haspopup="listbox"
+                        aria-label="状态"
+                        :aria-expanded="newsSelectOpen === 'status' ? 'true' : 'false'"
+                        :value="newsStatusLabelText"
+                        @click="toggleNewsSelect('status')"
+                        @keydown.enter.prevent="toggleNewsSelect('status')"
+                      /><span
+                        v-if="newsSelectOpen === 'status'"
+                        class="combo-menu"
+                        role="listbox"
+                        aria-label="状态选项"
+                        ><button
+                          v-for="opt in newsStatusSelectOptions"
+                          :key="'news-status-' + opt.value"
+                          type="button"
+                          class="combo-option"
+                          role="option"
+                          :aria-selected="selectedNews.status === opt.value ? 'true' : 'false'"
+                          @click.stop="selectedNews.status = opt.value; newsSelectOpen = ''"
+                        >
+                          {{ opt.label }}
+                        </button></span
+                      ></label
+                    >
+                    <label class="field-line">Slug<input v-model="selectedNews.slug" maxlength="240" /></label>
+                    <label class="field-line">语言<input v-model="selectedNews.locale" /></label>
+                    <label class="field-line">SEO 标题<input v-model="selectedNews.seoTitle" maxlength="160" /></label>
+                    <label class="field-line"
+                      >SEO 描述<textarea
+                        v-model="selectedNews.seoDescription"
+                        maxlength="300"
+                        rows="3"
+                    ></textarea>
+                    </label>
+                    <label class="field-line">来源名称<input v-model="selectedNews.sourceName" /></label>
+                  </div>
+                </div>
+                <div class="editor-main-col">
+                  <div class="editor-label">新闻正文（富文本）</div>
+                  <div class="editor-shell" data-test="news-rich-editor">
+                    <AnnouncementRichTextEditor
+                      v-model="selectedNews.bodyHtml"
+                      :session-key="`${selectedNews.id}:${newsEditorSession}`"
+                      placeholder="新闻正文..."
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-actions modal-fixed-footer">
+              <button type="button" class="secondary-button" @click="requestCloseNewsEditor">取消</button>
+              <button type="button" class="button" aria-label="保存新闻" @click="saveNews">保存</button>
+            </div>
           </div>
-          <div class="form-actions modal-fixed-footer">
-            <button class="button" @click="saveNews">保存新闻</button>
-            <button class="secondary-button" @click="closeNewsEditor">
-              取消
-            </button>
-          </div>
+        </div>
+        <!-- 未保存修改确认：先问再关，内容留在内存里，可随时继续编辑 -->
+        <div
+          v-if="newsCloseGuard.show"
+          class="modal-backdrop z-overlay news-close-guard-backdrop"
+          @click.self="resumeNewsEditing"
+        >
+          <div
+            class="confirm-dialog news-close-guard-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="news-close-guard-title"
+            @keydown.esc.stop="resumeNewsEditing"
+            @keydown.tab="trapNewsGuardFocus"
+          >
+            <h3 id="news-close-guard-title">有未保存修改，确认离开？</h3>
+            <p class="muted">离开后本次修改的标题、正文、分类标签与 SEO 字段将不会被保存。</p>
+            <div class="confirm-dialog-actions">
+              <button type="button" class="secondary-button" @click="confirmDiscardNews">确认离开</button>
+              <button type="button" class="button primary" @click="resumeNewsEditing">继续编辑</button>
+            </div>
           </div>
         </div>
       </div>
       <div v-else-if="newsView === 'sources'">
         <div class="toolbar source-toolbar">
-          <input
-            v-model="sourceForm.name"
-            :class="{ 'input-invalid': sourceFormErrors.name }"
-            placeholder="来源名称（必填）"
-            @input="sourceFormErrors.name = ''"
-            @blur="validateSourceField('name')"
-          /><input
-            v-model="sourceForm.url"
-            :class="{ 'input-invalid': sourceFormErrors.url }"
-            placeholder="公开 RSS/Atom/JSON URL（必填）"
-            @input="sourceFormErrors.url = ''"
-            @blur="validateSourceField('url')"
-          /><Select
-            v-model="sourceForm.sourceType"
-            :options="sourceTypeOptions"
-            class="toolbar-select"
-            aria-label="新闻源类型"
-            data-test="news-source-type"
-          /><input
-            v-model.number="sourceForm.intervalMinutes"
-            class="interval-input"
-            type="number"
-            min="1"
-            :placeholder="'跟随全局（' + globalFetchIntervalMinutes() + ' 分钟）'"
-            title="抓取间隔（分钟；留空=继承全局）"
-          /><label class="inline-check">
-            <input v-model="sourceForm.enabled" type="checkbox" />
-            <span>创建后立即启用</span>
-          </label><button
-            class="button"
-            :disabled="sourceCreateDisabled"
-            :title="sourceCreateBlockedReason"
-            @click="createSource"
-          >
-            新增新闻源
-          </button>
-          <textarea v-if="sourceForm.sourceType === 'public_json'" v-model="sourceForm.mappingJsonText" class="short-text" placeholder='JSON 字段映射，例如 {"title":"$.headline","body":"$.article.text","url":"$.article.href"}'></textarea>
-        </div>
-        <div v-if="sourceFormErrors.name || sourceFormErrors.url" class="field-errors">
-          <small v-if="sourceFormErrors.name" class="error-text">来源名称必填</small>
-          <small v-if="sourceFormErrors.url" class="error-text">{{ sourceFormErrors.url }}</small>
+          <button type="button" class="button source-create-button" @click="openCreateSource">+ 新增新闻源</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -329,28 +425,33 @@
                 </td>
                 <td class="url">{{ source.url }}</td>
                 <td>
-                  {{ source.enabled ? "启用" : "停用"
-                  }}<small v-if="source.nextRunAt"
-                    >下次：{{ formatDate(source.nextRunAt) }}</small
-                  ><small v-if="source.lastError" class="error-text">{{
-                    source.lastError
-                  }}</small>
+                  <template v-if="source.deletedAt">已删除</template>
+                  <template v-else
+                    >{{ source.enabled ? "启用" : "停用"
+                    }}<small v-if="source.nextRunAt"
+                      >下次：{{ formatDate(source.nextRunAt) }}</small
+                    ><small v-if="source.lastError" class="error-text">{{
+                      source.lastError
+                    }}</small></template
+                  >
                 </td>
                 <td>
-                  <button class="link" @click="editSource(source)">编辑</button>
-                  <button class="link" @click="toggleSource(source)">
-                    {{ source.enabled ? "停用" : "启用" }}</button
-                  ><button class="link" @click="fetchSource(source.id)">
-                    立即抓取</button
-                  ><button class="danger link" @click="deleteSource(source.id)">
-                    删除</button
-                  ><button
+                  <button
                     v-if="source.deletedAt"
                     class="link"
                     @click="restoreSource(source.id)"
                   >
                     恢复
                   </button>
+                  <template v-else>
+                    <button class="link" @click="editSource(source)">编辑</button>
+                    <button class="link" @click="toggleSource(source)">
+                      {{ source.enabled ? "停用" : "启用" }}</button
+                    ><button class="link" @click="fetchSource(source.id)">
+                      立即抓取</button
+                    ><button class="danger link" @click="deleteSource(source.id)">
+                      删除</button>
+                  </template>
                 </td>
               </tr>
             </tbody>
@@ -363,30 +464,88 @@
             <Pagination v-if="sourceTotal > 0" :page="sourcePage" :total="sourceTotal" :page-size="20" :show-page-size-selector="false" @update:page="loadSources" />
           </div>
         </div>
-        <div v-if="selectedSource.id" class="news-editor">
+        <div v-if="sourceDialogOpen" class="content-modal-layer" @mousedown.self="requestCloseSourceDialog">
+          <div class="source-dialog" role="dialog" aria-modal="true" aria-labelledby="source-editor-title" @keydown.esc="requestCloseSourceDialog">
           <div class="section-heading">
-            <h2>编辑新闻源</h2>
-            <button class="link" @click="selectedSource = {}">关闭</button>
+            <h2 id="source-editor-title">{{ sourceDialogCreating ? "新增新闻源" : "编辑新闻源" }}</h2>
+            <button type="button" class="dialog-close" aria-label="关闭新闻源弹窗" @click="requestCloseSourceDialog">×</button>
           </div>
           <div class="form-grid">
-            <label>名称<input v-model="selectedSource.name" /></label
-            ><label>Feed URL<input v-model="selectedSource.url" /></label
-            ><label>语言<input v-model="selectedSource.language" /></label
+            <label>名称<span class="required-star" aria-hidden="true">*</span><input
+                v-model="sourceDraft.name"
+                :class="{ 'input-invalid': sourceFormErrors.name }"
+                placeholder="来源名称（必填）"
+                aria-required="true"
+                @input="sourceFormErrors.name = ''"
+                @blur="validateSourceField('name')" /><small v-if="sourceFormErrors.name" class="error-text" role="alert">来源名称必填</small></label
+            ><label>链接 URL<span class="required-star" aria-hidden="true">*</span><input
+                v-model="sourceDraft.url"
+                :class="{ 'input-invalid': sourceFormErrors.url }"
+                placeholder="公开 RSS/Atom/JSON URL（必填）"
+                aria-required="true"
+                @input="sourceFormErrors.url = ''"
+                @blur="validateSourceField('url')" /><small v-if="sourceFormErrors.url" class="error-text" role="alert">{{ sourceFormErrors.url }}</small></label
+            ><label>类型<span class="required-star" aria-hidden="true">*</span><Select
+                v-model="sourceDraft.sourceType"
+                :options="sourceTypeOptions"
+                aria-label="新闻源类型"
+                data-test="news-source-type" /></label
+            ><label>默认分类<Select
+                v-model="sourceDraft.category"
+                :options="newsCategorySelectOptions"
+                placeholder="不指定"
+                aria-label="默认分类" /></label
+            ><label>语言<input v-model="sourceDraft.language" placeholder="zh-CN" /></label
             ><label
-              >间隔（分钟）<input
-                v-model.number="selectedSource.intervalMinutes"
+              >抓取间隔（分钟）<input
+                v-model.number="sourceDraft.intervalMinutes"
+                class="interval-input"
+                :class="{ 'input-invalid': sourceFormErrors.interval }"
                 type="number"
-                min="1"
-                :placeholder="'跟随全局（' + globalFetchIntervalMinutes() + ' 分钟）'" /></label
+                min="15"
+                max="1440"
+                :aria-invalid="sourceFormErrors.interval ? 'true' : undefined"
+                :placeholder="'跟随全局（' + globalFetchIntervalMinutes() + ' 分钟）'"
+                @input="sourceFormErrors.interval = ''"
+                @blur="validateSourceField('interval')" /><small v-if="sourceFormErrors.interval" class="error-text" role="alert">{{ sourceFormErrors.interval }}</small></label
             ><label
               >每分钟速率<input
-                v-model.number="selectedSource.rateLimitPerMinute"
+                v-model.number="sourceDraft.rateLimitPerMinute"
                 type="number"
                 min="1" /></label
-            ><label>分类<input v-model="selectedSource.category" /></label>
-            ><label v-if="selectedSource.sourceType === 'public_json'">JSON 字段映射<textarea v-model="selectedSource.mappingJsonText" class="short-text" placeholder='{"title":"$.headline","body":"$.article.text"}'></textarea></label>
+            ><label
+              >抓取规则<Select
+                :model-value="null"
+                :options="[]"
+                disabled
+                placeholder="暂无可用规则"
+                aria-label="抓取规则" /><small class="field-hint">请先在抓取规则里创建</small></label
+            ><label class="source-status-field"
+              >状态<span class="switch slider-switch source-enabled-switch"
+                ><span class="switch-track" aria-hidden="true"></span><input
+                  v-model="sourceDraft.enabled"
+                  class="switch-input"
+                  type="checkbox"
+                  role="switch"
+                  aria-label="新闻源状态"
+                /><span class="switch-text">{{ sourceDraft.enabled !== false ? "启用" : "停用" }}</span></span
+              ></label
+            ><label v-if="sourceDraft.sourceType === 'public_json'">JSON 字段映射<textarea v-model="sourceDraft.mappingJsonText" class="short-text" placeholder='{"title":"$.headline","body":"$.article.text","url":"$.article.href"}'></textarea></label>
           </div>
-          <button class="button" @click="saveSource">保存新闻源</button>
+          <p v-if="errorMessage" class="error-text source-dialog-error" role="alert">{{ errorMessage }}</p>
+          <div class="form-actions modal-fixed-footer"><button type="button" class="secondary-button" @click="requestCloseSourceDialog">取消</button><button type="button" class="button" @click="submitSourceDialog">保存新闻源</button></div>
+          </div>
+        </div>
+        <!-- SRC-07：新闻源弹窗未保存确认（四种关闭方式共用） -->
+        <div v-if="sourceCloseGuard.show" class="modal-backdrop z-overlay source-close-guard-backdrop" @click.self="resumeSourceEditing">
+          <div class="confirm-dialog source-close-guard-dialog" role="dialog" aria-modal="true" aria-labelledby="source-close-guard-title" @keydown.esc.stop="resumeSourceEditing">
+            <h3 id="source-close-guard-title">有未保存修改，确认离开？</h3>
+            <p class="muted">离开后本次填写的名称、URL、间隔等设置将不会被保存。</p>
+            <div class="confirm-dialog-actions">
+              <button type="button" class="secondary-button" @click="confirmDiscardSource">确认离开</button>
+              <button type="button" class="button primary" @click="resumeSourceEditing">继续编辑</button>
+            </div>
+          </div>
         </div>
       </div>
       <div v-else-if="newsView === 'runs'">
@@ -461,10 +620,14 @@
         </div>
       </div>
       <div v-else class="settings">
-        <label class="switch"
-          ><input v-model="automation.enabled" type="checkbox" /><span
-            >启用定时抓取与自动发布</span
-          ></label
+        <label class="switch slider-switch"
+          ><span class="switch-track" aria-hidden="true"></span><input
+            v-model="automation.enabled"
+            class="switch-input"
+            type="checkbox"
+            role="switch"
+            :aria-checked="automation.enabled ? 'true' : 'false'"
+          /><span class="switch-text">启用定时抓取与自动发布</span></label
         >
         <div class="form-grid">
           <label>时区<input v-model="automation.timezone" /></label
@@ -516,7 +679,7 @@
                   type="checkbox"
                   :value="loc.value"
                 />
-                <span>{{ loc.label }}</span>
+                <span>{{ localeOptionLabel(loc.value) }}</span>
               </label>
             </div>
             <small class="muted">新闻抓取后自动按勾选语言生成译文任务；未勾选则不翻译。</small></label
@@ -634,14 +797,20 @@
                     <span v-else class="muted">未翻译</span>
                   </td>
                   <td class="featured-cell" @click.stop>
-                    <input
-                      type="checkbox"
-                      class="featured-toggle"
-                      title="设为精选 / 取消精选（仅 1 篇）"
-                      :checked="isArticleRowFeatured(item)"
-                      :disabled="articleFeatureBusyId === item.id"
-                      @change="toggleArticleFeatured(item, $event)"
-                    />
+                    <button
+                      type="button"
+                      class="switch featured-toggle"
+                      v-featured-checked
+                      role="switch"
+                      :class="{ on: isArticleRowFeatured(item) }"
+                      :aria-checked="isArticleRowFeatured(item) ? 'true' : 'false'"
+                      :aria-label="isArticleRowFeatured(item) ? '取消精选' : '设为精选'"
+                      :disabled="articleFeatureBusyId === item.id || (item.status !== 'published' && !isArticleRowFeatured(item))"
+                      :title="item.status !== 'published' && !isArticleRowFeatured(item) ? '仅已发布文章可设为精选' : '设为精选 / 取消精选（仅 1 篇）'"
+                      @click="toggleArticleFeatured(item, !isArticleRowFeatured(item))"
+                    >
+                      <span class="switch-knob"></span>
+                    </button>
                   </td>
                   <td>{{ item.readCount || 0 }}</td>
                   <td>{{ formatDate(item.publishedAt) }}</td>
@@ -698,19 +867,30 @@
           </div>
 
       <!-- 独立文章编辑弹窗（新建/编辑统一，居中，左右布局） -->
-      <div v-if="showArticleModal" class="modal-backdrop" @click.self="showArticleModal = false">
-        <div class="modal-drawer article-editor-modal">
+      <div v-if="showArticleModal" class="modal-backdrop" @click.self="requestCloseArticle">
+        <div
+          class="modal-drawer article-editor-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="文章编辑"
+          @keydown.esc.stop.prevent="requestCloseArticle"
+          @keydown.tab="trapArticleFocus"
+        >
           <div class="modal-drawer-header">
             <div class="header-title-wrap">
               <span class="header-badge">{{ articleForm.id ? '编辑模式' : '新建草稿' }}</span>
               <h3>{{ articleForm.id ? ("编辑文章 #" + articleForm.id) : "撰写新文章" }}</h3>
             </div>
-            <button type="button" class="close-btn" title="关闭" @click="showArticleModal = false">✕</button>
+            <button type="button" class="close-btn" title="关闭" @click="requestCloseArticle">✕</button>
           </div>
           <div class="modal-drawer-body">
             <div class="article-editor-columns">
-              <!-- 左列：标题 / 摘要 / 正文（源码与渲染预览切换） -->
-              <div class="editor-col-left">
+              <!-- 左列：配置字段（标题 / 摘要 / 分类标签 / SEO / 推荐 / 封面 / 译文） -->
+              <div
+                class="editor-col-left"
+                @keydown.capture="onEditorLeftKeydown"
+                @focusin="onEditorLeftFocusIn"
+              >
                 <div class="field-group">
                   <label class="field-label-prominent">文章标题 <span class="required-star">*</span></label>
                   <input
@@ -720,7 +900,6 @@
                     placeholder="输入引人入胜的文章标题..."
                   />
                 </div>
-
                 <div class="field-group mt-3">
                   <label class="field-label-prominent">文章摘要 (Excerpt)</label>
                   <textarea
@@ -730,50 +909,6 @@
                     placeholder="简明扼要地概括文章核心亮点，用于列表展示与社交分享..."
                   ></textarea>
                 </div>
-
-                <div class="field-group mt-3">
-                  <div class="body-editor-head">
-                    <label class="field-label-prominent">正文内容 <span class="required-star">*</span></label>
-                    <div class="body-mode-switch">
-                      <button
-                        type="button"
-                        :class="{ active: bodyEditMode === 'editor' }"
-                        @click="switchBodyMode('editor')"
-                      >富文本编辑</button>
-                      <button
-                        type="button"
-                        :class="{ active: bodyEditMode === 'source' }"
-                        @click="switchBodyMode('source')"
-                      >HTML 源码</button>
-                      <button
-                        type="button"
-                        :class="{ active: bodyEditMode === 'preview' }"
-                        @click="switchBodyMode('preview')"
-                      >渲染预览</button>
-                    </div>
-                  </div>
-                  <AnnouncementRichTextEditor
-                    v-if="bodyEditMode === 'editor'"
-                    v-model="articleForm.bodyMarkdown"
-                    placeholder="开始撰写文章内容，支持粘贴富文本/源码片段..."
-                  />
-                  <textarea
-                    v-else-if="bodyEditMode === 'source'"
-                    v-model="articleForm.bodyMarkdown"
-                    class="html-source-area"
-                    rows="14"
-                    placeholder="粘贴或编辑 HTML 源码，例如 <h2>章节标题</h2><p>正文...</p>"
-                  ></textarea>
-                  <div
-                    v-else
-                    class="body-render-preview"
-                    v-html="renderedBodyPreview"
-                  ></div>
-                </div>
-              </div>
-
-              <!-- 右列：分类/标签/SEO/精选/封面 -->
-              <div class="editor-col-right">
                 <div class="meta-card">
                   <div class="meta-card-header">
                     <span class="meta-card-icon">⚙️</span>
@@ -801,14 +936,16 @@
                     </div>
                     <div class="form-row">
                       <label>标签
-                        <TagInput v-model="articleTagsInput" :suggestions="taxonomy.tags" placeholder="输入或选择标签" />
+                        <TagInput
+                          v-model="articleTagsInput"
+                          :suggestions="taxonomy.tags"
+                          :max="ARTICLE_TAG_LIMIT"
+                          :tag-max-width="ARTICLE_TAG_MAX_WIDTH"
+                          :limit-hint="`单篇最多 ${ARTICLE_TAG_LIMIT} 个标签，单个标签最长 ${ARTICLE_TAG_MAX_WIDTH} 字（中文按 1 字、英文按半角计）`"
+                          placeholder="输入或选择标签"
+                        />
                       </label>
-                      <button
-                        type="button"
-                        class="mini-create-btn mt-1"
-                        title="新建标签"
-                        @click="openInlineTaxonomyDialog('tag')"
-                      >＋ 新建标签</button>
+                      <!-- 无独立「新建标签」按钮：输入即建词，保存时自动补写进标签库 -->
                     </div>
                   </div>
                 </div>
@@ -831,8 +968,28 @@
                     <button
                       type="button"
                       class="button primary seo-auto-btn"
+                      :aria-disabled="seoGenerating || !articleBodyPlainText ? 'true' : 'false'"
+                      :title="articleBodyPlainText ? '根据正文生成 SEO 描述与关键词' : '请先填写正文内容'"
                       @click="generateSeoMeta"
-                    >✨ SEO 自动化：生成标题 / 描述 / 关键词</button>
+                    >{{ seoGenerating ? "生成中..." : "✨ SEO 自动化：生成描述 / 关键词" }}</button>
+                    <!-- 覆盖确认是「弹窗层」的问答，挂到 body 上：既避免与编辑器底部的「取消」重名，
+                         也让读屏软件把它当作独立 alertdialog 而不是左栏卡片里的普通内容 -->
+                    <Teleport to="body">
+                      <div
+                        v-if="seoOverwriteConfirm"
+                        class="action-confirm seo-overwrite-confirm seo-overwrite-overlay"
+                        role="alertdialog"
+                        aria-modal="true"
+                        aria-label="SEO 覆盖确认"
+                        @keydown.esc="cancelSeoOverwrite"
+                      >
+                        <p>已有内容（SEO 描述 / 关键词），是否覆盖？覆盖后将用本次生成结果替换。</p>
+                        <div class="action-confirm-actions">
+                          <button ref="seoOverwriteOkRef" type="button" class="button primary" @click="confirmSeoOverwrite">覆盖</button>
+                          <button type="button" class="secondary-button" @click="cancelSeoOverwrite">取消</button>
+                        </div>
+                      </div>
+                    </Teleport>
                     <div class="form-row">
                       <label>SEO 标题
                         <input v-model="articleForm.seoTitle" maxlength="160" placeholder="默认继承文章标题" />
@@ -841,6 +998,9 @@
                     <div class="form-row">
                       <label>SEO 描述 (Meta Description)
                         <textarea v-model="articleForm.seoDescription" rows="2" maxlength="300" placeholder="留空默认使用文章摘要..."></textarea>
+                        <span class="field-hint" :class="{ 'hint-warn': seoDescLength > 0 && (seoDescLength < 120 || seoDescLength > 160) }">
+                          建议 120~160 字，当前 {{ seoDescLength }} 字
+                        </span>
                       </label>
                     </div>
                     <div class="form-row">
@@ -911,10 +1071,18 @@
                   <div class="meta-card-body">
                     <small class="muted">建议比例 16:9 或 2:1，不超过 5MB</small>
                     <div class="upload-control-row mt-2">
-                      <label class="upload-file-btn">
-                        <input type="file" accept="image/*" class="sr-only" @change="handleImageUpload($event, 'coverImage')" />
-                        <span>本地上传</span>
-                      </label>
+                      <!-- 键盘可达：可见按钮承载焦点与点击，file input 只做隐藏的取值通道
+                           （原先 label>input.sr-only 让 Tab 落在屏幕外 1747px 的绝对定位元素上） -->
+                      <button type="button" class="upload-file-btn" @click="coverFileRef?.click()">本地上传</button>
+                      <input
+                        ref="coverFileRef"
+                        type="file"
+                        accept="image/*"
+                        class="sr-only"
+                        tabindex="-1"
+                        aria-hidden="true"
+                        @change="handleImageUpload($event, 'coverImage')"
+                      />
                       <button
                         v-if="articleForm.coverImage"
                         type="button"
@@ -933,10 +1101,16 @@
                     <details class="advanced-seo mt-2">
                       <summary>社交分享图 (OG Image)</summary>
                       <div class="upload-control-row mt-2">
-                        <label class="upload-file-btn">
-                          <input type="file" accept="image/*" class="sr-only" @change="handleImageUpload($event, 'ogImage')" />
-                          <span>本地上传</span>
-                        </label>
+                        <button type="button" class="upload-file-btn" @click="ogFileRef?.click()">本地上传</button>
+                        <input
+                          ref="ogFileRef"
+                          type="file"
+                          accept="image/*"
+                          class="sr-only"
+                          tabindex="-1"
+                          aria-hidden="true"
+                          @change="handleImageUpload($event, 'ogImage')"
+                        />
                         <button
                           v-if="articleForm.ogImage"
                           type="button"
@@ -950,122 +1124,177 @@
                     </details>
                   </div>
                 </div>
+                <div v-if="articleForm.id" class="translations-card mt-4">
+                  <div class="trans-header">
+                    <div>
+                      <h4>多语言译文管理</h4>
+                      <small>为海外用户构建多语言版本，支持一键 AI 全自动互译</small>
+                    </div>
+                    <div class="translation-actions">
+                      <button type="button" class="secondary-button" @click="selectedArticleLocales = ADMIN_TARGET_LOCALES.map((l) => l.value)">
+                        全选语言
+                      </button>
+                      <button type="button" class="secondary-button" @click="selectedArticleLocales = []">
+                        清空
+                      </button>
+                      <button
+                        v-if="translationForm.id"
+                        type="button"
+                        class="secondary-button"
+                        @click="saveTranslation"
+                      >
+                        保存当前译文
+                      </button>
+                      <button
+                        type="button"
+                        class="button primary sparkle-btn"
+                        :disabled="translationBusy || !selectedArticleLocales.length"
+                        @click="generateSelectedTranslations"
+                      >
+                        ✨ 生成所选语言译文（{{ selectedArticleLocales.length }}）
+                      </button>
+                    </div>
+                  </div>
+                  <div class="locale-checkboxes" role="group" aria-label="目标语言">
+                    <label v-for="l in ADMIN_TARGET_LOCALES" :key="l.value" class="locale-checkbox">
+                      <input
+                        v-model="selectedArticleLocales"
+                        type="checkbox"
+                        :value="l.value"
+                        :data-locale="l.value"
+                      />
+                      <span>{{ localeOptionLabel(l.value) }}</span>
+                      <small>{{ l.value }}</small>
+                    </label>
+                  </div>
+                  <div class="translation-rows">
+                    <div
+                      v-for="l in ADMIN_TARGET_LOCALES"
+                      :key="'trans-row-' + l.value"
+                      class="translation-row"
+                      :data-locale="l.value"
+                    >
+                      <span class="trans-locale">{{ localeOptionLabel(l.value) }} <small>{{ l.value }}</small></span>
+                      <span
+                        class="status-badge"
+                        :class="'badge-' + translationStatusKey(translationFor(l.value)?.status)"
+                      >{{ translationStatusText(translationFor(l.value)?.status) }}</span>
+                      <span v-if="translationFor(l.value)?.errorCode" class="error-text">
+                        {{ translationFor(l.value)?.errorCode }}
+                      </span>
+                      <template v-if="translationFor(l.value)">
+                        <button
+                          v-if="translationFor(l.value).status === 'published'"
+                          type="button"
+                          class="link-action text-amber-600"
+                          @click="unpublishTranslation(translationFor(l.value))"
+                        >下架</button>
+                        <button
+                          v-else
+                          type="button"
+                          class="link-action text-blue-600"
+                          @click="publishTranslation(translationFor(l.value))"
+                        >发布</button>
+                        <button
+                          v-if="translationFor(l.value).status !== 'published'"
+                          type="button"
+                          class="link-action danger"
+                          :disabled="translationBusy"
+                          @click="cancelTranslation(l.value)"
+                        >取消</button>
+                        <button
+                          type="button"
+                          class="link-action"
+                          @click="editTranslation(translationFor(l.value))"
+                        >编辑</button>
+                      </template>
+                      <button
+                        v-else
+                        type="button"
+                        class="link-action"
+                        :disabled="translationBusy"
+                        @click="generateTranslationFor(l.value)"
+                      >{{ translationBusy ? "处理中…" : "重试/翻译" }}</button>
+                    </div>
+                  </div>
+                  <div v-if="otherTranslations.length" class="translations-chips">
+                    <div v-for="t in otherTranslations" :key="t.id" class="trans-chip">
+                      <span class="trans-chip-title" @click="editTranslation(t)">🌐 {{ t.locale }} - {{ t.title || '无标题' }}</span>
+                      <span class="status-badge" :class="'badge-' + translationStatusKey(t.status)">{{ translationStatusText(t.status) }}</span>
+                      <button v-if="t.status !== 'published'" type="button" class="link-action text-blue-600" @click="publishTranslation(t)">发布</button>
+                      <button v-else type="button" class="link-action text-amber-600" @click="unpublishTranslation(t)">下架</button>
+                    </div>
+                  </div>
+                  <small class="translation-hint muted">
+                    中文为源语言；勾选语言后生成会逐语言创建真实翻译任务，状态实时来自译文记录。
+                  </small>
+                </div>
               </div>
-            </div>
 
-            <!-- 翻译管理子卡片 -->
-            <div v-if="articleForm.id" class="translations-card mt-4">
-              <div class="trans-header">
-                <div>
-                  <h4>多语言译文管理</h4>
-                  <small>为海外用户构建多语言版本，支持一键 AI 全自动互译</small>
-                </div>
-                <div class="translation-actions">
-                  <button type="button" class="secondary-button" @click="selectedArticleLocales = ADMIN_TARGET_LOCALES.map((l) => l.value)">
-                    全选语言
-                  </button>
-                  <button type="button" class="secondary-button" @click="selectedArticleLocales = []">
-                    清空
-                  </button>
-                  <button
-                    v-if="translationForm.id"
-                    type="button"
-                    class="secondary-button"
-                    @click="saveTranslation"
-                  >
-                    保存当前译文
-                  </button>
-                  <button
-                    type="button"
-                    class="button primary sparkle-btn"
-                    :disabled="translationBusy || !selectedArticleLocales.length"
-                    @click="generateSelectedTranslations"
-                  >
-                    ✨ 生成所选语言译文（{{ selectedArticleLocales.length }}）
-                  </button>
-                </div>
-              </div>
-              <div class="locale-checkboxes" role="group" aria-label="目标语言">
-                <label v-for="l in ADMIN_TARGET_LOCALES" :key="l.value" class="locale-checkbox">
-                  <input
-                    v-model="selectedArticleLocales"
-                    type="checkbox"
-                    :value="l.value"
-                    :data-locale="l.value"
+              <!-- 右列：正文编辑器（占满剩余高度，内部滚动） -->
+              <div class="editor-col-right">
+                <div class="field-group body-field-group">
+                  <div class="body-editor-head">
+                    <label class="field-label-prominent">正文内容 <span class="required-star">*</span></label>
+                    <div class="body-mode-switch">
+                      <button
+                        type="button"
+                        :class="{ active: bodyEditMode === 'editor' }"
+                        @click="switchBodyMode('editor')"
+                      >富文本编辑</button>
+                      <button
+                        type="button"
+                        :class="{ active: bodyEditMode === 'source' }"
+                        @click="switchBodyMode('source')"
+                      >HTML 源码</button>
+                      <button
+                        type="button"
+                        :class="{ active: bodyEditMode === 'preview' }"
+                        @click="switchBodyMode('preview')"
+                      >渲染预览</button>
+                    </div>
+                  </div>
+                  <div class="article-editor-shell">
+                  <AnnouncementRichTextEditor
+                    v-if="bodyEditMode === 'editor'"
+                    v-model="articleForm.bodyMarkdown"
+                    placeholder="开始撰写文章内容，支持粘贴富文本/源码片段..."
                   />
-                  <span>{{ l.label }}</span>
-                  <small>{{ l.value }}</small>
-                </label>
-              </div>
-              <div class="translation-rows">
-                <div
-                  v-for="l in ADMIN_TARGET_LOCALES"
-                  :key="'trans-row-' + l.value"
-                  class="translation-row"
-                  :data-locale="l.value"
-                >
-                  <span class="trans-locale">{{ l.label }} <small>{{ l.value }}</small></span>
-                  <span
-                    class="status-badge"
-                    :class="'badge-' + translationStatusKey(translationFor(l.value)?.status)"
-                  >{{ translationStatusText(translationFor(l.value)?.status) }}</span>
-                  <span v-if="translationFor(l.value)?.errorCode" class="error-text">
-                    {{ translationFor(l.value)?.errorCode }}
-                  </span>
-                  <template v-if="translationFor(l.value)">
-                    <button
-                      v-if="translationFor(l.value).status === 'published'"
-                      type="button"
-                      class="link-action text-amber-600"
-                      @click="unpublishTranslation(translationFor(l.value))"
-                    >下架</button>
-                    <button
-                      v-else
-                      type="button"
-                      class="link-action text-blue-600"
-                      @click="publishTranslation(translationFor(l.value))"
-                    >发布</button>
-                    <button
-                      v-if="translationFor(l.value).status !== 'published'"
-                      type="button"
-                      class="link-action danger"
-                      :disabled="translationBusy"
-                      @click="cancelTranslation(l.value)"
-                    >取消</button>
-                    <button
-                      type="button"
-                      class="link-action"
-                      @click="editTranslation(translationFor(l.value))"
-                    >编辑</button>
-                  </template>
-                  <button
+                  <textarea
+                    v-else-if="bodyEditMode === 'source'"
+                    v-model="articleForm.bodyMarkdown"
+                    class="html-source-area"
+                    rows="14"
+                    placeholder="粘贴或编辑 HTML 源码，例如 <h2>章节标题</h2><p>正文...</p>"
+                  ></textarea>
+                  <div
                     v-else
-                    type="button"
-                    class="link-action"
-                    :disabled="translationBusy"
-                    @click="generateTranslationFor(l.value)"
-                  >{{ translationBusy ? "处理中…" : "重试/翻译" }}</button>
+                    class="body-render-preview"
+                    v-html="renderedBodyPreview"
+                  ></div>
+                  </div>
                 </div>
               </div>
-              <div v-if="otherTranslations.length" class="translations-chips">
-                <div v-for="t in otherTranslations" :key="t.id" class="trans-chip">
-                  <span class="trans-chip-title" @click="editTranslation(t)">🌐 {{ t.locale }} - {{ t.title || '无标题' }}</span>
-                  <span class="status-badge" :class="'badge-' + translationStatusKey(t.status)">{{ translationStatusText(t.status) }}</span>
-                  <button v-if="t.status !== 'published'" type="button" class="link-action text-blue-600" @click="publishTranslation(t)">发布</button>
-                  <button v-else type="button" class="link-action text-amber-600" @click="unpublishTranslation(t)">下架</button>
-                </div>
-              </div>
-              <small class="translation-hint muted">
-                中文为源语言；勾选语言后生成会逐语言创建真实翻译任务，状态实时来自译文记录。
-              </small>
             </div>
           </div>
           <div class="modal-drawer-footer">
-            <button class="secondary-button" @click="showArticleModal = false">取消</button>
+            <button class="secondary-button" @click="requestCloseArticle">取消</button>
             <button v-if="articleForm.id" class="secondary-button" type="button" @click="previewArticle">新窗口预览</button>
             <button class="button primary" :disabled="articleSaving" @click="saveArticleAndClose">
               {{ articleSaving ? "保存中..." : "保存" }}
             </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 未保存修改确认：关闭动作先暂停（编辑器隐藏、内容留在内存），由用户决定继续编辑或丢弃 -->
+      <div v-if="articleCloseGuard.show" class="modal-backdrop z-overlay" @click.self="resumeArticleEditing">
+        <div class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="article-close-guard-title">
+          <h3 id="article-close-guard-title">有未保存修改，确认离开？</h3>
+          <p class="muted">离开后本次填写的标题、正文、分类标签与 SEO 内容将不会被保存。</p>
+          <div class="confirm-dialog-actions">
+            <button type="button" class="secondary-button" @click="confirmDiscardArticle">确认离开</button>
+            <button type="button" class="button primary" @click="resumeArticleEditing">继续编辑</button>
           </div>
         </div>
       </div>
@@ -1182,6 +1411,8 @@
             <template v-else>
               <label class="taxonomy-field">
                 {{ currentTaxonomyEntity }}名称 <span class="required-star">*</span>
+                <!-- 单个名称：用普通输入框。TagInput 是多值组件（字符串模式 emit "a,b"），
+                     之前取 $event[0] 只拿到首字符，且 blur 100ms 延迟提交导致点「保存」时 name 仍为空。 -->
                 <input
                   v-model="taxonomyDialog.name"
                   :placeholder="'请输入' + currentTaxonomyEntity + '名称'"
@@ -1571,6 +1802,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import { extractApiErrorMessage } from "@/utils/apiError";
 import AppLayout from '@/components/layout/AppLayout.vue'
 import AnnouncementRichTextEditor from '@/components/admin/announcements/AnnouncementRichTextEditor.vue'
 import { announcementEditorInitialHtml, normalizeAnnouncementEditorHtml } from '@/utils/announcementContent'
@@ -1682,6 +1914,115 @@ const selectedNews = ref<any>({});
 const newsEditorSession = ref(0);
 let newsEditRequest = 0;
 const newsEditorRef = ref<HTMLElement | null>(null);
+
+// 左栏下拉（分类 / 状态）：用 readonly input 作触发器，label 文本保持纯字段名
+const newsSelectOpen = ref<"" | "category" | "status">("");
+function toggleNewsSelect(scope: "category" | "status") {
+  newsSelectOpen.value = newsSelectOpen.value === scope ? "" : scope;
+}
+const newsCategoryLabelText = computed(() => selectedNews.value?.category || "未分类");
+const newsStatusLabelText = computed(
+  () => newsStatusSelectOptions.find((o) => o.value === selectedNews.value?.status)?.label || "草稿",
+);
+// 词条式标签：chip 文本由 CSS attr(data-tag) 渲染，保证 label 文本不被污染
+const newsTagDraft = ref("");
+const newsTagChips = computed<string[]>(() => {
+  const tags = selectedNews.value?.tags;
+  if (Array.isArray(tags)) return tags.map((t) => String(t));
+  return tags ? parseTagsText(String(tags)) : [];
+});
+function commitNewsTag() {
+  if (!selectedNews.value) return;
+  const value = newsTagDraft.value.trim();
+  if (!value) return;
+  const list = [...newsTagChips.value];
+  if (!list.some((t) => t.toLowerCase() === value.toLowerCase())) list.push(value);
+  selectedNews.value.tags = list;
+  newsTagDraft.value = "";
+}
+function removeNewsTag(index: number) {
+  if (!selectedNews.value) return;
+  const list = [...newsTagChips.value];
+  list.splice(index, 1);
+  selectedNews.value.tags = list;
+}
+function handleNewsTagBackspace() {
+  if (newsTagDraft.value || !newsTagChips.value.length) return;
+  removeNewsTag(newsTagChips.value.length - 1);
+}
+
+// 新闻编辑弹窗字段契约：译文条折叠态 / 状态 Select / 同步语言多选 / 发布时间
+const newsTranslationOpen = ref(false);
+const newsTitleTouched = ref(false);
+const newsStatusSelectOptions = [
+  { value: "draft", label: "草稿" },
+  { value: "published", label: "发布" },
+];
+const newsCategorySelectOptions = computed(() =>
+  (taxonomy.value.newsCategories || []).map((c) => ({ value: c, label: c })),
+);
+const LOCALE_ZH_LABEL: Record<string, string> = {
+  "en-US": "英语",
+  "ru-RU": "俄语",
+  "fr-FR": "法语",
+  "de-DE": "德语",
+};
+
+const LOCALE_NATIVE_LABEL: Record<string, string> = {
+  "en-US": "English",
+  "ru-RU": "Русский",
+  "fr-FR": "Français",
+  "de-DE": "Deutsch",
+};
+function localeZhLabel(value: string): string {
+  return LOCALE_ZH_LABEL[value] || value;
+}
+/**
+ * 语言项文案：中文名 + 母语名（两者相同时只留一个）。
+ * 后台文案为中文，PRD 1.6 要求不直接把语言代码/原始名丢给用户 → 「俄语 Русский」。
+ */
+function localeOptionLabel(value: string): string {
+  const native = LOCALE_NATIVE_LABEL[value] || value;
+  const zh = localeZhLabel(value);
+  return zh === native ? native : `${zh} ${native}`;
+}
+const newsSyncLocales = computed<string[]>({
+  get() {
+    const raw = selectedNews.value?.syncLocales;
+    if (Array.isArray(raw)) return raw.filter((v: any) => typeof v === "string" && v);
+    if (typeof raw === "string" && raw.trim()) {
+      return raw
+        .split(/[,;，]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    return ADMIN_TARGET_LOCALES.map((l) => l.value);
+  },
+  set(next: string[]) {
+    selectedNews.value = { ...selectedNews.value, syncLocales: [...next] };
+  },
+});
+function toLocalDateTimeInput(value: any): string {
+  if (!value) return "";
+  const raw = String(value);
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw.slice(0, 16);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+const newsPublishedAtLocal = computed<string>({
+  get() {
+    return toLocalDateTimeInput(selectedNews.value?.publishedAt);
+  },
+  set(next: string) {
+    const iso = next ? new Date(next).toISOString() : null;
+    selectedNews.value = { ...selectedNews.value, publishedAt: iso };
+  },
+});
+const newsTitleInvalid = computed(() => {
+  if (!newsTitleTouched.value) return false;
+  return String(selectedNews.value?.title || "").trim().length === 0;
+});
 const selectedNewsIds = ref<number[]>([]);
 const allNewsSelected = ref(false);
 const sources = ref<any[]>([]);
@@ -1802,13 +2143,14 @@ const newsTopRows = computed(() => rankings.value.filter((r: any) => r.contentTy
 const todayStats = computed(() => {
   const today = isoDate(new Date());
   const row = trends.value.find((r: any) => String(r.date || "").slice(0, 10) === today) as any;
-  const impressions = row?.impressions || 0;
-  const clicks = row?.clicks || 0;
+  const source = { ...row, ...overview.value };
+  const impressions = source?.impressions || 0;
+  const clicks = source?.clicks || 0;
   return {
-    visitors: row?.uniqueVisitors || 0,
-    views: row?.pageViews || 0,
-    reads: row?.reads || 0,
-    ctr: impressions > 0 ? clicks / impressions : 0,
+    visitors: source?.uniqueVisitors || 0,
+    views: source?.pageViews || 0,
+    reads: source?.reads || 0,
+    ctr: Number(source?.ctr ?? (impressions > 0 ? clicks / impressions : 0)),
   };
 });
 
@@ -1942,11 +2284,14 @@ function selectAIModel(value: string | number | boolean | null) {
 
 const translations = ref<any[]>([]);
 // 管理端多语言目标（中文为源语言，不在此列）
+// 1.6：语言名按界面语言显示（后台界面为中文 → 用中文语言名）
 const ADMIN_TARGET_LOCALES = [
-  { value: "en-US", label: "English" },
-  { value: "ru-RU", label: "Русский" },
-  { value: "fr-FR", label: "Français" },
-  { value: "de-DE", label: "Deutsch" },
+  // PRD R9：语言选项按 i18n 口径显示原生语言名（English / Русский / Français / Deutsch），
+  // 五种界面语言下都一致，所以走词条而不是硬编码中文名。
+  { value: "en-US", get label() { return t("contentV04.language.english"); } },
+  { value: "ru-RU", get label() { return t("contentV04.language.russian"); } },
+  { value: "fr-FR", get label() { return t("contentV04.language.french"); } },
+  { value: "de-DE", get label() { return t("contentV04.language.german"); } },
 ];
 const selectedArticleLocales = ref<string[]>([]);
 const translationBusy = ref(false);
@@ -1955,6 +2300,8 @@ const newsTranslationSummaries = ref<Record<number, any[]>>({});
 const newsTranslationTasks = ref<any[]>([]);
 const TRANSLATION_STATUS_TEXT: Record<string, string> = {
   draft: "待发布",
+  // 保存时按 syncLocales 新建的待翻译记录（后端 domain.ContentTranslationDraft）
+  translation_draft: "待翻译",
   review: "待发布",
   published: "已发布",
   unpublished: "已下架",
@@ -2107,28 +2454,92 @@ const sourceForm = ref<any>({
   intervalMinutes: null,
   enabled: true,
 });
-const sourceFormErrors = ref<{ name: string; url: string }>({ name: "", url: "" });
+const sourceFormErrors = ref<{ name: string; url: string; interval: string }>({ name: "", url: "", interval: "" });
+// SRC-03：抓取间隔范围（分钟），留空表示继承全局
+function validateIntervalText(raw: any): string {
+  const text = String(raw ?? "").trim();
+  if (!text) return "";
+  const n = Number(text);
+  if (!Number.isFinite(n) || n < 15 || n > 1440) return "抓取间隔需在 15–1440 分钟之间";
+  return "";
+}
 // S5：字段级校验（红字提示 + 提交按钮禁用）
-function validateSourceField(field: "name" | "url") {
-  const name = String(sourceForm.value.name || "").trim();
-  const url = String(sourceForm.value.url || "").trim();
+function validateSourceField(field: "name" | "url" | "interval") {
+  const name = String(sourceDraft.value.name || "").trim();
+  const url = String(sourceDraft.value.url || "").trim();
   if (field === "name") {
     sourceFormErrors.value.name = name ? "" : "必填";
+    return;
+  }
+  if (field === "interval") {
+    // SRC-03：留空=继承全局；填了就必须落在 15–1440 分钟内
+    sourceFormErrors.value.interval = validateIntervalText(sourceDraft.value.intervalMinutes);
     return;
   }
   if (!url) sourceFormErrors.value.url = "URL 必填";
   else if (!/^https?:\/\//i.test(url)) sourceFormErrors.value.url = "URL 需以 http:// 或 https:// 开头";
   else sourceFormErrors.value.url = "";
 }
-const sourceCreateBlockedReason = computed(() => {
-  const name = String(sourceForm.value.name || "").trim();
-  const url = String(sourceForm.value.url || "").trim();
-  if (!name && !url) return "请填写来源名称与 URL";
-  if (!name) return "请填写来源名称";
-  if (!url) return "请填写公开 RSS/Atom/JSON URL";
-  return "";
+const sourceDialogCreating = ref(false);
+const sourceDialogOpen = computed(() => sourceDialogCreating.value || !!selectedSource.value.id);
+const sourceDraft = computed<any>(() => (sourceDialogCreating.value ? sourceForm.value : selectedSource.value));
+function emptySourceForm() {
+  return { name: "", url: "", sourceType: "rss", mappingJsonText: "", intervalMinutes: null, enabled: true, category: "", language: "zh-CN", rateLimitPerMinute: 60 };
+}
+function openCreateSource() {
+  selectedSource.value = {};
+  sourceForm.value = emptySourceForm();
+  sourceFormErrors.value = { name: "", url: "", interval: "" };
+  sourceDialogCreating.value = true;
+}
+function closeSourceDialog() {
+  sourceDialogCreating.value = false;
+  selectedSource.value = {};
+  sourceFormErrors.value = { name: "", url: "", interval: "" };
+  sourceCloseGuard.value.show = false;
+  sourceSnapshot = "";
+}
+// SRC-07：新闻源弹窗「有未保存修改，确认离开？」（与 NE-13/NE-14 一致的应用内确认）
+const sourceCloseGuard = ref({ show: false });
+let sourceSnapshot = "";
+function sourceFormSignature(): string {
+  const d = sourceDraft.value || {};
+  return JSON.stringify([
+    d.name ?? "", d.url ?? "", d.sourceType ?? "", d.category ?? "", d.language ?? "",
+    d.intervalMinutes ?? null, d.rateLimitPerMinute ?? null, d.enabled !== false,
+    d.mappingJsonText ?? "",
+  ]);
+}
+function isSourceDirty(): boolean {
+  return sourceDialogOpen.value && sourceFormSignature() !== sourceSnapshot;
+}
+function requestCloseSourceDialog() {
+  if (!isSourceDirty()) {
+    closeSourceDialog();
+    return;
+  }
+  sourceCloseGuard.value.show = true;
+}
+function resumeSourceEditing() {
+  sourceCloseGuard.value.show = false;
+}
+function confirmDiscardSource() {
+  sourceCloseGuard.value.show = false;
+  closeSourceDialog();
+}
+watch(sourceDialogOpen, async (open) => {
+  sourceCloseGuard.value.show = false;
+  if (!open) {
+    sourceSnapshot = "";
+    return;
+  }
+  await nextTick();
+  sourceSnapshot = sourceFormSignature();
 });
-const sourceCreateDisabled = computed(() => !!sourceCreateBlockedReason.value);
+async function submitSourceDialog() {
+  if (sourceDialogCreating.value) await createSource();
+  else await saveSource();
+}
 // R1-02/S6：全局抓取间隔（分钟），来自自动化设置 fetchCron，如 `0 */15 * * * *` → 15
 function globalFetchIntervalMinutes(): number {
   const parts = String(automation.value?.fetchCron || "").trim().split(/\s+/);
@@ -2265,35 +2676,168 @@ const seoScoreLevel = computed(() =>
   seoScore.value >= 80 ? "score-good" : seoScore.value >= 50 ? "score-mid" : "score-bad",
 );
 
-/* SEO 自动化：按最佳实践一键生成标题/描述/关键词 */
-function generateSeoMeta() {
-  const f = articleForm.value;
-  const bodyText = String(f.bodyMarkdown || "")
+/* SEO 自动化：按最佳实践一键生成描述/关键词（标题与 slug 保持不变） */
+const SEO_DESC_MIN = 120;
+const SEO_DESC_MAX = 160;
+const SEO_KW_MIN = 5;
+const SEO_KW_MAX = 8;
+const SEO_STOPWORDS = new Set([
+  "the", "and", "for", "with", "that", "this", "from", "are", "was", "were", "will", "can",
+  "has", "have", "not", "but", "you", "your", "our", "all", "any", "how", "why", "what",
+  "我们", "你们", "他们", "以及", "但是", "因此", "如果", "可以", "一个", "这个", "那个",
+  "什么", "因为", "所以", "已经", "还有", "同时", "进行", "通过", "对于", "需要", "支持",
+  "使用", "的是", "了的", "是一", "在的",
+]);
+const seoGenerating = ref(false);
+const seoOverwriteConfirm = ref(false);
+const seoOverwriteOkRef = ref<HTMLButtonElement | null>(null);
+const coverFileRef = ref<HTMLInputElement | null>(null);
+const ogFileRef = ref<HTMLInputElement | null>(null);
+
+/**
+ * 左栏键盘焦点滚动策略（AE-19）：
+ * 浏览器默认把新获得焦点的元素滚到可视区「中间」，于是按 Tab 前进时，
+ * 后面的字段反而出现在前面字段的上方，视觉顺序与 Tab 顺序相反。
+ * 这里统一改为「焦点字段对齐滚动面板顶部」：位置稳定（不会因控件高度不同上下浮动），
+ * 字段完整可见，且 Tab 前进时视觉 y 单调不后退。
+ */
+let leftPreFocusScrollTop: number | null = null;
+function onEditorLeftKeydown(e: KeyboardEvent) {
+  if (e.key !== "Tab") return;
+  const left = e.currentTarget as HTMLElement | null;
+  leftPreFocusScrollTop = left ? left.scrollTop : 0;
+}
+function onEditorLeftFocusIn(e: FocusEvent) {
+  const left = e.currentTarget as HTMLElement | null;
+  const el = e.target as HTMLElement | null;
+  const pre = leftPreFocusScrollTop;
+  leftPreFocusScrollTop = null;
+  // 只接管键盘 Tab 造成的焦点变化：鼠标点击时尊重用户当前滚动位置
+  if (!left || !el || pre === null || el === left) return;
+  const elRect = el.getBoundingClientRect();
+  const boxRect = left.getBoundingClientRect();
+  const pad = 12;
+  // 元素在滚动内容中的绝对位置（与当前 scrollTop 无关）
+  const contentTop = elRect.top - boxRect.top + left.scrollTop;
+  const max = Math.max(0, left.scrollHeight - left.clientHeight);
+  const next = Math.max(0, Math.min(max, Math.round(contentTop - pad)));
+  if (next !== left.scrollTop) left.scrollTop = next;
+}
+
+/** 精选开关是 role=switch 的 button：补一个 checked 反射属性，语义/自动化都与原生开关一致 */
+const vFeaturedChecked = {
+  mounted(el: HTMLElement) {
+    if (!("checked" in el)) {
+      Object.defineProperty(el, "checked", {
+        configurable: true,
+        get: () => el.getAttribute("aria-checked") === "true",
+        set: (v: boolean) => el.setAttribute("aria-checked", v ? "true" : "false"),
+      });
+    }
+  },
+};
+const articleBodyPlainText = computed(() =>
+  String(articleForm.value.bodyMarkdown || "")
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
-    .trim();
-  const baseTitle = String(f.title || "").trim();
-  if (baseTitle) {
-    f.seoTitle = baseTitle.length > 55 ? `${baseTitle.slice(0, 55)}…` : `${baseTitle} | CCAI`;
-    if (f.seoTitle.length > 60) f.seoTitle = baseTitle.slice(0, 57) + "...";
+    .trim(),
+);
+
+/** 描述：按句累加至 120~160 字，避免半句截断 */
+function buildSeoDescription(source: string): string {
+  const text = source.replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  const sentences = text.match(/[^。！？；.!?;]+[。！？；.!?;]?/g) || [text];
+  let out = "";
+  for (const raw of sentences) {
+    const s = raw.trim();
+    if (!s) continue;
+    if (out && out.length + s.length > SEO_DESC_MAX) break;
+    out += s;
+    if (out.length >= SEO_DESC_MIN) break;
   }
-  const descSource = String(f.excerpt || "").trim() || bodyText;
-  if (descSource) {
-    f.seoDescription = descSource.slice(0, 150).replace(/[。；;]\s*[^。；;]*$/, "") + (descSource.length > 150 ? "。" : "");
-  }
-  const words = (baseTitle + " " + bodyText.slice(0, 400))
-    .split(/[\s,，、。；;:：!！?？·\-—/()（）[\]]+/)
-    .map((w) => w.trim())
-    .filter((w) => w.length >= 2);
-  const freq = new Map<string, number>();
-  for (const w of words) freq.set(w, (freq.get(w) || 0) + 1);
-  const keywords = [...freq.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([w]) => w);
-  const tagKws = String(f.tags || "").split(",").map((t) => t.trim()).filter(Boolean);
-  f.seoKeywords = [...new Set([...tagKws, ...keywords])].slice(0, 10).join(", ");
+  if (!out) out = text;
+  return out.length > SEO_DESC_MAX ? out.slice(0, SEO_DESC_MAX) : out;
 }
+
+/** 关键词：中文按 2~3 元 n-gram、英文按词频统计，去重叠后取 5~8 个 */
+function buildSeoKeywords(f: any, bodyText: string): string[] {
+  const text = `${String(f.title || "")} ${bodyText}`;
+  const scored = new Map<string, number>();
+  const bump = (word: string, weight: number) => {
+    if (!word || SEO_STOPWORDS.has(word.toLowerCase())) return;
+    scored.set(word, (scored.get(word) || 0) + weight);
+  };
+  for (const w of text.match(/[A-Za-z][A-Za-z0-9+#._-]{1,19}/g) || []) {
+    bump(w.replace(/[._-]+$/, ""), 2);
+  }
+  for (const run of text.match(/[\u4e00-\u9fa5]+/g) || []) {
+    for (const n of [2, 3]) {
+      for (let i = 0; i + n <= run.length; i++) bump(run.slice(i, i + n), n);
+    }
+  }
+  const ranked = [...scored.entries()].sort((a, b) => b[1] - a[1] || b[0].length - a[0].length);
+  const picked: string[] = [];
+  for (const [w] of ranked) {
+    if (picked.length >= SEO_KW_MAX) break;
+    if (picked.some((p) => p.includes(w) || w.includes(p))) continue;
+    picked.push(w);
+  }
+  if (picked.length < SEO_KW_MIN) {
+    for (const [w] of ranked) {
+      if (picked.length >= SEO_KW_MIN) break;
+      if (!picked.includes(w)) picked.push(w);
+    }
+  }
+  return picked;
+}
+
+async function runSeoGeneration() {
+  const f = articleForm.value;
+  const bodyText = articleBodyPlainText.value;
+  if (!bodyText) return;
+  seoOverwriteConfirm.value = false;
+  seoGenerating.value = true;
+  try {
+    // 留出可感知的生成态，避免「点了没反应」
+    await new Promise((resolve) => setTimeout(resolve, 360));
+    const desc = buildSeoDescription(
+      [String(f.excerpt || "").trim(), bodyText].filter(Boolean).join(" "),
+    );
+    if (desc) f.seoDescription = desc;
+    const keywords = buildSeoKeywords(f, bodyText);
+    if (keywords.length) f.seoKeywords = keywords.join(", ");
+  } finally {
+    seoGenerating.value = false;
+  }
+}
+
+function generateSeoMeta() {
+  if (seoGenerating.value) return;
+  if (!articleBodyPlainText.value) {
+    // 空正文时按钮呈禁用语义（aria-disabled），但仍要给出明确原因，不能「点了没反应」
+    toast("warning", "请先填写正文内容，再生成 SEO 描述与关键词");
+    return;
+  }
+  const f = articleForm.value;
+  if (String(f.seoDescription || "").trim() || String(f.seoKeywords || "").trim()) {
+    seoOverwriteConfirm.value = true;
+    return;
+  }
+  void runSeoGeneration();
+}
+function confirmSeoOverwrite() {
+  void runSeoGeneration();
+}
+function cancelSeoOverwrite() {
+  seoOverwriteConfirm.value = false;
+}
+/* 覆盖确认出现即把焦点交给主操作，键盘用户不必再 Tab 找按钮；Esc 关闭 */
+watch(seoOverwriteConfirm, async (open) => {
+  if (!open) return;
+  await nextTick();
+  seoOverwriteOkRef.value?.focus();
+});
 
 /* 弹窗内新建分类/标签（复用 taxonomy mutate 接口） */
 function openInlineTaxonomyDialog(scope: string) {
@@ -2345,21 +2889,36 @@ const pageMeta = (v: any) => {
     total: Number(payload.total ?? 0),
   };
 };
-async function loadList(key: ContentListKey, request: () => Promise<void>) {
+// 列表请求代号：同类型的后发请求会作废先发请求，避免「翻页/搜索时先发的慢响应后到」把新结果覆盖掉
+// （NE-15 偶发：刷新页面后立刻点查询，首屏那次的响应晚到，列表被重置回全量，看不到刚保存的行）
+const listRequestSeq: Record<string, number> = {};
+async function loadList(
+  key: ContentListKey,
+  request: (isLatest: () => boolean) => Promise<void>,
+) {
+  const seq = (listRequestSeq[key] = (listRequestSeq[key] || 0) + 1);
+  const isLatest = () => listRequestSeq[key] === seq;
   const state = listState.value[key]; state.loading = true; state.error = "";
-  try { await request(); }
-  catch (error) { state.error = error instanceof Error ? error.message : "列表加载失败"; }
-  finally { state.loading = false; }
+  try { await request(isLatest); }
+  catch (error) { if (isLatest()) state.error = error instanceof Error ? error.message : "列表加载失败"; }
+  finally { if (isLatest()) state.loading = false; }
 }
 const formatDate = (v: string) => (v ? new Date(v).toLocaleDateString() : "-");
 const formatDateTime = (v: string) =>
   v ? new Date(v).toLocaleString() : "-";
-async function runAdmin(action: () => Promise<void>, message: string) {
+async function runAdmin(
+  action: () => Promise<void>,
+  message: string,
+  onError?: (msg: string) => void,
+) {
   errorMessage.value = "";
   try {
     await action();
   } catch (error) {
-    errorMessage.value = error instanceof Error && error.message ? error.message : message;
+    // 接口拦截器 reject 的是 { message, code } 普通对象，不是 Error；用统一工具透出后端文案（如「抓取间隔需在 15–1440 分钟之间」）
+    const msg = extractApiErrorMessage(error, message);
+    errorMessage.value = msg;
+    onError?.(msg);
   }
 }
 const parseMappingJSON = (raw: unknown): Record<string, string> => {
@@ -2400,7 +2959,7 @@ const parseMappingJSON = (raw: unknown): Record<string, string> => {
 async function loadNews(pageOrEvent: number | Event = newsPage.value) {
   const page = typeof pageOrEvent === "number" ? pageOrEvent : 1;
   newsPage.value = Math.max(1, page);
-  await loadList("news", async () => {
+  await loadList("news", async (isLatest) => {
   const { data } = await contentAPI.listNews({
     page: newsPage.value,
     page_size: 20,
@@ -2411,6 +2970,7 @@ async function loadNews(pageOrEvent: number | Event = newsPage.value) {
     from: newsFrom.value || undefined,
     to: newsTo.value || undefined,
   });
+  if (!isLatest()) return; // 已发起更新的列表请求，丢弃这次迟到的响应
   news.value = unwrap(data);
   const meta = pageMeta(data);
   newsTotal.value = meta.total;
@@ -2473,12 +3033,13 @@ async function bulkArticles(action: string) {
 }
 async function loadSources(page = sourcePage.value) {
   sourcePage.value = Math.max(1, page);
-  await loadList("sources", async () => {
+  await loadList("sources", async (isLatest) => {
   const { data } = await contentAPI.listSources({
     page: sourcePage.value,
     page_size: 20,
     include_deleted: true,
   });
+  if (!isLatest()) return;
   sources.value = unwrap(data);
   const meta = pageMeta(data);
   sourceTotal.value = meta.total;
@@ -2486,11 +3047,12 @@ async function loadSources(page = sourcePage.value) {
 }
 async function loadRuns(page = runPage.value) {
   runPage.value = Math.max(1, page);
-  await loadList("runs", async () => {
+  await loadList("runs", async (isLatest) => {
   const { data } = await contentAPI.listFetchRuns({
     page: runPage.value,
     page_size: 20,
   });
+  if (!isLatest()) return;
   runs.value = unwrap(data);
   const meta = pageMeta(data);
   runTotal.value = meta.total;
@@ -2499,7 +3061,7 @@ async function loadRuns(page = runPage.value) {
 async function loadArticles(pageOrEvent: number | Event = articlePage.value) {
   const page = typeof pageOrEvent === "number" ? pageOrEvent : 1;
   articlePage.value = Math.max(1, page);
-  await loadList("articles", async () => {
+  await loadList("articles", async (isLatest) => {
   const { data } = await contentAPI.listArticles({
     page: articlePage.value,
     page_size: 20,
@@ -2515,6 +3077,7 @@ async function loadArticles(pageOrEvent: number | Event = articlePage.value) {
     min_reads: articleMinReads.value || undefined,
     max_reads: articleMaxReads.value || undefined,
   });
+  if (!isLatest()) return; // 同上：迟到的旧响应不得覆盖新结果
   articles.value = unwrap(data);
   // D2：把当前结果里出现过的 model 名并入筛选下拉，保证存量数据可被筛出
   const seenModels = new Set(articleModelNames.value);
@@ -2597,11 +3160,109 @@ async function loadBI() {
     biLoading.value = false;
   }
 }
+const newsCloseGuard = ref({ show: false });
+const newsSnapshot = ref("");
+const newsFormTouched = ref(false);
+let newsGuardAcknowledged = false;
+
+/** 新闻表单签名：只取会写回后端的字段，避免展示态字段造成误判 */
+function newsFormSignature(): string {
+  const n = selectedNews.value || ({} as any);
+  return JSON.stringify({
+    title: String(n.title ?? ""),
+    originalUrl: String(n.originalUrl ?? ""),
+    category: String(n.category ?? ""),
+    tags: Array.isArray(n.tags) ? n.tags.map((t: unknown) => String(t)) : [],
+    status: String(n.status ?? ""),
+    slug: String(n.slug ?? ""),
+    locale: String(n.locale ?? ""),
+    seoTitle: String(n.seoTitle ?? ""),
+    seoDescription: String(n.seoDescription ?? ""),
+    sourceName: String(n.sourceName ?? ""),
+    summary: String(n.summary ?? ""),
+    bodyHtml: String(n.bodyHtml ?? n.bodyHTML ?? ""),
+  });
+}
+function isNewsDirty(): boolean {
+  if (!selectedNews.value?.id || !newsSnapshot.value) return false;
+  // 用户必须真实动过表单，避免编辑器挂载时的规范化被当成「未保存修改」
+  if (!newsFormTouched.value) return false;
+  return newsFormSignature() !== newsSnapshot.value;
+}
+/** 键盘焦点锁在给定根节点内：Tab 到末尾回开头，Shift+Tab 到开头跳末尾 */
+function trapFocusWithin(root: HTMLElement | null, ev: KeyboardEvent) {
+  if (!root) return;
+  const nodes = Array.from(
+    root.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((el) => el.getClientRects().length > 0);
+  if (!nodes.length) return;
+  const first = nodes[0];
+  const last = nodes[nodes.length - 1];
+  const active = document.activeElement as HTMLElement | null;
+  if (!ev.shiftKey && active === last) {
+    ev.preventDefault();
+    first.focus();
+  } else if (ev.shiftKey && active === first) {
+    ev.preventDefault();
+    last.focus();
+  }
+}
+function trapNewsFocus(ev: KeyboardEvent) {
+  trapFocusWithin(newsEditorRef.value as HTMLElement | null, ev);
+}
+function trapNewsGuardFocus(ev: KeyboardEvent) {
+  trapFocusWithin(
+    document.querySelector(".news-close-guard-dialog") as HTMLElement | null,
+    ev,
+  );
+}
+/** 关闭入口统一走这里：有未保存修改先确认 */
+function requestCloseNewsEditor() {
+  if (!selectedNews.value?.id) return;
+  if (newsGuardAcknowledged || !isNewsDirty()) {
+    closeNewsEditor();
+    return;
+  }
+  newsCloseGuard.value.show = true;
+  void nextTick(() => {
+    const keep = document.querySelector(".news-close-guard-dialog .button.primary") as HTMLElement | null;
+    keep?.focus();
+  });
+}
+function resumeNewsEditing() {
+  newsCloseGuard.value.show = false;
+  // 用户已明确选择「继续编辑」，接着再点关闭不重复追问；一旦改动表单会重新置脏
+  newsGuardAcknowledged = true;
+  void nextTick(() => (newsEditorRef.value as HTMLElement | null)?.focus?.());
+}
+function confirmDiscardNews() {
+  closeNewsEditor();
+}
+
+watch(
+  () => selectedNews.value?.id,
+  async (id) => {
+    newsCloseGuard.value.show = false;
+    newsGuardAcknowledged = false;
+    newsFormTouched.value = false;
+    newsSnapshot.value = "";
+    if (!id) return;
+    await nextTick();
+    newsSnapshot.value = newsFormSignature();
+  },
+);
+
 function closeNewsEditor() {
   newsEditRequest += 1
   newsEditorSession.value += 1
   selectedNews.value = {}
   newsTranslationTasks.value = []
+  newsCloseGuard.value.show = false
+  newsSnapshot.value = ""
+  newsFormTouched.value = false
+  newsGuardAcknowledged = false
 }
 
 async function editNews(item: any) {
@@ -2656,8 +3317,8 @@ async function saveNews() {
         String(selectedNews.value.bodyHtml || selectedNews.value.bodyHTML || ""),
       ),
     });
+    closeNewsEditor();
     await loadNews();
-    await editNews(selectedNews.value);
     toast("success", "新闻已保存");
   } catch {
     errorMessage.value = "新闻保存失败，请检查标题、Slug 和正文";
@@ -2712,6 +3373,16 @@ async function loadAutomation() {
 }
 
 // ---- 新闻行的发表 / 删除：必须走 /admin/content/news 接口（新闻与文章是两套表） ----
+/**
+ * 「发表」按钮的可点判据必须与后端 validateNewsItemPublishable 一致：
+ * 正文 HTML、正文纯文本、摘要、来源名四者都非空，否则 PublishNewsItem 直接 409。
+ * 这里先在前端置灰，避免用户点到一个必然失败的按钮。
+ */
+function newsPublishable(item: any): boolean {
+  const has = (v: unknown) => String(v ?? "").trim().length > 0;
+  if (!item) return false;
+  return has(item.bodyHtml) && has(item.bodyText) && has(item.summary) && has(item.sourceName);
+}
 async function publishNews(id: number) {
   await runAdmin(async () => {
     await contentAPI.publishNews(id);
@@ -2755,7 +3426,7 @@ async function refresh() {
 async function createSource() {
   const name = String(sourceForm.value.name || "").trim();
   const url = String(sourceForm.value.url || "").trim();
-  sourceFormErrors.value = { name: "", url: "" };
+  sourceFormErrors.value = { name: "", url: "", interval: "" };
   if (!name) sourceFormErrors.value.name = "必填";
   if (!url) {
     sourceFormErrors.value.url = "URL 必填";
@@ -2769,35 +3440,33 @@ async function createSource() {
   await runAdmin(async () => {
     const mappingJson = parseMappingJSON(sourceForm.value.mappingJsonText);
     // R1-02：留空必须提交 NULL（继承全局），不得用 15 覆盖（PRD v3.3 L121/L168）
-    const rawInterval = Number(sourceForm.value.intervalMinutes);
-    const intervalMinutes = Number.isFinite(rawInterval) && rawInterval > 0 ? rawInterval : null;
+    // SRC-03：只有空值才算「跟随全局」；0/14/1441 原样提交，由后端做 15–1440 范围校验
+    const rawText = String(sourceForm.value.intervalMinutes ?? "").trim();
+    const intervalMinutes = rawText === "" ? null : Number(rawText);
     await contentAPI.createSource({
       ...sourceForm.value,
       name,
       url,
       mappingJson,
-      language: "zh-CN",
+      language: String(sourceForm.value.language || "").trim() || "zh-CN",
       enabled: sourceForm.value.enabled !== false,
       intervalMinutes,
-      rateLimitPerMinute: 60,
+      rateLimitPerMinute: Number(sourceForm.value.rateLimitPerMinute) > 0 ? Number(sourceForm.value.rateLimitPerMinute) : 60,
       authorizationNote: "公开 feed，已获授权",
       robotsPolicy: "遵守 robots 规则",
     });
     const createdEnabled = sourceForm.value.enabled !== false;
-    sourceForm.value = {
-      name: "",
-      url: "",
-      sourceType: "rss",
-      mappingJsonText: "",
-      intervalMinutes: null,
-      enabled: true,
-    };
+    sourceForm.value = emptySourceForm();
+    sourceDialogCreating.value = false;
     await loadSources();
     const scheduleText = intervalMinutes
       ? `每 ${intervalMinutes} 分钟抓取`
       : `跟随全局（${globalFetchIntervalMinutes()} 分钟）`;
     toast("success", `新闻源已创建（${createdEnabled ? "已启用" : "已停用"}，${scheduleText}）`);
-  }, "新闻源创建失败");
+  }, "新闻源创建失败", (msg) => {
+    // SRC-03：后端对间隔做 15–1440 校验并回 400，这里把范围文案落到字段红字上
+    if (/间隔|interval/i.test(msg)) sourceFormErrors.value.interval = msg;
+  });
 }
 async function toggleSource(s: any) {
   await runAdmin(async () => {
@@ -2806,6 +3475,14 @@ async function toggleSource(s: any) {
   }, "新闻源状态更新失败");
 }
 async function editSource(source: any) {
+  // 软删除的行只提供「恢复」：详情接口（不带 include_deleted）对软删行返回 404，
+  // 这里提前拦截，避免发出必然 404 的请求（SRC-08：软删除行只显示「恢复」）。
+  if (source?.deletedAt) {
+    toast("error", "该新闻源已删除，请先恢复后再编辑");
+    return;
+  }
+  sourceDialogCreating.value = false;
+  sourceFormErrors.value = { name: "", url: "", interval: "" };
   try {
     const { data } = await contentAPI.getSource(source.id);
     selectedSource.value = data?.data || data || { ...source };
@@ -2817,10 +3494,16 @@ async function editSource(source: any) {
 }
 async function saveSource() {
   if (!selectedSource.value.id) return;
+  validateSourceField("name");
+  validateSourceField("url");
+  if (sourceFormErrors.value.name || sourceFormErrors.value.url) {
+    toast("error", "请先补全新闻源名称与 URL");
+    return;
+  }
   await runAdmin(async () => {
     // R1-02：清空间隔后保存必须写回 NULL（继承全局），不能残留旧值或 0
-    const rawInterval = Number(selectedSource.value.intervalMinutes);
-    const intervalMinutes = Number.isFinite(rawInterval) && rawInterval > 0 ? rawInterval : null;
+    const rawText = String(selectedSource.value.intervalMinutes ?? "").trim();
+    const intervalMinutes = rawText === "" ? null : Number(rawText);
     const payload = {
       ...selectedSource.value,
       intervalMinutes,
@@ -2831,7 +3514,8 @@ async function saveSource() {
       payload,
     );
     await loadSources();
-    await editSource(selectedSource.value);
+    selectedSource.value = {};
+    toast("success", "新闻源已保存");
   }, "新闻源保存失败");
 }
 async function restoreSource(id: number) {
@@ -3124,14 +3808,14 @@ function isArticleRowFeatured(item: any): boolean {
   return tags.some((t) => String(t).trim() === FEATURED_TAG || String(t).trim().toLowerCase() === "featured");
 }
 
-async function toggleArticleFeatured(item: any, ev: Event) {
+async function toggleArticleFeatured(item: any, nextChecked: boolean) {
   if (!item?.id || articleFeatureBusyId.value === item.id) return;
-  const checked = (ev.target as HTMLInputElement)?.checked ?? false;
+  const checked = Boolean(nextChecked);
   articleFeatureBusyId.value = item.id;
   try {
     await (contentAPI.mutateTaxonomy as any)({
-      scope: "article_feature",
-      action: checked ? "feature_article" : "unfeature_article",
+      scope: "featured_article",
+      action: checked ? "set" : "unset",
       name: String(item.id),
     });
     // 本地同步：精选为单选，其他文章自动落选；后端已写入 tags + taxonomy 并失效公开缓存
@@ -3148,8 +3832,8 @@ async function toggleArticleFeatured(item: any, ev: Event) {
       }
     }
   } catch (e) {
-    (ev.target as HTMLInputElement).checked = !checked;
-    errorMessage.value = "精选状态更新失败";
+    const reason = (e as any)?.reason || (e as any)?.response?.data?.reason;
+    errorMessage.value = reason === "article_not_published" ? "仅已发布文章可设为精选" : "精选状态更新失败";
   } finally {
     articleFeatureBusyId.value = null;
   }
@@ -3235,9 +3919,12 @@ async function saveArticleAndClose() {
   articleSaving.value = true;
   try {
     await saveArticle();
-    showArticleModal.value = false;
+    // 先关弹窗再刷新列表：保存成功即刻反馈，不让用户等网络请求
+    closeArticleEditor();
+    toast("success", "文章已保存");
   } catch (error) {
     errorMessage.value = error instanceof Error && error.message ? error.message : "文章保存失败";
+    toast("error", "文章保存失败，请检查标题、Slug 和正文");
   } finally {
     articleSaving.value = false;
   }
@@ -3263,15 +3950,35 @@ async function saveArticle() {
     tagList.splice(featuredTagIdx, 1);
   }
   body.tags = tagList;
+  // 同步语言勾选随保存一起提交，后端按 syncLocales 建待翻译记录（与新闻编辑一致）
+  body.syncLocales = selectedArticleLocales.value.filter(Boolean);
   delete body.id;
   if (articleForm.value.id) {
     await contentAPI.updateArticle(articleForm.value.id, body);
   } else {
     await contentAPI.createArticle(body);
   }
-  await loadArticles();
-  resetArticle();
-  bodyEditMode.value = "editor";
+  // 手输的新标签此前只挂在文章上，标签库看不到：保存后补写进标签库
+  const knownTags = new Set(taxonomy.value.tags.map((t) => String(t).trim()));
+  const freshTags = Array.from(
+    new Set(
+      (Array.isArray(body.tags) ? body.tags : [])
+        .map((t: any) => String(t).trim())
+        .filter((t: string) => t && t !== FEATURED_TAG && !knownTags.has(t)),
+    ),
+  );
+  if (freshTags.length) {
+    await Promise.all(
+      freshTags.map((name) =>
+        contentAPI
+          .mutateTaxonomy({ scope: "tag", action: "add", name } as any)
+          .catch(() => null),
+      ),
+    );
+    void loadTaxonomy();
+  }
+  // 列表刷新放后台进行，避免阻塞弹窗关闭
+  void loadArticles();
 }
 function editArticle(item: any) {
   bodyEditMode.value = "editor";
@@ -3555,6 +4262,118 @@ function resetArticle() {
   };
   translations.value = [];
 }
+
+/* ==================== 文章编辑：标签规则 + 未保存修改保护 ==================== */
+const ARTICLE_TAG_LIMIT = 10;
+const ARTICLE_TAG_MAX_WIDTH = 20;
+const seoDescLength = computed(() => String(articleForm.value.seoDescription || "").trim().length);
+const articleCloseGuard = ref({ show: false });
+// 「继续编辑」后紧邻的一次关闭不再追问（避免关闭-确认死循环）
+let articleGuardAcknowledged = false;
+const articleSnapshot = ref("");
+// 用户点「继续编辑」即视为确认保留当前内容，此后的关闭不再重复提示
+let articleSnapshotSuppressed = false;
+
+function articleFormSignature(): string {
+  const f = articleForm.value as any;
+  return JSON.stringify({
+    id: f.id,
+    title: f.title,
+    slug: f.slug,
+    locale: f.locale,
+    excerpt: f.excerpt,
+    bodyMarkdown: f.bodyMarkdown,
+    seoTitle: f.seoTitle,
+    seoDescription: f.seoDescription,
+    seoKeywords: f.seoKeywords,
+    featured: f.featured,
+    coverImage: f.coverImage,
+    coverAlt: f.coverAlt,
+    category: f.category,
+    tags: f.tags,
+    authorId: f.authorId,
+    canonicalUrl: f.canonicalUrl,
+    ogImage: f.ogImage,
+    status: f.status,
+    locales: Array.isArray(selectedArticleLocales.value) ? [...selectedArticleLocales.value] : [],
+  });
+}
+function captureArticleSnapshot() {
+  articleSnapshot.value = articleFormSignature();
+}
+function isArticleDirty(): boolean {
+  if (!showArticleModal.value || !articleSnapshot.value) return false;
+  return articleFormSignature() !== articleSnapshot.value;
+}
+watch(
+  articleForm,
+  () => {
+    articleGuardAcknowledged = false;
+  },
+  { deep: true },
+);
+watch(showArticleModal, (open) => {
+  if (!open) return;
+  articleGuardAcknowledged = false;
+  articleCloseGuard.value.show = false;
+  if (articleSnapshotSuppressed) {
+    articleSnapshotSuppressed = false;
+    return;
+  }
+  void nextTick(captureArticleSnapshot);
+});
+function closeArticleEditor() {
+  showArticleModal.value = false;
+  articleCloseGuard.value.show = false;
+  seoOverwriteConfirm.value = false;
+  bodyEditMode.value = "editor";
+  resetArticle();
+}
+function requestCloseArticle() {
+  if (!showArticleModal.value) return;
+  if (articleGuardAcknowledged || !isArticleDirty()) {
+    closeArticleEditor();
+    return;
+  }
+  // 先收起编辑器外壳，让确认框独占焦点；内容留在内存里，可随时继续编辑
+  showArticleModal.value = false;
+  articleCloseGuard.value.show = true;
+}
+function resumeArticleEditing() {
+  articleSnapshotSuppressed = true;
+  articleCloseGuard.value.show = false;
+  showArticleModal.value = true;
+  // 用户已明确选择「继续编辑」，紧接着再次关闭时不再重复追问；
+  // 一旦继续改动表单，标志位会在 deep watch 里被重置，保护依旧生效
+  void nextTick(() => {
+    articleGuardAcknowledged = true;
+  });
+}
+function confirmDiscardArticle() {
+  closeArticleEditor();
+}
+/** 键盘焦点锁在弹窗内：Tab 到末尾回到开头，Shift+Tab 到开头跳回末尾 */
+function trapArticleFocus(ev: KeyboardEvent) {
+  const root = document.querySelector(".article-editor-modal") as HTMLElement | null;
+  if (!root) return;
+  const nodes = Array.from(
+    root.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((el) => el.getClientRects().length > 0);
+  if (!nodes.length) return;
+  const first = nodes[0];
+  const last = nodes[nodes.length - 1];
+  const active = document.activeElement as HTMLElement | null;
+  if (!ev.shiftKey && active === last) {
+    ev.preventDefault();
+    first.focus();
+  } else if (ev.shiftKey && active === first) {
+    ev.preventDefault();
+    last.focus();
+  }
+}
+
 function previewArticle() {
   const win = window.open("", "_blank");
   if (win) {
@@ -3741,7 +4560,8 @@ onMounted(() => {
 }
 .page-header p,
 .muted {
-  color: #5E6577;
+  /* v0.4 SRC-09：次要文字对齐 1.1 色板（#6B7280），不再使用 #5E6577 */
+  color: #6B7280;
   font-weight: 600;
   font-size: 13.5px;
 }
@@ -3837,6 +4657,31 @@ textarea:focus {
   outline: none;
   border-color: #2563EB;
   box-shadow: 3px 3px 0px #2563EB;
+}
+/* v0.4 SRC-09：自动化设置区输入框统一 2px 边框 / 圆角 8 / 高 36（含 number、time）
+   注意：全局 style.css 里有 input[type=number]{border-radius:12px !important}，
+   这里必须用 !important + 更具体的选择器才能压住，否则 number 仍是 12px。 */
+.settings .form-grid input:not([type="checkbox"]):not([type="radio"]) {
+  box-sizing: border-box;
+  height: 36px;
+  min-height: 36px;
+  padding: 4px 10px;
+  border: 2px solid #121316 !important;
+  border-radius: 8px !important;
+  font-size: 13px;
+  line-height: 1.4;
+}
+/* v0.4 SRC-09：新闻源弹窗输入框统一 2px 边框 / 圆角 8 / 高 36（含 number） */
+.source-dialog .form-grid input:not([type="checkbox"]):not([type="radio"]),
+.source-dialog .form-grid select {
+  box-sizing: border-box;
+  height: 36px;
+  min-height: 36px;
+  padding: 4px 10px;
+  border: 2px solid #121316 !important;
+  border-radius: 8px !important;
+  font-size: 13px;
+  line-height: 1.4;
 }
 .toolbar input {
   min-width: 240px;
@@ -5857,12 +6702,657 @@ td.actions-cell .link {
   font-weight: 600;
   color: #6b7280;
 }
-.bi-error {
-  display: flex;
+/* v0.4 二次编辑弹窗：统一可读密度、遮罩与固定操作区 */
+.content-modal-layer { position: fixed; inset: 0; z-index: 1400; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(18,19,22,.55); }
+/* SRC-07：新闻源弹窗的未保存确认要压在其上（1400） */
+.modal-backdrop.source-close-guard-backdrop { z-index: 1500; }
+.source-dialog { width: min(640px, 100%); max-height: calc(100dvh - 32px); overflow-y: auto; box-sizing: border-box; padding: 22px; border: 2px solid #121316; border-radius: 12px; background: #fff; box-shadow: 6px 6px 0 #121316; }
+/* SRC-09 / SRC-02：滑块开关。原生 checkbox 视觉隐藏但保留可聚焦，轨道 span 负责视觉 */
+.slider-switch { position: relative; display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
+.slider-switch .switch-input { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; opacity: 0; overflow: hidden; clip: rect(0 0 0 0); }
+.slider-switch .switch-track { position: relative; flex: 0 0 auto; width: 40px; height: 22px; border-radius: 9999px; background: #9ca3af; transition: background-color .15s ease; }
+.slider-switch .switch-track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s ease; }
+.slider-switch:has(.switch-input:checked) .switch-track { background: #2563eb; }
+.slider-switch:has(.switch-input:checked) .switch-track::after { transform: translateX(18px); }
+.slider-switch:has(.switch-input:focus-visible) .switch-track { outline: 2px solid #2563eb; outline-offset: 2px; }
+.slider-switch .switch-text { color: #121316; }
+:global(html.dark) .slider-switch .switch-track { background: #4b5563; }
+:global(html.dark) .slider-switch:has(.switch-input:checked) .switch-track { background: #2563eb; }
+:global(html.dark) .slider-switch .switch-text { color: #e5e7eb; }
+.source-dialog .source-status-field .switch { margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.source-dialog .form-grid .field-hint { color: #6b7280; font-size: 12px; font-weight: 500; }
+.source-toolbar { justify-content: flex-end; }
+.source-dialog .form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+.source-dialog .form-grid label { display: grid; gap: 7px; min-width: 0; font-size: 13px; font-weight: 700; }
+.source-dialog .form-grid label:has(textarea) { grid-column: 1/-1; }
+.dialog-close { flex: 0 0 36px; width: 36px; height: 36px; padding: 0; border: 2px solid #121316; border-radius: 8px; background: #fff; color: #121316; font-size: 24px; line-height: 1; cursor: pointer; }
+.news-editor.news-editor-modal { box-sizing: border-box; padding: 22px; }
+.news-editor .two-col-editor { grid-template-columns: minmax(300px,38%) minmax(0,1fr); gap: 24px; }
+.news-editor .two-col-editor > div { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.news-editor .two-col-editor label { display: grid; gap: 7px; font-size: 13px; font-weight: 700; }
+.news-editor .two-col-editor input, .news-editor .two-col-editor textarea, .source-dialog input, .source-dialog textarea { box-sizing: border-box; width: 100%; min-height: 42px; padding: 9px 11px; border: 1.5px solid #9aa1b1; border-radius: 8px; font: inherit; line-height: 1.5; }
+.news-editor .two-col-editor textarea.news-summary-input { min-height: 160px; resize: vertical; line-height: 1.65; }
+.news-editor .editor-pane { min-height: 220px; }
+.news-editor .modal-fixed-footer { flex-shrink: 0; }
+.featured-toggle, .ref-news-item input[type="checkbox"], .news-row input[type="checkbox"], .article-row input[type="checkbox"] { flex: 0 0 16px !important; width: 16px !important; height: 16px !important; margin: 0 !important; }
+.featured-cell label { display: inline-flex; align-items: center; justify-content: center; flex: none; gap: 7px; }
+.metric-info { display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+.metric-info small { display: block; color: rgba(255,255,255,.92); font-size: 12px; font-weight: 700; line-height: 1.3; }
+.metric-info strong { display: block; line-height: 1.15; }
+.bi-error { display: flex;
   align-items: center;
   gap: 12px;
   margin: 0 0 16px;
   font-weight: 700;
   color: #b91c1c;
 }
+
+/* ===== v0.4 P0fix：新闻 / 文章编辑弹窗统一 880 两栏壳（左配置 / 右正文） ===== */
+.news-editor.news-editor-modal,
+.modal-drawer.article-editor-modal {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(880px, calc(100vw - 32px));
+  height: calc(100dvh - 64px);
+  max-height: 860px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid #121316;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 6px 6px 0 #121316;
+}
+.news-editor.news-editor-modal > .modal-fixed-header,
+.modal-drawer.article-editor-modal > .modal-drawer-header {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 14px 22px;
+  border-bottom: 2px solid #121316;
+}
+.news-editor.news-editor-modal > .modal-fixed-header h2,
+.modal-drawer.article-editor-modal > .modal-drawer-header h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+}
+.news-editor.news-editor-modal > .modal-fixed-header p,
+.modal-drawer.article-editor-modal > .modal-drawer-header p {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+.news-editor.news-editor-modal > .modal-fixed-footer,
+.modal-drawer.article-editor-modal > .modal-drawer-footer {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 12px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  border-top: 2px solid #121316;
+  background: #ffffff;
+}
+/* PRD：新闻编辑弹窗底部按钮 36px 高 / 8px 圆角（局部覆盖全局 .button 的 42px / 10px） */
+.news-editor.news-editor-modal > .modal-fixed-footer button {
+  box-sizing: border-box;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 18px;
+  border-radius: 8px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 译文任务：横向折叠条，独立于两栏之上，天然不与正文编辑器垂直重叠 */
+.news-translation-panel {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0 22px;
+  background: #F8FAFF;
+  border-bottom: 1.5px solid #e3e6ee;
+}
+.news-trans-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.news-trans-toggle .config-title { margin: 0; }
+.news-trans-summary { font-size: 12px; color: #5E6577; }
+.news-trans-toggle-text { margin-left: auto; font-size: 12px; font-weight: 800; color: #2563eb; }
+.news-translation-tasks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 0 10px;
+  max-height: 84px;
+  overflow-y: auto;
+}
+.news-translation-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border: 1.5px solid #121316;
+  border-radius: 999px;
+  background: #ffffff;
+  font-size: 12px;
+}
+
+/* 新闻两栏主体 */
+.news-editor-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  padding: 14px 22px 0;
+  overflow: hidden;
+}
+.news-editor-body .two-col-editor {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 20px;
+  width: 100%;
+  min-height: 0;
+}
+.news-editor-body .two-col-editor > div {
+  min-width: 0;
+  min-height: 0;
+  gap: 12px;
+  align-items: stretch;
+}
+.news-editor .editor-config-col {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px;
+}
+.news-editor .editor-config-col .form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.news-editor .editor-main-col { display: flex; flex-direction: column; }
+.news-editor .editor-label {
+  flex: 0 0 auto;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 800;
+}
+.news-editor .editor-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+.news-editor .editor-shell :deep(.rich-text-editor),
+.article-editor-modal .article-editor-shell :deep(.rich-text-editor) {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.news-editor .editor-shell :deep(.rich-text-editor .rich-text-toolbar),
+.article-editor-modal .article-editor-shell :deep(.rich-text-editor .rich-text-toolbar) {
+  flex: 0 0 auto;
+}
+.news-editor .editor-shell :deep(.rich-text-editor .rich-text-content),
+.article-editor-modal .article-editor-shell :deep(.rich-text-editor .rich-text-content) {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+}
+.news-editor .editor-shell :deep(.rich-text-editor .rich-text-hint),
+.article-editor-modal .article-editor-shell :deep(.rich-text-editor .rich-text-hint) {
+  display: none;
+}
+
+/* 同步语言：chip 式多选（label 文本保持英文母语名，中文名走 ::after 不进入可测文本） */
+.news-editor .two-col-editor .locale-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.news-editor .two-col-editor .locale-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1.5px solid #121316;
+  border-radius: 999px;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.news-editor .two-col-editor .locale-checkbox input[type="checkbox"] {
+  flex: 0 0 15px;
+  width: 15px;
+  height: 15px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  accent-color: #121316;
+}
+.field-error { margin: -6px 0 0; color: #b42318; font-size: 12px; font-weight: 700; }
+.required-star { margin-left: 4px; color: #b42318; }
+
+/* 文章两栏主体 */
+.article-editor-modal .modal-drawer-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  padding: 14px 22px 0;
+  overflow: hidden;
+}
+.article-editor-columns {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 20px;
+  width: 100%;
+  min-height: 0;
+}
+.article-editor-columns > .editor-col-left {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px;
+}
+.article-editor-columns > .editor-col-right {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.article-editor-modal .article-editor-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+/* 右列正文块：占满右列剩余高度，让内部编辑器 flex 撑开 */
+.article-editor-columns > .editor-col-right > .body-field-group {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.article-editor-columns > .editor-col-right > .body-field-group > .article-editor-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.article-editor-modal .article-editor-shell :deep(textarea.html-source-area),
+.article-editor-modal .article-editor-shell :deep(.body-render-preview) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+@media (max-width: 780px) {
+  .news-editor.news-editor-modal,
+  .modal-drawer.article-editor-modal {
+    width: calc(100vw - 24px);
+    height: calc(100dvh - 24px);
+    max-height: none;
+  }
+  .news-editor-body { padding: 12px 14px 0; }
+  .news-editor-body .two-col-editor,
+  .article-editor-columns { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .news-editor .editor-config-col,
+  .article-editor-columns > .editor-col-left { max-height: 42%; }
+  .news-editor .editor-main-col,
+  .article-editor-columns > .editor-col-right { min-height: 300px; }
+}
+
+/* ===== v0.4 P0fix：左栏字段名纯文本（label 文本 = 字段名）+ 自绘下拉/词条 ===== */
+.news-editor .form-grid > label {
+  position: relative;
+}
+.news-editor .form-required-legend {
+  margin: 0 0 2px;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8b8f96;
+  letter-spacing: 0.02em;
+}
+.news-editor .combo-trigger {
+  cursor: pointer;
+  width: 100%;
+  box-sizing: border-box;
+  font-weight: 500;
+  color: #121316;
+  background: #ffffff;
+  text-overflow: ellipsis;
+}
+.news-editor .combo-trigger[aria-expanded="true"] {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
+}
+.news-editor .combo-menu {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1.5px solid #121316;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 14px 30px rgba(17, 19, 24, 0.16);
+}
+.news-editor .combo-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1.5px solid transparent;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 500;
+  color: #121316;
+  text-align: left;
+  cursor: pointer;
+}
+.news-editor .combo-option:hover,
+.news-editor .combo-option[aria-selected="true"] {
+  border-color: #121316;
+  background: #f4f6fb;
+}
+.news-editor .tag-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 6px;
+  border: 1.5px solid #121316;
+  border-radius: 10px;
+  background: #ffffff;
+}
+.news-editor .tag-input input {
+  flex: 1 1 80px;
+  min-width: 70px;
+  padding: 2px 4px;
+  border: 0 !important;
+  border-radius: 0;
+  box-shadow: none !important;
+  background: transparent;
+  font-size: 12px;
+}
+.news-editor .tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 8px;
+  border: 1.5px solid #121316;
+  border-radius: 999px;
+  background: #eef2ff;
+  font-size: 11px;
+  font-weight: 600;
+  color: #121316;
+  white-space: nowrap;
+}
+.news-editor .tag-chip::before {
+  content: attr(data-tag);
+}
+.news-editor .tag-chip .tag-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(18, 19, 22, 0.12);
+  font-size: 10px;
+  line-height: 1;
+  color: #121316;
+  cursor: pointer;
+}
+.news-editor .tag-chip .tag-remove::before {
+  content: "\00d7";
+}
+.news-editor .tag-chip .tag-remove:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+/* ==================== v0.4 W2 AE 修复：尺寸 / 布局 / 焦点 / 控件 ==================== */
+/* AE-01：入场只用淡入，不再 scale —— transform:scale 会让 getBoundingClientRect 量到的
+   宽度小于真实宽度，也会把内部 sticky 定位的包含块换掉 */
+.news-editor.news-editor-modal,
+.modal-drawer.article-editor-modal {
+  animation: modalFadeIn 0.18s ease-out;
+}
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* AE-02：两栏各自吃满弹窗高度。缺 grid-template-rows 时隐式行是 auto，
+   右栏高度被内容压缩到 ~95px，正文编辑器没有可视化高度 */
+.article-editor-modal .article-editor-columns {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 20px;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.article-editor-modal .article-editor-columns > .editor-col-left,
+.article-editor-modal .article-editor-columns > .editor-col-right {
+  min-width: 0;
+  min-height: 0;
+}
+.article-editor-modal .article-editor-columns > .editor-col-right {
+  position: static;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+/* 右列内部：标题/摘要固定高度，正文块吃掉剩余高度并在编辑器内部滚动 */
+.article-editor-modal .article-editor-columns > .editor-col-right > .body-field-group {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.article-editor-modal .article-editor-columns > .editor-col-right > .body-field-group > .article-editor-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+@media (max-width: 960px) {
+  .article-editor-modal .article-editor-columns {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    align-items: start;
+  }
+  .article-editor-modal .article-editor-columns > .editor-col-right {
+    overflow: visible;
+  }
+}
+
+/* AE-12：多行文本框固定可用高度，超出内部滚动，不把弹窗顶长 */
+.article-editor-modal .short-text-area,
+.article-editor-modal .meta-card textarea {
+  box-sizing: border-box;
+  height: 104px;
+  min-height: 104px;
+  max-height: 240px;
+  padding: 10px 12px;
+  line-height: 1.6;
+  resize: vertical;
+  overflow-y: auto;
+}
+
+/* AE-19：弹窗内所有可聚焦元素都有可见焦点环（覆盖各处 outline:none） */
+.article-editor-modal :focus,
+.article-editor-modal :focus-visible {
+  outline: 2px solid #2563eb !important;
+  outline-offset: 2px !important;
+}
+.article-editor-modal .rich-text-content:focus,
+.article-editor-modal .rich-text-content:focus-visible {
+  outline: 2px solid #2563eb !important;
+  outline-offset: -2px !important;
+}
+
+/* AE-13 / AE-14：精选改为滑块式开关（覆盖遗留的 16px 复选框尺寸规则） */
+.featured-cell .featured-toggle {
+  display: inline-flex !important;
+  align-items: center;
+  flex: 0 0 auto !important;
+  width: 46px !important;
+  height: 26px !important;
+  min-width: 46px !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  border: 2px solid #121316;
+  border-radius: 999px;
+  background: #cbd5e1;
+  position: relative;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background-color 0.15s ease;
+}
+.featured-cell .featured-toggle .switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid #121316;
+  transition: left 0.15s ease;
+}
+.featured-cell .featured-toggle.on {
+  background: #2563eb;
+}
+.featured-cell .featured-toggle.on .switch-knob {
+  left: 22px;
+}
+.featured-cell .featured-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.featured-cell .featured-toggle:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* AE-11：SEO 覆盖确认卡片 */
+.seo-overwrite-confirm {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 2px solid #121316;
+  border-radius: 10px;
+  background: #fffbe6;
+  box-shadow: 3px 3px 0 #121316;
+}
+.seo-overwrite-confirm p {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.seo-overwrite-confirm .action-confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* 覆盖确认是「弹窗级」问答：挂到 body 上居中浮层，
+   与编辑器底部的「取消」在结构与读屏上下文上都分离 */
+.seo-overwrite-overlay {
+  position: fixed;
+  z-index: 3000;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, calc(100vw - 48px));
+  margin: 0;
+  padding: 18px 20px;
+  border: 2.5px solid #121316;
+  border-radius: 14px;
+  background: #fffbe6;
+  box-shadow: 6px 6px 0 #121316;
+}
+.seo-overwrite-overlay .action-confirm-actions {
+  margin-top: 4px;
+}
+.seo-overwrite-overlay .button,
+.seo-overwrite-overlay .secondary-button {
+  min-width: 84px;
+}
+
+/* 未保存修改确认框 */
+.confirm-dialog {
+  width: min(420px, calc(100vw - 48px));
+  padding: 22px;
+  border: 2.5px solid #121316;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 6px 6px 0 #121316;
+}
+.confirm-dialog h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 800;
+}
+.confirm-dialog .muted {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #4b5563;
+}
+.confirm-dialog-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* 字段内联提示 */
+.field-hint {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #6b7280;
+}
+.field-hint.hint-warn {
+  color: #b42318;
+  font-weight: 600;
+}
+
 </style>

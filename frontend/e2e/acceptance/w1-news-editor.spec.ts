@@ -525,8 +525,9 @@ test('NE-05 同步语言多选（English/Русский/Français/Deutsch）并�
     expect.soft(m.checkboxLabels.some((l) => l.includes(lang)), `缺语言选项「${lang}」`).toBe(true)
   }
   if (m.checkboxLabels.length) {
-    const order = m.checkboxLabels.filter((l) => expected.some((e) => l.includes(e)))
-    expect.soft(order, `语言顺序应按 i18n 顺序 ${expected.join('/')}，实测 ${order.join('/')}`).toEqual(expected)
+    // 标签可能是「本地化名 + 母语名」，按母语名归一化后再校验顺序
+    const order = m.checkboxLabels.map((l) => expected.find((e) => l.includes(e)) || '')
+    expect.soft(order, `语言顺序应按 i18n 顺序 ${expected.join('/')}，实测 ${m.checkboxLabels.join('/')}`).toEqual(expected)
   }
   expectClean(guard(page))
 })
@@ -831,18 +832,38 @@ test('NE-15 改标题保存：关弹窗 + 顶部「已保存」+ 列表刷新，
   const statusBefore = String(apiBefore.json?.data?.status ?? '')
   await page.getByLabel('标题', { exact: true }).fill(newTitle)
   await waitWrite(page, 'PUT', '/admin/content/news/', () => footer(page).getByRole('button', { name: '保存新闻' }).click())
+  // toast 与弹窗关闭都是异步渲染，isVisible()/isHidden() 不等待 → 显式 waitFor 后再取样
+  const toastLoc = page.locator('.ccai-neolab-toast', { hasText: '已保存' }).first()
+  await toastLoc.waitFor({ state: 'visible', timeout: 8_000 }).catch(() => null)
   await shot(page, 'saved-toast')
-  const toastVisible = await page.locator('.ccai-neolab-toast', { hasText: '已保存' }).first().isVisible().catch(() => false)
+  const toastVisible = await toastLoc.isVisible().catch(() => false)
   const toastText = await page.locator('.ccai-neolab-toast').allInnerTexts().catch(() => [])
-  const closed = await dlg(page).isHidden({ timeout: 10_000 }).catch(() => false)
+  const closed = await dlg(page)
+    .waitFor({ state: 'hidden', timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false)
   const apiAfter = await apiCall(page, 'GET', `/admin/content/news/${seededIds[0]}`)
   const statusAfter = String(apiAfter.json?.data?.status ?? '')
 
   await reloadToTab(page, TAB)
   const search = page.locator('input[placeholder="搜索标题或摘要"]')
   await search.fill(newTitle)
-  await page.locator('.toolbar button', { hasText: '查询' }).click()
-  const rowVisible = await page.locator('table tbody tr', { hasText: newTitle }).first().isVisible().catch(() => false)
+  // 等查询请求真正返回再判断：isVisible() 不等待，全量跑时后端稍慢就会误判
+  await Promise.all([
+    page
+      .waitForResponse(
+        (r) => r.url().includes('/admin/content/news') && r.request().method() === 'GET',
+        { timeout: 15_000 },
+      )
+      .catch(() => null),
+    page.locator('.toolbar button', { hasText: '查询' }).click(),
+  ])
+  const rowVisible = await page
+    .locator('table tbody tr', { hasText: newTitle })
+    .first()
+    .waitFor({ state: 'visible', timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false)
   await shot(page, 'list-refreshed')
   record('NE-15', { newTitle, toastVisible, toastText, closed, statusBefore, statusAfter, rowVisible, titleInApi: apiAfter.json?.data?.title })
   expect.soft(closed, '保存后弹窗未关闭').toBe(true)
@@ -1056,7 +1077,8 @@ test('NE-18 Tab 焦点顺序 左栏字段→编辑器→取消→保存，且不
   await shot(page, 'tab-sequence')
   record('NE-18', { seq, outside })
   const joined = seq.join(' | ')
-  const iEditor = seq.findIndex((s) => /rich-text-content|contenteditable/.test(s))
+  // 编辑器在 Tab 序列里表现为 div:新闻正文…（contenteditable 容器 aria-label 为「新闻正文」，class 不含 rich-text-content）
+  const iEditor = seq.findIndex((s) => /rich-text-content|contenteditable|新闻正文/.test(s))
   const iCancel = seq.findIndex((s) => s.includes('取消'))
   const iSave = seq.findIndex((s) => s.includes('保存'))
   expect.soft(outside.length, `焦点跑出弹窗：${outside.join(', ')}`).toBe(0)
@@ -1071,7 +1093,8 @@ test('NE-18 Tab 焦点顺序 左栏字段→编辑器→取消→保存，且不
     return `${cs.outlineStyle}/${cs.outlineWidth}/${cs.boxShadow.slice(0, 24)}`
   })
   record('NE-18-focus-ring', { focusVisible })
-  expect.soft(/solid|rgb|inset/.test(focusVisible), `焦点不可见（outline/box-shadow = ${focusVisible}）`).toBe(true)
+  // 契约口径：outline 或 box-shadow 可见（不为 none / 0）。Chrome 的 outline-style:auto 即为默认聚焦环，算可见
+  expect.soft(/auto|solid|rgb|inset/.test(focusVisible) && !/^none\/0px/.test(focusVisible), `焦点不可见（outline/box-shadow = ${focusVisible}）`).toBe(true)
   expectClean(guard(page))
 })
 

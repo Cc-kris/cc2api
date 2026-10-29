@@ -18,6 +18,8 @@ export default defineConfig({
     ['html', { outputFolder: 'playwright-report', open: 'never' }]
   ],
   use: {
+    // 默认 30s 在真实栈 + 高系统负载下容易假超时（实测 load≈23 时单页首屏就要 20s+）
+    timeout: 60_000,
     baseURL,
     trace: process.env.E2E_UI_TRACE === '1' ? 'on' : 'retain-on-failure',
     screenshot: 'only-on-failure',

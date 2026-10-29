@@ -571,6 +571,7 @@ test('PUB-11 详情页「更多深度解析」6 条不含当前 + 上一篇/下�
 
 // ---------------------------------------------------------------- PUB-12
 test('PUB-12 语言切换器：五项顺序一致、切换写 cookie 并跳前缀 URL', async ({ page, context, request }, testInfo) => {
+  test.slow() // 3 个页面 × 正反两轮切换 + 各 2.5s 等待，默认 30s 装不下
   const ev: Ev = []
   const shot = shooter('w5', testInfo)
   const problems = pubGuard(page)
@@ -641,6 +642,7 @@ test('PUB-12 语言切换器：五项顺序一致、切换写 cookie 并跳前�
 
 // ---------------------------------------------------------------- PUB-13
 test('PUB-13 全站样式扫描：无原生 select/单下边框输入框/#10B981、按钮输入框 36±1', async ({ page }, testInfo) => {
+  test.slow() // 7 个页面（浅色/深色）逐个扫描 + 截图，默认 30s 装不下
   const ev: Ev = []
   const shot = shooter('w5', testInfo)
   const problems = pubGuard(page)
