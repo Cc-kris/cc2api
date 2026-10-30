@@ -378,8 +378,8 @@ test('NE-01 弹窗多视口尺寸/圆角/居中/小屏不溢出', async ({ page 
     results[`${vp.width}`] = { dialog: m.dialog, radius: m.dialogRadius, overflow: m.docScrollOverflow, docW: m.viewport }
     await shot(page, `${vp.width}-layout`)
     const d = m.dialog!
-    expect.soft(d.w, `${vp.width} 下弹窗宽应为 880±4，实测 ${d.w}`).toBeGreaterThanOrEqual(876)
-    expect.soft(d.w, `${vp.width} 下弹窗宽应为 880±4，实测 ${d.w}`).toBeLessThanOrEqual(884)
+    const expectW = Math.min(1320, vp.width - 32)
+    expect.soft(Math.abs(d.w - expectW), `${vp.width} 下弹窗宽应为 min(1320, 100vw-32)=${expectW}（R16 基线），实测 ${d.w}`).toBeLessThanOrEqual(4)
     const centerOffset = Math.abs((d.x + d.w / 2) - vp.width / 2)
     expect.soft(centerOffset, `${vp.width} 下弹窗未居中：中心偏移 ${centerOffset}px`).toBeLessThanOrEqual(2)
     expect.soft(m.dialogRadius, `${vp.width} 下弹窗圆角应为 12px，实测 ${m.dialogRadius}`).toBe('12px')
@@ -405,18 +405,24 @@ test('NE-02 左右两栏布局与左栏字段顺序', async ({ page }, info) => 
   await shot(page, 'two-col')
   record('NE-02', { cols: m.cols, labels: m.labels, inputs: m.inputs })
 
-  expect(m.cols.length, `右侧编辑器栏缺失，只有 ${m.cols.length} 栏`).toBe(2)
+  expect(m.cols.length, `两栏缺失，只有 ${m.cols.length} 栏`).toBe(2)
   const [left, right] = m.cols
-  expect.soft(left.rect!.w, `左栏宽应为 320±8，实测 ${left.rect!.w}`).toBeGreaterThanOrEqual(312)
-  expect.soft(left.rect!.w, `左栏宽应为 320±8，实测 ${left.rect!.w}`).toBeLessThanOrEqual(328)
+  // R16 基线（2026-10-30 用户诉求 1/3）：左栏 = 标题/摘要/分类/标签 + 正文编辑器（弹性），
+  // 右栏 = 精选/封面/SEO/翻译（固定 380）
+  expect.soft(left.rect!.w, `左栏（正文栏）应占满剩余宽度（≥600px），实测 ${left.rect!.w}`).toBeGreaterThanOrEqual(600)
+  expect.soft(right.rect!.w, `右栏（元信息栏）宽应为 380±8，实测 ${right.rect!.w}`).toBeGreaterThanOrEqual(372)
+  expect.soft(right.rect!.w, `右栏（元信息栏）宽应为 380±8，实测 ${right.rect!.w}`).toBeLessThanOrEqual(388)
   expect.soft(Math.abs(left.rect!.y - right.rect!.y), `两栏没有并排：左栏 y=${left.rect!.y}，右栏 y=${right.rect!.y}`).toBeLessThanOrEqual(8)
-  expect.soft(right.rect!.w, `右栏应占满剩余宽度（>400px），实测 ${right.rect!.w}`).toBeGreaterThan(400)
+  // 正文编辑器必须落在左栏内（不被右栏挤压）
+  const ed = m.editor!
+  expect.soft(ed.x, `正文编辑器 x=${ed.x} 未落在左栏（x=${left.rect!.x}..${left.rect!.x + left.rect!.w}）`).toBeGreaterThanOrEqual(left.rect!.x)
+  expect.soft(ed.x + ed.w, `正文编辑器右边界 ${ed.x + ed.w} 越出左栏右边界 ${left.rect!.x + left.rect!.w}`).toBeLessThanOrEqual(left.rect!.x + left.rect!.w + 1)
 
-  const expectedOrder = ['标题', '来源链接', '分类', '标签', '发布时间', '封面图', '同步语言', '状态']
+  const expectedOrder = ['标题', '摘要', '分类', '标签']
   const leftLabels = m.leftColLabels
   const present = leftLabels.filter((l) => expectedOrder.some((e) => l.startsWith(e)))
   for (const name of expectedOrder) {
-    expect.soft(leftLabels.some((l) => l.startsWith(name)), `左栏（配置栏）缺字段「${name}」；左栏实有：${leftLabels.join(' / ')}`).toBe(true)
+    expect.soft(leftLabels.some((l) => l.startsWith(name)), `左栏缺字段「${name}」；左栏实有：${leftLabels.join(' / ')}`).toBe(true)
   }
   expect.soft(present, `左栏字段顺序与规范不一致\n规范：${expectedOrder.join(' / ')}\n实测：${present.join(' / ')}`).toEqual(expectedOrder)
   expectClean(guard(page))
@@ -539,6 +545,12 @@ test('NE-06 译文面板不挤压编辑区（1440×900 与 1024×768）', async 
   for (const vp of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }]) {
     await page.setViewportSize(vp)
     await page.waitForTimeout(400)
+    // R16 基线：字段在正文之上，小视口下弹窗主体可滚动。
+    // 先把正文滚进可视区（用户真实操作路径），再量可视高度；仍要求不被页脚/译文面板遮挡。
+    if (vp.width < 1440) {
+      await editor(page).scrollIntoViewIfNeeded()
+      await page.waitForTimeout(250)
+    }
     const m = await measureLayout(page)
     const e = m.editor!
     const p = m.panel
@@ -734,7 +746,7 @@ test('NE-12 ≥10000 字正文往返逐字一致', async ({ page }, info) => {
   record('NE-12-open', { apiBodyTextLen: apiText.length, apiNormLen: norm(apiText).length, editorTextLen: shown.length, editorNormLen: shownLen, tail: shown.slice(-60) })
   expect.soft(apiText.length, '造数正文不足 10000 字').toBeGreaterThanOrEqual(10000)
   expect.soft(shownLen, `回显字数与接口不一致：接口(去空白) ${norm(apiText).length} 字 vs 编辑器 ${shownLen} 字`).toBe(norm(apiText).length)
-  expect.soft(shown.endsWith(apiText.trim().slice(-40)), '回显尾部被截断').toBe(true)
+  expect.soft(shown.trim().endsWith(apiText.trim().slice(-40)), '回显尾部被截断').toBe(true)
 
   await waitWrite(page, 'PUT', '/admin/content/news/', () => footer(page).getByRole('button', { name: '保存新闻' }).click())
   await shot(page, 'long-saved')
@@ -1060,7 +1072,7 @@ test('NE-18 Tab 焦点顺序 左栏字段→编辑器→取消→保存，且不
   await page.getByLabel('标题', { exact: true }).click()
   const seq: string[] = []
   const outside: string[] = []
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 140; i++) {
     await page.keyboard.press('Tab')
     const cur = await page.evaluate(() => {
       const el = document.activeElement as HTMLElement | null

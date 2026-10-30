@@ -79,11 +79,11 @@
                   />
                 </th>
                 <th>标题</th>
-                <th>来源</th>
+                <th>语言</th>
                 <th>状态</th>
                 <th>译文</th>
                 <th>发布时间</th>
-                <th>操作</th>
+                <th class="actions-th">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -108,9 +108,9 @@
                     {{ item.title }}
                   </button>
                   <small v-if="item.summary" class="summary-clamp">{{ item.summary }}</small>
-                  <small class="locale-tag">{{ item.locale }}</small>
+                  <small v-if="item.sourceName" class="muted">{{ item.sourceName }}</small>
                 </td>
-                <td>{{ item.sourceName || "-" }}</td>
+                <td><span class="locale-tag">{{ item.locale }}</span></td>
                 <td>
                   <span class="status">{{ item.status }}</span>
                 </td>
@@ -223,141 +223,85 @@
 
             <div class="modal-scroll-body news-editor-body">
               <div class="two-col-editor">
-                <div class="editor-config-col">
-                  <div class="form-grid">
-                    <label class="form-required-legend">必填项标有 *</label>
-                    <label
-                      >标题<input
-                        v-model="selectedNews.title"
-                        aria-label="标题"
-                        maxlength="240"
-                        :aria-invalid="newsTitleInvalid ? 'true' : undefined"
-                        @blur="newsTitleTouched = true"
-                    /></label>
-                    <small v-if="newsTitleInvalid" class="field-error">标题不能为空</small>
-                    <label
-                      >来源链接<input
-                        v-model="selectedNews.originalUrl"
-                        placeholder="https://..."
-                    /></label>
-                    <label
-                      >分类<input
-                        class="combo-trigger"
-                        readonly
-                        role="combobox"
-                        aria-haspopup="listbox"
-                        aria-label="分类"
-                        :aria-expanded="newsSelectOpen === 'category' ? 'true' : 'false'"
-                        :value="newsCategoryLabelText"
-                        @click="toggleNewsSelect('category')"
-                        @keydown.enter.prevent="toggleNewsSelect('category')"
-                      /><span
-                        v-if="newsSelectOpen === 'category'"
-                        class="combo-menu"
-                        role="listbox"
-                        aria-label="分类选项"
-                        ><button
-                          v-for="opt in newsCategorySelectOptions"
-                          :key="'news-cat-' + opt.value"
-                          type="button"
-                          class="combo-option"
-                          role="option"
-                          :aria-selected="selectedNews.category === opt.value ? 'true' : 'false'"
-                          @click.stop="selectedNews.category = opt.value; newsSelectOpen = ''"
-                        >
-                          {{ opt.label }}
-                        </button></span
-                      ></label
-                    >
-                    <label
-                      >标签<span class="tag-input" data-test="tag-input"
-                        ><span
-                          v-for="(tag, tagIndex) in newsTagChips"
-                          :key="'news-tag-' + tag"
-                          class="tag-chip"
-                          :data-tag="tag"
-                          ><span
-                            class="tag-remove"
-                            role="button"
-                            tabindex="0"
-                            :title="'移除标签 ' + tag"
-                            @click.stop="removeNewsTag(tagIndex)"
-                            @keydown.enter.prevent.stop="removeNewsTag(tagIndex)"
-                            @keydown.space.prevent.stop="removeNewsTag(tagIndex)"
-                          ></span></span
-                        ><input
-                          v-model="newsTagDraft"
-                          placeholder="输入标签后回车"
-                          list="news-tag-suggestions"
-                          @keydown.enter.prevent="commitNewsTag"
-                          @keydown.backspace="handleNewsTagBackspace"
-                      /></span></label>
-                    <datalist id="news-tag-suggestions">
-                      <option v-for="t in taxonomy.tags" :key="'news-tag-opt-' + t" :value="t"></option>
-                    </datalist>
-                    <label class="field-line">发布时间<input v-model="newsPublishedAtLocal" type="datetime-local" /></label>
-                    <label class="field-line"
-                      >封面图<input v-model="selectedNews.imageUrl" placeholder="https://... 建议 16:9"
-                    /></label>
-                    <label class="field-line"
-                      >摘要<textarea v-model="selectedNews.summary" rows="3" placeholder="用简洁段落概括新闻核心内容"></textarea>
-                    </label>
-                    <div class="config-block">
-                      <div class="config-title">同步语言</div>
-                      <div class="locale-checkboxes" role="group" aria-label="同步语言">
-                        <label
-                          v-for="l in ADMIN_TARGET_LOCALES"
-                          :key="'news-sync-' + l.value"
-                          class="locale-checkbox"
-                        >
-                          <input type="checkbox" :value="l.value" v-model="newsSyncLocales" />
-                          <span>{{ localeOptionLabel(l.value) }}</span>
-                        </label>
-                      </div>
-                    </div>
-                    <label
-                      >状态<input
-                        class="combo-trigger"
-                        readonly
-                        role="combobox"
-                        aria-haspopup="listbox"
-                        aria-label="状态"
-                        :aria-expanded="newsSelectOpen === 'status' ? 'true' : 'false'"
-                        :value="newsStatusLabelText"
-                        @click="toggleNewsSelect('status')"
-                        @keydown.enter.prevent="toggleNewsSelect('status')"
-                      /><span
-                        v-if="newsSelectOpen === 'status'"
-                        class="combo-menu"
-                        role="listbox"
-                        aria-label="状态选项"
-                        ><button
-                          v-for="opt in newsStatusSelectOptions"
-                          :key="'news-status-' + opt.value"
-                          type="button"
-                          class="combo-option"
-                          role="option"
-                          :aria-selected="selectedNews.status === opt.value ? 'true' : 'false'"
-                          @click.stop="selectedNews.status = opt.value; newsSelectOpen = ''"
-                        >
-                          {{ opt.label }}
-                        </button></span
-                      ></label
-                    >
-                    <label class="field-line">Slug<input v-model="selectedNews.slug" maxlength="240" /></label>
-                    <label class="field-line">语言<input v-model="selectedNews.locale" /></label>
-                    <label class="field-line">SEO 标题<input v-model="selectedNews.seoTitle" maxlength="160" /></label>
-                    <label class="field-line"
-                      >SEO 描述<textarea
-                        v-model="selectedNews.seoDescription"
-                        maxlength="300"
-                        rows="3"
-                    ></textarea>
-                    </label>
-                    <label class="field-line">来源名称<input v-model="selectedNews.sourceName" /></label>
-                  </div>
-                </div>
                 <div class="editor-main-col">
+                  <div class="config-block">
+                    <div class="config-title">基础信息</div>
+                    <div class="form-grid">
+                      <label class="form-required-legend">必填项标有 *</label>
+                      <label
+                        >标题<input
+                          v-model="selectedNews.title"
+                          aria-label="标题"
+                          maxlength="240"
+                          :aria-invalid="newsTitleInvalid ? 'true' : undefined"
+                          @blur="newsTitleTouched = true"
+                      /></label>
+                      <small v-if="newsTitleInvalid" class="field-error">标题不能为空</small>
+                      <label class="field-line"
+                        >摘要<textarea
+                          v-model="selectedNews.summary"
+                          class="news-summary-input"
+                          rows="3"
+                          placeholder="用简洁段落概括新闻核心内容"
+                        ></textarea>
+                      </label>
+                      <label
+                        >分类<input
+                          class="combo-trigger"
+                          readonly
+                          role="combobox"
+                          aria-haspopup="listbox"
+                          aria-label="分类"
+                          :aria-expanded="newsSelectOpen === 'category' ? 'true' : 'false'"
+                          :value="newsCategoryLabelText"
+                          @click="toggleNewsSelect('category')"
+                          @keydown.enter.prevent="toggleNewsSelect('category')"
+                        /><span
+                          v-if="newsSelectOpen === 'category'"
+                          class="combo-menu"
+                          role="listbox"
+                          aria-label="分类选项"
+                          ><button
+                            v-for="opt in newsCategorySelectOptions"
+                            :key="'news-cat-' + opt.value"
+                            type="button"
+                            class="combo-option"
+                            role="option"
+                            :aria-selected="selectedNews.category === opt.value ? 'true' : 'false'"
+                            @click.stop="selectedNews.category = opt.value; newsSelectOpen = ''"
+                          >
+                            {{ opt.label }}
+                          </button></span
+                        ></label
+                      >
+                      <label
+                        >标签<span class="tag-input" data-test="tag-input"
+                          ><span
+                            v-for="(tag, tagIndex) in newsTagChips"
+                            :key="'news-tag-' + tag"
+                            class="tag-chip"
+                            :data-tag="tag"
+                            ><span
+                              class="tag-remove"
+                              role="button"
+                              tabindex="0"
+                              :title="'移除标签 ' + tag"
+                              @click.stop="removeNewsTag(tagIndex)"
+                              @keydown.enter.prevent.stop="removeNewsTag(tagIndex)"
+                              @keydown.space.prevent.stop="removeNewsTag(tagIndex)"
+                            ></span></span
+                          ><input
+                            v-model="newsTagDraft"
+                            placeholder="输入标签后回车"
+                            list="news-tag-suggestions"
+                            @keydown.enter.prevent="commitNewsTag"
+                            @keydown.backspace="handleNewsTagBackspace"
+                        /></span></label>
+                      <datalist id="news-tag-suggestions">
+                        <option v-for="t in taxonomy.tags" :key="'news-tag-opt-' + t" :value="t"></option>
+                      </datalist>
+                    </div>
+                  </div>
                   <div class="editor-label">新闻正文（富文本）</div>
                   <div class="editor-shell" data-test="news-rich-editor">
                     <AnnouncementRichTextEditor
@@ -365,6 +309,98 @@
                       :session-key="`${selectedNews.id}:${newsEditorSession}`"
                       placeholder="新闻正文..."
                     />
+                  </div>
+                </div>
+                <div class="editor-config-col">
+                  <div class="config-block">
+                    <div class="config-title">发布与精选</div>
+                    <div class="form-grid">
+                      <label
+                        >状态<input
+                          class="combo-trigger"
+                          readonly
+                          role="combobox"
+                          aria-haspopup="listbox"
+                          aria-label="状态"
+                          :aria-expanded="newsSelectOpen === 'status' ? 'true' : 'false'"
+                          :value="newsStatusLabelText"
+                          @click="toggleNewsSelect('status')"
+                          @keydown.enter.prevent="toggleNewsSelect('status')"
+                        /><span
+                          v-if="newsSelectOpen === 'status'"
+                          class="combo-menu"
+                          role="listbox"
+                          aria-label="状态选项"
+                          ><button
+                            v-for="opt in newsStatusSelectOptions"
+                            :key="'news-status-' + opt.value"
+                            type="button"
+                            class="combo-option"
+                            role="option"
+                            :aria-selected="selectedNews.status === opt.value ? 'true' : 'false'"
+                            @click.stop="selectedNews.status = opt.value; newsSelectOpen = ''"
+                          >
+                            {{ opt.label }}
+                          </button></span
+                        ></label
+                      >
+                      <label class="field-line">发布时间<input v-model="newsPublishedAtLocal" type="datetime-local" /></label>
+                      <label class="field-line">语言<input v-model="selectedNews.locale" /></label>
+                      <label class="field-line">Slug<input v-model="selectedNews.slug" maxlength="240" /></label>
+                      <label class="field-line">来源名称<input v-model="selectedNews.sourceName" /></label>
+                      <label class="field-line"
+                        >来源链接<input v-model="selectedNews.originalUrl" placeholder="https://..."
+                      /></label>
+                      <div class="config-block config-block-inner">
+                        <div class="config-title">同步语言</div>
+                        <div class="locale-checkboxes" role="group" aria-label="同步语言">
+                          <label
+                            v-for="l in ADMIN_TARGET_LOCALES"
+                            :key="'news-sync-' + l.value"
+                            class="locale-checkbox"
+                          >
+                            <input type="checkbox" :value="l.value" v-model="newsSyncLocales" />
+                            <span>{{ localeOptionLabel(l.value) }}</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="config-block">
+                    <div class="config-title">封面</div>
+                    <div class="form-grid">
+                      <label class="field-line"
+                        >封面图<input v-model="selectedNews.imageUrl" placeholder="https://... 建议 16:9"
+                      /></label>
+                    </div>
+                  </div>
+                  <div class="config-block">
+                    <div class="config-title">
+                      SEO
+                      <button
+                        type="button"
+                        class="secondary-button seo-ai-button"
+                        :disabled="newsSeoBusy || !selectedNews.id"
+                        :title="selectedNews.id ? '用 AI 检查正文并生成 SEO 标题、描述与关键词' : '先保存新闻再生成'"
+                        @click="generateNewsSEO"
+                      >{{ newsSeoBusy ? 'AI 生成中…' : '✨ AI 生成 SEO' }}</button>
+                    </div>
+                    <div class="form-grid">
+                      <label class="field-line">SEO 标题<input v-model="selectedNews.seoTitle" maxlength="160" /></label>
+                      <label class="field-line"
+                        >SEO 描述<textarea
+                          v-model="selectedNews.seoDescription"
+                          maxlength="300"
+                          rows="3"
+                        ></textarea>
+                        <span class="field-hint" :class="{ 'hint-warn': newsSeoLength > 0 && (newsSeoLength < 120 || newsSeoLength > 160) }">
+                          建议 120~160 字，当前 {{ newsSeoLength }} 字
+                        </span>
+                      </label>
+                      <label v-if="selectedNews.seoKeywordsText" class="field-line"
+                        >SEO 关键词<input v-model="selectedNews.seoKeywordsText" placeholder="AI 生成，逗号分隔" />
+                      </label>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -891,6 +927,9 @@
                 @keydown.capture="onEditorLeftKeydown"
                 @focusin="onEditorLeftFocusIn"
               >
+                <div class="meta-card">
+                  <div class="meta-card-header"><h4>基础信息</h4></div>
+                  <div class="meta-card-body">
                 <div class="field-group">
                   <label class="field-label-prominent">文章标题 <span class="required-star">*</span></label>
                   <input
@@ -908,6 +947,8 @@
                     rows="3"
                     placeholder="简明扼要地概括文章核心亮点，用于列表展示与社交分享..."
                   ></textarea>
+                </div>
+                  </div>
                 </div>
                 <div class="meta-card">
                   <div class="meta-card-header">
@@ -950,6 +991,140 @@
                   </div>
                 </div>
 
+                <div class="meta-card">
+                  <div class="meta-card-header"><h4>正文</h4></div>
+                  <div class="meta-card-body">
+                <div class="field-group body-field-group">
+                  <div class="body-editor-head">
+                    <label class="field-label-prominent">正文内容 <span class="required-star">*</span></label>
+                    <div class="body-mode-switch">
+                      <button
+                        type="button"
+                        :class="{ active: bodyEditMode === 'editor' }"
+                        @click="switchBodyMode('editor')"
+                      >富文本编辑</button>
+                      <button
+                        type="button"
+                        :class="{ active: bodyEditMode === 'source' }"
+                        @click="switchBodyMode('source')"
+                      >HTML 源码</button>
+                      <button
+                        type="button"
+                        :class="{ active: bodyEditMode === 'preview' }"
+                        @click="switchBodyMode('preview')"
+                      >渲染预览</button>
+                    </div>
+                  </div>
+                  <div class="article-editor-shell">
+                  <AnnouncementRichTextEditor
+                    v-if="bodyEditMode === 'editor'"
+                    v-model="articleForm.bodyMarkdown"
+                    placeholder="开始撰写文章内容，支持粘贴富文本/源码片段..."
+                  />
+                  <textarea
+                    v-else-if="bodyEditMode === 'source'"
+                    v-model="articleForm.bodyMarkdown"
+                    class="html-source-area"
+                    rows="14"
+                    placeholder="粘贴或编辑 HTML 源码，例如 <h2>章节标题</h2><p>正文...</p>"
+                  ></textarea>
+                  <div
+                    v-else
+                    class="body-render-preview"
+                    v-html="renderedBodyPreview"
+                  ></div>
+                  </div>
+                </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 右列：精选 / 封面 / SEO / 翻译 -->
+              <div class="editor-col-right">
+                <div class="meta-card mt-3">
+                  <div class="meta-card-header">
+                    <span class="meta-card-icon">⭐</span>
+                    <h4>推荐设置</h4>
+                  </div>
+                  <div class="meta-card-body">
+                    <label class="featured-switch-row">
+                      <span>首页精选展示</span>
+                      <button
+                        type="button"
+                        class="switch-btn"
+                        :class="{ on: articleForm.featured }"
+                        role="switch"
+                        :aria-checked="articleForm.featured"
+                        @click="articleForm.featured = !articleForm.featured"
+                      >
+                        <span class="switch-knob"></span>
+                      </button>
+                    </label>
+                    <small class="muted">开启后文章将优先展示在首页精选位。</small>
+                  </div>
+                </div>
+
+                <div class="meta-card mt-3">
+                  <div class="meta-card-header">
+                    <span class="meta-card-icon">🖼️</span>
+                    <h4>封面图 (Cover)</h4>
+                  </div>
+                  <div class="meta-card-body">
+                    <small class="muted">建议比例 16:9 或 2:1，不超过 5MB</small>
+                    <div class="upload-control-row mt-2">
+                      <!-- 键盘可达：可见按钮承载焦点与点击，file input 只做隐藏的取值通道
+                           （原先 label>input.sr-only 让 Tab 落在屏幕外 1747px 的绝对定位元素上） -->
+                      <button type="button" class="upload-file-btn" @click="coverFileRef?.click()">本地上传</button>
+                      <input
+                        ref="coverFileRef"
+                        type="file"
+                        accept="image/*"
+                        class="sr-only"
+                        tabindex="-1"
+                        aria-hidden="true"
+                        @change="handleImageUpload($event, 'coverImage')"
+                      />
+                      <button
+                        v-if="articleForm.coverImage"
+                        type="button"
+                        class="btn-clear"
+                        @click="articleForm.coverImage = ''"
+                      >清除</button>
+                    </div>
+                    <div v-if="articleForm.coverImage" class="image-preview-box mt-2">
+                      <img :src="articleForm.coverImage" alt="封面预览" />
+                    </div>
+                    <div class="mt-2">
+                      <label class="alt-label">Alt 替代文本：
+                        <input v-model="articleForm.coverAlt" placeholder="描述图片供无障碍与 SEO" />
+                      </label>
+                    </div>
+                    <details class="advanced-seo mt-2">
+                      <summary>社交分享图 (OG Image)</summary>
+                      <div class="upload-control-row mt-2">
+                        <button type="button" class="upload-file-btn" @click="ogFileRef?.click()">本地上传</button>
+                        <input
+                          ref="ogFileRef"
+                          type="file"
+                          accept="image/*"
+                          class="sr-only"
+                          tabindex="-1"
+                          aria-hidden="true"
+                          @change="handleImageUpload($event, 'ogImage')"
+                        />
+                        <button
+                          v-if="articleForm.ogImage"
+                          type="button"
+                          class="btn-clear"
+                          @click="articleForm.ogImage = ''"
+                        >清除</button>
+                      </div>
+                      <div v-if="articleForm.ogImage" class="image-preview-box mt-2">
+                        <img :src="articleForm.ogImage" alt="OG 图片预览" />
+                      </div>
+                    </details>
+                  </div>
+                </div>
                 <div class="meta-card mt-3">
                   <div class="meta-card-header">
                     <span class="meta-card-icon">🔍</span>
@@ -1040,90 +1215,6 @@
                   </div>
                 </div>
 
-                <div class="meta-card mt-3">
-                  <div class="meta-card-header">
-                    <span class="meta-card-icon">⭐</span>
-                    <h4>推荐设置</h4>
-                  </div>
-                  <div class="meta-card-body">
-                    <label class="featured-switch-row">
-                      <span>首页精选展示</span>
-                      <button
-                        type="button"
-                        class="switch-btn"
-                        :class="{ on: articleForm.featured }"
-                        role="switch"
-                        :aria-checked="articleForm.featured"
-                        @click="articleForm.featured = !articleForm.featured"
-                      >
-                        <span class="switch-knob"></span>
-                      </button>
-                    </label>
-                    <small class="muted">开启后文章将优先展示在首页精选位。</small>
-                  </div>
-                </div>
-
-                <div class="meta-card mt-3">
-                  <div class="meta-card-header">
-                    <span class="meta-card-icon">🖼️</span>
-                    <h4>封面图 (Cover)</h4>
-                  </div>
-                  <div class="meta-card-body">
-                    <small class="muted">建议比例 16:9 或 2:1，不超过 5MB</small>
-                    <div class="upload-control-row mt-2">
-                      <!-- 键盘可达：可见按钮承载焦点与点击，file input 只做隐藏的取值通道
-                           （原先 label>input.sr-only 让 Tab 落在屏幕外 1747px 的绝对定位元素上） -->
-                      <button type="button" class="upload-file-btn" @click="coverFileRef?.click()">本地上传</button>
-                      <input
-                        ref="coverFileRef"
-                        type="file"
-                        accept="image/*"
-                        class="sr-only"
-                        tabindex="-1"
-                        aria-hidden="true"
-                        @change="handleImageUpload($event, 'coverImage')"
-                      />
-                      <button
-                        v-if="articleForm.coverImage"
-                        type="button"
-                        class="btn-clear"
-                        @click="articleForm.coverImage = ''"
-                      >清除</button>
-                    </div>
-                    <div v-if="articleForm.coverImage" class="image-preview-box mt-2">
-                      <img :src="articleForm.coverImage" alt="封面预览" />
-                    </div>
-                    <div class="mt-2">
-                      <label class="alt-label">Alt 替代文本：
-                        <input v-model="articleForm.coverAlt" placeholder="描述图片供无障碍与 SEO" />
-                      </label>
-                    </div>
-                    <details class="advanced-seo mt-2">
-                      <summary>社交分享图 (OG Image)</summary>
-                      <div class="upload-control-row mt-2">
-                        <button type="button" class="upload-file-btn" @click="ogFileRef?.click()">本地上传</button>
-                        <input
-                          ref="ogFileRef"
-                          type="file"
-                          accept="image/*"
-                          class="sr-only"
-                          tabindex="-1"
-                          aria-hidden="true"
-                          @change="handleImageUpload($event, 'ogImage')"
-                        />
-                        <button
-                          v-if="articleForm.ogImage"
-                          type="button"
-                          class="btn-clear"
-                          @click="articleForm.ogImage = ''"
-                        >清除</button>
-                      </div>
-                      <div v-if="articleForm.ogImage" class="image-preview-box mt-2">
-                        <img :src="articleForm.ogImage" alt="OG 图片预览" />
-                      </div>
-                    </details>
-                  </div>
-                </div>
                 <div v-if="articleForm.id" class="translations-card mt-4">
                   <div class="trans-header">
                     <div>
@@ -1228,51 +1319,6 @@
                   <small class="translation-hint muted">
                     中文为源语言；勾选语言后生成会逐语言创建真实翻译任务，状态实时来自译文记录。
                   </small>
-                </div>
-              </div>
-
-              <!-- 右列：正文编辑器（占满剩余高度，内部滚动） -->
-              <div class="editor-col-right">
-                <div class="field-group body-field-group">
-                  <div class="body-editor-head">
-                    <label class="field-label-prominent">正文内容 <span class="required-star">*</span></label>
-                    <div class="body-mode-switch">
-                      <button
-                        type="button"
-                        :class="{ active: bodyEditMode === 'editor' }"
-                        @click="switchBodyMode('editor')"
-                      >富文本编辑</button>
-                      <button
-                        type="button"
-                        :class="{ active: bodyEditMode === 'source' }"
-                        @click="switchBodyMode('source')"
-                      >HTML 源码</button>
-                      <button
-                        type="button"
-                        :class="{ active: bodyEditMode === 'preview' }"
-                        @click="switchBodyMode('preview')"
-                      >渲染预览</button>
-                    </div>
-                  </div>
-                  <div class="article-editor-shell">
-                  <AnnouncementRichTextEditor
-                    v-if="bodyEditMode === 'editor'"
-                    v-model="articleForm.bodyMarkdown"
-                    placeholder="开始撰写文章内容，支持粘贴富文本/源码片段..."
-                  />
-                  <textarea
-                    v-else-if="bodyEditMode === 'source'"
-                    v-model="articleForm.bodyMarkdown"
-                    class="html-source-area"
-                    rows="14"
-                    placeholder="粘贴或编辑 HTML 源码，例如 <h2>章节标题</h2><p>正文...</p>"
-                  ></textarea>
-                  <div
-                    v-else
-                    class="body-render-preview"
-                    v-html="renderedBodyPreview"
-                  ></div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -1912,6 +1958,29 @@ const newsTotal = ref(0);
 
 const selectedNews = ref<any>({});
 const newsEditorSession = ref(0);
+const newsSeoBusy = ref(false);
+const newsSeoLength = computed(() => String(selectedNews.value?.seoDescription || "").trim().length);
+
+/** 让 AI 先检查正文、再写 SEO 标题/描述/关键词；结果直接回填编辑表单，保存时随表单一起落库。 */
+async function generateNewsSEO() {
+  const id = Number(selectedNews.value?.id || 0);
+  if (!id || newsSeoBusy.value) return;
+  newsSeoBusy.value = true;
+  try {
+    const res: any = await contentAPI.autoFillNewsSEO(id);
+    const data = res?.data ?? res ?? {};
+    if (data.seoTitle) selectedNews.value.seoTitle = String(data.seoTitle);
+    if (data.seoDescription) selectedNews.value.seoDescription = String(data.seoDescription);
+    if (Array.isArray(data.keywords) && data.keywords.length) {
+      selectedNews.value.seoKeywordsText = data.keywords.join(", ");
+    }
+    toast("success", "已生成 SEO 标题 / 描述 / 关键词，确认后保存");
+  } catch (err: any) {
+    toast("error", extractApiErrorMessage(err, "AI 生成 SEO 失败，请检查 AI 配置"));
+  } finally {
+    newsSeoBusy.value = false;
+  }
+}
 let newsEditRequest = 0;
 const newsEditorRef = ref<HTMLElement | null>(null);
 
@@ -3178,6 +3247,7 @@ function newsFormSignature(): string {
     locale: String(n.locale ?? ""),
     seoTitle: String(n.seoTitle ?? ""),
     seoDescription: String(n.seoDescription ?? ""),
+    seoKeywordsText: Array.isArray(n.mediaJson?.seoKeywords) ? n.mediaJson.seoKeywords.join(", ") : "",
     sourceName: String(n.sourceName ?? ""),
     summary: String(n.summary ?? ""),
     bodyHtml: String(n.bodyHtml ?? n.bodyHTML ?? ""),
@@ -3293,6 +3363,15 @@ async function editNews(item: any) {
   newsEditorRef.value?.scrollIntoView({ behavior: "smooth", block: "start" })
   void loadNewsTranslationTasks(Number(item.id))
 }
+/** 新闻保存时把 AI 生成的 SEO 关键词回写到 mediaJson.seoKeywords（不覆盖其他媒体字段）。 */
+function buildNewsMediaJson(): Record<string, unknown> {
+  const base = { ...(selectedNews.value?.mediaJson || {}) } as Record<string, unknown>;
+  const keywords = parseTagsText(String(selectedNews.value?.seoKeywordsText || ""));
+  if (keywords.length) base.seoKeywords = keywords;
+  else delete base.seoKeywords;
+  return base;
+}
+
 function stripEditorHtml(html: string): string {
   const div = document.createElement("div");
   div.innerHTML = html;
@@ -3316,6 +3395,7 @@ async function saveNews() {
       bodyHtml: normalizeAnnouncementEditorHtml(
         String(selectedNews.value.bodyHtml || selectedNews.value.bodyHTML || ""),
       ),
+      mediaJson: buildNewsMediaJson(),
     });
     closeNewsEditor();
     await loadNews();
@@ -5028,7 +5108,7 @@ td small {
 /* 新闻编辑面板改为浮层，避免出现在表格下方、视口外导致"点编辑没反应" */
 .news-editor.news-editor-modal {
   margin: 0;
-  width: min(880px, calc(100vw - 32px));
+  width: min(1320px, calc(100vw - 32px));
   max-height: 92vh;
   overflow-y: auto;
   text-align: left;
@@ -5179,6 +5259,13 @@ td.actions-cell .link {
 .metric-card.metric-reads { background: linear-gradient(135deg, #1D4ED8 0%, #2563EB 100%); }
 .metric-card.metric-uv { background: linear-gradient(135deg, #5B21B6 0%, #8B5CF6 100%); }
 .metric-card.metric-ctr { background: linear-gradient(135deg, #B45309 0%, #F59E0B 100%); }
+/* 模板里的简写类名（m-blue 等）与上面的语义类名等价：
+   缺这组规则时卡片没有背景色，而 .metric-card 的 color 是 #FFFFFF，
+   于是顶部汇总卡变成「白底白字」，看起来就像指标没有名称。 */
+.metric-card.m-blue { background: linear-gradient(135deg, #1D4ED8 0%, #3B82F6 100%); }
+.metric-card.m-green { background: linear-gradient(135deg, #0F766E 0%, #16A34A 100%); }
+.metric-card.m-purple { background: linear-gradient(135deg, #5B21B6 0%, #8B5CF6 100%); }
+.metric-card.m-amber { background: linear-gradient(135deg, #B45309 0%, #F59E0B 100%); }
 .metric-icon {
   font-size: 22px;
   width: 44px;
@@ -6726,12 +6813,12 @@ td.actions-cell .link {
 .source-dialog .form-grid label { display: grid; gap: 7px; min-width: 0; font-size: 13px; font-weight: 700; }
 .source-dialog .form-grid label:has(textarea) { grid-column: 1/-1; }
 .dialog-close { flex: 0 0 36px; width: 36px; height: 36px; padding: 0; border: 2px solid #121316; border-radius: 8px; background: #fff; color: #121316; font-size: 24px; line-height: 1; cursor: pointer; }
-.news-editor.news-editor-modal { box-sizing: border-box; padding: 22px; }
+.news-editor.news-editor-modal { box-sizing: border-box; padding: 0; }
 .news-editor .two-col-editor { grid-template-columns: minmax(300px,38%) minmax(0,1fr); gap: 24px; }
 .news-editor .two-col-editor > div { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .news-editor .two-col-editor label { display: grid; gap: 7px; font-size: 13px; font-weight: 700; }
 .news-editor .two-col-editor input, .news-editor .two-col-editor textarea, .source-dialog input, .source-dialog textarea { box-sizing: border-box; width: 100%; min-height: 42px; padding: 9px 11px; border: 1.5px solid #9aa1b1; border-radius: 8px; font: inherit; line-height: 1.5; }
-.news-editor .two-col-editor textarea.news-summary-input { min-height: 160px; resize: vertical; line-height: 1.65; }
+.news-editor .two-col-editor textarea.news-summary-input { min-height: 84px; resize: vertical; line-height: 1.65; }
 .news-editor .editor-pane { min-height: 220px; }
 .news-editor .modal-fixed-footer { flex-shrink: 0; }
 .featured-toggle, .ref-news-item input[type="checkbox"], .news-row input[type="checkbox"], .article-row input[type="checkbox"] { flex: 0 0 16px !important; width: 16px !important; height: 16px !important; margin: 0 !important; }
@@ -6753,9 +6840,9 @@ td.actions-cell .link {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  width: min(880px, calc(100vw - 32px));
-  height: calc(100dvh - 64px);
-  max-height: 860px;
+  width: min(1320px, calc(100vw - 32px));
+  height: calc(100dvh - 48px);
+  max-height: 900px;
   min-height: 0;
   margin: 0;
   padding: 0;
@@ -6766,11 +6853,23 @@ td.actions-cell .link {
   box-shadow: 6px 6px 0 #121316;
 }
 .news-editor.news-editor-modal > .modal-fixed-header,
+.news-editor.news-editor-modal > .modal-fixed-header,
 .modal-drawer.article-editor-modal > .modal-drawer-header {
   flex: 0 0 auto;
   margin: 0;
-  padding: 14px 22px;
+  padding: 10px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   border-bottom: 2px solid #121316;
+}
+.news-editor.news-editor-modal > .modal-fixed-header > div,
+.modal-drawer.article-editor-modal > .modal-drawer-header > div {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  min-width: 0;
 }
 .news-editor.news-editor-modal > .modal-fixed-header h2,
 .modal-drawer.article-editor-modal > .modal-drawer-header h2 {
@@ -6780,8 +6879,11 @@ td.actions-cell .link {
 }
 .news-editor.news-editor-modal > .modal-fixed-header p,
 .modal-drawer.article-editor-modal > .modal-drawer-header p {
-  margin: 4px 0 0;
+  margin: 0;
   font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .news-editor.news-editor-modal > .modal-fixed-footer,
 .modal-drawer.article-editor-modal > .modal-drawer-footer {
@@ -6857,13 +6959,19 @@ td.actions-cell .link {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
+  /* 解除 .modal-scroll-body 的 92vh-190px 封顶：弹窗是固定高 flex 容器，由 flex 分配剩余高度 */
+  max-height: none;
   padding: 14px 22px 0;
-  overflow: hidden;
+  /* v0.4：正文编辑区有最小高度，小视口下内容会高于弹窗主体，必须可滚动，
+     否则溢出部分会被 sticky 页脚盖住（Playwright/用户都点不到编辑区） */
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .news-editor-body .two-col-editor {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  /* v0.4 板块重排：左=内容（基础信息+正文），右=元信息（发布/封面/SEO） */
+  grid-template-columns: minmax(0, 1fr) 380px;
   gap: 20px;
   width: 100%;
   min-height: 0;
@@ -6885,6 +6993,34 @@ td.actions-cell .link {
   gap: 12px;
 }
 .news-editor .editor-main-col { display: flex; flex-direction: column; }
+/* v0.4 板块重排：右列元信息分区卡片 */
+.news-editor .editor-config-col > .config-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  background: #FFFFFF;
+  border: 2px solid #121316;
+  border-radius: 12px;
+  box-shadow: 3px 3px 0 #121316;
+}
+.news-editor .editor-config-col > .config-block > .config-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+.news-editor .editor-main-col > .config-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.news-editor .config-block-inner {
+  border: 1.5px dashed #9aa1b1;
+  border-radius: 10px;
+  padding: 10px;
+  gap: 8px;
+}
 .news-editor .editor-label {
   flex: 0 0 auto;
   margin-bottom: 8px;
@@ -6909,7 +7045,19 @@ td.actions-cell .link {
 .article-editor-modal .article-editor-shell :deep(.rich-text-editor .rich-text-toolbar) {
   flex: 0 0 auto;
 }
-.news-editor .editor-shell :deep(.rich-text-editor .rich-text-content),
+.news-editor .editor-shell {
+  /* v0.4 R16：左栏字段较多，小视口下正文会被挤到几十像素；
+     给编辑器一个可用下限，超出部分由 .news-editor-body 滚动兜底 */
+  min-height: 360px;
+}
+.news-editor .editor-shell :deep(.rich-text-editor .rich-text-content) {
+  flex: 1 1 auto;
+  /* v0.4：正文区必须有最小高度，否则工具栏占满后 content 塌成 0/24px，
+     会被下方 sticky 页脚与「更多格式」工具栏盖住 */
+  min-height: 240px;
+  max-height: none;
+  overflow-y: auto;
+}
 .article-editor-modal .article-editor-shell :deep(.rich-text-editor .rich-text-content) {
   flex: 1 1 auto;
   min-height: 0;
@@ -6962,7 +7110,8 @@ td.actions-cell .link {
 .article-editor-columns {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  /* v0.4 板块重排：左=内容（宽），右=元信息（380px） */
+  grid-template-columns: minmax(0, 1fr) 380px;
   gap: 20px;
   width: 100%;
   min-height: 0;
@@ -6989,17 +7138,24 @@ td.actions-cell .link {
   min-height: 0;
   display: flex;
 }
-/* 右列正文块：占满右列剩余高度，让内部编辑器 flex 撑开 */
-.article-editor-columns > .editor-col-right > .body-field-group {
-  flex: 1 1 auto;
-  min-height: 0;
+/* v0.4 板块重排：正文块已移入左列（v0.4 P0 返工：左内容/右元信息），
+   这里让正文编辑器在左列内保持可编辑高度；右列卡片较多时自身滚动。 */
+.article-editor-columns > .editor-col-left > .meta-card > .meta-card-body > .body-field-group {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 420px;
 }
-.article-editor-columns > .editor-col-right > .body-field-group > .article-editor-shell {
+.article-editor-columns > .editor-col-left > .meta-card > .meta-card-body > .body-field-group > .article-editor-shell {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 360px;
+}
+.article-editor-columns > .editor-col-right {
+  position: sticky;
+  top: 0;
+  max-height: calc(92vh - 150px);
+  overflow-y: auto;
+  padding-right: 4px;
 }
 .article-editor-modal .article-editor-shell :deep(textarea.html-source-area),
 .article-editor-modal .article-editor-shell :deep(.body-render-preview) {
@@ -7162,7 +7318,8 @@ td.actions-cell .link {
    右栏高度被内容压缩到 ~95px，正文编辑器没有可视化高度 */
 .article-editor-modal .article-editor-columns {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  /* v0.4 板块重排：左=内容（宽），右=元信息（380px） */
+  grid-template-columns: minmax(0, 1fr) 380px;
   grid-template-rows: minmax(0, 1fr);
   align-items: stretch;
   gap: 20px;
