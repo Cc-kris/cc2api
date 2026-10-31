@@ -186,4 +186,28 @@ describe('AIConfigPanel', () => {
     expect(wrapper.text()).not.toContain('leaked-plain-key')
     expect(wrapper.text()).toContain('****')
   })
+
+  // AI-05 回归：拦截器把错误压成扁平对象后，409 自动重试必须仍然生效
+  // （旧代码读 e.response.data → 恒为 undefined → 重试永不触发，用户只看到"保存失败，请刷新后重试"）
+  it('AI-05 revision 冲突（扁平 409）自动刷新 revision 并重试成功', async () => {
+    const created = { ...saved, id: 'cfg-9', label: 'Retry-OK', isDefault: false, models: ['gpt-new'] }
+    api.mutateAIConfig
+      .mockRejectedValueOnce({ status: 409, code: 409, reason: 'config_revision_conflict', message: 'AI config revision conflict' })
+      .mockResolvedValueOnce(reply([saved, created], 'rev-2'))
+    let listCalls = 0
+    api.listAIConfigs.mockImplementation(async () => {
+      listCalls += 1
+      // 前两次（首屏加载 + 打开弹窗刷新）返回旧 revision，409 之后的重取才拿到新 revision
+      return reply([saved], listCalls <= 2 ? 'rev-1' : 'rev-2')
+    })
+    const wrapper = mount(AIConfigPanel); await flushPromises()
+    await openCreate(wrapper)
+    await fillCreate(wrapper, { label: 'Retry-OK', baseUrl: 'https://api.example.com/v1', apiKey: 'secret-retry', model: 'gpt-new' })
+    await wrapper.get('form').trigger('submit'); await flushPromises()
+    expect(api.mutateAIConfig).toHaveBeenCalledTimes(2)
+    // 第一次用 rev-1，重试前已重新拉取列表拿到 rev-2
+    expect(api.mutateAIConfig.mock.calls[0][2]).toBe('rev-1')
+    expect(api.mutateAIConfig.mock.calls[1][2]).toBe('rev-2')
+    expect(wrapper.text()).not.toContain('配置保存失败')
+  })
 })

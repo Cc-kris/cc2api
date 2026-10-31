@@ -174,6 +174,9 @@ function resetForm() {
 }
 async function openDialog() {
   dialogOpen.value = true
+  // 打开弹窗时静默刷新一次 revision：面板可能停留很久，或用另一个标签页改过配置，
+  // 否则第一次保存必然 409。
+  void load()
   await nextTick()
   pristine.value = snapshot()
   document.querySelector<HTMLInputElement>('.ai-config-dialog input')?.focus()
@@ -224,18 +227,30 @@ function closeDialog() {
   resetForm()
 }
 
+/**
+ * 取错误字段：apiClient 的响应拦截器把错误压成扁平对象 { status, code, message, reason }，
+ * 不再保留 axios 的 e.response，所以两种形状都要兼容——否则这里永远取不到 409 和 reason，
+ * 自动重试形同虚设，用户只能看到"保存失败，请刷新后重试"。
+ */
+function errField(e: any, key: 'status' | 'message' | 'reason' | 'code'): any {
+  const flat = e?.[key]
+  if (flat !== undefined && flat !== null && flat !== '') return flat
+  const nested = e?.response?.data?.[key] ?? (key === 'status' ? e?.response?.status : undefined)
+  return nested
+}
+
 async function mutate(action: 'save' | 'default' | 'delete', body: any) {
   const send = async () => payload(await contentAPI.mutateAIConfig(action, body, revision.value))
   let d: any
   try {
     d = await send()
   } catch (e: any) {
-    const status = e?.response?.status
-    const reason = String(e?.response?.data?.reason || '')
-    const message = String(e?.response?.data?.message || '')
+    const status = errField(e, 'status')
+    const reason = String(errField(e, 'reason') || '')
+    const message = String(errField(e, 'message') || '')
     // revision 过期（面板停留过久 / 多端同时修改）时自动重取最新 revision 再试一次，
     // 否则用户看到的永远是"保存失败"。
-    if (status === 409 && /revision/i.test(reason + message)) {
+    if (Number(status) === 409 && /revision|conflict/i.test(reason + message)) {
       await load()
       d = await send()
     } else {
@@ -247,12 +262,14 @@ async function mutate(action: 'save' | 'default' | 'delete', body: any) {
 }
 /** 把后端 reason 翻成人话，避免只看到一句"失败"。 */
 function describeError(e: any, fallback: string) {
-  const data = e?.response?.data || {}
-  const raw = String(data.message || data.error || '')
-  if (/revision/i.test(String(data.reason || '') + raw)) return '配置已被其他操作更新，请重试'
-  if (/model_in_use/.test(raw)) return '该配置正被进行中的写作/翻译任务使用，请等任务结束再删除'
-  if (/duplicate/i.test(raw)) return '配置名称已存在，请换一个名称'
-  if (/encryption_not_configured/.test(raw)) return '服务端未配置加密密钥（TOTP_ENCRYPTION_KEY），无法保存 API Key'
+  const raw = String(errField(e, 'message') || '')
+  const reason = String(errField(e, 'reason') || '')
+  const all = `${reason} ${raw}`
+  if (/revision|conflict/i.test(all)) return '配置已被其他操作更新，已自动刷新，请再点一次保存'
+  if (/model_in_use/.test(all)) return '该配置正被进行中的写作/翻译任务使用，请等任务结束再删除'
+  if (/duplicate/i.test(all)) return '配置名称已存在，请换一个名称'
+  if (/encryption_not_configured/.test(all)) return '服务端未配置加密密钥（TOTP_ENCRYPTION_KEY），无法保存 API Key'
+  if (/network/i.test(all)) return '连接服务端失败，请确认后端是否在运行后重试'
   return raw || fallback
 }
 async function save() {

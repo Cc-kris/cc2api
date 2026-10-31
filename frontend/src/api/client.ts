@@ -100,6 +100,8 @@ apiClient.interceptors.response.use(
           message: apiResponse.message || 'Unknown error',
           reason: resp.reason,
           metadata: resp.metadata,
+          // 兼容旧调用点：很多页面仍按 err.response.data.xxx 取值。
+          response: { status: response.status, data: apiResponse },
         })
       }
     }
@@ -275,6 +277,8 @@ apiClient.interceptors.response.use(
         error: apiData.error,
         message: apiData.message || apiData.detail || error.message,
         metadata: apiData.metadata,
+        // 兼容旧调用点：很多页面仍按 err.response.data.xxx 取值（拦截器历史上的形状是 axios 原始错误）。
+        response: { status, data: apiData },
       })
     }
 
