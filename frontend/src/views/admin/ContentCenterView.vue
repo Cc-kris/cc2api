@@ -107,7 +107,7 @@
                   <button v-else class="title-link" type="button" @click="editNews(item)">
                     {{ item.title }}
                   </button>
-                  <small v-if="item.summary" class="summary-clamp">{{ item.summary }}</small>
+                  <small v-if="displayNewsSummary(item)" class="summary-clamp">{{ displayNewsSummary(item) }}</small>
                   <small v-if="item.sourceName" class="muted">{{ item.sourceName }}</small>
                 </td>
                 <td><span class="locale-tag">{{ item.locale }}</span></td>
@@ -1758,70 +1758,70 @@
         <div class="chart-card chart-wide">
           <h3>{{ t('contentV04.analytics.trend') }}</h3>
           <div class="chart-box">
-            <LineChart v-if="trends.length" :data="trendChartData" :options="trendChartOptions" />
+            <SvgChart v-if="trends.length" kind="line" :data="trendChartData" :height="260" />
             <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
           </div>
         </div>
         <div class="chart-card">
           <h3>{{ t('contentV04.analytics.articleTop') }}</h3>
           <div class="chart-box">
-            <BarChart v-if="articleTopRows.length" :data="articleTopChartData" :options="horizontalBarOptions" />
+            <SvgChart v-if="articleTopRows.length" kind="hbar" :data="articleTopChartData" :height="260" />
             <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
           </div>
         </div>
         <div class="chart-card">
           <h3>{{ t('contentV04.analytics.newsTop') }}</h3>
           <div class="chart-box">
-            <BarChart v-if="newsTopRows.length" :data="newsTopChartData" :options="horizontalBarOptions" />
+            <SvgChart v-if="newsTopRows.length" kind="hbar" :data="newsTopChartData" :height="260" />
             <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
           </div>
         </div>
         <div class="chart-card">
           <h3>{{ t('contentV04.analytics.placementCtr') }}</h3>
           <div class="chart-box">
-            <BarChart v-if="ctrRows.length" :data="ctrChartData" :options="verticalBarOptions" />
+            <SvgChart v-if="ctrRows.length" kind="bar" :data="ctrChartData" :height="260" />
             <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
           </div>
         </div>
         <div class="chart-card">
           <h3>{{ t('contentV04.analytics.category') }}</h3>
           <div class="chart-box">
-            <DoughnutChart v-if="distributions.category.length" :data="categoryChartData" :options="doughnutOptions" />
+            <SvgChart v-if="distributions.category.length" kind="doughnut" :data="categoryChartData" :height="260" />
             <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
           </div>
         </div>
         <div class="chart-card">
           <h3>{{ t('contentV04.analytics.language') }}</h3>
           <div class="chart-box">
-            <DoughnutChart v-if="distributions.locale.length" :data="localeChartData" :options="doughnutOptions" />
+            <SvgChart v-if="distributions.locale.length" kind="doughnut" :data="localeChartData" :height="260" />
             <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
           </div>
         </div>
         <div class="chart-card">
           <h3>{{ t('contentV04.analytics.source') }}</h3>
           <div class="chart-box">
-            <DoughnutChart v-if="distributions.source.length" :data="sourceChartData" :options="doughnutOptions" />
+            <SvgChart v-if="distributions.source.length" kind="doughnut" :data="sourceChartData" :height="260" />
             <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
           </div>
         </div>
         <div class="chart-card">
           <h3>{{ t('contentV04.analytics.referrer') }}</h3>
           <div class="chart-box">
-            <DoughnutChart v-if="distributions.referrer.length" :data="referrerChartData" :options="doughnutOptions" />
+            <SvgChart v-if="distributions.referrer.length" kind="doughnut" :data="referrerChartData" :height="260" />
             <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
           </div>
         </div>
         <div class="chart-card">
           <h3>{{ t('contentV04.analytics.duration') }}</h3>
           <div class="chart-box">
-            <LineChart v-if="trends.length" :data="readSecondsChartData" :options="trendChartOptions" />
+            <SvgChart v-if="trends.length" kind="line" :data="readSecondsChartData" :height="260" />
             <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
           </div>
         </div>
         <div class="chart-card chart-wide">
           <h3>{{ t('contentV04.analytics.publishing') }}</h3>
           <div class="chart-box">
-            <BarChart v-if="trends.length" :data="publishingChartData" :options="publishingBarOptions" />
+            <SvgChart v-if="trends.length" kind="bar" :data="publishingChartData" :height="260" />
             <p v-else class="chart-empty">{{ t('contentV04.analytics.noData') }}</p>
           </div>
         </div>
@@ -1854,22 +1854,9 @@ import AnnouncementRichTextEditor from '@/components/admin/announcements/Announc
 import { announcementEditorInitialHtml, normalizeAnnouncementEditorHtml } from '@/utils/announcementContent'
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  ArcElement,
-  Tooltip,
-  Legend,
-  Filler,
-} from "chart.js";
-import { Line as LineChart, Bar as BarChart, Doughnut as DoughnutChart } from "vue-chartjs";
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Tooltip, Legend, Filler);
 import contentAPI from "@/api/admin/content";
 import AIConfigPanel from "@/components/admin/content/AIConfigPanel.vue";
+import SvgChart from "@/components/admin/content/SvgChart.vue";
 import Pagination from "@/components/common/Pagination.vue";
 import Select from "@/components/common/Select.vue";
 import TagInput from "@/components/common/TagInput.vue";
@@ -2186,6 +2173,27 @@ const biPlacementOptions = computed(() => [
 const placementLabel = (code: string) =>
   PLACEMENT_KEYS[code] ? t(`contentV04.analytics.placements.${PLACEMENT_KEYS[code]}`) : code || "—";
 
+// HN 等源站抓来的原文里带着 "Article URL: ... Comments URL: ... Points: ..." 这类元数据，
+// 直接展示会让列表看起来像没处理过的原始数据，这里在显示层裁掉。
+function cleanNewsSummary(raw?: string | null): string {
+  const text = String(raw || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  const cut = text.search(
+    /(?:Article|Comments|Discussion|Original)\s+URL\s*:|Points\s*:|#\s*Comments\s*:|Submitted\s+by\s*:/i,
+  );
+  if (cut === 0) return "";
+  const kept = cut > 0 ? text.slice(0, cut) : text;
+  return kept.replace(/[\s·\-–—:;,、，。]+$/, "").trim();
+}
+
+function displayNewsSummary(item: { summary?: string | null; title?: string | null } | null | undefined): string {
+  const text = cleanNewsSummary(item?.summary);
+  if (!text) return "";
+  const title = String(item?.title || "").replace(/\s+/g, " ").trim();
+  if (title && text.toLowerCase() === title.toLowerCase()) return "";
+  return text;
+}
+
 const LOCALE_KEYS: Record<string, string> = {
   zh: "chinese",
   en: "english",
@@ -2194,7 +2202,15 @@ const LOCALE_KEYS: Record<string, string> = {
   de: "german",
 };
 const localeLabel = (code: string) => {
-  const short = String(code || "").slice(0, 2).toLowerCase();
+  const raw = String(code || "").toLowerCase();
+  // zh-CN / zh-TW / zh-HK 都要能区分，否则分布图里会出现多个同名「中文」
+  if (raw.startsWith("zh")) {
+    if (raw.includes("tw") || raw.includes("hk") || raw.includes("hant")) {
+      return t("contentV04.language.chineseHant", "中文（繁体）");
+    }
+    return t("contentV04.language.chineseHans", "中文（简体）");
+  }
+  const short = raw.slice(0, 2);
   return LOCALE_KEYS[short] ? t(`contentV04.language.${LOCALE_KEYS[short]}`) : code || "—";
 };
 
@@ -2290,21 +2306,27 @@ const ctrChartData = computed(() => ({
   ],
 }));
 
-const distributionChart = (rows: any[], labeler: (key: string) => string) => ({
-  labels: rows.map((r: any) => labeler(r.key)),
-  datasets: [{ data: rows.map((r: any) => r.count || 0), backgroundColor: CHART_PALETTE, borderWidth: 0 }],
-});
+const distributionChart = (rows: any[], labeler: (key: string) => string) => {
+  // 同一显示名可能对应多个原始值（例如 zh-CN / zh），出现重名时补原始值避免图例看不出区别
+  const seen = new Map<string, number>();
+  rows.forEach((r: any) => {
+    const label = labeler(r.key);
+    seen.set(label, (seen.get(label) || 0) + 1);
+  });
+  return {
+    labels: rows.map((r: any) => {
+      const label = labeler(r.key);
+      return (seen.get(label) || 0) > 1 && r.key && r.key !== label ? `${label} · ${r.key}` : label;
+    }),
+    datasets: [{ data: rows.map((r: any) => r.count || 0), backgroundColor: CHART_PALETTE, borderWidth: 0 }],
+  };
+};
 
 const categoryChartData = computed(() => distributionChart(distributions.value.category, (k) => k || "—"));
 const localeChartData = computed(() => distributionChart(distributions.value.locale, localeLabel));
 const sourceChartData = computed(() => distributionChart(distributions.value.source, (k) => k || "—"));
 const referrerChartData = computed(() => distributionChart(distributions.value.referrer, referrerLabel));
 
-const trendChartOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "top" as const } }, scales: { y: { beginAtZero: true } } };
-const horizontalBarOptions = { indexAxis: "y" as const, responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } };
-const doughnutOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom" as const } } };
-const verticalBarOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } };
-const publishingBarOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "top" as const } }, scales: { y: { beginAtZero: true } } };
 
 watch(biRange, (value) => {
   if (value === "custom") return;
@@ -2800,7 +2822,9 @@ const vFeaturedChecked = {
       Object.defineProperty(el, "checked", {
         configurable: true,
         get: () => el.getAttribute("aria-checked") === "true",
-        set: (v: boolean) => el.setAttribute("aria-checked", v ? "true" : "false"),
+        set: (v: boolean) => {
+          el.setAttribute("aria-checked", v ? "true" : "false");
+        },
       });
     }
   },

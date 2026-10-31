@@ -30,6 +30,38 @@ export function useOnboardingTour(options: OnboardingOptions) {
            step.popover.showButtons[0] === 'close'
   }
 
+  // Helper: 强制清除 driver.js 留在 DOM 上的残留（遮罩/弹窗/body 类）
+  // driver.js 在异常流程（组件卸载、路由跳转、动画中途关闭）下不会自动清理，
+  // body 上残留 driver-active 会让全站 pointer-events 失效并整体发灰，
+  // 表现就是"页面点不动、文字看不见"。这里做兜底清理，保证页面可用。
+  const purgeDriverDom = () => {
+    if (typeof document === 'undefined') return
+    document
+      .querySelectorAll('.driver-overlay, .driver-popover, .driver-active-element, .driver-active-element-overlay')
+      .forEach(node => node.parentElement?.removeChild(node))
+    document.body.classList.remove('driver-active', 'driver-fade', 'driver-simple', 'driver-no-scroll')
+    if (document.body.style.overflow === 'hidden') {
+      document.body.style.overflow = ''
+    }
+    document.documentElement.classList.remove('driver-active', 'driver-fade')
+  }
+
+  // 统一销毁入口：先 driver.destroy()，再清残留 DOM，最后重置 store
+  const teardownDriver = () => {
+    const inst = driverInstance ?? onboardingStore.getDriverInstance()
+    if (inst) {
+      try {
+        if (typeof inst.isActive === 'function' && inst.isActive()) inst.destroy()
+        else if (typeof inst.destroy === 'function') inst.destroy()
+      } catch {
+        // driver 内部状态异常时忽略，交给 purgeDriverDom 兜底
+      }
+    }
+    driverInstance = null
+    onboardingStore.setDriverInstance(null)
+    purgeDriverDom()
+  }
+
   // Helper: Clean up click listener
   const cleanupClickListener = () => {
     if (!currentClickListener) return
@@ -109,6 +141,8 @@ export function useOnboardingTour(options: OnboardingOptions) {
     if (driverInstance) {
       driverInstance.destroy()
     }
+    // driver.destroy() 可能来不及清理（异常/动画中途），启动前先把残留清干净
+    purgeDriverDom()
 
     // 创建新的 driver 实例并存储到 store
     driverInstance = driver({
@@ -413,6 +447,8 @@ export function useOnboardingTour(options: OnboardingOptions) {
           globalKeyboardHandler = null
         }
         onboardingStore.setDriverInstance(null)
+        // driver 自身 destroy 偶尔会留下遮罩节点/body 类，这里兜底清干净
+        purgeDriverDom()
       }
     })
 
@@ -529,6 +565,12 @@ export function useOnboardingTour(options: OnboardingOptions) {
   }
 
   onMounted(async () => {
+    // 兜底：上一个页面实例可能留下了 driver 遮罩残留（body.driver-active），
+    // 若当前并没有活跃的 driver，直接清掉，避免整站被灰色遮罩压住、点不动。
+    if (!onboardingStore.isDriverActive()) {
+      purgeDriverDom()
+    }
+
     onboardingStore.setControlMethods({
       nextStep,
       isCurrentStep
@@ -561,7 +603,9 @@ export function useOnboardingTour(options: OnboardingOptions) {
       clearTimeout(autoStartTimer)
       autoStartTimer = null
     }
-    // 关键修复：不再此处清理 globalKeyboardHandler，交由 driver.onDestroyed 管理
+    // 关键：组件卸载时必须销毁 driver 实例，否则 body 会残留 driver-active，
+    // 导致整站 pointer-events 失效、页面发灰，看起来"点不动 + 没有文字"。
+    teardownDriver()
     onboardingStore.clearControlMethods()
   })
 
