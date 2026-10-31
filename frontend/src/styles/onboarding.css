@@ -27,7 +27,16 @@
 }
 
 /* 2. Popover Container */
+/* driver.js 的入场动画 animate-fade-in 从 opacity:0 起跳。当标签页被遮挡 / 被浏览器
+   节流时，动画会冻结在 currentTime=0（实测 getAnimations() 返回 running@0），
+   弹窗就永久停在 opacity:0：看不见，却因为 .driver-popover 自带 pointer-events:auto
+   而把页面中间一大块点击全部吃掉。所以这里不依赖动画，直接给静态可见值。 */
+.driver-active .driver-overlay {
+  animation: none !important;
+}
 .driver-popover.theme-tour-popover {
+  opacity: 1 !important;
+  animation: none !important;
   position: fixed !important;
   z-index: 100000000 !important;
   background-color: #ffffff !important;

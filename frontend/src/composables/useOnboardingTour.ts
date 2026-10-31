@@ -1,4 +1,5 @@
-import { onMounted, onUnmounted, nextTick } from 'vue'
+import { onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { driver, type Driver, type DriveStep } from 'driver.js'
 import 'driver.js/dist/driver.css'
 import { useAuthStore as useUserStore } from '@/stores/auth'
@@ -36,14 +37,36 @@ export function useOnboardingTour(options: OnboardingOptions) {
   // 表现就是"页面点不动、文字看不见"。这里做兜底清理，保证页面可用。
   const purgeDriverDom = () => {
     if (typeof document === 'undefined') return
-    document
-      .querySelectorAll('.driver-overlay, .driver-popover, .driver-active-element, .driver-active-element-overlay')
-      .forEach(node => node.parentElement?.removeChild(node))
+    const leftovers = document.querySelectorAll(
+      '.driver-overlay, .driver-popover, .driver-active-element, .driver-active-element-overlay'
+    )
+    leftovers.forEach(node => {
+      // 这些节点即便 opacity:0 也带着 pointer-events:auto，
+      // 会隐形地吃掉页面中间一大片点击（表现为"页面点不动"），必须直接移除。
+      node.parentElement?.removeChild(node)
+    })
     document.body.classList.remove('driver-active', 'driver-fade', 'driver-simple', 'driver-no-scroll')
     if (document.body.style.overflow === 'hidden') {
       document.body.style.overflow = ''
     }
+    if (document.body.style.pointerEvents === 'none') {
+      document.body.style.pointerEvents = ''
+    }
     document.documentElement.classList.remove('driver-active', 'driver-fade')
+  }
+
+  // driver.js 的实例状态和 DOM 现实可能脱节：store 里还认为"引导进行中"，
+  // 但 DOM 里遮罩/弹窗早没了（或停在 opacity:0 的半透明状态）。
+  // 只有 DOM 里真有可见遮罩或弹窗，才算引导真的还活着。
+  const isDriverDomLive = () => {
+    if (typeof document === 'undefined') return false
+    const visible = (selector: string) => {
+      const el = document.querySelector(selector)
+      if (!el) return false
+      const style = getComputedStyle(el)
+      return style.display !== 'none' && parseFloat(style.opacity || '1') > 0.05
+    }
+    return visible('.driver-overlay') || visible('.driver-popover')
   }
 
   // 统一销毁入口：先 driver.destroy()，再清残留 DOM，最后重置 store
@@ -564,7 +587,39 @@ export function useOnboardingTour(options: OnboardingOptions) {
     void startTour()
   }
 
+  // 引导的每一步都锚定在某个页面的具体元素上。一旦路由变化，旧元素消失，
+  // driver 就会留下一个 opacity:0 的僵尸弹窗，看不见却用 pointer-events:auto
+  // 把页面中间一大块点击全部吃掉。所以路径变化时主动收掉引导。
+  let currentRoute: ReturnType<typeof useRoute> | null = null
+  try {
+    currentRoute = useRoute()
+  } catch {
+    currentRoute = null
+  }
+  if (currentRoute) {
+    watch(
+      () => currentRoute!.path,
+      (to, from) => {
+        if (to === from) return
+        if (autoStartTimer) {
+          clearTimeout(autoStartTimer)
+          autoStartTimer = null
+        }
+        if (driverInstance || onboardingStore.isDriverActive()) {
+          teardownDriver()
+        }
+      }
+    )
+  }
+
   onMounted(async () => {
+    // 僵尸状态检测：store 说"引导进行中"，但 DOM 里根本没有可见遮罩/弹窗
+    // （典型成因是路由切换把目标元素带走，driver 只剩一个 opacity:0 的弹窗
+    // 卡在页面中间，看不见却把点击全吃掉）。这种状态必须强制复位。
+    if (onboardingStore.isDriverActive() && !isDriverDomLive()) {
+      teardownDriver()
+    }
+
     // 兜底：上一个页面实例可能留下了 driver 遮罩残留（body.driver-active），
     // 若当前并没有活跃的 driver，直接清掉，避免整站被灰色遮罩压住、点不动。
     if (!onboardingStore.isDriverActive()) {
@@ -593,6 +648,18 @@ export function useOnboardingTour(options: OnboardingOptions) {
     }
 
     if (!options.autoStart || hasSeen()) return
+
+    // 自动引导每个会话只弹一次。AppLayout 在路由切换时会重新挂载，
+    // 若只用 hasSeen() 判断，用户每点一次侧边栏就会从头再播 21 步
+    // （而且引导期间 driver 会给全站加 pointer-events:none，表现就是"点不动"）。
+    const autoStartFlag = `${getStorageKey()}_autostarted`
+    try {
+      if (sessionStorage.getItem(autoStartFlag)) return
+      sessionStorage.setItem(autoStartFlag, '1')
+    } catch {
+      // 隐私模式等场景下 sessionStorage 不可用，退化为"本次挂载启动一次"
+    }
+
     autoStartTimer = setTimeout(() => {
       void startTour()
     }, TIMING.AUTO_START_DELAY_MS)

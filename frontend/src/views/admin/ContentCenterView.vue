@@ -5042,7 +5042,10 @@ td small {
   gap: 16px;
   margin-bottom: 26px;
 }
-.metrics div {
+/* 只作用于卡片本身，绝不能写成 `.metrics div`：
+   后代选择器会把内层 .metric-info 一起匹配，导致它被涂成 #F8FAFF 白底 + 黑框，
+   而标签文字颜色是 rgba(255,255,255,.92)，就变成「白底白字 = 看起来根本没写标签」。 */
+.metrics > div:not(.metric-card) {
   background: #F8FAFF;
   border: 2px solid #121316;
   padding: 18px 20px;
@@ -5273,12 +5276,28 @@ td.actions-cell .link {
 
 /* 数据汇总卡片：彩色渐变 */
 .metric-card {
-  border-radius: 12px;
-  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 96px;
+  border-radius: 14px;
+  padding: 18px 20px;
   color: #FFFFFF;
-  border: none;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  border: 2px solid #121316;
+  box-shadow: 4px 4px 0 #121316;
+  position: relative;
+  overflow: hidden;
 }
+/* 文字压一层由左向右淡出的深色罩：渐变右侧亮端对白字只有 3.2:1，
+   加罩后最差 4.73:1（WCAG AA 4.5:1），保证标签一定读得清。 */
+.metric-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, rgba(18,19,22,.26) 0%, rgba(18,19,22,.10) 55%, rgba(18,19,22,0) 100%);
+  pointer-events: none;
+}
+.metric-card > * { position: relative; z-index: 1; }
 .metric-card.metric-views { background: linear-gradient(135deg, #1D4ED8 0%, #3B82F6 100%); }
 .metric-card.metric-reads { background: linear-gradient(135deg, #1D4ED8 0%, #2563EB 100%); }
 .metric-card.metric-uv { background: linear-gradient(135deg, #5B21B6 0%, #8B5CF6 100%); }
@@ -5287,21 +5306,23 @@ td.actions-cell .link {
    缺这组规则时卡片没有背景色，而 .metric-card 的 color 是 #FFFFFF，
    于是顶部汇总卡变成「白底白字」，看起来就像指标没有名称。 */
 .metric-card.m-blue { background: linear-gradient(135deg, #1D4ED8 0%, #3B82F6 100%); }
-.metric-card.m-green { background: linear-gradient(135deg, #0F766E 0%, #16A34A 100%); }
-.metric-card.m-purple { background: linear-gradient(135deg, #5B21B6 0%, #8B5CF6 100%); }
-.metric-card.m-amber { background: linear-gradient(135deg, #B45309 0%, #F59E0B 100%); }
+.metric-card.m-green { background: linear-gradient(135deg, #0F766E 0%, #15803D 100%); }
+.metric-card.m-purple { background: linear-gradient(135deg, #5B21B6 0%, #7C3AED 100%); }
+.metric-card.m-amber { background: linear-gradient(135deg, #B45309 0%, #D97706 100%); }
 .metric-icon {
   font-size: 22px;
   width: 44px;
   height: 44px;
+  flex: 0 0 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: rgba(255,255,255,0.2);
   border-radius: 10px;
 }
-.metric-info small { color: rgba(255,255,255,0.8); }
-.metric-info strong { font-size: 24px; }
+.metric-info { min-width: 0; }
+.metric-info small { color: rgba(255,255,255,0.88); }
+.metric-info strong { color: #FFFFFF; font-size: 26px; font-weight: 800; }
 
 /* ==================== 文章编辑抽屉 (Drawer) ==================== */
 .modal-backdrop {
@@ -6847,9 +6868,9 @@ td.actions-cell .link {
 .news-editor .modal-fixed-footer { flex-shrink: 0; }
 .featured-toggle, .ref-news-item input[type="checkbox"], .news-row input[type="checkbox"], .article-row input[type="checkbox"] { flex: 0 0 16px !important; width: 16px !important; height: 16px !important; margin: 0 !important; }
 .featured-cell label { display: inline-flex; align-items: center; justify-content: center; flex: none; gap: 7px; }
-.metric-info { display: flex; flex-direction: column; justify-content: center; gap: 4px; }
-.metric-info small { display: block; color: rgba(255,255,255,.92); font-size: 12px; font-weight: 700; line-height: 1.3; }
-.metric-info strong { display: block; line-height: 1.15; }
+.metric-info { display: flex; flex-direction: column; justify-content: center; gap: 6px; min-width: 0; }
+.metric-info small { display: block; color: rgba(255,255,255,.92); font-size: 12px; font-weight: 700; line-height: 1.3; letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.metric-info strong { display: block; color: #fff; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 28px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .bi-error { display: flex;
   align-items: center;
   gap: 12px;
