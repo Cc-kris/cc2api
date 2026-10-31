@@ -32,6 +32,8 @@ export const contentAdminAPI = {
     apiClient.post(`/admin/content/news/${id}/publish`),
   unpublishNews: (id: number) =>
     apiClient.post(`/admin/content/news/${id}/unpublish`),
+  autoFillNewsSEO: (id: number) =>
+    apiClient.post(`/admin/content/news/${id}/seo-autofill`),
   deleteNews: (id: number) => apiClient.delete(`/admin/content/news/${id}`),
   bulkNews: (body: unknown) => apiClient.post("/admin/content/news/bulk", body),
   listArticles: (params?: Record<string, unknown>) =>

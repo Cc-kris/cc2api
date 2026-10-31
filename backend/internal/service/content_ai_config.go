@@ -164,12 +164,20 @@ func (s *ContentAIConfigStore) load() ([]ContentAIProviderConfig, string, error)
 		}
 		seenIDs[c.ID] = struct{}{}
 		x := ContentAIProviderConfig{ID: c.ID, Label: c.Label, Provider: c.Provider, BaseURL: c.BaseURL, DefaultModel: c.Model, Models: c.Models, UpdatedAt: c.Updated}
+		// 原密文始终随配置带上（json:"-" 不对外暴露），保存时未填新 Key 就复用它，
+		// 否则“只改名称”会把已存的 Key 抹掉。
+		x.EncryptedKey = c.Key
 		if c.Key != "" {
 			if s.encryptor == nil {
 				return nil, "", ErrContentAIEncryptionNotConfigured
 			}
+			// 单条解密失败不能拖垮整个列表：换过加密钥/手工改过配置后，旧密文解不开，
+			// 以前这里直接 500，管理端就表现为“保存失败、一个都删不掉”。
+			// 现在降级为“Key 不可读”，用户可重填 Key 或直接删除该配置。
 			if x.APIKey, e = s.encryptor.Decrypt(c.Key); e != nil {
-				return nil, "", e
+				x.APIKey = ""
+				x.EncryptedKey = c.Key
+				x.KeyUnreadable = true
 			}
 		}
 		x.HasAPIKey = x.APIKey != ""
@@ -216,6 +224,9 @@ func (s *ContentAIConfigStore) save(configs []ContentAIProviderConfig, def strin
 			if e != nil {
 				return e
 			}
+		} else if strings.TrimSpace(c.EncryptedKey) != "" {
+			// 未填新 Key 且已有密文：原样保留，避免解密降级后保存把 Key 抹掉。
+			k = ""
 		}
 		f.Configs = append(f.Configs, contentAIStored{c.ID, c.Label, c.Provider, c.BaseURL, c.EncryptedKey, c.DefaultModel, c.Models, c.UpdatedAt})
 	}

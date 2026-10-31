@@ -20,6 +20,14 @@ describe('TagInput', () => {
     await input.setValue(' Gateway '); vi.useFakeTimers(); await input.trigger('blur'); vi.runAllTimers(); vi.useRealTimers(); await nextTick(); expect(emitted(w)).toEqual(['AI', 'Gateway'])
     await input.trigger('keydown', { key: 'Backspace' }); expect(emitted(w)).toEqual([])
   })
+  it('shows existing suggestions on focus and supports a single string model', async () => {
+    const w = mount(TagInput, { props: { modelValue: '', suggestions: ['Gateway', 'LLM'] } })
+    await w.get('input').trigger('focus')
+    expect(w.findAll('[role=option]').map(x => x.text())).toEqual(['Gateway', 'LLM'])
+    await w.get('input').setValue('new-tag')
+    await w.get('input').trigger('keydown', { key: 'Enter' })
+    expect(w.emitted('update:modelValue')?.at(-1)?.[0]).toBe('new-tag')
+  })
   it('navigates suggestions, escapes and splits pasted delimiters', async () => {
     const w = setup(['Gateway', 'LLM']); const input = w.get('input')
     await input.setValue('g'); await input.trigger('keydown', { key: 'ArrowDown' }); await input.trigger('keydown', { key: 'Enter' }); expect(emitted(w)).toEqual(['AI', 'Gateway'])

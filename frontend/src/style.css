@@ -1361,6 +1361,7 @@ select:focus {
   outline: none !important;
 }
 html.dark .input,
+html.dark input:not([type]),
 html.dark input[type="text"]:not(.select-search-input),
 html.dark input[type="email"],
 html.dark input[type="password"],
@@ -2214,3 +2215,122 @@ input:focus-visible:not([type='checkbox']):not([type='radio']), textarea:focus-v
 }
 /* 表格分隔线保留（R15-02） */
 .table th, .table td { border-bottom-width: 1px; border-bottom-style: solid; }
+
+/* ===== NE-17：深色主题覆盖富文本编辑器（子组件类名是全局的，放这里才压得住组件内的浅色底） ===== */
+html.dark .rich-text-editor {
+  background: #0f1219 !important;
+  border-color: #334155 !important;
+}
+html.dark .rich-text-toolbar {
+  background: #1b2230 !important;
+  border-bottom-color: #334155 !important;
+}
+html.dark .rich-text-tool {
+  background: #232b3b !important;
+  border-color: #3b4658 !important;
+  color: #e2e8f0 !important;
+}
+html.dark .rich-text-tool.is-active {
+  background: #1d4ed8 !important;
+  border-color: #60a5fa !important;
+  color: #f8fafc !important;
+}
+html.dark .rich-text-content {
+  background: #0f1219 !important;
+  color: #f8fafc !important;
+}
+html.dark .is-readonly .rich-text-content {
+  background: #141822 !important;
+}
+html.dark .rich-text-hint {
+  color: #94a3b8 !important;
+}
+
+/* NE-17：弹窗内的次要文字（必填项说明 / muted 提示）在深色底上要够亮，
+   组件内 scoped 规则会被 .news-editor .xxx 之类更高优先级的浅色声明压住，这里用全局 !important 直接落地 */
+html.dark .news-editor .form-required-legend,
+html.dark .article-editor-modal .form-required-legend,
+html.dark .news-editor .muted,
+html.dark .article-editor-modal .muted,
+html.dark .source-dialog .muted,
+html.dark .taxonomy-dialog .muted,
+html.dark .news-editor .field-hint,
+html.dark .article-editor-modal .field-hint,
+html.dark .source-dialog .field-hint {
+  color: #cbd5e1 !important;
+}
+
+/* ===== NE-17：深色主题覆盖内容中心弹窗 =====
+   注意：ContentCenterView.vue 是 <style scoped>，其内部的 :global(html.dark) 规则不会产出，
+   所以深色覆盖必须写在这个全局样式表里，并用 !important 压过组件内 `.news-editor.news-editor-modal`
+   这类更高优先级的浅色声明。 */
+html.dark .news-editor.news-editor-modal,
+html.dark .modal-drawer.article-editor-modal,
+html.dark .source-dialog,
+html.dark .taxonomy-dialog {
+  background: #171b26 !important;
+  border-color: #cbd5e1 !important;
+  color: #e2e8f0 !important;
+  box-shadow: 6px 6px 0 #020617 !important;
+}
+html.dark .news-editor.news-editor-modal > .modal-fixed-header,
+html.dark .news-editor.news-editor-modal > .modal-fixed-footer,
+html.dark .modal-drawer.article-editor-modal > .modal-drawer-header,
+html.dark .modal-drawer.article-editor-modal > .modal-drawer-footer {
+  background: #1b2230 !important;
+  border-color: #334155 !important;
+}
+html.dark .news-editor .modal-fixed-header h2,
+html.dark .news-editor .modal-fixed-header p,
+html.dark .modal-drawer.article-editor-modal .modal-drawer-header h2,
+html.dark .modal-drawer.article-editor-modal .modal-drawer-header p,
+html.dark .source-dialog h2,
+html.dark .taxonomy-dialog h2 {
+  color: #f8fafc !important;
+}
+html.dark .news-editor label,
+html.dark .news-editor .editor-label,
+html.dark .news-editor .field-line,
+html.dark .modal-drawer.article-editor-modal label,
+html.dark .source-dialog label,
+html.dark .taxonomy-dialog label {
+  color: #e2e8f0 !important;
+}
+html.dark .news-editor .two-col-editor input,
+html.dark .news-editor .two-col-editor textarea,
+html.dark .news-editor input,
+html.dark .news-editor textarea,
+html.dark .modal-drawer.article-editor-modal input,
+html.dark .modal-drawer.article-editor-modal textarea,
+html.dark .source-dialog input,
+html.dark .source-dialog textarea,
+html.dark .taxonomy-dialog input {
+  background: #0f1219 !important;
+  border-color: #cbd5e1 !important;
+  color: #f8fafc !important;
+}
+html.dark .news-editor .two-col-editor input::placeholder,
+html.dark .news-editor .two-col-editor textarea::placeholder,
+html.dark .source-dialog input::placeholder,
+html.dark .source-dialog textarea::placeholder {
+  color: #94a3b8 !important;
+}
+html.dark .news-editor .form-required-legend,
+html.dark .modal-drawer.article-editor-modal .form-required-legend {
+  color: #cbd5e1 !important;
+}
+html.dark .news-editor .muted,
+html.dark .news-editor .field-hint,
+html.dark .modal-drawer.article-editor-modal .muted,
+html.dark .modal-drawer.article-editor-modal .field-hint,
+html.dark .source-dialog .muted,
+html.dark .source-dialog .field-hint,
+html.dark .taxonomy-dialog .muted {
+  color: #cbd5e1 !important;
+}
+/* 弹窗内的标签/分类等次级卡片 */
+html.dark .news-editor .editor-pane,
+html.dark .news-editor .editor-config-col,
+html.dark .news-editor .editor-main-col {
+  background: transparent !important;
+}

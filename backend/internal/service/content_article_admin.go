@@ -24,7 +24,12 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/contentmd"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/gin-gonic/gin"
+
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
+
+// ErrFeaturedArticleNotPublished is a client error: only published articles may be featured.
+var ErrFeaturedArticleNotPublished = infraerrors.BadRequest("article_not_published", "only published articles can be featured")
 
 var (
 	ErrContentArticleNotFound            = errors.New("content article not found")
@@ -69,6 +74,8 @@ type ContentArticle struct {
 	Version        int        `json:"version"`
 	// IsFeatured is derived from FeaturedAt, the database source of truth.
 	IsFeatured bool `json:"isFeatured"`
+	// SyncLocales 是保存请求里携带的目标语言，仅用于本次保存后创建翻译记录。
+	SyncLocales []string `json:"-"`
 }
 
 type ContentArticleFilters struct {
@@ -205,11 +212,14 @@ type ContentWritingExecutor interface {
 
 type ContentSEOInput struct {
 	Title        string
+	Summary      string
 	BodyMarkdown string
 	BodyHTML     string
+	Locale       string
 }
 
 type ContentSEOResult struct {
+	Title       string   `json:"title,omitempty"`
 	Description string   `json:"description"`
 	Keywords    []string `json:"keywords"`
 	Model       string   `json:"model,omitempty"`
@@ -237,7 +247,10 @@ type ContentAIProviderConfig struct {
 	EncryptedKey string   `json:"-"`
 	APIKeyMasked string   `json:"apiKeyMasked,omitempty"`
 	HasAPIKey    bool     `json:"hasApiKey"`
-	DefaultModel string   `json:"defaultModel"`
+	// KeyUnreadable 表示已存密文用当前加密钥解不开（换过密钥/手工改过文件），
+	// 前端据此提示“请重新填写 API Key”，而不是整页 500。
+	KeyUnreadable bool     `json:"keyUnreadable,omitempty"`
+	DefaultModel  string   `json:"defaultModel"`
 	Models       []string `json:"models"`
 	UpdatedAt    string   `json:"updatedAt,omitempty"`
 }
@@ -393,15 +406,21 @@ func (s *ContentArticleAdminService) UpdateAIProviderConfig(ctx context.Context,
 
 // AIConfigRevision returns a stable optimistic concurrency token for the current config set.
 func aiConfigHash(configs []ContentAIProviderConfig, def string) string {
-	for i := range configs {
-		configs[i].APIKey = ""
-		configs[i].APIKeyMasked = ""
-		configs[i].HasAPIKey = false
+	// Hash a detached copy: callers pass the live config slice, and blanking the
+	// secret/display fields in place used to wipe APIKey before the save path
+	// could re-use it (an edit that omitted the key silently dropped it, W4 AI-05).
+	safe := make([]ContentAIProviderConfig, len(configs))
+	for i, c := range configs {
+		c.APIKey = ""
+		c.APIKeyMasked = ""
+		c.HasAPIKey = false
+		c.IsDefault = false
+		safe[i] = c
 	}
 	b, _ := json.Marshal(struct {
 		Configs []ContentAIProviderConfig `json:"configs"`
 		Default string                    `json:"default"`
-	}{configs, def})
+	}{safe, def})
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
 }
@@ -410,11 +429,18 @@ func ListAIProviderConfigs() ([]ContentAIProviderConfig, string, string, error) 
 	if err != nil {
 		return nil, "", "", err
 	}
+	// Revision is computed on a detached copy: aiConfigHash blanks secret/default
+	// fields in place, so hashing the live slice would wipe the display fields
+	// (isDefault / apiKeyMasked / hasApiKey) that the admin list must return.
+	revision := aiConfigHash(append([]ContentAIProviderConfig(nil), configs...), def)
 	for i := range configs {
 		configs[i].IsDefault = configs[i].ID == def
+		// Key is only ever exposed as a mask; the plaintext never leaves the server.
+		configs[i].APIKeyMasked = maskAPIKey(configs[i].APIKey)
+		configs[i].HasAPIKey = strings.TrimSpace(configs[i].APIKey) != ""
 		configs[i].APIKey = ""
 	}
-	return configs, def, aiConfigHash(configs, def), nil
+	return configs, def, revision, nil
 }
 func (s *ContentArticleAdminService) MutateAIProviderConfig(ctx context.Context, action, id, revision string, input ContentAIProviderConfig) error {
 	contentAIMu.Lock()
@@ -439,6 +465,10 @@ func (s *ContentArticleAdminService) MutateAIProviderConfig(ctx context.Context,
 			if c.ID == input.ID {
 				if input.APIKey == "" {
 					input.APIKey = c.APIKey
+					// 密文必须跟着走：解密降级（KeyUnreadable）时 APIKey 是空的，
+					// 这里若丢掉密文，用户只是改个名字就会把已存的 Key 抹掉。
+					input.EncryptedKey = c.EncryptedKey
+					input.KeyUnreadable = c.KeyUnreadable
 				}
 				configs[i] = input
 				found = true
@@ -464,34 +494,42 @@ func (s *ContentArticleAdminService) MutateAIProviderConfig(ctx context.Context,
 		}
 		def = id
 	case "delete":
-		if id == def {
-			return fmt.Errorf("model_in_use: default configuration cannot be deleted")
-		}
+		// 只拦截被进行中任务引用的配置；默认配置不再禁止删除：
+		// 删掉默认项后自动把剩余第一条提升为默认，避免管理端"一个都删不掉"。
+		found := false
 		for _, c := range configs {
-			if c.ID == id {
-				for _, t := range []string{"writing", "translation"} {
-					tasks, e := s.ListWritingTasks(ctx, t, 200)
-					if e != nil {
-						return e
-					}
-					for _, task := range tasks {
-						if task.ProviderKeyRef == id && (task.Status == ContentWritingQueued || task.Status == ContentWritingRunning) {
-							return fmt.Errorf("model_in_use")
-						}
+			if c.ID != id {
+				continue
+			}
+			found = true
+			for _, t := range []string{"writing", "translation"} {
+				tasks, e := s.ListWritingTasks(ctx, t, 200)
+				if e != nil {
+					return e
+				}
+				for _, task := range tasks {
+					if task.ProviderKeyRef == id && (task.Status == ContentWritingQueued || task.Status == ContentWritingRunning) {
+						return fmt.Errorf("model_in_use")
 					}
 				}
-				filtered := configs[:0]
-				for _, cfg := range configs {
-					if cfg.ID != id {
-						filtered = append(filtered, cfg)
-					}
-				}
-				configs = filtered
-				goto deleted
 			}
 		}
-		return fmt.Errorf("configuration not found")
-	deleted:
+		if !found {
+			return fmt.Errorf("configuration not found")
+		}
+		filtered := make([]ContentAIProviderConfig, 0, len(configs))
+		for _, cfg := range configs {
+			if cfg.ID != id {
+				filtered = append(filtered, cfg)
+			}
+		}
+		configs = filtered
+		if def == id || def == "" {
+			def = ""
+			if len(configs) > 0 {
+				def = configs[0].ID
+			}
+		}
 	}
 	return contentAIStore().SaveAll(configs, def)
 }
@@ -810,7 +848,7 @@ func (s *ContentArticleAdminService) MutateTaxonomy(ctx context.Context, scope, 
 			return cfg, ErrContentArticleNotFound
 		}
 		if cleanAction == "set" && art.Status != domain.ContentStatusPublished {
-			return cfg, errors.New("only published articles can be featured")
+			return cfg, ErrFeaturedArticleNotPublished
 		}
 		artCopy := *art
 		if cleanAction == "set" {
@@ -965,7 +1003,33 @@ func (e *GatewayContentWritingExecutor) GenerateSEO(ctx context.Context, model s
 }
 
 func buildContentSEOPrompt(input ContentSEOInput) string {
-	return fmt.Sprintf("为以下文章生成 SEO 描述与关键词。只允许输出 JSON：{\\\"description\\\":\\\"...\\\",\\\"keywords\\\":[\\\"...\\\"]}。描述控制在 120-160 个 Unicode 字符，关键词 5-8 个。标题：%s\\n正文：%s\\n%s", strings.TrimSpace(input.Title), strings.TrimSpace(input.BodyMarkdown), strings.TrimSpace(input.BodyHTML))
+	body := strings.TrimSpace(input.BodyMarkdown)
+	if body == "" {
+		body = strings.TrimSpace(input.BodyHTML)
+	}
+	if body == "" {
+		body = strings.TrimSpace(input.Summary)
+	}
+	// 正文可能很长（抓取新闻常见），提示词只带前 4000 字符，避免超出上下文。
+	if runes := []rune(body); len(runes) > 4000 {
+		body = string(runes[:4000])
+	}
+	locale := strings.TrimSpace(input.Locale)
+	if locale == "" {
+		locale = "zh-CN"
+	}
+	return fmt.Sprintf(`你是资深 SEO 编辑。请先检查下面的内容，再为其编写 SEO 元数据。
+检查要点：标题是否包含核心关键词、摘要/正文是否覆盖用户搜索意图、是否有堆砌或空泛表述。
+写作要求：
+1. title 是搜索结果里显示的 SEO 标题：包含核心关键词、不超过 70 个 Unicode 字符、不含换行与引号，可与原标题不同但不得夸张。
+2. description 必须是一句完整、可读、面向搜索结果的摘要，严格 120-160 个 Unicode 字符，不得包含换行与引号。
+3. keywords 为 5-8 个不重复的核心关键词，按重要度降序，全部小写、不含标点。
+4. 只输出 JSON，不要任何解释或代码块：{"title":"...","description":"...","keywords":["..."]}
+5. 语言与内容语言一致（当前 locale：%s）。
+
+标题：%s
+摘要：%s
+正文：%s`, locale, strings.TrimSpace(input.Title), strings.TrimSpace(input.Summary), body)
 }
 
 func parseContentSEOResult(raw []byte) (*ContentSEOResult, error) {
@@ -983,6 +1047,14 @@ func parseContentSEOResult(raw []byte) (*ContentSEOResult, error) {
 func validateContentSEOResult(result *ContentSEOResult) error {
 	if result == nil {
 		return ErrContentSEOResultInvalid
+	}
+	// title 可选：给了就必须是能直接上 SERP 的短标题，没给就沿用原标题。
+	title := strings.TrimSpace(result.Title)
+	if title != "" {
+		if len([]rune(title)) > 70 || strings.ContainsAny(title, "\r\n") {
+			return ErrContentSEOResultInvalid
+		}
+		result.Title = title
 	}
 	description := strings.TrimSpace(result.Description)
 	if length := len([]rune(description)); length < 120 || length > 160 {
@@ -1434,6 +1506,14 @@ type ContentArticleAdminService struct {
 	workerDone          chan struct{}
 	audit               ContentAuditLogger
 	defaultModel        string
+	translat            *ContentTranslationSyncer
+}
+
+// SetTranslationSyncer 注入翻译记录同步器（内容保存时按 syncLocales 建待翻译记录）。
+func (s *ContentArticleAdminService) SetTranslationSyncer(syncer *ContentTranslationSyncer) {
+	if s != nil {
+		s.translat = syncer
+	}
 }
 
 type ContentAuditEntry struct {
@@ -1480,11 +1560,27 @@ func NewContentArticleAdminService(repo ContentArticleRepository, catalog Conten
 }
 
 func (s *ContentArticleAdminService) GenerateSEO(ctx context.Context, input ContentSEOInput) (*ContentSEOResult, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
 	if s == nil {
 		return nil, ErrContentAIModelNotConfigured
+	}
+	s.workerMu.Lock()
+	executor := s.seoExecutor
+	s.workerMu.Unlock()
+	if executor == nil {
+		executor = &GatewayContentWritingExecutor{}
+	}
+	return runContentSEO(ctx, executor, input)
+}
+
+// GenerateContentSEO 为任意内容类型（文章、抓取新闻）生成 SEO 描述与关键词。
+// 新闻抓取入库与 AI 自动写作落库都调用它，保证每条内容都过一道 SEO 检查与编写。
+func GenerateContentSEO(ctx context.Context, input ContentSEOInput) (*ContentSEOResult, error) {
+	return runContentSEO(ctx, &GatewayContentWritingExecutor{}, input)
+}
+
+func runContentSEO(ctx context.Context, executor ContentSEOExecutor, input ContentSEOInput) (*ContentSEOResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	cfg, err := loadContentAIProviderConfigWithError()
 	if err != nil {
@@ -1494,12 +1590,9 @@ func (s *ContentArticleAdminService) GenerateSEO(ctx context.Context, input Cont
 	if model == "" {
 		return nil, ErrContentAIModelNotConfigured
 	}
-	s.workerMu.Lock()
-	executor := s.seoExecutor
 	if executor == nil {
 		executor = &GatewayContentWritingExecutor{}
 	}
-	s.workerMu.Unlock()
 	for attempt := 0; attempt < 2; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -1577,12 +1670,18 @@ func (s *ContentArticleAdminService) Create(ctx context.Context, a *ContentArtic
 	if a != nil && a.Status == "" {
 		a.Status = domain.ContentStatusDraft
 	}
+	sanitizeArticleBody(a)
 	if e := validateArticle(a, false); e != nil {
 		return nil, e
 	}
 	out, err := s.repo.CreateArticle(ctx, a)
 	if err == nil {
 		InvalidatePublicContentCache()
+		// repo 返回的是重新查询的记录，SyncLocales 不落库会丢失，这里从请求带回
+		if out != nil {
+			out.SyncLocales = a.SyncLocales
+		}
+		s.syncArticleTranslationDrafts(ctx, out)
 		if auditErr := s.auditArticle(ctx, "create", nil, out); auditErr != nil {
 			return out, auditErr
 		}
@@ -1596,6 +1695,7 @@ func (s *ContentArticleAdminService) Update(ctx context.Context, a *ContentArtic
 	if a.Status == domain.ContentStatusPublished {
 		return nil, ErrContentArticleInvalid
 	}
+	sanitizeArticleBody(a)
 	if e := validateArticle(a, false); e != nil {
 		return nil, e
 	}
@@ -1609,6 +1709,11 @@ func (s *ContentArticleAdminService) Update(ctx context.Context, a *ContentArtic
 	out, err := s.repo.UpdateArticle(ctx, a, expected)
 	if err == nil {
 		InvalidatePublicContentCache()
+		// repo 返回的是重新查询的记录，SyncLocales 不落库会丢失，这里从请求带回
+		if out != nil {
+			out.SyncLocales = a.SyncLocales
+		}
+		s.syncArticleTranslationDrafts(ctx, out)
 		if auditErr := s.auditArticle(ctx, "update", before, out); auditErr != nil {
 			return out, auditErr
 		}
@@ -2238,8 +2343,14 @@ func (s *ContentArticleAdminService) executeWritingTask(ctx context.Context, q C
 	} else {
 		a.SeoTitle = stringPtr(strings.TrimSpace(result.Title) + " | CCAI 技术专栏")
 	}
-	if strings.TrimSpace(result.SeoDescription) != "" {
+	if strings.TrimSpace(result.SeoDescription) != "" && len([]rune(strings.TrimSpace(result.SeoDescription))) >= 120 {
 		a.SeoDescription = stringPtr(strings.TrimSpace(result.SeoDescription))
+	} else if seo, seoErr := s.GenerateSEO(ctx, ContentSEOInput{Title: a.Title, Summary: stringValue(a.Excerpt), BodyMarkdown: stringValue(a.BodyMarkdown), BodyHTML: stringValue(a.BodyHTML), Locale: a.Locale}); seoErr == nil && seo != nil {
+		// AI 写作落库前再过一道 SEO 检查与编写，避免自动生成的描述过短或缺失。
+		a.SeoDescription = stringPtr(strings.TrimSpace(seo.Description))
+		if a.Excerpt == nil && strings.TrimSpace(seo.Description) != "" {
+			a.Excerpt = stringPtr(truncateRunes(strings.TrimSpace(seo.Description), 180))
+		}
 	} else if a.Excerpt != nil && strings.TrimSpace(*a.Excerpt) != "" {
 		a.SeoDescription = a.Excerpt
 	}

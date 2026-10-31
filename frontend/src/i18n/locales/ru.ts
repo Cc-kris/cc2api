@@ -1271,6 +1271,10 @@ export default {
   "errors": {
     "somethingWentWrong": "Что-то пошло не так.",
     "pageNotFound": "Страница не найдена",
+    "pageNotFoundDescription": "Страница, которую вы ищете, не существует или была перемещена.",
+    "goBack": "Назад",
+    "goHome": "На главную",
+    "needHelp": "Нужна помощь?",
     "unauthorized": "несанкционированный",
     "forbidden": "Запретный",
     "serverError": "Серверная ошибка",

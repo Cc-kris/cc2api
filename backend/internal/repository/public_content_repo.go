@@ -16,6 +16,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/contentmd"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/richtext"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
@@ -711,8 +712,11 @@ func publicDerefTime(value *time.Time) time.Time {
 // The conversion itself lives in internal/pkg/contentmd so the AI writer can
 // persist the same HTML at ingest time.
 func publicBodyHTML(htmlBody, markdown string) string {
-	if strings.TrimSpace(htmlBody) != "" {
-		return htmlBody
+	raw := htmlBody
+	if strings.TrimSpace(raw) == "" {
+		raw = contentmd.Render(markdown, contentmd.Options{MinHeadingLevel: 1})
 	}
-	return contentmd.Render(markdown, contentmd.Options{MinHeadingLevel: 1})
+	// 出口再清洗一次：库里可能存在清洗规则上线前写入的历史数据，
+	// 而 bodyHtml 现在会随公开详情 JSON 一起返回给匿名客户端。
+	return richtext.Sanitize(raw)
 }

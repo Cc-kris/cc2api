@@ -1,0 +1,11 @@
+/* PUB-14：深色偏好下公开站点（首页 hero 等）保留“纸面浅底”视觉，
+   但 style.css 里 `html.dark h1..h4/body` 的 !important 规则会把文字刷成近白，
+   在浅底上形成 1.0 左右对比度。这里用更高特异性把落在纸面上的标题压回墨色。
+   只覆盖确实处于浅底之上的标题，按钮/深底胶囊等白字不受影响。 */
+
+html.dark body .ccai-home-viewport .hero-headline,
+html.dark body .ccai-home-viewport .hero-headline > span:not(.hl-pill),
+html.dark body .ccai-home-viewport h2.core-title,
+html.dark body .ccai-home-viewport .core-title {
+  color: #121316 !important;
+}

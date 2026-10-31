@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
-const { api, editorControl } = vi.hoisted(() => ({
+const { api } = vi.hoisted(() => ({
   api: {
     listNews: vi.fn(),
     getNews: vi.fn(),
@@ -15,7 +15,6 @@ const { api, editorControl } = vi.hoisted(() => ({
     analyticsExport: vi.fn(),
     listAIConfigs: vi.fn(),
   },
-  editorControl: { editor: null as any },
 }))
 
 vi.mock('@/api/admin/content', () => ({
@@ -73,32 +72,6 @@ vi.mock('vue-chartjs', async () => {
   return { Line: ChartStub, Bar: ChartStub, Doughnut: ChartStub }
 })
 
-vi.mock('@wangeditor/editor-for-vue', async () => {
-  const { defineComponent: component, h: createElement } = await import('vue')
-  return {
-    Editor: component({
-      props: { modelValue: { type: String, default: '' } },
-      emits: ['update:modelValue', 'onCreated', 'onChange'],
-      setup(props, { emit }) {
-        return () => createElement('div', [
-          createElement('textarea', {
-            'data-test': 'news-rich-editor',
-            value: props.modelValue,
-            onInput: (event: Event) => {
-              emit('update:modelValue', (event.target as HTMLTextAreaElement).value)
-              emit('onChange')
-            },
-          }),
-          createElement('button', {
-            type: 'button',
-            onClick: () => emit('onCreated', editorControl.editor),
-          }, '创建编辑器'),
-        ])
-      },
-    }),
-    Toolbar: component({ setup: () => () => createElement('div') }),
-  }
-})
 
 import { createI18n } from 'vue-i18n'
 import contentV04Messages from '@/i18n/locales/contentV04'
@@ -120,21 +93,12 @@ function response(data: unknown) {
   return Promise.resolve({ data })
 }
 
-function makeEditor() {
-  let editorHtml = '<p>wangEditor 初始内容</p>'
-  return {
-    getHtml: vi.fn(() => editorHtml),
-    setHtml: vi.fn((html: string) => { editorHtml = html }),
-    destroy: vi.fn(),
-  }
-}
-
 async function openNewsEditor(wrapper: ReturnType<typeof mount>) {
   const editButton = wrapper.findAll('button').find((button) => button.text().trim() === '编辑')
   expect(editButton, 'news row should have its edit action').toBeTruthy()
   await editButton!.trigger('click')
   await flushPromises()
-  const editor = wrapper.get('[data-test="news-rich-editor"]')
+  const editor = wrapper.get('[data-test="news-rich-editor"] .rich-text-content')
   await wrapper.get('button').exists()
   return editor
 }
@@ -197,7 +161,6 @@ beforeEach(() => {
     if (dim === 'source') return response([{ key: 'Reuters', count: 4, ratio: 0.4 }])
     return response([{ key: '科技', count: 11, ratio: 1 }])
   })
-  editorControl.editor = makeEditor()
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
     configurable: true,
     value: vi.fn(),
@@ -234,12 +197,13 @@ describe('ContentCenterView news body editing integration', () => {
 
     const wrapper = await mountContentCenter()
     const editor = await openNewsEditor(wrapper)
-    expect((editor.element as HTMLTextAreaElement).value).toBe(originalHtml)
+    expect(editor.element.innerHTML).toBe(originalHtml)
 
     const editedHtml = `<p>${text}末尾追加</p>`
-    await editor.setValue(editedHtml)
+    editor.element.innerHTML = editedHtml
+    await editor.trigger('input')
     await wrapper.get('button').exists()
-    const saveButton = wrapper.findAll('button').find((button) => button.text().trim() === '保存新闻')
+    const saveButton = wrapper.findAll('button').find((button) => button.text().trim() === '保存')
     expect(saveButton).toBeTruthy()
     await saveButton!.trigger('click')
     await flushPromises()
@@ -248,8 +212,8 @@ describe('ContentCenterView news body editing integration', () => {
     expect(api.updateNews.mock.calls[0][0]).toBe(1381)
     expect(api.updateNews.mock.calls[0][1].bodyHtml).toBe(editedHtml)
     expect(persistedNews.bodyHtml).toBe(editedHtml)
-    expect((wrapper.get('[data-test="news-rich-editor"]').element as HTMLTextAreaElement).value).toBe(editedHtml)
-    expect(api.getNews).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[data-test="news-rich-editor"]').exists()).toBe(false)
+    expect(api.getNews).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
 
@@ -264,19 +228,20 @@ describe('ContentCenterView news body editing integration', () => {
 
     const wrapper = await mountContentCenter()
     const editor = await openNewsEditor(wrapper)
-    const initialHtml = (editor.element as HTMLTextAreaElement).value
+    const initialHtml = editor.element.innerHTML
     expect(initialHtml).toContain('<h2>历史 Markdown 标题</h2>')
     expect(initialHtml).toContain('<strong>加粗结尾</strong>')
     expect(initialHtml).toContain('历史正文段落。')
 
     const amendedHtml = `${initialHtml}<p>保存后追加段落</p>`
-    await editor.setValue(amendedHtml)
-    const saveButton = wrapper.findAll('button').find((button) => button.text().trim() === '保存新闻')
+    editor.element.innerHTML = amendedHtml
+    await editor.trigger('input')
+    const saveButton = wrapper.findAll('button').find((button) => button.text().trim() === '保存')
     await saveButton!.trigger('click')
     await flushPromises()
 
     expect(api.updateNews.mock.calls[0][1].bodyHtml).toBe(amendedHtml)
-    expect((wrapper.get('[data-test="news-rich-editor"]').element as HTMLTextAreaElement).value).toBe(amendedHtml)
+    expect(wrapper.find('[data-test="news-rich-editor"]').exists()).toBe(false)
     wrapper.unmount()
   })
   it('文章列表按语言展示译文状态，弹窗可按勾选语言批量创建翻译任务', async () => {
@@ -371,6 +336,13 @@ describe('ContentCenterView news body editing integration', () => {
     await sourcesTab!.trigger('click')
     await flushPromises()
 
+    const openButton = wrapper.findAll('button').find((b) => b.text().trim() === '+ 新增新闻源')
+    expect(openButton, '列表右上角应只有「+ 新增新闻源」按钮').toBeTruthy()
+    expect(wrapper.find('.source-dialog').exists(), '未点按钮前不应有新闻源表单').toBe(false)
+    await openButton!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.source-dialog').exists(), '点按钮后应弹出新闻源弹窗').toBe(true)
+
     const nameInput = wrapper.findAll('input').find((i) => i.attributes('placeholder') === '来源名称（必填）')
     const urlInput = wrapper.findAll('input').find((i) => i.attributes('placeholder') === '公开 RSS/Atom/JSON URL（必填）')
     expect(nameInput, 'name input should exist').toBeTruthy()
@@ -380,12 +352,12 @@ describe('ContentCenterView news body editing integration', () => {
 
     const intervalInput = wrapper.get('input.interval-input')
     await intervalInput.setValue('45')
-    const enabledCheckbox = wrapper.get('.inline-check input[type="checkbox"]')
+    const enabledCheckbox = wrapper.get('.source-enabled-switch input[type="checkbox"]')
     expect((enabledCheckbox.element as HTMLInputElement).checked).toBe(true)
     await enabledCheckbox.setValue(false)
 
-    const createButton = wrapper.findAll('button').find((b) => b.text().trim() === '新增新闻源')
-    expect(createButton, 'create source button should exist').toBeTruthy()
+    const createButton = wrapper.findAll('.source-dialog button').find((b) => b.text().trim() === '保存新闻源')
+    expect(createButton, 'dialog save button should exist').toBeTruthy()
     await createButton!.trigger('click')
     await flushPromises()
 
@@ -395,6 +367,7 @@ describe('ContentCenterView news body editing integration', () => {
     expect(payload.url).toBe('https://example.com/feed.xml')
     expect(payload.intervalMinutes).toBe(45)
     expect(payload.enabled).toBe(false)
+    expect(wrapper.find('.source-dialog').exists(), '创建成功后弹窗应关闭').toBe(false)
     wrapper.unmount()
   })
 
@@ -428,6 +401,13 @@ describe('ContentCenterView news body editing integration', () => {
     expect(rows[0].text(), '不得把全局 fetchCron 当作源自身间隔').not.toContain('每 15 分钟抓取一次')
     expect(rows[1].text()).toContain('每 45 分钟抓取一次')
 
+    const openButton = wrapper.findAll('button').find((b) => b.text().trim() === '+ 新增新闻源')
+    expect(openButton, '列表右上角应只有「+ 新增新闻源」按钮').toBeTruthy()
+    expect(wrapper.find('.source-dialog').exists(), '未点按钮前不应有新闻源表单').toBe(false)
+    await openButton!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.source-dialog').exists(), '点按钮后应弹出新闻源弹窗').toBe(true)
+
     const intervalInput = wrapper.get('input.interval-input')
     expect((intervalInput.element as HTMLInputElement).value, '默认留空，表示继承全局').toBe('')
     expect(intervalInput.attributes('placeholder')).toContain('跟随全局')
@@ -436,7 +416,7 @@ describe('ContentCenterView news body editing integration', () => {
     const urlInput = wrapper.findAll('input').find((i) => i.attributes('placeholder') === '公开 RSS/Atom/JSON URL（必填）')
     await nameInput!.setValue('留空间隔源')
     await urlInput!.setValue('https://example.com/empty.xml')
-    const createButton = wrapper.findAll('button').find((b) => b.text().trim() === '新增新闻源')
+    const createButton = wrapper.findAll('.source-dialog button').find((b) => b.text().trim() === '保存新闻源')
     await createButton!.trigger('click')
     await flushPromises()
 
@@ -456,11 +436,15 @@ describe('ContentCenterView news body editing integration', () => {
 
     const wrapper = await mountContentCenter()
     await openNewsEditor(wrapper)
+    const expand = wrapper.findAll('button').find((b) => b.text().includes('展开'))
+    expect(expand, '译文状态条应可展开').toBeTruthy()
+    await expand!.trigger('click')
+    await flushPromises()
 
     const text = wrapper.text()
     expect(text).toContain('译文任务')
-    expect(text).toContain('EN已完成')
-    expect(text).toContain('RU失败')
+    expect(text).toContain('EN·已完成')
+    expect(text).toContain('RU·失败')
     expect(text).toContain('llm_rate_limited')
     expect(api.listNewsTranslationTasks).toHaveBeenCalledWith(1381)
     wrapper.unmount()
@@ -589,7 +573,10 @@ describe('R15 内容中心下拉统一为 common/Select（AC-14）', () => {
     // 新闻源
     await clickButton(wrapper, '新闻源')
     expect(wrapper.findAll('select')).toHaveLength(0)
+    await clickButton(wrapper, '+ 新增新闻源')
+    expect(wrapper.findAll('select')).toHaveLength(0)
     expect(selectByTest(wrapper, 'news-source-type'), '新闻源类型应为 common/Select').toBeTruthy()
+    await clickButton(wrapper, '取消')
 
     // 自动化设置
     await clickButton(wrapper, '自动化设置')

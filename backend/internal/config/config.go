@@ -1507,6 +1507,12 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	} else {
 		cfg.Totp.EncryptionKeyConfigured = true
 	}
+	// 内容中心的 AI 配置存储通过 contentAIEncryptorFromEnv() 读取该环境变量来做
+	// AES-GCM 加密；这里把最终生效的密钥（配置值或自动生成的）回写给环境，避免
+	// 配置里已有密钥、加密器却只看到空环境变量而导致保存 Key 时 503。
+	if os.Getenv("TOTP_ENCRYPTION_KEY") == "" {
+		_ = os.Setenv("TOTP_ENCRYPTION_KEY", cfg.Totp.EncryptionKey)
+	}
 
 	originalJWTSecret := cfg.JWT.Secret
 	if allowMissingJWTSecret && originalJWTSecret == "" {

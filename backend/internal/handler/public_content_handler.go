@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/xml"
 	"errors"
 	"net/http"
@@ -118,7 +119,50 @@ func (h *PublicContentHandler) RenderArticleHTML(c *gin.Context) {
 		publicContentHTMLError(c, err)
 		return
 	}
-	renderArticleDocument(c, h.baseURL, item)
+	related, prev, next := h.articleNeighbors(c.Request.Context(), item)
+	renderArticleDocument(c, h.baseURL, item, related, prev, next)
+}
+
+// articleNeighbors feeds the SEO detail shell: up to six other published
+// articles for the "more deep dive" block plus the previous/next pair taken
+// from the same locale listing order as the index page.
+func (h *PublicContentHandler) articleNeighbors(ctx context.Context, item *service.PublicArticle) ([]service.PublicArticleListItem, *service.PublicArticleListItem, *service.PublicArticleListItem) {
+	if h == nil || h.service == nil || item == nil {
+		return nil, nil, nil
+	}
+	locale := item.RequestedLocale
+	if strings.TrimSpace(locale) == "" {
+		locale = item.Locale
+	}
+	listing, err := h.service.ListArticles(ctx, locale, 1, 24)
+	if err != nil {
+		return nil, nil, nil
+	}
+	related := make([]service.PublicArticleListItem, 0, 6)
+	var prev, next *service.PublicArticleListItem
+	index := -1
+	for i := range listing.Items {
+		if listing.Items[i].Slug == item.Slug {
+			index = i
+			break
+		}
+	}
+	if index > 0 {
+		prev = &listing.Items[index-1]
+	}
+	if index >= 0 && index+1 < len(listing.Items) {
+		next = &listing.Items[index+1]
+	}
+	for i := range listing.Items {
+		if listing.Items[i].Slug == item.Slug {
+			continue
+		}
+		related = append(related, listing.Items[i])
+		if len(related) == 6 {
+			break
+		}
+	}
+	return related, prev, next
 }
 
 // redirectPublicLocaleSegment 301s stored/alias locale spellings (en-US,

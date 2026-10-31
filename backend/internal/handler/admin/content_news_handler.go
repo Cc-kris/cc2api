@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -66,6 +67,8 @@ type contentNewsItemRequest struct {
 	SeoTitle            *string                `json:"seoTitle"`
 	SeoDescription      *string                `json:"seoDescription"`
 	MediaJSON           map[string]interface{} `json:"mediaJson"`
+	// SyncLocales 仅用于本次保存后同步创建翻译记录，不参与落库。
+	SyncLocales []string `json:"syncLocales"`
 }
 
 type contentAutomationRequest struct {
@@ -80,7 +83,7 @@ type contentAutomationRequest struct {
 	PublishWindowStart string     `json:"publishWindowStart"`
 	PublishWindowEnd   string     `json:"publishWindowEnd"`
 	DedupeWindowHours  int        `json:"dedupeWindowHours"`
-	TargetLocales      []string   `json:"targetLocales" binding:"required"`
+	TargetLocales      []string   `json:"targetLocales"`
 }
 
 // UnmarshalJSON accepts the admin form's clock-only publish window ("09:00")
@@ -466,9 +469,27 @@ func (h *ContentNewsHandler) UpdateNews(c *gin.Context) {
 		item.SeoTitle = &st
 	}
 	if item.SeoDescription == nil || strings.TrimSpace(*item.SeoDescription) == "" {
+		// SEO 检查/编写环节：先让配置好的 AI 写一版描述与关键词；
+		// 未配置模型或调用失败时退回标题/摘要拼接，绝不阻塞保存。
 		desc := strings.TrimSpace(item.Title)
 		if item.Summary != nil && strings.TrimSpace(*item.Summary) != "" {
 			desc = truncateRunes(strings.TrimSpace(*item.Summary), 180)
+		}
+		seoCtx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+		seoResult, seoErr := service.GenerateContentSEO(seoCtx, newsSEOInput(&item))
+		cancel()
+		if seoErr == nil && seoResult != nil {
+			desc = strings.TrimSpace(seoResult.Description)
+			if len(seoResult.Keywords) > 0 {
+				media := map[string]interface{}{}
+				if item.MediaJSON != nil {
+					for k, v := range item.MediaJSON {
+						media[k] = v
+					}
+				}
+				media["seoKeywords"] = seoResult.Keywords
+				item.MediaJSON = media
+			}
 		}
 		item.SeoDescription = &desc
 	}
@@ -480,6 +501,52 @@ func (h *ContentNewsHandler) UpdateNews(c *gin.Context) {
 	}
 	response.Success(c, out)
 }
+// AutoFillSEO 为抓取的新闻调用配置好的 AI 完成一道 SEO 检查与编写，
+// 返回生成的 SEO 描述与关键词，供编辑页直接采用。
+func (h *ContentNewsHandler) AutoFillSEO(c *gin.Context) {
+	id, ok := contentID(c)
+	if !ok {
+		return
+	}
+	item, err := h.svc.GetNewsItem(c.Request.Context(), id, false)
+	if err != nil {
+		writeContentNewsError(c, err)
+		return
+	}
+	if item == nil {
+		response.NotFound(c, "news not found")
+		return
+	}
+	result, err := service.GenerateContentSEO(contentMutationContext(c), newsSEOInput(item))
+	if err != nil {
+		if errors.Is(err, service.ErrContentAIModelNotConfigured) {
+			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "reason": "model_not_configured", "message": "请先在 AI 创作 → 模型配置里设置默认模型"})
+			return
+		}
+		if errors.Is(err, service.ErrContentSEOResultInvalid) {
+			response.BadRequest(c, err.Error())
+			return
+		}
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"seoTitle": result.Title, "seoDescription": result.Description, "keywords": result.Keywords, "model": result.Model})
+}
+
+// newsSEOInput 把新闻条目映射成 SEO 输入（正文优先 HTML，其次纯文本，最后摘要）。
+func newsSEOInput(item *service.ContentNewsItem) service.ContentSEOInput {
+	input := service.ContentSEOInput{Title: item.Title, Locale: item.Locale}
+	if item.Summary != nil {
+		input.Summary = *item.Summary
+	}
+	if item.BodyHTML != nil && strings.TrimSpace(*item.BodyHTML) != "" {
+		input.BodyHTML = *item.BodyHTML
+	} else if item.BodyText != nil {
+		input.BodyMarkdown = *item.BodyText
+	}
+	return input
+}
+
 func (h *ContentNewsHandler) PublishNews(c *gin.Context) {
 	id, ok := contentID(c)
 	if !ok {
@@ -690,7 +757,7 @@ func newsFromRequest(req contentNewsItemRequest) service.ContentNewsItem {
 	if locale == "" {
 		locale = "zh-CN"
 	}
-	return service.ContentNewsItem{SourceID: req.SourceID, ExternalID: req.ExternalID, SourceCanonicalURL: req.SourceCanonicalURL, Slug: req.Slug, Locale: locale, Title: req.Title, Summary: req.Summary, BodyHTML: req.BodyHTML, BodyText: req.BodyText, BodySourceType: req.BodySourceType, ImageURL: req.ImageURL, SourceName: req.SourceName, Category: req.Category, Tags: req.Tags, OriginalURL: req.OriginalURL, OriginalPublishedAt: req.OriginalPublishedAt, PublishedAt: req.PublishedAt, Status: status, PublishMode: mode, SeoTitle: req.SeoTitle, SeoDescription: req.SeoDescription, MediaJSON: req.MediaJSON}
+	return service.ContentNewsItem{SourceID: req.SourceID, ExternalID: req.ExternalID, SourceCanonicalURL: req.SourceCanonicalURL, Slug: req.Slug, Locale: locale, Title: req.Title, Summary: req.Summary, BodyHTML: req.BodyHTML, BodyText: req.BodyText, BodySourceType: req.BodySourceType, ImageURL: req.ImageURL, SourceName: req.SourceName, Category: req.Category, Tags: req.Tags, OriginalURL: req.OriginalURL, OriginalPublishedAt: req.OriginalPublishedAt, PublishedAt: req.PublishedAt, Status: status, PublishMode: mode, SeoTitle: req.SeoTitle, SeoDescription: req.SeoDescription, MediaJSON: req.MediaJSON, SyncLocales: req.SyncLocales}
 }
 func contentID(c *gin.Context) (int64, bool) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)

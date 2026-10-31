@@ -169,7 +169,9 @@ func TestPublicContentProjectionDoesNotExposeInternalFields(t *testing.T) {
 	require.NotContains(t, string(payload), "status")
 	require.NotContains(t, string(payload), "deletedAt")
 	require.NotContains(t, string(payload), "sourceCanonicalUrl")
-	require.NotContains(t, string(payload), "bodyHtml")
+	// NE-19: 公开详情要带清洗后的 bodyHtml（内部字段仍然不外泄）。
+	require.Contains(t, string(payload), `"bodyHtml":`)
+	require.NotContains(t, string(payload), "script")
 	articlePayload, err := json.Marshal(PublicArticle{
 		Locale:   "zh-CN",
 		Slug:     "article",
@@ -178,7 +180,8 @@ func TestPublicContentProjectionDoesNotExposeInternalFields(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotContains(t, string(articlePayload), "version")
-	require.NotContains(t, string(articlePayload), "bodyHtml")
+	require.Contains(t, string(articlePayload), `"bodyHtml":`)
+	require.NotContains(t, string(articlePayload), "script")
 	listPayload, err := json.Marshal(PublicArticleListItem{Locale: "zh-CN", Slug: "article", Title: "Article"})
 	require.NoError(t, err)
 	require.NotContains(t, string(listPayload), "bodyHtml")

@@ -1271,6 +1271,10 @@ export default {
   "errors": {
     "somethingWentWrong": "Quelque chose a mal tourné",
     "pageNotFound": "Page introuvable",
+    "pageNotFoundDescription": "La page que vous recherchez n'existe pas ou a été déplacée.",
+    "goBack": "Retour",
+    "goHome": "Retour à l'accueil",
+    "needHelp": "Besoin d'aide ?",
     "unauthorized": "Non autorisé",
     "forbidden": "Interdit",
     "serverError": "Erreur du serveur",

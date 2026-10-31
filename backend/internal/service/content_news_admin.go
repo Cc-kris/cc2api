@@ -10,6 +10,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/richtext"
 	"github.com/robfig/cron/v3"
 )
 
@@ -87,6 +88,9 @@ type ContentNewsItem struct {
 	ContentHash         *string                `json:"contentHash,omitempty"`
 	CreatedBy           *int64                 `json:"createdBy,omitempty"`
 	UpdatedBy           *int64                 `json:"updatedBy,omitempty"`
+	// SyncLocales 是保存请求里携带的目标语言，仅用于本次保存后创建翻译记录，
+	// 不落库、也不出现在任何响应里。
+	SyncLocales []string `json:"-"`
 }
 
 type ContentAutomationSetting struct {
@@ -203,9 +207,10 @@ type ContentNewsAdminRepository interface {
 }
 
 type ContentNewsAdminService struct {
-	repo   ContentNewsAdminRepository
-	worker *ContentNewsWorker
-	audit  ContentAuditLogger
+	repo     ContentNewsAdminRepository
+	worker   *ContentNewsWorker
+	audit    ContentAuditLogger
+	translat *ContentTranslationSyncer
 }
 
 func NewContentNewsAdminService(repo ContentNewsAdminRepository, audit ...ContentAuditLogger) *ContentNewsAdminService {
@@ -214,6 +219,13 @@ func NewContentNewsAdminService(repo ContentNewsAdminRepository, audit ...Conten
 		s.audit = audit[0]
 	}
 	return s
+}
+
+// SetTranslationSyncer 注入翻译记录同步器（内容保存时按 syncLocales 建待翻译记录）。
+func (s *ContentNewsAdminService) SetTranslationSyncer(syncer *ContentTranslationSyncer) {
+	if s != nil {
+		s.translat = syncer
+	}
 }
 func (s *ContentNewsAdminService) SetAuditLogger(a ContentAuditLogger) { s.audit = a }
 func (s *ContentNewsAdminService) ListNewsTranslationTasks(ctx context.Context, newsID int64) ([]*ContentWritingTask, error) {
@@ -539,12 +551,17 @@ func (s *ContentNewsAdminService) GetNewsItem(ctx context.Context, id int64, inc
 }
 
 func (s *ContentNewsAdminService) CreateNewsItem(ctx context.Context, item *ContentNewsItem) (*ContentNewsItem, error) {
+	sanitizeNewsItemBody(item)
 	if err := validateNewsItem(item); err != nil {
 		return nil, err
 	}
 	out, err := s.repo.CreateNewsItem(ctx, item)
 	if err == nil {
 		InvalidatePublicContentCache()
+		if out != nil && len(out.SyncLocales) == 0 {
+			out.SyncLocales = item.SyncLocales
+		}
+		s.syncNewsTranslationDrafts(ctx, out)
 		if auditErr := s.auditNews(ctx, "create", nil, out); auditErr != nil {
 			return out, auditErr
 		}
@@ -556,6 +573,7 @@ func (s *ContentNewsAdminService) UpdateNewsItem(ctx context.Context, item *Cont
 	if item == nil || item.ID <= 0 {
 		return nil, ErrContentNewsItemNotFound
 	}
+	sanitizeNewsItemBody(item)
 	if err := validateNewsItem(item); err != nil {
 		return nil, err
 	}
@@ -571,11 +589,53 @@ func (s *ContentNewsAdminService) UpdateNewsItem(ctx context.Context, item *Cont
 	out, err := s.repo.UpdateNewsItem(ctx, item)
 	if err == nil {
 		InvalidatePublicContentCache()
+		if out != nil && len(out.SyncLocales) == 0 {
+			out.SyncLocales = item.SyncLocales
+		}
+		s.syncNewsTranslationDrafts(ctx, out)
 		if auditErr := s.auditNews(ctx, "update", before, out); auditErr != nil {
 			return out, auditErr
 		}
 	}
 	return out, err
+}
+
+// sanitizeNewsItemBody 对新闻正文做白名单清洗；未提交正文时保持 nil，交给
+// 上层（handler 的字段合并）决定是否沿用旧值。
+func sanitizeNewsItemBody(item *ContentNewsItem) {
+	if item == nil || item.BodyHTML == nil {
+		return
+	}
+	clean := richtext.Sanitize(*item.BodyHTML)
+	item.BodyHTML = &clean
+}
+
+// syncNewsTranslationDrafts 按保存请求里的 syncLocales 建立待翻译记录。
+// 失败不影响新闻本身的保存结果（正文已经落库），只记录审计日志。
+func (s *ContentNewsAdminService) syncNewsTranslationDrafts(ctx context.Context, item *ContentNewsItem) {
+	if s == nil || s.translat == nil || item == nil || len(item.SyncLocales) == 0 {
+		return
+	}
+	_, errs := s.translat.EnsureDrafts(ctx, TranslationDraftRequest{
+		ContentType:   contentTranslationTypeNews,
+		ContentID:     item.ID,
+		SourceVersion: 1,
+		SourceLocale:  item.Locale,
+		Slug:          item.Slug,
+		Title:         item.Title,
+		Locales:       item.SyncLocales,
+	})
+	for _, err := range errs {
+		if err != nil && s.audit != nil {
+			id := item.ID
+			_ = s.audit.Log(ctx, ContentAuditEntry{
+				ContentType: contentTranslationTypeNews,
+				Action:      "translate_sync_failed",
+				ContentID:   &id,
+				After:       map[string]any{"error": err.Error()},
+			})
+		}
+	}
 }
 
 func (s *ContentNewsAdminService) PublishNewsItem(ctx context.Context, id int64, publishAt *time.Time) (*ContentNewsItem, error) {
@@ -835,7 +895,7 @@ func validateNewsSource(ctx context.Context, source *ContentNewsSource) error {
 		source.Language = "zh-CN"
 	}
 	if source.IntervalMinutesOverride != nil && (*source.IntervalMinutesOverride < 15 || *source.IntervalMinutesOverride > 1440) {
-		return ErrContentNewsInvalidInput
+		return fmt.Errorf("%w: %s", ErrContentNewsInvalidInput, "抓取间隔需在 15–1440 分钟之间")
 	}
 	if source.RateLimitPerMinute <= 0 {
 		return ErrContentNewsInvalidInput
@@ -928,17 +988,12 @@ func validateAutomationSetting(setting *ContentAutomationSetting) error {
 	if err := applyAutomationPublishWindow(setting); err != nil {
 		return err
 	}
-	if len(setting.TargetLocales) == 0 {
-		return ErrContentNewsInvalidInput
-	}
+	// 目标语言允许为空：管理端把多选框全部取消后要能保存成功，空数组原样回读。
 	locales := make([]string, 0, len(setting.TargetLocales))
 	for _, locale := range setting.TargetLocales {
 		if normalized := domain.NormalizeContentLocale(locale); normalized != "" {
 			locales = append(locales, normalized)
 		}
-	}
-	if len(locales) == 0 {
-		return ErrContentNewsInvalidInput
 	}
 	setting.TargetLocales = locales
 	setting.Timezone, setting.FetchCron = strings.TrimSpace(setting.Timezone), strings.TrimSpace(setting.FetchCron)

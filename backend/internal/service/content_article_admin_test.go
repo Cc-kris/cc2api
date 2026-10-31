@@ -443,6 +443,17 @@ func TestAIConfigRevisionRejectsStaleToken(t *testing.T) {
 	require.ErrorContains(t, (&ContentArticleAdminService{}).MutateAIProviderConfig(context.Background(), "default", "missing", "stale", ContentAIProviderConfig{}), "revision conflict")
 }
 
+func TestAIConfigRevisionAllowsSavingDefaultConfig(t *testing.T) {
+	old := contentAIConfigPath
+	contentAIConfigPath = filepath.Join(t.TempDir(), "ai.json")
+	defer func() { contentAIConfigPath = old }()
+	require.NoError(t, saveContentAIProviderConfig(ContentAIProviderConfig{ID: "default", Label: "Default", Provider: "custom", IsDefault: true, BaseURL: "https://example.test/v1", Models: []string{"model"}, DefaultModel: "model"}))
+	_, _, revision, err := ListAIProviderConfigs()
+	require.NoError(t, err)
+	err = (&ContentArticleAdminService{}).MutateAIProviderConfig(context.Background(), "save", "default", revision, ContentAIProviderConfig{ID: "default", Label: "Default", Provider: "custom", BaseURL: "https://example.test/v1", Models: []string{"model"}, DefaultModel: "model"})
+	require.NoError(t, err)
+}
+
 func TestContentSEOValidationAndSingleBoundaryRetry(t *testing.T) {
 	oldPath := contentAIConfigPath
 	contentAIConfigPath = filepath.Join(t.TempDir(), "ai.json")

@@ -563,16 +563,6 @@
                 <span class="font-mono">{{ copiedLink ? '✓' : '#' }}</span>
                 <span>{{ copiedLink ? (isZh ? '已复制链接' : 'Copied') : (isZh ? '分享链接' : 'Share') }}</span>
               </button>
-              <a
-                v-if="detail.sourceUrl"
-                :href="detail.sourceUrl"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="action-pill-btn"
-              >
-                <span>↗</span>
-                <span>{{ isZh ? '查看原新闻' : 'Original Source' }}</span>
-              </a>
             </div>
           </div>
 
@@ -815,84 +805,52 @@
             aria-labelledby="featured-section-title"
           >
             <div class="public-featured-header">
-              <div>
-                <span id="featured-section-title" class="public-featured-title">
-                  {{ isZh ? '精选深度解析' : 'FEATURED DEEP DIVES' }}
-                </span>
-                <p class="public-featured-subtitle">
-                  {{ isZh ? '编辑部精选的技术洞察与实践。' : 'Editorial picks for practical engineering insight.' }}
-                </p>
-              </div>
               <router-link to="/articles" class="public-featured-all-link">
                 {{ isZh ? '查看全部' : 'View all' }} →
               </router-link>
             </div>
 
-            <div class="public-featured-layout">
+            <div class="public-featured-layout public-featured-list" data-testid="featured-list">
               <router-link
-                v-if="featuredItems[0]"
-                :to="itemPath(featuredItems[0])"
-                class="public-featured-large"
-                data-testid="featured-large-card"
+                v-for="(item, idx) in [featuredItems[0], ...featuredItems.slice(1, 10)]"
+                :key="item.id || item.slug"
+                :to="itemPath(item)"
+                class="public-featured-row"
+                :data-testid="idx === 0 ? 'featured-large-card' : 'featured-small'"
                 data-analytics-placement="home_hero"
-                :data-analytics-id="featuredItems[0].id"
-                @click="trackPlacementClick('home_hero', featuredItems[0])"
+                :data-analytics-id="item.id"
+                @click="trackPlacementClick('home_hero', item)"
               >
-                <div class="public-featured-cover public-featured-cover-large">
+                <div class="public-featured-cover public-featured-cover-row">
                   <img
-                    v-if="featuredImage(featuredItems[0])"
-                    :src="featuredImage(featuredItems[0])"
-                    :alt="featuredItems[0].coverAlt || featuredItems[0].displayTitle || featuredItems[0].title"
+                    v-if="featuredImage(item)"
+                    :src="featuredImage(item)"
+                    :alt="item.coverAlt || item.displayTitle || item.title"
                     loading="lazy"
                   />
-                  <span v-else class="public-featured-cover-placeholder" aria-hidden="true">✦</span>
-                  <span class="public-featured-badge">★ {{ isZh ? '编辑精选' : 'FEATURED' }}</span>
+                  <span v-else class="public-featured-cover-placeholder" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M3 16l5-5 4 4 3-3 6 6" /><circle cx="9" cy="9" r="1.4" /></svg>
+                  </span>
+                  <span v-if="idx === 0" class="public-featured-badge">★ {{ isZh ? '编辑精选' : 'FEATURED' }}</span>
                 </div>
-                <div class="public-featured-large-body">
+                <div class="public-featured-row-body">
                   <div class="public-featured-meta">
-                    <span>{{ featuredItems[0].displayCategory || featuredItems[0].category || 'CCAI' }}</span>
-                    <span>{{ estimateReadingTime(featuredItems[0].displaySummary || featuredItems[0].summary || featuredItems[0].excerpt || '') }} MIN READ</span>
+                    <span class="pf-row-index font-mono">{{ String(idx + 1).padStart(2, '0') }}</span>
+                    <span class="pf-row-cat">{{ item.displayCategory || item.category || 'CCAI' }}</span>
+                    <span class="pf-row-read font-mono">{{ estimateReadingTime(item.displaySummary || item.summary || item.excerpt || '') }} MIN READ</span>
                   </div>
-                  <h2 class="public-featured-card-title public-featured-large-title">
-                    {{ featuredItems[0].displayTitle || featuredItems[0].title }}
+                  <h2 class="public-featured-card-title public-featured-row-title">
+                    {{ item.displayTitle || item.title }}
                   </h2>
-                  <p class="public-featured-large-summary">
-                    {{ featuredItems[0].displaySummary || featuredItems[0].summary || featuredItems[0].excerpt || '' }}
+                  <p class="public-featured-row-summary">
+                    {{ item.displaySummary || item.summary || item.excerpt || '' }}
                   </p>
                   <div class="public-featured-tags">
-                    <span v-for="tag in getCleanItemTags(featuredItems[0]).slice(0, 3)" :key="tag">#{{ tag }}</span>
+                    <span v-for="tag in getCleanItemTags(item).slice(0, 3)" :key="tag">#{{ tag }}</span>
                   </div>
                 </div>
+                <span class="public-featured-row-cta" aria-hidden="true">→</span>
               </router-link>
-
-              <div class="public-featured-small-grid" data-testid="featured-small-grid">
-                <router-link
-                  v-for="item in featuredItems.slice(1, 10)"
-                  :key="item.id || item.slug"
-                  :to="itemPath(item)"
-                  class="public-featured-small"
-                  data-analytics-placement="home_hero"
-                  :data-analytics-id="item.id"
-                  @click="trackPlacementClick('home_hero', item)"
-                >
-                  <div class="public-featured-cover public-featured-cover-small">
-                    <img
-                      v-if="featuredImage(item)"
-                      :src="featuredImage(item)"
-                      :alt="item.coverAlt || item.displayTitle || item.title"
-                      loading="lazy"
-                    />
-                    <span v-else class="public-featured-cover-placeholder" aria-hidden="true">✦</span>
-                  </div>
-                  <div class="public-featured-small-body">
-                    <span class="public-featured-small-category">{{ item.displayCategory || item.category || 'CCAI' }}</span>
-                    <h3 class="public-featured-card-title">{{ item.displayTitle || item.title }}</h3>
-                    <div class="public-featured-tags">
-                      <span v-for="tag in getCleanItemTags(item).slice(0, 2)" :key="tag">#{{ tag }}</span>
-                    </div>
-                  </div>
-                </router-link>
-              </div>
             </div>
           </section>
 
@@ -909,6 +867,12 @@
                 @click="trackPlacementClick('articles_list', item)"
               >
                 <div class="row-left-strip" :class="'strip-' + (idx % 3)"></div>
+                <div class="list-card-cover article-row-cover" data-testid="list-card-cover">
+                  <img v-if="contentCover(item)" :src="contentCover(item)" :alt="coverAltOf(item)" loading="lazy" decoding="async" @error="markCoverBroken(item)" />
+                  <div v-else class="cover-placeholder" role="img" :aria-label="isZh ? '暂无封面' : 'Cover unavailable'">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 16l5-5 4 4 3-3 6 6" /><circle cx="9" cy="9" r="1.4" /></svg>
+                  </div>
+                </div>
                 <div class="article-row-main">
                   <div class="article-row-meta">
                     <span class="meta-tag">{{ item.displayCategory || item.category || '架构与网关' }}</span>
@@ -955,17 +919,6 @@
                 <div class="spotlight-meta">
                   <span class="meta-tag tag-lime">{{ featuredItem.displayCategory || featuredItem.category || featuredItem.sourceName || 'CCAI' }}</span>
                   <span v-if="featuredItem.sourceName" class="meta-source-label font-mono">{{ featuredItem.sourceName }}</span>
-                  <a
-                    v-if="featuredItem.sourceUrl"
-                    :href="featuredItem.sourceUrl"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="meta-source-label font-mono"
-                    style="color: #2563EB; text-decoration: underline;"
-                    @click.stop
-                  >
-                    ↗ {{ isZh ? '原新闻链接' : 'Original URL' }}
-                  </a>
                 </div>
                 <h2 class="spotlight-title">{{ featuredItem.displayTitle || featuredItem.title }}</h2>
                 <p class="spotlight-excerpt">
@@ -1009,18 +962,6 @@
                   </p>
                   <div v-if="getCleanItemTags(item).length" class="tl-tags">
                     <span v-for="tg in getCleanItemTags(item).slice(0, 3)" :key="tg" class="tl-tag">#{{ tg }}</span>
-                  </div>
-                  <div v-if="item.sourceUrl" style="margin-top: 6px;">
-                    <a
-                      :href="item.sourceUrl"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="font-mono"
-                      style="font-size: 12px; font-weight: 800; color: #2563EB; text-decoration: underline;"
-                      @click.stop
-                    >
-                      ↗ {{ isZh ? '跳转到原新闻 URL' : 'Original Source URL' }}
-                    </a>
                   </div>
                 </div>
                 <div class="timeline-arrow-col">
@@ -1915,7 +1856,7 @@ const searchInputRef = ref<HTMLInputElement | null>(null);
 const kind = computed(() => route.path.startsWith("/articles") ? "articles" : "news");
 
 // ==================== 前台列表分页状态（后端 page_size 窗口 + 跨 locale 合并后按页切片） ====================
-const PAGE_SIZE_DEFAULT = 5;
+const PAGE_SIZE_DEFAULT = 20;
 const DETAIL_WINDOW_SIZE = 48;
 const currentPage = ref(1);
 const pageSize = ref(PAGE_SIZE_DEFAULT);
@@ -1956,7 +1897,7 @@ function translateCategory(rawCat: string, zhMode: boolean): string {
   return CATEGORY_ZH_TO_EN[clean] || clean;
 }
 
-function localizeItem(item: any, kindName: "news" | "articles" = kind.value): any {
+function localizeItem(item: any, _kindName: "news" | "articles" = kind.value): any {
   if (!item) return item;
   const zhMode = isZh.value;
   const resolvedCat = item.category || item.mediaJson?.category || "";
@@ -1978,9 +1919,9 @@ function localizeItem(item: any, kindName: "news" | "articles" = kind.value): an
     : (item.bodyTextEn || item.bodyText || item.bodyMarkdown || "");
 
   let displayBodyHtml = item.bodyHtml || "";
-  if (kindName === "news" && displayBodyText) {
-    displayBodyHtml = DOMPurify.sanitize(marked.parse(displayBodyText) as string, { USE_PROFILES: { html: true } });
-  } else if (!displayBodyHtml && displayBodyText) {
+  // 正文富文本优先：只有拿不到 HTML 时才用 markdown/纯文本兜底，
+  // 否则会把编辑器保存的 h2/ul/blockquote/img 结构重新拍平成纯文本。
+  if (!displayBodyHtml && displayBodyText) {
     displayBodyHtml = DOMPurify.sanitize(marked.parse(displayBodyText) as string, { USE_PROFILES: { html: true } });
   }
 
@@ -2470,20 +2411,37 @@ async function fetchMergedPublicList(
   opts: { page?: number; pageSize?: number } = {}
 ): Promise<{ items: any[]; hasMore: boolean; windowSize: number; total: number }> {
   const page = Math.max(1, Math.floor(opts.page || 1));
-  const pageSizeLimit = Math.min(24, Math.max(1, Math.floor(opts.pageSize || 12)));
+  const pageSizeLimit = Math.min(40, Math.max(1, Math.floor(opts.pageSize || 12)));
   // 跨 locale 合并要保证顺序稳定：向后端要「前 page*pageSize 条」连续窗口，再按页切片，不重不漏
-  const windowSize = Math.min(100, page * pageSizeLimit);
+  const windowSize = Math.max(1, page * pageSizeLimit);
   const queryLocales = kind.value === "news" ? allLocales : primaryLocales;
-  const results = await Promise.allSettled(
-    queryLocales.map((loc) => apiClient.get(`/public/${kind.value}`, {
-      params: { locale: loc, page: 1, page_size: windowSize }
-    }))
-  );
+  // 单次请求上限 page_size=100，窗口更大时分页累加
+  const fetchWindow = async (loc: string) => {
+    const collected: any[] = [];
+    let total = NaN;
+    let p = 1;
+    // 注意：后端按「请求的 page_size」计算偏移量，翻页时若把每页条数改小（如第二页只要剩余 20 条），
+    // 拿回的是 21..40 这类重叠区间，去重后会丢数据、末页变空。所以这里固定 chunk 翻页，最后再裁到窗口长度。
+    const chunk = 100;
+    while (collected.length < windowSize && p <= 10) {
+      const res: any = await apiClient.get(`/public/${kind.value}`, {
+        params: { locale: loc, page: p, page_size: chunk }
+      });
+      const list = extractListItems(res);
+      collected.push(...list);
+      const t = Number(res?.total ?? res?.data?.total ?? NaN);
+      if (!Number.isNaN(t)) total = t;
+      if (list.length < chunk) break;
+      p += 1;
+    }
+    return { items: collected.slice(0, windowSize), total };
+  };
+  const results = await Promise.allSettled(queryLocales.map((loc) => fetchWindow(loc)));
   const merged: any[] = [];
   const seen = new Set<string>();
   for (const r of results) {
     if (r.status === "fulfilled") {
-      for (const item of extractListItems(r.value)) {
+      for (const item of r.value.items) {
         const dedupeKey = kind.value === "articles"
           ? `${item.slug || item.id}`
           : `${item.locale || ""}:${item.slug || item.id}`;
@@ -2498,9 +2456,14 @@ async function fetchMergedPublicList(
   let totalCount = 0;
   for (const r of results) {
     if (r.status === "fulfilled") {
-      const fetched = extractListItems(r.value).length;
-      const total = Number((r.value as any)?.total ?? (r.value as any)?.data?.total ?? NaN);
-      totalCount += Number.isNaN(total) ? fetched : total;
+      const fetched = r.value.items.length;
+      const total = r.value.total;
+      // 文章按 slug 跨语种去重，各语种 total 指向同一集合 → 取最大值；新闻按语种区分 → 累加
+      if (kind.value === "articles") {
+        totalCount = Math.max(totalCount, Number.isNaN(total) ? fetched : total);
+      } else {
+        totalCount += Number.isNaN(total) ? fetched : total;
+      }
       if (fetched >= windowSize || (!Number.isNaN(total) && total > fetched)) {
         hasMore = true;
       }
@@ -2509,7 +2472,7 @@ async function fetchMergedPublicList(
   if (kind.value === "articles" && merged.length === 0) {
     const fallbackResults = await Promise.allSettled(
       allLocales.map((loc) => apiClient.get(`/public/${kind.value}`, {
-        params: { locale: loc, page: 1, page_size: windowSize }
+        params: { locale: loc, page: 1, page_size: Math.min(100, windowSize) }
       }))
     );
     for (const r of fallbackResults) {
@@ -2670,6 +2633,14 @@ async function loadPublicContent() {
       const maxPage = Math.max(1, Math.ceil(publicTotalCount.value / pageSize.value));
       if (currentPage.value > maxPage) {
         currentPage.value = maxPage;
+        // 越界页的列表必然为空，必须按最后一页重新取数，否则页面会停在空列表
+        const refill = await fetchMergedPublicList(primaryLocales, allLocales, {
+          page: maxPage,
+          pageSize: pageSize.value
+        });
+        publicItems.value = refill.items;
+        pageWindowHasMore.value = refill.hasMore;
+        publicTotalCount.value = refill.total || publicTotalCount.value;
         const query: Record<string, string> = {};
         for (const [k, v] of Object.entries(route.query)) {
           if (typeof v === "string") query[k] = v;
@@ -4004,7 +3975,7 @@ watch([() => route.fullPath, isZh], () => {
 
 .seg-code {
   font-size: 11px;
-  color: #8C93A4;
+  color: #5F6675;
   font-weight: 900;
 }
 
@@ -4259,6 +4230,14 @@ watch([() => route.fullPath, isZh], () => {
 .neo-prose-body p {
   margin-bottom: 20px;
 }
+/* 正文内嵌图片：块级满列、等比缩放；未加载完成时也保有可见尺寸，避免塌陷成 0×0。
+   正文由 v-html 注入，不带 scoped 标记，必须用 :deep 才能命中。 */
+.neo-prose-body :deep(img) {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
 .neo-prose-body pre {
   background: #121316;
   color: #F5F2EB;
@@ -4475,7 +4454,7 @@ watch([() => route.fullPath, isZh], () => {
 .neo-article-row-card {
   position: relative;
   display: grid;
-  grid-template-columns: 8px 1fr auto;
+  grid-template-columns: 8px auto 1fr auto;
   align-items: stretch;
   background: #FFFFFF;
   border: 2.5px solid #121316;
@@ -4495,6 +4474,11 @@ watch([() => route.fullPath, isZh], () => {
 .row-left-strip {
   width: 8px;
   border-right: 2px solid #121316;
+}
+
+.article-row-cover {
+  margin: 16px 0 16px 18px;
+  object-fit: cover;
 }
 
 .article-row-main {
@@ -5692,9 +5676,116 @@ watch([() => route.fullPath, isZh], () => {
   font-size: 10px;
 }
 
+/* ---- 精选：一行一条（左大图 + 右文案） ---- */
+.public-featured-layout.public-featured-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.public-featured-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 44px;
+  overflow: hidden;
+  color: var(--featured-ink);
+  background: var(--featured-surface);
+  border: 2px solid var(--featured-border);
+  border-radius: 16px;
+  box-shadow: 4px 4px 0 var(--featured-border);
+  text-decoration: none;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.public-featured-row:hover,
+.public-featured-row:focus-visible {
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 7px 0 var(--featured-border);
+  outline: none;
+}
+.public-featured-cover-row {
+  width: 100%;
+  height: 100%;
+  min-height: 172px;
+  aspect-ratio: auto;
+  border-right: 2px solid var(--featured-border);
+  background: linear-gradient(135deg, #EEF7CF 0%, #D9F26B 55%, #CCFF00 100%);
+}
+.public-featured-cover-row img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform .45s ease;
+}
+.public-featured-row:hover .public-featured-cover-row img {
+  transform: scale(1.045);
+}
+.public-featured-cover-row .public-featured-cover-placeholder svg {
+  width: 54px;
+  height: 54px;
+  fill: none;
+  stroke: rgba(18, 19, 22, .45);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+.public-featured-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px 18px 14px;
+}
+.public-featured-meta .pf-row-index {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--featured-accent);
+  color: #121316;
+  font-weight: 900;
+}
+.pf-row-cat {
+  color: var(--featured-ink);
+  font-weight: 900;
+}
+.pf-row-read {
+  margin-left: auto;
+  color: var(--featured-muted);
+}
+.public-featured-row-title {
+  font-size: 20px;
+  line-height: 1.32;
+}
+.public-featured-row-summary {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--featured-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.public-featured-row .public-featured-tags {
+  margin-top: auto;
+  padding-top: 8px;
+}
+.public-featured-row-cta {
+  display: grid;
+  place-items: center;
+  border-left: 2px solid var(--featured-border);
+  font-size: 20px;
+  font-weight: 900;
+  transition: transform .18s ease, background .18s ease;
+}
+.public-featured-row:hover .public-featured-row-cta {
+  transform: translateX(3px);
+  background: var(--featured-accent);
+  color: #121316;
+}
+
 @media (max-width: 1100px) {
   .public-featured-layout {
     grid-template-columns: minmax(240px, 1fr) minmax(0, 1.35fr);
+  }
+  .public-featured-row {
+    grid-template-columns: 240px minmax(0, 1fr) 40px;
   }
   .public-featured-small-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5872,4 +5963,13 @@ watch([() => route.fullPath, isZh], () => {
   }
 }
 
+/* PUB-14 补充：深色主题下这些浅纸面色块仍用浅底，需固定深墨色，避免全局深色文字色落浅底 */
+:global(.dark) .hero-headline,
+:global(.dark) .hero-headline span,
+:global(.dark) .hero-sub,
+:global(.dark) .core-title,
+:global(.dark) .pain-item span,
+:global(.dark) .pain-code {
+  color: #121316 !important;
+}
 </style>

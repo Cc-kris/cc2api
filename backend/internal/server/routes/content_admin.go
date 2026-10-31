@@ -32,6 +32,7 @@ func RegisterContentAdminRoutes(admin *gin.RouterGroup, h *adminhandler.ContentN
 		news.PUT("/:id", h.UpdateNews)
 		news.DELETE("/:id", h.DeleteNews)
 		news.POST("/:id/publish", h.PublishNews)
+		news.POST("/:id/seo-autofill", h.AutoFillSEO)
 		news.POST("/:id/unpublish", h.UnpublishNews)
 		news.POST("/:id/restore", h.RestoreNews)
 

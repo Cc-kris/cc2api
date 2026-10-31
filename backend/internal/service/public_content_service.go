@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/richtext"
 )
 
 const (
@@ -39,32 +41,30 @@ type PublicNews struct {
 	Slug    string `json:"slug"`
 	Title   string `json:"title"`
 	Summary string `json:"summary"`
-	// BodyHTML is consumed by the server-side renderer only. Anonymous JSON
-	// clients must not receive raw captured HTML, because they could otherwise
-	// render it unsafely outside the server sanitizer.
-	BodyHTML            string            `json:"-"`
-	BodyText            string            `json:"bodyText,omitempty"`
-	SourceName          string            `json:"sourceName"`
-	Category            string            `json:"category,omitempty"`
-	Tags                []string          `json:"tags,omitempty"`
-	TitleZh             string            `json:"titleZh,omitempty"`
-	SummaryZh           string            `json:"summaryZh,omitempty"`
-	BodyTextZh          string            `json:"bodyTextZh,omitempty"`
-	CategoryZh          string            `json:"categoryZh,omitempty"`
-	TitleEn             string            `json:"titleEn,omitempty"`
-	SummaryEn           string            `json:"summaryEn,omitempty"`
-	BodyTextEn          string            `json:"bodyTextEn,omitempty"`
-	CategoryEn          string            `json:"categoryEn,omitempty"`
-	OriginalPublishedAt *time.Time        `json:"originalPublishedAt,omitempty"`
-	PublishedAt         time.Time         `json:"publishedAt"`
-	ImageURL            string            `json:"imageUrl,omitempty"`
-	SeoTitle            string            `json:"seoTitle,omitempty"`
-	SeoDescription      string            `json:"seoDescription,omitempty"`
-	Status              string            `json:"-"`
-	DeletedAt           *time.Time        `json:"-"`
+	// BodyHTML 已按白名单清洗（保存时清洗 + 出口再次清洗），可以安全地提供给匿名客户端。
+	BodyHTML            string     `json:"bodyHtml,omitempty"`
+	BodyText            string     `json:"bodyText,omitempty"`
+	SourceName          string     `json:"sourceName"`
+	Category            string     `json:"category,omitempty"`
+	Tags                []string   `json:"tags,omitempty"`
+	TitleZh             string     `json:"titleZh,omitempty"`
+	SummaryZh           string     `json:"summaryZh,omitempty"`
+	BodyTextZh          string     `json:"bodyTextZh,omitempty"`
+	CategoryZh          string     `json:"categoryZh,omitempty"`
+	TitleEn             string     `json:"titleEn,omitempty"`
+	SummaryEn           string     `json:"summaryEn,omitempty"`
+	BodyTextEn          string     `json:"bodyTextEn,omitempty"`
+	CategoryEn          string     `json:"categoryEn,omitempty"`
+	OriginalPublishedAt *time.Time `json:"originalPublishedAt,omitempty"`
+	PublishedAt         time.Time  `json:"publishedAt"`
+	ImageURL            string     `json:"imageUrl,omitempty"`
+	SeoTitle            string     `json:"seoTitle,omitempty"`
+	SeoDescription      string     `json:"seoDescription,omitempty"`
+	Status              string     `json:"-"`
+	DeletedAt           *time.Time `json:"-"`
 	// RequestedLocale is the URL locale the reader asked for; Locale is the
 	// language actually served. The renderer keeps UI chrome in RequestedLocale.
-	RequestedLocale string            `json:"-"`
+	RequestedLocale string `json:"-"`
 	// Fallback names the language served when the requested translation is
 	// missing (R9-03/R9-05). It drives noindex and the canonical target.
 	Fallback   string            `json:"fallback,omitempty"`
@@ -103,23 +103,23 @@ type PublicArticle struct {
 	Title   string `json:"title"`
 	Excerpt string `json:"excerpt"`
 	Author  string `json:"author,omitempty"`
-	// See PublicNews.BodyHTML. Public article HTML is rendered server-side.
-	BodyHTML       string            `json:"-"`
-	BodyText       string            `json:"bodyText,omitempty"`
-	CoverImage     string            `json:"coverImage,omitempty"`
-	CoverAlt       string            `json:"coverAlt,omitempty"`
-	Category       string            `json:"category,omitempty"`
-	Tags           []string          `json:"tags,omitempty"`
-	SeoTitle       string            `json:"seoTitle,omitempty"`
-	SeoDescription string            `json:"seoDescription,omitempty"`
-	CanonicalURL   string            `json:"-"`
-	OgImage        string            `json:"ogImage,omitempty"`
-	PublishedAt    time.Time         `json:"publishedAt"`
-	Status         string            `json:"-"`
-	DeletedAt      *time.Time        `json:"-"`
-	RequestedLocale string           `json:"-"`
-	Fallback       string            `json:"fallback,omitempty"`
-	Alternates     []PublicAlternate `json:"alternates,omitempty"`
+	// See PublicNews.BodyHTML. 已按白名单清洗后输出。
+	BodyHTML        string            `json:"bodyHtml,omitempty"`
+	BodyText        string            `json:"bodyText,omitempty"`
+	CoverImage      string            `json:"coverImage,omitempty"`
+	CoverAlt        string            `json:"coverAlt,omitempty"`
+	Category        string            `json:"category,omitempty"`
+	Tags            []string          `json:"tags,omitempty"`
+	SeoTitle        string            `json:"seoTitle,omitempty"`
+	SeoDescription  string            `json:"seoDescription,omitempty"`
+	CanonicalURL    string            `json:"-"`
+	OgImage         string            `json:"ogImage,omitempty"`
+	PublishedAt     time.Time         `json:"publishedAt"`
+	Status          string            `json:"-"`
+	DeletedAt       *time.Time        `json:"-"`
+	RequestedLocale string            `json:"-"`
+	Fallback        string            `json:"fallback,omitempty"`
+	Alternates      []PublicAlternate `json:"alternates,omitempty"`
 }
 
 type PublicAlternate struct {
@@ -643,4 +643,22 @@ func allPublicArticleListItemsValid(items []PublicArticleListItem) bool {
 		}
 	}
 	return true
+}
+
+// MarshalJSON 在序列化边界再清洗一次 bodyHtml：公开详情允许输出清洗后的
+// HTML（NE-19），但任何构造路径（服务映射、测试直构 DTO）都不能把 script/
+// on* 属性这类内容漏给匿名客户端。
+func (n PublicNews) MarshalJSON() ([]byte, error) {
+	type alias PublicNews
+	clone := alias(n)
+	clone.BodyHTML = richtext.Sanitize(n.BodyHTML)
+	return json.Marshal(clone)
+}
+
+// MarshalJSON 见 PublicNews.MarshalJSON。
+func (a PublicArticle) MarshalJSON() ([]byte, error) {
+	type alias PublicArticle
+	clone := alias(a)
+	clone.BodyHTML = richtext.Sanitize(a.BodyHTML)
+	return json.Marshal(clone)
 }

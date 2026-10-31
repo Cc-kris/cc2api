@@ -257,8 +257,11 @@ func TestPublicContentHandlerJSONDoesNotExposeRawHTML(t *testing.T) {
 	res := httptest.NewRecorder()
 	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/news/zh-CN/safe", nil))
 	require.Equal(t, http.StatusOK, res.Code)
-	require.NotContains(t, res.Body.String(), "bodyHtml")
+	// NE-19: bodyHtml 对外可见，但只允许清洗后的白名单内容。
+	require.Contains(t, res.Body.String(), `"bodyHtml"`)
+	require.Contains(t, res.Body.String(), "unsafe")
 	require.NotContains(t, res.Body.String(), "alert(1)")
+	require.NotContains(t, res.Body.String(), "<script")
 }
 
 func TestSafePublicImageURLRejectsCapturedRemoteImages(t *testing.T) {

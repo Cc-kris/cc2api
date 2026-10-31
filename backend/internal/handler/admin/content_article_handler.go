@@ -45,6 +45,8 @@ type contentArticleRequest struct {
 	OgImage        *string    `json:"ogImage"`
 	PublishedAt    *time.Time `json:"publishedAt"`
 	Version        int        `json:"version"`
+	// SyncLocales 仅用于本次保存后同步创建翻译记录，不参与落库。
+	SyncLocales []string `json:"syncLocales"`
 }
 type contentTranslationRequest struct {
 	ContentType      string  `json:"contentType"`
@@ -188,7 +190,7 @@ func (h *ContentArticleHandler) AutoFillSEO(c *gin.Context) {
 		response.BadRequest(c, "article body is required")
 		return
 	}
-	result, err := h.svc.GenerateSEO(contentMutationContext(c), service.ContentSEOInput{Title: article.Title, BodyMarkdown: stringValue(article.BodyMarkdown), BodyHTML: stringValue(article.BodyHTML)})
+	result, err := h.svc.GenerateSEO(contentMutationContext(c), service.ContentSEOInput{Title: article.Title, Summary: stringValue(article.Excerpt), BodyMarkdown: stringValue(article.BodyMarkdown), BodyHTML: stringValue(article.BodyHTML), Locale: article.Locale})
 	if err != nil {
 		if errors.Is(err, service.ErrContentAIModelNotConfigured) {
 			c.JSON(400, gin.H{"code": 400, "reason": "model_not_configured", "message": "请先配置默认 AI 模型"})
@@ -476,6 +478,13 @@ func (h *ContentArticleHandler) MutateAIConfig(c *gin.Context) {
 		id = in.ID
 	}
 	if e := h.svc.MutateAIProviderConfig(c.Request.Context(), action, id, c.GetHeader("If-Match"), in); e != nil {
+		// Typed service errors (e.g. 503 encryption_not_configured) keep their own
+		// status/reason; only untyped errors fall back to the 409 mapping below.
+		var appErr *infraerrors.ApplicationError
+		if errors.As(e, &appErr) {
+			response.ErrorFrom(c, appErr)
+			return
+		}
 		reason := "AI_CONFIG_CONFLICT"
 		if strings.Contains(e.Error(), "revision conflict") {
 			reason = "config_revision_conflict"
@@ -485,10 +494,7 @@ func (h *ContentArticleHandler) MutateAIConfig(c *gin.Context) {
 		response.ErrorFrom(c, infraerrors.Conflict(reason, e.Error()))
 		return
 	}
-	if action == "delete" {
-		c.Status(204)
-		return
-	}
+	// 删除与其他变更保持同一响应约定：200 + 最新列表与 revision，便于前端一次刷新状态。
 	h.ListAIConfigs(c)
 }
 func (h *ContentArticleHandler) TestAIConfig(c *gin.Context) {
@@ -670,7 +676,7 @@ func articleID(c *gin.Context) (int64, bool) {
 	return id, true
 }
 func articleFromRequest(r contentArticleRequest) service.ContentArticle {
-	a := service.ContentArticle{Locale: strings.TrimSpace(r.Locale), Slug: strings.TrimSpace(r.Slug), Title: strings.TrimSpace(r.Title), Excerpt: r.Excerpt, BodyMarkdown: r.BodyMarkdown, BodyHTML: r.BodyHTML, CoverImage: r.CoverImage, CoverAlt: r.CoverAlt, Category: r.Category, Tags: r.Tags, Status: r.Status, AuthorID: r.AuthorID, Model: r.Model, SeoTitle: r.SeoTitle, SeoDescription: r.SeoDescription, CanonicalURL: r.CanonicalURL, OgImage: r.OgImage, PublishedAt: r.PublishedAt, Version: r.Version}
+	a := service.ContentArticle{Locale: strings.TrimSpace(r.Locale), Slug: strings.TrimSpace(r.Slug), Title: strings.TrimSpace(r.Title), Excerpt: r.Excerpt, BodyMarkdown: r.BodyMarkdown, BodyHTML: r.BodyHTML, CoverImage: r.CoverImage, CoverAlt: r.CoverAlt, Category: r.Category, Tags: r.Tags, Status: r.Status, AuthorID: r.AuthorID, Model: r.Model, SeoTitle: r.SeoTitle, SeoDescription: r.SeoDescription, CanonicalURL: r.CanonicalURL, OgImage: r.OgImage, PublishedAt: r.PublishedAt, Version: r.Version, SyncLocales: r.SyncLocales}
 	autoEnrichArticleSEO(&a)
 	return a
 }

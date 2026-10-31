@@ -75,3 +75,26 @@ func TestContentAIConfigNeverExposesOrStoresPlaintextKey(t *testing.T) {
 		check(tc.name, do(http.MethodPut, aiBody(tc.apiKey)))
 	}
 }
+
+// SRC-09: 自动化设置不再强制要求 targetLocales（前端允许留空），
+// 同时保留「仅时钟」发布窗口的兼容解析。
+func TestContentAutomationRequestBindsWithoutTargetLocales(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := `{"enabled":true,"timezone":"Asia/Shanghai","publishMode":"auto","fetchCron":"0 8 * * *","publishStartAt":"09:00","publishEndAt":"18:30","dailyFetchLimit":20}`
+	for _, payload := range []string{body, strings.Replace(body, `"enabled":true`, `"enabled":true,"targetLocales":["en-US"]`, 1)} {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPut, "/content/news/automation-settings", strings.NewReader(payload))
+		c.Request.Header.Set("Content-Type", "application/json")
+		var req contentAutomationRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			t.Fatalf("binding failed for %s: %v", payload, err)
+		}
+		if !req.Enabled {
+			t.Fatalf("enabled not bound for %s", payload)
+		}
+		if req.PublishWindowStart != "09:00" || req.PublishWindowEnd != "18:30" {
+			t.Fatalf("clock-only window not preserved: %q-%q", req.PublishWindowStart, req.PublishWindowEnd)
+		}
+	}
+}

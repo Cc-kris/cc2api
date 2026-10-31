@@ -40,6 +40,9 @@ type publicDetailView struct {
 	JSONLD              template.JS
 	Nonce               string
 	Author              string
+	RelatedItems        []publicArticleListView
+	PrevItem            *publicArticleListView
+	NextItem            *publicArticleListView
 	IsNews              bool
 	Robots              string
 	Alternates          []publicAlternateView
@@ -59,15 +62,19 @@ type publicChromeView struct {
 	Author              string
 	Published           string
 	OriginalPublished   string
+	MoreDeepDive        string
+	PrevNext            string
+	PrevArticle         string
+	NextArticle         string
 }
 
 var publicChromeBySegment = map[string]publicChromeView{
-	"zh": {News: "新闻", Articles: "文章", Docs: "API 文档", Source: "来源：", Author: "作者：", Published: "发布时间：", OriginalPublished: "原始发布时间："},
-	"en": {News: "News", Articles: "Articles", Docs: "API Docs", Source: "Source: ", Author: "Author: ", Published: "Published: ", OriginalPublished: "Originally published: "},
-	"ru": {News: "Новости", Articles: "Статьи", Docs: "Документация API", Source: "Источник: ", Author: "Автор: ", Published: "Опубликовано: ", OriginalPublished: "Первая публикация: "},
-	"fr": {News: "Actualités", Articles: "Articles", Docs: "Documentation API", Source: "Source : ", Author: "Auteur : ", Published: "Publié le : ", OriginalPublished: "Publication initiale : "},
-	"de": {News: "Nachrichten", Articles: "Artikel", Docs: "Dokumentation", Source: "Quelle: ", Author: "Autor: ", Published: "Veröffentlicht: ", OriginalPublished: "Ursprünglich veröffentlicht: "},
-	"ja": {News: "ニュース", Articles: "記事", Docs: "API ドキュメント", Source: "出典：", Author: "著者：", Published: "公開日：", OriginalPublished: "初回公開日："},
+	"zh": {News: "新闻", Articles: "文章", Docs: "API 文档", Source: "来源：", Author: "作者：", Published: "发布时间：", OriginalPublished: "原始发布时间：", MoreDeepDive: "更多深度解析", PrevNext: "上一篇/下一篇", PrevArticle: "上一篇", NextArticle: "下一篇"},
+	"en": {News: "News", Articles: "Articles", Docs: "API Docs", Source: "Source: ", Author: "Author: ", Published: "Published: ", OriginalPublished: "Originally published: ", MoreDeepDive: "More Deep Dive", PrevNext: "Previous/Next", PrevArticle: "Previous", NextArticle: "Next"},
+	"ru": {News: "Новости", Articles: "Статьи", Docs: "Документация API", Source: "Источник: ", Author: "Автор: ", Published: "Опубликовано: ", OriginalPublished: "Первая публикация: ", MoreDeepDive: "Больше разборов", PrevNext: "Предыдущая/Следующая", PrevArticle: "Предыдущая", NextArticle: "Следующая"},
+	"fr": {News: "Actualités", Articles: "Articles", Docs: "Documentation API", Source: "Source : ", Author: "Auteur : ", Published: "Publié le : ", OriginalPublished: "Publication initiale : ", MoreDeepDive: "Pour aller plus loin", PrevNext: "Précédent/Suivant", PrevArticle: "Précédent", NextArticle: "Suivant"},
+	"de": {News: "Nachrichten", Articles: "Artikel", Docs: "Dokumentation", Source: "Quelle: ", Author: "Autor: ", Published: "Veröffentlicht: ", OriginalPublished: "Ursprünglich veröffentlicht: ", MoreDeepDive: "Mehr Hintergründe", PrevNext: "Zurück/Weiter", PrevArticle: "Zurück", NextArticle: "Weiter"},
+	"ja": {News: "ニュース", Articles: "記事", Docs: "API ドキュメント", Source: "出典：", Author: "著者：", Published: "公開日：", OriginalPublished: "初回公開日：", MoreDeepDive: "さらに深掘り", PrevNext: "前へ/次へ", PrevArticle: "前の記事", NextArticle: "次の記事"},
 }
 
 func publicChrome(locale string) publicChromeView {
@@ -75,6 +82,51 @@ func publicChrome(locale string) publicChromeView {
 		return chrome
 	}
 	return publicChromeBySegment["en"]
+}
+
+// publicPagerNeighbors returns the clamped previous/next page numbers.
+func publicPagerNeighbors(page, totalPages int) (int, int) {
+	if totalPages < 1 {
+		totalPages = 1
+	}
+	prev := page - 1
+	if prev < 1 {
+		prev = 1
+	}
+	next := page + 1
+	if next > totalPages {
+		next = totalPages
+	}
+	return prev, next
+}
+
+// publicPagerItems builds at most five numbered page links around the current
+// page so the SSR list keeps a compact, stable pagination control.
+func publicPagerItems(base string, page, totalPages int) []publicPagerItemView {
+	if totalPages < 1 {
+		totalPages = 1
+	}
+	span := 5
+	if totalPages < span {
+		span = totalPages
+	}
+	start := page - 2
+	if start < 1 {
+		start = 1
+	}
+	if maxStart := totalPages - span + 1; start > maxStart {
+		start = maxStart
+	}
+	items := make([]publicPagerItemView, 0, span)
+	for i := 0; i < span; i++ {
+		p := start + i
+		items = append(items, publicPagerItemView{
+			Page:    p,
+			Href:    base + "&page=" + strconv.Itoa(p),
+			Current: p == page,
+		})
+	}
+	return items
 }
 
 const publicHTMLNoncePlaceholder = "__CCAI_PUBLIC_NONCE__"
@@ -133,7 +185,19 @@ type publicCollectionView struct {
 	PageSize     int
 	Total        int
 	HasNext      bool
+	TotalPages   int
+	PrevPage     int
+	NextPage     int
+	PagerBase    string
+	PagerItems   []publicPagerItemView
 	Chrome       publicChromeView
+}
+
+// publicPagerItemView is one numbered page link in the SSR pagination control.
+type publicPagerItemView struct {
+	Page    int
+	Href    string
+	Current bool
 }
 
 type publicDocsView struct {
@@ -181,6 +245,18 @@ var publicDetailTemplate = template.Must(template.New("public-detail").Parse(`<!
       {{if .OriginalPublishedAt}}<time datetime="{{.OriginalPublishedAt}}">{{.Chrome.OriginalPublished}}{{.OriginalPublishedAt}}</time>{{end}}
       <time datetime="{{.PublishedAt}}">{{.Chrome.Published}}{{.PublishedAt}}</time>
       <section class="content">{{.Body}}</section>
+      {{if .RelatedItems}}
+      <section class="related-block" aria-labelledby="related-heading">
+        <h2 id="related-heading">{{.Chrome.MoreDeepDive}}</h2>
+        <ul class="related-list">{{range .RelatedItems}}<li><a href="{{.URL}}">{{.Title}}</a><p>{{.Excerpt}}</p></li>{{end}}</ul>
+      </section>
+      {{end}}
+      {{if or .PrevItem .NextItem}}
+      <nav class="detail-prev-next-grid" aria-label="{{.Chrome.PrevNext}}">
+        {{with .PrevItem}}<a class="prev-next-card" href="{{.URL}}"><span class="pn-label">{{$.Chrome.PrevArticle}}</span><strong class="pn-title">{{.Title}}</strong></a>{{else}}<span class="prev-next-card pn-empty">{{.Chrome.PrevArticle}}：—</span>{{end}}
+        {{with .NextItem}}<a class="prev-next-card" href="{{.URL}}"><span class="pn-label">{{$.Chrome.NextArticle}}</span><strong class="pn-title">{{.Title}}</strong></a>{{else}}<span class="prev-next-card pn-empty">{{$.Chrome.NextArticle}}：—</span>{{end}}
+      </nav>
+      {{end}}
     </article>
   </main>
 </body>
@@ -219,7 +295,7 @@ Authorization: Bearer YOUR_API_KEY</code></pre><a href="/docs?locale={{.Locale}}
     {{else if eq .Kind "news"}}
     <section aria-labelledby="page-heading"><h1 id="page-heading">CCAI 新闻</h1><p>{{.Description}}</p><div class="news-list">{{range .NewsItems}}<article><h2><a href="{{.URL}}">{{.Title}}</a></h2><p>{{.Summary}}</p><p><span>{{.SourceName}}</span> · <time datetime="{{.PublishedAt}}">{{.PublishedAt}}</time></p></article>{{else}}<p>暂无已发布新闻。</p>{{end}}</div></section>
     {{else}}
-    <section aria-labelledby="page-heading"><h1 id="page-heading">CCAI 文章</h1><p>{{.Description}}</p><div class="article-list">{{range .ArticleItems}}<article><h2><a href="{{.URL}}">{{.Title}}</a></h2><p>{{.Excerpt}}</p><time datetime="{{.PublishedAt}}">{{.PublishedAt}}</time></article>{{else}}<p>暂无已发布文章。</p>{{end}}</div></section>
+    <section aria-labelledby="page-heading"><h1 id="page-heading">CCAI 文章</h1><p>{{.Description}}</p><div class="article-list">{{range .ArticleItems}}<article><h2><a href="{{.URL}}">{{.Title}}</a></h2><p>{{.Excerpt}}</p><time datetime="{{.PublishedAt}}">{{.PublishedAt}}</time></article>{{else}}<p>暂无已发布文章。</p>{{end}}</div>{{if gt .TotalPages 1}}<nav class="pager" aria-label="分页"><a class="pager-btn pager-prev" href="{{.PagerBase}}&page={{.PrevPage}}" rel="prev">上一页</a>{{range .PagerItems}}<a class="pager-num{{if .Current}} is-active{{end}}" href="{{.Href}}"{{if .Current}} aria-current="page"{{end}}>{{.Page}}</a>{{end}}<a class="pager-btn pager-next" href="{{.PagerBase}}&page={{.NextPage}}" rel="next">下一页</a></nav>{{end}}</section>
     {{end}}
   </main>
 </body>
@@ -277,7 +353,7 @@ func renderNewsDocument(c *gin.Context, baseURL string, item *service.PublicNews
 	renderPublicTemplate(c, publicDetailTemplate, view, publicHTMLCacheDetail, view.Robots)
 }
 
-func renderArticleDocument(c *gin.Context, baseURL string, item *service.PublicArticle) {
+func renderArticleDocument(c *gin.Context, baseURL string, item *service.PublicArticle, related []service.PublicArticleListItem, prev, next *service.PublicArticleListItem) {
 	requested := firstPublicNonEmpty(item.RequestedLocale, item.Locale)
 	seoLocale := requested
 	if item.Fallback != "" {
@@ -297,6 +373,15 @@ func renderArticleDocument(c *gin.Context, baseURL string, item *service.PublicA
 		Nonce:       middleware.GetNonceFromContext(c),
 		Chrome:      publicChrome(requested),
 		Author:      item.Author,
+	}
+	view.RelatedItems = articleListViews(related)
+	if prev != nil {
+		prevView := articleListViews([]service.PublicArticleListItem{*prev})[0]
+		view.PrevItem = &prevView
+	}
+	if next != nil {
+		nextView := articleListViews([]service.PublicArticleListItem{*next})[0]
+		view.NextItem = &nextView
 	}
 	view.Alternates = publicAlternateViews(c, baseURL, "/articles", seoLocale, item.Slug, item.Alternates, true)
 	view.JSONLD = publicJSONLD(articleJSONLD(item, view.Title, view.Description, view.Canonical))
@@ -412,6 +497,10 @@ func renderArticleListDocument(c *gin.Context, baseURL, locale string, page serv
 		Total:        page.Total,
 		HasNext:      page.HasNext,
 	}
+	view.TotalPages = page.TotalPages
+	view.PagerBase = "/articles?locale=" + publicLocaleSegment(locale)
+	view.PagerItems = publicPagerItems(view.PagerBase, page.Page, page.TotalPages)
+	view.PrevPage, view.NextPage = publicPagerNeighbors(page.Page, page.TotalPages)
 	view.JSONLD = publicJSONLD(map[string]any{
 		"@context":   "https://schema.org",
 		"@type":      "CollectionPage",

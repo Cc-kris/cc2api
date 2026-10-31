@@ -1,0 +1,52 @@
+/* BI 分析响应式与深色主题覆盖（BI-01 / BI-05）。
+   这些规则只作用于内容中心 BI 页面，独立成文件以避免触碰 ContentCenterView.vue 的主样式，
+   并通过 !important 明确覆盖 .chart-grid 中排序在后、无条件生效的两列声明。 */
+
+/* 390 窄屏：图表网格必须单列。原文件 @media(max-width:640px) 的单列规则
+   被其后无条件的 .chart-grid 两列规则覆盖，故此处显式收紧到 767px 并加权。 */
+@media (max-width: 767px) {
+  .chart-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .chart-card.chart-wide {
+    grid-column: span 1 !important;
+  }
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .chart-card {
+    padding: 12px;
+  }
+  .chart-box {
+    height: 220px;
+  }
+}
+
+/* 中等宽度：KPI 必须保持一行，收窄页面内边距避免横向溢出 */
+@media (max-width: 1279px) {
+  .admin-page {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+@media (min-width: 1024px) {
+  .metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+}
+
+/* 深色主题：图表卡不再使用纯白纸面，标题改为高对比浅色 */
+html.dark .chart-card,
+html.dark .chart-card.chart-wide {
+  background: #15171c !important;
+  border-color: #2a2e37 !important;
+  box-shadow: 4px 4px 0 #05060a !important;
+}
+html.dark .chart-card h3 {
+  color: #e9edf6 !important;
+}
+html.dark .chart-card .chart-empty,
+html.dark .chart-card .chart-legend,
+html.dark .chart-card .chart-legend span {
+  color: #c3cad8 !important;
+}

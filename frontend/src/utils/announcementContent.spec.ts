@@ -1,29 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-const editorTestControl = vi.hoisted(() => ({ editor: null as any }))
-
-vi.mock('@wangeditor/editor-for-vue', async () => {
-  const { defineComponent, h } = await import('vue')
-  return {
-    Editor: defineComponent({
-      props: { modelValue: { type: String, default: '' } },
-      emits: ['update:modelValue', 'onCreated', 'onChange'],
-      setup(props, { emit }) {
-        return () => h('div', [
-          h('textarea', {
-            value: props.modelValue,
-            onInput: (event: Event) => {
-              emit('update:modelValue', (event.target as HTMLTextAreaElement).value)
-              emit('onChange')
-            },
-          }),
-          h('button', { onClick: () => emit('onCreated', editorTestControl.editor) }, 'create editor'),
-        ])
-      },
-    }),
-    Toolbar: defineComponent({ setup: () => () => h('div') }),
-  }
-})
 
 import AnnouncementRichTextEditor from '@/components/admin/announcements/AnnouncementRichTextEditor.vue'
 import {
@@ -39,35 +15,28 @@ describe('announcementContent', () => {
   it('replays the latest long body when the editor is created after async content arrives', async () => {
     const body = 'x'.repeat(10_000)
     const html = `<p>${body}</p>`
-    const editor = {
-      getHtml: vi.fn(() => '<p>initial</p>'),
-      setHtml: vi.fn(),
-      destroy: vi.fn(),
-    }
-    editorTestControl.editor = editor
     const wrapper = mount(AnnouncementRichTextEditor, { props: { modelValue: '<p>initial</p>' } })
 
+    // 异步拿到正文后外部值回灌：长正文必须完整进 contenteditable（N5 不被截断）
     await wrapper.setProps({ modelValue: html })
-    await wrapper.get('button').trigger('click')
 
-    expect(editor.setHtml).toHaveBeenCalledTimes(1)
-    expect(editor.setHtml).toHaveBeenCalledWith(html)
+    expect(wrapper.get('.rich-text-content').element.innerHTML).toBe(html)
     wrapper.unmount()
-    editorTestControl.editor = null
   })
 
   it('keeps local edits when modelValue changes, then accepts content on a new editor session', async () => {
-    editorTestControl.editor = null
     const wrapper = mount(AnnouncementRichTextEditor, {
       props: { modelValue: '<p>saved</p>', sessionKey: 'news-1' },
     })
+    const editor = wrapper.get('.rich-text-content').element as HTMLElement
+    editor.innerHTML = '<p>local edit</p>'
+    await wrapper.get('.rich-text-content').trigger('input')
 
-    await wrapper.get('textarea').setValue('<p>local edit</p>')
     await wrapper.setProps({ modelValue: '<p>stale server value</p>' })
-    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('<p>local edit</p>')
+    expect(editor.innerHTML).toBe('<p>local edit</p>')
 
     await wrapper.setProps({ modelValue: '<p>next news</p>', sessionKey: 'news-2' })
-    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('<p>next news</p>')
+    expect(editor.innerHTML).toContain('next news')
     wrapper.unmount()
   })
 

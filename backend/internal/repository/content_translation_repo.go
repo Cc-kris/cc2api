@@ -15,6 +15,30 @@ type contentTranslationRepository struct{ client *dbent.Client }
 func NewContentTranslationRepository(c *dbent.Client) service.ContentTranslationStore {
 	return &contentTranslationRepository{client: c}
 }
+
+// NewContentTranslationDraftStore 暴露「建立草稿 + 查询未完成记录」的窄接口，
+// 供内容保存时同步翻译记录使用。
+func NewContentTranslationDraftStore(c *dbent.Client) service.ContentTranslationDraftStore {
+	return &contentTranslationRepository{client: c}
+}
+
+// ListUnfinished 返回某条内容的所有未完成翻译记录（草稿/待审/已下线），
+// 不限源版本：同一 locale 只要还有未完成记录就不再新建。
+func (r *contentTranslationRepository) ListUnfinished(ctx context.Context, contentType string, contentID int64) ([]service.ContentTranslation, error) {
+	if r == nil || r.client == nil || contentID <= 0 {
+		return nil, service.ErrContentArticleInvalid
+	}
+	rows, e := r.client.ContentTranslation.Query().Where(
+		contenttranslation.ContentTypeEQ(contentType),
+		contenttranslation.ContentIDEQ(contentID),
+		contenttranslation.DeletedAtIsNil(),
+		contenttranslation.StatusNEQ(domain.ContentTranslationPublished),
+	).All(ctx)
+	if e != nil {
+		return nil, e
+	}
+	return mapContentTranslations(rows), nil
+}
 func (r *contentTranslationRepository) Get(ctx context.Context, id int64) (*service.ContentTranslation, error) {
 	if r == nil || r.client == nil || id <= 0 {
 		return nil, service.ErrContentTranslationNotFound

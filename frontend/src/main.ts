@@ -5,6 +5,8 @@ import router from './router'
 import i18n, { initI18n } from './i18n'
 import { useAppStore } from '@/stores/app'
 import './style.css'
+import './styles/bi-layout-overrides.css'
+import './styles/public-dark-ink.css'
 
 function initThemeClass() {
   const savedTheme = localStorage.getItem('theme')
