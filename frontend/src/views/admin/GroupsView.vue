@@ -520,6 +520,27 @@
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
         </div>
+        <div class="flex items-center justify-between rounded-lg border border-gray-200 p-3 dark:border-dark-600" data-testid="createForm-failover-on-any-error">
+          <div>
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t("admin.groups.form.failoverOnAnyError") }}</label>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {{ createForm.failover_on_any_error ? t("admin.groups.form.failoverOnAnyErrorOn") : t("admin.groups.form.failoverOnAnyErrorOff") }}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="createForm.failover_on_any_error"
+            @click="createForm.failover_on_any_error = !createForm.failover_on_any_error"
+            class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+            :class="createForm.failover_on_any_error ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600'"
+          >
+            <span
+              class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+              :class="createForm.failover_on_any_error ? 'translate-x-6' : 'translate-x-1'"
+            />
+          </button>
+        </div>
         <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-600">
           <label class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
             <input v-model="createForm.long_context_pricing_enabled" type="checkbox" class="rounded border-gray-300 text-primary-600" />
@@ -1758,6 +1779,27 @@
             :placeholder="t('admin.groups.form.rpmLimitPlaceholder')"
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
+        </div>
+        <div class="flex items-center justify-between rounded-lg border border-gray-200 p-3 dark:border-dark-600" data-testid="editForm-failover-on-any-error">
+          <div>
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t("admin.groups.form.failoverOnAnyError") }}</label>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {{ editForm.failover_on_any_error ? t("admin.groups.form.failoverOnAnyErrorOn") : t("admin.groups.form.failoverOnAnyErrorOff") }}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="editForm.failover_on_any_error"
+            @click="editForm.failover_on_any_error = !editForm.failover_on_any_error"
+            class="relative inline-flex h-6 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+            :class="editForm.failover_on_any_error ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600'"
+          >
+            <span
+              class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+              :class="editForm.failover_on_any_error ? 'translate-x-6' : 'translate-x-1'"
+            />
+          </button>
         </div>
         <div class="rounded-lg border border-gray-200 p-3 dark:border-dark-600">
           <label class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -3296,6 +3338,8 @@ const createForm = reactive({
   copy_accounts_from_group_ids: [] as number[],
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
+  // 任意错误换号（分组级，默认开启）
+  failover_on_any_error: true,
 	long_context_pricing_enabled: true,
 	model_pricing_json: "{}",
 });
@@ -3591,6 +3635,8 @@ const editForm = reactive({
 	model_pricing_json: "{}",
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
+  // 任意错误换号（分组级，默认开启）
+  failover_on_any_error: true,
 });
 
 type ImagePricingFormState = {
@@ -3835,6 +3881,7 @@ const closeCreateModal = () => {
   createForm.supported_model_scopes = ["claude", "gemini_text", "gemini_image"];
   createForm.mcp_xml_inject = true;
 	createForm.long_context_pricing_enabled = true;
+  createForm.failover_on_any_error = true;
 	createForm.model_pricing_json = "{}";
   createForm.copy_accounts_from_group_ids = [];
   createModelRoutingRules.value = [];
@@ -4001,6 +4048,7 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.copy_accounts_from_group_ids = []; // 复制账号字段每次编辑时重置为空
   editForm.rpm_limit = group.rpm_limit ?? 0;
 	editForm.long_context_pricing_enabled = group.long_context_pricing_enabled ?? true;
+  editForm.failover_on_any_error = group.failover_on_any_error ?? true;
 	editForm.model_pricing_json = JSON.stringify(group.model_pricing ?? {}, null, 2);
   // 加载模型路由规则（异步加载账号名称）
   editModelRoutingRules.value = await convertApiFormatToRoutingRules(

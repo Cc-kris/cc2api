@@ -167,7 +167,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 
 	sessionHash := h.gatewayService.GenerateExplicitSessionHash(c, body)
 
-	maxAccountSwitches := h.maxAccountSwitches
+	maxAccountSwitches := effectiveMaxAccountSwitches(c.Request.Context(), h.cfg, h.maxAccountSwitches)
 	switchCount := 0
 	failedAccountIDs := make(map[int64]struct{})
 	sameAccountRetryCount := make(map[int64]int)
@@ -270,8 +270,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 				if errors.As(err, &failoverErr) {
 					appendBillableUsageAttemptFromFailover(c, account, parsed.Model, failoverErr)
 					h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
-					if failoverErr.RetryableOnSameAccount {
-						retryLimit := account.GetPoolModeRetryCount()
+					if retryLimit := sameAccountRetryLimit(c.Request.Context(), h.cfg, account, failoverErr); retryLimit > 0 {
 						if sameAccountRetryCount[account.ID] < retryLimit {
 							sameAccountRetryCount[account.ID]++
 							reqLog.Warn("openai.images.pool_mode_same_account_retry",
@@ -296,7 +295,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 						return
 					}
 					switchCount++
-					if h.gatewayService.ShouldStopOpenAIOAuth429Failover(account, failoverErr.StatusCode, switchCount, &oauth429FailoverState) {
+					if shouldRespectOAuth429StormStop(c.Request.Context(), h.cfg) && h.gatewayService.ShouldStopOpenAIOAuth429Failover(account, failoverErr.StatusCode, switchCount, &oauth429FailoverState) {
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}

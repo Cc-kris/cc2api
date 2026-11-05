@@ -133,6 +133,9 @@ type Group struct {
 	// RPMLimit 分组级每分钟请求数上限（0 = 不限制），设置后覆盖用户级 rpm_limit。
 	RPMLimit int `json:"rpm_limit"`
 
+	// FailoverOnAnyError 任意上游错误都切换分组内其他账号
+	FailoverOnAnyError bool `json:"failover_on_any_error"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

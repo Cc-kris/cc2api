@@ -554,6 +554,8 @@ export interface Group {
 }
 
 export interface AdminGroup extends Group {
+  // 任意错误换号（分组级，默认开启）
+  failover_on_any_error?: boolean
   // 模型路由配置（仅管理员可见，内部信息）
   model_routing: Record<string, number[]> | null
   model_routing_enabled: boolean
@@ -679,6 +681,7 @@ export interface CreateGroupRequest {
   supported_model_scopes?: string[]
   require_oauth_only?: boolean
   require_privacy_set?: boolean
+  failover_on_any_error?: boolean
   // 从指定分组复制账号
 	copy_accounts_from_group_ids?: number[]
 	long_context_pricing_enabled?: boolean
@@ -714,6 +717,7 @@ export interface UpdateGroupRequest {
   supported_model_scopes?: string[]
   require_oauth_only?: boolean
   require_privacy_set?: boolean
+  failover_on_any_error?: boolean
 	copy_accounts_from_group_ids?: number[]
 	long_context_pricing_enabled?: boolean
 	model_pricing?: Record<string, GroupModelPricing>

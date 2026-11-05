@@ -1985,6 +1985,10 @@ func init() {
 	groupDescModelPricing := groupFields[37].Descriptor()
 	// group.DefaultModelPricing holds the default value on creation for the model_pricing field.
 	group.DefaultModelPricing = groupDescModelPricing.Default.(map[string]interface{})
+	// groupDescFailoverOnAnyError is the schema descriptor for failover_on_any_error field.
+	groupDescFailoverOnAnyError := groupFields[38].Descriptor()
+	// group.DefaultFailoverOnAnyError holds the default value on creation for the failover_on_any_error field.
+	group.DefaultFailoverOnAnyError = groupDescFailoverOnAnyError.Default.(bool)
 	idempotencyrecordMixin := schema.IdempotencyRecord{}.Mixin()
 	idempotencyrecordMixinFields0 := idempotencyrecordMixin[0].Fields()
 	_ = idempotencyrecordMixinFields0

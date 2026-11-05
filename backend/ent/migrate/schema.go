@@ -1502,6 +1502,7 @@ var (
 		{Name: "rpm_limit", Type: field.TypeInt, Default: 0},
 		{Name: "long_context_pricing_enabled", Type: field.TypeBool, Default: true},
 		{Name: "model_pricing", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "failover_on_any_error", Type: field.TypeBool, Default: true},
 	}
 	// GroupsTable holds the schema information for the "groups" table.
 	GroupsTable = &schema.Table{

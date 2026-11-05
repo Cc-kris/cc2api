@@ -2272,7 +2272,10 @@ func (s *OpenAIGatewayService) GetAccessToken(ctx context.Context, account *Acco
 	}
 }
 
-func (s *OpenAIGatewayService) shouldFailoverUpstreamError(statusCode int) bool {
+func (s *OpenAIGatewayService) shouldFailoverUpstreamError(ctx context.Context, statusCode int) bool {
+	if failoverOnAnyHTTPError(ctx, s.cfg, statusCode) {
+		return true
+	}
 	switch statusCode {
 	case 401, 402, 403, 429, 529:
 		return true
@@ -2281,8 +2284,12 @@ func (s *OpenAIGatewayService) shouldFailoverUpstreamError(statusCode int) bool 
 	}
 }
 
-func (s *OpenAIGatewayService) shouldFailoverOpenAIUpstreamResponse(statusCode int, upstreamMsg string, upstreamBody []byte) bool {
-	if s.shouldFailoverUpstreamError(statusCode) {
+func (s *OpenAIGatewayService) shouldFailoverOpenAIUpstreamResponse(ctx context.Context, statusCode int, upstreamMsg string, upstreamBody []byte) bool {
+	// 内容审核 / 图片用户错误：换号无意义，直接返回给用户（不受任意错误换号开关影响）
+	if statusCode < 500 && isUserContentRejectionBody(upstreamBody) {
+		return false
+	}
+	if s.shouldFailoverUpstreamError(ctx, statusCode) {
 		return true
 	}
 	return isOpenAITransientProcessingError(statusCode, upstreamMsg, upstreamBody)
@@ -2383,6 +2390,11 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		return nil, errors.New("openai ws v1 is temporarily unsupported; use ws v2")
 	}
 	passthroughEnabled := account.IsOpenAIPassthroughEnabled()
+	if sc := StreamContinuationFromContext(c); sc.Active() && (passthroughEnabled || account.IsGrok() ||
+		(account.Type == AccountTypeAPIKey && !openai_compat.ShouldUseResponsesAPI(account.Extra))) {
+		// 续写进行中：透传 / Grok / Chat 兼容路径不支持流拼接，换下一个账号
+		return nil, NewStreamContinuationUnsupportedFailover()
+	}
 	if passthroughEnabled {
 		// 透传分支只需要轻量提取字段，避免热路径全量 Unmarshal。
 		reasoningEffort := extractOpenAIReasoningEffortFromBody(body, reqModel)
@@ -2790,6 +2802,14 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			}
 		}
 	}
+	// 流式续写：已推给客户端的内容作为 assistant 消息带给新账号，让它从断点接着写
+	if sc := StreamContinuationFromContext(c); sc.Active() {
+		if wsDecision.Transport == OpenAIUpstreamTransportResponsesWebsocketV2 {
+			// WS 上游路径不支持流拼接，换下一个账号
+			return nil, NewStreamContinuationUnsupportedFailover()
+		}
+		body = sc.BuildResponsesContinuationBody(body)
+	}
 	// Get access token
 	token, _, err := s.GetAccessToken(ctx, account)
 	if err != nil {
@@ -3054,6 +3074,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				Kind:               "request_error",
 				Message:            safeErr,
 			})
+			if foErr := newAnyErrorTransportFailover(ctx, s.cfg, err); foErr != nil {
+				return nil, foErr
+			}
 			c.JSON(http.StatusBadGateway, gin.H{
 				"error": gin.H{
 					"type":    "upstream_error",
@@ -3084,7 +3107,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				}
 				logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Skip non-WSv2 invalid_encrypted_content retry because encrypted reasoning items are missing (account: %s)", account.Name)
 			}
-			if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
+			if s.shouldFailoverOpenAIUpstreamResponse(ctx, resp.StatusCode, upstreamMsg, respBody) {
 				upstreamDetail := ""
 				if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
 					maxBytes := s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes
@@ -3374,6 +3397,9 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			Kind:               "request_error",
 			Message:            safeErr,
 		})
+		if foErr := newAnyErrorTransportFailover(ctx, s.cfg, err); foErr != nil {
+			return nil, foErr
+		}
 		c.JSON(http.StatusBadGateway, gin.H{
 			"error": gin.H{
 				"type":    "upstream_error",
@@ -3389,6 +3415,15 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		// 上游容量类错误，应先触发多账号 failover 以维持基础 SLA。
 		if shouldFailoverOpenAIPassthroughResponse(resp.StatusCode) {
 			return nil, s.handleFailoverErrorResponsePassthrough(ctx, resp, c, account, body)
+		}
+		if failoverOnAnyHTTPError(ctx, s.cfg, resp.StatusCode) {
+			// 先读出错误体判断是否为内容审核/用户错误（这类不换号），再重新包装供后续处理读取
+			errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+			_ = resp.Body.Close()
+			resp.Body = io.NopCloser(bytes.NewReader(errBody))
+			if !isUserContentRejectionBody(errBody) {
+				return nil, s.handleFailoverErrorResponsePassthrough(ctx, resp, c, account, body)
+			}
 		}
 		return nil, s.handleErrorResponsePassthrough(ctx, resp, c, account, body)
 	}
@@ -4776,6 +4811,24 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 	clientOutputStarted := false
 	upstreamRequestID := strings.TrimSpace(resp.Header.Get("x-request-id"))
 	var streamFailoverErr error
+	// 流式续写：已推给客户端的内容不撤回，中途断开时换号让新账号接着写（仅内存、仅本次请求）
+	streamCont := StreamContinuationFromContext(c)
+	if streamCont != nil {
+		streamCont.BeginAttempt()
+		streamCont.beginResponsesAttempt()
+	}
+	interruptForContinuation := func(message string) error {
+		if streamCont == nil || clientDisconnected || !streamCont.Active() || !streamCont.Recoverable() {
+			return nil
+		}
+		// 已记录为"推给客户端"的内容必须真正落到客户端，再换号续写
+		if err := flushBuffered(); err != nil {
+			clientDisconnected = true
+			return nil
+		}
+		logger.LegacyPrintf("service.openai_gateway", "Stream interrupted mid-output (account=%d), failing over with continuation: %s", account.ID, message)
+		return streamCont.NewStreamInterruptedFailover(message)
+	}
 	sendErrorEvent := func(reason string) {
 		if errorEventSent || clientDisconnected {
 			return
@@ -4811,6 +4864,9 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 	}
 	finalizeStream := func() (*openaiStreamingResult, error) {
 		if !sawTerminalEvent {
+			if foErr := interruptForContinuation("upstream stream ended before a terminal event"); foErr != nil {
+				return nil, foErr
+			}
 			if !openAIStreamClientOutputStarted(c, clientOutputStarted) {
 				return resultWithUsage(), s.newOpenAIStreamFailoverError(
 					c,
@@ -4853,6 +4909,11 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 		// /v1/responses 的 SSE 事件必须符合 OpenAI 协议；这里不注入自定义 error event，避免下游 SDK 解析失败。
 		if errors.Is(scanErr, context.Canceled) || errors.Is(scanErr, context.DeadlineExceeded) {
 			return resultWithUsage(), fmt.Errorf("stream usage incomplete: %w", scanErr), true
+		}
+		if !errors.Is(scanErr, bufio.ErrTooLong) {
+			if foErr := interruptForContinuation("upstream stream disconnected: " + sanitizeStreamError(scanErr)); foErr != nil {
+				return nil, foErr, true
+			}
 		}
 		if errors.Is(scanErr, bufio.ErrTooLong) {
 			logger.LegacyPrintf("service.openai_gateway", "SSE line too long: account=%d max_size=%d error=%v", account.ID, maxLineSize, scanErr)
@@ -4920,6 +4981,13 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 					streamFailoverErr = s.newOpenAIStreamFailoverError(c, account, false, upstreamRequestID, dataBytes, failedMessage)
 					return
 				}
+				// 已开始输出后上游返回 response.failed：可重试类错误换号续写
+				if openAIStreamFailedEventShouldFailover(dataBytes, failedMessage) {
+					if foErr := interruptForContinuation("upstream response failed mid-stream: " + failedMessage); foErr != nil {
+						streamFailoverErr = foErr
+						return
+					}
+				}
 				forceFlushFailedEvent = true
 				sawFailedEvent = true
 			}
@@ -4933,6 +5001,19 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 				eventType = strings.TrimSpace(gjson.GetBytes(dataBytes, "type").String())
 			}
 			startsClientOutput := forceFlushFailedEvent || openAIStreamDataStartsClientOutput(data, eventType)
+
+			// 续写：丢弃重复的 preamble、并入旧的未结束 message、重排 output_index / sequence_number
+			if streamCont != nil {
+				rewritten, keep := streamCont.RewriteResponsesData(data, startsClientOutput)
+				if !keep {
+					s.parseSSEUsageBytes(dataBytes, usage)
+					return
+				}
+				if rewritten != data {
+					data = rewritten
+					line = "data: " + rewritten
+				}
+			}
 
 			// 写入客户端（客户端断开后继续 drain 上游）
 			if !clientDisconnected {
@@ -5060,6 +5141,9 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			// 处理流超时，可能标记账户为临时不可调度或错误状态
 			if s.rateLimitService != nil {
 				s.rateLimitService.HandleStreamTimeout(ctx, account, originalModel)
+			}
+			if foErr := interruptForContinuation(fmt.Sprintf("upstream stream idle for %s", streamInterval)); foErr != nil {
+				return nil, foErr
 			}
 			sendErrorEvent("stream_timeout")
 			return resultWithUsage(), fmt.Errorf("stream data interval timeout")

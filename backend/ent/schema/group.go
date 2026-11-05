@@ -184,6 +184,11 @@ func (Group) Fields() []ent.Field {
 		field.JSON("model_pricing", map[string]any{}).
 			Default(map[string]any{}).
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
+
+		// 任意上游错误都切换到分组内其他账号（含流式中途断开续写），直到全部账号尝试完毕。
+		field.Bool("failover_on_any_error").
+			Default(true).
+			Comment("任意上游错误都切换分组内其他账号，直到全部账号失败才返回错误"),
 	}
 }
 

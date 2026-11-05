@@ -191,11 +191,11 @@ func grokContentPolicyClientMessage(responseBody []byte) string {
 // shouldFailoverGrokUpstreamError is the body-aware counterpart of the
 // status-only failover helper. Grok content refusals must stay on the current
 // account and be returned to the caller instead of consuming the account pool.
-func (s *OpenAIGatewayService) shouldFailoverGrokUpstreamError(statusCode int, responseBody []byte) bool {
+func (s *OpenAIGatewayService) shouldFailoverGrokUpstreamError(ctx context.Context, statusCode int, responseBody []byte) bool {
 	if isGrokContentPolicyRejection(statusCode, responseBody) {
 		return false
 	}
-	return s.shouldFailoverUpstreamError(statusCode)
+	return s.shouldFailoverUpstreamError(ctx, statusCode)
 }
 
 // applyGrokForbiddenPolicy applies an administrator's existing temporary

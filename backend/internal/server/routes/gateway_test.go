@@ -94,6 +94,30 @@ func TestGatewayRoutesOpenAIImagesPathsAreRegistered(t *testing.T) {
 	}
 }
 
+func TestGatewayRoutesOpenAIVideoCreationPathsAreRegistered(t *testing.T) {
+	router := newGatewayRoutesTestRouterForPlatform(service.PlatformOpenAI)
+	routes := router.Routes()
+	registered := make(map[string]bool, len(routes))
+	for _, route := range routes {
+		registered[route.Method+" "+route.Path] = true
+	}
+
+	require.True(t, registered[http.MethodPost+" /v1/videos"])
+	require.True(t, registered[http.MethodPost+" /videos"])
+
+	// 别名必须落到 videoGenerationHandler，而不是 gin 默认 404：
+	// 非 Grok 分组会得到平台不支持的业务错误体，据此区分路由是否命中。
+	for _, path := range []string{"/v1/videos", "/videos"} {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"MiniMax-H3","prompt":"a cat"}`))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusNotFound, w.Code, "path=%s", path)
+		require.Contains(t, w.Body.String(), "Videos API is not supported for this platform", "path=%s should hit videoGenerationHandler", path)
+	}
+}
+
 func TestGatewayRoutesCodexModelsPathsAreRegistered(t *testing.T) {
 	router := newGatewayRoutesTestRouter()
 	routes := router.Routes()

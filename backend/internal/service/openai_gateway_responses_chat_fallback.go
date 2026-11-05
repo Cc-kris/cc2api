@@ -185,6 +185,9 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 			Kind:               "request_error",
 			Message:            safeErr,
 		})
+		if foErr := newAnyErrorTransportFailover(ctx, s.cfg, err); foErr != nil {
+			return nil, foErr
+		}
 		c.JSON(http.StatusBadGateway, gin.H{
 			"error": gin.H{
 				"type":    "upstream_error",
@@ -202,7 +205,7 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 
 		upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(respBody))
 		upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
-		if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
+		if s.shouldFailoverOpenAIUpstreamResponse(ctx, resp.StatusCode, upstreamMsg, respBody) {
 			upstreamDetail := ""
 			if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
 				maxBytes := s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes

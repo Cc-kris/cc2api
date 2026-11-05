@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
@@ -49,6 +50,11 @@ type FailoverState struct {
 	LastFailoverErr       *service.UpstreamFailoverError
 	ForceCacheBilling     bool
 	hasBoundSession       bool
+
+	// anyErrorCfg 非 nil 且开启 FailoverOnAnyError 时，任意错误都会依次尝试分组内所有账号。
+	anyErrorCfg *config.Config
+	// backoffMaxSwitches 单账号 503 退避重试的上限，保持原配置值，避免放开切换上限后退避循环过长。
+	backoffMaxSwitches int
 }
 
 // NewFailoverState 创建 failover 状态
@@ -58,7 +64,20 @@ func NewFailoverState(maxSwitches int, hasBoundSession bool) *FailoverState {
 		FailedAccountIDs:      make(map[int64]struct{}),
 		SameAccountRetryCount: make(map[int64]int),
 		hasBoundSession:       hasBoundSession,
+		backoffMaxSwitches:    maxSwitches,
 	}
+}
+
+// WithAnyErrorFailover 按配置开启"任意错误都切换账号直到分组内账号全部尝试"模式。
+// cfg 为 nil 或开关关闭时不改变任何行为。
+// 是否生效由全局总开关 + ctx 中请求所属分组的 failover_on_any_error 共同决定。
+func (s *FailoverState) WithAnyErrorFailover(ctx context.Context, cfg *config.Config) *FailoverState {
+	if s == nil || !service.FailoverOnAnyErrorEnabled(ctx, cfg) {
+		return s
+	}
+	s.anyErrorCfg = cfg
+	s.MaxSwitches = anyErrorMaxSwitchesSafetyCap
+	return s
 }
 
 // HandleFailoverError 处理 UpstreamFailoverError，返回下一步动作。
@@ -92,6 +111,24 @@ func (s *FailoverState) HandleFailoverError(
 		return FailoverContinue
 	}
 
+	// FailoverOnAnyError：非 RetryableOnSameAccount 的错误，切换前也先在同账号重试（确定性错误除外）
+	if !failoverErr.RetryableOnSameAccount && s.anyErrorCfg != nil {
+		limit := anyErrorSameAccountRetryLimitEnabled(s.anyErrorCfg, failoverErr)
+		if s.SameAccountRetryCount[accountID] < limit {
+			s.SameAccountRetryCount[accountID]++
+			logger.FromContext(ctx).Warn("gateway.failover_any_error_same_account_retry",
+				zap.Int64("account_id", accountID),
+				zap.Int("upstream_status", failoverErr.StatusCode),
+				zap.Int("same_account_retry_count", s.SameAccountRetryCount[accountID]),
+				zap.Int("same_account_retry_max", limit),
+			)
+			if !sleepWithContext(ctx, sameAccountRetryDelay) {
+				return FailoverCanceled
+			}
+			return FailoverContinue
+		}
+	}
+
 	// 同账号重试用尽，执行临时封禁
 	if failoverErr.RetryableOnSameAccount {
 		gatewayService.TempUnscheduleRetryableError(ctx, accountID, failoverErr)
@@ -117,6 +154,9 @@ func (s *FailoverState) HandleFailoverError(
 	// Antigravity 平台换号线性递增延时
 	if platform == service.PlatformAntigravity {
 		delay := time.Duration(s.SwitchCount-1) * time.Second
+		if s.anyErrorCfg != nil && delay > anyErrorAntigravityMaxSwitchDelaySeconds*time.Second {
+			delay = anyErrorAntigravityMaxSwitchDelaySeconds * time.Second
+		}
 		if !sleepWithContext(ctx, delay) {
 			return FailoverCanceled
 		}
@@ -135,7 +175,7 @@ func (s *FailoverState) HandleFailoverError(
 func (s *FailoverState) HandleSelectionExhausted(ctx context.Context) FailoverAction {
 	if s.LastFailoverErr != nil &&
 		s.LastFailoverErr.StatusCode == http.StatusServiceUnavailable &&
-		s.SwitchCount <= s.MaxSwitches {
+		s.SwitchCount <= s.backoffMaxSwitches {
 
 		logger.FromContext(ctx).Warn("gateway.failover_single_account_backoff",
 			zap.Duration("backoff_delay", singleAccountBackoffDelay),

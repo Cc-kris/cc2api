@@ -571,6 +571,20 @@ func (_c *GroupCreate) SetModelPricing(v map[string]interface{}) *GroupCreate {
 	return _c
 }
 
+// SetFailoverOnAnyError sets the "failover_on_any_error" field.
+func (_c *GroupCreate) SetFailoverOnAnyError(v bool) *GroupCreate {
+	_c.mutation.SetFailoverOnAnyError(v)
+	return _c
+}
+
+// SetNillableFailoverOnAnyError sets the "failover_on_any_error" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableFailoverOnAnyError(v *bool) *GroupCreate {
+	if v != nil {
+		_c.SetFailoverOnAnyError(*v)
+	}
+	return _c
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_c *GroupCreate) AddAPIKeyIDs(ids ...int64) *GroupCreate {
 	_c.mutation.AddAPIKeyIDs(ids...)
@@ -808,6 +822,10 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultModelPricing
 		_c.mutation.SetModelPricing(v)
 	}
+	if _, ok := _c.mutation.FailoverOnAnyError(); !ok {
+		v := group.DefaultFailoverOnAnyError
+		_c.mutation.SetFailoverOnAnyError(v)
+	}
 	return nil
 }
 
@@ -918,6 +936,9 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.ModelPricing(); !ok {
 		return &ValidationError{Name: "model_pricing", err: errors.New(`ent: missing required field "Group.model_pricing"`)}
+	}
+	if _, ok := _c.mutation.FailoverOnAnyError(); !ok {
+		return &ValidationError{Name: "failover_on_any_error", err: errors.New(`ent: missing required field "Group.failover_on_any_error"`)}
 	}
 	return nil
 }
@@ -1109,6 +1130,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ModelPricing(); ok {
 		_spec.SetField(group.FieldModelPricing, field.TypeJSON, value)
 		_node.ModelPricing = value
+	}
+	if value, ok := _c.mutation.FailoverOnAnyError(); ok {
+		_spec.SetField(group.FieldFailoverOnAnyError, field.TypeBool, value)
+		_node.FailoverOnAnyError = value
 	}
 	if nodes := _c.mutation.APIKeysIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -1932,6 +1957,18 @@ func (u *GroupUpsert) UpdateModelPricing() *GroupUpsert {
 	return u
 }
 
+// SetFailoverOnAnyError sets the "failover_on_any_error" field.
+func (u *GroupUpsert) SetFailoverOnAnyError(v bool) *GroupUpsert {
+	u.Set(group.FieldFailoverOnAnyError, v)
+	return u
+}
+
+// UpdateFailoverOnAnyError sets the "failover_on_any_error" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateFailoverOnAnyError() *GroupUpsert {
+	u.SetExcluded(group.FieldFailoverOnAnyError)
+	return u
+}
+
 // UpdateNewValues updates the mutable fields using the new values that were set on create.
 // Using this option is equivalent to using:
 //
@@ -2751,6 +2788,20 @@ func (u *GroupUpsertOne) SetModelPricing(v map[string]interface{}) *GroupUpsertO
 func (u *GroupUpsertOne) UpdateModelPricing() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateModelPricing()
+	})
+}
+
+// SetFailoverOnAnyError sets the "failover_on_any_error" field.
+func (u *GroupUpsertOne) SetFailoverOnAnyError(v bool) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetFailoverOnAnyError(v)
+	})
+}
+
+// UpdateFailoverOnAnyError sets the "failover_on_any_error" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateFailoverOnAnyError() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateFailoverOnAnyError()
 	})
 }
 
@@ -3739,6 +3790,20 @@ func (u *GroupUpsertBulk) SetModelPricing(v map[string]interface{}) *GroupUpsert
 func (u *GroupUpsertBulk) UpdateModelPricing() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateModelPricing()
+	})
+}
+
+// SetFailoverOnAnyError sets the "failover_on_any_error" field.
+func (u *GroupUpsertBulk) SetFailoverOnAnyError(v bool) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetFailoverOnAnyError(v)
+	})
+}
+
+// UpdateFailoverOnAnyError sets the "failover_on_any_error" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateFailoverOnAnyError() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateFailoverOnAnyError()
 	})
 }
 

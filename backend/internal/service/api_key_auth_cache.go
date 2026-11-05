@@ -95,6 +95,9 @@ type APIKeyAuthGroupSnapshot struct {
 
 	// RPMLimit 分组级每分钟请求数上限（0 = 不限制）；用于 billing_cache_service.checkRPM 级联判断。
 	RPMLimit int `json:"rpm_limit"`
+
+	// FailoverOnAnyError 分组级任意错误换号开关；nil（旧缓存条目）视为开启。
+	FailoverOnAnyError *bool `json:"failover_on_any_error,omitempty"`
 }
 
 // APIKeyAuthCacheEntry 缓存条目，支持负缓存

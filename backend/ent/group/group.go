@@ -98,6 +98,8 @@ const (
 	FieldLongContextPricingEnabled = "long_context_pricing_enabled"
 	// FieldModelPricing holds the string denoting the model_pricing field in the database.
 	FieldModelPricing = "model_pricing"
+	// FieldFailoverOnAnyError holds the string denoting the failover_on_any_error field in the database.
+	FieldFailoverOnAnyError = "failover_on_any_error"
 	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
 	EdgeAPIKeys = "api_keys"
 	// EdgeRedeemCodes holds the string denoting the redeem_codes edge name in mutations.
@@ -214,6 +216,7 @@ var Columns = []string{
 	FieldRpmLimit,
 	FieldLongContextPricingEnabled,
 	FieldModelPricing,
+	FieldFailoverOnAnyError,
 }
 
 var (
@@ -307,6 +310,8 @@ var (
 	DefaultLongContextPricingEnabled bool
 	// DefaultModelPricing holds the default value on creation for the "model_pricing" field.
 	DefaultModelPricing map[string]interface{}
+	// DefaultFailoverOnAnyError holds the default value on creation for the "failover_on_any_error" field.
+	DefaultFailoverOnAnyError bool
 )
 
 // OrderOption defines the ordering options for the Group queries.
@@ -500,6 +505,11 @@ func ByRpmLimit(opts ...sql.OrderTermOption) OrderOption {
 // ByLongContextPricingEnabled orders the results by the long_context_pricing_enabled field.
 func ByLongContextPricingEnabled(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLongContextPricingEnabled, opts...).ToFunc()
+}
+
+// ByFailoverOnAnyError orders the results by the failover_on_any_error field.
+func ByFailoverOnAnyError(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFailoverOnAnyError, opts...).ToFunc()
 }
 
 // ByAPIKeysCount orders the results by api_keys count.

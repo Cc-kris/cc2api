@@ -225,7 +225,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 		upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
 		if account.Platform == PlatformGrok {
 			kind := "http_error"
-			if s.shouldFailoverGrokUpstreamError(resp.StatusCode, respBody) {
+			if s.shouldFailoverGrokUpstreamError(ctx, resp.StatusCode, respBody) {
 				kind = "failover"
 			}
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -238,7 +238,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 				Message:            upstreamMsg,
 			})
 			s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
-			if s.shouldFailoverGrokUpstreamError(resp.StatusCode, respBody) {
+			if s.shouldFailoverGrokUpstreamError(ctx, resp.StatusCode, respBody) {
 				return nil, &UpstreamFailoverError{
 					StatusCode:             resp.StatusCode,
 					ResponseBody:           respBody,
@@ -248,7 +248,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 			}
 			return s.handleChatCompletionsErrorResponse(resp, c, account)
 		}
-		if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
+		if s.shouldFailoverOpenAIUpstreamResponse(ctx, resp.StatusCode, upstreamMsg, respBody) {
 			upstreamDetail := ""
 			if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
 				maxBytes := s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes

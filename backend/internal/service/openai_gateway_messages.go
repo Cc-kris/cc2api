@@ -344,6 +344,9 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 				Kind:               "request_error",
 				Message:            safeErr,
 			})
+			if foErr := newAnyErrorTransportFailover(ctx, s.cfg, err); foErr != nil {
+				return nil, foErr
+			}
 			writeAnthropicError(c, http.StatusBadGateway, "api_error", "Upstream request failed")
 			return nil, fmt.Errorf("upstream request failed: %s", safeErr)
 		}
@@ -397,7 +400,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 				}
 			}
 			s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
-			if s.shouldFailoverGrokUpstreamError(resp.StatusCode, respBody) {
+			if s.shouldFailoverGrokUpstreamError(ctx, resp.StatusCode, respBody) {
 				return nil, &UpstreamFailoverError{
 					StatusCode:             resp.StatusCode,
 					ResponseBody:           respBody,
@@ -420,7 +423,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 			)
 			return s.ForwardAsAnthropic(ctx, c, account, body, promptCacheKey, defaultMappedModel)
 		}
-		if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
+		if s.shouldFailoverOpenAIUpstreamResponse(ctx, resp.StatusCode, upstreamMsg, respBody) {
 			upstreamDetail := ""
 			if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
 				maxBytes := s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes
@@ -556,7 +559,7 @@ func (s *OpenAIGatewayService) forwardAnthropicViaNativeMessages(ctx context.Con
 	if resp.StatusCode >= http.StatusBadRequest {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 		upstreamMsg := sanitizeUpstreamErrorMessage(extractUpstreamErrorMessage(respBody))
-		if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
+		if s.shouldFailoverOpenAIUpstreamResponse(ctx, resp.StatusCode, upstreamMsg, respBody) {
 			s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
 			return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: respBody, ResponseHeaders: resp.Header.Clone()}
 		}
@@ -702,7 +705,7 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 	if resp.StatusCode >= http.StatusBadRequest {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 		upstreamMsg := sanitizeUpstreamErrorMessage(extractUpstreamErrorMessage(respBody))
-		if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
+		if s.shouldFailoverOpenAIUpstreamResponse(ctx, resp.StatusCode, upstreamMsg, respBody) {
 			s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
 			return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: respBody, ResponseHeaders: resp.Header.Clone()}
 		}

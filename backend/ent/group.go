@@ -101,6 +101,8 @@ type Group struct {
 	LongContextPricingEnabled bool `json:"long_context_pricing_enabled,omitempty"`
 	// ModelPricing holds the value of the "model_pricing" field.
 	ModelPricing map[string]interface{} `json:"model_pricing,omitempty"`
+	// 任意上游错误都切换分组内其他账号，直到全部账号失败才返回错误
+	FailoverOnAnyError bool `json:"failover_on_any_error,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the GroupQuery when eager-loading is set.
 	Edges        GroupEdges `json:"edges"`
@@ -209,7 +211,7 @@ func (*Group) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case group.FieldModelRouting, group.FieldSupportedModelScopes, group.FieldMessagesDispatchModelConfig, group.FieldModelPricing:
 			values[i] = new([]byte)
-		case group.FieldIsExclusive, group.FieldAllowImageGeneration, group.FieldImageRateIndependent, group.FieldVideoRateIndependent, group.FieldClaudeCodeOnly, group.FieldModelRoutingEnabled, group.FieldMcpXMLInject, group.FieldAllowMessagesDispatch, group.FieldRequireOauthOnly, group.FieldRequirePrivacySet, group.FieldLongContextPricingEnabled:
+		case group.FieldIsExclusive, group.FieldAllowImageGeneration, group.FieldImageRateIndependent, group.FieldVideoRateIndependent, group.FieldClaudeCodeOnly, group.FieldModelRoutingEnabled, group.FieldMcpXMLInject, group.FieldAllowMessagesDispatch, group.FieldRequireOauthOnly, group.FieldRequirePrivacySet, group.FieldLongContextPricingEnabled, group.FieldFailoverOnAnyError:
 			values[i] = new(sql.NullBool)
 		case group.FieldRateMultiplier, group.FieldDailyLimitUsd, group.FieldWeeklyLimitUsd, group.FieldMonthlyLimitUsd, group.FieldImageRateMultiplier, group.FieldImagePrice1k, group.FieldImagePrice2k, group.FieldImagePrice4k, group.FieldVideoRateMultiplier, group.FieldVideoPrice480p, group.FieldVideoPrice720p, group.FieldVideoPrice1080p:
 			values[i] = new(sql.NullFloat64)
@@ -507,6 +509,12 @@ func (_m *Group) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field model_pricing: %w", err)
 				}
 			}
+		case group.FieldFailoverOnAnyError:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field failover_on_any_error", values[i])
+			} else if value.Valid {
+				_m.FailoverOnAnyError = value.Bool
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -731,6 +739,9 @@ func (_m *Group) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("model_pricing=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ModelPricing))
+	builder.WriteString(", ")
+	builder.WriteString("failover_on_any_error=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FailoverOnAnyError))
 	builder.WriteByte(')')
 	return builder.String()
 }
