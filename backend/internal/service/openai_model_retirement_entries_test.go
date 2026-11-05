@@ -23,6 +23,7 @@ func gpt55MixedAccounts() []Account {
 
 // 调度器路径 + HTTP 粘性：会话粘在 OAuth 账号上，请求 gpt-5.5 时重新选到 API Key 账号。
 func TestGPT55RetirementSchedulerStickyReselects(t *testing.T) {
+	resetOpenAIAdvancedSchedulerSettingCacheForTest()
 	ctx := context.Background()
 	groupID := int64(7701)
 	cfg := &config.Config{}
@@ -45,8 +46,8 @@ func TestGPT55RetirementSchedulerStickyReselects(t *testing.T) {
 		}
 	}
 
-	// gpt-5.4 仍可以用 OAuth 账号（优先级更高）。
-	selection, _, err := svc.SelectAccountWithScheduler(ctx, &groupID, "", "", "gpt-5.4", nil, OpenAIUpstreamTransportAny, false)
+	// 对照：gpt-5.4 仍可以用 OAuth 账号（排除 API Key 账号后能选到 OAuth）。
+	selection, _, err := svc.SelectAccountWithScheduler(ctx, &groupID, "", "", "gpt-5.4", map[int64]struct{}{502: {}}, OpenAIUpstreamTransportAny, false)
 	require.NoError(t, err)
 	require.Equal(t, int64(501), selection.Account.ID)
 	if selection.ReleaseFunc != nil {

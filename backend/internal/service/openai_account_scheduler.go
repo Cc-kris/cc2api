@@ -992,6 +992,10 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatible(ctx context.C
 	if s != nil && s.service != nil && s.service.isOpenAIAccountRuntimeBlocked(account) {
 		return false
 	}
+	// 代理断流熔断：第一轮排除被隔离代理下的账号；fail-open 重选时 ctx 带旁路标记（V02-T06）。
+	if s != nil && s.service != nil && s.service.isOpenAIProxyStreamQuarantined(ctx, account) {
+		return false
+	}
 	if req.RequestedModel != "" && !supportsOpenAIRequestModel(account, req.RequestedModel, req.RequireCompact) {
 		return false
 	}
@@ -1180,7 +1184,29 @@ func (s *OpenAIGatewayService) ReportOpenAIAccountScheduleModelResult(accountID 
 	s.ReportOpenAIAccountScheduleResult(accountID, success, firstTokenMs)
 }
 
+// selectAccountWithScheduler 包一层代理断流熔断的 fail-open（上游 da49ce3f2，V02-T06）：
+// 所有候选都在被隔离代理下导致无可用账号时，带旁路标记整轮重选一次，隔离退化为偏好。
+// CCAI 在调用前已经把非 OpenAI 平台分流出去（SelectAccountWithSchedulerForCapability），
+// 不需要上游的平台判断。
 func (s *OpenAIGatewayService) selectAccountWithScheduler(
+	ctx context.Context,
+	groupID *int64,
+	previousResponseID string,
+	sessionHash string,
+	requestedModel string,
+	excludedIDs map[int64]struct{},
+	requiredTransport OpenAIUpstreamTransport,
+	requiredImageCapability OpenAIImagesCapability,
+	requireCompact bool,
+) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
+	selection, decision, err := s.selectAccountWithSchedulerOnce(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredImageCapability, requireCompact)
+	if !s.shouldRetryOpenAISelectionWithQuarantineBypass(ctx, err, requestedModel) {
+		return selection, decision, err
+	}
+	return s.selectAccountWithSchedulerOnce(withOpenAIProxyStreamQuarantineBypass(ctx), groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredImageCapability, requireCompact)
+}
+
+func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
 	ctx context.Context,
 	groupID *int64,
 	previousResponseID string,
