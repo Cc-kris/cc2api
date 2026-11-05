@@ -99,3 +99,20 @@ func TestPublicOrderResolveNotRateLimited(t *testing.T) {
 		require.NotEqual(t, http.StatusTooManyRequests, w.Code, "request %d", i)
 	}
 }
+
+// V01-AC20：用户端 /payment/channels 已下线。
+func TestUserPaymentChannelsRouteRemoved(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+
+	router := newPaymentRoutesTestRouter(rdb)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/payment/channels", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusNotFound, w.Code)
+
+	for _, route := range router.Routes() {
+		require.NotEqual(t, "/api/v1/payment/channels", route.Path)
+	}
+}
