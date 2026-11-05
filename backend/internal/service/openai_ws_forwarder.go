@@ -1379,12 +1379,12 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 		}
 	}
 	if s != nil && s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
-		headers.Set("user-agent", codexCLIUserAgent)
-	}
-	if account != nil && account.Type == AccountTypeOAuth && !openai.IsCodexCLIRequest(headers.Get("user-agent")) {
-		headers.Set("user-agent", codexCLIUserAgent)
+		headers.Set("user-agent", CodexCanonicalUserAgent())
 	}
 	resolveOpenAIAgentIdentity(account).ApplyTo(headers, nil)
+	// 终态收口：WS 握手与 HTTP 出站共用同一套身份语义（含 version 头，V02-T15）。
+	// 原「非 Codex UA 兜底」已被收口吸收。
+	s.enforceOpenAIOAuthCodexIdentity(c, account, headers)
 
 	return headers, sessionResolution
 }
