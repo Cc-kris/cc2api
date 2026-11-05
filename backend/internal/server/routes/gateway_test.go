@@ -100,6 +100,11 @@ func TestGatewayRoutesResponsesSubpathRejectsNonConformingSubpaths(t *testing.T)
 		"/compact//detail",
 		"/" + longSegment,
 		deepSuffix,
+		// 不合规片段放在后面那个 /responses 之前：只看最后一个 /responses 之后的后缀会漏掉这些。
+		"/%2e%2e/responses/compact",
+		"/x%0d%0a/responses/compact",
+		"/%2e%2e/responses/resp_x/cancel",
+		"//responses/compact",
 	}
 	for _, prefix := range []string{"/v1/responses", "/responses", "/backend-api/codex/responses"} {
 		for _, subpath := range subpaths {

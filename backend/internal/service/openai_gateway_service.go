@@ -6173,9 +6173,23 @@ func openAIResponsesRequestPathSuffix(c *gin.Context) string {
 
 // IsForwardableOpenAIResponsesRequestPath 判断入站请求携带的 /responses 子路径
 // 是否可以安全转发。路由层用它在鉴权后、调度前直接拒绝畸形子路径。
+//
+// 除了实际转发的后缀（最后一个 /responses 之后），还要校验路由通配符匹配到的
+// 整段子路径：否则 /responses/%2e%2e/responses/compact 这类请求，不合规片段
+// 藏在后一个 /responses 之前，会躲过校验进入调度。
 func IsForwardableOpenAIResponsesRequestPath(c *gin.Context) bool {
-	_, ok := sanitizedUpstreamPathSuffix(rawOpenAIResponsesRequestPathSuffix(c))
-	return ok
+	if _, ok := sanitizedUpstreamPathSuffix(rawOpenAIResponsesRequestPathSuffix(c)); !ok {
+		return false
+	}
+	if c == nil {
+		return true
+	}
+	if subpath := c.Param("subpath"); subpath != "" && subpath != "/" {
+		if _, ok := sanitizedUpstreamPathSuffix(strings.TrimRight(subpath, "/")); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // rawOpenAIResponsesRequestPathSuffix 仅做提取，不做任何安全判断。
