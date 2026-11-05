@@ -240,6 +240,11 @@ func LongContextPricingEnabled(v bool) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldLongContextPricingEnabled, v))
 }
 
+// FailoverOnAnyError applies equality check predicate on the "failover_on_any_error" field. It's identical to FailoverOnAnyErrorEQ.
+func FailoverOnAnyError(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldFailoverOnAnyError, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldCreatedAt, v))
@@ -1678,6 +1683,16 @@ func LongContextPricingEnabledEQ(v bool) predicate.Group {
 // LongContextPricingEnabledNEQ applies the NEQ predicate on the "long_context_pricing_enabled" field.
 func LongContextPricingEnabledNEQ(v bool) predicate.Group {
 	return predicate.Group(sql.FieldNEQ(FieldLongContextPricingEnabled, v))
+}
+
+// FailoverOnAnyErrorEQ applies the EQ predicate on the "failover_on_any_error" field.
+func FailoverOnAnyErrorEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldFailoverOnAnyError, v))
+}
+
+// FailoverOnAnyErrorNEQ applies the NEQ predicate on the "failover_on_any_error" field.
+func FailoverOnAnyErrorNEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldFailoverOnAnyError, v))
 }
 
 // HasAPIKeys applies the HasEdge predicate on the "api_keys" edge.

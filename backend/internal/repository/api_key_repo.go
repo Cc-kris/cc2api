@@ -190,6 +190,7 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 				group.FieldDefaultMappedModel,
 				group.FieldMessagesDispatchModelConfig,
 				group.FieldRpmLimit,
+				group.FieldFailoverOnAnyError,
 			)
 		}).
 		Only(ctx)
@@ -737,6 +738,7 @@ func groupEntityToService(g *dbent.Group) *service.Group {
 		RPMLimit:                        g.RpmLimit,
 		LongContextPricingEnabled:       g.LongContextPricingEnabled,
 		ModelPricing:                    decodeGroupModelPricing(g.ModelPricing),
+		FailoverOnAnyError:              g.FailoverOnAnyError,
 		CreatedAt:                       g.CreatedAt,
 		UpdatedAt:                       g.UpdatedAt,
 	}

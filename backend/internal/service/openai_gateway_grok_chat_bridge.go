@@ -609,7 +609,7 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 			upstreamMsg = fmt.Sprintf("xAI upstream returned status %d", resp.StatusCode)
 		}
 		kind := "http_error"
-		if s.shouldFailoverGrokUpstreamError(resp.StatusCode, respBody) {
+		if s.shouldFailoverGrokUpstreamError(ctx, resp.StatusCode, respBody) {
 			kind = "failover"
 		}
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -622,7 +622,7 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 			Message:            upstreamMsg,
 		})
 		s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
-		if s.shouldFailoverGrokUpstreamError(resp.StatusCode, respBody) {
+		if s.shouldFailoverGrokUpstreamError(ctx, resp.StatusCode, respBody) {
 			return nil, &UpstreamFailoverError{
 				StatusCode:             resp.StatusCode,
 				ResponseBody:           respBody,

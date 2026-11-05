@@ -4,7 +4,7 @@ package ent
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"sync"
@@ -29040,6 +29040,7 @@ type GroupMutation struct {
 	addrpm_limit                            *int
 	long_context_pricing_enabled            *bool
 	model_pricing                           *map[string]interface{}
+	failover_on_any_error                   *bool
 	clearedFields                           map[string]struct{}
 	api_keys                                map[int64]struct{}
 	removedapi_keys                         map[int64]struct{}
@@ -31186,6 +31187,42 @@ func (m *GroupMutation) ResetModelPricing() {
 	m.model_pricing = nil
 }
 
+// SetFailoverOnAnyError sets the "failover_on_any_error" field.
+func (m *GroupMutation) SetFailoverOnAnyError(b bool) {
+	m.failover_on_any_error = &b
+}
+
+// FailoverOnAnyError returns the value of the "failover_on_any_error" field in the mutation.
+func (m *GroupMutation) FailoverOnAnyError() (r bool, exists bool) {
+	v := m.failover_on_any_error
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailoverOnAnyError returns the old "failover_on_any_error" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldFailoverOnAnyError(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailoverOnAnyError is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailoverOnAnyError requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailoverOnAnyError: %w", err)
+	}
+	return oldValue.FailoverOnAnyError, nil
+}
+
+// ResetFailoverOnAnyError resets all changes to the "failover_on_any_error" field.
+func (m *GroupMutation) ResetFailoverOnAnyError() {
+	m.failover_on_any_error = nil
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by ids.
 func (m *GroupMutation) AddAPIKeyIDs(ids ...int64) {
 	if m.api_keys == nil {
@@ -31544,7 +31581,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 41)
+	fields := make([]string, 0, 42)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -31668,6 +31705,9 @@ func (m *GroupMutation) Fields() []string {
 	if m.model_pricing != nil {
 		fields = append(fields, group.FieldModelPricing)
 	}
+	if m.failover_on_any_error != nil {
+		fields = append(fields, group.FieldFailoverOnAnyError)
+	}
 	return fields
 }
 
@@ -31758,6 +31798,8 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.LongContextPricingEnabled()
 	case group.FieldModelPricing:
 		return m.ModelPricing()
+	case group.FieldFailoverOnAnyError:
+		return m.FailoverOnAnyError()
 	}
 	return nil, false
 }
@@ -31849,6 +31891,8 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldLongContextPricingEnabled(ctx)
 	case group.FieldModelPricing:
 		return m.OldModelPricing(ctx)
+	case group.FieldFailoverOnAnyError:
+		return m.OldFailoverOnAnyError(ctx)
 	}
 	return nil, fmt.Errorf("unknown Group field %s", name)
 }
@@ -32144,6 +32188,13 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetModelPricing(v)
+		return nil
+	case group.FieldFailoverOnAnyError:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailoverOnAnyError(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Group field %s", name)
@@ -32610,6 +32661,9 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldModelPricing:
 		m.ResetModelPricing()
+		return nil
+	case group.FieldFailoverOnAnyError:
+		m.ResetFailoverOnAnyError()
 		return nil
 	}
 	return fmt.Errorf("unknown Group field %s", name)
@@ -65989,8 +66043,8 @@ type UsageCleanupTaskMutation struct {
 	created_at      *time.Time
 	updated_at      *time.Time
 	status          *string
-	filters         *json.RawMessage
-	appendfilters   json.RawMessage
+	filters         *jsontext.Value
+	appendfilters   jsontext.Value
 	created_by      *int64
 	addcreated_by   *int64
 	deleted_rows    *int64
@@ -66214,13 +66268,13 @@ func (m *UsageCleanupTaskMutation) ResetStatus() {
 }
 
 // SetFilters sets the "filters" field.
-func (m *UsageCleanupTaskMutation) SetFilters(jm json.RawMessage) {
-	m.filters = &jm
+func (m *UsageCleanupTaskMutation) SetFilters(j jsontext.Value) {
+	m.filters = &j
 	m.appendfilters = nil
 }
 
 // Filters returns the value of the "filters" field in the mutation.
-func (m *UsageCleanupTaskMutation) Filters() (r json.RawMessage, exists bool) {
+func (m *UsageCleanupTaskMutation) Filters() (r jsontext.Value, exists bool) {
 	v := m.filters
 	if v == nil {
 		return
@@ -66231,7 +66285,7 @@ func (m *UsageCleanupTaskMutation) Filters() (r json.RawMessage, exists bool) {
 // OldFilters returns the old "filters" field's value of the UsageCleanupTask entity.
 // If the UsageCleanupTask object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *UsageCleanupTaskMutation) OldFilters(ctx context.Context) (v json.RawMessage, err error) {
+func (m *UsageCleanupTaskMutation) OldFilters(ctx context.Context) (v jsontext.Value, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldFilters is only allowed on UpdateOne operations")
 	}
@@ -66245,13 +66299,13 @@ func (m *UsageCleanupTaskMutation) OldFilters(ctx context.Context) (v json.RawMe
 	return oldValue.Filters, nil
 }
 
-// AppendFilters adds jm to the "filters" field.
-func (m *UsageCleanupTaskMutation) AppendFilters(jm json.RawMessage) {
-	m.appendfilters = append(m.appendfilters, jm...)
+// AppendFilters adds j to the "filters" field.
+func (m *UsageCleanupTaskMutation) AppendFilters(j jsontext.Value) {
+	m.appendfilters = append(m.appendfilters, j...)
 }
 
 // AppendedFilters returns the list of values that were appended to the "filters" field in this mutation.
-func (m *UsageCleanupTaskMutation) AppendedFilters() (json.RawMessage, bool) {
+func (m *UsageCleanupTaskMutation) AppendedFilters() (jsontext.Value, bool) {
 	if len(m.appendfilters) == 0 {
 		return nil, false
 	}
@@ -66802,7 +66856,7 @@ func (m *UsageCleanupTaskMutation) SetField(name string, value ent.Value) error 
 		m.SetStatus(v)
 		return nil
 	case usagecleanuptask.FieldFilters:
-		v, ok := value.(json.RawMessage)
+		v, ok := value.(jsontext.Value)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}

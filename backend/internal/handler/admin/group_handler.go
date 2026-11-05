@@ -124,6 +124,8 @@ type CreateGroupRequest struct {
 	RPMLimit                  int                                  `json:"rpm_limit"`
 	LongContextPricingEnabled *bool                                `json:"long_context_pricing_enabled"`
 	ModelPricing              map[string]service.GroupModelPricing `json:"model_pricing"`
+	// 任意错误换号开关；不传默认开启
+	FailoverOnAnyError *bool `json:"failover_on_any_error"`
 	// 从指定分组复制账号（创建后自动绑定）
 	CopyAccountsFromGroupIDs []int64 `json:"copy_accounts_from_group_ids"`
 }
@@ -171,6 +173,8 @@ type UpdateGroupRequest struct {
 	RPMLimit                  *int                                 `json:"rpm_limit"`
 	LongContextPricingEnabled *bool                                `json:"long_context_pricing_enabled"`
 	ModelPricing              map[string]service.GroupModelPricing `json:"model_pricing"`
+	// 任意错误换号开关；nil 表示不改动
+	FailoverOnAnyError *bool `json:"failover_on_any_error"`
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64 `json:"copy_accounts_from_group_ids"`
 }
@@ -300,6 +304,7 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		LongContextPricingEnabled:       req.LongContextPricingEnabled != nil && *req.LongContextPricingEnabled,
 		LongContextPricingProvided:      req.LongContextPricingEnabled != nil,
 		ModelPricing:                    req.ModelPricing,
+		FailoverOnAnyError:              req.FailoverOnAnyError,
 		CopyAccountsFromGroupIDs:        req.CopyAccountsFromGroupIDs,
 	})
 	if err != nil {
@@ -362,6 +367,7 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		RPMLimit:                        req.RPMLimit,
 		LongContextPricingEnabled:       req.LongContextPricingEnabled,
 		ModelPricing:                    req.ModelPricing,
+		FailoverOnAnyError:              req.FailoverOnAnyError,
 		CopyAccountsFromGroupIDs:        req.CopyAccountsFromGroupIDs,
 	})
 	if err != nil {

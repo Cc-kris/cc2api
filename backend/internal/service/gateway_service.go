@@ -3943,7 +3943,10 @@ func (s *GatewayService) shouldRetryUpstreamError(account *Account, statusCode i
 }
 
 // shouldFailoverUpstreamError determines whether an upstream error should trigger account failover.
-func (s *GatewayService) shouldFailoverUpstreamError(statusCode int) bool {
+func (s *GatewayService) shouldFailoverUpstreamError(ctx context.Context, statusCode int) bool {
+	if failoverOnAnyHTTPError(ctx, s.cfg, statusCode) {
+		return true
+	}
 	switch statusCode {
 	case 400, 401, 403, 429, 529:
 		return true
@@ -4482,6 +4485,12 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		return s.handleWebSearchEmulation(ctx, c, account, parsed)
 	}
 
+	// 流式续写进行中：只有标准 Anthropic 转发路径支持拼接，透传/Bedrock 直接换下一个账号
+	if sc := StreamContinuationFromContext(c); sc.Active() && account != nil &&
+		(account.IsAnthropicAPIKeyPassthroughEnabled() || account.IsBedrock()) {
+		return nil, NewStreamContinuationUnsupportedFailover()
+	}
+
 	if account != nil && account.IsAnthropicAPIKeyPassthroughEnabled() {
 		passthroughBody := parsed.Body
 		passthroughModel := parsed.Model
@@ -4527,6 +4536,9 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	}
 
 	body := parsed.Body
+	if sc := StreamContinuationFromContext(c); sc.Active() {
+		body = sc.BuildAnthropicContinuationBody(body)
+	}
 	reqModel := parsed.Model
 	reqStream := parsed.Stream
 	originalModel := reqModel
@@ -4694,6 +4706,9 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 				Kind:               "request_error",
 				Message:            safeErr,
 			})
+			if foErr := newAnyErrorTransportFailover(ctx, s.cfg, err); foErr != nil {
+				return nil, foErr
+			}
 			c.JSON(http.StatusBadGateway, gin.H{
 				"type": "error",
 				"error": gin.H{
@@ -4881,7 +4896,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		}
 
 		// 检查是否需要通用重试；上游 400 已先经过签名/预算整流，仍失败时进入同账号重试与 failover
-		if resp.StatusCode >= 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) {
+		if resp.StatusCode >= 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) && !peekUserContentRejection(resp) {
 			if attempt < maxRetryAttempts {
 				elapsed := time.Since(retryStart)
 				if elapsed >= maxRetryElapsed {
@@ -4942,8 +4957,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	defer func() { _ = resp.Body.Close() }()
 
 	// 处理重试耗尽的情况
-	if resp.StatusCode >= 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) {
-		if s.shouldFailoverUpstreamError(resp.StatusCode) {
+	if resp.StatusCode >= 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) && !peekUserContentRejection(resp) {
+		if s.shouldFailoverUpstreamError(ctx, resp.StatusCode) {
 			respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 			_ = resp.Body.Close()
 			resp.Body = io.NopCloser(bytes.NewReader(respBody))
@@ -4978,7 +4993,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	}
 
 	// 处理可切换账号的错误
-	if resp.StatusCode >= 400 && s.shouldFailoverUpstreamError(resp.StatusCode) {
+	if resp.StatusCode >= 400 && s.shouldFailoverUpstreamError(ctx, resp.StatusCode) && !peekUserContentRejection(resp) {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 		_ = resp.Body.Close()
 		resp.Body = io.NopCloser(bytes.NewReader(respBody))
@@ -5188,6 +5203,9 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 				Kind:               "request_error",
 				Message:            safeErr,
 			})
+			if foErr := newAnyErrorTransportFailover(ctx, s.cfg, err); foErr != nil {
+				return nil, foErr
+			}
 			c.JSON(http.StatusBadGateway, gin.H{
 				"type": "error",
 				"error": gin.H{
@@ -5199,7 +5217,7 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 		}
 
 		// 透传分支禁止 400 请求体降级重试（该重试会改写请求体）
-		if resp.StatusCode >= 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) {
+		if resp.StatusCode >= 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) && !peekUserContentRejection(resp) {
 			if attempt < maxRetryAttempts {
 				elapsed := time.Since(retryStart)
 				if elapsed >= maxRetryElapsed {
@@ -5251,8 +5269,8 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode >= 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) {
-		if s.shouldFailoverUpstreamError(resp.StatusCode) {
+	if resp.StatusCode >= 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) && !peekUserContentRejection(resp) {
+		if s.shouldFailoverUpstreamError(ctx, resp.StatusCode) {
 			respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 			_ = resp.Body.Close()
 			resp.Body = io.NopCloser(bytes.NewReader(respBody))
@@ -5286,7 +5304,7 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 		return s.handleRetryExhaustedError(ctx, resp, c, account)
 	}
 
-	if resp.StatusCode >= 400 && s.shouldFailoverUpstreamError(resp.StatusCode) {
+	if resp.StatusCode >= 400 && s.shouldFailoverUpstreamError(ctx, resp.StatusCode) && !peekUserContentRejection(resp) {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 		_ = resp.Body.Close()
 		resp.Body = io.NopCloser(bytes.NewReader(respBody))
@@ -6134,6 +6152,9 @@ func (s *GatewayService) executeBedrockUpstream(
 				Kind:               "request_error",
 				Message:            safeErr,
 			})
+			if foErr := newAnyErrorTransportFailover(ctx, s.cfg, err); foErr != nil {
+				return nil, foErr
+			}
 			c.JSON(http.StatusBadGateway, gin.H{
 				"type": "error",
 				"error": gin.H{
@@ -6144,7 +6165,7 @@ func (s *GatewayService) executeBedrockUpstream(
 			return nil, fmt.Errorf("upstream request failed: %s", safeErr)
 		}
 
-		if resp.StatusCode >= 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) {
+		if resp.StatusCode >= 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) && !peekUserContentRejection(resp) {
 			if attempt < maxRetryAttempts {
 				elapsed := time.Since(retryStart)
 				if elapsed >= maxRetryElapsed {
@@ -6204,7 +6225,7 @@ func (s *GatewayService) handleBedrockUpstreamErrors(
 ) (*ForwardResult, error) {
 	// retry exhausted + failover
 	if s.shouldRetryUpstreamError(account, resp.StatusCode) {
-		if s.shouldFailoverUpstreamError(resp.StatusCode) {
+		if s.shouldFailoverUpstreamError(ctx, resp.StatusCode) {
 			respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 			_ = resp.Body.Close()
 			resp.Body = io.NopCloser(bytes.NewReader(respBody))
@@ -6231,7 +6252,7 @@ func (s *GatewayService) handleBedrockUpstreamErrors(
 	}
 
 	// non-retryable failover
-	if s.shouldFailoverUpstreamError(resp.StatusCode) {
+	if s.shouldFailoverUpstreamError(ctx, resp.StatusCode) {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 		_ = resp.Body.Close()
 		resp.Body = io.NopCloser(bytes.NewReader(respBody))
@@ -7658,6 +7679,16 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 	needModelReplace := originalModel != mappedModel
 	clientDisconnected := false // 客户端断开标志，断开后继续读取上游以获取完整usage
 	sawTerminalEvent := false
+	// 流式续写：已推给客户端的内容不撤回，中途断开时换号让新账号接着写
+	streamCont := StreamContinuationFromContext(c)
+	streamCont.BeginAttempt()
+	interruptForContinuation := func(message string) *UpstreamFailoverError {
+		if streamCont == nil || clientDisconnected || !streamCont.Active() || !streamCont.Recoverable() {
+			return nil
+		}
+		logger.LegacyPrintf("service.gateway", "Stream interrupted mid-output (account=%d), failing over with continuation: %s", account.ID, message)
+		return streamCont.NewStreamInterruptedFailover(message)
+	}
 	var billingPayload []byte
 	resultWithBilling := func(disconnected bool) *streamingResult {
 		return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: disconnected, billingPayload: append([]byte(nil), billingPayload...)}
@@ -7796,6 +7827,9 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 			if !ok {
 				// 上游完成，返回结果
 				if !sawTerminalEvent {
+					if foErr := interruptForContinuation("upstream stream ended without message_stop"); foErr != nil {
+						return nil, foErr
+					}
 					return resultWithBilling(clientDisconnected), fmt.Errorf("stream usage incomplete: missing terminal event")
 				}
 				return resultWithBilling(clientDisconnected), nil
@@ -7803,6 +7837,11 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 			if ev.err != nil {
 				if sawTerminalEvent {
 					return resultWithBilling(clientDisconnected), nil
+				}
+				if !errors.Is(ev.err, context.Canceled) && !errors.Is(ev.err, context.DeadlineExceeded) && !errors.Is(ev.err, bufio.ErrTooLong) {
+					if foErr := interruptForContinuation("upstream stream disconnected: " + sanitizeStreamError(ev.err)); foErr != nil {
+						return nil, foErr
+					}
 				}
 				// 检测 context 取消（客户端断开会导致 context 取消，进而影响上游读取）
 				if errors.Is(ev.err, context.Canceled) || errors.Is(ev.err, context.DeadlineExceeded) {
@@ -7857,11 +7896,20 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 					if clientDisconnected {
 						return resultWithBilling(true), nil
 					}
+					if foErr := interruptForContinuation("upstream sent error event mid-stream"); foErr != nil {
+						return nil, foErr
+					}
 					return nil, err
 				}
 				billingPayload = appendFinanceBillingPayload(billingPayload, []byte(strings.Join(outputBlocks, "")))
 
 				for _, block := range outputBlocks {
+					if streamCont != nil {
+						block = streamCont.RewriteAnthropicBlock(block)
+						if block == "" {
+							continue
+						}
+					}
 					if !clientDisconnected {
 						restored := reverseToolNamesIfPresent(c, []byte(block))
 						if _, werr := fmt.Fprint(w, string(restored)); werr != nil {
@@ -7899,6 +7947,9 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 			// 处理流超时，可能标记账户为临时不可调度或错误状态
 			if s.rateLimitService != nil {
 				s.rateLimitService.HandleStreamTimeout(ctx, account, originalModel)
+			}
+			if foErr := interruptForContinuation(fmt.Sprintf("upstream stream idle for %s", streamInterval)); foErr != nil {
+				return nil, foErr
 			}
 			sendErrorEvent("stream_timeout", fmt.Sprintf("upstream stream idle for %s", streamInterval))
 			return resultWithBilling(false), fmt.Errorf("stream data interval timeout")

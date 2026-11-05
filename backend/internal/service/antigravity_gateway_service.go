@@ -1705,7 +1705,7 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 				}
 			}
 
-			if s.shouldFailoverUpstreamError(resp.StatusCode) {
+			if s.shouldFailoverUpstreamError(ctx, resp.StatusCode) {
 				upstreamMsg := strings.TrimSpace(extractAntigravityErrorMessage(respBody))
 				upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
 				upstreamDetail := s.getUpstreamErrorDetail(respBody)
@@ -2377,7 +2377,7 @@ func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Co
 			return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: unwrappedForOps, RetryableOnSameAccount: true}
 		}
 
-		if s.shouldFailoverUpstreamError(resp.StatusCode) {
+		if s.shouldFailoverUpstreamError(ctx, resp.StatusCode) {
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				Platform:           account.Platform,
 				AccountID:          account.ID,
@@ -2465,7 +2465,10 @@ handleSuccess:
 	}, nil
 }
 
-func (s *AntigravityGatewayService) shouldFailoverUpstreamError(statusCode int) bool {
+func (s *AntigravityGatewayService) shouldFailoverUpstreamError(ctx context.Context, statusCode int) bool {
+	if failoverOnAnyHTTPError(ctx, s.antigravityConfig(), statusCode) {
+		return true
+	}
 	switch statusCode {
 	case 401, 403, 429, 529:
 		return true

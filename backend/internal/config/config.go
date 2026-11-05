@@ -804,6 +804,13 @@ type GatewayConfig struct {
 	// 是否允许对部分 400 错误触发 failover（默认关闭以避免改变语义）
 	FailoverOn400 bool `mapstructure:"failover_on_400"`
 
+	// 任意上游错误（任意 >=400 状态码、网络/传输错误）都触发账号切换（默认开启）。
+	// 开启后同一分组内的账号会依次尝试，直到全部失败才把错误返回给用户；
+	// 也覆盖"某账号不支持该模型（400/404 model not found）"的场景。
+	FailoverOnAnyError bool `mapstructure:"failover_on_any_error"`
+	// FailoverOnAnyError 模式下，切换账号前在同一账号上的额外重试次数（默认 1；确定性错误如 401/402/403/404/429 不重试直接切换）
+	FailoverSameAccountRetries int `mapstructure:"failover_same_account_retries"`
+
 	// 账户切换最大次数（遇到上游错误时切换到其他账户的次数上限）
 	MaxAccountSwitches int `mapstructure:"max_account_switches"`
 	// Gemini 账户切换最大次数（Gemini 平台单独配置，因 API 限制更严格）
@@ -1833,6 +1840,8 @@ func setDefaults() {
 	viper.SetDefault("gateway.log_upstream_error_body_max_bytes", 2048)
 	viper.SetDefault("gateway.inject_beta_for_apikey", false)
 	viper.SetDefault("gateway.failover_on_400", false)
+	viper.SetDefault("gateway.failover_on_any_error", true)
+	viper.SetDefault("gateway.failover_same_account_retries", 1)
 	viper.SetDefault("gateway.max_account_switches", 10)
 	viper.SetDefault("gateway.max_account_switches_gemini", 3)
 	viper.SetDefault("gateway.force_codex_cli", false)

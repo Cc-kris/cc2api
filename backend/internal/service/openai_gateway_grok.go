@@ -149,7 +149,7 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 			upstreamMsg = fmt.Sprintf("xAI upstream returned status %d", resp.StatusCode)
 		}
 		kind := "http_error"
-		if s.shouldFailoverGrokUpstreamError(resp.StatusCode, respBody) {
+		if s.shouldFailoverGrokUpstreamError(ctx, resp.StatusCode, respBody) {
 			kind = "failover"
 		}
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -162,7 +162,7 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 			Message:            upstreamMsg,
 		})
 		s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
-		if s.shouldFailoverGrokUpstreamError(resp.StatusCode, respBody) {
+		if s.shouldFailoverGrokUpstreamError(ctx, resp.StatusCode, respBody) {
 			return nil, &UpstreamFailoverError{
 				StatusCode:             resp.StatusCode,
 				ResponseBody:           respBody,
@@ -909,7 +909,7 @@ func (s *OpenAIGatewayService) describeGrokComposerImage(
 			upstreamMsg = fmt.Sprintf("xAI image bridge upstream returned status %d", resp.StatusCode)
 		}
 		kind := "http_error"
-		if s.shouldFailoverGrokUpstreamError(resp.StatusCode, respBody) {
+		if s.shouldFailoverGrokUpstreamError(ctx, resp.StatusCode, respBody) {
 			kind = "failover"
 		}
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -922,7 +922,7 @@ func (s *OpenAIGatewayService) describeGrokComposerImage(
 			Message:            upstreamMsg,
 		})
 		s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
-		if s.shouldFailoverGrokUpstreamError(resp.StatusCode, respBody) {
+		if s.shouldFailoverGrokUpstreamError(ctx, resp.StatusCode, respBody) {
 			return "", OpenAIUsage{}, &UpstreamFailoverError{
 				StatusCode:             resp.StatusCode,
 				ResponseBody:           respBody,

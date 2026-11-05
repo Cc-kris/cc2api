@@ -773,6 +773,20 @@ func (_u *GroupUpdate) SetModelPricing(v map[string]interface{}) *GroupUpdate {
 	return _u
 }
 
+// SetFailoverOnAnyError sets the "failover_on_any_error" field.
+func (_u *GroupUpdate) SetFailoverOnAnyError(v bool) *GroupUpdate {
+	_u.mutation.SetFailoverOnAnyError(v)
+	return _u
+}
+
+// SetNillableFailoverOnAnyError sets the "failover_on_any_error" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableFailoverOnAnyError(v *bool) *GroupUpdate {
+	if v != nil {
+		_u.SetFailoverOnAnyError(*v)
+	}
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *GroupUpdate) AddAPIKeyIDs(ids ...int64) *GroupUpdate {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -1295,6 +1309,9 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.ModelPricing(); ok {
 		_spec.SetField(group.FieldModelPricing, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.FailoverOnAnyError(); ok {
+		_spec.SetField(group.FieldFailoverOnAnyError, field.TypeBool, value)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -2347,6 +2364,20 @@ func (_u *GroupUpdateOne) SetModelPricing(v map[string]interface{}) *GroupUpdate
 	return _u
 }
 
+// SetFailoverOnAnyError sets the "failover_on_any_error" field.
+func (_u *GroupUpdateOne) SetFailoverOnAnyError(v bool) *GroupUpdateOne {
+	_u.mutation.SetFailoverOnAnyError(v)
+	return _u
+}
+
+// SetNillableFailoverOnAnyError sets the "failover_on_any_error" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableFailoverOnAnyError(v *bool) *GroupUpdateOne {
+	if v != nil {
+		_u.SetFailoverOnAnyError(*v)
+	}
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *GroupUpdateOne) AddAPIKeyIDs(ids ...int64) *GroupUpdateOne {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -2899,6 +2930,9 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.ModelPricing(); ok {
 		_spec.SetField(group.FieldModelPricing, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.FailoverOnAnyError(); ok {
+		_spec.SetField(group.FieldFailoverOnAnyError, field.TypeBool, value)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{

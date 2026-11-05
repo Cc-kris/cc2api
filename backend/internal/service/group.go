@@ -75,6 +75,9 @@ type Group struct {
 	LongContextPricingEnabled bool
 	ModelPricing              map[string]GroupModelPricing
 
+	// FailoverOnAnyError 任意上游错误都切换到分组内其他账号，直到全部账号尝试完才返回错误（默认开启）。
+	FailoverOnAnyError bool
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 

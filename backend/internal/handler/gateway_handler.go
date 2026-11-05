@@ -316,7 +316,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	hasBoundSession := sessionKey != "" && sessionBoundAccountID > 0
 
 	if platform == service.PlatformGemini {
-		fs := NewFailoverState(h.maxAccountSwitchesGemini, hasBoundSession)
+		fs := NewFailoverState(h.maxAccountSwitchesGemini, hasBoundSession).WithAnyErrorFailover(c.Request.Context(), h.cfg)
 
 		// 单账号分组提前设置 SingleAccountRetry 标记，让 Service 层首次 503 就不设模型限流标记。
 		// 避免单账号分组收到 503 (MODEL_CAPACITY_EXHAUSTED) 时设 29s 限流，导致后续请求连续快速失败。
@@ -564,7 +564,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	}
 
 	for {
-		fs := NewFailoverState(h.maxAccountSwitches, hasBoundSession)
+		fs := NewFailoverState(h.maxAccountSwitches, hasBoundSession).WithAnyErrorFailover(c.Request.Context(), h.cfg)
 		retryWithFallback := false
 
 		for {
@@ -769,8 +769,18 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			}
 			// 记录 Forward 前已写入字节数，Forward 后若增加则说明 SSE 内容已发，禁止 failover
 			writerSizeBeforeForward := c.Writer.Size()
+			// 流式 + 任意错误换号：开启续写状态（仅内存、仅本次请求）
+			streamCont := service.StreamContinuationFromContext(c)
+			if streamCont == nil && reqStream && anyErrorFailoverEnabled(c.Request.Context(), h.cfg) {
+				streamCont = service.AttachStreamContinuation(c)
+			}
 			if account.Platform == service.PlatformAntigravity && account.Type != service.AccountTypeAPIKey {
-				result, err = h.antigravityGatewayService.Forward(requestCtx, c, account, body, hasBoundSession)
+				if streamCont.Active() {
+					// Antigravity 转发路径不支持流拼接，换下一个账号
+					err = service.NewStreamContinuationUnsupportedFailover()
+				} else {
+					result, err = h.antigravityGatewayService.Forward(requestCtx, c, account, body, hasBoundSession)
+				}
 			} else {
 				result, err = h.gatewayService.Forward(requestCtx, c, account, parsedReq)
 			}
@@ -852,10 +862,14 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
 					appendBillableUsageAttemptFromFailover(c, account, reqModel, failoverErr)
-					// 流式内容已写入客户端，无法撤销，禁止 failover 以防止流拼接腐化
-					if c.Writer.Size() != writerSizeBeforeForward {
+					// 流式内容已写入客户端：只有支持续写的中断（SafeToFailoverAfterWrite）才能换号接着写
+					wroteDuringForward := c.Writer.Size() != writerSizeBeforeForward
+					if wroteDuringForward && !failoverErr.SafeToFailoverAfterWrite {
 						h.handleFailoverExhausted(c, failoverErr, account.Platform, true)
 						return
+					}
+					if wroteDuringForward || streamCont.Active() {
+						streamStarted = true
 					}
 					action := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, failoverErr)
 					switch action {

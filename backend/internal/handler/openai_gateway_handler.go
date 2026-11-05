@@ -428,7 +428,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	sessionHash := h.gatewayService.GenerateHTTPStableSessionHash(c, sessionHashBody)
 	requireCompact := isOpenAIRemoteCompactPath(c) || compactionContext.NativeResponses
 
-	maxAccountSwitches := h.maxAccountSwitches
+	maxAccountSwitches := effectiveMaxAccountSwitches(c.Request.Context(), h.cfg, h.maxAccountSwitches)
 	switchCount := 0
 	teamWorkspaceSwitchCount := 0
 	failedAccountIDs := make(map[int64]struct{})
@@ -540,6 +540,11 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				zap.String("image_model", channelMapping.MappedModel),
 			)
 		}
+		// 流式 + 任意错误换号：开启续写状态（仅内存、仅本次请求）
+		streamCont := service.StreamContinuationFromContext(c)
+		if streamCont == nil && reqStream && anyErrorFailoverEnabled(c.Request.Context(), h.cfg) {
+			streamCont = service.AttachStreamContinuation(c)
+		}
 		result, err := func() (*service.OpenAIForwardResult, error) {
 			defer func() {
 				if accountReleaseFunc != nil {
@@ -569,14 +574,18 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
 					appendBillableUsageAttemptFromFailover(c, account, reqModel, failoverErr)
-					if c.Writer.Size() != writerSizeBeforeForward {
+					// 已写出内容时，只有可续写的中断（SafeToFailoverAfterWrite）才能换号接着写
+					wroteDuringForward := c.Writer.Size() != writerSizeBeforeForward
+					if wroteDuringForward && !failoverErr.SafeToFailoverAfterWrite {
 						h.handleFailoverExhausted(c, failoverErr, true)
 						return
 					}
+					if wroteDuringForward || streamCont.Active() {
+						streamStarted = true
+					}
 					h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
 					// 池模式：同账号重试
-					if failoverErr.RetryableOnSameAccount {
-						retryLimit := account.GetPoolModeRetryCount()
+					if retryLimit := sameAccountRetryLimit(c.Request.Context(), h.cfg, account, failoverErr); retryLimit > 0 {
 						if sameAccountRetryCount[account.ID] < retryLimit {
 							sameAccountRetryCount[account.ID]++
 							reqLog.Warn("openai.pool_mode_same_account_retry",
@@ -615,7 +624,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 						return
 					}
 					switchCount++
-					if h.gatewayService.ShouldStopOpenAIOAuth429Failover(account, failoverErr.StatusCode, switchCount, &oauth429FailoverState) {
+					if shouldRespectOAuth429StormStop(c.Request.Context(), h.cfg) && h.gatewayService.ShouldStopOpenAIOAuth429Failover(account, failoverErr.StatusCode, switchCount, &oauth429FailoverState) {
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}
@@ -918,7 +927,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 	promptCacheKey := h.gatewayService.ExtractSessionID(c, body)
 	sessionHash, promptCacheKey = resolveOpenAIMessagesMetadataSession(sessionHash, promptCacheKey, reqModel, body)
 
-	maxAccountSwitches := h.maxAccountSwitches
+	maxAccountSwitches := effectiveMaxAccountSwitches(c.Request.Context(), h.cfg, h.maxAccountSwitches)
 	switchCount := 0
 	teamWorkspaceSwitchCount := 0
 	failedAccountIDs := make(map[int64]struct{})
@@ -1031,8 +1040,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 					}
 					h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
 					// 池模式：同账号重试
-					if failoverErr.RetryableOnSameAccount {
-						retryLimit := account.GetPoolModeRetryCount()
+					if retryLimit := sameAccountRetryLimit(c.Request.Context(), h.cfg, account, failoverErr); retryLimit > 0 {
 						if sameAccountRetryCount[account.ID] < retryLimit {
 							sameAccountRetryCount[account.ID]++
 							reqLog.Warn("openai_messages.pool_mode_same_account_retry",
@@ -1069,7 +1077,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 						return
 					}
 					switchCount++
-					if h.gatewayService.ShouldStopOpenAIOAuth429Failover(account, failoverErr.StatusCode, switchCount, &oauth429FailoverState) {
+					if shouldRespectOAuth429StormStop(c.Request.Context(), h.cfg) && h.gatewayService.ShouldStopOpenAIOAuth429Failover(account, failoverErr.StatusCode, switchCount, &oauth429FailoverState) {
 						h.handleAnthropicFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}

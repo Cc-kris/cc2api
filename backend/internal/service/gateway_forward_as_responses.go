@@ -140,6 +140,9 @@ func (s *GatewayService) ForwardAsResponses(
 			Kind:               "request_error",
 			Message:            safeErr,
 		})
+		if foErr := newAnyErrorTransportFailover(ctx, s.cfg, err); foErr != nil {
+			return nil, foErr
+		}
 		writeResponsesError(c, http.StatusBadGateway, "server_error", "Upstream request failed")
 		return nil, fmt.Errorf("upstream request failed: %s", safeErr)
 	}
@@ -154,7 +157,7 @@ func (s *GatewayService) ForwardAsResponses(
 		upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(respBody))
 		upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
 
-		if s.shouldFailoverUpstreamError(resp.StatusCode) {
+		if s.shouldFailoverUpstreamError(ctx, resp.StatusCode) {
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				Platform:           account.Platform,
 				AccountID:          account.ID,
