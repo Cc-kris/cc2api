@@ -172,8 +172,11 @@ export function buildLocaleSwitchTarget(
   const suffix = search ? (search.startsWith('?') ? search : `?${search}`) : ''
   const segments = pathSegments(raw).map((segment) => decodeURIComponent(segment))
 
-  // 已带前缀（`/de/...`）：仅替换首段语言
+  // 已带前缀（`/de/...`）：仅替换首段语言；首页保持规范写法 `/<lang>/`
   if (segments.length > 0 && isLocaleCode(segments[0])) {
+    if (segments.length === 1) {
+      return `/${locale}/${suffix}`
+    }
     segments[0] = locale
     return `/${segments.join('/')}${suffix}`
   }

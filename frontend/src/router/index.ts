@@ -68,6 +68,26 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/public/PublicContentView.vue'),
     meta: { requiresAuth: false, title: '深度解析' }
   },
+  // 语言前缀的首页/列表（技术设计 §3.1：/<lang>/、/<lang>/news、/<lang>/articles）。
+  // 生产环境由后端 SSR 先出 HTML，SPA 必须能接管同一 URL，否则切换语言后整页落到 404。
+  {
+    path: '/:lang(en|zh|ru|fr|de)',
+    name: 'PublicLocaleHome',
+    component: () => import('@/views/public/PublicContentView.vue'),
+    meta: { requiresAuth: false, title: 'Home' }
+  },
+  {
+    path: '/:lang(en|zh|ru|fr|de)/news',
+    name: 'PublicLocaleNewsList',
+    component: () => import('@/views/public/PublicContentView.vue'),
+    meta: { requiresAuth: false, title: 'News' }
+  },
+  {
+    path: '/:lang(en|zh|ru|fr|de)/articles',
+    name: 'PublicLocaleArticlesList',
+    component: () => import('@/views/public/PublicContentView.vue'),
+    meta: { requiresAuth: false, title: '深度解析' }
+  },
   {
     path: '/docs/:pathMatch(.*)*',
     name: 'PublicDocs',
@@ -823,6 +843,11 @@ const BACKEND_MODE_CALLBACK_PATHS = [
 const BACKEND_MODE_PENDING_AUTH_PATHS = ['/register', '/email-verify']
 
 function isBackendModePublicRouteAllowed(path: string, hasPendingAuthSession: boolean): boolean {
+  // 语言前缀的公开页（/zh/、/en/news、/ru/articles）与无前缀写法同等放行
+  const localeStripped = path.replace(/^\/(en|zh|ru|fr|de)(?=\/|$)/, '') || '/'
+  if (localeStripped !== path && ['/', '/news', '/articles'].includes(localeStripped.replace(/\/$/, '') || '/')) {
+    return true
+  }
   if (
     BACKEND_MODE_ALLOWED_PATHS.some((allowedPath) =>
       allowedPath === '/' ? path === '/' : path === allowedPath || path.startsWith(`${allowedPath}/`)

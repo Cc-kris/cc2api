@@ -18,7 +18,7 @@
     <main class="screen">
       <!-- 1. 顶部三栏对称导航 -->
       <header class="header-bar">
-        <router-link to="/" class="brand">
+        <router-link :to="localePath('')" class="brand">
           <div class="brand-logo" aria-hidden="true">
             <svg viewBox="0 0 24 24" class="brand-stamp-icon" width="20" height="20">
               <path d="M4 17L12 4L20 17H4Z" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round" />
@@ -52,11 +52,11 @@
         </div>
 
         <div class="cta-wrap">
-          <router-link to="/news" class="nav-sub-btn">
+          <router-link :to="localePath('news')" class="nav-sub-btn">
             <span class="nav-dot dot-live"></span>
             <span>{{ isZh ? '新闻动态' : 'News' }}</span>
           </router-link>
-          <router-link to="/articles" class="nav-sub-btn">
+          <router-link :to="localePath('articles')" class="nav-sub-btn">
             <span class="nav-dot dot-doc"></span>
             <span>{{ isZh ? '深度解析' : 'Deep Dive' }}</span>
           </router-link>
@@ -384,7 +384,7 @@
               <span class="pulse-dot"></span>
               {{ isZh ? '最新资讯' : 'LATEST NEWS' }}
             </div>
-            <router-link to="/news" class="hc-more">
+            <router-link :to="localePath('news')" class="hc-more">
               {{ isZh ? '查看更多' : 'View all' }} →
             </router-link>
           </div>
@@ -409,7 +409,7 @@
               <span class="pulse-dot"></span>
               {{ isZh ? '深度解析' : 'DEEP DIVE' }}
             </div>
-            <router-link to="/articles" class="hc-more">
+            <router-link :to="localePath('articles')" class="hc-more">
               {{ isZh ? '查看更多' : 'View all' }} →
             </router-link>
           </div>
@@ -438,7 +438,7 @@
     <header class="header-bar neo-sub-header-bar">
       <!-- 品牌标识与面包屑 -->
       <div class="sub-header-left">
-        <router-link to="/" class="brand">
+        <router-link :to="localePath('')" class="brand">
           <div class="brand-logo" aria-hidden="true">
             <svg viewBox="0 0 24 24" class="brand-stamp-icon" width="20" height="20">
               <path d="M4 17L12 4L20 17H4Z" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round" />
@@ -459,7 +459,7 @@
       <!-- 中心：纯正 Neo-Lab 硬核双核分段选项卡（无劣质胶囊/无emoji） -->
       <nav class="sub-segmented-nav" aria-label="Content navigation">
         <router-link
-          to="/news"
+          :to="localePath('news')"
           class="seg-item"
           :class="{ active: kind === 'news' }"
         >
@@ -467,7 +467,7 @@
           <span class="seg-label">{{ isZh ? '新闻动态' : 'News' }}</span>
         </router-link>
         <router-link
-          to="/articles"
+          :to="localePath('articles')"
           class="seg-item"
           :class="{ active: kind === 'articles' }"
         >
@@ -478,7 +478,7 @@
 
       <!-- 右侧：返回首页 + 语言切换 + 控制台 -->
       <div class="cta-wrap">
-        <router-link to="/" class="nav-home-btn">
+        <router-link :to="localePath('')" class="nav-home-btn">
           <span>←</span>
           <span>{{ isZh ? '返回首页' : 'Home' }}</span>
         </router-link>
@@ -600,13 +600,13 @@
           </div>
 
           <div class="article-bottom-cta">
-            <router-link to="/" class="cta-banner-copy-link" :title="isZh ? '点击访问 CCAI 首页' : 'Visit CCAI Homepage'">
+            <router-link :to="localePath('')" class="cta-banner-copy-link" :title="isZh ? '点击访问 CCAI 首页' : 'Visit CCAI Homepage'">
               <div class="cta-banner-badge font-mono">⚡ CCAI UNIFIED AI GATEWAY</div>
               <div class="cta-banner-title">{{ isZh ? '用 CCAI 调用这些模型' : 'Use these models with CCAI' }}</div>
               <div class="cta-banner-sub">{{ isZh ? '一个 API Key 调用 Claude、GPT、Gemini、DeepSeek 等模型 · 点击前往首页了解架构详情' : 'One API key for Claude, GPT, Gemini, DeepSeek and more · Click to explore homepage' }}</div>
             </router-link>
             <div class="cta-banner-actions">
-              <router-link to="/" class="cta-home-btn">
+              <router-link :to="localePath('')" class="cta-home-btn">
                 {{ isZh ? '返回首页' : 'Homepage' }}
               </router-link>
               <router-link :to="consoleTarget" class="cta-btn">
@@ -681,7 +681,7 @@
                   {{ kind === 'news' ? (isZh ? '更多新闻动态' : 'More News & Updates') : (isZh ? '更多深度解析' : 'More Deep Dive') }}
                 </h2>
               </div>
-              <router-link :to="kind === 'news' ? '/news' : '/articles'" class="more-view-all-link font-mono">
+              <router-link :to="localePath(kind)" class="more-view-all-link font-mono">
                 {{ kind === 'news' ? (isZh ? '查看全部新闻 →' : 'All News →') : (isZh ? '查看全部文章 →' : 'All Articles →') }}
               </router-link>
             </div>
@@ -805,7 +805,7 @@
             aria-labelledby="featured-section-title"
           >
             <div class="public-featured-header">
-              <router-link to="/articles" class="public-featured-all-link">
+              <router-link :to="localePath('articles')" class="public-featured-all-link">
                 {{ isZh ? '查看全部' : 'View all' }} →
               </router-link>
             </div>
@@ -1062,6 +1062,7 @@ import { apiClient } from '@/api/client'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { availableLocales, setLocale, type LocaleCode } from '@/i18n'
+import { normalizeLocaleCode } from '@/i18n/registry'
 import { createContentAnalyticsTracker, referrerHostOf } from '@/utils/contentAnalyticsV04'
 import { postPublicAnalyticsEvent } from '@/api/publicAnalyticsV04'
 import {
@@ -1145,6 +1146,13 @@ const isHome = computed(() => {
   const path = route.path.replace(/^\/(en|zh|ru|fr|de)(?=\/|$)/, '') || '/'
   return path === '/'
 })
+
+// 站内链接一律带当前语言前缀：无前缀的 /news 在服务端会无条件 301 到 /zh/news，
+// 刷新或新开标签时会丢掉用户刚选的语言
+const urlLocale = computed<LocaleCode>(() => normalizeLocaleCode(locale.value) || 'zh')
+function localePath(section: '' | 'news' | 'articles'): string {
+  return section ? `/${urlLocale.value}/${section}` : `/${urlLocale.value}/`
+}
 
 
 const consoleTarget = computed(() => {
@@ -1871,7 +1879,10 @@ const publicItems = ref<any[]>([]);
 const contentLoading = ref(false);
 const errorMessage = ref("");
 const searchInputRef = ref<HTMLInputElement | null>(null);
-const kind = computed(() => route.path.startsWith("/articles") ? "articles" : "news");
+const kind = computed(() => {
+  const path = route.path.replace(/^\/(en|zh|ru|fr|de)(?=\/|$)/, "");
+  return path.startsWith("/articles") ? "articles" : "news";
+});
 
 // ==================== 前台列表分页状态（后端 page_size 窗口 + 跨 locale 合并后按页切片） ====================
 const PAGE_SIZE_DEFAULT = 20;
@@ -2111,8 +2122,9 @@ function localeCandidates(locale: string): string[] {
 
 function itemPath(item: any, itemKind?: "news" | "articles") {
   const targetKind = itemKind || (item.contentType === "article" || kind.value === "articles" ? "articles" : "news");
-  const targetLocale = normalizePublicLocale(item.locale, isZh.value ? "zh-CN" : "en-US");
-  return `/${targetKind}/${targetLocale}/${item.slug}`;
+  // URL 只用短码（技术设计 §3.3）：zh-CN → zh，避免每次点击多一跳 301
+  const segment = normalizeLocaleCode(item.locale) || urlLocale.value;
+  return `/${targetKind}/${segment}/${item.slug}`;
 }
 
 function truncateText(value: any, max = 96): string {

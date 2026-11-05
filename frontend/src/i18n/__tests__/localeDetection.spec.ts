@@ -193,7 +193,8 @@ describe('R12-03 cookie + localStorage 双写与跨标签同步', () => {
 describe('R12-04 切换器保留当前页面与查询串', () => {
   it('首页与列表只替换语言段', () => {
     expect(buildLocaleSwitchTarget('/', '', 'ru')).toBe('/ru/')
-    expect(buildLocaleSwitchTarget('/zh', '', 'en')).toBe('/en')
+    expect(buildLocaleSwitchTarget('/zh', '', 'en')).toBe('/en/')
+    expect(buildLocaleSwitchTarget('/zh/', '', 'de')).toBe('/de/')
     expect(buildLocaleSwitchTarget('/zh/news', '?page=2', 'de')).toBe('/de/news?page=2')
     expect(buildLocaleSwitchTarget('/articles', '', 'fr')).toBe('/fr/articles')
   })

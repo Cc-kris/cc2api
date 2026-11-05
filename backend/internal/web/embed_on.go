@@ -90,6 +90,10 @@ func (s *FrontendServer) Middleware() gin.HandlerFunc {
 
 		// Skip API routes
 		if shouldBypassEmbeddedFrontend(path, true) {
+			if isPublicSSRRoute(path) {
+				servePublicSSRInShell(c, s.shellHTML)
+				return
+			}
 			c.Next()
 			return
 		}
@@ -210,6 +214,27 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	c.Abort()
 }
 
+// shellHTML returns the SPA index.html with settings and the request nonce
+// injected, for wrapping public SSR pages (see public_ssr_shell.go).
+func (s *FrontendServer) shellHTML(c *gin.Context) []byte {
+	nonce := middleware.GetNonceFromContext(c)
+	if cached := s.cache.Get(); cached != nil {
+		return replaceNoncePlaceholder(cached.Content, nonce)
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
+	if s.settings != nil {
+		if settings, err := s.settings.GetPublicSettingsForInjection(ctx); err == nil {
+			if settingsJSON, err := json.Marshal(settings); err == nil {
+				rendered := s.injectSettings(settingsJSON)
+				s.cache.Set(rendered, settingsJSON)
+				return replaceNoncePlaceholder(rendered, nonce)
+			}
+		}
+	}
+	return replaceNoncePlaceholder(s.baseHTML, nonce)
+}
+
 func (s *FrontendServer) injectSettings(settingsJSON []byte) []byte {
 	// Create the script tag to inject with nonce placeholder
 	// The placeholder will be replaced with actual nonce at request time
@@ -279,6 +304,16 @@ func serveEmbeddedFrontend(publicSSR bool) gin.HandlerFunc {
 		path := c.Request.URL.Path
 
 		if shouldBypassEmbeddedFrontend(path, publicSSR) {
+			if publicSSR && isPublicSSRRoute(path) {
+				servePublicSSRInShell(c, func(c *gin.Context) []byte {
+					shell, err := fs.ReadFile(distFS, "index.html")
+					if err != nil {
+						return nil
+					}
+					return replaceNoncePlaceholder(shell, middleware.GetNonceFromContext(c))
+				})
+				return
+			}
 			c.Next()
 			return
 		}

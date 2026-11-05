@@ -14,7 +14,7 @@ describe('PublicContentView featured section contract', () => {
     expect(component).toContain('featuredItems[0]')
     expect(component).toContain('featuredItems.slice(1, 10)')
     expect(component).toContain('.slice(0, 10)')
-    expect(component).toContain('to="/articles" class="public-featured-all-link"')
+    expect(component).toContain(':to="localePath(\'articles\')" class="public-featured-all-link"')
   })
 
   it('uses featured time descending with an ID descending deterministic tie-breaker', () => {
