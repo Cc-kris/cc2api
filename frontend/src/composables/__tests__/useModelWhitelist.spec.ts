@@ -70,6 +70,51 @@ describe('useModelWhitelist', () => {
     expect(models.indexOf('gemini-2.5-flash-image')).toBeLessThan(models.indexOf('gemini-2.5-flash-lite'))
   })
 
+  it('Claude 模型列表包含新发布的 Claude 模型', () => {
+    const claude = getModelsByPlatform('claude')
+    const ag = getModelsByPlatform('antigravity')
+    for (const model of ['claude-fable-5-1', 'claude-fable-5', 'claude-opus-4-8', 'claude-opus-5', 'claude-opus-5-5', 'claude-sonnet-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']) {
+      expect(claude).toContain(model)
+    }
+    expect(ag).toContain('claude-fable-5-1')
+    expect(ag).toContain('claude-fable-5')
+    expect(ag).toContain('claude-opus-4-8')
+    // Antigravity 上 5.5 只有档位 ID，简称走默认映射
+    expect(ag).not.toContain('claude-opus-5-5')
+    expect(ag).not.toContain('claude-sonnet-5-5')
+    for (const tier of ['high', 'medium', 'low']) {
+      expect(ag).toContain(`claude-opus-5-5-${tier}`)
+      expect(ag).toContain(`claude-sonnet-5-5-${tier}`)
+    }
+  })
+
+  it('Claude 新模型预设使用各平台的官方模型 ID', () => {
+    expect(getPresetMappingsByPlatform('claude')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Sonnet 5.5', from: 'claude-sonnet-5-5', to: 'claude-sonnet-5-5' }),
+      expect.objectContaining({ label: 'Opus 5.5', from: 'claude-opus-5-5', to: 'claude-opus-5-5' }),
+      expect.objectContaining({ label: 'Fable 5.1', from: 'claude-fable-5-1', to: 'claude-fable-5-1' }),
+      expect.objectContaining({ label: 'Haiku 5.5', from: 'claude-haiku-5-5', to: 'claude-haiku-5-5' })
+    ]))
+    expect(getPresetMappingsByPlatform('bedrock')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Sonnet 5.5', from: 'claude-sonnet-5-5', to: 'global.anthropic.claude-sonnet-5-5' }),
+      expect.objectContaining({ label: 'Opus 5', from: 'claude-opus-5', to: 'us.anthropic.claude-opus-5-v1' }),
+      expect.objectContaining({ label: 'Fable 5', from: 'claude-fable-5', to: 'anthropic.claude-fable-5' })
+    ]))
+    // 上游没有 opus-5-5、haiku-5-5 的 Bedrock ID
+    const bedrockFroms = getPresetMappingsByPlatform('bedrock').map(p => p.from)
+    expect(bedrockFroms).not.toContain('claude-opus-5-5')
+    expect(bedrockFroms).not.toContain('claude-haiku-5-5')
+    expect(getPresetMappingsByPlatform('antigravity')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ from: 'claude-opus-5-5', to: 'claude-opus-5-5-high' }),
+      expect.objectContaining({ from: 'claude-sonnet-5-5', to: 'claude-sonnet-5-5-high' })
+    ]))
+  })
+
+  it('Claude 默认白名单保存后允许 Haiku 5.5', () => {
+    const mapping = buildModelMappingObject('whitelist', getModelsByPlatform('anthropic'), [])
+    expect(mapping?.['claude-haiku-5-5']).toBe('claude-haiku-5-5')
+  })
+
   it('whitelist 模式会忽略通配符条目', () => {
     const mapping = buildModelMappingObject('whitelist', ['claude-*', 'gemini-3.1-flash-image'], [])
     expect(mapping).toEqual({
