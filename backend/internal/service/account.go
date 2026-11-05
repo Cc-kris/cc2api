@@ -1053,6 +1053,12 @@ func (a *Account) IsOpenAIOAuth() bool {
 	return a.IsOpenAI() && a.Type == AccountTypeOAuth
 }
 
+// IsOpenAIOAuthLike 判断是否为 OpenAI 的 OAuth 类账号（上游 account.go:1472-1474）。
+// CCAI 的 OpenAI 没有 setup-token 账号，保留该分支只为和上游语义一致。
+func (a *Account) IsOpenAIOAuthLike() bool {
+	return a != nil && a.IsOpenAI() && (a.Type == AccountTypeOAuth || a.Type == AccountTypeSetupToken)
+}
+
 func (a *Account) IsOpenAIApiKey() bool {
 	return a.IsOpenAI() && a.Type == AccountTypeAPIKey
 }

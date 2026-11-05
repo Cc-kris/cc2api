@@ -128,7 +128,7 @@ func TestCodexIdentityFullModeSkipsEnforcement(t *testing.T) {
 	require.Equal(t, pinnedUA, req.Header.Get("User-Agent"))
 	require.Empty(t, req.Header.Get("Version"), "full 档跳过收口，非 compact 请求保持不写 version")
 
-	headers, _ := svc.buildOpenAIWSHeaders(c, account, "tok", OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2}, true, "", "", "")
+	headers, _ := svc.buildOpenAIWSHeaders(c, account, "tok", OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2}, true, "", "", "", "", "")
 	require.Equal(t, pinnedUA, headers.Get("User-Agent"))
 
 	// full 档但账号没填 UA：full 档不写 UA，照常收口。
@@ -188,7 +188,7 @@ func TestCodexIdentityWSHandshake(t *testing.T) {
 	svc := &OpenAIGatewayService{cfg: &config.Config{}}
 	c := newCodexIdentityTestContext(t, "codex-tui/0.140.2 (Mac OS X 14.0; arm64) iTerm (codex-tui; 0.140.2)", "codex-tui", "")
 
-	headers, _ := svc.buildOpenAIWSHeaders(c, newCodexIdentityTestOAuthAccount(), "tok", OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2}, true, "", "", "")
+	headers, _ := svc.buildOpenAIWSHeaders(c, newCodexIdentityTestOAuthAccount(), "tok", OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2}, true, "", "", "", "", "")
 	requireCodexIdentityTestHeaders(t, headers)
 }
 
