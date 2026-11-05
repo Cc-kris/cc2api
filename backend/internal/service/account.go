@@ -163,6 +163,12 @@ func (a *Account) IsCNQuotaExhausted() bool {
 	return cnProviderSnapshotBlocksScheduling(snapshot, time.Now())
 }
 
+// IsCNProvider 报告账号是否属于国产供应商（kimi/zhipu/deepseek）。
+// 余额不足、配额耗尽等可恢复状态走 ratelimit_cn_providers.go 的临时冷却路径。
+func (a *Account) IsCNProvider() bool {
+	return a != nil && isDomesticOpenAICompatiblePlatform(a.Platform)
+}
+
 func parseQuotaSnapshotNumber(value any) (float64, bool) {
 	switch n := value.(type) {
 	case float64:
