@@ -1202,10 +1202,29 @@ func (s *OpenAIGatewayService) downloadCodexImageResponseURL(
 	if len(imageBytes) > openAIImageMaxDownloadBytes {
 		return nil, fmt.Errorf("image download exceeds %d bytes", openAIImageMaxDownloadBytes)
 	}
-	if contentType := http.DetectContentType(imageBytes); !strings.HasPrefix(contentType, "image/") {
-		return nil, fmt.Errorf("image download returned %s", contentType)
+	// 只信字节嗅探结果，不看响应头的 Content-Type；且只接受 png/jpeg/webp/gif。
+	if !isAllowedCodexImageContent(imageBytes) {
+		return nil, fmt.Errorf("image download returned disallowed content %s", http.DetectContentType(imageBytes))
 	}
 	return imageBytes, nil
+}
+
+// codexImageAllowedContentTypes 是 Codex 生图下载允许的图片格式，以字节嗅探结果为准。
+var codexImageAllowedContentTypes = map[string]struct{}{
+	"image/png":  {},
+	"image/jpeg": {},
+	"image/webp": {},
+	"image/gif":  {},
+}
+
+// isAllowedCodexImageContent 报告 data 的前 512 字节是否嗅探为允许的图片格式。
+func isAllowedCodexImageContent(data []byte) bool {
+	if len(data) == 0 {
+		return false
+	}
+	contentType := strings.TrimSpace(strings.Split(http.DetectContentType(data), ";")[0])
+	_, ok := codexImageAllowedContentTypes[contentType]
+	return ok
 }
 
 func newCodexImageDownloadHTTPClient() *http.Client {
