@@ -20,6 +20,8 @@ import (
 type antigravityMappingMigrationCase struct {
 	file string
 	keys []string
+	// customKey 是第 4 类账号里管理员已指向别处的键
+	customKey string
 }
 
 var antigravityMappingMigrations = []antigravityMappingMigrationCase{
@@ -30,6 +32,12 @@ var antigravityMappingMigrations = []antigravityMappingMigrationCase{
 			"claude-opus-5-5", "claude-opus-5-5-high", "claude-opus-5-5-medium", "claude-opus-5-5-low",
 			"claude-sonnet-5-5", "claude-sonnet-5-5-high", "claude-sonnet-5-5-medium", "claude-sonnet-5-5-low",
 		},
+		customKey: "claude-opus-4-8",
+	},
+	{
+		file:      "221_add_gemini_argon_to_antigravity_mapping.sql",
+		keys:      []string{"gemini-4-argon", "gemini-4-argon-high", "gemini-4-argon-medium", "gemini-4-argon-low"},
+		customKey: "gemini-4-argon",
 	},
 }
 
@@ -84,7 +92,7 @@ func TestAntigravityModelMappingMigration(t *testing.T) {
 				map[string]any{"model_mapping": map[string]any{"claude-sonnet-4-6": "claude-sonnet-4-6"}}, false)
 			// 第 4 类：有映射，管理员已把新键之一指向别处
 			customized := map[string]any{"claude-sonnet-4-6": "claude-sonnet-4-6"}
-			customKey := mc.keys[2] // 220: claude-opus-4-8
+			customKey := mc.customKey
 			customized[customKey] = "claude-sonnet-4-6"
 			adminOverride := insertMigrationTestAccount(t, ctx, name("override"), "antigravity",
 				map[string]any{"model_mapping": customized}, false)

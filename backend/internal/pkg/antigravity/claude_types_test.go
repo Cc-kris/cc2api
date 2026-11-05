@@ -27,6 +27,24 @@ func TestDefaultModels_ContainsNewAndLegacyImageModels(t *testing.T) {
 		"gemini-3.1-flash-image",
 		"gemini-3.1-flash-image-preview",
 		"gemini-3-pro-image", // legacy compatibility
+		"gemini-3.6-flash",
+		"gemini-3.6-flash-high",
+		"gemini-3.6-flash-low",
+		"gemini-3.6-flash-medium",
+		"gemini-3.6-flash-tiered",
+		"gemini-3.7-flash",
+		"gemini-3.7-flash-high",
+		"gemini-3.7-flash-low",
+		"gemini-3.7-flash-medium",
+		"gemini-3.7-flash-tiered",
+		"gemini-3.8-flash",
+		"gemini-3.8-flash-high",
+		"gemini-3.8-flash-low",
+		"gemini-3.8-flash-medium",
+		"gemini-3.8-flash-tiered",
+		"gemini-4-argon-high",
+		"gemini-4-argon-low",
+		"gemini-4-argon-medium",
 	}
 
 	for _, id := range requiredIDs {

@@ -613,16 +613,23 @@ func (s *PricingService) GetModelPricing(modelName string) *LiteLLMModelPricing 
 }
 
 func (s *PricingService) buildModelLookupCandidates(modelLower string) []string {
-	// Prefer canonical model name first (this also improves billing compatibility with "models/xxx").
-	candidates := []string{
-		normalizeModelNameForPricing(modelLower),
+	rawCandidates := []string{
 		modelLower,
-	}
-	candidates = append(candidates,
 		strings.TrimPrefix(modelLower, "models/"),
 		lastSegment(modelLower),
 		lastSegment(strings.TrimPrefix(modelLower, "models/")),
-	)
+	}
+	normalized := normalizeModelNameForPricing(modelLower)
+
+	// 档位 ID（Antigravity 的 Gemini / Claude 5.5 thinking tier）：价格表以后有了
+	// 档位专属条目时优先用它，基础模型价放在最后兜底（上游 buildModelLookupCandidates）。
+	// 其他别名照旧优先用规范名（这也让 "models/xxx" 能命中）。
+	var candidates []string
+	if isAntigravityThinkingTierAlias(lastSegment(modelLower)) {
+		candidates = append(rawCandidates, normalized)
+	} else {
+		candidates = append([]string{normalized}, rawCandidates...)
+	}
 
 	seen := make(map[string]struct{}, len(candidates))
 	out := make([]string, 0, len(candidates))
@@ -664,7 +671,28 @@ func normalizeModelNameForPricing(model string) string {
 	if canonical := canonicalizeOpenAIModelAliasSpelling(model); canonical != "" {
 		return canonical
 	}
-	return normalizeAntigravityClaudeTierAlias(model)
+	return normalizeAntigravityClaudeTierAlias(normalizeGeminiThinkingTierAlias(model))
+}
+
+// isAntigravityThinkingTierAlias reports whether model is an Antigravity
+// Gemini or Claude thinking-tier alias of a priced base model.
+func isAntigravityThinkingTierAlias(model string) bool {
+	return normalizeGeminiThinkingTierAlias(model) != model || normalizeAntigravityClaudeTierAlias(model) != model
+}
+
+// normalizeGeminiThinkingTierAlias maps Antigravity's Gemini thinking-tier
+// model IDs to the public base model. The tier controls reasoning behavior, not
+// the published token rate, so this keeps -high/-low/-medium and -tiered
+// requests on the corresponding base model's price card.
+func normalizeGeminiThinkingTierAlias(model string) string {
+	for _, baseModel := range []string{"gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash", "gemini-4-argon"} {
+		for _, tier := range []string{"-high", "-low", "-medium", "-tiered"} {
+			if model == baseModel+tier {
+				return baseModel
+			}
+		}
+	}
+	return model
 }
 
 // normalizeAntigravityClaudeTierAlias maps Antigravity's Claude 5.5 thinking-tier

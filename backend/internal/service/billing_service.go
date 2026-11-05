@@ -346,6 +346,48 @@ func (s *BillingService) initFallbackPricing() {
 		SupportsCacheBreakdown:     false,
 	}
 
+	// Gemini 3.6 / 3.7 / 3.8 Flash（Google AI 优惠价：$0.75 输入 / $3.75 输出 /
+	// $0.075 缓存读 per MTok，至 2026-12-31；2027-01-01 起官方价翻倍为 $1.50/$7.50/$0.15）。
+	// Antigravity 的 -high/-low/-medium/-tiered 档位 ID 在 getFallbackPricing 里按子串归到这里，
+	// 远程价格表不可用时也不会记 0 元（上游 4426593e9、8ed57b000、6254aba5e）。
+	s.fallbackPrices["gemini-3.6-flash"] = &ModelPricing{
+		InputPricePerToken:     0.75e-6,
+		OutputPricePerToken:    3.75e-6,
+		CacheReadPricePerToken: 0.075e-6,
+		SupportsCacheBreakdown: false,
+	}
+	s.fallbackPrices["gemini-3.7-flash"] = &ModelPricing{
+		InputPricePerToken:     0.75e-6,
+		OutputPricePerToken:    3.75e-6,
+		CacheReadPricePerToken: 0.075e-6,
+		SupportsCacheBreakdown: false,
+	}
+	s.fallbackPrices["gemini-3.8-flash"] = &ModelPricing{
+		InputPricePerToken:     0.75e-6,
+		OutputPricePerToken:    3.75e-6,
+		CacheReadPricePerToken: 0.075e-6,
+		SupportsCacheBreakdown: false,
+	}
+
+	// Gemini 4 Argon（Google AI 优惠价：$2 输入 / $10 输出 / $0.10 缓存读 per MTok，
+	// 至 2026-11-30；2026-12-01 起官方价翻倍为 $4/$20/$0.20）。不分 prompt 长度。
+	// 远程价格表没有这个模型，生产计费走这里（上游 c6c9935ae）。
+	s.fallbackPrices["gemini-4-argon"] = &ModelPricing{
+		InputPricePerToken:     2e-6,
+		OutputPricePerToken:    10e-6,
+		CacheReadPricePerToken: 0.1e-6,
+		SupportsCacheBreakdown: false,
+	}
+
+	// Gemini 4 Argon Cyber Permissive（Vertex AI：$4 输入 / $20 输出 / $0.20 缓存读 per MTok）。
+	// 不享受 Gemini 4 Argon 的优惠价。
+	s.fallbackPrices["gemini-4-argon-cyber-permissive"] = &ModelPricing{
+		InputPricePerToken:     4e-6,
+		OutputPricePerToken:    20e-6,
+		CacheReadPricePerToken: 0.2e-6,
+		SupportsCacheBreakdown: false,
+	}
+
 	// OpenAI GPT-5.4（业务指定价格）
 	s.fallbackPrices["gpt-5.4"] = &ModelPricing{
 		InputPricePerToken:             2.5e-6,  // $2.5 per MTok
@@ -491,6 +533,22 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	}
 	if strings.Contains(modelLower, "gemini-3.1-pro") || strings.Contains(modelLower, "gemini-3-1-pro") {
 		return s.fallbackPrices["gemini-3.1-pro"]
+	}
+	if strings.Contains(modelLower, "gemini-3.6-flash") || strings.Contains(modelLower, "gemini-3-6-flash") {
+		return s.fallbackPrices["gemini-3.6-flash"]
+	}
+	if strings.Contains(modelLower, "gemini-3.7-flash") || strings.Contains(modelLower, "gemini-3-7-flash") {
+		return s.fallbackPrices["gemini-3.7-flash"]
+	}
+	if strings.Contains(modelLower, "gemini-3.8-flash") || strings.Contains(modelLower, "gemini-3-8-flash") {
+		return s.fallbackPrices["gemini-3.8-flash"]
+	}
+	// Cyber 变体不享受 Gemini 4 Argon 的优惠价，必须先于 "gemini-4-argon" 判。
+	if strings.Contains(modelLower, "gemini-4-argon-cyber") {
+		return s.fallbackPrices["gemini-4-argon-cyber-permissive"]
+	}
+	if strings.Contains(modelLower, "gemini-4-argon") {
+		return s.fallbackPrices["gemini-4-argon"]
 	}
 
 	// OpenAI 仅匹配已知 GPT-5/Codex 族，避免未知 OpenAI 型号误计价。

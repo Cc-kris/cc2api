@@ -115,6 +115,34 @@ describe('useModelWhitelist', () => {
     expect(mapping?.['claude-haiku-5-5']).toBe('claude-haiku-5-5')
   })
 
+  it('Gemini 3.6/3.7/3.8 Flash 和 4 Argon 在 gemini 与 antigravity 平台使用对应真实模型 ID', () => {
+    const gemini = getModelsByPlatform('gemini')
+    for (const model of ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.8-flash', 'gemini-4-argon']) {
+      expect(gemini).toContain(model)
+    }
+    const ag = getModelsByPlatform('antigravity')
+    for (const base of ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.8-flash']) {
+      for (const tier of ['', '-high', '-low', '-medium', '-tiered']) {
+        expect(ag).toContain(base + tier)
+      }
+    }
+    expect(ag).not.toContain('gemini-4-argon')
+    for (const tier of ['high', 'medium', 'low']) {
+      expect(ag).toContain(`gemini-4-argon-${tier}`)
+    }
+    expect(getPresetMappingsByPlatform('antigravity')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ from: 'gemini-4-argon', to: 'gemini-4-argon-high' }),
+      expect.objectContaining({ from: 'gemini-4-argon-high', to: 'gemini-4-argon-high' }),
+      expect.objectContaining({ from: 'gemini-4-argon-medium', to: 'gemini-4-argon-medium' }),
+      expect.objectContaining({ from: 'gemini-4-argon-low', to: 'gemini-4-argon-low' }),
+      expect.objectContaining({ from: 'gemini-3.8-flash', to: 'gemini-3.8-flash' })
+    ]))
+    expect(getPresetMappingsByPlatform('gemini')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ from: 'gemini-4-argon', to: 'gemini-4-argon' }),
+      expect.objectContaining({ from: 'gemini-3.8-flash', to: 'gemini-3.8-flash' })
+    ]))
+  })
+
   it('whitelist 模式会忽略通配符条目', () => {
     const mapping = buildModelMappingObject('whitelist', ['claude-*', 'gemini-3.1-flash-image'], [])
     expect(mapping).toEqual({

@@ -72,6 +72,31 @@ describe('AccountStatusIndicator', () => {
     expect(text).not.toContain('claude-fable-5')
   })
 
+  it('Gemini 3.6+ 与 4 Argon 模型限流时显示短别名', () => {
+    const limited = { rate_limited_at: '2026-10-13T00:00:00Z', rate_limit_reset_at: '2099-10-13T00:00:00Z' }
+    const wrapper = mount(AccountStatusIndicator, {
+      props: {
+        account: makeAccount({
+          extra: {
+            model_rate_limits: {
+              'gemini-3.6-flash': limited,
+              'gemini-3.8-flash-high': limited,
+              'gemini-4-argon-high': limited,
+              'gemini-4-argon-low': limited
+            }
+          }
+        })
+      },
+      global: { stubs: { Icon: true } }
+    })
+
+    const text = wrapper.text()
+    for (const alias of ['G36F', 'G38FH', 'G4AH', 'G4AL']) {
+      expect(text).toContain(alias)
+    }
+    expect(text).not.toContain('gemini-4-argon')
+  })
+
   it('模型限流 + overages 启用 + 无 AICredits key → 显示 ⚡ (credits_active)', () => {
     const wrapper = mount(AccountStatusIndicator, {
       props: {
