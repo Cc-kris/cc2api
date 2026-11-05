@@ -12,6 +12,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
@@ -366,6 +367,28 @@ func StripEmptyTextBlocks(body []byte) []byte {
 		return body
 	}
 	return out
+}
+
+// isClaudeSamplingLockedModel 判断采样锁定模型：sonnet-5-5、haiku-5-5 上
+// temperature 和 top_p 同时出现时上游直接 400（上游 d56f5e787、c4bdc4847）。
+func isClaudeSamplingLockedModel(model string) bool {
+	return claude.IsSonnet55(model) || claude.IsHaiku55(model)
+}
+
+// StripClaudeSamplingConflict 给采样锁定模型的出站 body 去掉冲突的采样参数：
+// temperature 和 top_p 同时存在时删 top_p，保留 temperature（真实 Claude Code CLI
+// 总是发 temperature，保留它出站指纹更一致）。其他模型、或只有其中一个参数时原样返回。
+func StripClaudeSamplingConflict(body []byte, model string) []byte {
+	if len(body) == 0 || !isClaudeSamplingLockedModel(model) {
+		return body
+	}
+	if !gjson.GetBytes(body, "temperature").Exists() || !gjson.GetBytes(body, "top_p").Exists() {
+		return body
+	}
+	if next, err := sjson.DeleteBytes(body, "top_p"); err == nil {
+		return next
+	}
+	return body
 }
 
 // FilterThinkingBlocks removes thinking blocks from request body

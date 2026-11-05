@@ -1250,8 +1250,20 @@ func normalizeClaudeOAuthRequestBody(body []byte, modelID string, opts claudeOAu
 	// temperature：真实 Claude Code CLI 总是发送 temperature（默认 1，客户端可覆盖）。
 	// 之前的实现直接 delete 会导致 payload 缺字段，与真实 CLI 字节级不一致。
 	// 策略：客户端传了什么就透传；没传则补默认 1。
-	if !gjson.GetBytes(out, "temperature").Exists() {
+	// 例外（上游 c4c2e6607、d56f5e787）：opus-5-5 不补；采样锁定的模型
+	// （sonnet-5-5/haiku-5-5）上 temperature+top_p 共存即 400，客户端只传 top_p 时
+	// 不得再补 temperature，否则网关自己制造 400。
+	samplingLocked := isClaudeSamplingLockedModel(modelID)
+	if !gjson.GetBytes(out, "temperature").Exists() && !claude.IsOpus55(modelID) &&
+		(!samplingLocked || !gjson.GetBytes(out, "top_p").Exists()) {
 		if next, ok := setJSONValueBytes(out, "temperature", 1); ok {
+			out = next
+			modified = true
+		}
+	}
+	// 客户端自己同时传了两个参数时，出站只留 temperature（V02-AC46）。
+	if samplingLocked {
+		if next := StripClaudeSamplingConflict(out, modelID); len(next) != len(out) {
 			out = next
 			modified = true
 		}
@@ -4959,6 +4971,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	// 调试日志：记录即将转发的账号信息
 	logger.LegacyPrintf("service.gateway", "[Forward] Using account: ID=%d Name=%s Platform=%s Type=%s TLSFingerprint=%v Proxy=%s",
 		account.ID, account.Name, account.Platform, account.Type, tlsProfile, proxyURL)
+	// 采样锁定模型（sonnet-5-5/haiku-5-5）temperature+top_p 同时出现上游会 400，出站只留一个。
+	body = StripClaudeSamplingConflict(body, reqModel)
 	// Pre-filter: strip empty text blocks (including nested in tool_result) to prevent upstream 400.
 	body = StripEmptyTextBlocks(body)
 
@@ -6319,6 +6333,7 @@ func (s *GatewayService) forwardBedrock(
 	if err != nil {
 		return nil, fmt.Errorf("prepare bedrock request body: %w", err)
 	}
+	bedrockBody = StripClaudeSamplingConflict(bedrockBody, mappedModel)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
