@@ -4,6 +4,8 @@ package repository
 
 import (
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -85,6 +87,83 @@ func (s *EmailCacheSuite) TestGetVerificationCode_JSONCorruption() {
 	_, err := s.cache.GetVerificationCode(s.ctx, "corrupted@example.com")
 	require.Error(s.T(), err, "expected error for corrupted JSON")
 	require.False(s.T(), errors.Is(err, redis.Nil), "expected decoding error, not redis.Nil")
+}
+
+func (s *EmailCacheSuite) TestIncrVerificationCodeAttempts_ConcurrentCapAndTTL() {
+	// V01-R08：真 Redis 上验证 Lua 原子递增（并发 20 次错误码不超过 5 次比较）和 TTL 跟随验证码。
+	email := "atomic-int@example.com"
+	require.NoError(s.T(), s.cache.SetVerificationCode(s.ctx, email, &service.VerificationCodeData{
+		Code:      "123456",
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(15 * time.Minute),
+	}, 15*time.Minute))
+
+	svc := service.NewEmailService(nil, s.cache)
+	const workers = 20
+	var invalid, maxed atomic.Int32
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			switch err := svc.VerifyCode(s.ctx, email, "000000"); {
+			case errors.Is(err, service.ErrInvalidVerifyCode):
+				invalid.Add(1)
+			case errors.Is(err, service.ErrVerifyCodeMaxAttempts):
+				maxed.Add(1)
+			default:
+				s.T().Errorf("unexpected result: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	require.LessOrEqual(s.T(), int(invalid.Load()), 4)
+	require.Equal(s.T(), workers, int(invalid.Load()+maxed.Load()))
+	require.ErrorIs(s.T(), svc.VerifyCode(s.ctx, email, "123456"), service.ErrVerifyCodeMaxAttempts)
+
+	attemptsTTL, err := s.rdb.TTL(s.ctx, verifyCodeKey(email)+attemptsKeySuffix).Result()
+	require.NoError(s.T(), err)
+	s.AssertTTLWithin(attemptsTTL, 14*time.Minute, 15*time.Minute)
+
+	// 重新发码：计数清零。
+	require.NoError(s.T(), s.cache.SetVerificationCode(s.ctx, email, &service.VerificationCodeData{Code: "654321"}, time.Minute))
+	data, err := s.cache.GetVerificationCode(s.ctx, email)
+	require.NoError(s.T(), err)
+	require.Equal(s.T(), 0, data.Attempts)
+	require.NoError(s.T(), svc.VerifyCode(s.ctx, email, "654321"))
+	exists, err := s.rdb.Exists(s.ctx, verifyCodeKey(email), verifyCodeKey(email)+attemptsKeySuffix).Result()
+	require.NoError(s.T(), err)
+	require.Zero(s.T(), exists)
+}
+
+func (s *EmailCacheSuite) TestConsumePasswordResetToken_RealRedisCompareAndDelete() {
+	email := "reset-int@example.com"
+	require.NoError(s.T(), s.cache.SetPasswordResetToken(s.ctx, email, &service.PasswordResetTokenData{Token: "hash-a", CreatedAt: time.Now()}, time.Minute))
+
+	ok, err := s.cache.ConsumePasswordResetToken(s.ctx, email, "hash-b")
+	require.NoError(s.T(), err)
+	require.False(s.T(), ok)
+
+	const workers = 20
+	var wins atomic.Int32
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if ok, err := s.cache.ConsumePasswordResetToken(s.ctx, email, "hash-a"); err == nil && ok {
+				wins.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	require.Equal(s.T(), int32(1), wins.Load())
+
+	// 损坏的 JSON 不报错、不删除。
+	require.NoError(s.T(), s.rdb.Set(s.ctx, passwordResetKey(email), "not-json", time.Minute).Err())
+	ok, err = s.cache.ConsumePasswordResetToken(s.ctx, email, "hash-a")
+	require.NoError(s.T(), err)
+	require.False(s.T(), ok)
 }
 
 func TestEmailCacheSuite(t *testing.T) {
