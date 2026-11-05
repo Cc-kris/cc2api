@@ -1021,6 +1021,15 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 
 	// Fallback to default models
 	if platform == service.PlatformOpenAI {
+		// GetAvailableModels 对 OpenAI 返回非 nil 的空切片表示「过滤退役模型后为空」，
+		// 不能再回落含 gpt-5.5 的默认列表（V02-T18）。
+		if availableModels != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"object": "list",
+				"data":   []openai.Model{},
+			})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{
 			"object": "list",
 			"data":   openai.DefaultModels,

@@ -415,3 +415,11 @@ func buildCodexModelsManifestURL(endpoint string, appendModelsPath bool, clientV
 	requestURL.RawQuery = query.Encode()
 	return requestURL, nil
 }
+
+// SetChatGPTCodexModelsURLForTest 让 handler 包的测试把 OAuth 清单请求指向 httptest 服务器，
+// 返回恢复函数。只供测试使用。
+func SetChatGPTCodexModelsURLForTest(url string) func() {
+	old := chatgptCodexModelsURL
+	chatgptCodexModelsURL = url
+	return func() { chatgptCodexModelsURL = old }
+}
