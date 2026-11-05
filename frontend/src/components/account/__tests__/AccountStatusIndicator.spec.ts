@@ -43,6 +43,35 @@ function makeAccount(overrides: Partial<Account>): Account {
 }
 
 describe('AccountStatusIndicator', () => {
+  it('Claude 5 系列模型限流时显示短别名', () => {
+    const limited = { rate_limited_at: '2026-07-28T00:00:00Z', rate_limit_reset_at: '2099-07-28T00:00:00Z' }
+    const wrapper = mount(AccountStatusIndicator, {
+      props: {
+        account: makeAccount({
+          extra: {
+            model_rate_limits: {
+              'claude-opus-5': limited,
+              'claude-sonnet-5': limited,
+              'claude-sonnet-5-5': limited,
+              'claude-opus-5-5': limited,
+              'claude-opus-4-8': limited,
+              'claude-fable-5-1': limited,
+              'claude-fable-5': limited
+            }
+          }
+        })
+      },
+      global: { stubs: { Icon: true } }
+    })
+
+    const text = wrapper.text()
+    for (const alias of ['COpus5', 'CSon5', 'CSon55', 'COpus55', 'COpus48', 'CFable51', 'CFable5']) {
+      expect(text).toContain(alias)
+    }
+    expect(text).not.toContain('claude-sonnet-5')
+    expect(text).not.toContain('claude-fable-5')
+  })
+
   it('模型限流 + overages 启用 + 无 AICredits key → 显示 ⚡ (credits_active)', () => {
     const wrapper = mount(AccountStatusIndicator, {
       props: {
