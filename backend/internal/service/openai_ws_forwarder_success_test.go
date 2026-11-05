@@ -602,8 +602,9 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testi
 		originator     string
 		wantOriginator string
 	}{
-		{name: "desktop originator preserved", originator: "Codex Desktop", wantOriginator: "Codex Desktop"},
-		{name: "vscode originator preserved", originator: "codex_vscode", wantOriginator: "codex_vscode"},
+		// V02-T15：WS 握手与 HTTP 出站共用身份收口，客户端自报 originator 不参与构造。
+		{name: "desktop originator unified", originator: "Codex Desktop", wantOriginator: "codex_cli_rs"},
+		{name: "vscode originator unified", originator: "codex_vscode", wantOriginator: "codex_cli_rs"},
 		{name: "official ua fallback to codex_cli_rs", userAgent: "Codex Desktop/1.2.3", wantOriginator: "codex_cli_rs"},
 	}
 
@@ -669,6 +670,8 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testi
 			require.NoError(t, err)
 			require.NotNil(t, result)
 			require.Equal(t, tt.wantOriginator, captureDialer.lastHeaders.Get("originator"))
+			require.Equal(t, codexCLIUserAgent, captureDialer.lastHeaders.Get("user-agent"))
+			require.Equal(t, codexCLIVersion, captureDialer.lastHeaders.Get("version"))
 		})
 	}
 }

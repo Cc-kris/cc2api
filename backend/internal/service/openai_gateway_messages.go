@@ -285,6 +285,10 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 		upstreamReq, err = buildGrokResponsesRequest(upstreamCtx, c, account, responsesBody, token, grokCacheIdentity, s.cfg)
 		SetActualOpenAIUpstreamEndpoint(c, grokChatResponsesEndpoint)
 	} else {
+		// Messages 桥保持 CCAI 现状：不发 originator，也不经 Codex 身份收口（V02-T15）。
+		// 显式标记桥接上下文，避免请求体不带桥接标记时 buildUpstreamRequest 先补 originator、
+		// 收口写入 version 后又被下面删掉 originator，留下不配套的身份头。
+		setOpenAICompatMessagesBridgeContext(c, true)
 		upstreamReq, err = s.buildUpstreamRequest(upstreamCtx, c, account, responsesBody, token, isStream, promptCacheKey, false)
 	}
 	releaseUpstreamCtx()

@@ -735,6 +735,11 @@ type GatewayConfig struct {
 	// ForceCodexCLI: 强制将 OpenAI `/v1/responses` 请求按 Codex CLI 处理。
 	// 用于网关未透传/改写 User-Agent 时的兼容兜底（默认关闭，避免影响其他客户端）。
 	ForceCodexCLI bool `mapstructure:"force_codex_cli"`
+	// DisableCodexIdentityEnforcement: 关闭「强制统一 Codex 出站身份」（V02-R06）。
+	// 默认开启强制统一：OAuth 出站 User-Agent / originator / version 一律改写为网关规范身份；
+	// 关闭后退回「仅按最终 User-Agent 配对 originator、校正过低 version」，供上游策略变动时回滚。
+	// 取反义命名，零值即开启保护。
+	DisableCodexIdentityEnforcement bool `mapstructure:"disable_codex_identity_enforcement"`
 	// CodexImageGenerationBridgeEnabled 仅为兼容历史配置保留。
 	// Deprecated: 网关运行时忽略该字段，桥接路由仅由当前活跃渠道控制。
 	CodexImageGenerationBridgeEnabled bool `mapstructure:"codex_image_generation_bridge_enabled"`
@@ -1852,6 +1857,7 @@ func setDefaults() {
 	viper.SetDefault("gateway.max_account_switches", 10)
 	viper.SetDefault("gateway.max_account_switches_gemini", 3)
 	viper.SetDefault("gateway.force_codex_cli", false)
+	viper.SetDefault("gateway.disable_codex_identity_enforcement", false)
 	viper.SetDefault("gateway.codex_image_generation_bridge_enabled", false)
 	viper.SetDefault("gateway.openai_passthrough_allow_timeout_headers", false)
 	// OpenAI Responses WebSocket（默认开启；可通过 force_http 紧急回滚）

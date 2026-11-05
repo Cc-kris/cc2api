@@ -639,6 +639,8 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		if chatgptAccountID != "" {
 			req.Header.Set("chatgpt-account-id", chatgptAccountID)
 		}
+		// 与真实转发同一套 Codex 身份（V02-T15，上游 account_test_service.go:932-942）。
+		applyAccountTestCodexIdentity(req.Header, account)
 	}
 
 	// Get proxy URL
@@ -937,9 +939,10 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 		req.Header.Set("Accept", "application/json")
 		req.Header.Set("Authorization", "Bearer "+authToken)
 		req.Header.Set("OpenAI-Beta", "responses=experimental")
-		req.Header.Set("Originator", "codex_cli_rs")
-		req.Header.Set("User-Agent", codexCLIUserAgent)
-		req.Header.Set("Version", codexCLIVersion)
+		canonical := resolveCodexOutboundIdentity("")
+		req.Header.Set("Originator", canonical.originator)
+		req.Header.Set("User-Agent", canonical.userAgent)
+		req.Header.Set("Version", canonical.version)
 		probeSessionID := compactProbeSessionID(account.ID)
 		req.Header.Set("Session_ID", probeSessionID)
 		req.Header.Set("Conversation_ID", probeSessionID)
@@ -950,6 +953,9 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 			}
 		}
 		resolveOpenAIAgentIdentity(account).ApplyTo(req.Header, nil)
+		if isOAuth && !codexIdentityPinnedByAccount(account) {
+			enforceCodexIdentityHeadersWithUA(req.Header, account.GetOpenAIUserAgent())
+		}
 		return req, nil
 	}
 
@@ -1830,12 +1836,7 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("OpenAI-Beta", "responses=experimental")
-	req.Header.Set("originator", "opencode")
-	if customUA := strings.TrimSpace(account.GetOpenAIUserAgent()); customUA != "" {
-		req.Header.Set("User-Agent", customUA)
-	} else {
-		req.Header.Set("User-Agent", codexCLIUserAgent)
-	}
+	applyAccountTestCodexIdentity(req.Header, account)
 	if chatgptAccountID := strings.TrimSpace(account.GetChatGPTAccountID()); chatgptAccountID != "" {
 		req.Header.Set("chatgpt-account-id", chatgptAccountID)
 	}
@@ -1964,4 +1965,23 @@ func parseTestSSEOutput(body string) (responseText, errMsg string) {
 	}
 	responseText = strings.Join(texts, "")
 	return
+}
+
+// applyAccountTestCodexIdentity 给 OpenAI OAuth 账号测试请求写入与真实转发一致的 Codex 身份：
+// 规范 originator + UA（账号自定义 UA 优先），再按账号 UA 收口；full 档钉住账号 UA 时不收口。
+func applyAccountTestCodexIdentity(h http.Header, account *Account) {
+	if h == nil || account == nil {
+		return
+	}
+	canonical := resolveCodexOutboundIdentity("")
+	h.Set("Originator", canonical.originator)
+	if customUA := strings.TrimSpace(account.GetOpenAIUserAgent()); customUA != "" {
+		h.Set("User-Agent", customUA)
+	} else {
+		h.Set("User-Agent", canonical.userAgent)
+	}
+	if codexIdentityPinnedByAccount(account) {
+		return
+	}
+	enforceCodexIdentityHeadersWithUA(h, account.GetOpenAIUserAgent())
 }

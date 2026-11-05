@@ -189,7 +189,9 @@ func TestFetchCodexModelsManifestOAuthUsesChatGPTEndpoint(t *testing.T) {
 		require.Equal(t, "Bearer oauth-token", r.Header.Get("Authorization"))
 		require.Equal(t, "chatgpt-account", r.Header.Get("ChatGPT-Account-ID"))
 		require.Equal(t, "codex_cli_rs", r.Header.Get("Originator"))
-		require.Equal(t, "0.137.0", r.Header.Get("Version"))
+		// client_version 查询参数按客户端原值透传；version 头低于上游门槛 0.144.0 时回退规范版本。
+		require.Equal(t, codexCLIVersion, r.Header.Get("Version"))
+		require.Equal(t, codexCLIUserAgent, r.Header.Get("User-Agent"))
 		w.Header().Set("ETag", `"manifest-v1"`)
 		_, _ = io.WriteString(w, codexModelsNativeTestManifest("gpt-5.6"))
 	}))

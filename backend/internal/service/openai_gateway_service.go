@@ -43,7 +43,13 @@ const (
 	// OpenAI Platform API for API Key accounts (fallback)
 	openaiPlatformAPIURL   = "https://api.openai.com/v1/responses"
 	openaiStickySessionTTL = time.Hour // 粘性会话TTL
-	codexCLIUserAgent      = "codex_cli_rs/0.125.0"
+	// 与真实 Codex CLI 的 User-Agent 结构对齐：
+	// {originator}/{version} ({OS} {OS_version}; {arch}) {terminal}
+	// 该后缀是 UA 形态的唯一定义处，buildCodexCLIUserAgent 按运行时版本号复用它。
+	codexCLIUserAgentSuffix = " (Ubuntu 22.4.0; x86_64) xterm-256color"
+	// codexCLIUserAgent 是编译期兜底 UA；运行时优先使用由后台设置拼出的规范 UA。
+	// 版本段必须来自 codexCLIVersion：UA 与 version 头是同一个版本声明的两个出口。
+	codexCLIUserAgent = openai.CodexDefaultOriginator + "/" + codexCLIVersion + codexCLIUserAgentSuffix
 	// codex_cli_only 拒绝时单个请求头日志长度上限（字符）
 	codexCLIOnlyHeaderValueMaxBytes = 256
 
@@ -57,7 +63,9 @@ const (
 	openAIWSRetryBackoffMaxDefault     = 2 * time.Second
 	openAIWSRetryJitterRatioDefault    = 0.2
 	openAICompactSessionSeedKey        = "openai_compact_session_seed"
-	codexCLIVersion                    = "0.125.0"
+	// codexCLIVersion 是网关对上游声明的 Codex 客户端内置基线版本（上游 8e92c892b 为 0.146.0），
+	// 同时供 codexCLIUserAgent 与 version 头使用。
+	codexCLIVersion = "0.146.0"
 	// Codex 限额快照仅用于后台展示/诊断，不需要每个成功请求都立即落库。
 	openAICodexSnapshotPersistMinInterval = 30 * time.Second
 )
@@ -502,6 +510,11 @@ func NewOpenAIGatewayService(
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
 	idempotencyRepo IdempotencyRepository,
 ) *OpenAIGatewayService {
+	// enforceCodexIdentityHeaders 是 HTTP / 透传 / WS / 探针等出站路径共用的纯函数收口点，
+	// 拿不到配置，故在此发布进程级开关快照。配置取反义，零值即「强制统一出口开启」。
+	if cfg != nil {
+		SetCodexIdentityEnforcementEnabled(!cfg.Gateway.DisableCodexIdentityEnforcement)
+	}
 	svc := &OpenAIGatewayService{
 		accountRepo:         accountRepo,
 		usageLogRepo:        usageLogRepo,
@@ -1415,7 +1428,7 @@ func resolveOpenAIUpstreamOriginator(c *gin.Context, isOfficialClient bool) stri
 		}
 	}
 	if isOfficialClient {
-		return "codex_cli_rs"
+		return openai.CodexDefaultOriginator
 	}
 	return "opencode"
 }
@@ -3581,7 +3594,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
 			if req.Header.Get("version") == "" {
-				req.Header.Set("version", codexCLIVersion)
+				req.Header.Set("version", CodexCanonicalClientVersion())
 			}
 			if clientSessionID == "" {
 				clientSessionID = resolveOpenAICompactSessionID(c)
@@ -3593,7 +3606,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 			req.Header.Set("OpenAI-Beta", "responses=experimental")
 		}
 		if req.Header.Get("originator") == "" {
-			req.Header.Set("originator", "codex_cli_rs")
+			req.Header.Set("originator", resolveCodexOutboundIdentity("").originator)
 		}
 		// 用隔离后的 session 标识符覆盖客户端透传值，防止跨用户会话碰撞。
 		if clientSessionID == "" {
@@ -3616,17 +3629,16 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		req.Header.Set("user-agent", customUA)
 	}
 	if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
-		req.Header.Set("user-agent", codexCLIUserAgent)
-	}
-	// OAuth 安全透传：对非 Codex UA 统一兜底，降低被上游风控拦截概率。
-	if account.Type == AccountTypeOAuth && !openai.IsCodexCLIRequest(req.Header.Get("user-agent")) {
-		req.Header.Set("user-agent", codexCLIUserAgent)
+		req.Header.Set("user-agent", CodexCanonicalUserAgent())
 	}
 	resolveOpenAIAgentIdentity(account).ApplyTo(req.Header, nil)
 
-	// 浏览器型 UA 兜底：仅 OAuth（ChatGPT 内部接口）账号生效，若最终 user-agent 仍为浏览器
-	// （Chrome/Firefox/Safari/Edge 等），替换为后台配置的 Codex UA，避免 Cloudflare 触发 JS 质询。
+	// 浏览器型 UA 兜底：仅 OAuth（ChatGPT 内部接口）账号生效。带 originator 的请求随后被
+	// 终态收口整体覆盖；保留它只为不带 originator 的路径（Messages 桥）不把浏览器 UA 发到上游。
 	s.overrideBrowserUserAgent(ctx, account, req)
+	// 终态收口：强制统一 OAuth 出站身份（User-Agent / originator / version 同源自洽）。
+	// 原「非 Codex UA 兜底」已被收口吸收。
+	s.enforceOpenAIOAuthCodexIdentity(c, account, req.Header)
 
 	if req.Header.Get("content-type") == "" {
 		req.Header.Set("content-type", "application/json")
@@ -4409,7 +4421,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
 			if req.Header.Get("version") == "" {
-				req.Header.Set("version", codexCLIVersion)
+				req.Header.Set("version", CodexCanonicalClientVersion())
 			}
 			compactSession := resolveOpenAICompactSessionID(c)
 			req.Header.Set("session_id", isolateOpenAISessionID(apiKeyID, compactSession))
@@ -4432,15 +4444,17 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	}
 	resolveOpenAIAgentIdentity(account).ApplyTo(req.Header, nil)
 
-	// 若开启 ForceCodexCLI，则强制将上游 User-Agent 伪装为 Codex CLI。
+	// 若开启 ForceCodexCLI，则强制将上游 User-Agent 伪装为规范 Codex 身份。
 	// 用于网关未透传/改写 User-Agent 时，仍能命中 Codex 侧识别逻辑。
 	if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
-		req.Header.Set("user-agent", codexCLIUserAgent)
+		req.Header.Set("user-agent", CodexCanonicalUserAgent())
 	}
 
-	// 浏览器型 UA 兜底：仅 OAuth（ChatGPT 内部接口）账号生效，若最终 user-agent 仍为浏览器
-	// （Chrome/Firefox/Safari/Edge 等），替换为后台配置的 Codex UA，避免 Cloudflare 触发 JS 质询。
+	// 浏览器型 UA 兜底：仅 OAuth（ChatGPT 内部接口）账号生效。带 originator 的请求随后被
+	// 终态收口整体覆盖；保留它只为不带 originator 的路径（Messages 桥）不把浏览器 UA 发到上游。
 	s.overrideBrowserUserAgent(ctx, account, req)
+	// 终态收口：强制统一 OAuth 出站身份，必须在所有 User-Agent 改写之后。
+	s.enforceOpenAIOAuthCodexIdentity(c, account, req.Header)
 
 	// Ensure required headers exist
 	if req.Header.Get("content-type") == "" {
@@ -4472,6 +4486,41 @@ func (s *OpenAIGatewayService) overrideBrowserUserAgent(ctx context.Context, acc
 		}
 	}
 	req.Header.Set("user-agent", codexUA)
+}
+
+// codexIdentityOverrideUA 返回账号级显式配置的出站 User-Agent，供强制统一身份时作为覆写来源。
+// ForceCodexCLI 语义是「强制使用 Codex CLI 身份」，等价于使用网关规范身份，故返回空串
+// （上游 openai_gateway_forward.go codexIdentityOverrideUA）。
+func (s *OpenAIGatewayService) codexIdentityOverrideUA(account *Account) string {
+	if s != nil && s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
+		return ""
+	}
+	if account == nil {
+		return ""
+	}
+	return account.GetOpenAIUserAgent()
+}
+
+// codexIdentityPinnedByAccount 判断账号是否用 codex_identity_mode=full 钉住了 UA。
+// full 档的作用是让出站 UA 等于账号 UA（openai_agent_identity_compat.go），收口会重建
+// 版本段并重配 originator，因此 full 档账号跳过收口（V02 审核取舍 5，AC63）。
+// 账号没填 UA 时 full 档不写 UA，照常收口。
+func codexIdentityPinnedByAccount(account *Account) bool {
+	return account != nil &&
+		account.GetCodexIdentityMode() == OpenAICodexIdentityModeFull &&
+		strings.TrimSpace(account.GetOpenAIUserAgent()) != ""
+}
+
+// enforceOpenAIOAuthCodexIdentity 是 HTTP 转发、透传、WS 握手共用的终态收口入口（V02-T15）。
+// 只作用于 OpenAI OAuth 账号；Messages 桥不发 originator，收口自然跳过。
+func (s *OpenAIGatewayService) enforceOpenAIOAuthCodexIdentity(c *gin.Context, account *Account, h http.Header) {
+	if account == nil || !account.IsOpenAIOAuth() || codexIdentityPinnedByAccount(account) {
+		return
+	}
+	if isOpenAICompatMessagesBridgeContext(c) {
+		return
+	}
+	enforceCodexIdentityHeadersWithUA(h, s.codexIdentityOverrideUA(account))
 }
 
 func (s *OpenAIGatewayService) handleErrorResponse(
