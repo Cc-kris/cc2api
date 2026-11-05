@@ -14,17 +14,20 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/andybalholm/brotli"
+	"golang.org/x/mod/semver"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyurl"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/proxyutil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
 )
@@ -57,7 +60,9 @@ const (
 	defaultOpenAIHTTP2FallbackErrorThreshold = 2
 	defaultOpenAIHTTP2FallbackWindow         = 60 * time.Second
 	defaultOpenAIHTTP2FallbackTTL            = 10 * time.Minute
-	grokCLIProxyHost                         = "cli-chat-proxy.grok.com"
+	grokCLIProxyHost                         = xai.CLIProxyHost
+	grokCLIStableVersion                     = xai.CLIClientVersion // preferred pin (not the minimum floor)
+	grokCLIVersionOverride                   = xai.CLIVersionEnv
 	grokOfficialAPIHost                      = "api.x.ai"
 	grokFallbackBodyLimit                    = 64 << 10
 )
@@ -353,6 +358,16 @@ func (t *grokAccessDeniedFallbackTransport) RoundTrip(req *http.Request) (*http.
 	return fallbackResp, nil
 }
 
+// applyGrokCLIProxyTransportHeaders applies the official Grok Build client
+// identity at the final shared transport boundary. Keying this behavior to the
+// exact CLI proxy host keeps direct api.x.ai traffic unchanged and covers
+// Responses, Chat Completions, media, quota probes, and account tests, after
+// account-level header overrides have already run.
+//
+// Operator overrides must be >= xai.CLIClientVersion (the preferred pin).
+// xai.IsSupportedCLIVersion uses a lower floor (CLIStableVersion) for general
+// validation; transport is stricter so we never silently advertise an older pin
+// than the binary default.
 func applyGrokCLIProxyTransportHeaders(req *http.Request) {
 	if req == nil || req.URL == nil || !strings.EqualFold(strings.TrimSpace(req.URL.Hostname()), grokCLIProxyHost) {
 		return
@@ -360,7 +375,24 @@ func applyGrokCLIProxyTransportHeaders(req *http.Request) {
 	if req.Header == nil {
 		req.Header = make(http.Header)
 	}
-	req.Header.Set("X-XAI-Token-Auth", "xai-grok-cli")
+	version := strings.TrimSpace(os.Getenv(grokCLIVersionOverride))
+	if !isSupportedGrokCLITransportVersion(version) {
+		version = grokCLIStableVersion
+	}
+	req.Header.Set("X-XAI-Token-Auth", xai.CLITokenAuth)
+	req.Header.Set("x-grok-client-version", version)
+	req.Header.Set("x-grok-client-identifier", xai.CLIClientIdentifier)
+	req.Header.Set("x-grok-client-mode", xai.CLIClientMode)
+	req.Header.Set("x-authenticateresponse", "authenticate-response")
+	req.Header.Set("User-Agent", xai.CLIUserAgent(version))
+}
+
+func isSupportedGrokCLITransportVersion(version string) bool {
+	canonical := "v" + version
+	minimum := "v" + xai.CLIClientVersion
+	return semver.IsValid(canonical) &&
+		semver.Canonical(canonical) == canonical &&
+		semver.Compare(canonical, minimum) >= 0
 }
 
 func isGrokCLICompatibilityAccessDenied(body []byte) bool {
@@ -407,7 +439,17 @@ func newGrokOfficialAPIFallbackRequest(req *http.Request) (*http.Request, error)
 	fallbackReq.Host = ""
 	fallbackReq.RequestURI = ""
 	fallbackReq.Header = req.Header.Clone()
-	for _, header := range []string{"X-XAI-Token-Auth", "X-Grok-Client-Version", "X-Grok-Client-Surface", "X-Grok-Client-Mode", "X-UserID", "X-Email", "User-Agent"} {
+	for _, header := range []string{
+		"X-XAI-Token-Auth",
+		"X-Grok-Client-Version",
+		"X-Grok-Client-Identifier",
+		"X-Grok-Client-Mode",
+		"X-Authenticateresponse",
+		"X-Grok-Client-Surface",
+		"X-UserID",
+		"X-Email",
+		"User-Agent",
+	} {
 		fallbackReq.Header.Del(header)
 	}
 	return fallbackReq, nil
