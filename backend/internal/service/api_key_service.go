@@ -520,7 +520,7 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 
 	// 验证所有权
 	if apiKey.UserID != userID {
-		return nil, ErrInsufficientPerms
+		return nil, ErrAPIKeyNotFound // 与不存在的 Key 同一响应，不泄露存在性（V01-R11）
 	}
 
 	// 验证 IP 白名单格式
@@ -650,7 +650,7 @@ func (s *APIKeyService) Delete(ctx context.Context, id int64, userID int64) erro
 
 	// 验证当前用户是否为该 API Key 的所有者
 	if ownerID != userID {
-		return ErrInsufficientPerms
+		return ErrAPIKeyNotFound // 与不存在的 Key 同一响应，不泄露存在性（V01-R11）
 	}
 
 	// 清除Redis缓存（使用 userID 而非 apiKey.UserID）

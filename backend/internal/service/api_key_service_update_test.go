@@ -140,3 +140,18 @@ func TestAPIKeyServiceUpdate_InvalidIPRejectedWithoutWrite(t *testing.T) {
 		})
 	}
 }
+
+// TestAPIKeyServiceUpdate_ForeignKeyIndistinguishableFromMissing：改别人的 Key 与改不存在的 Key
+// 返回同一个错误，不写库（V01-R11，e2e 发现 PUT 仍返回 403）。
+func TestAPIKeyServiceUpdate_ForeignKeyIndistinguishableFromMissing(t *testing.T) {
+	svc, repo := newAPIKeyUpdateTestService(t)
+	name := "hijack"
+
+	_, foreignErr := svc.Update(context.Background(), 10, 8, UpdateAPIKeyRequest{Name: &name})
+	require.ErrorIs(t, foreignErr, ErrAPIKeyNotFound)
+
+	_, missingErr := svc.Update(context.Background(), 999, 7, UpdateAPIKeyRequest{Name: &name})
+	require.ErrorIs(t, missingErr, ErrAPIKeyNotFound)
+
+	require.Empty(t, repo.updated)
+}
