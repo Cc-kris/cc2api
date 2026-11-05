@@ -61,11 +61,20 @@ export function shooter(flow: string, testInfo: TestInfo) {
 /** 去掉 dev 浮层 / 公告弹窗等非业务遮挡（公告按真实用户点击关闭）。 */
 export async function dismissOverlays(page: Page) {
   await page.evaluate(() => document.querySelector('vite-plugin-checker-error-overlay')?.remove())
-  for (let i = 0; i < 3; i++) {
-    const btn = page.locator('div[class*="z-[120]"] button').first()
-    if (!(await btn.isVisible().catch(() => false))) break
-    await btn.click()
-    await page.waitForTimeout(300)
+  for (let i = 0; i < 8; i++) {
+    const tour = page.locator('.driver-popover:visible')
+    if (await tour.isVisible().catch(() => false)) {
+      await page.keyboard.press('Escape')
+      await expect(page.locator('.driver-overlay')).toHaveCount(0)
+      continue
+    }
+    const announcement = page.locator('div[class*="z-[120]"] button').first()
+    if (await announcement.isVisible().catch(() => false)) {
+      await announcement.click()
+      await page.waitForTimeout(350)
+      continue
+    }
+    break
   }
 }
 
@@ -80,12 +89,15 @@ export async function realLogin(page: Page) {
   await page.locator('#password').fill(PASSWORD)
   await page.locator('button[type="submit"]').click()
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 30_000 })
+  await page.waitForTimeout(1_200)
+  await dismissOverlays(page)
 }
 
 /** 打开内容中心并真实点击切到一级 tab。 */
 export async function openContentTab(page: Page, tab: string) {
   if (!page.url().includes('/admin/content')) await page.goto(`${BASE}/admin/content`)
   await expect(page.locator('.tabs button').first()).toBeVisible({ timeout: 30_000 })
+  await page.waitForTimeout(1_200)
   await dismissOverlays(page)
   await page.locator('.tabs button', { hasText: tab }).first().click()
   await expect(page.locator('.tabs button.active', { hasText: tab }).first()).toBeVisible()

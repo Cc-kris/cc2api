@@ -590,8 +590,11 @@ onUnmounted(() => {
 
 <style scoped>
 .select-trigger {
-  @apply relative w-full h-9 min-h-9 flex items-center justify-between gap-2 rounded-lg;
-  @apply px-3.5 py-2.5 rounded-xl text-sm font-bold;
+  @apply relative w-full h-9 min-h-9 flex items-center justify-between gap-2;
+  @apply px-3.5 py-1.5 rounded-lg text-sm font-bold;
+  height: 36px;
+  min-height: 36px;
+  border-radius: 8px;
   background-color: #FFFFFF;
   border: 2px solid #121316;
   color: #121316;
@@ -599,6 +602,10 @@ onUnmounted(() => {
   @apply transition-all duration-150;
   @apply focus:outline-none;
   @apply cursor-pointer;
+}
+.select-trigger:focus-visible {
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
 }
 :global(.dark) .select-trigger {
   background-color: #181C26;
@@ -681,7 +688,8 @@ onUnmounted(() => {
 }
 
 .select-dropdown-portal {
-  @apply w-full rounded-xl overflow-hidden;
+  @apply w-full rounded-lg overflow-hidden;
+  border-radius: 8px;
   background-color: #FFFFFF;
   border: 2.5px solid #121316;
   box-shadow: 6px 6px 0px #121316;

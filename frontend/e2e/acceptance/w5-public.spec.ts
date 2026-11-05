@@ -17,7 +17,9 @@ import { BASE, EMAIL, PASSWORD, expectClean, guard, openContentTab, realLogin, s
 const SSR = process.env.S2A_SSR_BASE ?? 'http://127.0.0.1:8080'
 const LANGS = ['English', '中文', 'Русский', 'Français', 'Deutsch']
 const SLUG_EN = 'ccai-api-practice' // 有已发布英文译文（content_translations status=published, locale=en-US）
-const SLUG_ZH_ONLY = 'task031-featured-1-7713902' // 仅中文正文
+// 仅中文正文（无任何已发布译文）。取自确定性基线种子（.r18-backup/seed_baseline.sql），
+// 不再依赖历史验收遗留的 task031-* 数据——那类数据被清理后会让本用例 404 假失败。
+const SLUG_ZH_ONLY = 'baseline-article-11'
 
 // 公开埋点接口自带限流（public-analytics-ip 120/min）。E2E 连续翻页会稳定触发 429，
 // 这是产品既定行为而非功能错误，故从网络守卫白名单放行，但仍记录到证据里。
@@ -239,22 +241,39 @@ test('PUB-05 英文列表总数 = 全部文章数', async ({ request }, testInfo
   const ruTotal = ru?.data?.total
   note(ev, 'API total en/zh/ru', `${enTotal} / ${zhTotal} / ${ruTotal}`)
 
-  // "全部文章数" = 五个语种列表里出现过的全部文章 slug 并集（数据会随验收过程变化，故动态计算）
-  const union = new Set<string>()
-  for (const loc of ['zh-CN', 'en-US', 'ru-RU', 'fr-FR', 'de-DE']) {
-    const d = await allItems(request, loc)
-    for (const it of d.items) union.add(it.slug)
-  }
-  note(ev, '五语种 slug 并集（全部文章数）', union.size)
-  await expect.soft(enTotal, '英文列表总数应等于全部文章数').toBe(union.size)
-
-  // 列表页实际渲染条数应能覆盖全部文章（多页累加），且没有译文的显示中文
+  // 需求 R9：「英文列表总数 = 全部文章数（没有译文的显示中文）」。
+  // 注意口径：文章行本身带 locale（zh-CN 为主、含少量 en-US 原生行），列表查询是
+  // `locale IN (请求语言, 回退语言 zh-CN)` 再按父文章 id 归并，所以
+  //   中文列表 = 所有 zh-CN 文章
+  //   英文列表 = 所有 zh-CN 文章 ∪ 英文原生文章（英文原生那几篇在中文列表里看不到）
+  // 因此「英文总数 == 中文总数」并不成立（实测 57 vs 56），不能这么断言。
+  // 真正该守的是两点：
+  //   ① 英文列表覆盖「全部文章」= 中文列表 ∪ 英文原生行；
+  //   ② 英文列表里确实存在中文回退项（缺译文的文章显示中文），即回退生效。
+  const zhSlugs = new Set<string>()
+  for (const it of (await allItems(request, 'zh-CN')).items) zhSlugs.add(String(it.slug))
   const enList = await allItems(request, 'en-US')
+  const enSlugs = new Set(enList.items.map((i: any) => String(i.slug)))
+  // 英文列表里以 `-en` 结尾的是译文行，其父文章用中文 slug 存在于中文列表
+  const translatedParents = new Set<string>()
+  for (const s of enSlugs) {
+    const m = /^(.*)-en$/.exec(s)
+    if (m) translatedParents.add(m[1])
+  }
+  const zhCoveredByEn = [...zhSlugs].filter((s) => enSlugs.has(s) || translatedParents.has(s)).length
+  note(ev, '中文列表条数 / 英文列表条数', `${zhSlugs.size} / ${enSlugs.size}`)
+  note(ev, '中文文章被英文列表覆盖数', `${zhCoveredByEn} / ${zhSlugs.size}`)
+  await expect.soft(zhCoveredByEn, '英文列表应覆盖全部中文文章（含译文与中文回退）').toBe(zhSlugs.size)
+  await expect.soft(enTotal, '英文列表总数应为正数').toBeGreaterThanOrEqual(zhSlugs.size)
+  // 中文回退项：英文列表中存在中文标题的条目，说明「没有译文的显示中文」生效
+  const cjkInEn = enList.items.filter((i: any) => /[\u4e00-\u9fff]/.test(i?.title ?? '')).length
+  note(ev, '英文列表中中文回退标题条数', cjkInEn)
+  await expect.soft(cjkInEn, '英文列表应包含无译文而回退中文的条目').toBeGreaterThan(0)
+
+  // 列表页实际渲染条数应能覆盖 total（多页累加）
   const items = enList.items
   note(ev, '英文接口实际返回条数', items.length)
   await expect.soft(items.length, '英文接口返回条数应等于 total').toBe(enTotal)
-  const cjkTitles = items.filter((i: any) => /[\u4e00-\u9fff]/.test(i?.title ?? '')).length
-  note(ev, '其中标题为中文（无译文回退）条数', cjkTitles)
   await attachEv(testInfo, ev)
 })
 
@@ -317,7 +336,7 @@ test('PUB-06 封面：列表卡左 240px 16:9、详情 ≤400px、无封面占�
 })
 
 // ---------------------------------------------------------------- PUB-07
-test('PUB-07 精选区结构：柠绿胶囊标题 + 副标题 + 查看全部 + 1 大 9 小 + 倒序', async ({ page, request }, testInfo) => {
+test('PUB-07 精选区结构：一行一条 + 左图右文 + 无区块标题胶囊 + 查看全部 + 倒序', async ({ page, request }, testInfo) => {
   const ev: Ev = []
   const shot = shooter('w5', testInfo)
   const problems = pubGuard(page)
@@ -330,31 +349,44 @@ test('PUB-07 精选区结构：柠绿胶囊标题 + 副标题 + 查看全部 + 1
   const head = await page.evaluate(() => {
     const s = document.querySelector('[data-testid="featured-section"]') as HTMLElement | null
     if (!s) return null
-    const pill = s.querySelector('.public-featured-title, [class*="pill"], [class*="eyebrow"]') as HTMLElement | null
-    const cs = pill ? getComputedStyle(pill) : null
-    const viewAll = Array.from(s.querySelectorAll('a,button')).map((e) => (e.textContent ?? '').trim()).filter((t) => /查看全部|View all|Voir tout|Alle|Смотреть/.test(t))
+    const rows = Array.from(s.querySelectorAll('[data-testid="featured-large-card"], [data-testid="featured-small"]')) as HTMLElement[]
+    const first = rows[0] ?? null
+    const cover = first?.querySelector('.public-featured-cover-row') as HTMLElement | null
+    const title = first?.querySelector('.public-featured-row-title') as HTMLElement | null
+    // 旧行为回归守卫：精选区不允许再出现「大标题胶囊/副标题」头部结构
+    const legacyPill = s.querySelector('.public-featured-title, .public-featured-subtitle') as HTMLElement | null
+    const badge = first?.querySelector('.public-featured-badge, .pf-row-index') as HTMLElement | null
+    const badgeCs = badge ? getComputedStyle(badge) : null
     return {
-      pillText: pill?.textContent?.trim() ?? '',
-      pillBg: cs?.backgroundColor ?? '',
-      pillColor: cs?.color ?? '',
-      pillRadius: cs?.borderRadius ?? '',
-      subtitles: Array.from(s.querySelectorAll('[class*="subtitle"], [class*="sub-title"], p')).map((e) => (e.textContent ?? '').trim()).filter(Boolean).slice(0, 3),
-      viewAll,
-      largeCount: s.querySelectorAll('[data-testid="featured-large-card"]').length,
-      smallCount: s.querySelectorAll('[data-testid="featured-small-grid"] > *').length,
-      gridCols: s.querySelector('[data-testid="featured-small-grid"]') ? getComputedStyle(s.querySelector('[data-testid="featured-small-grid"]') as HTMLElement).gridTemplateColumns : '',
+      rowCount: rows.length,
+      legacyPillText: legacyPill?.textContent?.trim() ?? '',
+      badgeBg: badgeCs?.backgroundColor ?? '',
+      badgeColor: badgeCs?.color ?? '',
+      badgeRadius: badgeCs?.borderRadius ?? '',
+      viewAll: Array.from(s.querySelectorAll('a,button')).map((e) => (e.textContent ?? '').trim()).filter((t) => /查看全部|View all|Voir tout|Alle|Смотреть/.test(t)),
+      firstCover: cover ? { w: Math.round(cover.getBoundingClientRect().width), left: Math.round(cover.getBoundingClientRect().left), h: Math.round(cover.getBoundingClientRect().height) } : null,
+      firstTitleRightOfCover: cover && title ? title.getBoundingClientRect().left >= cover.getBoundingClientRect().right - 2 : false,
+      rowTitleText: (title?.textContent ?? '').trim().slice(0, 30),
     }
   })
   note(ev, '精选区头部/数量', head)
   if (head) {
-    await expect.soft(head.pillBg.replace(/\s/g, ''), '胶囊标题底色应柠绿 rgb(204,255,0)').toMatch(/204,\s*255,\s*0|#ccff00/i)
-    await expect.soft(head.pillColor.replace(/\s/g, ''), '胶囊标题文字应 #121316').toMatch(/18,\s*19,\s*22/)
-    await expect.soft(head.pillRadius, '胶囊标题应为全圆角').toMatch(/999|9999|50%/)
-    await expect.soft(head.subtitles.length, '缺少副标题').toBeGreaterThan(0)
+    // 最新需求：精选一行一条（列表布局），首条=大卡，其余=小卡行，最多 10 条
+    await expect.soft(head.rowCount, '精选应为 1 大 + ≤9 小条').toBeLessThanOrEqual(10)
+    await expect.soft(head.rowCount, '至少 1 条精选').toBeGreaterThanOrEqual(1)
+    // 无精选区块标题胶囊（柠绿大标题已移除）
+    await expect.soft(head.legacyPillText, '精选区不应再有区块标题胶囊/副标题').toBe('')
+    // 「查看全部 →」保留
     await expect.soft(head.viewAll.length, '缺少「查看全部 →」').toBeGreaterThan(0)
-    await expect.soft(head.largeCount, '应有 1 张大卡').toBe(1)
-    await expect.soft(head.smallCount, '小卡最多 9 张').toBeLessThanOrEqual(9)
-    await expect.soft(Number(head.gridCols.split(' ').length), '小卡应为 3 列').toBe(3)
+    // 首条左图右文：封面列在标题左侧
+    if (head.firstCover) {
+      await expect.soft(head.firstCover.w, '首条封面列宽应固定 300px（左图）').toBeGreaterThanOrEqual(240)
+      await expect.soft(head.firstTitleRightOfCover, '标题应在封面右侧（左图右文）').toBe(true)
+    }
+    // FEATURED 徽章柠绿底深色字
+    await expect.soft(head.badgeBg.replace(/\s/g, ''), 'FEATURED 徽章底色应柠绿 rgb(204,255,0)').toMatch(/204,\s*255,\s*0|#ccff00/i)
+    await expect.soft(head.badgeColor.replace(/\s/g, ''), 'FEATURED 徽章文字应 #121316').toMatch(/18,\s*19,\s*22/)
+    await expect.soft(head.badgeRadius, '行内 FEATURED 标记应为圆角徽记').toMatch(/4px|6px|999|9999|50%/)
   }
 
   const largeW = await page.evaluate(() => {
@@ -367,7 +399,8 @@ test('PUB-07 精选区结构：柠绿胶囊标题 + 副标题 + 查看全部 + 1
   if (largeW) {
     const pct = (largeW.large / largeW.section) * 100
     note(ev, '大卡占比 %', Math.round(pct * 10) / 10)
-    await expect.soft(Math.abs(pct - 40), '大卡应约 40% 宽').toBeLessThanOrEqual(8)
+    // 最新需求：一行一条，首条大卡占满整行
+    await expect.soft(pct, '大卡应占满一行（≥98%）').toBeGreaterThanOrEqual(98)
   }
 
   // 最多 10 篇 + 按 featured_at 倒序
@@ -463,7 +496,7 @@ test('PUB-09 精选卡片悬停上浮+阴影加深，点击进入详情', async 
 })
 
 // ---------------------------------------------------------------- PUB-10
-test('PUB-10 390×844 精选区：大卡占满一行、小卡 1 列、无横向溢出', async ({ page }, testInfo) => {
+test('PUB-10 390×844 精选区：大卡占满一行、左图右文保留、无横向溢出', async ({ page }, testInfo) => {
   const ev: Ev = []
   const shot = shooter('w5', testInfo)
   await page.setViewportSize({ width: 390, height: 844 })
@@ -472,18 +505,28 @@ test('PUB-10 390×844 精选区：大卡占满一行、小卡 1 列、无横向�
   await shot(page, 'mobile')
   const m = await page.evaluate(() => {
     const l = document.querySelector('[data-testid="featured-large-card"]') as HTMLElement | null
-    const g = document.querySelector('[data-testid="featured-small-grid"]') as HTMLElement | null
-    const cols = g ? getComputedStyle(g).gridTemplateColumns.split(' ').length : -1
+    const g = document.querySelector('[data-testid="featured-list"]') as HTMLElement | null
+    const cover = l?.querySelector('.public-featured-cover-row') as HTMLElement | null
+    const title = l?.querySelector('.public-featured-row-title') as HTMLElement | null
+    const listCols = g ? getComputedStyle(g).flexDirection : ''
     return {
       largeW: l ? Math.round(l.getBoundingClientRect().width) : -1,
       viewportW: document.documentElement.clientWidth,
-      cols,
+      coverW: cover ? Math.round(cover.getBoundingClientRect().width) : -1,
+      titleRightOfCover: cover && title ? title.getBoundingClientRect().left >= cover.getBoundingClientRect().right - 2 : false,
+      listLayout: listCols,
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
     }
   })
   note(ev, '390 视口测量', m)
   await expect.soft(m.largeW, '大卡应占满一行').toBeGreaterThanOrEqual(m.viewportW - 48)
-  await expect.soft(m.cols, '小卡在 390 下应为 1 列').toBe(1)
+  // 最新需求：一行一条列表布局
+  await expect.soft(m.listLayout, '精选列表应为纵向一列（flex-direction: column）').toBe('column')
+  // 左图右文在窄屏仍保留（封面列缩到 240px）
+  if (m.coverW > 0) {
+    await expect.soft(m.coverW, '390 下封面列 ≥200px').toBeGreaterThanOrEqual(200)
+    await expect.soft(m.titleRightOfCover, '标题在封面右侧').toBe(true)
+  }
   await expect.soft(m.overflow, '390 视口横向溢出').toBeLessThanOrEqual(1)
   await attachEv(testInfo, ev)
 })
@@ -763,6 +806,15 @@ test('PUB-14 全站正文对比度抽样（每页前 30 个文本节点，双主
         })
       }, CONTRAST_SRC)
       const bad = (r as any[]).filter((x) => x.ratio !== null && x.ratio < (x.large ? 3 : 4.5))
+      if (theme === 'dark' && p.startsWith('/articles/zh/')) {
+        const sheet = await page.locator('.neo-article-sheet').evaluate((el) => {
+          const bg = getComputedStyle(el).backgroundColor
+          const rgb = bg.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [255, 255, 255]
+          return { bg, channelMax: Math.max(...rgb) }
+        })
+        note(ev, '深色详情整卡背景', sheet)
+        await expect.soft(sheet.channelMax, `深色详情卡片仍接近白底：${sheet.bg}`).toBeLessThan(80)
+      }
       note(ev, `[${theme}] ${p} 抽样 ${r.length} 条，违规 ${bad.length}`, bad.slice(0, 8))
       for (const b of bad as any[]) {
         await expect.soft(b.ratio, `[${theme}] ${p}「${b.text}」对比度 ${b.ratio} < ${b.large ? 3 : 4.5}（fg ${b.color} / bg ${b.bg}）`).toBeGreaterThanOrEqual(b.large ? 3 : 4.5)

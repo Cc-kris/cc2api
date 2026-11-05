@@ -50,3 +50,19 @@ html.dark .chart-card .chart-legend,
 html.dark .chart-card .chart-legend span {
   color: #c3cad8 !important;
 }
+
+/* 深色模式下 SvgChart 图例文字与数值高对比度适配，以及 KPI 卡片图标背景深色衬底 */
+html.dark .chart-card .svg-chart__legend li,
+html.dark .chart-card .svg-chart__legend-label {
+  color: #CBD5E1 !important;
+}
+html.dark .chart-card .svg-chart__legend-val {
+  color: #F8FAFC !important;
+}
+html.dark .chart-card .svg-chart__legend-val em {
+  color: #94A3B8 !important;
+}
+.metric-card .metric-icon {
+  background: rgba(18, 19, 22, 0.42) !important;
+  color: #FFFFFF !important;
+}

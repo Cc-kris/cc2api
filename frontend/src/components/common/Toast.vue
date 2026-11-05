@@ -135,7 +135,7 @@ const getBadgeBgClass = (type: string): string => {
     case 'error':
       return 'bg-[#FF3B30] text-white'
     case 'success':
-      return 'bg-[#CCFF00]'
+      return 'bg-[#16A34A] text-white'
     case 'warning':
       return 'bg-[#FF9500]'
     default:
@@ -148,7 +148,7 @@ const getTagClass = (type: string): string => {
     case 'error':
       return 'bg-[#FF3B30] text-white'
     case 'success':
-      return 'bg-[#CCFF00] text-[#121316]'
+      return 'bg-[#16A34A] text-white'
     case 'warning':
       return 'bg-[#FF9500] text-white'
     default:
@@ -159,7 +159,7 @@ const getTagClass = (type: string): string => {
 const getProgressBarColor = (type: string): string => {
   switch (type) {
     case 'success':
-      return 'bg-[#00C896]'
+      return 'bg-[#16A34A]'
     case 'error':
       return 'bg-[#FF3B30]'
     case 'warning':

@@ -1,5 +1,5 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test'
-import { expectClean, guard, openContentTab, realLogin, reloadToTab, shooter, stamp } from '../real/real-helpers'
+import { expectClean, guard, openContentTab, realLogin, reloadToTab, shooter, stamp, waitWrite } from '../real/real-helpers'
 
 /**
  * v0.4 W3 验收：新闻源 / 抓取规则 / 自动化设置 / 分类标签 / 按钮清单（SRC-01 ~ SRC-13）
@@ -726,8 +726,8 @@ test('SRC-11 分类管理：新建/改名/删除都在弹窗内完成，删除�
   await expect.soft(await dlg.count(), '新建分类没有弹窗').toBeGreaterThan(0)
   await shot(page, 'create-dialog')
   await dlg.locator('input').first().fill(nm)
-  await dlg.getByRole('button', { name: /保存|创建/ }).first().click()
-  await page.waitForTimeout(1000)
+  await waitWrite(page, 'POST', 'taxonomy/mutate', () => dlg.getByRole('button', { name: /保存|创建/ }).first().click())
+  await expect(dlg).toHaveCount(0)
   note(ev, '新建后弹窗关闭', (await dlg.count()) === 0)
 
   // 分类列表 10 条/页，历史数据会把新建项挤到第 2 页；回读时用搜索框定位，避免分页干扰
@@ -735,10 +735,13 @@ test('SRC-11 分类管理：新建/改名/删除都在弹窗内完成，删除�
     await page.reload()
     await openContentTab(page, TAX)
     await page.locator('.subnav button', { hasText: '文章分类' }).first().click()
-    await page.waitForTimeout(700)
+    const searchBox = page.locator('.taxonomy-pane input.search-input').first()
+    await expect(searchBox).toBeVisible()
+    // refresh() 会异步恢复上次的 taxonomyView/taxonomySearch；先等旧值回显，避免新输入被覆盖。
+    await page.waitForTimeout(900)
     if (q) {
-      await page.locator('.taxonomy-pane input.search-input').first().fill(q)
-      await page.waitForTimeout(600)
+      await searchBox.fill(q)
+      await expect(searchBox).toHaveValue(q)
     }
   }
 
@@ -750,8 +753,8 @@ test('SRC-11 分类管理：新建/改名/删除都在弹窗内完成，删除�
   await row.first().getByRole('button', { name: '编辑' }).click()
   await page.waitForTimeout(500)
   await dlg.locator('input').first().fill(nm2)
-  await dlg.getByRole('button', { name: /保存|创建/ }).first().click()
-  await page.waitForTimeout(1000)
+  await waitWrite(page, 'POST', 'taxonomy/mutate', () => dlg.getByRole('button', { name: /保存|创建/ }).first().click())
+  await expect(dlg).toHaveCount(0)
   await reopen(nm2)
   const renamed = await page.locator('table tbody tr', { hasText: nm2 }).count()
   note(ev, '改名后回读', renamed)
@@ -764,8 +767,8 @@ test('SRC-11 分类管理：新建/改名/删除都在弹窗内完成，删除�
   note(ev, '删除确认文案', delText.replace(/\n/g, ' ').slice(0, 80))
   await expect.soft(delText, '删除没有明确确认弹窗').toMatch(/删除/)
   await shot(page, 'delete-confirm')
-  await page.locator('.taxonomy-dialog').getByRole('button', { name: /确认删除|删除/ }).last().click()
-  await page.waitForTimeout(1200)
+  await waitWrite(page, 'POST', 'taxonomy/mutate', () => page.locator('.taxonomy-dialog').getByRole('button', { name: /确认删除|删除/ }).last().click())
+  await expect(page.locator('.taxonomy-dialog')).toHaveCount(0)
   await reopen(nm2)
   const left = await page.locator('table tbody tr', { hasText: nm2 }).count()
   note(ev, '删除后残留行', left)

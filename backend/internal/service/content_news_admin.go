@@ -540,6 +540,9 @@ func (s *ContentNewsAdminService) RestoreNewsSource(ctx context.Context, id int6
 func (s *ContentNewsAdminService) ListNewsItems(ctx context.Context, filters ContentNewsListFilters, page, pageSize int, includeDeleted bool) (ContentPage[ContentNewsItem], error) {
 	page, pageSize = normalizeContentPage(page, pageSize)
 	items, total, err := s.repo.ListNewsItems(ctx, filters, page, pageSize, includeDeleted)
+	for i := range items {
+		cleanContentNewsItemSummary(&items[i])
+	}
 	return makeContentPage(items, total, page, pageSize), err
 }
 
@@ -547,10 +550,13 @@ func (s *ContentNewsAdminService) GetNewsItem(ctx context.Context, id int64, inc
 	if id <= 0 {
 		return nil, ErrContentNewsItemNotFound
 	}
-	return s.repo.GetNewsItem(ctx, id, includeDeleted)
+	item, err := s.repo.GetNewsItem(ctx, id, includeDeleted)
+	cleanContentNewsItemSummary(item)
+	return item, err
 }
 
 func (s *ContentNewsAdminService) CreateNewsItem(ctx context.Context, item *ContentNewsItem) (*ContentNewsItem, error) {
+	cleanContentNewsItemSummary(item)
 	sanitizeNewsItemBody(item)
 	if err := validateNewsItem(item); err != nil {
 		return nil, err
@@ -573,6 +579,7 @@ func (s *ContentNewsAdminService) UpdateNewsItem(ctx context.Context, item *Cont
 	if item == nil || item.ID <= 0 {
 		return nil, ErrContentNewsItemNotFound
 	}
+	cleanContentNewsItemSummary(item)
 	sanitizeNewsItemBody(item)
 	if err := validateNewsItem(item); err != nil {
 		return nil, err

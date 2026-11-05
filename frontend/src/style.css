@@ -975,10 +975,17 @@ select.input,
 textarea.input {
   background-color: #FFFFFF !important;
   border: 2px solid #121316 !important;
-  border-radius: 12px !important;
+  border-radius: 8px !important;
   box-shadow: 2px 2px 0px rgba(18, 19, 22, 0.15) !important;
   font-weight: 600 !important;
   color: #121316 !important;
+}
+.input:not(textarea) {
+  box-sizing: border-box !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
 }
 .dark .input,
 .dark select.input,
@@ -987,7 +994,8 @@ textarea.input {
   border-color: #475569 !important;
   color: #F8FAFC !important;
 }
-.input:focus {
+.input:focus,
+html.dark .input:focus {
   border-color: #2563EB !important;
   box-shadow: 3px 3px 0px #2563EB !important;
   outline: none !important;
@@ -1147,6 +1155,102 @@ html.dark .stat-value {
   color: #F8FAFC !important;
 }
 
+/* 公开阅读页的纸张、目录和推荐卡片必须随主题一起反色。 */
+html.dark .neo-reader-layout .neo-article-sheet {
+  background: #1E2026;
+  border-color: #0B0D12;
+  box-shadow: 8px 8px 0 #0B0D12;
+  color: #F1F5F9;
+}
+html.dark .neo-reader-layout .article-headline,
+html.dark .neo-reader-layout .neo-prose-body,
+html.dark .neo-reader-layout .neo-prose-body h1,
+html.dark .neo-reader-layout .neo-prose-body h2,
+html.dark .neo-reader-layout .neo-prose-body h3,
+html.dark .neo-reader-layout .neo-prose-body h4,
+html.dark .neo-reader-layout .author-name,
+html.dark .neo-reader-layout .more-title,
+html.dark .neo-reader-layout .more-card-title,
+html.dark .neo-reader-layout .cta-banner-title {
+  color: #F8FAFC !important;
+}
+html.dark .neo-reader-layout .article-lede {
+  background: #172033;
+  color: #C3D0E8;
+}
+html.dark .neo-reader-layout .article-toc,
+html.dark .neo-reader-layout .back-link,
+html.dark .neo-reader-layout .action-pill-btn,
+html.dark .neo-reader-layout .more-all-link {
+  background: #171B24;
+  border-color: #0B0D12;
+  color: #F1F5F9;
+}
+html.dark .neo-reader-layout .toc-link-chip,
+html.dark .neo-reader-layout .article-read-time,
+html.dark .neo-reader-layout .tag-chip,
+html.dark .neo-reader-layout .more-card-cat {
+  background: #172033;
+  border-color: #3F4C63;
+  color: #93C5FD;
+}
+html.dark .neo-reader-layout .toc-links a,
+html.dark .neo-reader-layout .more-card-go {
+  color: #93C5FD;
+}
+html.dark .neo-reader-layout .article-author-bar,
+html.dark .neo-reader-layout .neo-prose-body h2 {
+  border-color: #465167;
+}
+html.dark .neo-reader-layout .neo-prose-body blockquote {
+  background: #172033;
+  color: #D5E1F3;
+}
+html.dark .neo-reader-layout .neo-prose-body code {
+  background: #111827;
+  color: #93C5FD;
+}
+html.dark .neo-reader-layout .neo-prose-body pre,
+html.dark .neo-reader-layout .neo-prose-body pre code {
+  background: #111318;
+  color: #F5F2EB;
+}
+html.dark .neo-reader-layout .neo-prose-body th {
+  background: #2B3242;
+  color: #F8FAFC;
+}
+html.dark .neo-reader-layout .neo-prose-body td {
+  border-color: #465167;
+}
+html.dark .neo-reader-layout .article-bottom-cta {
+  background: #171E2C;
+  border-color: #0B0D12;
+  box-shadow: 5px 5px 0 #0B0D12;
+}
+html.dark .neo-reader-layout .cta-banner-sub,
+html.dark .neo-reader-layout .more-card-date,
+html.dark .neo-reader-layout .more-card-summary,
+html.dark .neo-reader-layout .author-role,
+html.dark .neo-reader-layout .article-date {
+  color: #A9B4C7;
+}
+html.dark .neo-reader-layout .more-related-card {
+  background: #22262F;
+  border-color: #0B0D12;
+  box-shadow: 4px 4px 0 #0B0D12;
+  color: #F1F5F9;
+}
+html.dark .neo-reader-layout .more-related-card:hover {
+  background: #29303C;
+}
+html.dark .neo-reader-layout .article-badge,
+html.dark .neo-reader-layout .author-avatar,
+html.dark .neo-reader-layout .cta-banner-badge,
+html.dark .neo-reader-layout .more-badge,
+html.dark .neo-reader-layout .pf-row-index {
+  color: #121316 !important;
+}
+
 .page-description,
 .stat-label,
 .input-hint {
@@ -1214,12 +1318,17 @@ html.dark .card-footer {
 /* 3. 全站按钮 (.btn / 登录注册按钮 / 弹窗按钮) 彻底清除渐变图并统一为首页 Neo-Lab 按钮 */
 .btn {
   border: 2px solid #121316 !important;
-  border-radius: 12px !important;
+  border-radius: 8px !important;
   font-weight: 900 !important;
   background-image: none !important;
   box-shadow: 3px 3px 0px #121316 !important;
   transition: transform 0.14s ease, box-shadow 0.14s ease, background-color 0.14s ease !important;
   letter-spacing: -0.01em !important;
+}
+.btn:focus,
+.btn:focus-visible {
+  outline: 2px solid #2563EB !important;
+  outline-offset: 2px !important;
 }
 .btn:hover:not(:disabled) {
   transform: translate(-1.5px, -1.5px) !important;
@@ -1331,7 +1440,7 @@ button.bg-amber-500 {
 
 /* 4. 输入框 (.input / input / textarea / select) 对齐首页硬边框风格 */
 .input,
-input[type="text"]:not(.select-search-input),
+input[type="text"]:not(.select-search-input):not(.list-search-input),
 input[type="email"],
 input[type="password"],
 input[type="number"],
@@ -1341,14 +1450,25 @@ textarea,
 select {
   background-color: #FFFFFF !important;
   border: 2px solid #121316 !important;
-  border-radius: 12px !important;
+  border-radius: 8px !important;
   color: #121316 !important;
   font-weight: 700 !important;
   box-shadow: 2.5px 2.5px 0px rgba(18, 19, 22, 0.18) !important;
   transition: all 0.15s ease !important;
 }
+.input:hover:not(:disabled),
+input[type="text"]:not(.select-search-input):not(.list-search-input):hover:not(:disabled),
+input[type="email"]:hover:not(:disabled),
+input[type="password"]:hover:not(:disabled),
+input[type="number"]:hover:not(:disabled),
+input[type="url"]:hover:not(:disabled),
+input[type="search"]:hover:not(:disabled),
+textarea:hover:not(:disabled),
+select:hover:not(:disabled) {
+  border-color: #2563EB !important;
+}
 .input:focus,
-input[type="text"]:not(.select-search-input):focus,
+input[type="text"]:not(.select-search-input):not(.list-search-input):focus,
 input[type="email"]:focus,
 input[type="password"]:focus,
 input[type="number"]:focus,
@@ -1360,9 +1480,16 @@ select:focus {
   box-shadow: 3.5px 3.5px 0px #2563EB !important;
   outline: none !important;
 }
+input[aria-invalid="true"],
+textarea[aria-invalid="true"],
+input.input-invalid,
+textarea.input-invalid {
+  border-color: #DC2626 !important;
+  box-shadow: 3px 3px 0px rgba(220, 38, 38, 0.28) !important;
+}
 html.dark .input,
-html.dark input:not([type]),
-html.dark input[type="text"]:not(.select-search-input),
+html.dark input:not([type]):not(.list-search-input),
+html.dark input[type="text"]:not(.select-search-input):not(.list-search-input),
 html.dark input[type="email"],
 html.dark input[type="password"],
 html.dark input[type="number"],
@@ -1669,9 +1796,9 @@ html.dark table tbody tr:hover td {
 .modal-content,
 .dialog-container {
   background-color: #FFFFFF !important;
-  border: 3px solid #121316 !important;
-  border-radius: 22px !important;
-  box-shadow: 9px 9px 0px #121316 !important;
+  border: 2.5px solid #121316 !important;
+  border-radius: 12px !important;
+  box-shadow: 8px 8px 0px #121316 !important;
   overflow: hidden !important;
 }
 html.dark .modal-content,
@@ -1899,11 +2026,7 @@ html.dark .sidebar-link-active > svg {
   border-color: #3B82F6 !important;
   color: #FFFFFF !important;
 }
-html.dark :is(
-  [aria-selected="true"],
-  [aria-current="page"],
-  .bg-white:not(.dark\:bg-dark-800):not(.dark\:bg-dark-900):not(.dark\:bg-dark-700):not(.card):not(.modal-content):not(.dialog-container):not(.sidebar):not(.table-container):not(.dropdown)
-) * {
+html.dark :is([aria-selected="true"], [aria-current="page"]):not(.sidebar-link-active) * {
   color: #121316 !important;
 }
 
@@ -2333,4 +2456,381 @@ html.dark .news-editor .editor-pane,
 html.dark .news-editor .editor-config-col,
 html.dark .news-editor .editor-main-col {
   background: transparent !important;
+}
+
+/* ===== v0.4 全页面深色主题补齐：内容中心表格、AI 创作工作台、文章弹窗卡片 ===== */
+html.dark .table-wrap {
+  background: #181C26 !important;
+  border-color: #CBD5E1 !important;
+  box-shadow: 4px 4px 0px #020617 !important;
+}
+html.dark .table-wrap table th,
+html.dark .table-wrap th:last-child,
+html.dark .table-wrap th.actions-th {
+  background: #1E2638 !important;
+  color: #F8FAFC !important;
+  border-bottom-color: #475569 !important;
+}
+html.dark .table-wrap table td {
+  background: #181C26 !important;
+  color: #F1F5F9 !important;
+  border-bottom-color: rgba(226, 232, 240, 0.12) !important;
+}
+html.dark .table-wrap table tbody tr:hover td {
+  background: #252E42 !important;
+  color: #FFFFFF !important;
+}
+html.dark .table-wrap td.actions-cell {
+  background: #181C26 !important;
+  box-shadow: -2px 0 6px rgba(0, 0, 0, 0.35) !important;
+}
+html.dark .top-tabs-title {
+  color: #F8FAFC !important;
+}
+html.dark .tag-chip,
+html.dark .news-editor .tag-chip,
+html.dark .modal-drawer.article-editor-modal .tag-chip {
+  background: #1E293B !important;
+  color: #93C5FD !important;
+  border-color: #60A5FA !important;
+}
+html.dark .tag-chip button,
+html.dark .news-editor .tag-chip .tag-remove {
+  color: #E2E8F0 !important;
+}
+html.dark .news-editor .combo-trigger {
+  background: #0F1219 !important;
+  color: #F8FAFC !important;
+  border-color: #CBD5E1 !important;
+}
+html.dark .news-editor .combo-menu {
+  background: #181C26 !important;
+  border-color: #64748B !important;
+}
+html.dark .news-editor .combo-option {
+  background: transparent !important;
+  color: #F8FAFC !important;
+}
+html.dark .news-editor .combo-option:hover,
+html.dark .news-editor .combo-option[aria-selected="true"] {
+  background: #252E42 !important;
+  border-color: #60A5FA !important;
+}
+html.dark .table-wrap .title-link {
+  color: #F8FAFC !important;
+}
+html.dark .table-wrap .title-link:hover {
+  color: #60A5FA !important;
+}
+html.dark .table-wrap .summary-clamp,
+html.dark .table-wrap td small {
+  color: #CBD5E1 !important;
+}
+html.dark .table-wrap .locale-tag {
+  background: #1E293B !important;
+  color: #E2E8F0 !important;
+  border-color: #64748B !important;
+}
+html.dark .table-footer,
+html.dark .bulk-bar {
+  background: #141822 !important;
+  border-top-color: #475569 !important;
+  color: #E2E8F0 !important;
+}
+html.dark .page-info {
+  color: #E2E8F0 !important;
+}
+
+/* AI 创作工作台深色适配 */
+html.dark .panel-header-desc,
+html.dark .ai-form-card,
+html.dark .ai-preview-card,
+html.dark .task-list,
+html.dark .current-task-card {
+  background: #181C26 !important;
+  border-color: #CBD5E1 !important;
+  color: #F8FAFC !important;
+  box-shadow: 3px 3px 0px #020617 !important;
+}
+html.dark .panel-header-desc h2,
+html.dark .ai-col-header h3,
+html.dark .ai-empty h4,
+html.dark .generating-title,
+html.dark .result-header h4,
+html.dark .block-label,
+html.dark .task-item-topic,
+html.dark .task-detail-topic {
+  color: #F8FAFC !important;
+}
+html.dark .panel-header-desc p,
+html.dark .ai-empty p,
+html.dark .task-date,
+html.dark .task-label {
+  color: #CBD5E1 !important;
+}
+html.dark .task-item {
+  background: #11151F !important;
+  border-color: #334155 !important;
+  color: #F1F5F9 !important;
+}
+html.dark .task-item.active {
+  background: #1E293B !important;
+  border-color: #60A5FA !important;
+}
+html.dark .ai-topic-input,
+html.dark .ai-ref-textarea,
+html.dark .ref-news-list,
+html.dark .ai-form-card input,
+html.dark .ai-form-card select {
+  background: #0F1219 !important;
+  border-color: #475569 !important;
+  color: #F8FAFC !important;
+}
+html.dark .ref-news-item {
+  color: #E2E8F0 !important;
+}
+html.dark .ref-news-item:hover {
+  background: #1E293B !important;
+}
+
+/* 文章编辑弹窗内部卡片深色适配 */
+html.dark .modal-drawer.article-editor-modal .meta-card {
+  background: #1E2433 !important;
+  border-color: #475569 !important;
+  color: #F8FAFC !important;
+}
+html.dark .modal-drawer.article-editor-modal .meta-card-header h4,
+html.dark .modal-drawer.article-editor-modal .modal-drawer-header h3 {
+  color: #F8FAFC !important;
+}
+html.dark .modal-drawer.article-editor-modal .serp-preview {
+  background: #0F1219 !important;
+  border-color: #334155 !important;
+}
+html.dark .modal-drawer.article-editor-modal .serp-title {
+  color: #93C5FD !important;
+}
+html.dark .modal-drawer.article-editor-modal .serp-url {
+  color: #4ADE80 !important;
+}
+html.dark .modal-drawer.article-editor-modal .serp-desc,
+html.dark .modal-drawer.article-editor-modal .seo-score-tips,
+html.dark .modal-drawer.article-editor-modal .advanced-seo summary {
+  color: #CBD5E1 !important;
+}
+html.dark .rich-text-stats {
+  color: #CBD5E1 !important;
+}
+
+/* ===== v0.4 第二轮深色细节收口 ===== */
+html.dark .news-editor .news-translation-panel {
+  background: #1B2230 !important;
+  border-color: #334155 !important;
+  color: #F8FAFC !important;
+}
+html.dark .news-editor .news-trans-summary {
+  color: #CBD5E1 !important;
+}
+html.dark .news-editor .news-trans-toggle-text {
+  color: #60A5FA !important;
+}
+html.dark .news-editor .editor-config-col > .config-block {
+  background: #1E2433 !important;
+  border-color: #475569 !important;
+  color: #F8FAFC !important;
+  box-shadow: 3px 3px 0 #020617 !important;
+}
+html.dark .news-editor .config-title {
+  color: #F8FAFC !important;
+}
+html.dark .news-editor .locale-checkbox,
+html.dark .news-editor .locale-checkbox span {
+  background: #141822 !important;
+  color: #F1F5F9 !important;
+  border-color: #475569 !important;
+}
+html.dark .rich-text-toolbar-row {
+  background: #1B2230 !important;
+  border-bottom-color: #334155 !important;
+}
+html.dark .rich-text-adv-tool,
+html.dark .rich-text-adv-tool .rich-text-tool-icon {
+  color: #E2E8F0 !important;
+}
+html.dark .rich-text-stats {
+  color: #CBD5E1 !important;
+}
+html.dark .modal-drawer.article-editor-modal .mini-create-btn,
+html.dark .modal-drawer.article-editor-modal .upload-file-btn,
+html.dark .modal-drawer.article-editor-modal .btn-clear {
+  background: #1E293B !important;
+  color: #F8FAFC !important;
+  border-color: #64748B !important;
+  box-shadow: 2px 2px 0 #020617 !important;
+}
+html.dark .modal-drawer.article-editor-modal .seo-score-badge,
+html.dark .modal-drawer.article-editor-modal .seo-score-badge .seo-score-num,
+html.dark .modal-drawer.article-editor-modal .seo-score-badge .seo-score-label {
+  color: #121316 !important;
+}
+html.dark .required-star {
+  color: #F87171 !important;
+}
+html.dark .tag-input-hint,
+html.dark .table-wrap .muted,
+html.dark .content-center .muted {
+  color: #CBD5E1 !important;
+}
+html.dark .slider-switch .switch-text,
+html.dark .source-dialog .switch-text,
+html.dark .settings .switch-text {
+  color: #F1F5F9 !important;
+}
+html.dark .ai-col {
+  background: #181C26 !important;
+  border-color: #CBD5E1 !important;
+  color: #F8FAFC !important;
+}
+html.dark .ai-col-header {
+  border-bottom-color: #475569 !important;
+}
+html.dark .ai-col-header h3 {
+  color: #F8FAFC !important;
+}
+
+/* ===== v0.4 第三轮深色容器全覆盖：杜绝深色模式下残留白底大色块 ===== */
+html.dark .content-center .tabs,
+html.dark .admin-page .tabs {
+  background: #181C26 !important;
+  border-color: #475569 !important;
+  box-shadow: 4px 4px 0 #020617 !important;
+}
+html.dark .content-center .tabs button:not(.active),
+html.dark .admin-page .tabs button:not(.active) {
+  background: transparent !important;
+  color: #CBD5E1 !important;
+}
+html.dark .workspace {
+  background: #141822 !important;
+  border-color: #475569 !important;
+  color: #F8FAFC !important;
+  box-shadow: 6px 6px 0 #020617 !important;
+}
+html.dark .subnav {
+  background: #1B2230 !important;
+  border-color: #475569 !important;
+}
+html.dark .subnav button:not(.selected) {
+  background: transparent !important;
+  color: #CBD5E1 !important;
+}
+html.dark .select-trigger {
+  background: #0F1219 !important;
+  border-color: #64748B !important;
+  color: #F8FAFC !important;
+}
+html.dark .select-trigger-disabled {
+  background: #1E2433 !important;
+  color: #94A3B8 !important;
+}
+html.dark .toolbar input,
+html.dark .toolbar select,
+html.dark .settings input,
+html.dark .settings select {
+  background: #0F1219 !important;
+  border-color: #64748B !important;
+  color: #F8FAFC !important;
+}
+html.dark .secondary-button {
+  background: #1E293B !important;
+  color: #F8FAFC !important;
+  border-color: #64748B !important;
+  box-shadow: 2px 2px 0 #020617 !important;
+}
+html.dark .link:not(.danger) {
+  background: #1E293B !important;
+  color: #93C5FD !important;
+  border-color: #475569 !important;
+  box-shadow: 2px 2px 0 #020617 !important;
+}
+html.dark .link.danger,
+html.dark .danger-button {
+  background: #3B181E !important;
+  color: #FCA5A5 !important;
+  border-color: #7F1D1D !important;
+  box-shadow: 2px 2px 0 #020617 !important;
+}
+html.dark .source-dialog .modal-fixed-footer,
+html.dark .source-dialog .form-actions {
+  background: #171B26 !important;
+  border-top-color: #334155 !important;
+}
+html.dark .source-dialog .dialog-close,
+html.dark .ai-config-dialog .ai-dialog-close,
+html.dark .modal-drawer.article-editor-modal .close-btn {
+  background: #1E293B !important;
+  color: #F8FAFC !important;
+  border-color: #64748B !important;
+}
+html.dark .modal-drawer.article-editor-modal .tag-input,
+html.dark .news-editor .tag-input {
+  background: #0F1219 !important;
+  border-color: #64748B !important;
+  color: #F8FAFC !important;
+}
+html.dark .modal-drawer.article-editor-modal .tag-input input,
+html.dark .news-editor .tag-input input,
+.tag-input input {
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+html.dark .list-search-input,
+.list-search-input {
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+html.dark .modal-drawer.article-editor-modal .body-mode-switch {
+  background: #0F1219 !important;
+  border-color: #64748B !important;
+}
+html.dark .modal-drawer.article-editor-modal .body-mode-switch button:not(.active) {
+  color: #CBD5E1 !important;
+}
+html.dark .modal-drawer.article-editor-modal .switch-btn:not(.on) {
+  background: #334155 !important;
+}
+html.dark .ai-config-list li {
+  background: #181C26 !important;
+  border-color: #475569 !important;
+  color: #F8FAFC !important;
+}
+html.dark .ai-config-summary > span,
+html.dark .ai-config-summary small,
+html.dark .ai-config-header p {
+  color: #CBD5E1 !important;
+}
+html.dark .ai-config-dialog {
+  background: #171B26 !important;
+  border-color: #CBD5E1 !important;
+  color: #F8FAFC !important;
+  box-shadow: 6px 6px 0 #020617 !important;
+}
+html.dark .ai-config-dialog h3,
+html.dark .ai-config-dialog .ai-field-label {
+  color: #F8FAFC !important;
+}
+html.dark .ai-config-dialog header p {
+  color: #CBD5E1 !important;
+}
+html.dark .ai-config-dialog input,
+html.dark .ai-config-dialog textarea {
+  background: #0F1219 !important;
+  border-color: #64748B !important;
+  color: #F8FAFC !important;
+}
+html.dark .ai-config-dialog .ai-dialog-footer {
+  background: #1B2230 !important;
+  border-top-color: #334155 !important;
 }

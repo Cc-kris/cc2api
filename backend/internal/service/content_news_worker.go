@@ -948,9 +948,9 @@ func buildFetchedContentNewsItem(source *ContentNewsSource, entry ContentNewsFee
 	if canonical == "" {
 		return nil, ErrContentNewsFeedInvalid
 	}
-	summary := strings.TrimSpace(entry.Summary)
+	summary := CleanContentNewsSummary(entry.Summary)
 	if summary == "" {
-		summary = contentNewsSummary(bodyText)
+		summary = CleanContentNewsSummary(bodyText)
 	}
 	hash := contentNewsHash(canonical + "\n" + entry.Title + "\n" + bodyText)
 	bodyHash := contentNewsHash(bodyText)
@@ -1136,11 +1136,7 @@ func contentNewsSlug(title, hash string) string {
 }
 
 func contentNewsSummary(text string) string {
-	value := []rune(strings.TrimSpace(text))
-	if len(value) > 220 {
-		return strings.TrimSpace(string(value[:220]))
-	}
-	return string(value)
+	return CleanContentNewsSummary(text)
 }
 
 func optionalString(value string) *string {

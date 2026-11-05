@@ -110,7 +110,11 @@ function choose(value: string) { add(value); nextTick(focus) }
 </template>
 <style scoped>
 .tag-input-wrap{display:flex;flex-direction:column;gap:4px}
-.tag-input{position:relative;display:flex;flex-wrap:wrap;gap:6px;min-height:44px;padding:6px 8px;border:2px solid #121316;border-radius:10px;background:#fff}.tag-input:focus-within{box-shadow:2px 2px 0 #ccff00}.tag-input input{flex:1;min-width:120px;border:0;outline:0;padding:5px;font:inherit}.tag-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 7px;border:1.5px solid #121316;border-radius:6px;background:#edf4ff;font-size:12px;font-weight:700}.tag-chip button{border:0;background:transparent;cursor:pointer;font-size:16px}.tag-suggestions{position:absolute;z-index:20;top:calc(100% + 4px);left:0;right:0;margin:0;padding:5px;border:2px solid #121316;border-radius:9px;background:#fff;list-style:none;box-shadow:3px 3px 0 #121316}.tag-suggestions li{padding:7px;cursor:pointer}.tag-suggestions li.active,.tag-suggestions li:hover{background:#ccff00}
+.tag-input{position:relative;display:flex;flex-wrap:wrap;gap:6px;min-height:44px;padding:6px 8px;border:2px solid #121316;border-radius:10px;background:#fff}.tag-input:focus-within{box-shadow:2px 2px 0 #ccff00}.tag-input input{flex:1;min-width:120px;border:0;outline:0;padding:5px;font:inherit}.tag-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 7px;border:1.5px solid #121316;border-radius:6px;background:#edf4ff;color:#121316;font-size:12px;font-weight:700}.tag-chip button{border:0;background:transparent;color:inherit;cursor:pointer;font-size:16px;line-height:1}.tag-suggestions{position:absolute;z-index:20;top:calc(100% + 4px);left:0;right:0;margin:0;padding:5px;border:2px solid #121316;border-radius:9px;background:#fff;color:#121316;list-style:none;box-shadow:3px 3px 0 #121316}.tag-suggestions li{padding:7px;border-radius:6px;cursor:pointer}.tag-suggestions li.active,.tag-suggestions li:hover{background:#ccff00;color:#121316}
+:global(html.dark) .tag-chip{background:#1e293b;color:#93c5fd;border-color:#60a5fa}
+:global(html.dark) .tag-chip button{color:#e2e8f0}
+:global(html.dark) .tag-suggestions{background:#181c26;color:#f8fafc;border-color:#64748b;box-shadow:3px 3px 0 #020617}
+:global(html.dark) .tag-suggestions li.active,:global(html.dark) .tag-suggestions li:hover{background:#ccff00;color:#121316}
 .tag-input-hint{margin:0;font-size:11.5px;line-height:1.5;color:#6b7280}
-.tag-input-error{margin:0;font-size:11.5px;line-height:1.5;font-weight:600;color:#b42318}
+.tag-input-error{margin:0;font-size:11.5px;line-height:1.5;font-weight:600;color:#dc2626}
 </style>

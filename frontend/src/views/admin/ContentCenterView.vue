@@ -10,7 +10,7 @@
         v-for="tab in tabs"
         :key="tab"
         :class="{ active: current === tab }"
-        @click="current = tab"
+        @click="onMainTabClick(tab)"
       >
         {{ tab }}
       </button>
@@ -67,7 +67,7 @@
             type="date"
           /><button class="button" @click="loadNews">查询</button>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap table-card-list">
           <table>
             <thead>
               <tr>
@@ -150,9 +150,12 @@
               </tr>
             </tbody>
           </table>
-          <p v-if="listState.news.loading" class="list-state" role="status">正在加载新闻…</p>
+          <div v-if="listState.news.loading" class="list-state" role="status">
+            <span>正在加载新闻…</span>
+            <div class="skeleton-rows" aria-hidden="true"><div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div></div>
+          </div>
           <p v-else-if="listState.news.error" class="list-state list-error" role="alert">{{ listState.news.error }} <button class="link" @click="loadNews()">重试</button></p>
-          <p v-else-if="!news.length" class="empty" role="status">暂无新闻</p>
+          <p v-else-if="!news.length" class="empty" role="status">暂无新闻 <button type="button" class="link empty-action-btn" @click="newsView = 'sources'">+ 新增新闻源</button></p>
           <div class="table-footer">
             <div class="bulk-actions">
               <button
@@ -184,7 +187,7 @@
                 <h2 id="news-editor-title">新闻详情编辑</h2>
                 <p class="muted">编辑抓取正文、摘要、分类标签和 SEO 字段后再发布。</p>
               </div>
-              <button type="button" class="dialog-close" aria-label="关闭新闻编辑" @click="requestCloseNewsEditor">×</button>
+              <button type="button" class="dialog-close close-btn" aria-label="关闭新闻编辑" @click="requestCloseNewsEditor">×</button>
             </div>
 
             <!-- 译文任务：横向折叠条置于两栏之上，避免与正文编辑器在垂直方向重叠 -->
@@ -243,6 +246,7 @@
                           class="news-summary-input"
                           rows="3"
                           placeholder="用简洁段落概括新闻核心内容"
+                          @input="autoGrowTextarea($event)"
                         ></textarea>
                       </label>
                       <label
@@ -439,7 +443,7 @@
         <div class="toolbar source-toolbar">
           <button type="button" class="button source-create-button" @click="openCreateSource">+ 新增新闻源</button>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap table-card-list">
           <table>
             <thead>
               <tr>
@@ -460,7 +464,7 @@
                   <small v-if="source.nextRunAt" class="muted">下次：{{ formatDate(source.nextRunAt) }}</small>
                 </td>
                 <td class="url">{{ source.url }}</td>
-                <td>
+                <td class="source-status-cell">
                   <template v-if="source.deletedAt">已删除</template>
                   <template v-else
                     >{{ source.enabled ? "启用" : "停用"
@@ -471,7 +475,7 @@
                     }}</small></template
                   >
                 </td>
-                <td>
+                <td class="actions-cell">
                   <button
                     v-if="source.deletedAt"
                     class="link"
@@ -492,9 +496,12 @@
               </tr>
             </tbody>
           </table>
-          <p v-if="listState.sources.loading" class="list-state" role="status">正在加载新闻源…</p>
+          <div v-if="listState.sources.loading" class="list-state" role="status">
+            <span>正在加载新闻源…</span>
+            <div class="skeleton-rows" aria-hidden="true"><div class="skeleton-row"></div><div class="skeleton-row"></div></div>
+          </div>
           <p v-else-if="listState.sources.error" class="list-state list-error" role="alert">{{ listState.sources.error }} <button class="link" @click="loadSources()">重试</button></p>
-          <p v-else-if="!sources.length" class="empty" role="status">暂无新闻源</p>
+          <p v-else-if="!sources.length" class="empty" role="status">暂无新闻源 <button type="button" class="link empty-action-btn" @click="openCreateSource">+ 新增新闻源</button></p>
           <div class="table-footer">
             <div></div>
             <Pagination v-if="sourceTotal > 0" :page="sourcePage" :total="sourceTotal" :page-size="20" :show-page-size-selector="false" @update:page="loadSources" />
@@ -506,34 +513,34 @@
             <h2 id="source-editor-title">{{ sourceDialogCreating ? "新增新闻源" : "编辑新闻源" }}</h2>
             <button type="button" class="dialog-close" aria-label="关闭新闻源弹窗" @click="requestCloseSourceDialog">×</button>
           </div>
-          <div class="form-grid">
-            <label>名称<span class="required-star" aria-hidden="true">*</span><input
+          <div class="form-grid source-dialog-body">
+            <label><span class="field-label-inline">名称<span class="required-star" aria-hidden="true">*</span></span><input
                 v-model="sourceDraft.name"
                 :class="{ 'input-invalid': sourceFormErrors.name }"
                 placeholder="来源名称（必填）"
                 aria-required="true"
                 @input="sourceFormErrors.name = ''"
                 @blur="validateSourceField('name')" /><small v-if="sourceFormErrors.name" class="error-text" role="alert">来源名称必填</small></label
-            ><label>链接 URL<span class="required-star" aria-hidden="true">*</span><input
+            ><label><span class="field-label-inline">链接 URL<span class="required-star" aria-hidden="true">*</span></span><input
                 v-model="sourceDraft.url"
                 :class="{ 'input-invalid': sourceFormErrors.url }"
                 placeholder="公开 RSS/Atom/JSON URL（必填）"
                 aria-required="true"
                 @input="sourceFormErrors.url = ''"
                 @blur="validateSourceField('url')" /><small v-if="sourceFormErrors.url" class="error-text" role="alert">{{ sourceFormErrors.url }}</small></label
-            ><label>类型<span class="required-star" aria-hidden="true">*</span><Select
+            ><label><span class="field-label-inline">类型<span class="required-star" aria-hidden="true">*</span></span><Select
                 v-model="sourceDraft.sourceType"
                 :options="sourceTypeOptions"
                 aria-label="新闻源类型"
                 data-test="news-source-type" /></label
-            ><label>默认分类<Select
+            ><label><span class="field-label-inline">默认分类</span><Select
                 v-model="sourceDraft.category"
                 :options="newsCategorySelectOptions"
                 placeholder="不指定"
                 aria-label="默认分类" /></label
-            ><label>语言<input v-model="sourceDraft.language" placeholder="zh-CN" /></label
+            ><label><span class="field-label-inline">语言</span><input v-model="sourceDraft.language" placeholder="zh-CN" /></label
             ><label
-              >抓取间隔（分钟）<input
+              ><span class="field-label-inline">抓取间隔（分钟）</span><input
                 v-model.number="sourceDraft.intervalMinutes"
                 class="interval-input"
                 :class="{ 'input-invalid': sourceFormErrors.interval }"
@@ -545,19 +552,19 @@
                 @input="sourceFormErrors.interval = ''"
                 @blur="validateSourceField('interval')" /><small v-if="sourceFormErrors.interval" class="error-text" role="alert">{{ sourceFormErrors.interval }}</small></label
             ><label
-              >每分钟速率<input
+              ><span class="field-label-inline">每分钟速率</span><input
                 v-model.number="sourceDraft.rateLimitPerMinute"
                 type="number"
                 min="1" /></label
             ><label
-              >抓取规则<Select
+              ><span class="field-label-inline">抓取规则</span><Select
                 :model-value="null"
                 :options="[]"
                 disabled
                 placeholder="暂无可用规则"
                 aria-label="抓取规则" /><small class="field-hint">请先在抓取规则里创建</small></label
             ><label class="source-status-field"
-              >状态<span class="switch slider-switch source-enabled-switch"
+              ><span class="field-label-inline">状态</span><span class="switch slider-switch source-enabled-switch"
                 ><span class="switch-track" aria-hidden="true"></span><input
                   v-model="sourceDraft.enabled"
                   class="switch-input"
@@ -566,7 +573,7 @@
                   aria-label="新闻源状态"
                 /><span class="switch-text">{{ sourceDraft.enabled !== false ? "启用" : "停用" }}</span></span
               ></label
-            ><label v-if="sourceDraft.sourceType === 'public_json'">JSON 字段映射<textarea v-model="sourceDraft.mappingJsonText" class="short-text" placeholder='{"title":"$.headline","body":"$.article.text","url":"$.article.href"}'></textarea></label>
+            ><label v-if="sourceDraft.sourceType === 'public_json'"><span class="field-label-inline">JSON 字段映射</span><textarea v-model="sourceDraft.mappingJsonText" class="short-text" placeholder='{"title":"$.headline","body":"$.article.text","url":"$.article.href"}'></textarea></label>
           </div>
           <p v-if="errorMessage" class="error-text source-dialog-error" role="alert">{{ errorMessage }}</p>
           <div class="form-actions modal-fixed-footer"><button type="button" class="secondary-button" @click="requestCloseSourceDialog">取消</button><button type="button" class="button" @click="submitSourceDialog">保存新闻源</button></div>
@@ -783,7 +790,7 @@
       </div>
 
       <!-- 表格内容 -->
-      <div class="table-wrap">
+      <div class="table-wrap table-card-list">
         <table>
               <thead>
                 <tr>
@@ -845,6 +852,7 @@
                       :title="item.status !== 'published' && !isArticleRowFeatured(item) ? '仅已发布文章可设为精选' : '设为精选 / 取消精选（仅 1 篇）'"
                       @click="toggleArticleFeatured(item, !isArticleRowFeatured(item))"
                     >
+                      <span class="switch-state-sr">{{ isArticleRowFeatured(item) ? '已开启' : '已关闭' }}</span>
                       <span class="switch-knob"></span>
                     </button>
                   </td>
@@ -854,33 +862,27 @@
                     <button
                       class="link"
                       @click="editArticle(item)"
-                    >
-                      编辑
-                    </button>
-                    <button
+                    >编辑</button><button
                       class="link"
                       @click="
                         item.status === 'published'
                           ? unpublishArticle(item.id)
                           : publishArticle(item.id)
                       "
-                    >
-                      {{
-                        item.status === "published" ? "下架" : "发布"
-                      }}</button
-                    ><button
+                    >{{ item.status === "published" ? "下架" : "发布" }}</button><button
                       class="danger link"
                       @click="deleteArticle(item.id)"
-                    >
-                      删除
-                    </button>
+                    >删除</button>
                   </td>
                 </tr>
               </tbody>
             </table>
-            <p v-if="listState.articles.loading" class="list-state" role="status">正在加载文章…</p>
+            <div v-if="listState.articles.loading" class="list-state" role="status">
+              <span>正在加载文章…</span>
+              <div class="skeleton-rows" aria-hidden="true"><div class="skeleton-row"></div><div class="skeleton-row"></div><div class="skeleton-row"></div></div>
+            </div>
           <p v-else-if="listState.articles.error" class="list-state list-error" role="alert">{{ listState.articles.error }} <button class="link" @click="loadArticles()">重试</button></p>
-          <p v-else-if="!articles.length" class="empty" role="status">暂无文章</p>
+          <p v-else-if="!articles.length" class="empty" role="status">暂无文章 <button type="button" class="link empty-action-btn" @click="openNewArticle">+ 新建文章</button></p>
             <div class="table-footer">
               <div class="bulk-actions">
                 <button
@@ -946,6 +948,7 @@
                     class="short-text-area"
                     rows="3"
                     placeholder="简明扼要地概括文章核心亮点，用于列表展示与社交分享..."
+                    @input="autoGrowTextarea($event)"
                   ></textarea>
                 </div>
                   </div>
@@ -1091,8 +1094,15 @@
                         @click="articleForm.coverImage = ''"
                       >清除</button>
                     </div>
-                    <div v-if="articleForm.coverImage" class="image-preview-box mt-2">
-                      <img :src="articleForm.coverImage" alt="封面预览" />
+                    <div v-if="articleForm.coverImage" class="image-preview-box mt-2" :class="{ 'is-broken': coverPreviewBroken }">
+                      <img
+                        v-if="!coverPreviewBroken"
+                        :src="articleForm.coverImage"
+                        alt="封面预览"
+                        @error="coverPreviewBroken = true"
+                        @load="coverPreviewBroken = false"
+                      />
+                      <span v-else>封面图加载失败<br />请检查图片地址或重新上传</span>
                     </div>
                     <div class="mt-2">
                       <label class="alt-label">Alt 替代文本：
@@ -1136,13 +1146,22 @@
                         <span class="seo-score-num">{{ seoScore }}</span>
                         <span class="seo-score-label">SEO 评分</span>
                       </div>
-                      <ul class="seo-score-tips">
-                        <li v-for="tip in seoScoreTips" :key="tip">{{ tip }}</li>
-                      </ul>
+                      <!-- 评分提示最多 8 条，全展开会把卡片撑到 768px、超过右列可视区（512px），
+                           用户既看不全又不好定位。改为可折叠，默认收起，只露条数。 -->
+                      <details v-if="seoScoreTips.length" class="seo-tips-details" :open="seoScoreTips.length <= 2">
+                        <summary>
+                          {{ seoScoreTips.length }} 项待优化
+                        </summary>
+                        <ul class="seo-score-tips">
+                          <li v-for="tip in seoScoreTips" :key="tip">{{ tip }}</li>
+                        </ul>
+                      </details>
+                      <p v-else class="seo-tips-ok">SEO 检查项全部通过</p>
                     </div>
                     <button
                       type="button"
                       class="button primary seo-auto-btn"
+                      :disabled="seoGenerating"
                       :aria-disabled="seoGenerating || !articleBodyPlainText ? 'true' : 'false'"
                       :title="articleBodyPlainText ? '根据正文生成 SEO 描述与关键词' : '请先填写正文内容'"
                       @click="generateSeoMeta"
@@ -1407,7 +1426,7 @@
           + 新增{{ currentTaxonomyEntity }}
         </button>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap table-card-list">
         <table>
           <thead>
             <tr>
@@ -1420,7 +1439,7 @@
             <tr v-for="name in pagedTaxonomyItems" :key="name">
               <td>{{ name }}</td>
               <td>{{ currentTaxonomyScopeLabel }}</td>
-              <td>
+              <td class="actions-cell">
                 <button class="link" type="button" @click="openTaxonomyDialog('edit', name)">编辑</button>
                 <button class="link danger" type="button" @click="openTaxonomyDialog('delete', name)">删除</button>
               </td>
@@ -2156,8 +2175,12 @@ const biLocaleOptions = computed(() => [
 
 const PLACEMENT_KEYS: Record<string, string> = {
   home_hero: "homeHero",
+  hero_cta: "homeHero",
   home_list: "homeList",
+  article_detail: "articleDetailRelated",
   article_detail_related: "articleDetailRelated",
+  article_list: "articlesList",
+  news_detail: "newsList",
   news_list: "newsList",
   articles_list: "articlesList",
 };
@@ -2171,7 +2194,7 @@ const biPlacementOptions = computed(() => [
 
 // 代码值统一走翻译键，禁止把接口原始代码直接给用户看（PRD 1.6）
 const placementLabel = (code: string) =>
-  PLACEMENT_KEYS[code] ? t(`contentV04.analytics.placements.${PLACEMENT_KEYS[code]}`) : code || "—";
+  PLACEMENT_KEYS[code] ? t(`contentV04.analytics.placements.${PLACEMENT_KEYS[code]}`) : code ? t("contentV04.analytics.all") : "—";
 
 // HN 等源站抓来的原文里带着 "Article URL: ... Comments URL: ... Points: ..." 这类元数据，
 // 直接展示会让列表看起来像没处理过的原始数据，这里在显示层裁掉。
@@ -2694,6 +2717,9 @@ function applySavedModelConfig() {
   }
 }
 const showArticleModal = ref(false);
+// 封面预览加载失败标记：URL 失效/需要鉴权的媒体地址会让 <img> 静默失败，
+// 之前预览区背景是纯黑，用户看到的就是一块「挂掉的图」。改用明确的失败文案。
+const coverPreviewBroken = ref(false)
 const articleForm = ref<any>({
   id: 0,
   version: 0,
@@ -2992,9 +3018,17 @@ async function loadList(
   const seq = (listRequestSeq[key] = (listRequestSeq[key] || 0) + 1);
   const isLatest = () => listRequestSeq[key] === seq;
   const state = listState.value[key]; state.loading = true; state.error = "";
+  const t0 = Date.now();
   try { await request(isLatest); }
   catch (error) { if (isLatest()) state.error = error instanceof Error ? error.message : "列表加载失败"; }
-  finally { if (isLatest()) state.loading = false; }
+  finally {
+    // 「加载中」最少显示 120ms 防闪烁，但只延后收起提示，不阻塞调用方：
+    // 列表落地后紧接着的译文状态等后续加载不能被这段纯视觉延时拖住
+    const remain = 120 - (Date.now() - t0);
+    const settle = () => { if (isLatest()) state.loading = false; };
+    if (remain > 0) setTimeout(settle, remain);
+    else settle();
+  }
 }
 const formatDate = (v: string) => (v ? new Date(v).toLocaleDateString() : "-");
 const formatDateTime = (v: string) =>
@@ -3155,6 +3189,8 @@ async function loadArticles(pageOrEvent: number | Event = articlePage.value) {
   const page = typeof pageOrEvent === "number" ? pageOrEvent : 1;
   articlePage.value = Math.max(1, page);
   await loadList("articles", async (isLatest) => {
+  // 记下请求发出时的精选变更代号：期间若发生过切换，这条响应里的精选字段就是旧的
+  const epochAtRequest = articleMutationEpoch;
   const { data } = await contentAPI.listArticles({
     page: articlePage.value,
     page_size: 20,
@@ -3172,6 +3208,12 @@ async function loadArticles(pageOrEvent: number | Event = articlePage.value) {
   });
   if (!isLatest()) return; // 同上：迟到的旧响应不得覆盖新结果
   articles.value = unwrap(data);
+  // 精选回填：本次请求发出后发生的精选切换，其结果一定比这条响应新，用本地状态重新套一遍，
+  // 否则旧响应会把用户刚切换的开关翻回去（精选开关闪回）。更旧的记录此时已被服务端数据覆盖，可安全丢弃
+  for (const [id, entry] of articleFeaturedOverrides) {
+    if (entry.epoch > epochAtRequest) applyLocalArticleFeatured(id, entry.checked);
+    else articleFeaturedOverrides.delete(id);
+  }
   // D2：把当前结果里出现过的 model 名并入筛选下拉，保证存量数据可被筛出
   const seenModels = new Set(articleModelNames.value);
   for (const a of (articles.value as any[])) {
@@ -3385,6 +3427,11 @@ async function editNews(item: any) {
   }
   await nextTick()
   newsEditorRef.value?.scrollIntoView({ behavior: "smooth", block: "start" })
+  const summaryEl = newsEditorRef.value?.querySelector<HTMLTextAreaElement>('textarea.news-summary-input')
+  if (summaryEl) {
+    summaryEl.style.height = 'auto'
+    summaryEl.style.height = `${Math.min(Math.max(summaryEl.scrollHeight, 96), 400)}px`
+  }
   void loadNewsTranslationTasks(Number(item.id))
 }
 /** 新闻保存时把 AI 生成的 SEO 关键词回写到 mediaJson.seoKeywords（不覆盖其他媒体字段）。 */
@@ -3587,6 +3634,7 @@ async function editSource(source: any) {
   }
   sourceDialogCreating.value = false;
   sourceFormErrors.value = { name: "", url: "", interval: "" };
+  selectedSource.value = { ...source, mappingJsonText: JSON.stringify(source.mappingJson || {}, null, 2) };
   try {
     const { data } = await contentAPI.getSource(source.id);
     selectedSource.value = data?.data || data || { ...source };
@@ -3905,6 +3953,11 @@ async function publishArticle(id: number) {
 /** 精选标记标签（与后端 isArticleFeatured 判定保持一致：tags 含「精选」/featured） */
 const FEATURED_TAG = "精选";
 const articleFeatureBusyId = ref<number | null>(null);
+// 精选变更代号：每次切换精选自增。列表请求发出时记下代号，响应回来时若代号已变，
+// 说明这条响应比精选变更更旧，必须用本地状态回填精选字段，否则开关会自己翻回去
+let articleMutationEpoch = 0;
+// 最近一次本地精选变更（按文章 id），只保留「比某些在途列表请求更新」的那条，供回填使用
+const articleFeaturedOverrides = new Map<number, { epoch: number; checked: boolean }>();
 
 function isArticleRowFeatured(item: any): boolean {
   if (item?.isFeatured) return true;
@@ -3912,9 +3965,28 @@ function isArticleRowFeatured(item: any): boolean {
   return tags.some((t) => String(t).trim() === FEATURED_TAG || String(t).trim().toLowerCase() === "featured");
 }
 
+function applyLocalArticleFeatured(targetId: number, checked: boolean) {
+  for (const a of articles.value) {
+    const tags: string[] = Array.isArray(a.tags) ? [...a.tags] : [];
+    const idx = tags.findIndex((t) => String(t).trim() === FEATURED_TAG || String(t).trim().toLowerCase() === "featured");
+    if (a.id === targetId) {
+      if (checked && idx < 0) a.tags = [...tags, FEATURED_TAG];
+      if (!checked && idx >= 0) a.tags = tags.filter((_, i) => i !== idx);
+      a.isFeatured = checked;
+    } else if (checked) {
+      if (idx >= 0) a.tags = tags.filter((_, i) => i !== idx);
+      a.isFeatured = false;
+    }
+  }
+}
+
 async function toggleArticleFeatured(item: any, nextChecked: boolean) {
   if (!item?.id || articleFeatureBusyId.value === item.id) return;
   const checked = Boolean(nextChecked);
+  const prevSnapshot = articles.value.map((a) => ({ id: a.id, isFeatured: a.isFeatured, tags: Array.isArray(a.tags) ? [...a.tags] : a.tags }));
+  applyLocalArticleFeatured(item.id, checked);
+  // 先自增代号再发请求：此前已发出、尚未返回的列表请求，其响应里的精选字段都已过期
+  articleFeaturedOverrides.set(item.id, { epoch: ++articleMutationEpoch, checked });
   articleFeatureBusyId.value = item.id;
   try {
     await (contentAPI.mutateTaxonomy as any)({
@@ -3922,20 +3994,18 @@ async function toggleArticleFeatured(item: any, nextChecked: boolean) {
       action: checked ? "set" : "unset",
       name: String(item.id),
     });
-    // 本地同步：精选为单选，其他文章自动落选；后端已写入 tags + taxonomy 并失效公开缓存
-    for (const a of articles.value) {
-      const tags: string[] = Array.isArray(a.tags) ? [...a.tags] : [];
-      const idx = tags.findIndex((t) => String(t).trim() === FEATURED_TAG || String(t).trim().toLowerCase() === "featured");
-      if (a.id === item.id) {
-        if (checked && idx < 0) a.tags = [...tags, FEATURED_TAG];
-        if (!checked && idx >= 0) a.tags = tags.filter((_, i) => i !== idx);
-        a.isFeatured = checked;
-      } else if (checked) {
-        if (idx >= 0) a.tags = tags.filter((_, i) => i !== idx);
-        a.isFeatured = false;
+    // 成功后再次自增：请求在途期间发出的列表请求可能读到提交前的旧数据，同样需要回填
+    articleFeaturedOverrides.set(item.id, { epoch: ++articleMutationEpoch, checked });
+  } catch (e) {
+    // 写失败已回滚本地状态，撤掉回填记录，后续列表响应按服务端真实数据渲染
+    articleFeaturedOverrides.delete(item.id);
+    for (const snap of prevSnapshot) {
+      const row = articles.value.find((a) => a.id === snap.id);
+      if (row) {
+        row.isFeatured = snap.isFeatured;
+        row.tags = snap.tags;
       }
     }
-  } catch (e) {
     const reason = (e as any)?.reason || (e as any)?.response?.data?.reason;
     errorMessage.value = reason === "article_not_published" ? "仅已发布文章可设为精选" : "精选状态更新失败";
   } finally {
@@ -4087,6 +4157,7 @@ async function saveArticle() {
 function editArticle(item: any) {
   bodyEditMode.value = "editor";
   showArticleModal.value = true;
+  coverPreviewBroken.value = false;
   articleForm.value = {
     id: item.id,
     version: item.version || 0,
@@ -4108,7 +4179,10 @@ function editArticle(item: any) {
     ogImage: item.ogImage || "",
     status: item.status || "draft",
   };
-  void loadTranslations(item.id);
+  void nextTick(captureArticleSnapshot);
+  void loadTranslations(item.id).then(() => {
+    void nextTick(captureArticleSnapshot);
+  });
 }
 function editTranslation(item: any) {
   translationForm.value = {
@@ -4306,6 +4380,7 @@ async function openGeneratedArticle() {
     }
   }
   showArticleModal.value = true;
+  coverPreviewBroken.value = false;
   articleForm.value = {
     id: 0,
     version: 0,
@@ -4334,6 +4409,7 @@ function openNewArticle() {
 
 function resetArticle() {
   stopWritingPoll();
+  coverPreviewBroken.value = false;
   articleForm.value = {
     id: 0,
     version: 0,
@@ -4416,6 +4492,14 @@ watch(
   },
   { deep: true },
 );
+function autoGrowTextarea(ev: Event) {
+  const el = ev.target as HTMLTextAreaElement | null;
+  if (!el) return;
+  el.style.height = "auto";
+  const next = Math.min(Math.max(el.scrollHeight, 96), 400);
+  el.style.height = `${next}px`;
+}
+
 watch(showArticleModal, (open) => {
   if (!open) return;
   articleGuardAcknowledged = false;
@@ -4424,7 +4508,18 @@ watch(showArticleModal, (open) => {
     articleSnapshotSuppressed = false;
     return;
   }
-  void nextTick(captureArticleSnapshot);
+  void nextTick(() => {
+    captureArticleSnapshot();
+    const firstInput = document.querySelector<HTMLElement>(
+      ".article-editor-modal input:not([disabled]), .article-editor-modal textarea:not([disabled])"
+    );
+    firstInput?.focus();
+    setTimeout(() => {
+      if (showArticleModal.value && !articleGuardAcknowledged) {
+        captureArticleSnapshot();
+      }
+    }, 300);
+  });
 });
 function closeArticleEditor() {
   showArticleModal.value = false;
@@ -4497,6 +4592,13 @@ function previewArticle() {
     main.append(heading, rendered);
     doc.body.appendChild(main);
   }
+}
+function onMainTabClick(tab: string) {
+  if (current.value === tab) {
+    void refresh();
+    return;
+  }
+  current.value = tab;
 }
 watch([current, newsView], refresh);
 /* ==================== 分类与标签 (Taxonomy) ==================== */
@@ -4788,37 +4890,60 @@ textarea:focus {
   line-height: 1.4;
 }
 .toolbar input {
-  min-width: 240px;
+  min-width: 150px;
 }
 .button {
-  padding: 9px 18px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 16px;
   border: 2px solid #121316;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #CCFF00;
   color: #121316;
   font-weight: 900;
   font-size: 13px;
+  line-height: 1;
   box-shadow: 3px 3px 0px #121316;
   cursor: pointer;
-  transition: transform 0.14s ease, box-shadow 0.14s ease;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, background-color 0.14s ease;
 }
 .button:hover:not(:disabled) {
   transform: translate(-1.5px, -1.5px);
   box-shadow: 4.5px 4.5px 0px #121316;
   background: #d8ff33;
 }
+.button:focus,
+.button:focus-visible,
+.secondary-button:focus,
+.secondary-button:focus-visible,
+.link:focus,
+.link:focus-visible {
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
+}
 .button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 .secondary-button {
-  padding: 9px 18px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 16px;
   border: 2px solid #121316;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #FFFFFF;
   color: #121316;
   font-weight: 800;
   font-size: 13px;
+  line-height: 1;
   box-shadow: 3px 3px 0px #121316;
   cursor: pointer;
   transition: transform 0.14s ease, box-shadow 0.14s ease;
@@ -4968,14 +5093,15 @@ td small {
   transform: translate(-1px, -1px);
   box-shadow: 3px 3px 0px #121316;
 }
-.link:disabled {
-  opacity: 0.48;
+.link:disabled,
+.link.is-muted {
+  opacity: 0.45;
   cursor: not-allowed;
   box-shadow: 1px 1px 0px rgba(18, 19, 22, 0.35);
 }
 .link.danger {
   background: #FFE4E1;
-  color: #FF3B30;
+  color: #B42318;
 }
 .status {
   font-family: 'JetBrains Mono', monospace;
@@ -5253,15 +5379,16 @@ td small {
   box-shadow: 3px 3px 0px #121316 !important;
   transition: all 0.15s ease;
 }
-.new-btn:hover {
+.new-btn:hover:not(:disabled) {
+  background: #1D4ED8 !important;
   transform: translate(-1px, -1px);
   box-shadow: 4px 4px 0px #121316 !important;
 }
 
-/* 操作列收窄 + sticky */
+/* 操作列自适应 + sticky */
 th:last-child, td.actions-cell {
-  min-width: 110px;
-  width: 110px;
+  min-width: 164px;
+  width: auto;
   white-space: nowrap;
   position: sticky;
   right: 0;
@@ -5270,7 +5397,9 @@ th:last-child, td.actions-cell {
 }
 td.actions-cell .link {
   font-size: 12.5px;
-  padding: 3px 6px;
+  padding: 5px 10px;
+  min-width: 46px;
+  min-height: 30px;
   font-weight: 700;
 }
 
@@ -5350,15 +5479,24 @@ td.actions-cell .link {
   animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .taxonomy-dialog {
-  width: 100%;
-  max-width: 440px;
+  box-sizing: border-box;
+  width: min(440px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: min(85vh, calc(100dvh - 32px));
+  overflow: hidden;
   background: #FAF8F5;
+  border: 2px solid #121316;
   border-radius: 12px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
-  padding: 24px;
+  box-shadow: 6px 6px 0 #121316;
+  padding: 20px 22px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+.taxonomy-dialog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 .taxonomy-dialog-header {
   display: flex;
@@ -5525,11 +5663,13 @@ td.actions-cell .link {
 
 .editor-title-input {
   width: 100%;
-  font-size: 17px;
+  box-sizing: border-box;
+  height: 40px;
+  font-size: 15px;
   font-weight: 700;
-  padding: 11px 14px;
+  padding: 6px 12px;
   border: 2px solid #121316;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #FAFBFC;
   box-shadow: 2px 2px 0px rgba(18, 19, 22, 0.05);
   transition: all 0.15s ease;
@@ -5731,7 +5871,9 @@ td.actions-cell .link {
   border-radius: 8px;
   overflow: hidden;
   box-shadow: 2px 2px 0px #121316;
-  background: #000;
+  /* 不能写死黑色：图片加载失败时会露出纯黑块，看起来像「挂掉的图」。
+     改为浅色占位底，并按 16:9 预留高度，避免加载前后跳动。 */
+  background: #F3F4F6;
   max-height: 150px;
 }
 .image-preview-box img {
@@ -5739,6 +5881,17 @@ td.actions-cell .link {
   height: 150px;
   object-fit: cover;
   display: block;
+}
+.image-preview-box.is-broken {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 150px;
+  color: #6B7280;
+  font-size: 12px;
+  text-align: center;
+  padding: 8px;
+  box-sizing: border-box;
 }
 
 .alt-label {
@@ -6066,7 +6219,7 @@ td.actions-cell .link {
   font-size: 11px;
 }
 .task-date {
-  color: #94A3B8;
+  color: #475569;
   font-size: 11px;
 }
 .task-delete-btn {
@@ -6501,7 +6654,8 @@ td.actions-cell .link {
   width: 140px;
 }
 .toolbar-select :deep(.select-trigger) {
-  height: 38px;
+  height: 36px;
+  min-height: 36px;
   padding-block: 0;
   font-size: 13px;
 }
@@ -6552,12 +6706,41 @@ td.actions-cell .link {
   margin-top: 4px;
 }
 .seo-score-tips {
-  margin: 0;
+  margin: 6px 0 0;
   padding-left: 18px;
   font-size: 12px;
   line-height: 1.7;
   color: #5E6577;
   font-weight: 600;
+}
+/* SEO 提示折叠：默认只显示「N 项待优化」，避免卡片被撑高到超过右列可视区 */
+.seo-tips-details {
+  min-width: 0;
+  font-size: 12px;
+  color: #5E6577;
+  font-weight: 700;
+}
+.seo-tips-details > summary {
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+  color: #B45309;
+}
+.seo-tips-details > summary:focus-visible {
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* 展开后限制最大高度并内部滚动，卡片不会被无限撑长 */
+.seo-tips-details[open] .seo-score-tips {
+  max-height: 132px;
+  overflow-y: auto;
+}
+.seo-tips-ok {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #16A34A;
+  font-weight: 700;
 }
 .seo-auto-btn {
   width: 100%;
@@ -6788,7 +6971,7 @@ td.actions-cell .link {
 .list-state { margin: 12px 0; padding: 12px 16px; border-radius: 8px; background: #fff; color: #5E6577; }
 .list-error { color: #b42318; border: 1px solid #f3b7b2; }
 @media (max-width: 640px) {
-  .news-editor.news-editor-modal { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); box-sizing: border-box; }
+  .news-editor.news-editor-modal { width: min(1320px, calc(100vw - 32px)); max-height: min(90vh, 900px); box-sizing: border-box; }
   .two-col-editor { grid-template-columns: minmax(0, 1fr); }
   .modal-scroll-body { max-height: calc(100dvh - 180px); }
   .chart-card.chart-wide { grid-column: span 1; }
@@ -6838,32 +7021,59 @@ td.actions-cell .link {
 .content-modal-layer { position: fixed; inset: 0; z-index: 1400; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(18,19,22,.55); }
 /* SRC-07：新闻源弹窗的未保存确认要压在其上（1400） */
 .modal-backdrop.source-close-guard-backdrop { z-index: 1500; }
-.source-dialog { width: min(640px, 100%); max-height: calc(100dvh - 32px); overflow-y: auto; box-sizing: border-box; padding: 22px; border: 2px solid #121316; border-radius: 12px; background: #fff; box-shadow: 6px 6px 0 #121316; }
+.source-dialog { display: flex; flex-direction: column; width: min(640px, calc(100vw - 32px)); max-height: min(85vh, calc(100dvh - 32px)); overflow: hidden; box-sizing: border-box; padding: 20px 22px; border: 2px solid #121316; border-radius: 12px; background: #fff; box-shadow: 6px 6px 0 #121316; }
+.source-dialog > .section-heading { flex: 0 0 auto; margin-bottom: 12px; }
+.source-dialog > .modal-fixed-footer { flex: 0 0 auto; margin-top: 12px; padding-top: 12px; border-top: 1.5px solid #e5e7eb; display: flex; justify-content: flex-end; gap: 10px; }
 /* SRC-09 / SRC-02：滑块开关。原生 checkbox 视觉隐藏但保留可聚焦，轨道 span 负责视觉 */
-.slider-switch { position: relative; display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
+.settings label.slider-switch,
+.source-dialog .source-status-field .slider-switch,
+.slider-switch { position: relative; display: inline-flex; flex-direction: row; align-items: center; gap: 10px; width: fit-content; min-width: 0; height: auto; cursor: pointer; }
+.settings label.slider-switch { padding: 8px 14px; margin-bottom: 18px; }
 .slider-switch .switch-input { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; opacity: 0; overflow: hidden; clip: rect(0 0 0 0); }
 .slider-switch .switch-track { position: relative; flex: 0 0 auto; width: 40px; height: 22px; border-radius: 9999px; background: #9ca3af; transition: background-color .15s ease; }
 .slider-switch .switch-track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s ease; }
 .slider-switch:has(.switch-input:checked) .switch-track { background: #2563eb; }
 .slider-switch:has(.switch-input:checked) .switch-track::after { transform: translateX(18px); }
 .slider-switch:has(.switch-input:focus-visible) .switch-track { outline: 2px solid #2563eb; outline-offset: 2px; }
-.slider-switch .switch-text { color: #121316; }
+.slider-switch .switch-text { color: #121316; white-space: nowrap; }
 :global(html.dark) .slider-switch .switch-track { background: #4b5563; }
 :global(html.dark) .slider-switch:has(.switch-input:checked) .switch-track { background: #2563eb; }
 :global(html.dark) .slider-switch .switch-text { color: #e5e7eb; }
-.source-dialog .source-status-field .switch { margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.source-dialog .source-status-field .switch { margin: 0; padding: 0; border: 0 !important; background: transparent; box-shadow: none; width: fit-content; min-width: 0; height: auto; flex-direction: row; white-space: nowrap; }
+.source-dialog .field-label-inline { display: inline-flex; align-items: center; gap: 2px; }
 .source-dialog .form-grid .field-hint { color: #6b7280; font-size: 12px; font-weight: 500; }
 .source-toolbar { justify-content: flex-end; }
-.source-dialog .form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
-.source-dialog .form-grid label { display: grid; gap: 7px; min-width: 0; font-size: 13px; font-weight: 700; }
+.source-dialog .form-grid { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: 4px; margin-bottom: 0; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px 16px; align-content: start; }
+.source-dialog .form-grid label { display: grid; gap: 6px; min-width: 0; font-size: 13px; font-weight: 700; }
 .source-dialog .form-grid label:has(textarea) { grid-column: 1/-1; }
 .dialog-close { flex: 0 0 36px; width: 36px; height: 36px; padding: 0; border: 2px solid #121316; border-radius: 8px; background: #fff; color: #121316; font-size: 24px; line-height: 1; cursor: pointer; }
 .news-editor.news-editor-modal { box-sizing: border-box; padding: 0; }
 .news-editor .two-col-editor { grid-template-columns: minmax(300px,38%) minmax(0,1fr); gap: 24px; }
 .news-editor .two-col-editor > div { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .news-editor .two-col-editor label { display: grid; gap: 7px; font-size: 13px; font-weight: 700; }
-.news-editor .two-col-editor input, .news-editor .two-col-editor textarea, .source-dialog input, .source-dialog textarea { box-sizing: border-box; width: 100%; min-height: 42px; padding: 9px 11px; border: 1.5px solid #9aa1b1; border-radius: 8px; font: inherit; line-height: 1.5; }
-.news-editor .two-col-editor textarea.news-summary-input { min-height: 84px; resize: vertical; line-height: 1.65; }
+.news-editor .two-col-editor input, .news-editor .two-col-editor textarea, .source-dialog input, .source-dialog textarea { box-sizing: border-box; width: 100%; min-height: 36px; padding: 6px 10px; border: 2px solid #121316; border-radius: 8px; font: inherit; line-height: 1.5; }
+.news-editor .two-col-editor textarea.news-summary-input { min-height: 96px; height: 96px; max-height: 400px; overflow-y: auto; resize: vertical; line-height: 1.6; }
+.news-editor .two-col-editor input:hover:not(:disabled),
+.news-editor .two-col-editor textarea:hover:not(:disabled),
+.source-dialog input:hover:not(:disabled),
+.source-dialog textarea:hover:not(:disabled) {
+  border-color: #2563EB;
+}
+.news-editor .two-col-editor input:focus,
+.news-editor .two-col-editor textarea:focus,
+.source-dialog input:focus,
+.source-dialog textarea:focus {
+  border-color: #2563EB;
+  box-shadow: 3.5px 3.5px 0px #2563EB;
+  outline: none;
+}
+.news-editor .two-col-editor input[aria-invalid="true"],
+.news-editor .two-col-editor textarea[aria-invalid="true"],
+.source-dialog input.input-invalid,
+.source-dialog textarea.input-invalid {
+  border-color: #DC2626 !important;
+  box-shadow: 3px 3px 0px rgba(220, 38, 38, 0.28) !important;
+}
 .news-editor .editor-pane { min-height: 220px; }
 .news-editor .modal-fixed-footer { flex-shrink: 0; }
 .featured-toggle, .ref-news-item input[type="checkbox"], .news-row input[type="checkbox"], .article-row input[type="checkbox"] { flex: 0 0 16px !important; width: 16px !important; height: 16px !important; margin: 0 !important; }
@@ -6882,12 +7092,13 @@ td.actions-cell .link {
 /* ===== v0.4 P0fix：新闻 / 文章编辑弹窗统一 880 两栏壳（左配置 / 右正文） ===== */
 .news-editor.news-editor-modal,
 .modal-drawer.article-editor-modal {
+  max-width: 1320px;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
   width: min(1320px, calc(100vw - 32px));
-  height: calc(100dvh - 48px);
-  max-height: 900px;
+  height: min(90vh, 900px, calc(100dvh - 32px));
+  max-height: min(90vh, 900px);
   min-height: 0;
   margin: 0;
   padding: 0;
@@ -7032,10 +7243,32 @@ td.actions-cell .link {
   overflow-x: hidden;
   padding-right: 6px;
 }
+.news-editor .editor-main-col .form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+  align-items: start;
+  margin-bottom: 6px;
+}
+.news-editor .editor-main-col .form-grid > .form-required-legend,
+.news-editor .editor-main-col .form-grid > .field-error {
+  grid-column: 1 / -1;
+}
+.news-editor .editor-main-col textarea.news-summary-input {
+  min-height: 96px;
+  height: 96px;
+  max-height: 400px;
+  overflow-y: auto;
+}
 .news-editor .editor-config-col .form-grid {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+}
+.news-editor .two-col-editor input:not([type="checkbox"]):not([type="radio"]) {
+  height: 36px;
+  min-height: 36px;
+  padding: 6px 10px;
 }
 .news-editor .editor-main-col { display: flex; flex-direction: column; }
 /* v0.4 板块重排：右列元信息分区卡片 */
@@ -7141,8 +7374,10 @@ td.actions-cell .link {
   padding: 0;
   accent-color: #121316;
 }
-.field-error { margin: -6px 0 0; color: #b42318; font-size: 12px; font-weight: 700; }
-.required-star { margin-left: 4px; color: #b42318; }
+.field-error,
+.error-text { margin: 0; color: #dc2626 !important; font-size: 12px; font-weight: 700; }
+.news-editor .field-error { margin: -4px 0 0; }
+.required-star { margin-left: 4px; color: #dc2626; }
 
 /* 文章两栏主体 */
 .article-editor-modal .modal-drawer-body {
@@ -7177,6 +7412,13 @@ td.actions-cell .link {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* 右列卡片（推荐设置/封面/SEO/译文）总高远超可视区，必须自身可滚动，
+     否则底部卡片被页脚裁掉且用户滚不到（实测 scrollHeight 1723 vs clientHeight 568）。 */
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px;
+  /* 让最后一张卡片与页脚之间留出间距，滚到底时不贴边 */
+  padding-bottom: 12px;
 }
 .article-editor-modal .article-editor-shell {
   flex: 1 1 auto;
@@ -7186,10 +7428,34 @@ td.actions-cell .link {
 /* v0.4 板块重排：正文块已移入左列（v0.4 P0 返工：左内容/右元信息），
    这里让正文编辑器在左列内保持可编辑高度；右列卡片较多时自身滚动。 */
 .article-editor-columns > .editor-col-left > .meta-card > .meta-card-body > .body-field-group {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-height: 420px;
+  min-height: 0;
+}
+.article-editor-modal .article-editor-columns > .editor-col-left > .meta-card:last-child {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.article-editor-modal .article-editor-columns > .editor-col-left > .meta-card:last-child > .meta-card-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.article-editor-modal .article-editor-shell :deep(.rich-text-editor) {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.article-editor-modal .article-editor-shell :deep(.rich-text-content) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 .article-editor-columns > .editor-col-left > .meta-card > .meta-card-body > .body-field-group > .article-editor-shell {
   flex: 1 1 auto;
@@ -7212,17 +7478,16 @@ td.actions-cell .link {
 @media (max-width: 780px) {
   .news-editor.news-editor-modal,
   .modal-drawer.article-editor-modal {
-    width: calc(100vw - 24px);
-    height: calc(100dvh - 24px);
-    max-height: none;
+    width: min(1320px, calc(100vw - 32px));
+    height: min(90vh, 900px, calc(100dvh - 32px));
+    max-height: min(90vh, 900px);
   }
   .news-editor-body { padding: 12px 14px 0; }
   .news-editor-body .two-col-editor,
   .article-editor-columns { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .news-editor .editor-config-col,
-  .article-editor-columns > .editor-col-left { max-height: 42%; }
-  .news-editor .editor-main-col,
-  .article-editor-columns > .editor-col-right { min-height: 300px; }
+  .news-editor .editor-config-col { max-height: 42%; }
+  .article-editor-columns > .editor-col-left { max-height: none; }
+  .news-editor .editor-main-col { min-height: 300px; }
 }
 
 /* ===== v0.4 P0fix：左栏字段名纯文本（label 文本 = 字段名）+ 自绘下拉/词条 ===== */
@@ -7234,7 +7499,7 @@ td.actions-cell .link {
   padding: 0;
   font-size: 11px;
   font-weight: 600;
-  color: #8b8f96;
+  color: #525866;
   letter-spacing: 0.02em;
 }
 .news-editor .combo-trigger {
@@ -7383,7 +7648,13 @@ td.actions-cell .link {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  overflow: hidden;
+  /* 右列含推荐设置/封面/SEO/译文多张卡片，总高远超可视区。
+     原为 overflow:hidden，导致底部卡片被页脚裁掉且滚轮滚不动
+     （实测 scrollHeight 1735 vs clientHeight 512，下面 1223px 永久不可见）。 */
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  padding-bottom: 12px;
 }
 /* 右列内部：标题/摘要固定高度，正文块吃掉剩余高度并在编辑器内部滚动 */
 .article-editor-modal .article-editor-columns > .editor-col-right > .body-field-group {
@@ -7407,15 +7678,15 @@ td.actions-cell .link {
   }
 }
 
-/* AE-12：多行文本框固定可用高度，超出内部滚动，不把弹窗顶长 */
+/* AE-12 / INTERACT-03：多行文本框初始 >=96px，随内容自动增长至 400px，超出内部滚动 */
 .article-editor-modal .short-text-area,
 .article-editor-modal .meta-card textarea {
   box-sizing: border-box;
-  height: 104px;
-  min-height: 104px;
-  max-height: 240px;
-  padding: 10px 12px;
-  line-height: 1.6;
+  height: 96px;
+  min-height: 96px;
+  max-height: 400px;
+  padding: 8px 12px;
+  line-height: 1.55;
   resize: vertical;
   overflow-y: auto;
 }
@@ -7471,9 +7742,22 @@ td.actions-cell .link {
   cursor: not-allowed;
   opacity: 0.55;
 }
+.featured-cell .featured-toggle:focus,
 .featured-cell .featured-toggle:focus-visible {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
+  outline: 2px solid #2563eb !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35) !important;
+}
+.switch-state-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* AE-11：SEO 覆盖确认卡片 */
@@ -7555,6 +7839,197 @@ td.actions-cell .link {
 .field-hint.hint-warn {
   color: #b42318;
   font-weight: 600;
+}
+
+
+/* ===== v0.4 布局优化：文章弹窗首屏高度 & AI 创作移动端防溢出 & 列表列宽收敛 ===== */
+.article-editor-modal .editor-col-left {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.article-editor-modal .editor-col-left > .meta-card {
+  padding: 10px 14px;
+  gap: 8px;
+}
+.article-editor-modal .editor-col-left > .meta-card > .meta-card-header {
+  padding-bottom: 6px;
+}
+.article-editor-modal .editor-col-left > .meta-card > .meta-card-body {
+  gap: 8px;
+}
+.article-editor-modal .editor-col-left > .meta-card:nth-child(2) > .meta-card-body {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+@media (max-width: 780px) {
+  .article-editor-modal .editor-col-left > .meta-card:nth-child(2) > .meta-card-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.article-editor-modal .editor-col-left .mt-3 {
+  margin-top: 4px !important;
+}
+
+/* AI 创作工作台子列严格防撑破 */
+.ai-studio-grid > .ai-col,
+.ai-form-card,
+.ai-preview-card,
+.form-row-grid > .field-group {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.form-row-grid input,
+.form-row-grid select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+@media (max-width: 767px) {
+  .form-row-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ai-form-card,
+  .ai-preview-card {
+    padding: 14px;
+  }
+}
+
+/* 新闻源 URL 列与文章列表列宽收敛，避免 1440/1024 下把右侧操作列顶出视口 */
+td.url {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+td.source-status-cell {
+  max-width: 260px;
+  white-space: normal;
+  word-break: break-word;
+}
+td.source-status-cell .error-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.4;
+}
+.skeleton-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.skeleton-row {
+  height: 36px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+}
+.empty-action-btn {
+  margin-left: 10px;
+}
+@media (min-width: 1280px) {
+  .toolbar {
+    flex-wrap: nowrap;
+    gap: 8px;
+    min-width: 0;
+  }
+  .toolbar input {
+    min-width: 0;
+    width: auto;
+    flex: 1 1 80px;
+    max-width: 132px;
+  }
+  .toolbar input[type="date"] {
+    flex: 0 1 118px;
+    max-width: 118px;
+    padding: 4px 6px;
+  }
+  .toolbar .toolbar-select {
+    flex: 0 1 112px;
+    width: 112px;
+  }
+}
+@media (min-width: 1280px) and (max-width: 1400px) {
+  th, td {
+    padding: 10px 8px;
+  }
+  td.title-cell {
+    min-width: 160px;
+    max-width: 220px;
+  }
+  .trans-cell {
+    min-width: 80px;
+  }
+  th:last-child, td.actions-cell {
+    min-width: 120px;
+  }
+  td.actions-cell .link {
+    padding: 4px 7px;
+    margin-right: 4px;
+    min-width: 36px;
+  }
+}
+@media (max-width: 1279px) {
+  th, td {
+    padding: 10px 10px;
+  }
+  td.title-cell {
+    min-width: 180px;
+    max-width: 280px;
+  }
+}
+@media (max-width: 767px) {
+  .table-wrap table {
+    display: block;
+    width: 100%;
+  }
+  .table-wrap thead {
+    display: none;
+  }
+  .table-wrap tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+  }
+  .table-wrap tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    padding: 12px;
+    border: 1.5px solid #121316;
+    border-radius: 10px;
+    background: #ffffff;
+  }
+  .table-wrap tbody td {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 0;
+    border-bottom: 0;
+    white-space: normal;
+  }
+  .table-wrap tbody td.title-cell {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .table-wrap tbody td.actions-cell {
+    position: static;
+    flex: 1 1 100%;
+    min-width: 0;
+    padding-top: 6px;
+    border-top: 1px dashed rgba(18, 19, 22, 0.15);
+    box-shadow: none;
+    background: transparent;
+  }
 }
 
 </style>

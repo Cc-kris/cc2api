@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { expect, test as base, type Page } from '@playwright/test'
-import { OUT_ROOT, expectClean, guard, openContentTab, realLogin, shooter, type Problem } from '../real/real-helpers'
+import { OUT_ROOT, dismissOverlays, expectClean, guard, openContentTab, realLogin, shooter, type Problem } from '../real/real-helpers'
 
 /**
  * W4 验收：AI 创作模型配置（AI-01~AI-11）+ BI 分析（BI-01~BI-07）
@@ -46,6 +46,8 @@ const test = base.extend<{}, { admin: Ctx }>({
         page: async () => {
           const p = await context.newPage()
           await p.goto('http://127.0.0.1:3100/admin/content')
+          await p.waitForTimeout(1_200)
+          await dismissOverlays(p)
           return p
         }
       })
@@ -56,6 +58,7 @@ const test = base.extend<{}, { admin: Ctx }>({
 })
 
 async function gotoTab(page: Page, tab: 'AI 创作' | 'BI 分析') {
+  await dismissOverlays(page)
   await page.keyboard.press('Escape')
   const btn = page.locator('.tabs button', { hasText: tab }).first()
   if (await btn.count()) {
@@ -135,10 +138,29 @@ async function saveDialog(page: Page, dlg: ReturnType<Page['locator']>) {
 
 async function closeIfOpen(page: Page) {
   const dlg = page.locator('.ai-config-dialog')
-  if (await dlg.isVisible().catch(() => false)) await page.keyboard.press('Escape')
+  if (await dlg.isVisible().catch(() => false)) {
+    page.once('dialog', (d) => d.accept())
+    await dlg.getByRole('button', { name: '关闭模型配置', exact: true }).click()
+    await expect(dlg).toBeHidden()
+  }
 }
 
 /** 删除本文件创建的所有测试配置（仅 E2E-W4- 前缀），返回删除结果说明。 */
+async function ensureW4Config(page: Page, label: string) {
+  await gotoConfig(page)
+  const dlg = await openDialog(page)
+  await fillDialog(page, dlg, {
+    label,
+    provider: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: FAKE_KEY,
+    models: 'gpt-4o-mini\ngpt-4o',
+    model: 'gpt-4o-mini'
+  })
+  await saveDialog(page, dlg)
+  await expect(rowOf(page, label)).toBeVisible({ timeout: 15_000 })
+}
+
 async function cleanupW4Configs(page: Page, label: string) {
   await gotoConfig(page)
   const rows = page.locator('.ai-config-list li')
@@ -399,9 +421,10 @@ test.describe('W4 AI 创作模型配置 + BI 分析（真实 E2E 验收）', () 
     const page = await admin.page()
     const c = collector()
     guard(page, [/fetch-models/]).forEach((p) => problems.push(p))
-    await gotoConfig(page)
+    const label = `${LABEL_A}-fetch`
+    await ensureW4Config(page, label)
 
-    const row = rowOf(page, new RegExp(`^${LABEL_A}`))
+    const row = rowOf(page, new RegExp(`^${label}`))
     await row.locator('button', { hasText: /Edit|编辑/ }).first().click()
     const dlg = page.locator('.ai-config-dialog')
     await expect(dlg).toBeVisible()
@@ -420,6 +443,7 @@ test.describe('W4 AI 创作模型配置 + BI 分析（真实 E2E 验收）', () 
 
     await shot(page, 'ai-get-models')
     await closeIfOpen(page)
+    await cleanupW4Configs(page, label)
     c.finish()
   })
 
@@ -427,9 +451,10 @@ test.describe('W4 AI 创作模型配置 + BI 分析（真实 E2E 验收）', () 
     const page = await admin.page()
     const c = collector()
     guard(page, [/ai-config-test/]).forEach((p) => problems.push(p))
-    await gotoConfig(page)
+    const label = `${LABEL_A}-connect`
+    await ensureW4Config(page, label)
 
-    const row = rowOf(page, new RegExp(`^${LABEL_A}`))
+    const row = rowOf(page, new RegExp(`^${label}`))
     await row.locator('button', { hasText: /Edit|编辑/ }).first().click()
     const dlg = page.locator('.ai-config-dialog')
     await expect(dlg).toBeVisible()
@@ -455,6 +480,7 @@ test.describe('W4 AI 创作模型配置 + BI 分析（真实 E2E 验收）', () 
 
     await shot(page, 'ai-test-connection')
     await closeIfOpen(page)
+    await cleanupW4Configs(page, label)
     c.finish()
   })
 
@@ -462,9 +488,10 @@ test.describe('W4 AI 创作模型配置 + BI 分析（真实 E2E 验收）', () 
     const page = await admin.page()
     const c = collector()
     guard(page).forEach((p) => problems.push(p))
-    await gotoConfig(page)
+    const label = `${LABEL_A}-default`
+    await ensureW4Config(page, label)
 
-    const rowA = rowOf(page, LABEL_A)
+    const rowA = rowOf(page, label)
     await expect(rowA).toBeVisible()
     const respPromise = page.waitForResponse((r) => r.url().includes('/ai-configs/default'), { timeout: 20_000 }).catch(() => null)
     await rowA.locator('button', { hasText: /Set as default|设为默认/ }).first().click()
@@ -491,7 +518,7 @@ test.describe('W4 AI 创作模型配置 + BI 分析（真实 E2E 验收）', () 
 
     // 刷新后仍是默认
     await reloadToConfig(page)
-    const rowAReload = (await rowOf(page, LABEL_A).innerText()).replace(/\s+/g, ' ')
+    const rowAReload = (await rowOf(page, label).innerText()).replace(/\s+/g, ' ')
     c.note(`刷新后 A 行 = ${rowAReload}`)
     c.check(/default|默认/i.test(rowAReload), '刷新后默认状态丢失')
 
@@ -505,11 +532,11 @@ test.describe('W4 AI 创作模型配置 + BI 分析（真实 E2E 验收）', () 
     guard(page).forEach((p) => problems.push(p))
     await gotoConfig(page)
 
-    // 默认配置的删除按钮必须禁用
+    // R16 新需求：默认配置也允许删除，后端自动提升下一条为默认。
     const defaultRow = page.locator('.ai-config-list li').filter({ has: page.locator('.default-badge') }).first()
     const defaultDel = defaultRow.locator('button', { hasText: /Delete|删除/ }).first()
     c.note(`默认行删除按钮 disabled = ${await defaultDel.isDisabled()}`)
-    c.check(await defaultDel.isDisabled(), '默认配置的删除按钮未禁用（PRD 要求默认配置不可删）')
+    c.check(!(await defaultDel.isDisabled()), '默认配置的删除按钮应可用（删除后自动提升下一条）')
 
     // 先建 B（非默认）
     let dlg = await openDialog(page)
@@ -734,29 +761,14 @@ test.describe('W4 AI 创作模型配置 + BI 分析（真实 E2E 验收）', () 
     const info = await page.evaluate(() => {
       const cards = Array.from(document.querySelectorAll('.chart-card')).map((card) => {
         const h = card.querySelector('h3')
-        const cv = card.querySelector('canvas')
-        let drawn = false
-        let colors = 0
-        if (cv) {
-          try {
-            const ctx = cv.getContext('2d')
-            const d = ctx.getImageData(0, 0, cv.width, cv.height).data
-            const seen = new Set<string>()
-            for (let i = 0; i < d.length; i += 4 * 97) {
-              if (d[i + 3] > 8) seen.add(`${d[i]},${d[i + 1]},${d[i + 2]}`)
-              if (seen.size > 6) break
-            }
-            colors = seen.size
-            drawn = colors > 1
-          } catch (e) {
-            drawn = false
-          }
-        }
+        const chart = card.querySelector('.svg-chart')
+        const shapes = chart ? Array.from(chart.querySelectorAll('path[d], rect[fill]:not(.svg-chart__hit), circle[stroke-dasharray]')) : []
+        const colors = new Set(shapes.flatMap((el) => [el.getAttribute('stroke'), el.getAttribute('fill')]).filter((v) => v && v !== 'none' && !v.startsWith('url('))).size
         return {
           title: h ? (h.textContent || '').trim() : '',
-          hasCanvas: !!cv,
+          hasSVG: !!chart?.querySelector('svg[role="img"]'),
           empty: !!card.querySelector('.chart-empty'),
-          drawn,
+          drawn: shapes.length > 0,
           colors,
           wide: card.className.includes('chart-wide'),
         }
@@ -786,11 +798,11 @@ test.describe('W4 AI 创作模型配置 + BI 分析（真实 E2E 验收）', () 
         return
       }
       c.check(re.test(card.title), `第 ${i + 1} 张卡片标题不匹配（应为 ${name}，实测「${card.title}」）`)
-      c.check(card.hasCanvas, `第 ${i + 1} 张（${card.title}）没有 canvas`)
+      c.check(card.hasSVG, `第 ${i + 1} 张（${card.title}）没有 SVG 图表`)
       c.check(!card.empty, `第 ${i + 1} 张（${card.title}）显示空态（有数据时应渲染图表）`)
-      c.check(card.drawn, `第 ${i + 1} 张（${card.title}）canvas 未绘制内容（颜色样本 ${card.colors}）`)
+      c.check(card.drawn, `第 ${i + 1} 张（${card.title}）SVG 未绘制内容（颜色样本 ${card.colors}）`)
     })
-    c.note('图表类型（源码核对）：trend=LineChart 3 线；TOP10×2=BarChart indexAxis=y；位置点击率=BarChart 纵向；分类/语言/来源/流量=环形图；平均阅读时长=LineChart；发布趋势=BarChart')
+    c.note('图表类型（SvgChart）：trend=折线；TOP10×2=横向柱状；位置点击率=纵向柱状；分类/语言/来源/流量=环形图；平均阅读时长=折线；发布趋势=柱状')
     await shot(page, 'bi-charts')
     c.finish()
   })
@@ -829,17 +841,14 @@ test.describe('W4 AI 创作模型配置 + BI 分析（真实 E2E 验收）', () 
     }
     c.check(!/NaN|undefined|null/.test(text), '页面出现 NaN/undefined/null')
 
-    // tooltip 为 canvas 绘制，无法读 DOM：用悬浮截图留证
-    const first = page.locator('.chart-card canvas').first()
-    const box = await first.boundingBox()
-    if (box) {
-      await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.5)
-      await page.waitForTimeout(500)
-      await shot(page, 'bi-tooltip-hover')
-      c.note('tooltip 为 canvas 内绘制，已用悬浮截图留证（无法取 DOM 文本）')
-    } else {
-      await shot(page, 'bi-i18n')
-    }
+    // SVG 折线图的悬停热区应展示游标与数据点，不能只验证 SVG 容器存在。
+    const first = page.locator('.chart-card .svg-chart__hit').first()
+    await first.hover({ force: true })
+    const cursor = page.locator('.chart-card .svg-chart__cursor').first()
+    await expect(cursor).toBeAttached()
+    c.note(`SVG 游标测量 = ${JSON.stringify(await cursor.evaluate((el) => ({ rect: el.getBoundingClientRect().toJSON(), display: getComputedStyle(el).display, visibility: getComputedStyle(el).visibility, opacity: getComputedStyle(el).opacity, stroke: getComputedStyle(el).stroke })))}`)
+    c.check(await page.locator('.chart-card .svg-chart__cursor').count() > 0, 'SVG 图表悬停后未出现数据游标')
+    await shot(page, 'bi-tooltip-hover')
     c.finish()
   })
 

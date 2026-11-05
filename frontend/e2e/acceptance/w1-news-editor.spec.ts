@@ -1234,6 +1234,12 @@ test('NE-19 保存后前台新闻详情渲染标题层级/列表/引用/图片/�
     })
   })
   record('NE-19-dark', { dark: true, darkDom })
+  const sheetDark = await page.locator('.neo-article-sheet').evaluate((el) => {
+    const rgb = getComputedStyle(el).backgroundColor.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [255, 255, 255]
+    return { background: getComputedStyle(el).backgroundColor, channelMax: Math.max(...rgb) }
+  })
+  record('NE-19-dark-sheet', sheetDark)
+  expect.soft(sheetDark.channelMax, `深色详情卡片背景必须真正变深，实测 ${sheetDark.background}`).toBeLessThan(80)
   for (const t of darkDom) {
     if (t.ratio === null) continue
     expect.soft(t.ratio as number, `前台深色下 ${t.s} 对比度 ${t.ratio} < 4.5（fg=${t.fg}, bg=${t.bg}）`).toBeGreaterThanOrEqual(4.5)

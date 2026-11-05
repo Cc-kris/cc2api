@@ -745,7 +745,12 @@ watch(
 .rich-text-adv-tool.is-active { border-color: #2563eb; background: #dbeafe; color: #1d4ed8; }
 .rich-text-adv-tool:disabled { opacity: 0.45; cursor: not-allowed; }
 .rich-text-adv-divider { width: 1px; height: 16px; margin: 0 2px; background: #d5d9e2; }
-.rich-text-stats { margin-left: auto; padding-right: 4px; color: #94a3b8; font-size: 12px; font-variant-numeric: tabular-nums; }
+.rich-text-stats { margin-left: auto; padding-right: 4px; color: #475569; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 640px) {
+  .rich-text-toolbar-row { flex-wrap: wrap; gap: 4px; }
+  .rich-text-toolbar { flex-wrap: wrap; gap: 4px; max-width: 100%; }
+  .rich-text-advanced { flex-wrap: wrap; justify-content: flex-start; gap: 4px; width: 100%; }
+}
 .rich-text-editor.is-fullscreen {
   position: fixed;
   inset: 12px;

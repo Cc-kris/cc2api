@@ -6,6 +6,7 @@ import { useAuthStore as useUserStore } from '@/stores/auth'
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useI18n } from 'vue-i18n'
 import { getAdminSteps, getUserSteps } from '@/components/Guide/steps'
+import { useAnnouncementStore } from '@/stores/announcements'
 
 export interface OnboardingOptions {
   storageKey?: string
@@ -16,6 +17,7 @@ export function useOnboardingTour(options: OnboardingOptions) {
   const { t } = useI18n()
   const userStore = useUserStore()
   const onboardingStore = useOnboardingStore()
+  const announcementStore = useAnnouncementStore()
   const storageVersion = 'v4_interactive' // Bump version for new tour type
 
   // Timing constants for better maintainability
@@ -184,8 +186,7 @@ export function useOnboardingTour(options: OnboardingOptions) {
         // 如果是最后一步，点击则是"完成"
         if (state.activeIndex === (config.steps?.length ?? 0) - 1) {
           markAsSeen()
-          driverInstance?.destroy()
-          onboardingStore.setDriverInstance(null)
+          teardownDriver()
         } else {
           // 注意：交互式步骤通常隐藏 Next 按钮，此处逻辑为防御性编程
           const currentIndex = state.activeIndex ?? 0
@@ -212,8 +213,7 @@ export function useOnboardingTour(options: OnboardingOptions) {
       },
       onCloseClick: () => {
         markAsSeen()
-        driverInstance?.destroy()
-        onboardingStore.setDriverInstance(null)
+        teardownDriver()
       },
 
       // 渲染时重组 Footer 布局
@@ -485,8 +485,7 @@ export function useOnboardingTour(options: OnboardingOptions) {
         e.preventDefault()
         e.stopPropagation()
         markAsSeen()
-        driverInstance.destroy()
-        onboardingStore.setDriverInstance(null)
+        teardownDriver()
         return
       }
 
@@ -598,6 +597,12 @@ export function useOnboardingTour(options: OnboardingOptions) {
   }
   if (currentRoute) {
     watch(
+      () => announcementStore.currentPopup,
+      (popup) => {
+        if (popup && (driverInstance || onboardingStore.isDriverActive())) teardownDriver()
+      },
+    )
+    watch(
       () => currentRoute!.path,
       (to, from) => {
         if (to === from) return
@@ -661,6 +666,9 @@ export function useOnboardingTour(options: OnboardingOptions) {
     }
 
     autoStartTimer = setTimeout(() => {
+      // Announcements are a higher-priority blocking flow. Do not cover their
+      // only dismissal action with an onboarding overlay.
+      if (announcementStore.currentPopup) return
       void startTour()
     }, TIMING.AUTO_START_DELAY_MS)
   })

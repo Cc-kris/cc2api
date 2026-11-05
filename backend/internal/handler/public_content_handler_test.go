@@ -405,6 +405,187 @@ func TestPublicContentTranslationInvalidationClearsRenderedCache(t *testing.T) {
 	require.Contains(t, service.PublicContentCacheKey("/articles", "en-US"), "v="+strconv.FormatUint(service.PublicContentCacheVersion(), 10))
 }
 
+// publicPagedRepoStub honours limit/offset like the real repository (which
+// clamps the window, see repository.publicPageBounds) so tests can observe
+// which page the handler actually served.
+type publicPagedRepoStub struct {
+	publicContentHandlerRepoStub
+
+	newsTotal     int
+	articleTotal  int
+	lastNewsLimit int
+	lastNewsOff   int
+}
+
+func publicPagedBounds(total, limit, offset int) (int, int) {
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > total {
+		offset = total
+	}
+	end := offset + limit
+	if limit <= 0 || end > total {
+		end = total
+	}
+	return offset, end
+}
+
+func (s *publicPagedRepoStub) ListPublishedNews(_ context.Context, _ string, limit, offset int) (service.PublicNewsPage, error) {
+	s.lastNewsLimit, s.lastNewsOff = limit, offset
+	start, end := publicPagedBounds(s.newsTotal, limit, offset)
+	items := make([]service.PublicNewsListItem, 0, end-start)
+	for i := start; i < end; i++ {
+		items = append(items, service.PublicNewsListItem{
+			ID: int64(i + 1), Locale: "zh-CN", Slug: "news-" + strconv.Itoa(i+1),
+			Title: "News " + strconv.Itoa(i+1), Summary: "Summary", SourceName: "CCAI",
+			PublishedAt: time.Date(2026, 9, 9, 0, 0, 0, 0, time.UTC), Status: "published",
+		})
+	}
+	return service.PublicNewsPage{Items: items, Total: s.newsTotal}, nil
+}
+
+func (s *publicPagedRepoStub) ListPublishedArticles(_ context.Context, _ string, limit, offset int) (service.PublicArticlePage, error) {
+	start, end := publicPagedBounds(s.articleTotal, limit, offset)
+	items := make([]service.PublicArticleListItem, 0, end-start)
+	for i := start; i < end; i++ {
+		items = append(items, service.PublicArticleListItem{
+			ID: int64(i + 1), Locale: "zh-CN", Slug: "article-" + strconv.Itoa(i+1),
+			Title: "Article " + strconv.Itoa(i+1), Excerpt: "Excerpt",
+			PublishedAt: time.Date(2026, 9, 9, 0, 0, 0, 0, time.UTC), Status: "published",
+		})
+	}
+	return service.PublicArticlePage{Items: items, Total: s.articleTotal}, nil
+}
+
+type publicPageEnvelope struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    struct {
+		Items []struct {
+			Slug string `json:"slug"`
+		} `json:"items"`
+		Total      int `json:"total"`
+		Page       int `json:"page"`
+		PageSize   int `json:"pageSize"`
+		TotalPages int `json:"totalPages"`
+	} `json:"data"`
+}
+
+func decodePublicPage(t *testing.T, res *httptest.ResponseRecorder) publicPageEnvelope {
+	t.Helper()
+	require.Equal(t, http.StatusOK, res.Code, res.Body.String())
+	require.Contains(t, res.Header().Get("Content-Type"), "application/json")
+	var envelope publicPageEnvelope
+	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &envelope), res.Body.String())
+	require.Equal(t, 0, envelope.Code)
+	require.Equal(t, "success", envelope.Message)
+	return envelope
+}
+
+// The JSON APIs must clamp a past-the-end page to the last page and answer
+// 200 JSON; the 301 they used to emit is unreadable for non-browser clients.
+func TestPublicContentHandlerJSONClampsPagePastEnd(t *testing.T) {
+	repo := &publicPagedRepoStub{newsTotal: 45, articleTotal: 45}
+	r := newPublicContentHandlerPagedRouter(repo)
+
+	for _, tc := range []struct {
+		target      string
+		wantFirst   string
+		wantItemLen int
+	}{
+		{"/articles?locale=zh-CN&page=999&page_size=20", "article-41", 5},
+		{"/news?locale=zh-CN&page=999&page_size=20", "news-41", 5},
+	} {
+		res := httptest.NewRecorder()
+		r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, tc.target, nil))
+		envelope := decodePublicPage(t, res)
+		require.Empty(t, res.Header().Get("Location"), tc.target)
+		require.Equal(t, 3, envelope.Data.TotalPages, tc.target)
+		require.Equal(t, 3, envelope.Data.Page, tc.target)
+		require.Equal(t, 45, envelope.Data.Total, tc.target)
+		require.Len(t, envelope.Data.Items, tc.wantItemLen, tc.target)
+		require.Equal(t, tc.wantFirst, envelope.Data.Items[0].Slug, tc.target)
+	}
+
+	// The clamped page really was re-queried from the service (page 3 => offset 40).
+	require.Equal(t, 20, repo.lastNewsLimit)
+	require.Equal(t, 40, repo.lastNewsOff)
+}
+
+func TestPublicContentHandlerJSONKeepsInRangePage(t *testing.T) {
+	repo := &publicPagedRepoStub{newsTotal: 45, articleTotal: 45}
+	r := newPublicContentHandlerPagedRouter(repo)
+
+	for _, target := range []string{
+		"/articles?locale=zh-CN&page=2&page_size=20",
+		"/news?locale=zh-CN&page=2&page_size=20",
+	} {
+		res := httptest.NewRecorder()
+		r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, target, nil))
+		envelope := decodePublicPage(t, res)
+		require.Equal(t, 2, envelope.Data.Page, target)
+		require.Equal(t, 3, envelope.Data.TotalPages, target)
+		require.Len(t, envelope.Data.Items, 20, target)
+	}
+
+	// An empty collection keeps the page echo and never redirects.
+	empty := &publicPagedRepoStub{}
+	emptyRes := httptest.NewRecorder()
+	newPublicContentHandlerPagedRouter(empty).ServeHTTP(emptyRes, httptest.NewRequest(http.MethodGet, "/articles?page=5", nil))
+	emptyEnvelope := decodePublicPage(t, emptyRes)
+	require.Equal(t, 5, emptyEnvelope.Data.Page)
+	require.Equal(t, 0, emptyEnvelope.Data.TotalPages)
+	require.Empty(t, emptyEnvelope.Data.Items)
+}
+
+func TestPublicContentHandlerJSONDegradesInvalidPageToFirst(t *testing.T) {
+	repo := &publicPagedRepoStub{newsTotal: 45, articleTotal: 45}
+	r := newPublicContentHandlerPagedRouter(repo)
+
+	for _, target := range []string{
+		"/articles?locale=zh-CN&page=0&page_size=20",
+		"/articles?locale=zh-CN&page=abc&page_size=20",
+		"/articles?locale=zh-CN&page=-5&page_size=20",
+		"/news?locale=zh-CN&page=0&page_size=20",
+		"/news?locale=zh-CN&page=abc&page_size=20",
+	} {
+		res := httptest.NewRecorder()
+		r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, target, nil))
+		envelope := decodePublicPage(t, res)
+		require.Equal(t, 1, envelope.Data.Page, target)
+		require.Equal(t, 20, envelope.Data.PageSize, target)
+		require.Len(t, envelope.Data.Items, 20, target)
+	}
+}
+
+// HTML collection pages keep canonicalising past-the-end pages with a 301.
+func TestPublicContentHandlerHTMLStillRedirectsPastEnd(t *testing.T) {
+	repo := &publicPagedRepoStub{newsTotal: 45, articleTotal: 45}
+	r := newPublicContentHandlerPagedRouter(repo)
+
+	res := httptest.NewRecorder()
+	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/articles-html?locale=zh-CN&page=999&page_size=20", nil))
+	require.Equal(t, http.StatusMovedPermanently, res.Code)
+	require.Equal(t, "/articles-html?locale=zh-CN&page=3&page_size=20", res.Header().Get("Location"))
+
+	res = httptest.NewRecorder()
+	r.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "/news-html?locale=zh-CN&page=999&page_size=20", nil))
+	require.Equal(t, http.StatusMovedPermanently, res.Code)
+	require.Equal(t, "/news-html?locale=zh-CN&page=3&page_size=20", res.Header().Get("Location"))
+}
+
+func newPublicContentHandlerPagedRouter(repo *publicPagedRepoStub) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	h := NewPublicContentHandler(service.NewPublicContentService(repo), &config.Config{Server: config.ServerConfig{FrontendURL: "https://ccai.example"}})
+	r.GET("/news", h.ListNews)
+	r.GET("/articles", h.ListArticles)
+	r.GET("/news-html", h.RenderNewsListHTML)
+	r.GET("/articles-html", h.RenderArticleListHTML)
+	return r
+}
+
 func TestPublicContentListCacheUsesVersionedKey(t *testing.T) {
 	// 版本号参与缓存键：同一路径在同一版本下复用，版本推进后换键。
 	repo := &publicContentHandlerRepoStub{news: service.PublicNewsPage{Total: 1, Locale: "zh-CN"}}

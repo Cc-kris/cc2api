@@ -47,8 +47,15 @@ func (h *PublicContentHandler) ListNews(c *gin.Context) {
 		publicContentError(c, err)
 		return
 	}
-	if redirectToLastPublicPage(c, page, data.TotalPages) {
-		return
+	// The JSON API clamps to the last page instead of answering 301: SDKs,
+	// server-side renderers and scripts do not follow redirects and would
+	// receive an HTML body where they expect JSON.
+	if page > data.TotalPages && data.TotalPages > 0 {
+		data, err = h.service.ListNews(c.Request.Context(), publicLocaleQuery(c), data.TotalPages, pageSize)
+		if err != nil {
+			publicContentError(c, err)
+			return
+		}
 	}
 	response.Success(c, data)
 }
@@ -72,8 +79,13 @@ func (h *PublicContentHandler) ListArticles(c *gin.Context) {
 		publicContentError(c, err)
 		return
 	}
-	if redirectToLastPublicPage(c, page, data.TotalPages) {
-		return
+	// See ListNews: the JSON API clamps instead of redirecting.
+	if page > data.TotalPages && data.TotalPages > 0 {
+		data, err = h.service.ListArticles(c.Request.Context(), publicLocaleQuery(c), data.TotalPages, pageSize)
+		if err != nil {
+			publicContentError(c, err)
+			return
+		}
 	}
 	response.Success(c, data)
 }

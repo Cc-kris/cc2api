@@ -316,16 +316,98 @@ func (r *publicContentRepository) ListFeaturedArticles(ctx context.Context, loca
 	if limit <= 0 || limit > service.MaxPublicFeaturedArticles {
 		return nil, service.ErrPublicContentRepositoryContract
 	}
-	predicates := publicArticlePredicates(locale)
+	requested := strings.TrimSpace(locale)
+	// 与 ListPublishedArticles 保持一致：精选区同样必须做语言回退。
+	// 之前这里用 publicArticlePredicates(locale) 精确匹配 locale，导致「精选文章都在
+	// 中文、浏览英文站」时精选区整块消失（PRD R9：无译文时回落中文正文）。
+	predicates := publicArticlePredicates("")
 	predicates = append(predicates, contentarticle.FeaturedAtNotNil())
+	if requested != "" {
+		predicates = append(predicates, contentarticle.LocaleIn(requested, service.PublicContentFallbackLocale))
+	}
+	// 多取一批候选：同一篇文章可能同时存在请求语言与回退语言两行，归并后仍要凑满 limit。
 	items, err := client.ContentArticle.Query().Where(predicates...).Order(
 		contentarticle.ByFeaturedAt(sql.OrderDesc()),
 		contentarticle.ByID(sql.OrderDesc()),
-	).Limit(limit).All(ctx)
+	).Limit(limit * 2).All(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return mapPublicArticlesList(items), nil
+	// 按父文章 id 归并，优先请求语言，其次回退语言，保持 featured_at 倒序。
+	chosen := make(map[int64]*dbent.ContentArticle, len(items))
+	order := make([]int64, 0, len(items))
+	for _, row := range items {
+		if row == nil {
+			continue
+		}
+		current, seen := chosen[row.ID]
+		if !seen {
+			chosen[row.ID] = row
+			order = append(order, row.ID)
+			continue
+		}
+		if strings.TrimSpace(row.Locale) == requested {
+			chosen[row.ID] = row
+		} else if strings.TrimSpace(current.Locale) != requested && row.Locale == service.PublicContentFallbackLocale {
+			chosen[row.ID] = row
+		}
+	}
+	ordered := make([]*dbent.ContentArticle, 0, len(order))
+	for _, id := range order {
+		if row, ok := chosen[id]; ok {
+			ordered = append(ordered, row)
+		}
+	}
+	mapped := mapPublicArticlesList(ordered)
+	// 请求语言存在已发布译文时用译文覆盖标题/摘要，与列表页行为一致。
+	if requested != "" && requested != service.PublicContentFallbackLocale && len(mapped) > 0 {
+		byID := make(map[int64]int, len(mapped))
+		for i, item := range mapped {
+			byID[item.ID] = i
+		}
+		itemIDs := make([]int64, 0, len(byID))
+		for id := range byID {
+			itemIDs = append(itemIDs, id)
+		}
+		translations, translationErr := client.ContentTranslation.Query().Where(
+			contenttranslation.ContentTypeEQ("article"),
+			contenttranslation.LocaleEQ(requested),
+			contenttranslation.StatusEQ(domain.ContentTranslationPublished),
+			contenttranslation.DeletedAtIsNil(),
+			contenttranslation.PublishedAtNotNil(),
+			contenttranslation.ContentIDIn(itemIDs...),
+		).All(ctx)
+		if translationErr != nil {
+			return nil, translationErr
+		}
+		for _, translation := range translations {
+			idx, tracked := byID[translation.ContentID]
+			if !tracked {
+				continue
+			}
+			validTranslation, validationErr := publishedArticleTranslation(ctx, client, translation.ContentID, translation.SourceVersion)
+			if validationErr != nil {
+				return nil, validationErr
+			}
+			if !validTranslation {
+				continue
+			}
+			parent, parentErr := client.ContentArticle.Query().Where(contentarticle.IDEQ(translation.ContentID)).Only(ctx)
+			if parentErr != nil {
+				if !dbent.IsNotFound(parentErr) {
+					return nil, parentErr
+				}
+				continue
+			}
+			if entry, ok := publicArticleTranslationItem(parent, translation); ok {
+				mapped[idx] = entry
+			}
+		}
+	}
+	if len(mapped) > limit {
+		mapped = mapped[:limit]
+	}
+	return mapped, nil
 }
 
 func (r *publicContentRepository) ListPublishedArticlesForSitemap(ctx context.Context) ([]service.PublicArticleListItem, error) {
@@ -507,18 +589,18 @@ func mapPublicNews(items []*dbent.ContentNewsItem) []service.PublicNews {
 			Locale:              item.Locale,
 			Slug:                item.Slug,
 			Title:               item.Title,
-			Summary:             publicDerefString(item.Summary),
+			Summary:             service.CleanContentNewsSummaryWithFallback(publicDerefString(item.Summary), publicPlainText(publicDerefString(item.BodyText), publicDerefString(item.BodyHTML), "")),
 			BodyHTML:            publicDerefString(item.BodyHTML),
 			BodyText:            publicPlainText(publicDerefString(item.BodyText), publicDerefString(item.BodyHTML), ""),
 			SourceName:          publicDerefString(item.SourceName),
 			Category:            cat,
 			Tags:                tags,
 			TitleZh:             titleZh,
-			SummaryZh:           summaryZh,
+			SummaryZh:           service.CleanContentNewsSummary(summaryZh),
 			BodyTextZh:          bodyTextZh,
 			CategoryZh:          catZh,
 			TitleEn:             titleEn,
-			SummaryEn:           summaryEn,
+			SummaryEn:           service.CleanContentNewsSummary(summaryEn),
 			BodyTextEn:          bodyTextEn,
 			CategoryEn:          catEn,
 			OriginalPublishedAt: item.OriginalPublishedAt,
@@ -545,15 +627,15 @@ func mapPublicNewsList(items []*dbent.ContentNewsItem) []service.PublicNewsListI
 			Locale:              item.Locale,
 			Slug:                item.Slug,
 			Title:               item.Title,
-			Summary:             publicDerefString(item.Summary),
+			Summary:             service.CleanContentNewsSummaryWithFallback(publicDerefString(item.Summary), publicPlainText(publicDerefString(item.BodyText), publicDerefString(item.BodyHTML), "")),
 			SourceName:          publicDerefString(item.SourceName),
 			Category:            cat,
 			Tags:                tags,
 			TitleZh:             titleZh,
-			SummaryZh:           summaryZh,
+			SummaryZh:           service.CleanContentNewsSummary(summaryZh),
 			CategoryZh:          catZh,
 			TitleEn:             titleEn,
-			SummaryEn:           summaryEn,
+			SummaryEn:           service.CleanContentNewsSummary(summaryEn),
 			CategoryEn:          catEn,
 			OriginalPublishedAt: item.OriginalPublishedAt,
 			PublishedAt:         publicDerefTime(item.PublishedAt),

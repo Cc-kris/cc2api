@@ -350,7 +350,11 @@ func shouldBypassEmbeddedFrontend(path string, publicSSR bool) bool {
 		trimmed == "/health" ||
 		trimmed == "/responses" ||
 		strings.HasPrefix(trimmed, "/responses/") ||
-		strings.HasPrefix(trimmed, "/images/")
+		strings.HasPrefix(trimmed, "/images/") ||
+		// 内容中心上传的图片由 r.Static("/media/content", ...) 托管，文件不在内嵌 dist 里。
+		// 不放行会被下面的 SPA fallback 抢走：fileExists=false → 重定向 /login，
+		// 于是后台封面预览和公开页封面全部变成「挂掉的图」（实测 302 → /login）。
+		strings.HasPrefix(trimmed, "/media/")
 }
 
 // isPublicSSRRoute lets the registered Go handlers render crawlable pages

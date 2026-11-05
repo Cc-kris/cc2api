@@ -10,8 +10,7 @@ const url = `https://example.com/e2e-real-${stamp}.xml`
 
 async function gotoSources(page: Page) {
   await page.locator('button', { hasText: '新闻源' }).first().click()
-  await expect(page.getByPlaceholder('来源名称（必填）')).toBeVisible()
-  // 列表是异步加载的（20/页），行未渲染前点行内按钮会「元素不存在」
+  await expect(page.locator('.source-toolbar button', { hasText: '新增新闻源' }).first()).toBeVisible()
   await expect(page.locator('table tbody tr').first()).toBeVisible({ timeout: 30_000 })
 }
 const row = (page: Page, n: string) => page.locator('table tbody tr', { hasText: n })
@@ -24,13 +23,15 @@ test('S1 新建新闻源，刷新后仍在', async ({ page }, info) => {
   await realLogin(page)
   await openContentTab(page, TAB)
   await gotoSources(page)
-  await page.getByPlaceholder('来源名称（必填）').fill(name)
-  await page.getByPlaceholder('公开 RSS/Atom/JSON URL（必填）').fill(url)
+  await page.locator('.source-toolbar button', { hasText: '新增新闻源' }).first().click()
+  const dlg = page.locator('.source-dialog[role="dialog"]')
+  await expect(dlg).toBeVisible()
+  await dlg.getByPlaceholder('来源名称（必填）').fill(name)
+  await dlg.getByPlaceholder('公开 RSS/Atom/JSON URL（必填）').fill(url)
   await shot(page, 'form')
-  // 真实按钮文案为「新增新闻源」（探针实测 .source-toolbar button.button 唯一候选）
-  const createBtn = page.locator('.source-toolbar button.button', { hasText: '新增新闻源' }).first()
-  await expect(createBtn, '填完必填项后创建按钮仍禁用').toBeEnabled()
-  await waitWrite(page, 'POST', '/admin/content/news-sources', () => createBtn.click())
+  const saveBtn = dlg.getByRole('button', { name: '保存新闻源' })
+  await expect(saveBtn).toBeEnabled()
+  await waitWrite(page, 'POST', '/admin/content/news-sources', () => saveBtn.click())
   await reloadToTab(page, TAB)
   await gotoSources(page)
   await expect(row(page, name)).toHaveCount(1)
@@ -46,7 +47,7 @@ test('S2 编辑名称保存，刷新后回显', async ({ page }, info) => {
   await gotoSources(page)
   await row(page, name).getByRole('button', { name: '编辑' }).click()
   // 真实弹窗结构：.content-modal-layer > .source-dialog[role=dialog]（没有 .modal-backdrop）
-  const dlg = page.locator('.source-dialog[role="dialog"]', { has: page.locator('[aria-label="关闭新闻源编辑"]') })
+  const dlg = page.locator('.source-dialog[role="dialog"]')
   await expect(dlg).toBeVisible({ timeout: 20_000 })
   await dlg.locator('label', { hasText: '名称' }).first().locator('input').fill(renamed)
   await shot(page, 'edit')

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { dismissOverlays } from './real/real-helpers'
 // TASK-033 前台浏览器验收（R7-01/03, R9-09, R12-04, R13-01～03, R14-01/02, R15-01/02, COMP-01）
 const BASE = new URL(process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3100')
 const NEWS = '/news/zh/ccai-api-gateway-news'
@@ -74,24 +75,36 @@ test('R12-04 五语言切换跳对应短码前缀且不丢当前详情', async (
   await page.waitForURL(/\/news\/en\//)
 })
 
-test('R13-01 精选 1 大 + 最多 9 小，三视口网格与无横向滚动', async ({ page }) => {
+test('R13-01 精选一行一条 + 左图右文，三视口无横向滚动', async ({ page }) => {
   await page.goto('/articles')
-  await expect(page.locator('[data-testid="featured-large-card"]')).toHaveCount(1)
-  const small = await page.locator('[data-testid="featured-small-grid"] > *').count()
-  expect(small, '小卡 1～9').toBeGreaterThan(0)
-  expect(small, '小卡 1～9').toBeLessThanOrEqual(9)
+  const rows = page.locator('.public-featured-section .public-featured-row')
+  await expect(rows.first()).toBeVisible()
+  expect(await rows.count(), '精选最多 10 条').toBeLessThanOrEqual(10)
+  await expect(page.locator('.public-featured-small-grid')).toHaveCount(0)
+  await expect(page.locator('.public-featured-section h2').filter({ hasText: '精选深度解析' })).toHaveCount(0)
   for (const w of [1440, 1024, 390]) {
     await page.setViewportSize({ width: w, height: 900 })
     await page.waitForTimeout(250)
     const { docW, winW } = await widths(page)
     expect(docW, `${w}px 横向滚动`).toBeLessThanOrEqual(winW + 1)
-    const cols = await page.locator('[data-testid="featured-small-grid"]').evaluate((e) => getComputedStyle(e).gridTemplateColumns.split(' ').length)
-    expect([1, 2, 3], `${w}px 栅格列数`).toContain(cols)
+    const first = await rows.first().evaluate((el) => {
+      const row = el.getBoundingClientRect()
+      const cover = el.querySelector('.public-featured-cover-row')?.getBoundingClientRect()
+      const body = el.querySelector('.public-featured-row-body')?.getBoundingClientRect()
+      const display = getComputedStyle(el).display
+      return { rowW: row.width, coverX: cover?.x ?? 0, bodyX: body?.x ?? 0, coverY: cover?.y ?? 0, bodyY: body?.y ?? 0, display }
+    })
+    expect(first.rowW, `${w}px 精选行占满内容宽度`).toBeGreaterThan(200)
+    if (w >= 1024) {
+      expect(first.coverX, `${w}px 封面在正文左侧`).toBeLessThan(first.bodyX)
+      expect(Math.abs(first.coverY - first.bodyY), `${w}px 图与正文同一行`).toBeLessThan(80)
+    }
   }
 })
 
 test('R13-02 精选徽章柠绿底深色字，暗色主题下仍一致', async ({ page }) => {
   await page.goto('/articles')
+  await expect(page.locator('.public-featured-badge, .pf-row-index').first()).toBeVisible()
   for (const dark of [false, true]) {
     await setTheme(page, dark)
     const badge = await page.evaluate(() => {
@@ -111,7 +124,9 @@ test('R13-03 0 篇精选整段隐藏，长标题两行截断', async ({ page }) 
   await expect(page.locator('[data-testid="featured-section"]')).toHaveCount(0)
   await page.unroute('**/api/v1/public/articles/featured*')
   await page.goto('/articles')
-  const clamp = await page.locator('[data-testid="featured-large-card"] [class*="title"]').first().evaluate((e) => getComputedStyle(e).webkitLineClamp)
+  const title = page.locator('[data-testid="featured-large-card"] .public-featured-row-title')
+  await expect(title).toBeVisible()
+  const clamp = await title.evaluate((e) => getComputedStyle(e).webkitLineClamp)
   expect(clamp).toBe('2')
 })
 
@@ -164,6 +179,8 @@ test('R15-01/02 后台下拉、输入框、表格统一组件化', async ({ page
     localStorage.setItem('admin_guide_2_admin_v4_interactive', 'true')
   }, token)
   await page.goto('/admin/content')
+  await page.waitForTimeout(1_200)
+  await dismissOverlays(page)
 
   const nativeSelects = page.locator('select')
   const dropdown = page.locator('.select-dropdown-portal:visible')
@@ -275,7 +292,9 @@ test('R15-01/02 后台下拉、输入框、表格统一组件化', async ({ page
     await expect(nativeSelects, `${sub} 无原生 select`).toHaveCount(0)
   }
   await page.getByRole('button', { name: '新闻源', exact: true }).click()
+  await page.getByRole('button', { name: '+ 新增新闻源', exact: true }).click()
   await expect(page.locator('[data-test="news-source-type"]')).toBeVisible()
+  await page.locator('.source-dialog').getByRole('button', { name: '取消', exact: true }).click()
   await page.getByRole('button', { name: '自动化设置', exact: true }).click()
   await expect(page.locator('[data-test="automation-publish-mode"]')).toBeVisible()
 

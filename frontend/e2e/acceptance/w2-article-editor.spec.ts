@@ -233,21 +233,31 @@ test('AE-01 文章编辑弹窗宽度/圆角/居中 + 左右结构 + 390 不横�
   await shot(page, '1440-dialog')
 
   expect
-    .soft(m1440.modal!.w, `1440 视口弹窗宽度期望 880±4，实测 ${m1440.modal!.w}`)
-    .toBeGreaterThanOrEqual(876)
-  expect.soft(m1440.modal!.w, `1440 视口弹窗宽度期望 880±4，实测 ${m1440.modal!.w}`).toBeLessThanOrEqual(884)
+    .soft(m1440.modal!.w, `1440 视口弹窗宽度期望 1320±4，实测 ${m1440.modal!.w}`)
+    .toBeGreaterThanOrEqual(1316)
+  expect.soft(m1440.modal!.w, `1440 视口弹窗宽度期望 1320±4，实测 ${m1440.modal!.w}`).toBeLessThanOrEqual(1324)
   expect.soft(m1440.modalRadius, `弹窗圆角期望 12px，实测 ${m1440.modalRadius}`).toBe('12px')
   const centerDelta = Math.abs(m1440.modal!.x + m1440.modal!.w / 2 - m1440.vw / 2)
   expect.soft(centerDelta, `弹窗未居中，中心偏移 ${centerDelta}px`).toBeLessThanOrEqual(4)
 
-  // 左右结构：左栏配置项、右栏正文编辑器（用例 AE-01 明确）
+  // 左右结构（R16/R17 最新基线）：左栏=标题/摘要/分类标签/正文编辑器，右栏=精选/封面/SEO/翻译
   expect.soft(m1440.left, '缺少左栏').not.toBeNull()
   expect.soft(m1440.right, '缺少右栏').not.toBeNull()
   expect.soft(m1440.left!.x, '左栏应在右栏左侧').toBeLessThan(m1440.right!.x)
-  expect.soft(m1440.bodyInRight, `正文编辑器应在右栏，实测 bodyInLeft=${m1440.bodyInLeft} bodyInRight=${m1440.bodyInRight}`).toBe(true)
+  expect.soft(m1440.bodyInLeft, `正文编辑器应在左栏，实测 bodyInLeft=${m1440.bodyInLeft} bodyInRight=${m1440.bodyInRight}`).toBe(true)
+  // 右栏应含 精选(推荐设置)/封面图/SEO 卡片；编辑态另含译文卡（AE-15 覆盖）
+  const rightCards = await modal(page).locator('.editor-col-right .meta-card-header h4').allInnerTexts()
+  console.log(`AE-01 right cards=${JSON.stringify(rightCards)}`)
+  expect.soft(rightCards.join('|'), `右栏应含推荐(精选)/封面/SEO 卡片，实测 ${JSON.stringify(rightCards)}`).toMatch(/推荐设置/)
+  expect.soft(rightCards.join('|'), `右栏应含封面图卡片，实测 ${JSON.stringify(rightCards)}`).toMatch(/封面图/)
+  expect.soft(rightCards.join('|'), `右栏应含 SEO 卡片，实测 ${JSON.stringify(rightCards)}`).toMatch(/SEO/)
+  // 左栏应含正文卡片（编辑器所在）
+  const leftCards = await modal(page).locator('.editor-col-left .meta-card-header h4').allInnerTexts()
+  console.log(`AE-01 left cards=${JSON.stringify(leftCards)}`)
+  expect.soft(leftCards.join('|'), `左栏应含正文卡片，实测 ${JSON.stringify(leftCards)}`).toMatch(/正文/)
   await shot(page, '1440-columns')
 
-  // 1024 视口
+  // 1024 视口（弹窗宽 = min(1320, 100vw-32) = 992）
   await page.setViewportSize({ width: 1024, height: 768 })
   await modal(page).getByRole('button', { name: '取消' }).click()
   await expect(modal(page)).toHaveCount(0)
@@ -257,9 +267,9 @@ test('AE-01 文章编辑弹窗宽度/圆角/居中 + 左右结构 + 390 不横�
   console.log('AE-01 1024 metrics:', JSON.stringify(m1024))
   await shot(page, '1024-dialog')
   expect
-    .soft(m1024.modal!.w, `1024 视口弹窗宽度期望 880±4，实测 ${m1024.modal!.w}`)
-    .toBeGreaterThanOrEqual(876)
-  expect.soft(m1024.modal!.w, `1024 视口弹窗宽度期望 880±4，实测 ${m1024.modal!.w}`).toBeLessThanOrEqual(884)
+    .soft(m1024.modal!.w, `1024 视口弹窗宽度期望 min(1320,100vw-32)=992±4，实测 ${m1024.modal!.w}`)
+    .toBeGreaterThanOrEqual(988)
+  expect.soft(m1024.modal!.w, `1024 视口弹窗宽度期望 min(1320,100vw-32)=992±4，实测 ${m1024.modal!.w}`).toBeLessThanOrEqual(996)
   expect.soft(Math.abs(m1024.left!.x - m1024.right!.x), '1024 下左右两栏应并排（左右 x 不同）').toBeGreaterThan(50)
   await modal(page).getByRole('button', { name: '取消' }).click()
   await expect(modal(page)).toHaveCount(0)
@@ -679,10 +689,11 @@ test('AE-10 SEO 按钮：正文空禁用 + 加载态 + 描述 120-160 字/关键
   const seoTitleInput = seoCard.locator('input').first()
   const seoKwWrap = seoCard.locator('.tag-input')
 
-  const disabledOnEmpty = await seoBtn.isDisabled()
-  console.log(`AE-10 text empty → seo button disabled=${disabledOnEmpty}`)
+  // 正文为空：按钮呈禁用语义（aria-disabled），且点击必须给出明确提示，不能「点了没反应」
+  const ariaDisabledOnEmpty = await seoBtn.getAttribute('aria-disabled')
+  console.log(`AE-10 text empty → seo button aria-disabled=${ariaDisabledOnEmpty}`)
   await shot(page, 'empty-body-disabled')
-  expect.soft(disabledOnEmpty, `正文为空时 SEO 按钮应禁用，实测 disabled=${disabledOnEmpty}`).toBe(true)
+  expect.soft(ariaDisabledOnEmpty, `正文为空时 SEO 按钮应为禁用语义（aria-disabled=true），实测 ${ariaDisabledOnEmpty}`).toBe('true')
 
   // 空正文点击：必须给出明确结果（提示/请求/状态变化）
   const toastBefore = await page.locator('.ccai-neolab-toast').count()
@@ -694,11 +705,15 @@ test('AE-10 SEO 按钮：正文空禁用 + 加载态 + 描述 120-160 字/关键
   await seoBtn.click({ force: true }).catch(() => {})
   await page.waitForTimeout(1500)
   const toastAfter = await page.locator('.ccai-neolab-toast').count()
+  const toastTextsEmpty = await page.locator('.ccai-neolab-toast').allInnerTexts()
   const descOnEmpty = await seoDesc.inputValue()
-  console.log(`AE-10 empty click → toasts ${toastBefore}→${toastAfter}, desc="${descOnEmpty}", writes=${JSON.stringify(writes)}`)
+  console.log(`AE-10 empty click → toasts ${toastBefore}→${toastAfter} ${JSON.stringify(toastTextsEmpty)}, desc="${descOnEmpty}", writes=${JSON.stringify(writes)}`)
   await shot(page, 'empty-body-click')
   const hasEmptyFeedback = toastAfter > toastBefore || descOnEmpty.length > 0 || writes.length > 0
   expect.soft(hasEmptyFeedback, '正文为空时点击 SEO 按钮无任何结果（无提示/无请求/无字段变化）').toBe(true)
+  expect
+    .soft(toastTextsEmpty.join('|'), `空正文点击应提示「请先填写正文内容」，实测 toast=${JSON.stringify(toastTextsEmpty)}`)
+    .toMatch(/请先填写正文|正文/)
 
   // 有正文时点击
   await modal(page).locator('.title-cell, .editor-title-input').first().fill(`${PREFIX} SEO 校验标题`)
@@ -758,13 +773,18 @@ test('AE-11 已有 SEO 描述时点击：先确认「已有内容，是否覆盖
   })
   await modal(page).locator('.seo-auto-btn').click()
   await page.waitForTimeout(800)
-  const confirmText = await page.locator('text=/已有内容.*是否覆盖/').count()
+  // 覆盖确认卡片（Teleport 到 body 的 alertdialog）
+  const confirmText = await page.locator('.seo-overwrite-confirm').count()
   const modalConfirm = await page.locator('.action-confirm, .inline-tax-dialog, .confirm-dialog').filter({ hasText: '覆盖' }).count()
   console.log(`AE-11 confirmByText=${confirmText} confirmByDialog=${modalConfirm} nativeDialog=${confirmSeen}`)
   await shot(page, 'overwrite-confirm')
   expect
     .soft(confirmText + modalConfirm + (confirmSeen ? 1 : 0), '已有内容时应先弹「已有内容，是否覆盖？」确认，实测无确认框')
     .toBeGreaterThan(0)
+  // 点「取消」→ 原描述不变
+  const cancelBtn = page.locator('.seo-overwrite-confirm').getByRole('button', { name: '取消' })
+  if (await cancelBtn.isVisible().catch(() => false)) await cancelBtn.click()
+  await page.waitForTimeout(400)
   const afterDesc = await seoDesc.inputValue()
   console.log(`AE-11 desc after click="${afterDesc.slice(0, 80)}" unchanged=${afterDesc === existing}`)
   expect.soft(afterDesc, `取消覆盖后原 SEO 描述应保持不变，实测 "${afterDesc}"`).toBe(existing)
@@ -861,7 +881,7 @@ test('AE-14 已发布文章精选开关：滑块式、开 #2563EB/关灰、刷�
       h: r.height,
       bg: cs.backgroundColor,
       appearance: cs.appearance,
-      knob: !!(el as HTMLElement).querySelector('span, i'),
+      knob: !!(el as HTMLElement).querySelector('.switch-knob'),
       // 浏览器原生 checkbox 的特征：appearance 为 auto 且无滑块子元素
       nativeCheckbox: cs.appearance !== 'none' && !((el as HTMLElement).querySelector('*')),
     }
@@ -870,36 +890,47 @@ test('AE-14 已发布文章精选开关：滑块式、开 #2563EB/关灰、刷�
   await shot(page, 'toggle-off')
   expect.soft(desc.nativeCheckbox || desc.tag === 'INPUT', `精选开关应为滑块式（.switch/.switch-btn），实测 ${desc.tag} type=${desc.type} class="${desc.cls}" appearance=${desc.appearance}`).toBe(false)
   expect.soft(desc.role, `滑块应有 role=switch，实测 role="${desc.role}"`).toMatch(/switch/i)
+  expect.soft(desc.knob, '滑块应含 .switch-knob 滑块子元素').toBe(true)
 
-  // 打开 → 蓝色；关 → 灰（浅色主题）
+  // 滑块尺寸口径（46×26）
+  expect.soft(desc.w, `滑块宽度期望 46px，实测 ${desc.w}`).toBeGreaterThanOrEqual(40)
+  expect.soft(desc.w, `滑块宽度期望 46px，实测 ${desc.w}`).toBeLessThanOrEqual(52)
+  expect.soft(desc.h, `滑块高度期望 26px，实测 ${desc.h}`).toBeGreaterThanOrEqual(22)
+  expect.soft(desc.h, `滑块高度期望 26px，实测 ${desc.h}`).toBeLessThanOrEqual(30)
+
+  // 打开 → 蓝色 #2563EB；关 → 灰（浅色主题）
+  const onOf = (page2: typeof page, title: string) =>
+    rowOf(page2, title).locator('.featured-toggle').evaluate((el) => ({
+      on: (el as HTMLElement).classList.contains('on'),
+      ariaChecked: el.getAttribute('aria-checked') || '',
+      bg: getComputedStyle(el as HTMLElement).backgroundColor,
+    }))
   await waitWrite(page, 'POST', TAX_API, () => row.locator('.featured-toggle').click())
   await page.waitForTimeout(400)
-  const onStyle = await row.locator('.featured-toggle').evaluate((el) => {
-    const cs = getComputedStyle(el as HTMLElement)
-    return { bg: cs.backgroundColor, color: cs.color, border: cs.borderTopColor, checked: (el as HTMLInputElement).checked }
-  })
+  const onStyle = await onOf(page, PUB_TITLE)
   console.log(`AE-14 on style=${JSON.stringify(onStyle)}`)
   await shot(page, 'toggle-on')
+  expect.soft(onStyle.on, '点击后滑块应为 on 态').toBe(true)
+  expect.soft(onStyle.bg, `滑块 on 态背景应为主色 #2563eb，实测 ${onStyle.bg}`).toMatch(/37, 99, 235/)
 
   await reloadToTab(page, TAB)
   await search(page, PUB_TITLE)
-  const stillOn = await rowOf(page, PUB_TITLE).locator('.featured-toggle').isChecked()
+  const stillOn = await rowOf(page, PUB_TITLE).locator('.featured-toggle').evaluate((el) => (el as HTMLElement).classList.contains('on'))
   console.log(`AE-14 after reload checked=${stillOn}`)
   await shot(page, 'toggle-on-after-reload')
-  expect.soft(stillOn, `刷新后精选状态应保持（开），实测 checked=${stillOn}`).toBe(true)
+  expect.soft(stillOn, `刷新后精选状态应保持（开），实测 on=${stillOn}`).toBe(true)
 
   await waitWrite(page, 'POST', TAX_API, () => rowOf(page, PUB_TITLE).locator('.featured-toggle').click())
   await page.waitForTimeout(300)
-  const offStyle = await rowOf(page, PUB_TITLE).locator('.featured-toggle').evaluate((el) => {
-    const cs = getComputedStyle(el as HTMLElement)
-    return { bg: cs.backgroundColor, border: cs.borderTopColor, checked: (el as HTMLInputElement).checked }
-  })
+  const offStyle = await onOf(page, PUB_TITLE)
   console.log(`AE-14 off style=${JSON.stringify(offStyle)}`)
-  expect.soft(offStyle.checked, `再次点击应关闭精选，实测 checked=${offStyle.checked}`).toBe(false)
+  expect.soft(offStyle.on, `再次点击应关闭精选，实测 on=${offStyle.on}`).toBe(false)
   await reloadToTab(page, TAB)
   await search(page, PUB_TITLE)
-  await expect(rowOf(page, PUB_TITLE).locator('.featured-toggle')).not.toBeChecked()
+  const offAfterReload = await rowOf(page, PUB_TITLE).locator('.featured-toggle').evaluate((el) => (el as HTMLElement).classList.contains('on'))
+  await expect(rowOf(page, PUB_TITLE).locator('.featured-toggle')).not.toHaveClass(/on/)
   await shot(page, 'toggle-off-after-reload')
+  expect.soft(offAfterReload, `刷新后精选应保持关闭，实测 on=${offAfterReload}`).toBe(false)
   expectClean(problems)
 })
 
@@ -962,10 +993,12 @@ test('AE-16 四种关闭方式 + 未保存确认', async ({ page }, info) => {
     else if (way === 'backdrop') await page.locator('.modal-backdrop').first().click({ position: { x: 10, y: 10 } })
     else await page.keyboard.press('Escape')
     await page.waitForTimeout(700)
+    // 有未保存修改时：关闭动作被拦截，编辑弹窗隐藏并显示「有未保存修改，确认离开？」
     const confirmText = await page.locator('text=/有未保存修改/').count()
     const confirmNodes = await page.locator('.confirm-dialog, .inline-tax-dialog, [role=dialog]').filter({ hasText: '有未保存修改' }).count()
     const modalOpen = await modal(page).count()
-    console.log(`AE-16 way=${way} confirmText=${confirmText} confirmNodes=${confirmNodes} modalOpen=${modalOpen}`)
+    const guardShown = await page.locator('.confirm-dialog').filter({ hasText: '有未保存修改' }).isVisible().catch(() => false)
+    console.log(`AE-16 way=${way} confirmText=${confirmText} confirmNodes=${confirmNodes} modalOpen=${modalOpen} guardShown=${guardShown}`)
     await shot(page, `close-${way}`)
     return { confirm: confirmText + confirmNodes, modalOpen }
   }
@@ -976,10 +1009,14 @@ test('AE-16 四种关闭方式 + 未保存确认', async ({ page }, info) => {
     // 复原：处理可能出现的确认框，然后关闭弹窗
     const keepEditing = page.getByRole('button', { name: /继续编辑/ })
     if (await keepEditing.isVisible().catch(() => false)) await keepEditing.click().catch(() => {})
-    const discard = page.getByRole('button', { name: /确认|离开/ }).last()
+    const discard = page.getByRole('button', { name: /确认离开|确认|离开/ }).last()
     if (await discard.isVisible().catch(() => false)) await discard.click().catch(() => {})
     if (await modal(page).count()) {
+      await modal(page).locator('.editor-title-input').fill(`${PREFIX}-UNSAVED-${way}-${stamp}-x`)
       await modal(page).locator('.close-btn').click().catch(() => {})
+      await page.waitForTimeout(300)
+      const leave = page.getByRole('button', { name: /确认离开/ })
+      if (await leave.isVisible().catch(() => false)) await leave.click().catch(() => {})
       await page.waitForTimeout(300)
     }
   }
@@ -987,8 +1024,8 @@ test('AE-16 四种关闭方式 + 未保存确认', async ({ page }, info) => {
   for (const way of ['x', 'cancel', 'backdrop', 'esc'] as const) {
     expect.soft(results[way].confirm, `关闭方式「${way}」在有未保存修改时应先弹「有未保存修改，确认离开？」，实测确认框数 ${results[way].confirm}`).toBeGreaterThan(0)
   }
-  // Esc 必须能关闭（有确认时点确认；无确认时必须关闭弹窗）
-  expect.soft(results.esc.modalOpen, `Esc 应能关闭弹窗，实测弹窗仍存在=${results.esc.modalOpen === 1}`).toBe(0)
+  // Esc 必须能触发关闭流程：编辑弹窗不再滞留（隐藏或出现确认框都算已拦截关闭）
+  expect.soft(results.esc.modalOpen, `Esc 应能关闭弹窗（进入未保存确认），实测弹窗仍打开=${results.esc.modalOpen === 1}`).toBe(0)
   expectClean(problems)
 })
 
@@ -1014,7 +1051,6 @@ test('AE-17 新建文章保存：关闭弹窗 + 「已保存」提示 + 列表�
   await shot(page, 'after-save')
   expect.soft(closed, '保存成功后应关闭弹窗，实测仍打开').toBe(0)
   expect.soft(savedToast.length, `保存成功后应出现「已保存」提示，实测 toast=${JSON.stringify(toastTexts)}`).toBeGreaterThan(0)
-
   await reloadToTab(page, TAB)
   await search(page, newTitle)
   const row = rowOf(page, newTitle)

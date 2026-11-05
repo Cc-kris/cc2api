@@ -3,6 +3,7 @@
     :show="show"
     :title="t('admin.users.createUser')"
     width="normal"
+    :has-unsaved-changes="hasUnsavedChanges"
     @close="$emit('close')"
   >
     <form id="create-user-form" @submit.prevent="submit" class="space-y-5">
@@ -60,7 +61,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
+import { computed, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'; import { adminAPI } from '@/api/admin'
 import { useForm } from '@/composables/useForm'
 import BaseDialog from '@/components/common/BaseDialog.vue'
@@ -70,6 +71,17 @@ const props = defineProps<{ show: boolean }>()
 const emit = defineEmits(['close', 'success']); const { t } = useI18n()
 
 const form = reactive({ email: '', password: '', username: '', notes: '', balance: 0, concurrency: 1, rpm_limit: 0 })
+const hasUnsavedChanges = computed(() =>
+  Boolean(
+    form.email.trim() ||
+    form.password.trim() ||
+    form.username.trim() ||
+    form.notes.trim() ||
+    form.balance !== 0 ||
+    form.concurrency !== 1 ||
+    form.rpm_limit !== 0
+  )
+)
 
 const { loading, submit } = useForm({
   form,

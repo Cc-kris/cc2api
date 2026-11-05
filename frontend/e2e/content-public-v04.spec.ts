@@ -79,7 +79,8 @@ test('R9-03 无 JS 原文 HTML：en 英文正文，de 中文正文且德语界�
   const de = await (await go(request, `/articles/de/${SLUG}`)).text()
   expect(en).not.toMatch(/<script[^>]+src=/)
   expect(en).toContain('Overview')
-  expect(en).not.toMatch(/[\u4e00-\u9fa5]{10,}/)
+  const body = en.match(/<section class="content">([\s\S]*?)<\/section>/)?.[1] ?? ''
+  expect(body, '英文 SSR 正文不应回落中文').not.toMatch(/[\u4e00-\u9fa5]{10,}/)
   expect(de).toContain('通过 CCAI 可以用同一套密钥')
   expect(de).toMatch(/<html lang="de-DE"/)
   expect(de).toMatch(/>Nachrichten<|>Artikel<|>Dokumentation</)

@@ -59,6 +59,10 @@
                 <span class="ai-field-label">{{ t("contentV04.ai.apiKey") }}<span v-if="!editing" class="ai-required" aria-hidden="true">*</span></span>
                 <input v-model="form.apiKey" type="password" autocomplete="new-password" :placeholder="editing?.apiKeyMasked || (editing ? '留空则保留原密钥' : t('contentV04.ai.apiKey'))" />
               </label>
+              <div class="ai-config-tools ai-field-wide">
+                <button type="button" class="secondary-button" :disabled="busy" @click="fetchModels">{{ t("contentV04.ai.fetchModels") }}</button>
+                <button type="button" class="secondary-button" :disabled="busy" @click="testConnection">{{ t("contentV04.ai.testConnection") }}</button>
+              </div>
               <label class="ai-field ai-field-wide">
                 <span class="ai-field-label">{{ t("contentV04.ai.models") }}<span class="ai-required" aria-hidden="true">*</span></span>
                 <textarea v-model="form.modelsText" rows="4" placeholder="每行一个模型名称"></textarea>
@@ -72,10 +76,6 @@
                 <input v-model="form.isDefault" type="checkbox" />
                 <span class="ai-field-label">{{ t('contentV04.ai.setDefault') }}</span>
               </label>
-            </div>
-            <div class="ai-config-tools">
-              <button type="button" class="secondary-button" :disabled="busy" @click="fetchModels">{{ t("contentV04.ai.fetchModels") }}</button>
-              <button type="button" class="secondary-button" :disabled="busy" @click="testConnection">{{ t("contentV04.ai.testConnection") }}</button>
             </div>
           </div>
           <footer class="ai-dialog-footer">
@@ -504,7 +504,8 @@ onMounted(load)
   display: flex;
   flex-direction: column;
   width: min(640px, 100%);
-  max-height: calc(100dvh - 32px);
+  max-width: calc(100vw - 32px);
+  max-height: min(85vh, calc(100dvh - 32px));
   overflow: hidden;
   border: 2px solid #121316;
   border-radius: 12px;
@@ -569,8 +570,9 @@ onMounted(load)
 .ai-config-form textarea {
   box-sizing: border-box;
   width: 100%;
-  min-height: 42px;
-  padding: 9px 11px;
+  min-height: 36px;
+  height: 36px;
+  padding: 6px 11px;
   border: 1.5px solid #9aa1b1;
   border-radius: 8px;
   background: #fff;
@@ -581,13 +583,31 @@ onMounted(load)
 }
 .ai-config-form textarea {
   resize: vertical;
+  height: auto;
   min-height: 96px;
 }
 .ai-field-wide {
   grid-column: 1 / -1;
 }
+.ai-field.ai-checkbox-field {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+.ai-field.ai-checkbox-field input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: #2563eb;
+}
 .ai-config-tools {
-  margin: 18px 0 0;
+  margin: 0;
 }
 .ai-dialog-footer {
   display: flex;
@@ -612,7 +632,7 @@ onMounted(load)
     grid-template-columns: 1fr;
   }
   .ai-config-dialog {
-    max-height: calc(100dvh - 16px);
+    max-height: min(85vh, calc(100dvh - 32px));
   }
   .ai-dialog-header,
   .ai-config-body,
@@ -627,4 +647,38 @@ onMounted(load)
     flex: 1;
   }
 }
+
+.button,
+.secondary-button,
+.danger-button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  min-height: 36px;
+  min-width: 64px;
+  padding: 0 16px;
+  border: 2px solid #121316;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 #121316;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.button.primary {
+  background: #2563eb;
+  color: #ffffff;
+}
+.secondary-button {
+  background: #ffffff;
+  color: #121316;
+}
+.danger-button {
+  background: #ffe4e1;
+  color: #b42318;
+}
+
 </style>
