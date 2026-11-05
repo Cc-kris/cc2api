@@ -110,7 +110,7 @@ func TestGrokContentPolicy403DoesNotMutateOrFailover(t *testing.T) {
 	require.Zero(t, repo.rateLimitedCalls)
 	require.Zero(t, repo.updateCalls)
 	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
-	require.False(t, svc.shouldFailoverGrokUpstreamError(http.StatusForbidden, body))
+	require.False(t, svc.shouldFailoverGrokUpstreamError(context.Background(), http.StatusForbidden, body))
 
 }
 
