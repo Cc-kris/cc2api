@@ -388,6 +388,32 @@ func (s *BillingService) initFallbackPricing() {
 		SupportsCacheBreakdown: false,
 	}
 
+	// xAI Grok 4.7：200k 以内 $2 输入 / $0.50 缓存读 / $6 输出 per MTok；超过 200k 整次会话
+	// 输入、输出都按 2 倍（$4 / $12）。远程价格表没有 grok-4.7，生产计费走这里（上游 935db6851）。
+	// CCAI 的长上下文判断是严格大于阈值（shouldApplySessionLongContextPricing），
+	// 正好 200000 token 不涨价；上游 LongContextThresholdInclusive 不移植（V02-T22）。
+	s.fallbackPrices["grok-4.7"] = &ModelPricing{
+		InputPricePerToken:          2e-6,
+		OutputPricePerToken:         6e-6,
+		CacheReadPricePerToken:      0.5e-6,
+		SupportsCacheBreakdown:      false,
+		LongContextInputThreshold:   200000,
+		LongContextInputMultiplier:  2,
+		LongContextOutputMultiplier: 2,
+	}
+
+	// xAI Grok 4.7 Fast（仅 Cursor 和 Grok Build）：同一模型的高速版，200k 以内
+	// $4 输入 / $1 缓存读 / $12 输出 per MTok；超过 200k 按 1.5 倍（上游 1cdecf4a8）。
+	s.fallbackPrices["grok-4.7-fast"] = &ModelPricing{
+		InputPricePerToken:          4e-6,
+		OutputPricePerToken:         12e-6,
+		CacheReadPricePerToken:      1e-6,
+		SupportsCacheBreakdown:      false,
+		LongContextInputThreshold:   200000,
+		LongContextInputMultiplier:  1.5,
+		LongContextOutputMultiplier: 1.5,
+	}
+
 	// OpenAI GPT-5.4（业务指定价格）
 	s.fallbackPrices["gpt-5.4"] = &ModelPricing{
 		InputPricePerToken:             2.5e-6,  // $2.5 per MTok
@@ -569,6 +595,17 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 		case "gpt-5.3-codex", "gpt-5.3-codex-spark":
 			return s.fallbackPrices["gpt-5.3-codex"]
 		}
+	}
+
+	switch modelLower {
+	case "grok-4.7", "grok-4.7-latest":
+		return s.fallbackPrices["grok-4.7"]
+	// Grok 4.7 Fast IDs (grok-4.7-fast, and the Grok Build ID
+	// grok-4.7-build-fast). Without these cases both fall into the standard
+	// 4.7 card or have no price at all. The upstream catalog has no
+	// grok-4.7-build-fast entry, so this case is the only way it gets priced.
+	case "grok-4.7-fast", "grok-4.7-build-fast":
+		return s.fallbackPrices["grok-4.7-fast"]
 	}
 
 	return nil
@@ -873,9 +910,33 @@ func (s *BillingService) calculateCostInternal(model string, tokens UsageTokens,
 	return s.computeTokenBreakdown(pricing, tokens, rateMultiplier, serviceTier, true), nil
 }
 
+// grokLongContextCard 返回 Grok 4.7 族的回退价卡（带 200k 长上下文阶梯），其他模型返回 nil。
+func (s *BillingService) grokLongContextCard(model string) *ModelPricing {
+	switch strings.ToLower(strings.TrimSpace(model)) {
+	case "grok-4.7", "grok-4.7-latest":
+		return s.fallbackPrices["grok-4.7"]
+	case "grok-4.7-fast", "grok-4.7-build-fast":
+		return s.fallbackPrices["grok-4.7-fast"]
+	}
+	return nil
+}
+
 func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *ModelPricing) *ModelPricing {
 	if pricing == nil {
 		return nil
+	}
+	// 价格表解析不带长上下文字段（parsePricingData 不认 *_above_200k_tokens，也不读
+	// long_context_*），价格表一旦收录 grok-4.7 / grok-4.7-fast，超 200k 的倍率就会丢。
+	// 这里从回退价卡补上阶梯，基础单价仍以价格表为准（V02-T22 / AC51）。
+	if card := s.grokLongContextCard(model); card != nil {
+		if pricing.LongContextInputThreshold > 0 {
+			return pricing
+		}
+		cloned := *pricing
+		cloned.LongContextInputThreshold = card.LongContextInputThreshold
+		cloned.LongContextInputMultiplier = card.LongContextInputMultiplier
+		cloned.LongContextOutputMultiplier = card.LongContextOutputMultiplier
+		return &cloned
 	}
 	if !isOpenAIGPT54Or56Model(model) {
 		return pricing

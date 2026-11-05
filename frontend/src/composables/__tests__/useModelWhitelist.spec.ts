@@ -45,6 +45,15 @@ describe('useModelWhitelist', () => {
     expect(models.some(model => model.startsWith('claude-'))).toBe(false)
   })
 
+  it('Grok 4.7 进入模型列表和预设，grok-latest 仍指向 4.6', () => {
+    expect(getModelsByPlatform('grok')).toContain('grok-4.7')
+    expect(getModelsByPlatform('grok')).toContain('grok-4.7-latest')
+    const presets = getPresetMappingsByPlatform('grok')
+    expect(presets).toContainEqual(expect.objectContaining({ from: 'grok-4.7', to: 'grok-4.7' }))
+    expect(presets).toContainEqual(expect.objectContaining({ from: 'grok-4.7-latest', to: 'grok-4.7' }))
+    expect(presets).toContainEqual(expect.objectContaining({ from: 'grok-latest', to: 'grok-4.6' }))
+  })
+
   it('Grok 平台使用 Grok 预设映射', () => {
     const presets = getPresetMappingsByPlatform('grok')
 

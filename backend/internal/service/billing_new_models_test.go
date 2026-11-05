@@ -258,3 +258,74 @@ func TestBillingFallbackPricing_NewGeminiModelsAreBillable(t *testing.T) {
 		}
 	}
 }
+
+// V02-AC51：grok-4.7-fast / grok-4.7-build-fast 按 Fast 价卡（$4 输入 / $1 缓存读 / $12 输出），
+// 超过 200k 输入、输出 1.5 倍；不按普通 4.7 价。CCAI 阈值是严格大于，正好 200000 不涨价。
+// CCAI 长上下文倍率同时作用于输入、输出、缓存读和缓存写（computeTokenBreakdown），250k 时缓存读为 $1.5。
+func TestBillingGrok47FastPricing(t *testing.T) {
+	// 生产现状：远程价格表没有这两个模型
+	withoutGrok := &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+		"gpt-5.4": {InputCostPerToken: 2.5e-6, OutputCostPerToken: 15e-6},
+	}}
+	// 以后价格表收录了基础条目，但解析不带长上下文字段
+	withGrok := &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+		"grok-4.7":      {InputCostPerToken: 2e-6, OutputCostPerToken: 6e-6, CacheReadInputTokenCost: 0.5e-6},
+		"grok-4.7-fast": {InputCostPerToken: 4e-6, OutputCostPerToken: 12e-6, CacheReadInputTokenCost: 1e-6},
+	}}
+	// 价格表只有普通 4.7：fast 不能按普通 4.7 价
+	onlyStandard := &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+		"grok-4.7": {InputCostPerToken: 2e-6, OutputCostPerToken: 6e-6, CacheReadInputTokenCost: 0.5e-6},
+	}}
+
+	services := map[string]*BillingService{
+		"nil pricing service":       NewBillingService(&config.Config{}, nil),
+		"catalog without grok-4.7":  NewBillingService(&config.Config{}, withoutGrok),
+		"catalog with grok-4.7":     NewBillingService(&config.Config{}, withGrok),
+		"catalog with only 4.7 std": NewBillingService(&config.Config{}, onlyStandard),
+	}
+
+	type want struct{ input, output, cacheRead float64 }
+	cases := []struct {
+		name   string
+		model  string
+		tokens UsageTokens
+		want   want
+	}{
+		// 100k 输入（含缓存读）：基础价
+		{"fast 100k", "grok-4.7-fast", UsageTokens{InputTokens: 80_000, CacheReadTokens: 20_000, OutputTokens: 10_000}, want{80_000 * 4e-6, 10_000 * 12e-6, 20_000 * 1e-6}},
+		{"build-fast 100k", "grok-4.7-build-fast", UsageTokens{InputTokens: 80_000, CacheReadTokens: 20_000, OutputTokens: 10_000}, want{80_000 * 4e-6, 10_000 * 12e-6, 20_000 * 1e-6}},
+		// 250k：输入、输出、缓存读 1.5 倍
+		{"fast 250k", "grok-4.7-fast", UsageTokens{InputTokens: 230_000, CacheReadTokens: 20_000, OutputTokens: 10_000}, want{230_000 * 6e-6, 10_000 * 18e-6, 20_000 * 1.5e-6}},
+		{"build-fast 250k", "grok-4.7-build-fast", UsageTokens{InputTokens: 230_000, CacheReadTokens: 20_000, OutputTokens: 10_000}, want{230_000 * 6e-6, 10_000 * 18e-6, 20_000 * 1.5e-6}},
+		// 正好 200000：严格大于，不涨价
+		{"fast exactly 200k", "grok-4.7-fast", UsageTokens{InputTokens: 200_000, OutputTokens: 1_000}, want{200_000 * 4e-6, 1_000 * 12e-6, 0}},
+		// 普通 4.7：$2/$0.5/$6，超 200k 两倍
+		{"std 100k", "grok-4.7", UsageTokens{InputTokens: 100_000, OutputTokens: 10_000}, want{100_000 * 2e-6, 10_000 * 6e-6, 0}},
+		{"std 250k", "grok-4.7", UsageTokens{InputTokens: 250_000, OutputTokens: 10_000}, want{250_000 * 4e-6, 10_000 * 12e-6, 0}},
+		{"latest 250k", "grok-4.7-latest", UsageTokens{InputTokens: 250_000, OutputTokens: 10_000}, want{250_000 * 4e-6, 10_000 * 12e-6, 0}},
+	}
+	for svcName, svc := range services {
+		for _, tc := range cases {
+			t.Run(svcName+"/"+tc.name, func(t *testing.T) {
+				cost, err := svc.CalculateCost(tc.model, tc.tokens, 1)
+				require.NoError(t, err)
+				assert.InDelta(t, tc.want.input, cost.InputCost, 1e-9, "input")
+				assert.InDelta(t, tc.want.output, cost.OutputCost, 1e-9, "output")
+				assert.InDelta(t, tc.want.cacheRead, cost.CacheReadCost, 1e-9, "cache read")
+			})
+		}
+	}
+}
+
+// 其他模型不受 Grok 长上下文补丁影响。
+func TestBillingGrokLongContextPolicyScopedToGrok47(t *testing.T) {
+	svc := NewBillingService(&config.Config{}, &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+		"grok-4.6":       {InputCostPerToken: 2e-6, OutputCostPerToken: 6e-6},
+		"gemini-2.5-pro": {InputCostPerToken: 1.25e-6, OutputCostPerToken: 10e-6},
+	}})
+	for _, model := range []string{"grok-4.6", "gemini-2.5-pro"} {
+		pricing, err := svc.GetModelPricing(model)
+		require.NoError(t, err)
+		assert.Zero(t, pricing.LongContextInputThreshold, model)
+	}
+}
