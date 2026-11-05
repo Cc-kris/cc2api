@@ -599,3 +599,32 @@ func TestPublicContentListCacheUsesVersionedKey(t *testing.T) {
 	require.Contains(t, key, "?locale=zh-CN&v="+strconv.FormatUint(version, 10))
 	require.NotEqual(t, key, service.PublicContentCacheKey("/news", "en-US"))
 }
+
+// 2026-11-05：真实 nonce 是 base64，含 '+'；html/template 在属性里输出 &#43;，
+// 缓存存盘时只替换原文会漏掉，第二个访客拿到第一个访客的 nonce。
+func TestPublicContentCachedHTMLNeverLeaksPreviousNonce(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &publicContentHandlerRepoStub{}
+	nonces := []string{"a+b/first==", "c+d/second=="}
+	i := 0
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set(middleware.CSPNonceKey, nonces[i])
+		c.Next()
+	})
+	h := NewPublicContentHandler(service.NewPublicContentService(repo), &config.Config{Server: config.ServerConfig{FrontendURL: "https://ccai.example"}})
+	r.GET("/nonce-news-html", h.RenderNewsListHTML)
+
+	first := httptest.NewRecorder()
+	r.ServeHTTP(first, httptest.NewRequest(http.MethodGet, "/nonce-news-html?locale=zh", nil))
+	require.Equal(t, http.StatusOK, first.Code)
+
+	i = 1
+	second := httptest.NewRecorder()
+	r.ServeHTTP(second, httptest.NewRequest(http.MethodGet, "/nonce-news-html?locale=zh", nil))
+	require.Equal(t, http.StatusOK, second.Code)
+	body := second.Body.String()
+	require.NotContains(t, body, "first", "缓存命中时不能残留上一个请求的 nonce")
+	require.NotContains(t, body, publicHTMLNoncePlaceholder)
+	require.True(t, strings.Contains(body, `nonce="c&#43;d/second=="`) || strings.Contains(body, `nonce="c+d/second=="`), body)
+}

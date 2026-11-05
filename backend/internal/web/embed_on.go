@@ -159,11 +159,16 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	c.Header("X-Robots-Tag", robotsHeaderForFrontendPath(c.Request.URL.Path))
 	c.Header("Cache-Control", "no-cache")
 
+	// 带 CSP nonce 的页面每次响应体都不同（nonce 每请求新生成），不能用 ETag/304：
+	// 浏览器收到 304 会沿用旧正文里的旧 nonce，却套上新响应头里的新 CSP，
+	// 内联的 window.__APP_CONFIG__ 脚本被拦截（实测 /login 第二次访问即报 CSP 违规）。
+	useETag := nonce == ""
+
 	// Check cache first
 	cached := s.cache.Get()
 	if cached != nil {
 		// Check If-None-Match for 304 response
-		if match := c.GetHeader("If-None-Match"); match == cached.ETag {
+		if useETag && c.GetHeader("If-None-Match") == cached.ETag {
 			c.Status(http.StatusNotModified)
 			c.Abort()
 			return
@@ -172,7 +177,9 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 		// Replace nonce placeholder with actual nonce before serving
 		content := replaceNoncePlaceholder(cached.Content, nonce)
 
-		c.Header("ETag", cached.ETag)
+		if useETag {
+			c.Header("ETag", cached.ETag)
+		}
 		c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 		c.Abort()
 		return
@@ -207,7 +214,7 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 	content := replaceNoncePlaceholder(rendered, nonce)
 
 	cached = s.cache.Get()
-	if cached != nil {
+	if cached != nil && useETag {
 		c.Header("ETag", cached.ETag)
 	}
 	c.Data(http.StatusOK, "text/html; charset=utf-8", content)

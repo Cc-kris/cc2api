@@ -558,7 +558,12 @@ func renderPublicTemplate(c *gin.Context, tmpl *template.Template, data any, cac
 	}
 	body := out.Bytes()
 	if nonce != "" {
+		// html/template 在属性里把 base64 的 '+' 转义成 &#43;，只替换原文会漏掉，
+		// 导致进程缓存里残留第一个访客的 nonce 并发给后续所有访客
 		body = bytes.ReplaceAll(body, []byte(nonce), []byte(publicHTMLNoncePlaceholder))
+		if escaped := strings.ReplaceAll(nonce, "+", "&#43;"); escaped != nonce {
+			body = bytes.ReplaceAll(body, []byte(escaped), []byte(publicHTMLNoncePlaceholder))
+		}
 	}
 	if publicCacheEnabled {
 		publicHTMLCache.Lock()

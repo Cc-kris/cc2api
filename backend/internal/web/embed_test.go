@@ -282,10 +282,10 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 		server, err := NewFrontendServer(provider)
 		require.NoError(t, err)
 
+		// 未启用 CSP nonce 时正文稳定，才发 ETag
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
-		c.Set(middleware.CSPNonceKey, "nonce123")
 
 		server.serveIndexHTML(c)
 
@@ -293,6 +293,38 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 		assert.NotEmpty(t, etag)
 		assert.True(t, strings.HasPrefix(etag, `"`))
 		assert.True(t, strings.HasSuffix(etag, `"`))
+	})
+
+	t.Run("no_etag_or_304_when_csp_nonce_present", func(t *testing.T) {
+		provider := &mockSettingsProvider{
+			settings: map[string]string{"test": "value"},
+		}
+		server, err := NewFrontendServer(provider)
+		require.NoError(t, err)
+
+		nonces := []string{"nonce-first", "nonce-second"}
+		i := 0
+		router := gin.New()
+		router.Use(func(c *gin.Context) {
+			c.Set(middleware.CSPNonceKey, nonces[i])
+			c.Next()
+		})
+		router.Use(server.Middleware())
+
+		w1 := httptest.NewRecorder()
+		router.ServeHTTP(w1, httptest.NewRequest(http.MethodGet, "/login", nil))
+		assert.Equal(t, http.StatusOK, w1.Code)
+		assert.Empty(t, w1.Header().Get("ETag"), "nonce 页面不能带 ETag")
+
+		// 即使浏览器带着上一次的校验值来，也必须返回带新 nonce 的完整正文，而不是 304
+		i = 1
+		req2 := httptest.NewRequest(http.MethodGet, "/login", nil)
+		req2.Header.Set("If-None-Match", `"anything"`)
+		w2 := httptest.NewRecorder()
+		router.ServeHTTP(w2, req2)
+		assert.Equal(t, http.StatusOK, w2.Code)
+		assert.Contains(t, w2.Body.String(), `nonce="nonce-second"`)
+		assert.NotContains(t, w2.Body.String(), `nonce="nonce-first"`)
 	})
 
 	t.Run("returns_304_for_matching_etag", func(t *testing.T) {
@@ -303,12 +335,8 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 		server, err := NewFrontendServer(provider)
 		require.NoError(t, err)
 
-		// Use a real router for proper 304 handling
+		// Use a real router for proper 304 handling（无 CSP nonce 时才允许 304）
 		router := gin.New()
-		router.Use(func(c *gin.Context) {
-			c.Set(middleware.CSPNonceKey, "test-nonce")
-			c.Next()
-		})
 		router.Use(server.Middleware())
 
 		// First request to populate cache and get ETag

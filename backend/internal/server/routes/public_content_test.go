@@ -269,3 +269,22 @@ func TestPublicContentPrefixedEmptyListReturns200(t *testing.T) {
 		require.Equal(t, 0, stub.lastOffset, path)
 	}
 }
+
+// 2026-11-05：只注册 `/:locale/` 时 gin 的 RedirectTrailingSlash 会把 `/login`、`/dashboard`
+// 这类一段路径 301 到 `/login/`。显式注册 `/:locale` 后，只有真语言标签才跳 `/<lang>/`。
+func TestPublicContentBareSegmentIsNotTrailingSlashRedirected(t *testing.T) {
+	r := newPublicContentTestEngine(t, &publicRouteRepoStub{})
+	for _, path := range []string{"/login", "/dashboard", "/register", "/keys"} {
+		res := getPublicPath(r, path, false)
+		require.NotEqual(t, http.StatusMovedPermanently, res.Code, path)
+		require.NotEqual(t, path+"/", res.Header().Get("Location"), path)
+	}
+	for _, tc := range []struct{ from, to string }{{"/en", "/en/"}, {"/de-DE", "/de/"}, {"/zh?x=1", "/zh/?x=1"}} {
+		res := getPublicPath(r, tc.from, false)
+		require.Equal(t, http.StatusMovedPermanently, res.Code, tc.from)
+		require.Equal(t, tc.to, res.Header().Get("Location"), tc.from)
+	}
+	res := getPublicPath(r, "/xx", false)
+	require.Equal(t, http.StatusNotFound, res.Code)
+	require.Contains(t, res.Body.String(), "内容未找到")
+}

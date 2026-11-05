@@ -76,6 +76,11 @@ func RegisterPublicContentPageRoutes(r *gin.Engine, h *handler.Handlers) {
 	locale.GET("/news", h.PublicContent.RenderNewsListHTML)
 	locale.GET("/articles", h.PublicContent.RenderArticleListHTML)
 
+	// `/<lang>` 不带结尾斜杠：显式注册，而不是依赖 gin 的 RedirectTrailingSlash。
+	// 只注册 `/:locale/` 时，gin 会把任何一段路径（`/login`、`/dashboard`、`/register`）
+	// 都当成「缺斜杠的 /:locale/」301 到 `/login/`，SPA 页面整体多一跳且 URL 被改写。
+	r.GET("/:locale", redirectBareLocaleHome)
+
 	// Detail pages keep the established `/news|/articles/<lang>/<slug>` shape.
 	r.GET("/news/:locale/:slug", h.PublicContent.RenderNewsHTML)
 	r.GET("/articles/:locale/:slug", h.PublicContent.RenderArticleHTML)
@@ -141,6 +146,24 @@ func (w *publicLocaleQueryWriter) rewriteLocation(code int) {
 		return
 	}
 	w.Header().Set("Location", stripLocaleQueryParam(location))
+}
+
+// redirectBareLocaleHome answers `/<lang>` with a 301 to the canonical
+// `/<lang>/`; anything that is not a language tag (only reachable when the
+// embedded frontend is absent) gets the same noindex 404 as `/xx/`.
+func redirectBareLocaleHome(c *gin.Context) {
+	requested := c.Param("locale")
+	segment, ok := service.PublicLocaleSegment(requested)
+	if !ok {
+		publicSSRNotFound(c)
+		return
+	}
+	target := "/" + segment + "/"
+	if rawQuery := c.Request.URL.RawQuery; rawQuery != "" {
+		target += "?" + rawQuery
+	}
+	c.Redirect(http.StatusMovedPermanently, target)
+	c.Abort()
 }
 
 func redirectPublicPath(target string) gin.HandlerFunc {
