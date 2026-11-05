@@ -85,3 +85,27 @@ func TestDefaultBedrockModelMapping_ContainsNewClaudeModels(t *testing.T) {
 		}
 	}
 }
+
+func TestDefaultAntigravityModelMapping_NewGeminiModels(t *testing.T) {
+	t.Parallel()
+
+	for _, base := range []string{"gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"} {
+		for _, tier := range []string{"", "-high", "-low", "-medium", "-tiered"} {
+			model := base + tier
+			if got := DefaultAntigravityModelMapping[model]; got != model {
+				t.Fatalf("expected %s to map to itself, got %q", model, got)
+			}
+		}
+	}
+	cases := map[string]string{
+		"gemini-4-argon":        "gemini-4-argon-high",
+		"gemini-4-argon-high":   "gemini-4-argon-high",
+		"gemini-4-argon-low":    "gemini-4-argon-low",
+		"gemini-4-argon-medium": "gemini-4-argon-medium",
+	}
+	for from, want := range cases {
+		if got := DefaultAntigravityModelMapping[from]; got != want {
+			t.Fatalf("expected %s to map to %q, got %q", from, want, got)
+		}
+	}
+}

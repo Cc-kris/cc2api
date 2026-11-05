@@ -174,3 +174,87 @@ func TestPricingService_Opus5FamilyFallbackSkipsOpus55(t *testing.T) {
 		})
 	}
 }
+
+// V02-AC49：Gemini 档位 ID 用基础模型价；价格表有档位专属条目时优先用条目。
+func TestPricingService_GeminiThinkingTiersUseBasePricing(t *testing.T) {
+	basePricing := &LiteLLMModelPricing{InputCostPerToken: 0.75e-6, OutputCostPerToken: 3.75e-6, CacheReadInputTokenCost: 0.075e-6}
+	for _, baseModel := range []string{"gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash", "gemini-4-argon"} {
+		svc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{baseModel: basePricing}}
+		for _, tier := range []string{"", "-high", "-low", "-medium", "-tiered"} {
+			model := baseModel + tier
+			t.Run(model, func(t *testing.T) {
+				require.Same(t, basePricing, svc.GetModelPricing(model))
+				require.Same(t, basePricing, svc.GetModelPricing("models/"+model))
+			})
+		}
+	}
+}
+
+func TestPricingService_GeminiTierSpecificPricingTakesPrecedence(t *testing.T) {
+	basePricing := &LiteLLMModelPricing{InputCostPerToken: 1.5e-6}
+	tierPricing := &LiteLLMModelPricing{InputCostPerToken: 2e-6}
+	for _, baseModel := range []string{"gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"} {
+		t.Run(baseModel, func(t *testing.T) {
+			svc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+				baseModel:          basePricing,
+				baseModel + "-low": tierPricing,
+			}}
+			require.Same(t, tierPricing, svc.GetModelPricing("models/"+baseModel+"-low"))
+			require.Same(t, basePricing, svc.GetModelPricing(baseModel+"-high"))
+		})
+	}
+}
+
+// 价格表里的 cyber 条目不能被 argon 抢走（反过来也一样）。
+func TestPricingService_Gemini4ArgonCyberUsesOwnEntry(t *testing.T) {
+	basePricing := &LiteLLMModelPricing{InputCostPerToken: 2e-6}
+	cyberPricing := &LiteLLMModelPricing{InputCostPerToken: 4e-6}
+	svc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+		"gemini-4-argon":                  basePricing,
+		"gemini-4-argon-cyber-permissive": cyberPricing,
+	}}
+	for _, model := range []string{"gemini-4-argon", "gemini-4-argon-high", "models/gemini-4-argon-low", "projects/p/locations/global/publishers/google/models/gemini-4-argon"} {
+		require.Same(t, basePricing, svc.GetModelPricing(model), model)
+	}
+	require.Same(t, cyberPricing, svc.GetModelPricing("gemini-4-argon-cyber-permissive"))
+}
+
+// 生产远程价格表没有 argon / cyber：必须走 BillingService 回退价，不能报价格不可用或记 0 元。
+// 3.6/3.7/3.8 在远程价格表里有，但远程下载失败时也要能走回退价。
+func TestBillingFallbackPricing_NewGeminiModelsAreBillable(t *testing.T) {
+	// 模拟生产：价格表有别的模型，但没有这几个
+	pricing := &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+		"gemini-2.5-pro": {InputCostPerToken: 1.25e-6, OutputCostPerToken: 10e-6},
+	}}
+	tokens := UsageTokens{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheReadTokens: 1_000_000}
+	cases := []struct {
+		model               string
+		input, output, read float64
+	}{
+		{"gemini-3.6-flash", 0.75, 3.75, 0.075},
+		{"gemini-3.6-flash-high", 0.75, 3.75, 0.075},
+		{"gemini-3.6-flash-tiered", 0.75, 3.75, 0.075},
+		{"gemini-3.7-flash-low", 0.75, 3.75, 0.075},
+		{"gemini-3.8-flash-medium", 0.75, 3.75, 0.075},
+		{"gemini-4-argon", 2, 10, 0.1},
+		{"gemini-4-argon-high", 2, 10, 0.1},
+		{"gemini-4-argon-low", 2, 10, 0.1},
+		{"gemini-4-argon-medium", 2, 10, 0.1},
+		{"models/gemini-4-argon", 2, 10, 0.1},
+		{"gemini-4-argon-cyber-permissive", 4, 20, 0.2},
+		{"gemini-4-argon-cyber", 4, 20, 0.2},
+		{"publishers/google/models/gemini-4-argon-cyber-permissive", 4, 20, 0.2},
+	}
+	for _, svc := range []*BillingService{NewBillingService(&config.Config{}, nil), NewBillingService(&config.Config{}, pricing)} {
+		for _, tc := range cases {
+			t.Run(tc.model, func(t *testing.T) {
+				cost, err := svc.CalculateCost(tc.model, tokens, 1)
+				require.NoError(t, err)
+				require.InDelta(t, tc.input, cost.InputCost, 1e-9)
+				require.InDelta(t, tc.output, cost.OutputCost, 1e-9)
+				require.InDelta(t, tc.read, cost.CacheReadCost, 1e-9)
+				require.Greater(t, cost.ActualCost, 0.0)
+			})
+		}
+	}
+}
