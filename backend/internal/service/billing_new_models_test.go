@@ -1,6 +1,8 @@
 package service
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -327,5 +329,54 @@ func TestBillingGrokLongContextPolicyScopedToGrok47(t *testing.T) {
 		pricing, err := svc.GetModelPricing(model)
 		require.NoError(t, err)
 		assert.Zero(t, pricing.LongContextInputThreshold, model)
+	}
+}
+
+// V02-T23 / V02-AC52：远程价格下载失败时用的回退文件含 4 个新模型和 8 个新 Claude 模型，
+// 用它计价的结果和代码回退价一致（Grok 4.7 族的 200k 阶梯由计费策略补上）。
+func TestFallbackPricingFileIncludesNewModels(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "resources", "model-pricing", "model_prices_and_context_window.json"))
+	require.NoError(t, err)
+	pricingSvc := &PricingService{}
+	pricingData, err := pricingSvc.parsePricingData(data)
+	require.NoError(t, err)
+	pricingSvc.pricingData = pricingData
+	billing := NewBillingService(&config.Config{}, pricingSvc)
+
+	cases := map[string]expectedTokenPrice{
+		"claude-fable-5":                  priceFable5,
+		"claude-fable-5-1":                priceFable51,
+		"claude-opus-4-8":                 priceOpus48,
+		"claude-opus-5":                   priceOpus48,
+		"claude-opus-5-5":                 priceOpus55,
+		"claude-opus-5-5-high":            priceOpus55,
+		"claude-sonnet-5":                 {2e-6, 10e-6, 0.2e-6},
+		"claude-sonnet-5-5":               priceSonnet55,
+		"claude-sonnet-5-5-low":           priceSonnet55,
+		"claude-haiku-5-5":                priceHaiku55,
+		"gemini-3.6-flash":                {0.75e-6, 3.75e-6, 0.075e-6},
+		"gemini-3.7-flash-high":           {0.75e-6, 3.75e-6, 0.075e-6},
+		"gemini-3.8-flash-tiered":         {0.75e-6, 3.75e-6, 0.075e-6},
+		"gemini-4-argon":                  {2e-6, 10e-6, 0.1e-6},
+		"gemini-4-argon-high":             {2e-6, 10e-6, 0.1e-6},
+		"gemini-4-argon-cyber-permissive": {4e-6, 20e-6, 0.2e-6},
+		"grok-4.7":                        {2e-6, 6e-6, 0.5e-6},
+		"grok-4.7-fast":                   {4e-6, 12e-6, 1e-6},
+	}
+	for model, want := range cases {
+		t.Run(model, func(t *testing.T) {
+			require.NotNil(t, pricingSvc.GetModelPricing(model), "fallback file must price %s", model)
+			got, err := billing.GetModelPricing(model)
+			require.NoError(t, err)
+			assertTokenPrice(t, want, got)
+		})
+	}
+
+	for model, multiplier := range map[string]float64{"grok-4.7": 2, "grok-4.7-fast": 1.5, "grok-4.7-build-fast": 1.5} {
+		got, err := billing.GetModelPricing(model)
+		require.NoError(t, err)
+		assert.Equal(t, 200000, got.LongContextInputThreshold, model)
+		assert.InDelta(t, multiplier, got.LongContextInputMultiplier, 1e-12, model)
+		assert.InDelta(t, multiplier, got.LongContextOutputMultiplier, 1e-12, model)
 	}
 }
