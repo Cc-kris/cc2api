@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -172,6 +173,40 @@ func TestNeedsSetupFallsBackToFileDetectionWhenSkipSetupIsDisabled(t *testing.T)
 			}
 		})
 	}
+}
+
+func TestSetupMigrationTimeout(t *testing.T) {
+	t.Run("uses default timeout when unset", func(t *testing.T) {
+		cfg := &SetupConfig{}
+		if got := cfg.migrationTimeout(); got != 60*time.Second {
+			t.Fatalf("migrationTimeout()=%s, want 60s", got)
+		}
+	})
+
+	t.Run("uses configured timeout", func(t *testing.T) {
+		cfg := &SetupConfig{MigrationTimeoutSeconds: 300}
+		if got := cfg.migrationTimeout(); got != 300*time.Second {
+			t.Fatalf("migrationTimeout()=%s, want 300s", got)
+		}
+	})
+
+	t.Run("reads SETUP_MIGRATION_TIMEOUT_SECONDS from env", func(t *testing.T) {
+		t.Setenv("SETUP_MIGRATION_TIMEOUT_SECONDS", "300")
+		cfg := &SetupConfig{MigrationTimeoutSeconds: getEnvIntOrDefault("SETUP_MIGRATION_TIMEOUT_SECONDS", 0)}
+		if got := cfg.migrationTimeout(); got != 300*time.Second {
+			t.Fatalf("migrationTimeout()=%s, want 300s", got)
+		}
+	})
+
+	t.Run("zero or invalid env falls back to default", func(t *testing.T) {
+		for _, v := range []string{"0", "-5", "abc"} {
+			t.Setenv("SETUP_MIGRATION_TIMEOUT_SECONDS", v)
+			cfg := &SetupConfig{MigrationTimeoutSeconds: getEnvIntOrDefault("SETUP_MIGRATION_TIMEOUT_SECONDS", 0)}
+			if got := cfg.migrationTimeout(); got != 60*time.Second {
+				t.Fatalf("env=%q migrationTimeout()=%s, want 60s", v, got)
+			}
+		}
+	})
 }
 
 func TestWriteConfigFileKeepsDefaultUserConcurrency(t *testing.T) {

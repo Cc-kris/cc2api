@@ -356,6 +356,9 @@ func install(c *gin.Context) {
 		JWT: JWTConfig{
 			ExpireHour: 24,
 		},
+		// CCAI 本地补充：上游只在 AUTO_SETUP 路径读这个变量，网页安装向导也读，
+		// 这样 compose 里设置的超时对两种安装方式都生效。
+		MigrationTimeoutSeconds: getEnvIntOrDefault("SETUP_MIGRATION_TIMEOUT_SECONDS", 0),
 	}
 
 	if err := Install(cfg); err != nil {
