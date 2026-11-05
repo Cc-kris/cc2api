@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -126,7 +127,16 @@ func normalizeBedrockModelID(modelID string) (normalized string, shouldAdjustReg
 		return "", false, false
 	}
 	if mapped, exists := domain.DefaultBedrockModelMapping[modelID]; exists {
+		// Sonnet 5.5 currently has only a global inference profile on
+		// bedrock-runtime. A caller's AWS region selects the endpoint, but must
+		// not rewrite the profile ID to a regional one that does not exist.
+		if mapped == bedrockSonnet55GlobalModelID {
+			return mapped, false, true
+		}
 		return mapped, true, true
+	}
+	if modelID == bedrockSonnet55GlobalModelID {
+		return modelID, false, true
 	}
 	if isRegionalBedrockModelID(modelID) {
 		return modelID, true, true
@@ -229,10 +239,20 @@ func PrepareBedrockRequestBodyWithTokens(body []byte, modelID string, betaTokens
 	// 参考 litellm: _convert_output_format_to_inline_schema()
 	body = convertOutputFormatToInlineSchema(body)
 
-	// 移除 output_config 字段（Bedrock Invoke 不支持）
-	body, err = sjson.DeleteBytes(body, "output_config")
+	// InvokeModel accepts output_config.effort for Sonnet 5.5. Keep just that
+	// field; output_config.format has already been inlined above, and older
+	// models retain the existing output_config stripping behavior.
+	if claude.IsSonnet55(modelID) {
+		if effort := gjson.GetBytes(body, "output_config.effort"); effort.Exists() {
+			body, err = sjson.SetRawBytes(body, "output_config", []byte(`{"effort":`+effort.Raw+`}`))
+		} else {
+			body, err = sjson.DeleteBytes(body, "output_config")
+		}
+	} else {
+		body, err = sjson.DeleteBytes(body, "output_config")
+	}
 	if err != nil {
-		return nil, fmt.Errorf("remove output_config field: %w", err)
+		return nil, fmt.Errorf("normalize output_config field: %w", err)
 	}
 
 	// 移除工具定义中的 custom 字段
@@ -259,17 +279,21 @@ func ResolveBedrockBetaTokens(betaHeader string, body []byte, modelID string) []
 	return filterBedrockBetaTokens(betaTokens)
 }
 
-// convertOutputFormatToInlineSchema 将 output_format 中的 JSON schema 内联到最后一条 user message
+// convertOutputFormatToInlineSchema 将结构化输出（output_config.format / output_format）的 JSON schema 内联到最后一条 user message
 // Bedrock Invoke 不支持 output_format 参数，litellm 的做法是将 schema 追加到用户消息中
 // 参考: litellm AmazonAnthropicClaudeMessagesConfig._convert_output_format_to_inline_schema()
 func convertOutputFormatToInlineSchema(body []byte) []byte {
-	outputFormat := gjson.GetBytes(body, "output_format")
+	outputFormat := gjson.GetBytes(body, "output_config.format")
+	if !outputFormat.Exists() {
+		outputFormat = gjson.GetBytes(body, "output_format")
+	}
 	if !outputFormat.Exists() || !outputFormat.IsObject() {
 		return body
 	}
 
-	// 先从请求体中移除 output_format
+	// 先从请求体中移除两个版本的结构化输出字段。
 	body, _ = sjson.DeleteBytes(body, "output_format")
+	body, _ = sjson.DeleteBytes(body, "output_config.format")
 
 	schema := outputFormat.Get("schema")
 	if !schema.Exists() {
@@ -337,13 +361,21 @@ func removeCustomFieldFromTools(body []byte) []byte {
 }
 
 // claudeVersionRe 匹配 Claude 模型 ID 中的版本号部分
-// 支持 claude-{tier}-{major}-{minor} 和 claude-{tier}-{major}.{minor} 格式
-var claudeVersionRe = regexp.MustCompile(`claude-(?:haiku|sonnet|opus)-(\d+)[-.](\d+)`)
+// 支持 claude-{tier}-{major}-{minor} 和 claude-{tier}-{major}.{minor} 格式；
+// minor 可选，用于覆盖只有主版本号的新模型 ID（claude-opus-5 / claude-sonnet-5），
+// 此时 matches[2] 为空串，调用方 strconv.Atoi 得到 minor=0。
+// 缺少可选 minor 时这类 ID 完全不匹配，会被当作"旧模型"降级处理：
+// thinking.enabled 不转 adaptive（Opus 5 上游已移除 budget_tokens，直接 400）、
+// cache_control.ttl 被剥离、tool search 被过滤。
+var claudeVersionRe = regexp.MustCompile(`claude-(?:haiku|sonnet|opus)-(\d+)(?:[-.](\d+))?`)
 
 // isBedrockClaude45OrNewer 判断 Bedrock 模型 ID 是否为 Claude 4.5 或更新版本
 // Claude 4.5+ 支持 cache_control 中的 ttl 字段（"5m" 和 "1h"）
 func isBedrockClaude45OrNewer(modelID string) bool {
 	lower := strings.ToLower(modelID)
+	if isBedrockFable5(lower) {
+		return true
+	}
 	matches := claudeVersionRe.FindStringSubmatch(lower)
 	if matches == nil {
 		return false
@@ -636,9 +668,18 @@ func isBedrockOpus47OrNewer(modelID string) bool {
 	return major > 4 || (major == 4 && minor >= 7)
 }
 
+// bedrockSonnet55GlobalModelID 是 Sonnet 5.5 在 bedrock-runtime 上唯一的推理配置 ID。
+const bedrockSonnet55GlobalModelID = "global.anthropic.claude-sonnet-5-5"
+
+func isBedrockFable5(modelID string) bool {
+	return strings.Contains(strings.ToLower(modelID), "claude-fable-5")
+}
+
 const defaultThinkingBudgetTokens = 10000
 
 // sanitizeBedrockThinking 修复 thinking 字段的 Bedrock 兼容性问题：
+//   - Sonnet 5.5: enabled 改为 adaptive；disabled 改为 between_tools
+//   - Fable 5: 仅使用 always-on adaptive thinking，不支持手动 budget_tokens
 //   - Opus 4.7+: 仅支持 "adaptive"，将 "enabled" 转换为 "adaptive" 并移除 budget_tokens
 //   - 其他模型: "enabled" 必须带 budget_tokens，缺失时补充默认值
 func sanitizeBedrockThinking(body []byte, modelID string) []byte {
@@ -649,6 +690,27 @@ func sanitizeBedrockThinking(body []byte, modelID string) []byte {
 
 	thinkingType := thinking.Get("type").String()
 	if thinkingType == "" {
+		return body
+	}
+
+	if isBedrockFable5(modelID) {
+		if thinkingType == "enabled" {
+			body, _ = sjson.SetBytes(body, "thinking.type", "adaptive")
+		}
+		if thinkingType == "enabled" || thinkingType == "adaptive" {
+			body, _ = sjson.DeleteBytes(body, "thinking.budget_tokens")
+		}
+		return body
+	}
+
+	if claude.IsSonnet55(modelID) {
+		switch thinkingType {
+		case "enabled":
+			body, _ = sjson.SetBytes(body, "thinking.type", "adaptive")
+			body, _ = sjson.DeleteBytes(body, "thinking.budget_tokens")
+		case "disabled":
+			body, _ = sjson.SetBytes(body, "thinking.type", "between_tools")
+		}
 		return body
 	}
 
