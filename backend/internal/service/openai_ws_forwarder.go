@@ -4602,7 +4602,9 @@ func (s *OpenAIGatewayService) SelectAccountByPreviousResponseID(
 		_ = store.DeleteResponseAccount(ctx, derefGroupID(groupID), responseID)
 		return nil, nil
 	}
-	if requestedModel != "" && !account.IsModelSupported(requestedModel) {
+	// previous_response_id 粘连到的账号同样要过退役判定，否则 OAuth 账号上的 gpt-5.5 会话
+	// 会一直粘在被上游拒绝的账号上（V02-T18）。
+	if requestedModel != "" && !supportsOpenAIRequestModel(account, requestedModel, requireCompact) {
 		return nil, nil
 	}
 	account = s.recheckSelectedOpenAIAccountFromDB(ctx, account, requestedModel, requireCompact)

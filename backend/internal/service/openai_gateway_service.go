@@ -1495,7 +1495,8 @@ func isOpenAIAccountEligibleForRequest(account *Account, requestedModel string, 
 	if account == nil || !account.IsSchedulable() || !account.IsOpenAI() {
 		return false
 	}
-	if requestedModel != "" && !account.IsModelSupported(requestedModel) {
+	// compact 调用点传 requireCompact，退役判定按 compact 映射后的真实上游模型算（V02-T18）。
+	if requestedModel != "" && !supportsOpenAIRequestModel(account, requestedModel, requireCompact) {
 		return false
 	}
 	if requireCompact && openAICompactSupportTier(account) == 0 {
@@ -1534,15 +1535,36 @@ func prioritizeOpenAICompactAccounts(accounts []*Account) []*Account {
 // resolveOpenAIAccountUpstreamModelForRequest resolves the upstream model that
 // would be sent for a given request, honouring compact-only mappings when the
 // caller is on the /responses/compact path.
+// resolveOpenAIAccountUpstreamModelForRequest 算出该账号真实出站的上游模型，调度、渠道上游
+// 模型限制、GPT-5.5 退役判定都用它，必须和 Forward 的实际改写链一致（V02-T18，按上游
+// openai_gateway_scheduling.go:819-866 的最终形态升级，去掉 CCAI 没有的 raw chat 分支）。
 func resolveOpenAIAccountUpstreamModelForRequest(account *Account, requestedModel string, requireCompact bool) string {
+	// 透传账号只替换认证：forwardOpenAIPassthrough 不套账号 model_mapping，也不做 Codex
+	// 规范化；只有 compact 路径对请求模型套 compact_model_mapping。
+	if account != nil && account.IsOpenAIPassthroughEnabled() {
+		upstreamModel := strings.TrimSpace(requestedModel)
+		if upstreamModel == "" {
+			return ""
+		}
+		if requireCompact {
+			return resolveOpenAICompactForwardModel(account, upstreamModel)
+		}
+		return upstreamModel
+	}
+
+	// 非透传：先套账号 model_mapping；compact 路径再按映射后的模型套 compact_model_mapping
+	// （CCAI Forward 的 compact 映射以 billingModel 为键，不是上游那样先按客户端模型精确匹配），
+	// 命中则不再做 OAuth 规范化；否则 OAuth 账号按 normalizeOpenAIModelForUpstream 规范化。
 	upstreamModel := resolveOpenAIForwardModel(account, requestedModel, "")
 	if upstreamModel == "" {
 		return ""
 	}
 	if requireCompact {
-		return resolveOpenAICompactForwardModel(account, upstreamModel)
+		if compactModel := resolveOpenAICompactForwardModel(account, upstreamModel); compactModel != upstreamModel {
+			return compactModel
+		}
 	}
-	return upstreamModel
+	return normalizeOpenAIModelForUpstream(account, upstreamModel)
 }
 
 func (s *OpenAIGatewayService) selectAccountForModelWithExclusions(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, stickyAccountID int64) (*Account, error) {
@@ -1876,7 +1898,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 		if s.isOpenAIAccountRuntimeBlocked(acc) {
 			continue
 		}
-		if requestedModel != "" && !acc.IsModelSupported(requestedModel) {
+		if requestedModel != "" && !supportsOpenAIRequestModel(acc, requestedModel, requireCompact) {
 			continue
 		}
 		if needsUpstreamCheck && s.isUpstreamModelRestrictedByChannel(ctx, *groupID, acc, requestedModel, requireCompact) {
