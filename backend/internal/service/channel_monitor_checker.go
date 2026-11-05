@@ -298,6 +298,11 @@ func callProvider(ctx context.Context, provider, endpoint, apiKey, model, prompt
 		return "", "", 0, err
 	}
 	headers := mergeHeaders(adapter.buildHeaders(apiKey), opts)
+	// Gemini 把模型名拼进 URL path（/v1beta/models/{model}:generateContent），
+	// 与网关的 Gemini 构造点一样先过路径片段护栏，见 upstream_path_guard.go。
+	if provider == MonitorProviderGemini && !IsSafeGeminiModelPathSegment(model) {
+		return "", "", 0, errors.New("invalid gemini model for upstream url path")
+	}
 	full := joinURL(endpoint, adapter.buildPath(model))
 	respBytes, status, err := postRawJSON(ctx, full, body, headers)
 	if err != nil {

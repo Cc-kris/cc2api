@@ -76,6 +76,65 @@ func TestGatewayRoutesOpenAIResponsesCompactPathIsRegistered(t *testing.T) {
 	}
 }
 
+// TestGatewayRoutesResponsesSubpathRejectsNonConformingSubpaths 端到端锁定不变式：
+// /responses/*subpath 的子路径会被转发到上游同名端点之后，因此不合规的子路径必须
+// 在入口就被拒绝，不得进入调度与转发流程。三个入口（/v1、裸 /responses、
+// Codex 直连 /backend-api/codex）行为一致。
+func TestGatewayRoutesResponsesSubpathRejectsNonConformingSubpaths(t *testing.T) {
+	router := newGatewayRoutesTestRouter()
+
+	longSegment := strings.Repeat("a", 129)
+	deepSuffix := strings.Repeat("/a", 9)
+	subpaths := []string{
+		"/../../x/y",
+		"/..%2f..%2fx/y",
+		"/%2e%2e/%2e%2e/x",
+		"/%2e%2e%2fx",
+		`/..\..\x`,
+		"/%3fa=b",
+		"/x%23frag",
+		"/compact%2f..",
+		"/x%2f..%2fy",
+		"/%00x",
+		"//double",
+		"/compact//detail",
+		"/" + longSegment,
+		deepSuffix,
+	}
+	for _, prefix := range []string{"/v1/responses", "/responses", "/backend-api/codex/responses"} {
+		for _, subpath := range subpaths {
+			path := prefix + subpath
+			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"gpt-5"}`))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			router.ServeHTTP(w, req)
+			require.Equal(t, http.StatusNotFound, w.Code, "path=%s must be rejected at the edge", path)
+			require.Contains(t, w.Body.String(), "not_found_error", "path=%s", path)
+			require.Contains(t, w.Body.String(), "Unsupported responses subpath", "path=%s", path)
+		}
+	}
+}
+
+// TestGatewayRoutesResponsesSubpathAllowsConformingSubpaths 锁定正向行为：
+// compact、compact/detail、{id}/cancel 不被守卫拦截。
+func TestGatewayRoutesResponsesSubpathAllowsConformingSubpaths(t *testing.T) {
+	router := newGatewayRoutesTestRouter()
+
+	for _, prefix := range []string{"/v1/responses", "/responses", "/backend-api/codex/responses"} {
+		// 业务层看到的是解码后的 URL.Path，编码后的 `/` 解码成合规的多段路径时照常放行。
+		for _, subpath := range []string{"/compact", "/compact/detail", "/compact%2fdetail", "/resp_abc123/cancel", "/" + strings.Repeat("a", 128), strings.Repeat("/a", 8)} {
+			path := prefix + subpath
+			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"gpt-5"}`))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			router.ServeHTTP(w, req)
+			require.NotContains(t, w.Body.String(), "Unsupported responses subpath", "path=%s must pass the guard", path)
+		}
+	}
+}
+
 func TestGatewayRoutesOpenAIImagesPathsAreRegistered(t *testing.T) {
 	router := newGatewayRoutesTestRouter()
 

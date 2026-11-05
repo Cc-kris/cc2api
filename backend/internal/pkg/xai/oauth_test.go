@@ -146,6 +146,21 @@ func TestBuildGrokMediaURLs(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestBuildVideoURLWithValidatorRejectsNonSegmentRequestID(t *testing.T) {
+	for _, requestID := range []string{".", "..", " .. ", "req\r\nX-Injected: 1", "req\nid", "req\x00id"} {
+		_, err := BuildVideoURLWithValidator(DefaultBaseURL, requestID, nil)
+		require.Error(t, err, "request id %q must be rejected", requestID)
+	}
+
+	videoURL, err := BuildVideoURLWithValidator(DefaultBaseURL, "8c1f2d3e-4b5a-6789-abcd-ef0123456789", nil)
+	require.NoError(t, err)
+	require.Equal(t, DefaultBaseURL+"/videos/8c1f2d3e-4b5a-6789-abcd-ef0123456789", videoURL)
+
+	videoURL, err = BuildVideoURLWithValidator(DefaultBaseURL, "req..1", nil)
+	require.NoError(t, err)
+	require.Equal(t, DefaultBaseURL+"/videos/req..1", videoURL)
+}
+
 func TestValidateXAIURLsRejectUntrustedOAuthAndUnsafeBaseURLsByDefault(t *testing.T) {
 	_, err := ValidateOAuthEndpointURL("https://auth.example.test/oauth2/token")
 	require.Error(t, err)
