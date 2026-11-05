@@ -131,7 +131,8 @@ func (h *APIKeyHandler) GetByID(c *gin.Context) {
 
 	// 验证所有权
 	if key.UserID != subject.UserID {
-		response.Forbidden(c, "Not authorized to access this key")
+		// 与“不存在”返回完全相同的响应，避免通过状态码或响应体区分（CWE-204）
+		response.ErrorFrom(c, service.ErrAPIKeyNotFound)
 		return
 	}
 
