@@ -1336,7 +1336,7 @@ func (s *OpenAIGatewayService) GenerateExplicitSessionHash(c *gin.Context, body 
 // GenerateSessionHash generates a sticky-session hash for OpenAI requests.
 //
 // Priority:
-//  1. Header: session_id
+//  1. Header: session-id / session_id
 //  2. Header: conversation_id
 //  3. Body:   prompt_cache_key (opencode)
 //  4. Body:   content-based fallback (model + system + tools + first user message)
@@ -3590,6 +3590,10 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		apiKeyID := getAPIKeyIDFromContext(c)
 		// 先保存客户端原始值，再做 compact 补充，避免后续统一隔离时读到已处理的值。
 		clientSessionID := strings.TrimSpace(req.Header.Get("session_id"))
+		if clientSessionID == "" && c != nil {
+			// session-id 不在透传白名单里（不会原样发出），只在这里读出来参与隔离（V02-T17）。
+			clientSessionID = strings.TrimSpace(c.GetHeader("session-id"))
+		}
 		clientConversationID := strings.TrimSpace(req.Header.Get("conversation_id"))
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
@@ -3643,6 +3647,8 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	if req.Header.Get("content-type") == "" {
 		req.Header.Set("content-type", "application/json")
 	}
+	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
+	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http_passthrough", req.Header, body, "not_applicable")
 
 	return req, nil
 }
@@ -4460,6 +4466,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	if req.Header.Get("content-type") == "" {
 		req.Header.Set("content-type", "application/json")
 	}
+	// 路由提示（V02-T17）：按最终出站 body 的 model 和 service_tier 生成，入站同名头先删。
+	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
+	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http", req.Header, body, "not_applicable")
 
 	return req, nil
 }

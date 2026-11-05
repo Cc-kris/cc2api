@@ -67,6 +67,9 @@ func explicitOpenAIHeaderSessionID(c *gin.Context) string {
 		return ""
 	}
 	for _, header := range []string{
+		// Codex 客户端发 session-id（连字符，上游 8e60d5747）。只用于粘性和
+		// prompt_cache_key，出站白名单不放行它，出站只写隔离后的 session_id。
+		"session-id",
 		"session_id",
 		"conversation_id",
 		openCodeSessionAffinityHeader,

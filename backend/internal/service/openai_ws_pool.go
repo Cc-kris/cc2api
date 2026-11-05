@@ -226,6 +226,9 @@ type openAIWSConn struct {
 	ws openAIWSClientConn
 
 	handshakeHeaders http.Header
+	// routingAffinity 是握手时写入的 x-codex-routing-hint（V02-T17）。普通复用只挑
+	// 提示一致的连接；续链（PreferredConnID）不看它，避免模型/tier 变化打断 previous_response_id。
+	routingAffinity string
 
 	leaseCh   chan struct{}
 	closedCh  chan struct{}
@@ -497,6 +500,10 @@ func (c *openAIWSConn) handshakeHeader(name string) string {
 		return ""
 	}
 	return strings.TrimSpace(c.handshakeHeaders.Get(strings.TrimSpace(name)))
+}
+
+func (c *openAIWSConn) matchesRoutingAffinity(routingAffinity string) bool {
+	return c != nil && c.routingAffinity == routingAffinity
 }
 
 func (c *openAIWSConn) isPrewarmed() bool {
@@ -788,6 +795,7 @@ func (p *openAIWSConnPool) acquire(ctx context.Context, req openAIWSAcquireReque
 	}
 
 	accountID := req.Account.ID
+	routingAffinity := normalizeOpenAIWSRoutingAffinity(req.Headers)
 	effectiveMaxConns := p.effectiveMaxConnsByAccount(req.Account)
 	if effectiveMaxConns <= 0 {
 		return nil, errOpenAIWSConnQueueFull
@@ -918,7 +926,8 @@ func (p *openAIWSConnPool) acquire(ctx context.Context, req openAIWSAcquireReque
 			}
 		}
 
-		best := p.pickLeastBusyConnLocked(ap, "")
+		// 路由提示不一致的连接不复用（AC25）：只在提示一致的连接里挑。
+		best := p.pickLeastBusyConnWithRoutingAffinityLocked(ap, routingAffinity)
 		if best != nil && best.tryAcquire() {
 			connPick := time.Since(pickStartedAt)
 			p.recordConnPickDuration(connPick)
@@ -940,7 +949,7 @@ func (p *openAIWSConnPool) acquire(ctx context.Context, req openAIWSAcquireReque
 			return lease, nil
 		}
 		for _, conn := range ap.conns {
-			if conn == nil || conn == best {
+			if conn == nil || conn == best || !conn.matchesRoutingAffinity(routingAffinity) {
 				continue
 			}
 			if conn.tryAcquire() {
@@ -968,6 +977,16 @@ func (p *openAIWSConnPool) acquire(ctx context.Context, req openAIWSAcquireReque
 
 	if req.ForceNewConn && len(ap.conns)+ap.creating >= effectiveMaxConns {
 		if idle := p.pickOldestIdleConnLocked(ap); idle != nil {
+			delete(ap.conns, idle.id)
+			evicted = append(evicted, idle)
+			p.metrics.scaleDownTotal.Add(1)
+		}
+	}
+	// 容量已满且没有提示一致的连接：淘汰最老的空闲非一致连接，腾位按本轮提示重新建连
+	// （上游 de349187d）。都忙时退回下面的排队逻辑，提示在此退化为软约束，不拒绝请求。
+	if !req.ForceNewConn && len(ap.conns)+ap.creating >= effectiveMaxConns &&
+		p.pickLeastBusyConnWithRoutingAffinityLocked(ap, routingAffinity) == nil {
+		if idle := p.pickOldestIdleConnWithoutRoutingAffinityLocked(ap, routingAffinity); idle != nil {
 			delete(ap.conns, idle.id)
 			evicted = append(evicted, idle)
 			p.metrics.scaleDownTotal.Add(1)
@@ -1017,7 +1036,13 @@ func (p *openAIWSConnPool) acquire(ctx context.Context, req openAIWSAcquireReque
 		return nil, errOpenAIWSConnQueueFull
 	}
 
-	target := p.pickLeastBusyConnLocked(ap, req.PreferredConnID)
+	var target *openAIWSConn
+	if stringsTrim(req.PreferredConnID) == "" {
+		target = p.pickLeastBusyConnWithRoutingAffinityLocked(ap, routingAffinity)
+	}
+	if target == nil {
+		target = p.pickLeastBusyConnLocked(ap, req.PreferredConnID)
+	}
 	connPick := time.Since(pickStartedAt)
 	p.recordConnPickDuration(connPick)
 	if target == nil {
@@ -1245,6 +1270,47 @@ func (p *openAIWSConnPool) pickLeastBusyConnLocked(ap *openAIWSAccountPool, pref
 		}
 	}
 	return best
+}
+
+func (p *openAIWSConnPool) pickLeastBusyConnWithRoutingAffinityLocked(ap *openAIWSAccountPool, routingAffinity string) *openAIWSConn {
+	if ap == nil || len(ap.conns) == 0 {
+		return nil
+	}
+	var best *openAIWSConn
+	var bestWaiters int32
+	var bestLastUsed time.Time
+	for _, conn := range ap.conns {
+		if conn == nil || !conn.matchesRoutingAffinity(routingAffinity) {
+			continue
+		}
+		waiters := conn.waiters.Load()
+		lastUsed := conn.lastUsedAt()
+		if best == nil ||
+			waiters < bestWaiters ||
+			(waiters == bestWaiters && lastUsed.Before(bestLastUsed)) {
+			best = conn
+			bestWaiters = waiters
+			bestLastUsed = lastUsed
+		}
+	}
+	return best
+}
+
+func (p *openAIWSConnPool) pickOldestIdleConnWithoutRoutingAffinityLocked(ap *openAIWSAccountPool, routingAffinity string) *openAIWSConn {
+	if ap == nil || len(ap.conns) == 0 {
+		return nil
+	}
+	var oldest *openAIWSConn
+	for _, conn := range ap.conns {
+		if conn == nil || conn.matchesRoutingAffinity(routingAffinity) ||
+			conn.isLeased() || conn.waiters.Load() > 0 || p.isConnPinnedLocked(ap, conn.id) {
+			continue
+		}
+		if oldest == nil || conn.lastUsedAt().Before(oldest.lastUsedAt()) {
+			oldest = conn
+		}
+	}
+	return oldest
 }
 
 func accountPoolLoadLocked(ap *openAIWSAccountPool) (inflight int, waiters int) {
@@ -1511,7 +1577,36 @@ func (p *openAIWSConnPool) dialConn(ctx context.Context, req openAIWSAcquireRequ
 		}
 	}
 	id := p.nextConnID(req.Account.ID)
-	return newOpenAIWSConn(id, req.Account.ID, conn, handshakeHeaders), nil
+	pooledConn := newOpenAIWSConn(id, req.Account.ID, conn, handshakeHeaders)
+	pooledConn.routingAffinity = normalizeOpenAIWSRoutingAffinity(req.Headers)
+	return pooledConn, nil
+}
+
+// normalizeOpenAIWSRoutingAffinity 取请求头里的 x-codex-routing-hint（兼容非规范大小写的键）。
+func normalizeOpenAIWSRoutingAffinity(headers http.Header) string {
+	canonicalName := http.CanonicalHeaderKey(openAICodexRoutingHintHeader)
+	if values, ok := headers[canonicalName]; ok {
+		for _, value := range values {
+			if value = strings.TrimSpace(value); value != "" {
+				return value
+			}
+		}
+	}
+	variantNames := make([]string, 0)
+	for name := range headers {
+		if name != canonicalName && strings.EqualFold(strings.TrimSpace(name), openAICodexRoutingHintHeader) {
+			variantNames = append(variantNames, name)
+		}
+	}
+	sort.Strings(variantNames)
+	for _, name := range variantNames {
+		for _, value := range headers[name] {
+			if value = strings.TrimSpace(value); value != "" {
+				return value
+			}
+		}
+	}
+	return ""
 }
 
 func (p *openAIWSConnPool) nextConnID(accountID int64) string {
