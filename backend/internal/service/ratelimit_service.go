@@ -301,6 +301,13 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			shouldDisable = true
 		}
 	case 402:
+		// 国产供应商（kimi/zhipu/deepseek）：余额不足是可恢复状态（充值后即可继续用），
+		// 不能走 handleAuthError 永久置 status=error。改为可恢复的临时停调。
+		if account.IsCNProvider() {
+			s.handleCNProviderInsufficientBalance(ctx, account, upstreamMsg)
+			shouldDisable = true
+			break
+		}
 		// 支付要求：余额不足或计费问题，停止调度
 		msg := "Payment required (402): insufficient balance or billing issue"
 		if upstreamMsg != "" {
@@ -806,6 +813,20 @@ func (s *RateLimitService) handle403(ctx context.Context, account *Account, upst
 	if account.Platform == PlatformAntigravity {
 		return s.handleAntigravity403(ctx, account, upstreamMsg, responseBody)
 	}
+	// Kimi reports its transient per-account concurrency/business limit as a 403.
+	// Keep the normal 403 failover signal (true), but never feed this exact message
+	// into the escalating 403 counter that can permanently mark the account error.
+	if isCNProviderConcurrencyLimit403(account, upstreamMsg) {
+		s.handleCNProviderConcurrencyLimit403(ctx, account)
+		return true
+	}
+	// 国产供应商把配额窗口耗尽打成 403（Kimi：error.type=access_terminated_error），
+	// 这是窗口到期后自动恢复的限流信号而非封禁：按默认时长临时冷却，避免落入
+	// 下方通用 403 升级计数后被永久 SetError。
+	if isCNProviderQuotaExhausted403(account, responseBody, upstreamMsg) {
+		s.handleCNProviderQuotaExhausted403(ctx, account, upstreamMsg)
+		return true
+	}
 	// 国产供应商与 openai 同口径：HTML 403（CDN/代理拦截页）不构成账号失效证据，
 	// 且 403 在 failover 状态集里会被逐账号重放——直接 SetError 会让一个坏请求/
 	// 一层坏代理连环永久禁用整组账号。走 HTML 豁免 + N 次累计 + 临时冷却。
@@ -1014,6 +1035,11 @@ func (s *RateLimitService) handleCustomErrorCode(ctx context.Context, account *A
 // handle429 处理429限流错误
 // 解析响应头获取重置时间，标记账号为限流状态
 func (s *RateLimitService) handle429(ctx context.Context, account *Account, headers http.Header, responseBody []byte) {
+	// 国产供应商（kimi/zhipu/deepseek）的余额不足 429 走可恢复的临时停调；
+	// 未命中则继续默认 429 逻辑（频率型 429 没有重置头时走秒级回退冷却）。
+	if s.applyCNProviderReactive429(ctx, account, responseBody) {
+		return
+	}
 	// 1. OpenAI 平台：优先尝试解析 x-codex-* 响应头（用于 rate_limit_exceeded）
 	if account.Platform == PlatformOpenAI {
 		persistOpenAI429PlanType(ctx, s.accountRepo, account, responseBody)
