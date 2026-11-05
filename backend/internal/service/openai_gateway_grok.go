@@ -22,8 +22,6 @@ import (
 const (
 	grokComposerImageBridgeVisionModel     = "grok-build-0.1"
 	grokComposerImageBridgeMaxOutputTokens = 512
-	grokUpstreamUserAgent                  = "sub2api-grok/1.0"
-	grokCLIVersion                         = "0.2.93"
 	grokDefaultResponsesModel              = "grok-4.5"
 	grokRateLimitFallbackCooldown          = 2 * time.Minute
 	grokRateLimitRepeatCooldown            = 10 * time.Minute
@@ -1084,13 +1082,18 @@ func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Acc
 
 // applyGrokCLIHeaders identifies subscription traffic as a supported Grok CLI
 // version. The CLI gateway rejects otherwise valid OAuth requests without it.
+// Identity pins come from package xai so service-layer headers match the final
+// transport rewrite on cli-chat-proxy.grok.com.
 func applyGrokCLIHeaders(headers http.Header) {
 	if headers == nil {
 		return
 	}
-	headers.Set("User-Agent", grokUpstreamUserAgent)
-	headers.Set("X-Grok-Client-Version", grokCLIVersion)
-	headers.Set("X-Grok-Client-Mode", "interactive")
+	version := xai.ResolveCLIVersion()
+	headers.Set("User-Agent", xai.CLIUserAgent(version))
+	headers.Set("X-Grok-Client-Version", version)
+	headers.Set("x-grok-client-identifier", xai.CLIClientIdentifier)
+	// 对齐官方 CLI 交互模式，网关请求与额度探测共用身份。
+	headers.Set("X-Grok-Client-Mode", xai.CLIClientMode)
 }
 
 func (s *OpenAIGatewayService) updateGrokUsageSnapshot(ctx context.Context, account *Account, snapshot *xai.QuotaSnapshot) {

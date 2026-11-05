@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/stretchr/testify/require"
 )
 
@@ -101,7 +102,7 @@ func TestBuildUpstreamModelsRequestSupportsGrokOAuth(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "https://cli-chat-proxy.grok.com/v1/models", req.URL.String())
 	require.Equal(t, "Bearer oauth-access-token", req.Header.Get("Authorization"))
-	require.Equal(t, grokCLIVersion, req.Header.Get("X-Grok-Client-Version"))
+	require.Equal(t, xai.CLIClientVersion, req.Header.Get("X-Grok-Client-Version"))
 	require.Equal(t, "grok-user-id", req.Header.Get("X-UserID"))
 	require.Equal(t, "grok-user@example.com", req.Header.Get("X-Email"))
 	require.NotContains(t, req.Header.Get("Authorization"), "oauth-refresh-token")
