@@ -301,6 +301,13 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			shouldDisable = true
 		}
 	case 402:
+		// 国产供应商（kimi/zhipu/deepseek）：余额不足是可恢复状态（充值后即可继续用），
+		// 不能走 handleAuthError 永久置 status=error。改为可恢复的临时停调。
+		if account.IsCNProvider() {
+			s.handleCNProviderInsufficientBalance(ctx, account, upstreamMsg)
+			shouldDisable = true
+			break
+		}
 		// 支付要求：余额不足或计费问题，停止调度
 		msg := "Payment required (402): insufficient balance or billing issue"
 		if upstreamMsg != "" {
@@ -787,14 +794,43 @@ func buildForbiddenErrorMessage(prefix string, upstreamMsg string, responseBody 
 	return prefix + fallback
 }
 
-// handle403 处理 403 Forbidden 错误
-// Antigravity 平台区分 validation/violation/generic 三种类型，均 SetError 永久禁用；
+// handle403 处理 403 Forbidden 错误。Cloudflare 1010 是请求/边缘级拦截，
+// 不应将其视为账号级故障；其他真实 403 继续按平台策略处理：
+// Antigravity 区分 validation/violation/generic 三种类型，均 SetError 永久禁用；
+// OpenAI 与国产三家（kimi/zhipu/deepseek）走 HTML 豁免 + 累计计数 + 临时冷却；
 // 其他平台保持原有 SetError 行为。
 func (s *RateLimitService) handle403(ctx context.Context, account *Account, upstreamMsg string, responseBody []byte) (shouldDisable bool) {
+	if isCloudflareBotBlockResponse(responseBody) {
+		slog.Warn(
+			"403_cloudflare_bot_block_skips_account_penalty",
+			"account_id", account.ID,
+			"platform", account.Platform,
+			"upstream_message", upstreamMsg,
+		)
+		return false
+	}
+
 	if account.Platform == PlatformAntigravity {
 		return s.handleAntigravity403(ctx, account, upstreamMsg, responseBody)
 	}
-	if account.Platform == PlatformOpenAI {
+	// Kimi reports its transient per-account concurrency/business limit as a 403.
+	// Keep the normal 403 failover signal (true), but never feed this exact message
+	// into the escalating 403 counter that can permanently mark the account error.
+	if isCNProviderConcurrencyLimit403(account, upstreamMsg) {
+		s.handleCNProviderConcurrencyLimit403(ctx, account)
+		return true
+	}
+	// 国产供应商把配额窗口耗尽打成 403（Kimi：error.type=access_terminated_error），
+	// 这是窗口到期后自动恢复的限流信号而非封禁：按默认时长临时冷却，避免落入
+	// 下方通用 403 升级计数后被永久 SetError。
+	if isCNProviderQuotaExhausted403(account, responseBody, upstreamMsg) {
+		s.handleCNProviderQuotaExhausted403(ctx, account, upstreamMsg)
+		return true
+	}
+	// 国产供应商与 openai 同口径：HTML 403（CDN/代理拦截页）不构成账号失效证据，
+	// 且 403 在 failover 状态集里会被逐账号重放——直接 SetError 会让一个坏请求/
+	// 一层坏代理连环永久禁用整组账号。走 HTML 豁免 + N 次累计 + 临时冷却。
+	if account.Platform == PlatformOpenAI || isDomesticOpenAICompatiblePlatform(account.Platform) {
 		return s.handleOpenAI403(ctx, account, upstreamMsg, responseBody)
 	}
 	// 非 Antigravity 平台：保持原有行为
@@ -809,6 +845,23 @@ func (s *RateLimitService) handle403(ctx context.Context, account *Account, upst
 }
 
 func (s *RateLimitService) handleOpenAI403(ctx context.Context, account *Account, upstreamMsg string, responseBody []byte) (shouldDisable bool) {
+	// 上游代理 / CDN 在请求到达 OpenAI API 之前就拦下时，回的是 HTML 403 页面而不是
+	// {"error":{...}} 结构化错误。这类响应描述的是「这条链路 / 这个端点被挡了」，
+	// 不构成账号凭据或权限失效的证据。
+	//
+	// 据此写账号状态会把请求级错误放大成账号级处罚：首次即 temp-unschedulable，
+	// 连续 openAI403DisableThreshold 次直接永久禁用；而 403 又在 failover 状态集里，
+	// 同一个坏请求会被逐个账号重放，足以把整组账号打下线。
+	// 这里只跳过账号处罚（不计数），不改变 failover 行为——换个走不同代理的账号仍有可能成功。
+	if isHTMLResponse(responseBody) {
+		slog.Warn(
+			"openai_403_html_body_skips_account_penalty",
+			"account_id", account.ID,
+			"platform", account.Platform,
+			"upstream_message", upstreamMsg,
+		)
+		return false
+	}
 	msg := buildForbiddenErrorMessage(
 		"Access forbidden (403):",
 		upstreamMsg,
@@ -851,6 +904,75 @@ func (s *RateLimitService) handleOpenAI403(ctx context.Context, account *Account
 		"threshold", openAI403DisableThreshold,
 	)
 	return true
+}
+
+// isCloudflareBotBlockResponse reports Cloudflare's WAF bot-signature response
+// (error code 1010). The upstream never reached the account API, so this is a
+// request/edge-level failure and must not consume the account 403 strike budget.
+func isCloudflareBotBlockResponse(body []byte) bool {
+	normalized := strings.ToLower(strings.TrimSpace(string(body)))
+	var payload any
+	if json.Unmarshal(body, &payload) == nil {
+		return containsCloudflareBotBlockCode(payload)
+	}
+	return strings.Contains(normalized, "error code: 1010")
+}
+
+func containsCloudflareBotBlockCode(value any) bool {
+	switch node := value.(type) {
+	case map[string]any:
+		cloudflareError := false
+		for key, child := range node {
+			if strings.EqualFold(key, "cloudflare_error") {
+				if is, ok := child.(bool); ok && is {
+					cloudflareError = true
+				}
+			}
+		}
+		for key, child := range node {
+			if strings.EqualFold(key, "error_name") {
+				if name, ok := child.(string); ok && strings.EqualFold(strings.TrimSpace(name), "browser_signature_banned") {
+					return true
+				}
+			}
+			if cloudflareError && (strings.EqualFold(key, "code") || strings.EqualFold(key, "error_code")) {
+				if isCloudflareBotBlockCode(child) {
+					return true
+				}
+			}
+			if containsCloudflareBotBlockCode(child) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range node {
+			if containsCloudflareBotBlockCode(child) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isCloudflareBotBlockCode(value any) bool {
+	switch code := value.(type) {
+	case float64:
+		return code == 1010
+	case json.Number:
+		return code == "1010"
+	case string:
+		return strings.TrimSpace(code) == "1010"
+	default:
+		return false
+	}
+}
+
+// isHTMLResponse 判断响应体是否为 HTML 页面（CDN/代理拦截页），只认
+// <!doctype html 与 <html 前缀。
+func isHTMLResponse(body []byte) bool {
+	trimmed := strings.TrimSpace(strings.ToLower(string(body)))
+	return strings.HasPrefix(trimmed, "<!doctype html") ||
+		strings.HasPrefix(trimmed, "<html")
 }
 
 // handleAntigravity403 处理 Antigravity 平台的 403 错误
@@ -913,6 +1035,11 @@ func (s *RateLimitService) handleCustomErrorCode(ctx context.Context, account *A
 // handle429 处理429限流错误
 // 解析响应头获取重置时间，标记账号为限流状态
 func (s *RateLimitService) handle429(ctx context.Context, account *Account, headers http.Header, responseBody []byte) {
+	// 国产供应商（kimi/zhipu/deepseek）的余额不足 429 走可恢复的临时停调；
+	// 未命中则继续默认 429 逻辑（频率型 429 没有重置头时走秒级回退冷却）。
+	if s.applyCNProviderReactive429(ctx, account, responseBody) {
+		return
+	}
 	// 1. OpenAI 平台：优先尝试解析 x-codex-* 响应头（用于 rate_limit_exceeded）
 	if account.Platform == PlatformOpenAI {
 		persistOpenAI429PlanType(ctx, s.accountRepo, account, responseBody)
