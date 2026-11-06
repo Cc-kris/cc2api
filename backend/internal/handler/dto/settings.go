@@ -196,6 +196,9 @@ type SystemSettings struct {
 	LocalResponseCacheEnabled          bool   `json:"local_response_cache_enabled"`
 	AntigravityUserAgentVersion        string `json:"antigravity_user_agent_version"`
 	OpenAICodexUserAgent               string `json:"openai_codex_user_agent"`
+	ClaudeCodeClientVersion            string `json:"claude_code_client_version"`
+	ClaudeCodeClientVersionSynced      string `json:"claude_code_client_version_synced"`
+	ClaudeCodeVersionAutoSyncEnabled   bool   `json:"claude_code_version_auto_sync_enabled"`
 
 	// Web Search Emulation
 	WebSearchEmulationEnabled bool `json:"web_search_emulation_enabled"`

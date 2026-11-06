@@ -180,6 +180,8 @@ type SettingService struct {
 	antigravityUAVersionSF     singleflight.Group
 	openAICodexUACache         atomic.Value // *cachedOpenAICodexUserAgent
 	openAICodexUASF            singleflight.Group
+	claudeCodeVersionCache     atomic.Value // *cachedClaudeCodeClientVersion
+	claudeCodeVersionSF        singleflight.Group
 	salesPricingVersionCache   atomic.Value // *cachedSalesPricingVersion
 	salesPricingVersionSF      singleflight.Group
 	salesPricingResolverCache  atomic.Value // *cachedSalesPricingResolver
@@ -2191,6 +2193,10 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyLocalResponseCacheEnabled] = strconv.FormatBool(settings.LocalResponseCacheEnabled)
 	updates[SettingKeyAntigravityUserAgentVersion] = antigravity.NormalizeUserAgentVersion(settings.AntigravityUserAgentVersion)
 	updates[SettingKeyOpenAICodexUserAgent] = strings.TrimSpace(settings.OpenAICodexUserAgent)
+	updates[SettingKeyClaudeCodeClientVersion] = NormalizeClaudeCodeClientVersion(settings.ClaudeCodeClientVersion)
+	updates[SettingKeyClaudeCodeVersionAutoSyncEnabled] = strconv.FormatBool(settings.ClaudeCodeVersionAutoSyncEnabled)
+	// SettingKeyClaudeCodeClientVersionSynced 由自动同步任务独占写入，此处不得覆盖，
+	// 否则面板保存会把同步结果清空。
 	updates[SettingPaymentVisibleMethodAlipaySource] = settings.PaymentVisibleMethodAlipaySource
 	updates[SettingPaymentVisibleMethodWxpaySource] = settings.PaymentVisibleMethodWxpaySource
 	updates[SettingPaymentVisibleMethodAlipayEnabled] = strconv.FormatBool(settings.PaymentVisibleMethodAlipayEnabled)
@@ -3019,6 +3025,9 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 	defaults := map[string]string{
 		SettingKeyRegistrationEnabled:                       "true",
 		SettingKeyEmailVerifyEnabled:                        "false",
+		SettingKeyClaudeCodeClientVersion:                   "",
+		SettingKeyClaudeCodeClientVersionSynced:             "",
+		SettingKeyClaudeCodeVersionAutoSyncEnabled:          "true",
 		SettingKeyRegistrationEmailSuffixWhitelist:          "[]",
 		SettingKeyRegistrationDomainLimitEnabled:            "false",
 		SettingKeyRegistrationDomainLimitPerDomain:          "3",
@@ -3726,6 +3735,14 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.LocalResponseCacheEnabled = settings[SettingKeyLocalResponseCacheEnabled] == "true"
 	result.AntigravityUserAgentVersion = antigravity.NormalizeUserAgentVersion(settings[SettingKeyAntigravityUserAgentVersion])
 	result.OpenAICodexUserAgent = strings.TrimSpace(settings[SettingKeyOpenAICodexUserAgent])
+	result.ClaudeCodeClientVersion = NormalizeClaudeCodeClientVersion(settings[SettingKeyClaudeCodeClientVersion])
+	result.ClaudeCodeClientVersionSynced = NormalizeClaudeCodeClientVersion(settings[SettingKeyClaudeCodeClientVersionSynced])
+	// 自动同步默认开启：缺失/空值一律视为开启。
+	if v, ok := settings[SettingKeyClaudeCodeVersionAutoSyncEnabled]; ok && v != "" {
+		result.ClaudeCodeVersionAutoSyncEnabled = v == "true"
+	} else {
+		result.ClaudeCodeVersionAutoSyncEnabled = true
+	}
 
 	// Web search emulation: quick enabled check from the JSON config
 	if raw := settings[SettingKeyWebSearchEmulationConfig]; raw != "" {

@@ -279,6 +279,9 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		LocalResponseCacheEnabled:               settings.LocalResponseCacheEnabled,
 		AntigravityUserAgentVersion:             settings.AntigravityUserAgentVersion,
 		OpenAICodexUserAgent:                    settings.OpenAICodexUserAgent,
+		ClaudeCodeClientVersion:                 settings.ClaudeCodeClientVersion,
+		ClaudeCodeClientVersionSynced:           settings.ClaudeCodeClientVersionSynced,
+		ClaudeCodeVersionAutoSyncEnabled:        settings.ClaudeCodeVersionAutoSyncEnabled,
 		WebSearchEmulationEnabled:               settings.WebSearchEmulationEnabled,
 		PaymentVisibleMethodAlipaySource:        settings.PaymentVisibleMethodAlipaySource,
 		PaymentVisibleMethodWxpaySource:         settings.PaymentVisibleMethodWxpaySource,
@@ -626,6 +629,8 @@ type UpdateSettingsRequest struct {
 	LocalResponseCacheEnabled          *bool   `json:"local_response_cache_enabled"`
 	AntigravityUserAgentVersion        *string `json:"antigravity_user_agent_version"`
 	OpenAICodexUserAgent               *string `json:"openai_codex_user_agent"`
+	ClaudeCodeClientVersion            *string `json:"claude_code_client_version"`
+	ClaudeCodeVersionAutoSyncEnabled   *bool   `json:"claude_code_version_auto_sync_enabled"`
 
 	// Payment visible method routing
 	PaymentVisibleMethodAlipaySource  *string `json:"payment_visible_method_alipay_source"`
@@ -1581,6 +1586,16 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			return
 		}
 	}
+	if req.ClaudeCodeClientVersion != nil {
+		raw := strings.TrimSpace(*req.ClaudeCodeClientVersion)
+		normalized := service.NormalizeClaudeCodeClientVersion(raw)
+		// 空值表示清除覆写；非空但不合法直接拒绝，避免面板把管理员填的版本静默清空。
+		if raw != "" && normalized == "" {
+			response.Error(c, http.StatusBadRequest, "claude_code_client_version must be empty or a supported semver (e.g. 2.1.258, not older than the built-in baseline)")
+			return
+		}
+		req.ClaudeCodeClientVersion = &normalized
+	}
 
 	// 交叉验证：如果同时设置了最低和最高版本号，最高版本号必须 >= 最低版本号
 	if req.MinClaudeCodeVersion != "" && req.MaxClaudeCodeVersion != "" {
@@ -1814,6 +1829,18 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 				return *req.OpenAICodexUserAgent
 			}
 			return previousSettings.OpenAICodexUserAgent
+		}(),
+		ClaudeCodeClientVersion: func() string {
+			if req.ClaudeCodeClientVersion != nil {
+				return *req.ClaudeCodeClientVersion
+			}
+			return previousSettings.ClaudeCodeClientVersion
+		}(),
+		ClaudeCodeVersionAutoSyncEnabled: func() bool {
+			if req.ClaudeCodeVersionAutoSyncEnabled != nil {
+				return *req.ClaudeCodeVersionAutoSyncEnabled
+			}
+			return previousSettings.ClaudeCodeVersionAutoSyncEnabled
 		}(),
 		PaymentVisibleMethodAlipaySource: func() string {
 			if req.PaymentVisibleMethodAlipaySource != nil {
@@ -2256,6 +2283,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		LocalResponseCacheEnabled:               updatedSettings.LocalResponseCacheEnabled,
 		AntigravityUserAgentVersion:             updatedSettings.AntigravityUserAgentVersion,
 		OpenAICodexUserAgent:                    updatedSettings.OpenAICodexUserAgent,
+		ClaudeCodeClientVersion:                 updatedSettings.ClaudeCodeClientVersion,
+		ClaudeCodeClientVersionSynced:           updatedSettings.ClaudeCodeClientVersionSynced,
+		ClaudeCodeVersionAutoSyncEnabled:        updatedSettings.ClaudeCodeVersionAutoSyncEnabled,
 		PaymentVisibleMethodAlipaySource:        updatedSettings.PaymentVisibleMethodAlipaySource,
 		PaymentVisibleMethodWxpaySource:         updatedSettings.PaymentVisibleMethodWxpaySource,
 		PaymentVisibleMethodAlipayEnabled:       updatedSettings.PaymentVisibleMethodAlipayEnabled,
@@ -2759,6 +2789,12 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.OpenAICodexUserAgent != after.OpenAICodexUserAgent {
 		changed = append(changed, "openai_codex_user_agent")
+	}
+	if before.ClaudeCodeClientVersion != after.ClaudeCodeClientVersion {
+		changed = append(changed, "claude_code_client_version")
+	}
+	if before.ClaudeCodeVersionAutoSyncEnabled != after.ClaudeCodeVersionAutoSyncEnabled {
+		changed = append(changed, "claude_code_version_auto_sync_enabled")
 	}
 	if before.PaymentVisibleMethodAlipaySource != after.PaymentVisibleMethodAlipaySource {
 		changed = append(changed, "payment_visible_method_alipay_source")
