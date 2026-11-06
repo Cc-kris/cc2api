@@ -400,7 +400,7 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 	apiKey := &APIKey{
 		UserID:      userID,
 		Key:         key,
-		Name:        html.EscapeString(req.Name),
+		Name:        escapeAPIKeyName(req.Name),
 		GroupID:     req.GroupID,
 		Status:      StatusActive,
 		IPWhitelist: req.IPWhitelist,
@@ -539,7 +539,7 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 
 	// 更新字段
 	if req.Name != nil {
-		apiKey.Name = html.EscapeString(*req.Name)
+		apiKey.Name = escapeAPIKeyName(*req.Name)
 	}
 
 	if req.GroupID != nil {
@@ -885,4 +885,11 @@ func (s *APIKeyService) UpdateRateLimitUsage(ctx context.Context, apiKeyID int64
 		return nil
 	}
 	return s.apiKeyRepo.IncrementRateLimitUsage(ctx, apiKeyID, cost)
+}
+
+// escapeAPIKeyName 按 HTML 转义存储 Key 名称（V01-R11，上游 0ae332961）。
+// 先反转义再转义，保证幂等：前端编辑弹窗会把已转义的名称原样提交回来，
+// 直接 EscapeString 会每保存一次就多转义一层（A&B → A&amp;B → A&amp;amp;B）。
+func escapeAPIKeyName(name string) string {
+	return html.EscapeString(html.UnescapeString(name))
 }

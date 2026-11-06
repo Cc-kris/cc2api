@@ -54,3 +54,18 @@ func TestAPIKeyServiceUpdate_EscapesNameOnlyWhenProvided(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "a&b", repo.updated[1].Name)
 }
+
+// e2e 发现：编辑弹窗把已转义的名称原样提交，重复保存不能逐层加深转义。
+func TestAPIKeyServiceUpdate_NameEscapeIsIdempotent(t *testing.T) {
+	svc, repo := newAPIKeyUpdateTestService(t)
+	name := "A&B"
+	for i := 0; i < 3; i++ {
+		_, err := svc.Update(context.Background(), 10, 7, UpdateAPIKeyRequest{Name: &name})
+		require.NoError(t, err)
+		saved := repo.updated[len(repo.updated)-1].Name
+		require.Equal(t, "A&amp;B", saved, "save #%d", i+1)
+		name = saved // 模拟前端把已存储的名称原样提交回来
+		repo.apiKey.Name = saved
+	}
+	require.Equal(t, apiKeyXSSNameEscaped, escapeAPIKeyName(apiKeyXSSNameEscaped))
+}
