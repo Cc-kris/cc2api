@@ -5,7 +5,11 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/ent"
@@ -15,8 +19,77 @@ import (
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
-	_ "github.com/lib/pq" // PostgreSQL 驱动，通过副作用导入注册驱动
+	"github.com/lib/pq" // PostgreSQL 驱动，同时用于识别 pq.Error
 )
+
+const (
+	maxDatabaseInitializationRetries = 8
+	databaseInitializationRetryBase  = time.Second
+	databaseInitializationRetryMax   = 30 * time.Second
+)
+
+// initializeDatabaseWithRetry retries only errors that indicate PostgreSQL is
+// temporarily unavailable during startup. Permanent configuration, migration,
+// and data errors are returned immediately so they remain visible to operators.
+func initializeDatabaseWithRetry(ctx context.Context, initialize func(context.Context) error) error {
+	return initializeDatabaseWithRetryWithWait(ctx, initialize, waitForDatabaseInitializationRetry)
+}
+
+func initializeDatabaseWithRetryWithWait(
+	ctx context.Context,
+	initialize func(context.Context) error,
+	wait func(context.Context, time.Duration) error,
+) error {
+	for attempt := 1; ; attempt++ {
+		if err := initialize(ctx); err == nil {
+			return nil
+		} else {
+			if !isTransientDatabaseInitializationError(err) || attempt > maxDatabaseInitializationRetries {
+				return err
+			}
+
+			delay := databaseInitializationRetryBase * time.Duration(1<<(attempt-1))
+			if delay > databaseInitializationRetryMax {
+				delay = databaseInitializationRetryMax
+			}
+			slog.Warn("database initialization temporarily unavailable; retrying",
+				"retry", attempt,
+				"max_retries", maxDatabaseInitializationRetries,
+				"retry_in", delay,
+				"error", err,
+			)
+			if err := wait(ctx, delay); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func waitForDatabaseInitializationRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func isTransientDatabaseInitializationError(err error) bool {
+	// CCAI 本地补充：应用先于数据库启动时，lib/pq 拨号失败返回的是 *net.OpError
+	// （ECONNREFUSED），不是 pq.Error，上游判定会直接放弃。这里只放行连接被拒，
+	// DNS 解析失败等其它网络错误仍立即返回。
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return true
+	}
+	var pqErr *pq.Error
+	if !errors.As(err, &pqErr) {
+		return false
+	}
+	code := string(pqErr.Code)
+	return code == "57P03" || strings.HasPrefix(code, "08")
+}
 
 // InitEnt 初始化 Ent ORM 客户端并返回客户端实例和底层的 *sql.DB。
 //
@@ -59,7 +132,9 @@ func InitEnt(cfg *config.Config) (*ent.Client, *sql.DB, error) {
 	// 这种方式比 Ent 的自动迁移更可控，支持复杂的迁移场景。
 	migrationCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	if err := applyMigrationsFS(migrationCtx, drv.DB(), migrations.FS); err != nil {
+	if err := initializeDatabaseWithRetry(migrationCtx, func(ctx context.Context) error {
+		return applyMigrationsFS(ctx, drv.DB(), migrations.FS)
+	}); err != nil {
 		_ = drv.Close() // 迁移失败时关闭驱动，避免资源泄露
 		return nil, nil, err
 	}

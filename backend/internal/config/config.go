@@ -1183,6 +1183,7 @@ func (d *DatabaseConfig) DSNWithTimezone(tz string) string {
 type RedisConfig struct {
 	Host     string `mapstructure:"host"`
 	Port     int    `mapstructure:"port"`
+	Username string `mapstructure:"username"`
 	Password string `mapstructure:"password"`
 	DB       int    `mapstructure:"db"`
 	// 连接池与超时配置（性能优化：可配置化连接池参数）
@@ -1389,20 +1390,7 @@ func LoadForBootstrap() (*Config, error) {
 func load(allowMissingJWTSecret bool) (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
-
-	// Add config paths in priority order
-	// 1. DATA_DIR environment variable (highest priority)
-	if dataDir := os.Getenv("DATA_DIR"); dataDir != "" {
-		viper.AddConfigPath(dataDir)
-	}
-	// 2. Docker data directory
-	viper.AddConfigPath("/app/data")
-	// 3. Current directory
-	viper.AddConfigPath(".")
-	// 4. Config subdirectory
-	viper.AddConfigPath("./config")
-	// 5. System config directory
-	viper.AddConfigPath("/etc/sub2api")
+	configureConfigSource(viper.SetConfigFile, viper.AddConfigPath)
 
 	// 环境变量支持
 	viper.AutomaticEnv()
@@ -1553,6 +1541,24 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// configureConfigSource 选择配置文件来源：设置了 CONFIG_FILE 时只读这个文件；
+// 否则按优先级依次搜索 DATA_DIR、/app/data、当前目录、./config、/etc/sub2api。
+func configureConfigSource(setConfigFile, addConfigPath func(string)) {
+	if configFile := strings.TrimSpace(os.Getenv("CONFIG_FILE")); configFile != "" {
+		setConfigFile(configFile)
+		return
+	}
+
+	// Add config paths in priority order.
+	if dataDir := strings.TrimSpace(os.Getenv("DATA_DIR")); dataDir != "" {
+		addConfigPath(dataDir)
+	}
+	addConfigPath("/app/data")
+	addConfigPath(".")
+	addConfigPath("./config")
+	addConfigPath("/etc/sub2api")
 }
 
 func setDefaults() {
@@ -1725,6 +1731,7 @@ func setDefaults() {
 	// Redis
 	viper.SetDefault("redis.host", "localhost")
 	viper.SetDefault("redis.port", 6379)
+	viper.SetDefault("redis.username", "")
 	viper.SetDefault("redis.password", "")
 	viper.SetDefault("redis.db", 0)
 	viper.SetDefault("redis.dial_timeout_seconds", 5)
@@ -2917,14 +2924,12 @@ func generateJWTSecret(byteLength int) (string, error) {
 // GetServerAddress returns the server address (host:port) from config file or environment variable.
 // This is a lightweight function that can be used before full config validation,
 // such as during setup wizard startup.
-// Priority: config.yaml > environment variables > defaults
+// Priority: environment variables > config file > defaults.
 func GetServerAddress() string {
 	v := viper.New()
 	v.SetConfigName("config")
 	v.SetConfigType("yaml")
-	v.AddConfigPath(".")
-	v.AddConfigPath("./config")
-	v.AddConfigPath("/etc/sub2api")
+	configureConfigSource(v.SetConfigFile, v.AddConfigPath)
 
 	// Support SERVER_HOST and SERVER_PORT environment variables
 	v.AutomaticEnv()
