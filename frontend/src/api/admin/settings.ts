@@ -568,6 +568,9 @@ export interface SystemSettings {
   local_response_cache_enabled: boolean;
   antigravity_user_agent_version: string;
   openai_codex_user_agent: string;
+  claude_code_client_version: string;
+  claude_code_client_version_synced: string;
+  claude_code_version_auto_sync_enabled: boolean;
   web_search_emulation_enabled?: boolean;
 
   // Payment configuration
@@ -832,6 +835,8 @@ export interface UpdateSettingsRequest {
   local_response_cache_enabled?: boolean;
   antigravity_user_agent_version?: string;
   openai_codex_user_agent?: string;
+  claude_code_client_version?: string;
+  claude_code_version_auto_sync_enabled?: boolean;
   // Payment configuration
   payment_enabled?: boolean;
   risk_control_enabled?: boolean;
