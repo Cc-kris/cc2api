@@ -83,6 +83,7 @@ func provideCleanup(
 	balanceLowNotifyScanner *service.BalanceLowNotifyScanner,
 	accountExpiry *service.AccountExpiryService,
 	claudeCodeVersionSync *service.ClaudeCodeVersionSyncService,
+	codexVersionSync *service.OpenAICodexVersionSyncService,
 	subscriptionExpiry *service.SubscriptionExpiryService,
 	usageCleanup *service.UsageCleanupService,
 	idempotencyCleanup *service.IdempotencyCleanupService,
@@ -211,6 +212,10 @@ func provideCleanup(
 			}},
 			{"ClaudeCodeVersionSyncService", func() error {
 				claudeCodeVersionSync.Stop()
+				return nil
+			}},
+			{"OpenAICodexVersionSyncService", func() error {
+				codexVersionSync.Stop()
 				return nil
 			}},
 			{"SubscriptionExpiryService", func() error {

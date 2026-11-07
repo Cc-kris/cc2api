@@ -62,6 +62,8 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 		tokenRefreshSvc,
 		nil, // balanceLowNotifyScanner
 		accountExpirySvc,
+		service.NewClaudeCodeVersionSyncService(nil, nil, nil, time.Second),
+		service.NewOpenAICodexVersionSyncService(nil, nil, nil, time.Second),
 		subscriptionExpirySvc,
 		&service.UsageCleanupService{},
 		idempotencyCleanupSvc,

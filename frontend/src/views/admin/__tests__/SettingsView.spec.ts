@@ -401,6 +401,9 @@ const baseSettingsResponse = {
   local_response_cache_enabled: false,
   antigravity_user_agent_version: "",
   openai_codex_user_agent: "",
+  openai_codex_client_version: "",
+  openai_codex_client_version_synced: "",
+  openai_codex_version_auto_sync_enabled: true,
   payment_enabled: true,
   payment_min_amount: 1,
   payment_max_amount: 10000,
@@ -860,6 +863,34 @@ describe("admin SettingsView payment visible method controls", () => {
         antigravity_user_agent_version: "1.23.2",
       }),
     );
+  });
+
+  it("loads synced Codex version and submits only writable version settings", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      openai_codex_client_version: "0.150.0",
+      openai_codex_client_version_synced: "0.151.0",
+      openai_codex_version_auto_sync_enabled: false,
+    });
+
+    const wrapper = mountView();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain(
+      "admin.settings.gatewayForwarding.openaiCodexVersionSyncedValue",
+    );
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        openai_codex_client_version: "0.150.0",
+        openai_codex_version_auto_sync_enabled: false,
+      }),
+    );
+    expect(
+      updateSettings.mock.calls[0]?.[0].openai_codex_client_version_synced,
+    ).toBeUndefined();
   });
 
   it("manages balance low notification excluded users", async () => {
