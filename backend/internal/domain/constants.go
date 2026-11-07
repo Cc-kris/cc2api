@@ -78,6 +78,17 @@ const (
 // 与前端 useModelWhitelist.ts 中的 antigravityDefaultMappings 保持一致
 var DefaultAntigravityModelMapping = map[string]string{
 	// Claude 白名单
+	"claude-fable-5-1":           "claude-fable-5-1",         // 官方模型
+	"claude-fable-5":             "claude-fable-5",           // 官方模型
+	"claude-opus-5-5":            "claude-opus-5-5-high",     // 简称映射
+	"claude-opus-5-5-high":       "claude-opus-5-5-high",     // 官方模型
+	"claude-opus-5-5-medium":     "claude-opus-5-5-medium",   // 官方模型
+	"claude-opus-5-5-low":        "claude-opus-5-5-low",      // 官方模型
+	"claude-sonnet-5-5":          "claude-sonnet-5-5-high",   // 简称映射
+	"claude-sonnet-5-5-high":     "claude-sonnet-5-5-high",   // 官方模型
+	"claude-sonnet-5-5-medium":   "claude-sonnet-5-5-medium", // 官方模型
+	"claude-sonnet-5-5-low":      "claude-sonnet-5-5-low",    // 官方模型
+	"claude-opus-4-8":            "claude-opus-4-8",          // 官方模型
 	"claude-opus-4-7":            "claude-opus-4-7",          // 官方模型
 	"claude-opus-4-6-thinking":   "claude-opus-4-6-thinking", // 官方模型
 	"claude-opus-4-6":            "claude-opus-4-6-thinking", // 简称映射
@@ -114,6 +125,29 @@ var DefaultAntigravityModelMapping = map[string]string{
 	"gemini-3.1-flash-image": "gemini-3.1-flash-image",
 	// Gemini 3.1 image preview 映射
 	"gemini-3.1-flash-image-preview": "gemini-3.1-flash-image",
+	// Gemini 3.6 Flash tiered models
+	"gemini-3.6-flash":        "gemini-3.6-flash",
+	"gemini-3.6-flash-high":   "gemini-3.6-flash-high",
+	"gemini-3.6-flash-low":    "gemini-3.6-flash-low",
+	"gemini-3.6-flash-medium": "gemini-3.6-flash-medium",
+	"gemini-3.6-flash-tiered": "gemini-3.6-flash-tiered",
+	// Gemini 3.7 Flash tiered models
+	"gemini-3.7-flash":        "gemini-3.7-flash",
+	"gemini-3.7-flash-high":   "gemini-3.7-flash-high",
+	"gemini-3.7-flash-low":    "gemini-3.7-flash-low",
+	"gemini-3.7-flash-medium": "gemini-3.7-flash-medium",
+	"gemini-3.7-flash-tiered": "gemini-3.7-flash-tiered",
+	// Gemini 3.8 Flash tiered models
+	"gemini-3.8-flash":        "gemini-3.8-flash",
+	"gemini-3.8-flash-high":   "gemini-3.8-flash-high",
+	"gemini-3.8-flash-low":    "gemini-3.8-flash-low",
+	"gemini-3.8-flash-medium": "gemini-3.8-flash-medium",
+	"gemini-3.8-flash-tiered": "gemini-3.8-flash-tiered",
+	// Gemini 4 Argon tiered models（简称映射到 -high）
+	"gemini-4-argon":        "gemini-4-argon-high",
+	"gemini-4-argon-high":   "gemini-4-argon-high",
+	"gemini-4-argon-low":    "gemini-4-argon-low",
+	"gemini-4-argon-medium": "gemini-4-argon-medium",
 	// Gemini 3 image 兼容映射（向 3.1 image 迁移）
 	"gemini-3-pro-image":         "gemini-3.1-flash-image",
 	"gemini-3-pro-image-preview": "gemini-3.1-flash-image",
@@ -127,7 +161,12 @@ var DefaultAntigravityModelMapping = map[string]string{
 // 注意：此处的 "us." 前缀仅为默认值，ResolveBedrockModelID 会根据账号配置的
 // aws_region 自动调整为匹配的区域前缀（如 eu.、apac.、jp. 等）
 var DefaultBedrockModelMapping = map[string]string{
-	// Claude Opus
+	// Claude Fable
+	"claude-fable-5-1": "anthropic.claude-fable-5-1",
+	"claude-fable-5":   "anthropic.claude-fable-5",
+	// Claude Opus（opus-5-5 上游无 Bedrock ID，不加）
+	"claude-opus-5":            "us.anthropic.claude-opus-5-v1",
+	"claude-opus-4-8":          "us.anthropic.claude-opus-4-8-v1",
 	"claude-opus-4-7":          "us.anthropic.claude-opus-4-7-v1",
 	"claude-opus-4-6-thinking": "us.anthropic.claude-opus-4-6-v1",
 	"claude-opus-4-6":          "us.anthropic.claude-opus-4-6-v1",
@@ -136,13 +175,16 @@ var DefaultBedrockModelMapping = map[string]string{
 	"claude-opus-4-1":          "us.anthropic.claude-opus-4-1-20250805-v1:0",
 	"claude-opus-4-20250514":   "us.anthropic.claude-opus-4-20250514-v1:0",
 	// Claude Sonnet
+	// Sonnet 5.5 is available on bedrock-runtime through Global inference only.
+	"claude-sonnet-5-5":          "global.anthropic.claude-sonnet-5-5",
+	"claude-sonnet-5":            "us.anthropic.claude-sonnet-5-v1",
 	"claude-sonnet-4-6-thinking": "us.anthropic.claude-sonnet-4-6",
 	"claude-sonnet-4-6":          "us.anthropic.claude-sonnet-4-6",
 	"claude-sonnet-4-5":          "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
 	"claude-sonnet-4-5-thinking": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
 	"claude-sonnet-4-5-20250929": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
 	"claude-sonnet-4-20250514":   "us.anthropic.claude-sonnet-4-20250514-v1:0",
-	// Claude Haiku
+	// Claude Haiku（haiku-5-5 上游无 Bedrock ID，不加）
 	"claude-haiku-4-5":          "us.anthropic.claude-haiku-4-5-20251001-v1:0",
 	"claude-haiku-4-5-20251001": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
 }

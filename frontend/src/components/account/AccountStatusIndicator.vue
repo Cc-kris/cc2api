@@ -220,11 +220,20 @@ const activeModelStatuses = computed<AccountModelStatusItem[]>(() => {
 const formatScopeName = (scope: string): string => {
   const aliases: Record<string, string> = {
     // Claude 系列
+    'claude-fable-5-1': 'CFable51',
+    'claude-fable-5': 'CFable5',
     'claude-opus-4-6': 'COpus46',
     'claude-opus-4-6-thinking': 'COpus46T',
+    'claude-opus-4-7': 'COpus47',
+    'claude-opus-4-8': 'COpus48',
+    'claude-opus-5-5': 'COpus55',
+    'claude-opus-5': 'COpus5',
     'claude-sonnet-4-6': 'CSon46',
     'claude-sonnet-4-5': 'CSon45',
     'claude-sonnet-4-5-thinking': 'CSon45T',
+    'claude-sonnet-5-5': 'CSon55',
+    'claude-sonnet-5': 'CSon5',
+    'claude-haiku-5-5': 'CHaiku55',
     // Gemini 2.5 系列
     'gemini-2.5-flash': 'G25F',
     'gemini-2.5-flash-lite': 'G25FL',
@@ -233,6 +242,27 @@ const formatScopeName = (scope: string): string => {
     'gemini-2.5-flash-image': 'G25I',
     // Gemini 3.5 系列
     'gemini-3.5-flash': 'G35F',
+    // Gemini 3.6 / 3.7 / 3.8 Flash 系列
+    'gemini-3.6-flash': 'G36F',
+    'gemini-3.6-flash-high': 'G36FH',
+    'gemini-3.6-flash-medium': 'G36FM',
+    'gemini-3.6-flash-low': 'G36FL',
+    'gemini-3.6-flash-tiered': 'G36FT',
+    'gemini-3.7-flash': 'G37F',
+    'gemini-3.7-flash-high': 'G37FH',
+    'gemini-3.7-flash-medium': 'G37FM',
+    'gemini-3.7-flash-low': 'G37FL',
+    'gemini-3.7-flash-tiered': 'G37FT',
+    'gemini-3.8-flash': 'G38F',
+    'gemini-3.8-flash-high': 'G38FH',
+    'gemini-3.8-flash-medium': 'G38FM',
+    'gemini-3.8-flash-low': 'G38FL',
+    'gemini-3.8-flash-tiered': 'G38FT',
+    // Gemini 4 Argon 系列
+    'gemini-4-argon': 'G4A',
+    'gemini-4-argon-high': 'G4AH',
+    'gemini-4-argon-medium': 'G4AM',
+    'gemini-4-argon-low': 'G4AL',
     // Gemini 3 系列
     'gemini-3-flash': 'G3F',
     'gemini-3.1-pro-high': 'G3PH',
