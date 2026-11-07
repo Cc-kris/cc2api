@@ -397,6 +397,7 @@ const baseSettingsResponse = {
   enable_cch_signing: false,
   enable_anthropic_cache_ttl_1h_injection: false,
   rewrite_message_cache_control: false,
+  enable_client_dateline_normalization: true,
   local_response_cache_enabled: false,
   antigravity_user_agent_version: "",
   openai_codex_user_agent: "",

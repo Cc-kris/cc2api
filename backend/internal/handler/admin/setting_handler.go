@@ -276,6 +276,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		EnableCCHSigning:                        settings.EnableCCHSigning,
 		EnableAnthropicCacheTTL1hInjection:      settings.EnableAnthropicCacheTTL1hInjection,
 		RewriteMessageCacheControl:              settings.RewriteMessageCacheControl,
+		EnableClientDatelineNormalization:       settings.EnableClientDatelineNormalization,
 		LocalResponseCacheEnabled:               settings.LocalResponseCacheEnabled,
 		AntigravityUserAgentVersion:             settings.AntigravityUserAgentVersion,
 		OpenAICodexUserAgent:                    settings.OpenAICodexUserAgent,
@@ -624,16 +625,17 @@ type UpdateSettingsRequest struct {
 	BackendModeEnabled bool `json:"backend_mode_enabled"`
 
 	// Gateway forwarding behavior
-	EnableFingerprintUnification       *bool   `json:"enable_fingerprint_unification"`
-	EnableMetadataPassthrough          *bool   `json:"enable_metadata_passthrough"`
-	EnableCCHSigning                   *bool   `json:"enable_cch_signing"`
-	EnableAnthropicCacheTTL1hInjection *bool   `json:"enable_anthropic_cache_ttl_1h_injection"`
-	RewriteMessageCacheControl         *bool   `json:"rewrite_message_cache_control"`
-	LocalResponseCacheEnabled          *bool   `json:"local_response_cache_enabled"`
-	AntigravityUserAgentVersion        *string `json:"antigravity_user_agent_version"`
-	OpenAICodexUserAgent               *string `json:"openai_codex_user_agent"`
-	ClaudeCodeClientVersion            *string `json:"claude_code_client_version"`
-	ClaudeCodeVersionAutoSyncEnabled   *bool   `json:"claude_code_version_auto_sync_enabled"`
+	EnableFingerprintUnification           *bool   `json:"enable_fingerprint_unification"`
+	EnableMetadataPassthrough              *bool   `json:"enable_metadata_passthrough"`
+	EnableCCHSigning                       *bool   `json:"enable_cch_signing"`
+	EnableAnthropicCacheTTL1hInjection     *bool   `json:"enable_anthropic_cache_ttl_1h_injection"`
+	RewriteMessageCacheControl             *bool   `json:"rewrite_message_cache_control"`
+	EnableClientDatelineNormalization      *bool   `json:"enable_client_dateline_normalization"`
+	LocalResponseCacheEnabled              *bool   `json:"local_response_cache_enabled"`
+	AntigravityUserAgentVersion            *string `json:"antigravity_user_agent_version"`
+	OpenAICodexUserAgent                   *string `json:"openai_codex_user_agent"`
+	ClaudeCodeClientVersion                *string `json:"claude_code_client_version"`
+	ClaudeCodeVersionAutoSyncEnabled       *bool   `json:"claude_code_version_auto_sync_enabled"`
 	EnableClaudeOAuthSystemPromptInjection *bool   `json:"enable_claude_oauth_system_prompt_injection"`
 	ClaudeOAuthSystemPrompt                *string `json:"claude_oauth_system_prompt"`
 	ClaudeOAuthSystemPromptBlocks          *string `json:"claude_oauth_system_prompt_blocks"`
@@ -1824,6 +1826,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.RewriteMessageCacheControl
 		}(),
+		EnableClientDatelineNormalization: func() bool {
+			if req.EnableClientDatelineNormalization != nil {
+				return *req.EnableClientDatelineNormalization
+			}
+			return previousSettings.EnableClientDatelineNormalization
+		}(),
 		LocalResponseCacheEnabled: func() bool {
 			if req.LocalResponseCacheEnabled != nil {
 				return *req.LocalResponseCacheEnabled
@@ -2310,6 +2318,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		EnableCCHSigning:                        updatedSettings.EnableCCHSigning,
 		EnableAnthropicCacheTTL1hInjection:      updatedSettings.EnableAnthropicCacheTTL1hInjection,
 		RewriteMessageCacheControl:              updatedSettings.RewriteMessageCacheControl,
+		EnableClientDatelineNormalization:       updatedSettings.EnableClientDatelineNormalization,
 		LocalResponseCacheEnabled:               updatedSettings.LocalResponseCacheEnabled,
 		AntigravityUserAgentVersion:             updatedSettings.AntigravityUserAgentVersion,
 		OpenAICodexUserAgent:                    updatedSettings.OpenAICodexUserAgent,
@@ -2813,6 +2822,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.RewriteMessageCacheControl != after.RewriteMessageCacheControl {
 		changed = append(changed, "rewrite_message_cache_control")
+	}
+	if before.EnableClientDatelineNormalization != after.EnableClientDatelineNormalization {
+		changed = append(changed, "enable_client_dateline_normalization")
 	}
 	if before.LocalResponseCacheEnabled != after.LocalResponseCacheEnabled {
 		changed = append(changed, "local_response_cache_enabled")
