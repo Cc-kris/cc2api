@@ -564,6 +564,7 @@ export interface SystemSettings {
   enable_metadata_passthrough: boolean;
   enable_anthropic_cache_ttl_1h_injection: boolean;
   rewrite_message_cache_control: boolean;
+  enable_client_dateline_normalization: boolean;
   local_response_cache_enabled: boolean;
   antigravity_user_agent_version: string;
   openai_codex_user_agent: string;
@@ -833,6 +834,7 @@ export interface UpdateSettingsRequest {
   enable_metadata_passthrough?: boolean;
   enable_anthropic_cache_ttl_1h_injection?: boolean;
   rewrite_message_cache_control?: boolean;
+  enable_client_dateline_normalization?: boolean;
   local_response_cache_enabled?: boolean;
   antigravity_user_agent_version?: string;
   openai_codex_user_agent?: string;

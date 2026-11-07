@@ -216,17 +216,18 @@ type SystemSettings struct {
 	BackendModeEnabled bool
 
 	// Gateway forwarding behavior
-	EnableFingerprintUnification       bool   // 是否统一 OAuth 账号的指纹头（默认 true）
-	EnableMetadataPassthrough          bool   // 是否透传客户端原始 metadata（默认 false）
-	EnableCCHSigning                   bool   // 是否对 billing header cch 进行签名（默认 false）
-	EnableAnthropicCacheTTL1hInjection bool   // 是否对 Anthropic OAuth/SetupToken 请求体注入 1h cache_control ttl（默认 false）
-	RewriteMessageCacheControl         bool   // 是否改写 messages[*].content[*].cache_control（默认 false）
-	LocalResponseCacheEnabled          bool   // 是否启用本地精确响应缓存（默认 false）
-	AntigravityUserAgentVersion        string // Antigravity 上游 User-Agent 版本号；空值使用配置/默认值
-	OpenAICodexUserAgent               string // OpenAI Codex 上游完整 User-Agent；空值使用内置默认
-	ClaudeCodeClientVersion            string // 出站声明的 Claude Code CLI 客户端版本号（管理员覆写）；空值跟随自动同步值
-	ClaudeCodeClientVersionSynced      string // 自动同步到的官方最新版本号（只读展示）
-	ClaudeCodeVersionAutoSyncEnabled   bool   // 是否启用 Claude Code 客户端版本号自动同步（默认 true）
+	EnableFingerprintUnification           bool   // 是否统一 OAuth 账号的指纹头（默认 true）
+	EnableMetadataPassthrough              bool   // 是否透传客户端原始 metadata（默认 false）
+	EnableCCHSigning                       bool   // 是否对 billing header cch 进行签名（默认 false）
+	EnableAnthropicCacheTTL1hInjection     bool   // 是否对 Anthropic OAuth/SetupToken 请求体注入 1h cache_control ttl（默认 false）
+	RewriteMessageCacheControl             bool   // 是否改写 messages[*].content[*].cache_control（默认 false）
+	EnableClientDatelineNormalization      bool   // 是否归一化 Anthropic OAuth/SetupToken 的客户端 dateline（默认 true）
+	LocalResponseCacheEnabled              bool   // 是否启用本地精确响应缓存（默认 false）
+	AntigravityUserAgentVersion            string // Antigravity 上游 User-Agent 版本号；空值使用配置/默认值
+	OpenAICodexUserAgent                   string // OpenAI Codex 上游完整 User-Agent；空值使用内置默认
+	ClaudeCodeClientVersion                string // 出站声明的 Claude Code CLI 客户端版本号（管理员覆写）；空值跟随自动同步值
+	ClaudeCodeClientVersionSynced          string // 自动同步到的官方最新版本号（只读展示）
+	ClaudeCodeVersionAutoSyncEnabled       bool   // 是否启用 Claude Code 客户端版本号自动同步（默认 true）
 	EnableClaudeOAuthSystemPromptInjection bool   // 是否对非 CC 客户端的 OAuth 请求注入 CC system（默认 true）
 	ClaudeOAuthSystemPrompt                string // 自定义扩充提示词；空值使用内置
 	ClaudeOAuthSystemPromptBlocks          string // system blocks JSON；空值默认 3 块
