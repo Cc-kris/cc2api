@@ -199,6 +199,9 @@ type SystemSettings struct {
 	ClaudeCodeClientVersion            string `json:"claude_code_client_version"`
 	ClaudeCodeClientVersionSynced      string `json:"claude_code_client_version_synced"`
 	ClaudeCodeVersionAutoSyncEnabled   bool   `json:"claude_code_version_auto_sync_enabled"`
+	EnableClaudeOAuthSystemPromptInjection bool   `json:"enable_claude_oauth_system_prompt_injection"`
+	ClaudeOAuthSystemPrompt                string `json:"claude_oauth_system_prompt"`
+	ClaudeOAuthSystemPromptBlocks          string `json:"claude_oauth_system_prompt_blocks"`
 
 	// Web Search Emulation
 	WebSearchEmulationEnabled bool `json:"web_search_emulation_enabled"`

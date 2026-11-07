@@ -502,6 +502,12 @@ const (
 	SettingKeyClaudeCodeClientVersionSynced = "claude_code_client_version_synced"
 	// SettingKeyClaudeCodeVersionAutoSyncEnabled 是否启用 Claude Code 客户端版本号自动同步（默认 true）。
 	SettingKeyClaudeCodeVersionAutoSyncEnabled = "claude_code_version_auto_sync_enabled"
+	// SettingKeyEnableClaudeOAuthSystemPromptInjection 是否对非 CC 客户端的 OAuth 请求注入 CC system（默认 true）
+	SettingKeyEnableClaudeOAuthSystemPromptInjection = "enable_claude_oauth_system_prompt_injection"
+	// SettingKeyClaudeOAuthSystemPrompt 自定义扩充提示词；空值使用内置 claudeCodeSystemPromptExpansion
+	SettingKeyClaudeOAuthSystemPrompt = "claude_oauth_system_prompt"
+	// SettingKeyClaudeOAuthSystemPromptBlocks system blocks JSON 配置；空值使用默认 3 块
+	SettingKeyClaudeOAuthSystemPromptBlocks = "claude_oauth_system_prompt_blocks"
 
 	// 余额不足提醒
 	SettingKeyBalanceLowNotifyEnabled         = "balance_low_notify_enabled"           // 全局开关

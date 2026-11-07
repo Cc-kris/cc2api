@@ -570,6 +570,9 @@ export interface SystemSettings {
   claude_code_client_version: string;
   claude_code_client_version_synced: string;
   claude_code_version_auto_sync_enabled: boolean;
+  enable_claude_oauth_system_prompt_injection: boolean;
+  claude_oauth_system_prompt: string;
+  claude_oauth_system_prompt_blocks: string;
   web_search_emulation_enabled?: boolean;
 
   // Payment configuration
@@ -835,6 +838,9 @@ export interface UpdateSettingsRequest {
   openai_codex_user_agent?: string;
   claude_code_client_version?: string;
   claude_code_version_auto_sync_enabled?: boolean;
+  enable_claude_oauth_system_prompt_injection?: boolean;
+  claude_oauth_system_prompt?: string;
+  claude_oauth_system_prompt_blocks?: string;
   // Payment configuration
   payment_enabled?: boolean;
   risk_control_enabled?: boolean;
