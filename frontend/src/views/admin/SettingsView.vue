@@ -3854,21 +3854,6 @@
                 <Toggle v-model="form.enable_metadata_passthrough" />
               </div>
 
-              <!-- CCH Signing -->
-              <div class="flex items-center justify-between">
-                <div>
-                  <label
-                    class="text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    {{ t("admin.settings.gatewayForwarding.cchSigning") }}
-                  </label>
-                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                    {{ t("admin.settings.gatewayForwarding.cchSigningHint") }}
-                  </p>
-                </div>
-                <Toggle v-model="form.enable_cch_signing" />
-              </div>
-
               <!-- Anthropic Cache TTL 1h Injection -->
               <div class="flex items-center justify-between">
                 <div>
@@ -7701,7 +7686,6 @@ const form = reactive<SettingsForm>({
   // Gateway forwarding behavior
   enable_fingerprint_unification: true,
   enable_metadata_passthrough: false,
-  enable_cch_signing: false,
   enable_anthropic_cache_ttl_1h_injection: false,
   rewrite_message_cache_control: false,
   local_response_cache_enabled: false,
@@ -9034,7 +9018,6 @@ async function saveSettings() {
       allow_ungrouped_key_scheduling: form.allow_ungrouped_key_scheduling,
       enable_fingerprint_unification: form.enable_fingerprint_unification,
       enable_metadata_passthrough: form.enable_metadata_passthrough,
-      enable_cch_signing: form.enable_cch_signing,
       enable_anthropic_cache_ttl_1h_injection:
         form.enable_anthropic_cache_ttl_1h_injection,
       rewrite_message_cache_control: form.rewrite_message_cache_control,

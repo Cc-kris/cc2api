@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cespare/xxhash/v2"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
@@ -72,20 +71,3 @@ func syncBillingHeaderVersion(body []byte, userAgent string) []byte {
 	return body
 }
 
-// signBillingHeaderCCH computes the xxHash64-based CCH signature for the request
-// body and replaces the cch=00000 placeholder with the computed 5-hex-char hash.
-// The body must contain the placeholder when this function is called.
-func signBillingHeaderCCH(body []byte) []byte {
-	if !cchPlaceholderRe.Match(body) {
-		return body
-	}
-	cch := fmt.Sprintf("%05x", xxHash64Seeded(body, cchSeed)&0xFFFFF)
-	return cchPlaceholderRe.ReplaceAll(body, []byte("${1}"+cch+"${3}"))
-}
-
-// xxHash64Seeded computes xxHash64 of data with a custom seed.
-func xxHash64Seeded(data []byte, seed uint64) uint64 {
-	d := xxhash.NewWithSeed(seed)
-	_, _ = d.Write(data)
-	return d.Sum64()
-}
