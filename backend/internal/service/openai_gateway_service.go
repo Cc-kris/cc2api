@@ -43,7 +43,13 @@ const (
 	// OpenAI Platform API for API Key accounts (fallback)
 	openaiPlatformAPIURL   = "https://api.openai.com/v1/responses"
 	openaiStickySessionTTL = time.Hour // 粘性会话TTL
-	codexCLIUserAgent      = "codex_cli_rs/0.125.0"
+	// 与真实 Codex CLI 的 User-Agent 结构对齐：
+	// {originator}/{version} ({OS} {OS_version}; {arch}) {terminal}
+	// 该后缀是 UA 形态的唯一定义处，buildCodexCLIUserAgent 按运行时版本号复用它。
+	codexCLIUserAgentSuffix = " (Ubuntu 22.4.0; x86_64) xterm-256color"
+	// codexCLIUserAgent 是编译期兜底 UA；运行时优先使用由后台设置拼出的规范 UA。
+	// 版本段必须来自 codexCLIVersion：UA 与 version 头是同一个版本声明的两个出口。
+	codexCLIUserAgent = openai.CodexDefaultOriginator + "/" + codexCLIVersion + codexCLIUserAgentSuffix
 	// codex_cli_only 拒绝时单个请求头日志长度上限（字符）
 	codexCLIOnlyHeaderValueMaxBytes = 256
 
@@ -57,7 +63,9 @@ const (
 	openAIWSRetryBackoffMaxDefault     = 2 * time.Second
 	openAIWSRetryJitterRatioDefault    = 0.2
 	openAICompactSessionSeedKey        = "openai_compact_session_seed"
-	codexCLIVersion                    = "0.125.0"
+	// codexCLIVersion 是网关对上游声明的 Codex 客户端内置基线版本（上游 8e92c892b 为 0.146.0），
+	// 同时供 codexCLIUserAgent 与 version 头使用。
+	codexCLIVersion = "0.146.0"
 	// Codex 限额快照仅用于后台展示/诊断，不需要每个成功请求都立即落库。
 	openAICodexSnapshotPersistMinInterval = 30 * time.Second
 )
@@ -433,6 +441,10 @@ type OpenAIGatewayService struct {
 	grokCredentialMutationLocks         sync.Map // key: int64(accountID), value: *oauthRefreshLocalLock
 	openaiOAuth429WindowStartUnixNano   atomic.Int64
 	openaiOAuth429WindowCount           atomic.Int64
+	// 代理断流熔断（V02-T06）：按 proxy_id 隔离，进程内、有上限、重启清空。
+	openaiProxyStreamCircuitOnce        sync.Once
+	openaiProxyStreamCircuit            *openAIProxyStreamCircuit
+	openaiProxyStreamFailOpenLogAt      atomic.Int64
 	openaiWSRetryMetrics                openAIWSRetryMetrics
 	responseHeaderFilter                *responseheaders.CompiledHeaderFilter
 	codexSnapshotThrottle               *accountWriteThrottle
@@ -502,6 +514,11 @@ func NewOpenAIGatewayService(
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
 	idempotencyRepo IdempotencyRepository,
 ) *OpenAIGatewayService {
+	// enforceCodexIdentityHeaders 是 HTTP / 透传 / WS / 探针等出站路径共用的纯函数收口点，
+	// 拿不到配置，故在此发布进程级开关快照。配置取反义，零值即「强制统一出口开启」。
+	if cfg != nil {
+		SetCodexIdentityEnforcementEnabled(!cfg.Gateway.DisableCodexIdentityEnforcement)
+	}
 	svc := &OpenAIGatewayService{
 		accountRepo:         accountRepo,
 		usageLogRepo:        usageLogRepo,
@@ -1323,7 +1340,7 @@ func (s *OpenAIGatewayService) GenerateExplicitSessionHash(c *gin.Context, body 
 // GenerateSessionHash generates a sticky-session hash for OpenAI requests.
 //
 // Priority:
-//  1. Header: session_id
+//  1. Header: session-id / session_id
 //  2. Header: conversation_id
 //  3. Body:   prompt_cache_key (opencode)
 //  4. Body:   content-based fallback (model + system + tools + first user message)
@@ -1415,7 +1432,7 @@ func resolveOpenAIUpstreamOriginator(c *gin.Context, isOfficialClient bool) stri
 		}
 	}
 	if isOfficialClient {
-		return "codex_cli_rs"
+		return openai.CodexDefaultOriginator
 	}
 	return "opencode"
 }
@@ -1454,10 +1471,26 @@ func noAvailableOpenAISelectionError(requestedModel string, compactBlocked bool)
 	if compactBlocked {
 		return ErrNoAvailableCompactAccounts
 	}
+	message := "no available OpenAI accounts"
 	if requestedModel != "" {
-		return fmt.Errorf("no available OpenAI accounts supporting model: %s", requestedModel)
+		message = fmt.Sprintf("no available OpenAI accounts supporting model: %s", requestedModel)
 	}
-	return errors.New("no available OpenAI accounts")
+	return openAINoAvailableSelectionError{message: message}
+}
+
+// openAINoAvailableSelectionError 保持原错误文案，同时能被 errors.Is(err, ErrNoAvailableAccounts)
+// 识别（上游 openai_gateway_scheduling.go:323-333）。代理断流熔断的 fail-open 靠它判断
+// 「本轮是因为没号才失败」（V02-T06）。
+type openAINoAvailableSelectionError struct {
+	message string
+}
+
+func (e openAINoAvailableSelectionError) Error() string {
+	return e.message
+}
+
+func (e openAINoAvailableSelectionError) Unwrap() error {
+	return ErrNoAvailableAccounts
 }
 
 // openAICompactSupportTier classifies an OpenAI account by compact capability.
@@ -1482,7 +1515,8 @@ func isOpenAIAccountEligibleForRequest(account *Account, requestedModel string, 
 	if account == nil || !account.IsSchedulable() || !account.IsOpenAI() {
 		return false
 	}
-	if requestedModel != "" && !account.IsModelSupported(requestedModel) {
+	// compact 调用点传 requireCompact，退役判定按 compact 映射后的真实上游模型算（V02-T18）。
+	if requestedModel != "" && !supportsOpenAIRequestModel(account, requestedModel, requireCompact) {
 		return false
 	}
 	if requireCompact && openAICompactSupportTier(account) == 0 {
@@ -1521,18 +1555,67 @@ func prioritizeOpenAICompactAccounts(accounts []*Account) []*Account {
 // resolveOpenAIAccountUpstreamModelForRequest resolves the upstream model that
 // would be sent for a given request, honouring compact-only mappings when the
 // caller is on the /responses/compact path.
+// resolveOpenAIAccountUpstreamModelForRequest 算出该账号真实出站的上游模型，调度、渠道上游
+// 模型限制、GPT-5.5 退役判定都用它，必须和 Forward 的实际改写链一致（V02-T18，按上游
+// openai_gateway_scheduling.go:819-866 的最终形态升级，去掉 CCAI 没有的 raw chat 分支）。
 func resolveOpenAIAccountUpstreamModelForRequest(account *Account, requestedModel string, requireCompact bool) string {
+	// 透传账号只替换认证：forwardOpenAIPassthrough 不套账号 model_mapping，也不做 Codex
+	// 规范化；只有 compact 路径对请求模型套 compact_model_mapping。
+	if account != nil && account.IsOpenAIPassthroughEnabled() {
+		upstreamModel := strings.TrimSpace(requestedModel)
+		if upstreamModel == "" {
+			return ""
+		}
+		if requireCompact {
+			return resolveOpenAICompactForwardModel(account, upstreamModel)
+		}
+		return upstreamModel
+	}
+
+	// 非透传：先套账号 model_mapping；compact 路径再按映射后的模型套 compact_model_mapping
+	// （CCAI Forward 的 compact 映射以 billingModel 为键，不是上游那样先按客户端模型精确匹配），
+	// 命中则不再做 OAuth 规范化；否则 OAuth 账号按 normalizeOpenAIModelForUpstream 规范化。
 	upstreamModel := resolveOpenAIForwardModel(account, requestedModel, "")
 	if upstreamModel == "" {
 		return ""
 	}
 	if requireCompact {
-		return resolveOpenAICompactForwardModel(account, upstreamModel)
+		if compactModel := resolveOpenAICompactForwardModel(account, upstreamModel); compactModel != upstreamModel {
+			return compactModel
+		}
 	}
-	return upstreamModel
+	return normalizeOpenAIModelForUpstream(account, upstreamModel)
 }
 
+// selectAccountForModelWithExclusions 包一层代理断流熔断的 fail-open（V02-T06）：上游只包了
+// 调度器路径；CCAI 的旧选号路径（Codex 模型清单、Gemini 兼容、内容中心等）同样经过
+// resolveFresh/recheck 的隔离检查，所有候选都在被隔离代理下时也要整轮放行重选。
 func (s *OpenAIGatewayService) selectAccountForModelWithExclusions(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, stickyAccountID int64) (*Account, error) {
+	account, err := s.selectAccountForModelWithExclusionsOnce(ctx, groupID, sessionHash, requestedModel, excludedIDs, requireCompact, stickyAccountID)
+	if !s.shouldRetryOpenAISelectionWithQuarantineBypass(ctx, err, requestedModel) {
+		return account, err
+	}
+	return s.selectAccountForModelWithExclusionsOnce(withOpenAIProxyStreamQuarantineBypass(ctx), groupID, sessionHash, requestedModel, excludedIDs, requireCompact, stickyAccountID)
+}
+
+// shouldRetryOpenAISelectionWithQuarantineBypass：本轮因无可用账号失败、且熔断确实隔离了代理时，
+// 才值得带旁路标记整轮重选一次（上游 da49ce3f2）。
+func (s *OpenAIGatewayService) shouldRetryOpenAISelectionWithQuarantineBypass(ctx context.Context, err error, requestedModel string) bool {
+	if err == nil || openAIProxyStreamQuarantineBypassed(ctx) {
+		return false
+	}
+	if !errors.Is(err, ErrNoAvailableAccounts) && !errors.Is(err, ErrNoAvailableCompactAccounts) {
+		return false
+	}
+	blocked := s.getOpenAIProxyStreamCircuit().activeBlockCount(time.Now())
+	if blocked == 0 {
+		return false
+	}
+	s.logOpenAIProxyStreamQuarantineFailOpen(requestedModel, blocked)
+	return true
+}
+
+func (s *OpenAIGatewayService) selectAccountForModelWithExclusionsOnce(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, stickyAccountID int64) (*Account, error) {
 	if s.checkChannelPricingRestriction(ctx, groupID, requestedModel) {
 		slog.Warn("channel pricing restriction blocked request",
 			"group_id", derefGroupID(groupID),
@@ -1863,7 +1946,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 		if s.isOpenAIAccountRuntimeBlocked(acc) {
 			continue
 		}
-		if requestedModel != "" && !acc.IsModelSupported(requestedModel) {
+		if requestedModel != "" && !supportsOpenAIRequestModel(acc, requestedModel, requireCompact) {
 			continue
 		}
 		if needsUpstreamCheck && s.isUpstreamModelRestrictedByChannel(ctx, *groupID, acc, requestedModel, requireCompact) {
@@ -2096,6 +2179,9 @@ func (s *OpenAIGatewayService) resolveFreshSchedulableOpenAIAccount(ctx context.
 	if s.isOpenAIAccountRuntimeBlocked(fresh) {
 		return nil
 	}
+	if s.isOpenAIProxyStreamQuarantined(ctx, fresh) {
+		return nil
+	}
 	return fresh
 }
 
@@ -2108,6 +2194,9 @@ func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDB(ctx context.Co
 			return nil
 		}
 		if s.isOpenAITeamDurablyBlocked(ctx, account) {
+			return nil
+		}
+		if s.isOpenAIProxyStreamQuarantined(ctx, account) {
 			return nil
 		}
 		return account
@@ -2124,6 +2213,9 @@ func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDB(ctx context.Co
 		return nil
 	}
 	if s.isOpenAIAccountRuntimeBlocked(latest) {
+		return nil
+	}
+	if s.isOpenAIProxyStreamQuarantined(ctx, latest) {
 		return nil
 	}
 	return latest
@@ -3577,11 +3669,15 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		apiKeyID := getAPIKeyIDFromContext(c)
 		// 先保存客户端原始值，再做 compact 补充，避免后续统一隔离时读到已处理的值。
 		clientSessionID := strings.TrimSpace(req.Header.Get("session_id"))
+		if clientSessionID == "" && c != nil {
+			// session-id 不在透传白名单里（不会原样发出），只在这里读出来参与隔离（V02-T17）。
+			clientSessionID = strings.TrimSpace(c.GetHeader("session-id"))
+		}
 		clientConversationID := strings.TrimSpace(req.Header.Get("conversation_id"))
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
 			if req.Header.Get("version") == "" {
-				req.Header.Set("version", codexCLIVersion)
+				req.Header.Set("version", CodexCanonicalClientVersion())
 			}
 			if clientSessionID == "" {
 				clientSessionID = resolveOpenAICompactSessionID(c)
@@ -3593,7 +3689,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 			req.Header.Set("OpenAI-Beta", "responses=experimental")
 		}
 		if req.Header.Get("originator") == "" {
-			req.Header.Set("originator", "codex_cli_rs")
+			req.Header.Set("originator", resolveCodexOutboundIdentity("").originator)
 		}
 		// 用隔离后的 session 标识符覆盖客户端透传值，防止跨用户会话碰撞。
 		if clientSessionID == "" {
@@ -3616,21 +3712,22 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		req.Header.Set("user-agent", customUA)
 	}
 	if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
-		req.Header.Set("user-agent", codexCLIUserAgent)
-	}
-	// OAuth 安全透传：对非 Codex UA 统一兜底，降低被上游风控拦截概率。
-	if account.Type == AccountTypeOAuth && !openai.IsCodexCLIRequest(req.Header.Get("user-agent")) {
-		req.Header.Set("user-agent", codexCLIUserAgent)
+		req.Header.Set("user-agent", CodexCanonicalUserAgent())
 	}
 	resolveOpenAIAgentIdentity(account).ApplyTo(req.Header, nil)
 
-	// 浏览器型 UA 兜底：仅 OAuth（ChatGPT 内部接口）账号生效，若最终 user-agent 仍为浏览器
-	// （Chrome/Firefox/Safari/Edge 等），替换为后台配置的 Codex UA，避免 Cloudflare 触发 JS 质询。
+	// 浏览器型 UA 兜底：仅 OAuth（ChatGPT 内部接口）账号生效。带 originator 的请求随后被
+	// 终态收口整体覆盖；保留它只为不带 originator 的路径（Messages 桥）不把浏览器 UA 发到上游。
 	s.overrideBrowserUserAgent(ctx, account, req)
+	// 终态收口：强制统一 OAuth 出站身份（User-Agent / originator / version 同源自洽）。
+	// 原「非 Codex UA 兜底」已被收口吸收。
+	s.enforceOpenAIOAuthCodexIdentity(c, account, req.Header)
 
 	if req.Header.Get("content-type") == "" {
 		req.Header.Set("content-type", "application/json")
 	}
+	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
+	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http_passthrough", req.Header, body, "not_applicable")
 
 	return req, nil
 }
@@ -3820,7 +3917,52 @@ func openAIStreamDataStartsClientOutput(data, eventType string) bool {
 	return !openAIStreamEventIsPreamble(eventType)
 }
 
+// openAIStreamErrorStatusPaths 覆盖流内 error / response.failed 事件里上游状态码的
+// 两种拼写：OpenAI 用 status_code，而不少 OpenAI 兼容上游（含二级中转）只写 status。
+// 取自上游 37238c098。
+var openAIStreamErrorStatusPaths = []string{
+	"response.error.status_code",
+	"response.error.status",
+	"error.status_code",
+	"error.status",
+	"status_code",
+	"status",
+}
+
+// openAIStreamFailureStatus 决定流内失败事件对应的 failover 状态码。
+// 只把限流提升为 429（进入账号可配置的 429 同号重试 / 换号策略），
+// 其余一律保持原来的 502。上游 openAIStreamFailedEventSemanticStatus 的
+// 401/403/529、access-state、capacity-shed 分支属于别的需求，这里不取。
+func openAIStreamFailureStatus(payload []byte, message string) int {
+	if len(bytes.TrimSpace(payload)) == 0 || !gjson.ValidBytes(payload) {
+		return http.StatusBadGateway
+	}
+	for _, path := range openAIStreamErrorStatusPaths {
+		if int(gjson.GetBytes(payload, path).Int()) == http.StatusTooManyRequests {
+			return http.StatusTooManyRequests
+		}
+	}
+	code := strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "response.error.code").String()))
+	if code == "" {
+		code = strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "error.code").String()))
+	}
+	errType := strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "response.error.type").String()))
+	if errType == "" {
+		errType = strings.ToLower(strings.TrimSpace(gjson.GetBytes(payload, "error.type").String()))
+	}
+	combined := errType + " " + code + " " + strings.ToLower(strings.TrimSpace(message))
+	if strings.Contains(combined, "rate_limit") {
+		return http.StatusTooManyRequests
+	}
+	return http.StatusBadGateway
+}
+
 func openAIStreamFailedEventShouldFailover(payload []byte, message string) bool {
+	// response.failed 承载于 HTTP 200。限流语义优先于 invalid_request 这类通用 type，
+	// 让它和普通 HTTP 429 一样进入 429 重试策略（上游 85a27fae3）。
+	if openAIStreamFailureStatus(payload, message) == http.StatusTooManyRequests {
+		return true
+	}
 	if isOpenAITransientProcessingError(http.StatusBadRequest, message, payload) {
 		return true
 	}
@@ -3860,10 +4002,19 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
 	upstreamRequestID string,
 	payload []byte,
 	message string,
+	responseHeaders ...http.Header,
 ) *UpstreamFailoverError {
 	message = sanitizeUpstreamErrorMessage(strings.TrimSpace(message))
 	if message == "" {
 		message = "OpenAI stream disconnected before completion"
+	}
+	// 流内 failed 事件承载于 HTTP 200，响应头是正常配额快照而非限流信号，
+	// 不写账号级限流/封禁状态；重试与切号由 failover 引擎按
+	// StatusCode/RetryableOnSameAccount 决定。
+	statusCode := openAIStreamFailureStatus(payload, message)
+	var headers http.Header
+	if len(responseHeaders) > 0 && responseHeaders[0] != nil {
+		headers = responseHeaders[0].Clone()
 	}
 	detail := ""
 	if len(payload) > 0 && s != nil && s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
@@ -3874,10 +4025,10 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
 		detail = truncateString(string(payload), maxBytes)
 	}
 	if c != nil {
-		setOpsUpstreamError(c, http.StatusBadGateway, message, detail)
+		setOpsUpstreamError(c, statusCode, message, detail)
 		event := OpsUpstreamErrorEvent{
 			Platform:           PlatformOpenAI,
-			UpstreamStatusCode: http.StatusBadGateway,
+			UpstreamStatusCode: statusCode,
 			UpstreamRequestID:  strings.TrimSpace(upstreamRequestID),
 			Passthrough:        passthrough,
 			Kind:               "failover",
@@ -3891,15 +4042,20 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
 		}
 		appendOpsUpstreamError(c, event)
 	}
+	errType := "upstream_error"
+	if statusCode == http.StatusTooManyRequests {
+		errType = "rate_limit_error"
+	}
 	body, _ := json.Marshal(gin.H{
 		"error": gin.H{
-			"type":    "upstream_error",
+			"type":    errType,
 			"message": message,
 		},
 	})
 	return &UpstreamFailoverError{
-		StatusCode:             http.StatusBadGateway,
+		StatusCode:             statusCode,
 		ResponseBody:           body,
+		ResponseHeaders:        headers,
 		RetryableOnSameAccount: account != nil && account.IsPoolMode(),
 	}
 }
@@ -4009,7 +4165,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				failedMessage = extractOpenAISSEErrorMessage(dataBytes)
 				if !openAIStreamClientOutputStarted(c, clientOutputStarted) && openAIStreamFailedEventShouldFailover(dataBytes, failedMessage) {
 					return resultWithUsage(),
-						s.newOpenAIStreamFailoverError(c, account, true, upstreamRequestID, dataBytes, failedMessage)
+						s.newOpenAIStreamFailoverError(c, account, true, upstreamRequestID, dataBytes, failedMessage, resp.Header)
 				}
 				forceFlushFailedEvent = true
 				sawFailedEvent = true
@@ -4052,7 +4208,8 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		if sawTerminalEvent && !sawFailedEvent {
+		if (sawDone || sawTerminalEvent) && !sawFailedEvent {
+			s.clearOpenAIProxyStreamDisconnect(account)
 			return resultWithUsage(), nil
 		}
 		if sawFailedEvent {
@@ -4076,6 +4233,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 		if clientDisconnected {
 			return resultWithUsage(), fmt.Errorf("stream usage incomplete after disconnect: %w", err)
 		}
+		s.recordOpenAIProxyStreamDisconnect(account, err, upstreamRequestID)
 		logger.LegacyPrintf("service.openai_gateway",
 			"[OpenAI passthrough] 流读取异常中断: account=%d request_id=%s err=%v",
 			account.ID,
@@ -4097,7 +4255,11 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 			return resultWithUsage(),
 				s.newOpenAIStreamFailoverError(c, account, true, upstreamRequestID, nil, "OpenAI stream ended before a terminal event")
 		}
+		s.recordOpenAIProxyStreamDisconnect(account, errors.New("stream ended before terminal event"), upstreamRequestID)
 		return resultWithUsage(), errors.New("stream usage incomplete: missing terminal event")
+	}
+	if (sawDone || sawTerminalEvent) && !sawFailedEvent {
+		s.clearOpenAIProxyStreamDisconnect(account)
 	}
 
 	return resultWithUsage(), nil
@@ -4350,7 +4512,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		if isOpenAIResponsesCompactPath(c) {
 			req.Header.Set("accept", "application/json")
 			if req.Header.Get("version") == "" {
-				req.Header.Set("version", codexCLIVersion)
+				req.Header.Set("version", CodexCanonicalClientVersion())
 			}
 			compactSession := resolveOpenAICompactSessionID(c)
 			req.Header.Set("session_id", isolateOpenAISessionID(apiKeyID, compactSession))
@@ -4373,20 +4535,25 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	}
 	resolveOpenAIAgentIdentity(account).ApplyTo(req.Header, nil)
 
-	// 若开启 ForceCodexCLI，则强制将上游 User-Agent 伪装为 Codex CLI。
+	// 若开启 ForceCodexCLI，则强制将上游 User-Agent 伪装为规范 Codex 身份。
 	// 用于网关未透传/改写 User-Agent 时，仍能命中 Codex 侧识别逻辑。
 	if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
-		req.Header.Set("user-agent", codexCLIUserAgent)
+		req.Header.Set("user-agent", CodexCanonicalUserAgent())
 	}
 
-	// 浏览器型 UA 兜底：仅 OAuth（ChatGPT 内部接口）账号生效，若最终 user-agent 仍为浏览器
-	// （Chrome/Firefox/Safari/Edge 等），替换为后台配置的 Codex UA，避免 Cloudflare 触发 JS 质询。
+	// 浏览器型 UA 兜底：仅 OAuth（ChatGPT 内部接口）账号生效。带 originator 的请求随后被
+	// 终态收口整体覆盖；保留它只为不带 originator 的路径（Messages 桥）不把浏览器 UA 发到上游。
 	s.overrideBrowserUserAgent(ctx, account, req)
+	// 终态收口：强制统一 OAuth 出站身份，必须在所有 User-Agent 改写之后。
+	s.enforceOpenAIOAuthCodexIdentity(c, account, req.Header)
 
 	// Ensure required headers exist
 	if req.Header.Get("content-type") == "" {
 		req.Header.Set("content-type", "application/json")
 	}
+	// 路由提示（V02-T17）：按最终出站 body 的 model 和 service_tier 生成，入站同名头先删。
+	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
+	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http", req.Header, body, "not_applicable")
 
 	return req, nil
 }
@@ -4413,6 +4580,41 @@ func (s *OpenAIGatewayService) overrideBrowserUserAgent(ctx context.Context, acc
 		}
 	}
 	req.Header.Set("user-agent", codexUA)
+}
+
+// codexIdentityOverrideUA 返回账号级显式配置的出站 User-Agent，供强制统一身份时作为覆写来源。
+// ForceCodexCLI 语义是「强制使用 Codex CLI 身份」，等价于使用网关规范身份，故返回空串
+// （上游 openai_gateway_forward.go codexIdentityOverrideUA）。
+func (s *OpenAIGatewayService) codexIdentityOverrideUA(account *Account) string {
+	if s != nil && s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
+		return ""
+	}
+	if account == nil {
+		return ""
+	}
+	return account.GetOpenAIUserAgent()
+}
+
+// codexIdentityPinnedByAccount 判断账号是否用 codex_identity_mode=full 钉住了 UA。
+// full 档的作用是让出站 UA 等于账号 UA（openai_agent_identity_compat.go），收口会重建
+// 版本段并重配 originator，因此 full 档账号跳过收口（V02 审核取舍 5，AC63）。
+// 账号没填 UA 时 full 档不写 UA，照常收口。
+func codexIdentityPinnedByAccount(account *Account) bool {
+	return account != nil &&
+		account.GetCodexIdentityMode() == OpenAICodexIdentityModeFull &&
+		strings.TrimSpace(account.GetOpenAIUserAgent()) != ""
+}
+
+// enforceOpenAIOAuthCodexIdentity 是 HTTP 转发、透传、WS 握手共用的终态收口入口（V02-T15）。
+// 只作用于 OpenAI OAuth 账号；Messages 桥不发 originator，收口自然跳过。
+func (s *OpenAIGatewayService) enforceOpenAIOAuthCodexIdentity(c *gin.Context, account *Account, h http.Header) {
+	if account == nil || !account.IsOpenAIOAuth() || codexIdentityPinnedByAccount(account) {
+		return
+	}
+	if isOpenAICompatMessagesBridgeContext(c) {
+		return
+	}
+	enforceCodexIdentityHeadersWithUA(h, s.codexIdentityOverrideUA(account))
 }
 
 func (s *OpenAIGatewayService) handleErrorResponse(
@@ -4863,7 +5065,16 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 		}
 	}
 	finalizeStream := func() (*openaiStreamingResult, error) {
+		if sawTerminalEvent && !sawFailedEvent {
+			s.clearOpenAIProxyStreamDisconnect(account)
+		}
 		if !sawTerminalEvent {
+			// 已有输出、客户端没断开时上游提前结束：计入代理断流熔断。必须在
+			// interruptForContinuation 之前，否则开了流式续写的分组会先 return，
+			// 断流永远不会被记录（V02-T06）。
+			if openAIStreamClientOutputStarted(c, clientOutputStarted) && !clientDisconnected {
+				s.recordOpenAIProxyStreamDisconnect(account, errors.New("stream ended before terminal event"), upstreamRequestID)
+			}
 			if foErr := interruptForContinuation("upstream stream ended before a terminal event"); foErr != nil {
 				return nil, foErr
 			}
@@ -4899,6 +5110,7 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			return nil, nil, false
 		}
 		if sawTerminalEvent && !sawFailedEvent {
+			s.clearOpenAIProxyStreamDisconnect(account)
 			logger.LegacyPrintf("service.openai_gateway", "Upstream scan ended after terminal event: %v", scanErr)
 			return resultWithUsage(), nil, true
 		}
@@ -4911,6 +5123,10 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			return resultWithUsage(), fmt.Errorf("stream usage incomplete: %w", scanErr), true
 		}
 		if !errors.Is(scanErr, bufio.ErrTooLong) {
+			// 已有输出后的读错误计入代理断流熔断，放在续写之前（V02-T06）。
+			if openAIStreamClientOutputStarted(c, clientOutputStarted) && !clientDisconnected {
+				s.recordOpenAIProxyStreamDisconnect(account, scanErr, upstreamRequestID)
+			}
 			if foErr := interruptForContinuation("upstream stream disconnected: " + sanitizeStreamError(scanErr)); foErr != nil {
 				return nil, foErr, true
 			}
@@ -4978,7 +5194,7 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 				failedMessage = extractOpenAISSEErrorMessage(dataBytes)
 				if !openAIStreamClientOutputStarted(c, clientOutputStarted) && openAIStreamFailedEventShouldFailover(dataBytes, failedMessage) {
 					sawFailedEvent = true
-					streamFailoverErr = s.newOpenAIStreamFailoverError(c, account, false, upstreamRequestID, dataBytes, failedMessage)
+					streamFailoverErr = s.newOpenAIStreamFailoverError(c, account, false, upstreamRequestID, dataBytes, failedMessage, resp.Header)
 					return
 				}
 				// 已开始输出后上游返回 response.failed：可重试类错误换号续写

@@ -680,9 +680,16 @@ func resolveRequestedModelInMapping(mapping map[string]string, requestedModel st
 	return matchWildcardMappingResult(mapping, requestedModel)
 }
 
-// IsModelSupported 检查模型是否在 model_mapping 中（支持通配符）
-// 如果未配置 mapping，返回 true（允许所有模型）
+// IsModelSupported 检查账号能否承接该模型：model_mapping（支持通配符，未配置则允许所有）
+// 并且最终上游模型不是 ChatGPT 订阅已退役的模型（V02-T18，上游 26aab6dc0）。
+// 需要 compact 语义的调用点直接用 supportsOpenAIRequestModel(a, m, requireCompact)。
 func (a *Account) IsModelSupported(requestedModel string) bool {
+	return supportsOpenAIRequestModel(a, requestedModel, false)
+}
+
+// isModelMappingSupported 是 CCAI 原来的 IsModelSupported 函数体：只看 model_mapping。
+// 不带上游的 OAuth 可服务模型、DeepSeek 白名单分支（属于别的需求）。
+func (a *Account) isModelMappingSupported(requestedModel string) bool {
 	mapping := a.GetModelMapping()
 	if len(mapping) == 0 {
 		return true // 无映射 = 允许所有
@@ -1051,6 +1058,12 @@ func (a *Account) IsAnthropic() bool {
 
 func (a *Account) IsOpenAIOAuth() bool {
 	return a.IsOpenAI() && a.Type == AccountTypeOAuth
+}
+
+// IsOpenAIOAuthLike 判断是否为 OpenAI 的 OAuth 类账号（上游 account.go:1472-1474）。
+// CCAI 的 OpenAI 没有 setup-token 账号，保留该分支只为和上游语义一致。
+func (a *Account) IsOpenAIOAuthLike() bool {
+	return a != nil && a.IsOpenAI() && (a.Type == AccountTypeOAuth || a.Type == AccountTypeSetupToken)
 }
 
 func (a *Account) IsOpenAIApiKey() bool {

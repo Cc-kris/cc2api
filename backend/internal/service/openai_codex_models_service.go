@@ -59,7 +59,7 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 
 	clientVersion = strings.TrimSpace(clientVersion)
 	if clientVersion == "" {
-		clientVersion = openAICodexProbeVersion
+		clientVersion = CodexCanonicalClientVersion()
 	}
 
 	requestEndpoint := chatgptCodexModelsURL
@@ -130,9 +130,20 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	}
 	req.Header.Set("Authorization", "Bearer "+authToken)
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Originator", "codex_cli_rs")
-	req.Header.Set("Version", clientVersion)
-	req.Header.Set("User-Agent", codexCLIUserAgent)
+	overrideUA := ""
+	if !useAPIKeyUpstream {
+		overrideUA = account.GetOpenAIUserAgent()
+	}
+	identity := resolveCodexOutboundIdentity(overrideUA)
+	req.Header.Set("Originator", identity.originator)
+	req.Header.Set("User-Agent", identity.userAgent)
+	// Version 头优先与 client_version 查询参数同源：客户端自报版本合法且不低于上游门槛时
+	// 原样使用；否则回退规范版本，避免陈旧 version 触发上游 404（上游 openai_codex_models_service.go:1772）。
+	headerVersion := NormalizeCodexClientVersion(clientVersion)
+	if headerVersion == "" || CompareVersions(headerVersion, codexUpstreamMinVersion) < 0 {
+		headerVersion = identity.version
+	}
+	req.Header.Set("Version", headerVersion)
 	if etag := strings.TrimSpace(ifNoneMatch); etag != "" {
 		req.Header.Set("If-None-Match", etag)
 	}
@@ -403,4 +414,12 @@ func buildCodexModelsManifestURL(endpoint string, appendModelsPath bool, clientV
 	query.Set("client_version", clientVersion)
 	requestURL.RawQuery = query.Encode()
 	return requestURL, nil
+}
+
+// SetChatGPTCodexModelsURLForTest 让 handler 包的测试把 OAuth 清单请求指向 httptest 服务器，
+// 返回恢复函数。只供测试使用。
+func SetChatGPTCodexModelsURLForTest(url string) func() {
+	old := chatgptCodexModelsURL
+	chatgptCodexModelsURL = url
+	return func() { chatgptCodexModelsURL = old }
 }
