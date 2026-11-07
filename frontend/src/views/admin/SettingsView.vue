@@ -3854,21 +3854,6 @@
                 <Toggle v-model="form.enable_metadata_passthrough" />
               </div>
 
-              <!-- CCH Signing -->
-              <div class="flex items-center justify-between">
-                <div>
-                  <label
-                    class="text-sm font-medium text-gray-700 dark:text-gray-300"
-                  >
-                    {{ t("admin.settings.gatewayForwarding.cchSigning") }}
-                  </label>
-                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                    {{ t("admin.settings.gatewayForwarding.cchSigningHint") }}
-                  </p>
-                </div>
-                <Toggle v-model="form.enable_cch_signing" />
-              </div>
-
               <!-- Anthropic Cache TTL 1h Injection -->
               <div class="flex items-center justify-between">
                 <div>
@@ -3915,6 +3900,22 @@
                   </p>
                 </div>
                 <Toggle v-model="form.rewrite_message_cache_control" />
+              </div>
+
+              <!-- 客户端 dateline 归一化（仅 Anthropic OAuth/SetupToken） -->
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {{ t("admin.settings.gatewayForwarding.clientDatelineNormalization") }}
+                  </label>
+                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{ t("admin.settings.gatewayForwarding.clientDatelineNormalizationHint") }}
+                  </p>
+                </div>
+                <Toggle
+                  class="shrink-0"
+                  v-model="form.enable_client_dateline_normalization"
+                />
               </div>
 
               <!-- Antigravity UA 版本 -->
@@ -3972,6 +3973,137 @@
                   {{
                     t(
                       "admin.settings.gatewayForwarding.openaiCodexUserAgentHint",
+                    )
+                  }}
+                </p>
+              </div>
+
+              <!-- Claude Code 客户端版本号 -->
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{
+                    t(
+                      "admin.settings.gatewayForwarding.claudeCodeClientVersion",
+                    )
+                  }}
+                </label>
+                <input
+                  v-model="form.claude_code_client_version"
+                  type="text"
+                  class="input w-full font-mono text-sm"
+                  placeholder="2.1.258"
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{
+                    t(
+                      "admin.settings.gatewayForwarding.claudeCodeClientVersionHint",
+                    )
+                  }}
+                </p>
+              </div>
+
+              <!-- Claude Code 版本号自动同步 -->
+              <div class="flex items-center justify-between">
+                <div>
+                  <label
+                    class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {{
+                      t(
+                        "admin.settings.gatewayForwarding.claudeCodeVersionAutoSync",
+                      )
+                    }}
+                  </label>
+                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{
+                      t(
+                        "admin.settings.gatewayForwarding.claudeCodeVersionAutoSyncHint",
+                      )
+                    }}
+                  </p>
+                  <p
+                    v-if="claudeSyncedVersionLabel"
+                    class="mt-0.5 text-xs text-gray-500 dark:text-gray-400"
+                  >
+                    {{ claudeSyncedVersionLabel }}
+                  </p>
+                </div>
+                <Toggle v-model="form.claude_code_version_auto_sync_enabled" />
+              </div>
+
+              <!-- Claude OAuth system 注入 -->
+              <div class="flex items-center justify-between">
+                <div>
+                  <label
+                    class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {{
+                      t(
+                        "admin.settings.gatewayForwarding.claudeOAuthSystemPromptInjection",
+                      )
+                    }}
+                  </label>
+                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{
+                      t(
+                        "admin.settings.gatewayForwarding.claudeOAuthSystemPromptInjectionHint",
+                      )
+                    }}
+                  </p>
+                </div>
+                <Toggle
+                  v-model="form.enable_claude_oauth_system_prompt_injection"
+                />
+              </div>
+
+              <!-- 扩充提示词 -->
+              <div v-if="form.enable_claude_oauth_system_prompt_injection">
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{
+                    t(
+                      "admin.settings.gatewayForwarding.claudeOAuthSystemPrompt",
+                    )
+                  }}
+                </label>
+                <textarea
+                  v-model="form.claude_oauth_system_prompt"
+                  rows="4"
+                  class="input w-full font-mono text-sm"
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{
+                    t(
+                      "admin.settings.gatewayForwarding.claudeOAuthSystemPromptHint",
+                    )
+                  }}
+                </p>
+              </div>
+
+              <!-- blocks JSON -->
+              <div v-if="form.enable_claude_oauth_system_prompt_injection">
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{
+                    t(
+                      "admin.settings.gatewayForwarding.claudeOAuthSystemPromptBlocks",
+                    )
+                  }}
+                </label>
+                <textarea
+                  v-model="form.claude_oauth_system_prompt_blocks"
+                  rows="6"
+                  class="input w-full font-mono text-sm"
+                  placeholder='[{"type":"text","text":"{billing_header}"}]'
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{
+                    t(
+                      "admin.settings.gatewayForwarding.claudeOAuthSystemPromptBlocksHint",
                     )
                   }}
                 </p>
@@ -7646,12 +7778,19 @@ const form = reactive<SettingsForm>({
   // Gateway forwarding behavior
   enable_fingerprint_unification: true,
   enable_metadata_passthrough: false,
-  enable_cch_signing: false,
   enable_anthropic_cache_ttl_1h_injection: false,
   rewrite_message_cache_control: false,
+  enable_client_dateline_normalization: true,
   local_response_cache_enabled: false,
   antigravity_user_agent_version: "",
   openai_codex_user_agent: "",
+  claude_code_client_version: "",
+  // 只读展示：自动同步任务写入的官方最新版本，不参与提交
+  claude_code_client_version_synced: "",
+  claude_code_version_auto_sync_enabled: true,
+  enable_claude_oauth_system_prompt_injection: true,
+  claude_oauth_system_prompt: "",
+  claude_oauth_system_prompt_blocks: "",
   // 余额、订阅到期与账号限额通知
   balance_low_notify_enabled: false,
   balance_low_notify_threshold: 0,
@@ -8346,6 +8485,14 @@ function removeBalanceNotifyExcludedUser(userId: number) {
   balanceNotifyExcludedUsers.value = balanceNotifyExcludedUsers.value.filter((user) => user.id !== userId);
 }
 
+const claudeSyncedVersionLabel = computed(() => {
+  const synced = form.claude_code_client_version_synced?.trim();
+  if (!synced) return "";
+  return t("admin.settings.gatewayForwarding.claudeCodeVersionSyncedValue", {
+    version: synced,
+  });
+});
+
 async function loadSettings(): Promise<boolean> {
   loading.value = true;
   loadFailed.value = false;
@@ -8967,15 +9114,24 @@ async function saveSettings() {
       allow_ungrouped_key_scheduling: form.allow_ungrouped_key_scheduling,
       enable_fingerprint_unification: form.enable_fingerprint_unification,
       enable_metadata_passthrough: form.enable_metadata_passthrough,
-      enable_cch_signing: form.enable_cch_signing,
       enable_anthropic_cache_ttl_1h_injection:
         form.enable_anthropic_cache_ttl_1h_injection,
       rewrite_message_cache_control: form.rewrite_message_cache_control,
+      enable_client_dateline_normalization:
+        form.enable_client_dateline_normalization,
       local_response_cache_enabled: form.local_response_cache_enabled,
       antigravity_user_agent_version:
         form.antigravity_user_agent_version?.trim() || "",
       openai_codex_user_agent:
         form.openai_codex_user_agent?.trim() || "",
+      claude_code_client_version: form.claude_code_client_version?.trim() || "",
+      claude_code_version_auto_sync_enabled:
+        form.claude_code_version_auto_sync_enabled,
+      enable_claude_oauth_system_prompt_injection:
+        form.enable_claude_oauth_system_prompt_injection,
+      claude_oauth_system_prompt: form.claude_oauth_system_prompt || "",
+      claude_oauth_system_prompt_blocks:
+        form.claude_oauth_system_prompt_blocks || "",
       // Payment configuration
       payment_enabled: form.payment_enabled,
       risk_control_enabled: form.risk_control_enabled,

@@ -562,12 +562,18 @@ export interface SystemSettings {
   // Gateway forwarding behavior
   enable_fingerprint_unification: boolean;
   enable_metadata_passthrough: boolean;
-  enable_cch_signing: boolean;
   enable_anthropic_cache_ttl_1h_injection: boolean;
   rewrite_message_cache_control: boolean;
+  enable_client_dateline_normalization: boolean;
   local_response_cache_enabled: boolean;
   antigravity_user_agent_version: string;
   openai_codex_user_agent: string;
+  claude_code_client_version: string;
+  claude_code_client_version_synced: string;
+  claude_code_version_auto_sync_enabled: boolean;
+  enable_claude_oauth_system_prompt_injection: boolean;
+  claude_oauth_system_prompt: string;
+  claude_oauth_system_prompt_blocks: string;
   web_search_emulation_enabled?: boolean;
 
   // Payment configuration
@@ -826,12 +832,17 @@ export interface UpdateSettingsRequest {
   allow_ungrouped_key_scheduling?: boolean;
   enable_fingerprint_unification?: boolean;
   enable_metadata_passthrough?: boolean;
-  enable_cch_signing?: boolean;
   enable_anthropic_cache_ttl_1h_injection?: boolean;
   rewrite_message_cache_control?: boolean;
+  enable_client_dateline_normalization?: boolean;
   local_response_cache_enabled?: boolean;
   antigravity_user_agent_version?: string;
   openai_codex_user_agent?: string;
+  claude_code_client_version?: string;
+  claude_code_version_auto_sync_enabled?: boolean;
+  enable_claude_oauth_system_prompt_injection?: boolean;
+  claude_oauth_system_prompt?: string;
+  claude_oauth_system_prompt_blocks?: string;
   // Payment configuration
   payment_enabled?: boolean;
   risk_control_enabled?: boolean;

@@ -188,14 +188,21 @@ type SystemSettings struct {
 	BackendModeEnabled bool `json:"backend_mode_enabled"`
 
 	// Gateway forwarding behavior
-	EnableFingerprintUnification       bool   `json:"enable_fingerprint_unification"`
-	EnableMetadataPassthrough          bool   `json:"enable_metadata_passthrough"`
-	EnableCCHSigning                   bool   `json:"enable_cch_signing"`
-	EnableAnthropicCacheTTL1hInjection bool   `json:"enable_anthropic_cache_ttl_1h_injection"`
-	RewriteMessageCacheControl         bool   `json:"rewrite_message_cache_control"`
-	LocalResponseCacheEnabled          bool   `json:"local_response_cache_enabled"`
-	AntigravityUserAgentVersion        string `json:"antigravity_user_agent_version"`
-	OpenAICodexUserAgent               string `json:"openai_codex_user_agent"`
+	EnableFingerprintUnification           bool   `json:"enable_fingerprint_unification"`
+	EnableMetadataPassthrough              bool   `json:"enable_metadata_passthrough"`
+	EnableCCHSigning                       bool   `json:"enable_cch_signing"`
+	EnableAnthropicCacheTTL1hInjection     bool   `json:"enable_anthropic_cache_ttl_1h_injection"`
+	RewriteMessageCacheControl             bool   `json:"rewrite_message_cache_control"`
+	EnableClientDatelineNormalization      bool   `json:"enable_client_dateline_normalization"`
+	LocalResponseCacheEnabled              bool   `json:"local_response_cache_enabled"`
+	AntigravityUserAgentVersion            string `json:"antigravity_user_agent_version"`
+	OpenAICodexUserAgent                   string `json:"openai_codex_user_agent"`
+	ClaudeCodeClientVersion                string `json:"claude_code_client_version"`
+	ClaudeCodeClientVersionSynced          string `json:"claude_code_client_version_synced"`
+	ClaudeCodeVersionAutoSyncEnabled       bool   `json:"claude_code_version_auto_sync_enabled"`
+	EnableClaudeOAuthSystemPromptInjection bool   `json:"enable_claude_oauth_system_prompt_injection"`
+	ClaudeOAuthSystemPrompt                string `json:"claude_oauth_system_prompt"`
+	ClaudeOAuthSystemPromptBlocks          string `json:"claude_oauth_system_prompt_blocks"`
 
 	// Web Search Emulation
 	WebSearchEmulationEnabled bool `json:"web_search_emulation_enabled"`

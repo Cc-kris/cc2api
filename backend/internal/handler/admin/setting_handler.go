@@ -276,9 +276,16 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		EnableCCHSigning:                        settings.EnableCCHSigning,
 		EnableAnthropicCacheTTL1hInjection:      settings.EnableAnthropicCacheTTL1hInjection,
 		RewriteMessageCacheControl:              settings.RewriteMessageCacheControl,
+		EnableClientDatelineNormalization:       settings.EnableClientDatelineNormalization,
 		LocalResponseCacheEnabled:               settings.LocalResponseCacheEnabled,
 		AntigravityUserAgentVersion:             settings.AntigravityUserAgentVersion,
 		OpenAICodexUserAgent:                    settings.OpenAICodexUserAgent,
+		ClaudeCodeClientVersion:                 settings.ClaudeCodeClientVersion,
+		ClaudeCodeClientVersionSynced:           settings.ClaudeCodeClientVersionSynced,
+		ClaudeCodeVersionAutoSyncEnabled:        settings.ClaudeCodeVersionAutoSyncEnabled,
+		EnableClaudeOAuthSystemPromptInjection:  settings.EnableClaudeOAuthSystemPromptInjection,
+		ClaudeOAuthSystemPrompt:                 settings.ClaudeOAuthSystemPrompt,
+		ClaudeOAuthSystemPromptBlocks:           settings.ClaudeOAuthSystemPromptBlocks,
 		WebSearchEmulationEnabled:               settings.WebSearchEmulationEnabled,
 		PaymentVisibleMethodAlipaySource:        settings.PaymentVisibleMethodAlipaySource,
 		PaymentVisibleMethodWxpaySource:         settings.PaymentVisibleMethodWxpaySource,
@@ -618,14 +625,20 @@ type UpdateSettingsRequest struct {
 	BackendModeEnabled bool `json:"backend_mode_enabled"`
 
 	// Gateway forwarding behavior
-	EnableFingerprintUnification       *bool   `json:"enable_fingerprint_unification"`
-	EnableMetadataPassthrough          *bool   `json:"enable_metadata_passthrough"`
-	EnableCCHSigning                   *bool   `json:"enable_cch_signing"`
-	EnableAnthropicCacheTTL1hInjection *bool   `json:"enable_anthropic_cache_ttl_1h_injection"`
-	RewriteMessageCacheControl         *bool   `json:"rewrite_message_cache_control"`
-	LocalResponseCacheEnabled          *bool   `json:"local_response_cache_enabled"`
-	AntigravityUserAgentVersion        *string `json:"antigravity_user_agent_version"`
-	OpenAICodexUserAgent               *string `json:"openai_codex_user_agent"`
+	EnableFingerprintUnification           *bool   `json:"enable_fingerprint_unification"`
+	EnableMetadataPassthrough              *bool   `json:"enable_metadata_passthrough"`
+	EnableCCHSigning                       *bool   `json:"enable_cch_signing"`
+	EnableAnthropicCacheTTL1hInjection     *bool   `json:"enable_anthropic_cache_ttl_1h_injection"`
+	RewriteMessageCacheControl             *bool   `json:"rewrite_message_cache_control"`
+	EnableClientDatelineNormalization      *bool   `json:"enable_client_dateline_normalization"`
+	LocalResponseCacheEnabled              *bool   `json:"local_response_cache_enabled"`
+	AntigravityUserAgentVersion            *string `json:"antigravity_user_agent_version"`
+	OpenAICodexUserAgent                   *string `json:"openai_codex_user_agent"`
+	ClaudeCodeClientVersion                *string `json:"claude_code_client_version"`
+	ClaudeCodeVersionAutoSyncEnabled       *bool   `json:"claude_code_version_auto_sync_enabled"`
+	EnableClaudeOAuthSystemPromptInjection *bool   `json:"enable_claude_oauth_system_prompt_injection"`
+	ClaudeOAuthSystemPrompt                *string `json:"claude_oauth_system_prompt"`
+	ClaudeOAuthSystemPromptBlocks          *string `json:"claude_oauth_system_prompt_blocks"`
 
 	// Payment visible method routing
 	PaymentVisibleMethodAlipaySource  *string `json:"payment_visible_method_alipay_source"`
@@ -1581,6 +1594,22 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			return
 		}
 	}
+	if req.ClaudeOAuthSystemPromptBlocks != nil {
+		if err := service.ValidateClaudeOAuthSystemPromptBlocksConfig(*req.ClaudeOAuthSystemPromptBlocks); err != nil {
+			response.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	if req.ClaudeCodeClientVersion != nil {
+		raw := strings.TrimSpace(*req.ClaudeCodeClientVersion)
+		normalized := service.NormalizeClaudeCodeClientVersion(raw)
+		// 空值表示清除覆写；非空但不合法直接拒绝，避免面板把管理员填的版本静默清空。
+		if raw != "" && normalized == "" {
+			response.Error(c, http.StatusBadRequest, "claude_code_client_version must be empty or a supported semver (e.g. 2.1.258, not older than the built-in baseline)")
+			return
+		}
+		req.ClaudeCodeClientVersion = &normalized
+	}
 
 	// 交叉验证：如果同时设置了最低和最高版本号，最高版本号必须 >= 最低版本号
 	if req.MinClaudeCodeVersion != "" && req.MaxClaudeCodeVersion != "" {
@@ -1797,6 +1826,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.RewriteMessageCacheControl
 		}(),
+		EnableClientDatelineNormalization: func() bool {
+			if req.EnableClientDatelineNormalization != nil {
+				return *req.EnableClientDatelineNormalization
+			}
+			return previousSettings.EnableClientDatelineNormalization
+		}(),
 		LocalResponseCacheEnabled: func() bool {
 			if req.LocalResponseCacheEnabled != nil {
 				return *req.LocalResponseCacheEnabled
@@ -1814,6 +1849,36 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 				return *req.OpenAICodexUserAgent
 			}
 			return previousSettings.OpenAICodexUserAgent
+		}(),
+		ClaudeCodeClientVersion: func() string {
+			if req.ClaudeCodeClientVersion != nil {
+				return *req.ClaudeCodeClientVersion
+			}
+			return previousSettings.ClaudeCodeClientVersion
+		}(),
+		ClaudeCodeVersionAutoSyncEnabled: func() bool {
+			if req.ClaudeCodeVersionAutoSyncEnabled != nil {
+				return *req.ClaudeCodeVersionAutoSyncEnabled
+			}
+			return previousSettings.ClaudeCodeVersionAutoSyncEnabled
+		}(),
+		EnableClaudeOAuthSystemPromptInjection: func() bool {
+			if req.EnableClaudeOAuthSystemPromptInjection != nil {
+				return *req.EnableClaudeOAuthSystemPromptInjection
+			}
+			return previousSettings.EnableClaudeOAuthSystemPromptInjection
+		}(),
+		ClaudeOAuthSystemPrompt: func() string {
+			if req.ClaudeOAuthSystemPrompt != nil {
+				return *req.ClaudeOAuthSystemPrompt
+			}
+			return previousSettings.ClaudeOAuthSystemPrompt
+		}(),
+		ClaudeOAuthSystemPromptBlocks: func() string {
+			if req.ClaudeOAuthSystemPromptBlocks != nil {
+				return *req.ClaudeOAuthSystemPromptBlocks
+			}
+			return previousSettings.ClaudeOAuthSystemPromptBlocks
 		}(),
 		PaymentVisibleMethodAlipaySource: func() string {
 			if req.PaymentVisibleMethodAlipaySource != nil {
@@ -2253,9 +2318,16 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		EnableCCHSigning:                        updatedSettings.EnableCCHSigning,
 		EnableAnthropicCacheTTL1hInjection:      updatedSettings.EnableAnthropicCacheTTL1hInjection,
 		RewriteMessageCacheControl:              updatedSettings.RewriteMessageCacheControl,
+		EnableClientDatelineNormalization:       updatedSettings.EnableClientDatelineNormalization,
 		LocalResponseCacheEnabled:               updatedSettings.LocalResponseCacheEnabled,
 		AntigravityUserAgentVersion:             updatedSettings.AntigravityUserAgentVersion,
 		OpenAICodexUserAgent:                    updatedSettings.OpenAICodexUserAgent,
+		ClaudeCodeClientVersion:                 updatedSettings.ClaudeCodeClientVersion,
+		ClaudeCodeClientVersionSynced:           updatedSettings.ClaudeCodeClientVersionSynced,
+		ClaudeCodeVersionAutoSyncEnabled:        updatedSettings.ClaudeCodeVersionAutoSyncEnabled,
+		EnableClaudeOAuthSystemPromptInjection:  updatedSettings.EnableClaudeOAuthSystemPromptInjection,
+		ClaudeOAuthSystemPrompt:                 updatedSettings.ClaudeOAuthSystemPrompt,
+		ClaudeOAuthSystemPromptBlocks:           updatedSettings.ClaudeOAuthSystemPromptBlocks,
 		PaymentVisibleMethodAlipaySource:        updatedSettings.PaymentVisibleMethodAlipaySource,
 		PaymentVisibleMethodWxpaySource:         updatedSettings.PaymentVisibleMethodWxpaySource,
 		PaymentVisibleMethodAlipayEnabled:       updatedSettings.PaymentVisibleMethodAlipayEnabled,
@@ -2751,6 +2823,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.RewriteMessageCacheControl != after.RewriteMessageCacheControl {
 		changed = append(changed, "rewrite_message_cache_control")
 	}
+	if before.EnableClientDatelineNormalization != after.EnableClientDatelineNormalization {
+		changed = append(changed, "enable_client_dateline_normalization")
+	}
 	if before.LocalResponseCacheEnabled != after.LocalResponseCacheEnabled {
 		changed = append(changed, "local_response_cache_enabled")
 	}
@@ -2759,6 +2834,21 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.OpenAICodexUserAgent != after.OpenAICodexUserAgent {
 		changed = append(changed, "openai_codex_user_agent")
+	}
+	if before.ClaudeCodeClientVersion != after.ClaudeCodeClientVersion {
+		changed = append(changed, "claude_code_client_version")
+	}
+	if before.ClaudeCodeVersionAutoSyncEnabled != after.ClaudeCodeVersionAutoSyncEnabled {
+		changed = append(changed, "claude_code_version_auto_sync_enabled")
+	}
+	if before.EnableClaudeOAuthSystemPromptInjection != after.EnableClaudeOAuthSystemPromptInjection {
+		changed = append(changed, "enable_claude_oauth_system_prompt_injection")
+	}
+	if before.ClaudeOAuthSystemPrompt != after.ClaudeOAuthSystemPrompt {
+		changed = append(changed, "claude_oauth_system_prompt")
+	}
+	if before.ClaudeOAuthSystemPromptBlocks != after.ClaudeOAuthSystemPromptBlocks {
+		changed = append(changed, "claude_oauth_system_prompt_blocks")
 	}
 	if before.PaymentVisibleMethodAlipaySource != after.PaymentVisibleMethodAlipaySource {
 		changed = append(changed, "payment_visible_method_alipay_source")

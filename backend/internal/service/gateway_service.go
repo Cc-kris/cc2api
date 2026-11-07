@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/anthropicfp"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -54,7 +55,22 @@ const (
 	// to match real Claude CLI traffic as closely as possible. When we need a visual
 	// separator between system blocks, we add "\n\n" at concatenation time.
 	claudeCodeSystemPrompt = "You are Claude Code, Anthropic's official CLI for Claude."
-	maxCacheControlBlocks  = 4 // Anthropic API 允许的最大 cache_control 块数量
+	// claudeCodeSystemPromptExpansion 是真实 Claude Code 主系统提示词中"与具体工具无关"
+	// 的通用段落（身份/用途总述 + 安全声明 + URL 告警 + Tone and style），逐字取自真实
+	// CLI。伪装路径用它把 system 块数从 2 提升到 3、体量贴近真实 CC，同时刻意排除
+	// 工具专属指令，避免污染被代理用户行为。
+	claudeCodeSystemPromptExpansion = `You are an interactive agent that helps users with software engineering tasks. Use the instructions below and the tools available to you to assist the user.
+
+IMPORTANT: Assist with authorized security testing, defensive security, CTF challenges, and educational contexts. Refuse requests for destructive techniques, DoS attacks, mass targeting, supply chain compromise, or detection evasion for malicious purposes. Dual-use security tools (C2 frameworks, credential testing, exploit development) require clear authorization context: pentesting engagements, CTF competitions, security research, or defensive use cases.
+IMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.
+
+# Tone and style
+ - Only use emojis if the user explicitly requests it. Avoid using emojis in all communication unless asked.
+ - Your responses should be short and concise.
+ - When referencing specific functions or pieces of code include the pattern file_path:line_number to allow the user to easily navigate to the source code location.
+ - When referencing GitHub issues or pull requests, use the owner/repo#123 format (e.g. anthropics/claude-code#100) so they render as clickable links.
+ - Do not use a colon before tool calls. Your tool calls may not be shown directly in the output, so text like "Let me read the file:" followed by a read tool call should just be "Let me read the file." with a period.`
+	maxCacheControlBlocks = 4 // Anthropic API 允许的最大 cache_control 块数量
 
 	defaultUserGroupRateCacheTTL = 30 * time.Second
 	defaultModelsListCacheTTL    = 15 * time.Second
@@ -1030,9 +1046,8 @@ func (s *GatewayService) replaceModelInBody(body []byte, newModel string) []byte
 }
 
 type claudeOAuthNormalizeOptions struct {
-	injectMetadata          bool
-	metadataUserID          string
-	stripSystemCacheControl bool
+	injectMetadata bool
+	metadataUserID string
 }
 
 // sanitizeSystemText rewrites only the fixed OpenCode identity sentence (if present).
@@ -1150,13 +1165,6 @@ func normalizeClaudeOAuthSystemBody(body []byte, opts claudeOAuthNormalizeOption
 							modified = true
 						}
 					}
-				}
-			}
-
-			if opts.stripSystemCacheControl && item.Get("cache_control").Exists() {
-				if next, ok := deleteJSONPathBytes(out, fmt.Sprintf("system.%d.cache_control", index)); ok {
-					out = next
-					modified = true
 				}
 			}
 
@@ -1356,13 +1364,13 @@ func (s *GatewayService) applyClaudeCodeOAuthMimicryToBody(
 		return body
 	}
 
-	systemRewritten := false
-	if !strings.Contains(strings.ToLower(model), "haiku") {
-		body = rewriteSystemForNonClaudeCode(body, systemRaw)
-		systemRewritten = true
+	systemPromptInjectionEnabled, systemPrompt, systemPromptBlocks := s.claudeOAuthSystemPromptInjectionSettings(ctx)
+	if systemPromptInjectionEnabled {
+		systemPromptBlocks = claudeOAuthSystemPromptBlocksForModel(model, systemPromptBlocks)
+		body = rewriteSystemForNonClaudeCodeWithPromptBlocks(body, normalizeSystemParam(systemRaw), systemPrompt, systemPromptBlocks)
 	}
 
-	normalizeOpts := claudeOAuthNormalizeOptions{stripSystemCacheControl: !systemRewritten}
+	normalizeOpts := claudeOAuthNormalizeOptions{}
 
 	if s.identityService != nil && c != nil && c.Request != nil {
 		if fp, err := s.identityService.GetOrCreateFingerprint(ctx, account.ID, c.Request.Header); err == nil && fp != nil {
@@ -4157,43 +4165,264 @@ func injectClaudeCodePrompt(body []byte, system any) []byte {
 
 // rewriteSystemForNonClaudeCode 将非 Claude Code 客户端的 system prompt 迁移至 messages，
 // system 字段仅保留 Claude Code 标识提示词。
+func marshalAnthropicSystemTextBlockWithCacheControl(text string, cacheControl any) ([]byte, error) {
+	block := map[string]any{
+		"type": "text",
+		"text": text,
+	}
+	if cacheControl != nil {
+		block["cache_control"] = cacheControl
+	}
+	return json.Marshal(block)
+}
+
+type claudeOAuthSystemPromptBlockConfig struct {
+	Enabled      *bool           `json:"enabled,omitempty"`
+	Type         string          `json:"type,omitempty"`
+	Text         string          `json:"text,omitempty"`
+	CacheControl json.RawMessage `json:"cache_control,omitempty"`
+}
+
+type claudeOAuthSystemPromptBlocksEnvelope struct {
+	Blocks []claudeOAuthSystemPromptBlockConfig `json:"blocks"`
+}
+
+// claudeFableOAuthSystemPromptBlocks 保留 OAuth 凭据要求的 Claude Code 身份，去掉通用
+// CLI 扩充块：Fable 5 在上游对该扩充块返回 stop_reason=refusal 且零输出 token，而原生
+// billing + identity 形态被接受。客户端原始 system 指令仍由 rewrite 搬入 messages。
+const claudeFableOAuthSystemPromptBlocks = `[
+	{"type":"text","text":"{billing_header}"},
+	{"type":"text","text":"{claude_code_system_prompt}"}
+]`
+
+// isAnthropicFableModel 判断是否为 Fable 模型家族（claude-fable-5、claude-fable-5[1m] 等变体）
+func isAnthropicFableModel(model string) bool {
+	return strings.Contains(strings.ToLower(model), "fable")
+}
+
+func claudeOAuthSystemPromptBlocksForModel(model, configured string) string {
+	if isAnthropicFableModel(model) {
+		return claudeFableOAuthSystemPromptBlocks
+	}
+	return configured
+}
+
+func defaultClaudeOAuthExpansionPrompt(expansionPrompt string) string {
+	expansionPrompt = strings.TrimSpace(expansionPrompt)
+	if expansionPrompt == "" {
+		return claudeCodeSystemPromptExpansion
+	}
+	return expansionPrompt
+}
+
+func parseClaudeOAuthSystemPromptBlocksConfig(raw string) ([]claudeOAuthSystemPromptBlockConfig, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	if strings.HasPrefix(raw, "[") {
+		var blocks []claudeOAuthSystemPromptBlockConfig
+		if err := json.Unmarshal([]byte(raw), &blocks); err != nil {
+			return nil, err
+		}
+		return blocks, nil
+	}
+	var envelope claudeOAuthSystemPromptBlocksEnvelope
+	if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
+		return nil, err
+	}
+	return envelope.Blocks, nil
+}
+
+func decodeClaudeOAuthSystemPromptCacheControl(raw json.RawMessage) (any, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) || bytes.Equal(trimmed, []byte("false")) {
+		return nil, nil
+	}
+	if bytes.Equal(trimmed, []byte("true")) {
+		return map[string]string{
+			"type": "ephemeral",
+			"ttl":  claude.DefaultCacheControlTTL,
+		}, nil
+	}
+	var value any
+	if err := json.Unmarshal(trimmed, &value); err != nil {
+		return nil, err
+	}
+	if _, ok := value.(map[string]any); !ok {
+		return nil, fmt.Errorf("cache_control must be boolean, null, or object")
+	}
+	return value, nil
+}
+
+func expandClaudeOAuthSystemPromptTextTemplate(body []byte, text string, expansionPrompt string) (string, error) {
+	if text == "" {
+		return "", nil
+	}
+	expansionPrompt = defaultClaudeOAuthExpansionPrompt(expansionPrompt)
+	billingText, err := buildBillingAttributionText(body, claude.EffectiveCLIVersion())
+	if err != nil {
+		return "", err
+	}
+	fp := computeClaudeCodeFingerprint(body, claude.EffectiveCLIVersion())
+	replacer := strings.NewReplacer(
+		"{billing_header}", billingText,
+		"{cc_version}", claude.EffectiveCLIVersion(),
+		"{fp}", fp,
+		"{claude_code_system_prompt}", claudeCodeSystemPrompt,
+		"{claude_code_expansion_prompt}", expansionPrompt,
+	)
+	return replacer.Replace(text), nil
+}
+
+func defaultClaudeOAuthSystemPromptBlockConfig() []claudeOAuthSystemPromptBlockConfig {
+	enabled := true
+	return []claudeOAuthSystemPromptBlockConfig{
+		{
+			Enabled: &enabled,
+			Type:    "text",
+			Text:    "{billing_header}",
+		},
+		{
+			Enabled: &enabled,
+			Type:    "text",
+			Text:    "{claude_code_system_prompt}",
+		},
+		{
+			Enabled: &enabled,
+			Type:    "text",
+			Text:    "{claude_code_expansion_prompt}",
+			CacheControl: json.RawMessage(
+				fmt.Sprintf(`{"type":"ephemeral","ttl":%q}`, claude.DefaultCacheControlTTL),
+			),
+		},
+	}
+}
+
+func buildClaudeOAuthSystemPromptBlocksJSON(body []byte, expansionPrompt string, blocksConfig string) ([][]byte, error) {
+	blocks, err := parseClaudeOAuthSystemPromptBlocksConfig(blocksConfig)
+	if err != nil {
+		return nil, err
+	}
+	if len(blocks) == 0 {
+		blocks = defaultClaudeOAuthSystemPromptBlockConfig()
+	}
+
+	items := make([][]byte, 0, len(blocks))
+	for i, block := range blocks {
+		if block.Enabled != nil && !*block.Enabled {
+			continue
+		}
+		blockType := strings.TrimSpace(block.Type)
+		if blockType == "" {
+			blockType = "text"
+		}
+		if blockType != "text" {
+			return nil, fmt.Errorf("system block %d type %q is not supported", i, block.Type)
+		}
+		text, err := expandClaudeOAuthSystemPromptTextTemplate(body, block.Text, expansionPrompt)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(text) == "" {
+			continue
+		}
+		cacheControl, err := decodeClaudeOAuthSystemPromptCacheControl(block.CacheControl)
+		if err != nil {
+			return nil, fmt.Errorf("system block %d cache_control: %w", i, err)
+		}
+		raw, err := marshalAnthropicSystemTextBlockWithCacheControl(text, cacheControl)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, raw)
+	}
+	return items, nil
+}
+
+func ValidateClaudeOAuthSystemPromptBlocksConfig(raw string) error {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	blocks, err := parseClaudeOAuthSystemPromptBlocksConfig(raw)
+	if err != nil {
+		return fmt.Errorf("claude oauth system prompt blocks must be valid JSON: %w", err)
+	}
+	for i, block := range blocks {
+		blockType := strings.TrimSpace(block.Type)
+		if blockType == "" {
+			blockType = "text"
+		}
+		if blockType != "text" {
+			return fmt.Errorf("system block %d type must be text", i)
+		}
+		if _, err := decodeClaudeOAuthSystemPromptCacheControl(block.CacheControl); err != nil {
+			return fmt.Errorf("system block %d cache_control is invalid", i)
+		}
+	}
+	return nil
+}
+
+// extractSystemTextAndCacheControl 提取 system 文本与客户端缓存断点。
+// system blocks 随后被折叠成 messages 里的一个 text block，保留最后一个原始断点
+// 作为最接近的等价边界（含客户端选择的 TTL）。
+func extractSystemTextAndCacheControl(system any) (string, any) {
+	switch v := system.(type) {
+	case string:
+		return strings.TrimSpace(v), nil
+	case []any:
+		var parts []string
+		var cacheControl any
+		for _, item := range v {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			text, ok := m["text"].(string)
+			if !ok || strings.TrimSpace(text) == "" {
+				continue
+			}
+			parts = append(parts, text)
+			if cc, exists := m["cache_control"]; exists && cc != nil {
+				cacheControl = cc
+			}
+		}
+		return strings.Join(parts, "\n\n"), cacheControl
+	default:
+		return "", nil
+	}
+}
+
 // Anthropic 基于 system 参数内容检测第三方应用，仅前置追加 Claude Code 提示词
 // 无法通过检测，因为后续内容仍为非 Claude Code 格式。
 // 策略：将原始 system prompt 提取并注入为 user/assistant 消息对，system 仅保留 Claude Code 标识。
 func rewriteSystemForNonClaudeCode(body []byte, system any) []byte {
+	return rewriteSystemForNonClaudeCodeWithPromptBlocks(body, system, "", "")
+}
+
+func rewriteSystemForNonClaudeCodeWithPromptBlocks(body []byte, system any, expansionPrompt string, blocksConfig string) []byte {
 	system = normalizeSystemParam(system)
+	expansionPrompt = defaultClaudeOAuthExpansionPrompt(expansionPrompt)
 
-	// 1. 提取原始 system prompt 文本
-	var originalSystemText string
-	switch v := system.(type) {
-	case string:
-		originalSystemText = strings.TrimSpace(v)
-	case []any:
-		var parts []string
-		for _, item := range v {
-			if m, ok := item.(map[string]any); ok {
-				if text, ok := m["text"].(string); ok && strings.TrimSpace(text) != "" {
-					parts = append(parts, text)
-				}
-			}
-		}
-		originalSystemText = strings.Join(parts, "\n\n")
-	}
+	// 1. 提取原始 system prompt 文本及其缓存断点
+	originalSystemText, originalSystemCacheControl := extractSystemTextAndCacheControl(system)
 
-	// 2. 构造 system 数组，对齐真实 Claude Code CLI 的 2-block 形态：
-	//    [0] billing attribution block（cc_version={cliVer}.{fp}; cc_entrypoint=cli; cch=00000;）
-	//    [1] "You are Claude Code..." prompt block（带 cache_control 作为稳定缓存断点）
+	// 2. 构造 system 数组，默认对齐真实 Claude Code CLI 的 3-block 形态：
+	//    [0] billing attribution block
+	//    [1] "You are Claude Code..." 身份前缀 block（默认不带 cache_control）
+	//    [2] 工具无关的通用提示词扩充 block（带 cache_control 作为稳定缓存断点）
 	//
-	//    billing block 的 cch=00000 是占位符，会被 buildUpstreamRequest 里的
-	//    signBillingHeaderCCH 替换成 xxhash64 签名。缺失 billing block 的系统 payload
-	//    是 Anthropic 判定第三方的关键信号之一（真实 CLI 每个请求都带）。
-	billingBlock, billingErr := buildBillingAttributionBlockJSON(body, claude.CLICurrentVersion)
-	ccPromptBlock, ccErr := marshalAnthropicSystemTextBlock(claudeCodeSystemPrompt, true)
-	if billingErr != nil || ccErr != nil {
-		logger.LegacyPrintf("service.gateway", "Warning: failed to build system blocks (billing=%v, cc=%v)", billingErr, ccErr)
+	//    缺失 billing block 的系统 payload 是 Anthropic 判定第三方的关键信号之一。
+	systemBlocks, blockErr := buildClaudeOAuthSystemPromptBlocksJSON(body, expansionPrompt, blocksConfig)
+	if blockErr != nil {
+		logger.LegacyPrintf("service.gateway", "Warning: failed to build configured Claude OAuth system blocks: %v", blockErr)
+		systemBlocks, blockErr = buildClaudeOAuthSystemPromptBlocksJSON(body, expansionPrompt, "")
+	}
+	if blockErr != nil {
+		logger.LegacyPrintf("service.gateway", "Warning: failed to build default Claude OAuth system blocks: %v", blockErr)
 		return body
 	}
-	out, ok := setJSONRawBytes(body, "system", buildJSONArrayRaw([][]byte{billingBlock, ccPromptBlock}))
+	out, ok := setJSONRawBytes(body, "system", buildJSONArrayRaw(systemBlocks))
 	if !ok {
 		logger.LegacyPrintf("service.gateway", "Warning: failed to set Claude Code system prompt")
 		return body
@@ -4203,10 +4432,17 @@ func rewriteSystemForNonClaudeCode(body []byte, system any) []byte {
 	//    模型仍通过 messages 接收完整指令，保留客户端功能
 	ccPromptTrimmed := strings.TrimSpace(claudeCodeSystemPrompt)
 	if originalSystemText != "" && originalSystemText != ccPromptTrimmed && !hasClaudeCodePrefix(originalSystemText) {
+		instructionBlock := map[string]any{
+			"type": "text",
+			"text": "[System Instructions]\n" + originalSystemText,
+		}
+		if originalSystemCacheControl != nil {
+			instructionBlock["cache_control"] = originalSystemCacheControl
+		}
 		instrMsg, err1 := json.Marshal(map[string]any{
 			"role": "user",
 			"content": []map[string]any{
-				{"type": "text", "text": "[System Instructions]\n" + originalSystemText},
+				instructionBlock,
 			},
 		})
 		ackMsg, err2 := json.Marshal(map[string]any{
@@ -4473,6 +4709,53 @@ func (s *GatewayService) shouldInjectAnthropicCacheTTL1h(ctx context.Context, ac
 	return s.settingService.IsAnthropicCacheTTL1hInjectionEnabled(ctx)
 }
 
+func (s *GatewayService) shouldNormalizeClientDateline(ctx context.Context, account *Account) bool {
+	if account == nil || !account.IsAnthropicOAuthOrSetupToken() || s == nil || s.settingService == nil {
+		return false
+	}
+	return s.settingService.IsClientDatelineNormalizationEnabled(ctx)
+}
+
+func (s *GatewayService) normalizeClientDatelineIfEnabled(ctx context.Context, account *Account, body []byte) ([]byte, bool) {
+	if !s.shouldNormalizeClientDateline(ctx, account) {
+		return nil, false
+	}
+	next, _, changed := anthropicfp.NormalizeDateline(body)
+	if !changed {
+		return nil, false
+	}
+	return next, true
+}
+
+func (s *GatewayService) claudeOAuthSystemPromptInjectionSettings(ctx context.Context) (bool, string, string) {
+	if s == nil || s.settingService == nil {
+		return true, "", ""
+	}
+	return s.settingService.GetClaudeOAuthSystemPromptInjectionSettings(ctx)
+}
+
+// systemHasBillingAttributionBlock 检查请求体 system 中是否含真实 Claude Code 客户端注入的
+// billing attribution block。用于识别被上游 API 网关代理的真实 CC 流量（UA 被替换为
+// Go-http-client，body 保留完整客户端特征）：这类请求若走 mimicry 重写 system，会破坏
+// Anthropic prompt cache 的前缀一致性，导致 messages 级缓存永不命中。
+func systemHasBillingAttributionBlock(body []byte) bool {
+	system := gjson.GetBytes(body, "system")
+	if !system.IsArray() {
+		return false
+	}
+	found := false
+	system.ForEach(func(_, item gjson.Result) bool {
+		text := item.Get("text").String()
+		if strings.HasPrefix(text, "x-anthropic-billing-header") &&
+			strings.Contains(text, "cc_entrypoint=") {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
 // Forward 转发请求到Claude API
 func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, parsed *ParsedRequest) (*ForwardResult, error) {
 	startTime := time.Now()
@@ -4569,16 +4852,15 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		// Code..." system prompt 但缺少 billing attribution block，导致 Anthropic
 		// 检测到"有 CC prompt 但无 billing block"的不一致而判为 third-party。
 		// Parrot 的 transform_request 从不检查客户端 system 内容，直接覆盖。
-		systemRewritten := false
-		if !strings.Contains(strings.ToLower(reqModel), "haiku") {
-			body = rewriteSystemForNonClaudeCode(body, parsed.System)
-			systemRewritten = true
+		systemPromptInjectionEnabled, systemPrompt, systemPromptBlocks := s.claudeOAuthSystemPromptInjectionSettings(ctx)
+		if systemPromptInjectionEnabled {
+			systemPromptBlocks = claudeOAuthSystemPromptBlocksForModel(reqModel, systemPromptBlocks)
+			body = rewriteSystemForNonClaudeCodeWithPromptBlocks(body, parsed.System, systemPrompt, systemPromptBlocks)
 		}
 
-		// system 被重写时保留 CC prompt 的 cache_control: ephemeral（匹配真实 Claude Code 行为）；
-		// 未重写时（haiku / 已含 CC 前缀）剥离客户端 cache_control，与原有行为一致。
-		// 两种情况下 enforceCacheControlLimit 都会兜底处理上限。
-		normalizeOpts := claudeOAuthNormalizeOptions{stripSystemCacheControl: !systemRewritten}
+		// system 的 cache_control 一律保留：注入开启时是我们自己拼的稳定锚点，
+		// 关闭时是客户端的缓存意图。4 块上限由 enforceCacheControlLimit 兜底。
+		normalizeOpts := claudeOAuthNormalizeOptions{}
 		if s.identityService != nil {
 			fp, err := s.identityService.GetOrCreateFingerprint(ctx, account.ID, c.Request.Header)
 			if err == nil && fp != nil {
@@ -4605,6 +4887,11 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		} else {
 			body = applyToolsLastCacheBreakpoint(body)
 		}
+	}
+
+	// Dateline normalization applies to both genuine and mimicked OAuth traffic.
+	if next, ok := s.normalizeClientDatelineIfEnabled(ctx, account, body); ok {
+		body = next
 	}
 
 	// 强制执行 cache_control 块数量限制（最多 4 个）
@@ -6389,9 +6676,9 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 
 	// OAuth账号：应用统一指纹和metadata重写（受设置开关控制）
 	var fingerprint *Fingerprint
-	enableFP, enableMPT, enableCCH := true, false, false
+	enableFP, enableMPT := true, false
 	if s.settingService != nil {
-		enableFP, enableMPT, enableCCH = s.settingService.GetGatewayForwardingSettings(ctx)
+		enableFP, enableMPT, _ = s.settingService.GetGatewayForwardingSettings(ctx)
 	}
 	if account.IsOAuth() && s.identityService != nil {
 		// 1. 获取或创建指纹（包含随机生成的ClientID）
@@ -6418,13 +6705,14 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 		}
 	}
 
-	// 同步 billing header cc_version 与实际发送的 User-Agent 版本
-	if fingerprint != nil {
-		body = syncBillingHeaderVersion(body, fingerprint.UserAgent)
-	}
-	// CCH 签名：将 cch=00000 占位符替换为 xxHash64 签名（需在所有 body 修改之后）
-	if enableCCH {
-		body = signBillingHeaderCCH(body)
+	// 一致性铁律：同一次请求内只取一次 mimic UA，出站 User-Agent 头与
+	// 请求体 x-anthropic-billing-header 的 cc_version 都源自这一个字符串，
+	// 避免运行期版本缓存翻转瞬间头/体版本自相矛盾（会被判非正版客户端）。
+	mimicUserAgent := claude.DefaultUserAgent()
+
+	// Mimicry may override the cached User-Agent later, even without a fingerprint.
+	if billingUA := effectiveBillingUserAgent(mimicUserAgent, tokenType, mimicClaudeCode, fingerprint); billingUA != "" {
+		body = syncBillingHeaderVersion(body, billingUA)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(body))
@@ -6482,18 +6770,13 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 			// 非 Claude Code 客户端：按 opencode 的策略处理：
 			// - 强制 Claude Code 指纹相关请求头（尤其是 user-agent/x-stainless/x-app）
 			// - 保留 incoming beta 的同时，确保 OAuth 所需 beta 存在
-			applyClaudeCodeMimicHeaders(req, reqStream)
+			applyClaudeCodeMimicHeaders(req, reqStream, mimicUserAgent)
 
 			incomingBeta := getHeaderRaw(req.Header, "anthropic-beta")
 			// Claude Code OAuth credentials are scoped to Claude Code.
-			// Non-haiku models MUST include claude-code beta for Anthropic to recognize
-			// this as a legitimate Claude Code request; without it, the request is
-			// rejected as third-party ("out of extra usage").
-			// Haiku models are exempt from third-party detection and don't need it.
-			requiredBetas := []string{claude.BetaOAuth, claude.BetaInterleavedThinking}
-			if !strings.Contains(strings.ToLower(modelID), "haiku") {
-				requiredBetas = claude.FullClaudeCodeMimicryBetas()
-			}
+			// 所有模型统一使用完整 Claude Code beta，Haiku 不再旁路：真实 CLI 对
+			// Haiku 也发送同样的 beta 集，旁路会让伪装流量与真实流量可区分。
+			requiredBetas := claude.FullClaudeCodeMimicryBetas()
 			setHeaderRaw(req.Header, "anthropic-beta", mergeAnthropicBetaDropping(requiredBetas, incomingBeta, effectiveDropSet))
 		} else {
 			// Claude Code 客户端：尽量透传原始 header，仅补齐 oauth beta
@@ -6672,7 +6955,7 @@ func applyClaudeOAuthHeaderDefaults(req *http.Request) {
 	if getHeaderRaw(req.Header, "Accept") == "" {
 		setHeaderRaw(req.Header, "Accept", "application/json")
 	}
-	for key, value := range claude.DefaultHeaders {
+	for key, value := range claude.DefaultHeaders() {
 		if value == "" {
 			continue
 		}
@@ -6998,7 +7281,9 @@ var defaultDroppedBetasSet = buildBetaTokenSet(claude.DroppedBetas)
 // applyClaudeCodeMimicHeaders forces "Claude Code-like" request headers.
 // This mirrors opencode-anthropic-auth behavior: do not trust downstream
 // headers when using Claude Code-scoped OAuth credentials.
-func applyClaudeCodeMimicHeaders(req *http.Request, isStream bool) {
+// mimicUserAgent 由调用方在同一请求内取一次传入，保证出站 User-Agent 头与
+// 请求体 billing attribution 的 cc_version 版本号严格一致。
+func applyClaudeCodeMimicHeaders(req *http.Request, isStream bool, mimicUserAgent string) {
 	if req == nil {
 		return
 	}
@@ -7006,9 +7291,13 @@ func applyClaudeCodeMimicHeaders(req *http.Request, isStream bool) {
 	applyClaudeOAuthHeaderDefaults(req)
 	// Then force key headers to match Claude Code fingerprint regardless of what the client sent.
 	// 使用 resolveWireCasing 确保 key 与真实 wire format 一致（如 "x-app" 而非 "X-App"）
-	for key, value := range claude.DefaultHeaders {
+	for key, value := range claude.DefaultHeaders() {
 		if value == "" {
 			continue
+		}
+		if key == "User-Agent" && mimicUserAgent != "" {
+			// 版本号与 billing 路径共用同一字符串（见 mimicUserAgent 注释）。
+			value = mimicUserAgent
 		}
 		setHeaderRaw(req.Header, resolveWireCasing(key), value)
 	}
@@ -9462,8 +9751,7 @@ func (s *GatewayService) ForwardCountTokens(ctx context.Context, c *gin.Context,
 	shouldMimicClaudeCode := account.IsOAuth() && !isClaudeCodeCT
 
 	if shouldMimicClaudeCode {
-		normalizeOpts := claudeOAuthNormalizeOptions{stripSystemCacheControl: true}
-		body, reqModel = normalizeClaudeOAuthRequestBody(body, reqModel, normalizeOpts)
+		body, reqModel = normalizeClaudeOAuthRequestBody(body, reqModel, claudeOAuthNormalizeOptions{})
 
 		body = s.rewriteMessageCacheControlIfEnabled(ctx, body)
 		if rw := buildToolNameRewriteFromBody(body); rw != nil {
@@ -9471,6 +9759,10 @@ func (s *GatewayService) ForwardCountTokens(ctx context.Context, c *gin.Context,
 		} else {
 			body = applyToolsLastCacheBreakpoint(body)
 		}
+
+		// 4 块上限兜底：不再剥离客户端 system 断点后，「客户端 system + 客户端
+		// messages + 上面刚注入的 tools[-1]」可以直接顶到 5 块，上游对超限是 400。
+		body = enforceCacheControlLimit(body)
 	}
 
 	// Antigravity 账户不支持 count_tokens，返回 404 让客户端 fallback 到本地估算。
@@ -9818,9 +10110,9 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 
 	// OAuth 账号：应用统一指纹和重写 userID（受设置开关控制）
 	// 如果启用了会话ID伪装，会在重写后替换 session 部分为固定值
-	ctEnableFP, ctEnableMPT, ctEnableCCH := true, false, false
+	ctEnableFP, ctEnableMPT := true, false
 	if s.settingService != nil {
-		ctEnableFP, ctEnableMPT, ctEnableCCH = s.settingService.GetGatewayForwardingSettings(ctx)
+		ctEnableFP, ctEnableMPT, _ = s.settingService.GetGatewayForwardingSettings(ctx)
 	}
 	var ctFingerprint *Fingerprint
 	if account.IsOAuth() && s.identityService != nil {
@@ -9838,12 +10130,16 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 		}
 	}
 
-	// 同步 billing header cc_version 与实际发送的 User-Agent 版本
-	if ctFingerprint != nil && ctEnableFP {
-		body = syncBillingHeaderVersion(body, ctFingerprint.UserAgent)
+	// Disabled fingerprint unification does not disable forced mimicry headers.
+	var billingFingerprint *Fingerprint
+	if ctEnableFP {
+		billingFingerprint = ctFingerprint
 	}
-	if ctEnableCCH {
-		body = signBillingHeaderCCH(body)
+	// 一致性铁律：同一次请求内只取一次 mimic UA，billing cc_version 与出站
+	// User-Agent 头共用这一个字符串（同 buildUpstreamRequest）。
+	ctMimicUserAgent := claude.DefaultUserAgent()
+	if billingUA := effectiveBillingUserAgent(ctMimicUserAgent, tokenType, mimicClaudeCode, billingFingerprint); billingUA != "" {
+		body = syncBillingHeaderVersion(body, billingUA)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(body))
@@ -9891,7 +10187,7 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 	// OAuth 账号：处理 anthropic-beta header
 	if tokenType == "oauth" {
 		if mimicClaudeCode {
-			applyClaudeCodeMimicHeaders(req, false)
+			applyClaudeCodeMimicHeaders(req, false, ctMimicUserAgent)
 
 			incomingBeta := getHeaderRaw(req.Header, "anthropic-beta")
 			requiredBetas := append(claude.FullClaudeCodeMimicryBetas(), claude.BetaTokenCounting)
