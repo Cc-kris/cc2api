@@ -116,3 +116,27 @@ func (s *SettingService) InvalidateClaudeCodeClientVersionCache() {
 	s.claudeCodeVersionSF.Forget(claudeCodeClientVersionSFKey)
 	s.claudeCodeVersionCache.Store((*cachedClaudeCodeClientVersion)(nil))
 }
+
+// GetClaudeOAuthSystemPromptInjectionSettings 返回 Claude OAuth system 注入配置：
+// 开关（默认开）、自定义扩充提示词（空=内置）、blocks JSON（空=默认 3 块）。
+func (s *SettingService) GetClaudeOAuthSystemPromptInjectionSettings(ctx context.Context) (enabled bool, prompt string, blocks string) {
+	enabled = true
+	if s == nil || s.settingRepo == nil {
+		return
+	}
+	values, err := s.settingRepo.GetMultiple(ctx, []string{
+		SettingKeyEnableClaudeOAuthSystemPromptInjection,
+		SettingKeyClaudeOAuthSystemPrompt,
+		SettingKeyClaudeOAuthSystemPromptBlocks,
+	})
+	if err != nil {
+		slog.Warn("failed to get claude oauth system prompt injection settings", "error", err)
+		return
+	}
+	if v, ok := values[SettingKeyEnableClaudeOAuthSystemPromptInjection]; ok && v != "" {
+		enabled = v == "true"
+	}
+	prompt = values[SettingKeyClaudeOAuthSystemPrompt]
+	blocks = values[SettingKeyClaudeOAuthSystemPromptBlocks]
+	return
+}

@@ -282,6 +282,9 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		ClaudeCodeClientVersion:                 settings.ClaudeCodeClientVersion,
 		ClaudeCodeClientVersionSynced:           settings.ClaudeCodeClientVersionSynced,
 		ClaudeCodeVersionAutoSyncEnabled:        settings.ClaudeCodeVersionAutoSyncEnabled,
+		EnableClaudeOAuthSystemPromptInjection:  settings.EnableClaudeOAuthSystemPromptInjection,
+		ClaudeOAuthSystemPrompt:                 settings.ClaudeOAuthSystemPrompt,
+		ClaudeOAuthSystemPromptBlocks:           settings.ClaudeOAuthSystemPromptBlocks,
 		WebSearchEmulationEnabled:               settings.WebSearchEmulationEnabled,
 		PaymentVisibleMethodAlipaySource:        settings.PaymentVisibleMethodAlipaySource,
 		PaymentVisibleMethodWxpaySource:         settings.PaymentVisibleMethodWxpaySource,
@@ -631,6 +634,9 @@ type UpdateSettingsRequest struct {
 	OpenAICodexUserAgent               *string `json:"openai_codex_user_agent"`
 	ClaudeCodeClientVersion            *string `json:"claude_code_client_version"`
 	ClaudeCodeVersionAutoSyncEnabled   *bool   `json:"claude_code_version_auto_sync_enabled"`
+	EnableClaudeOAuthSystemPromptInjection *bool   `json:"enable_claude_oauth_system_prompt_injection"`
+	ClaudeOAuthSystemPrompt                *string `json:"claude_oauth_system_prompt"`
+	ClaudeOAuthSystemPromptBlocks          *string `json:"claude_oauth_system_prompt_blocks"`
 
 	// Payment visible method routing
 	PaymentVisibleMethodAlipaySource  *string `json:"payment_visible_method_alipay_source"`
@@ -1586,6 +1592,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			return
 		}
 	}
+	if req.ClaudeOAuthSystemPromptBlocks != nil {
+		if err := service.ValidateClaudeOAuthSystemPromptBlocksConfig(*req.ClaudeOAuthSystemPromptBlocks); err != nil {
+			response.Error(c, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	if req.ClaudeCodeClientVersion != nil {
 		raw := strings.TrimSpace(*req.ClaudeCodeClientVersion)
 		normalized := service.NormalizeClaudeCodeClientVersion(raw)
@@ -1841,6 +1853,24 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 				return *req.ClaudeCodeVersionAutoSyncEnabled
 			}
 			return previousSettings.ClaudeCodeVersionAutoSyncEnabled
+		}(),
+		EnableClaudeOAuthSystemPromptInjection: func() bool {
+			if req.EnableClaudeOAuthSystemPromptInjection != nil {
+				return *req.EnableClaudeOAuthSystemPromptInjection
+			}
+			return previousSettings.EnableClaudeOAuthSystemPromptInjection
+		}(),
+		ClaudeOAuthSystemPrompt: func() string {
+			if req.ClaudeOAuthSystemPrompt != nil {
+				return *req.ClaudeOAuthSystemPrompt
+			}
+			return previousSettings.ClaudeOAuthSystemPrompt
+		}(),
+		ClaudeOAuthSystemPromptBlocks: func() string {
+			if req.ClaudeOAuthSystemPromptBlocks != nil {
+				return *req.ClaudeOAuthSystemPromptBlocks
+			}
+			return previousSettings.ClaudeOAuthSystemPromptBlocks
 		}(),
 		PaymentVisibleMethodAlipaySource: func() string {
 			if req.PaymentVisibleMethodAlipaySource != nil {
@@ -2286,6 +2316,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		ClaudeCodeClientVersion:                 updatedSettings.ClaudeCodeClientVersion,
 		ClaudeCodeClientVersionSynced:           updatedSettings.ClaudeCodeClientVersionSynced,
 		ClaudeCodeVersionAutoSyncEnabled:        updatedSettings.ClaudeCodeVersionAutoSyncEnabled,
+		EnableClaudeOAuthSystemPromptInjection:  updatedSettings.EnableClaudeOAuthSystemPromptInjection,
+		ClaudeOAuthSystemPrompt:                 updatedSettings.ClaudeOAuthSystemPrompt,
+		ClaudeOAuthSystemPromptBlocks:           updatedSettings.ClaudeOAuthSystemPromptBlocks,
 		PaymentVisibleMethodAlipaySource:        updatedSettings.PaymentVisibleMethodAlipaySource,
 		PaymentVisibleMethodWxpaySource:         updatedSettings.PaymentVisibleMethodWxpaySource,
 		PaymentVisibleMethodAlipayEnabled:       updatedSettings.PaymentVisibleMethodAlipayEnabled,
@@ -2795,6 +2828,15 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.ClaudeCodeVersionAutoSyncEnabled != after.ClaudeCodeVersionAutoSyncEnabled {
 		changed = append(changed, "claude_code_version_auto_sync_enabled")
+	}
+	if before.EnableClaudeOAuthSystemPromptInjection != after.EnableClaudeOAuthSystemPromptInjection {
+		changed = append(changed, "enable_claude_oauth_system_prompt_injection")
+	}
+	if before.ClaudeOAuthSystemPrompt != after.ClaudeOAuthSystemPrompt {
+		changed = append(changed, "claude_oauth_system_prompt")
+	}
+	if before.ClaudeOAuthSystemPromptBlocks != after.ClaudeOAuthSystemPromptBlocks {
+		changed = append(changed, "claude_oauth_system_prompt_blocks")
 	}
 	if before.PaymentVisibleMethodAlipaySource != after.PaymentVisibleMethodAlipaySource {
 		changed = append(changed, "payment_visible_method_alipay_source")

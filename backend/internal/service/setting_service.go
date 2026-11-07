@@ -2197,6 +2197,9 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyClaudeCodeVersionAutoSyncEnabled] = strconv.FormatBool(settings.ClaudeCodeVersionAutoSyncEnabled)
 	// SettingKeyClaudeCodeClientVersionSynced 由自动同步任务独占写入，此处不得覆盖，
 	// 否则面板保存会把同步结果清空。
+	updates[SettingKeyEnableClaudeOAuthSystemPromptInjection] = strconv.FormatBool(settings.EnableClaudeOAuthSystemPromptInjection)
+	updates[SettingKeyClaudeOAuthSystemPrompt] = settings.ClaudeOAuthSystemPrompt
+	updates[SettingKeyClaudeOAuthSystemPromptBlocks] = settings.ClaudeOAuthSystemPromptBlocks
 	updates[SettingPaymentVisibleMethodAlipaySource] = settings.PaymentVisibleMethodAlipaySource
 	updates[SettingPaymentVisibleMethodWxpaySource] = settings.PaymentVisibleMethodWxpaySource
 	updates[SettingPaymentVisibleMethodAlipayEnabled] = strconv.FormatBool(settings.PaymentVisibleMethodAlipayEnabled)
@@ -3028,6 +3031,9 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyClaudeCodeClientVersion:                   "",
 		SettingKeyClaudeCodeClientVersionSynced:             "",
 		SettingKeyClaudeCodeVersionAutoSyncEnabled:          "true",
+		SettingKeyEnableClaudeOAuthSystemPromptInjection:    "true",
+		SettingKeyClaudeOAuthSystemPrompt:                   "",
+		SettingKeyClaudeOAuthSystemPromptBlocks:             "",
 		SettingKeyRegistrationEmailSuffixWhitelist:          "[]",
 		SettingKeyRegistrationDomainLimitEnabled:            "false",
 		SettingKeyRegistrationDomainLimitPerDomain:          "3",
@@ -3743,6 +3749,13 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	} else {
 		result.ClaudeCodeVersionAutoSyncEnabled = true
 	}
+	if v, ok := settings[SettingKeyEnableClaudeOAuthSystemPromptInjection]; ok && v != "" {
+		result.EnableClaudeOAuthSystemPromptInjection = v == "true"
+	} else {
+		result.EnableClaudeOAuthSystemPromptInjection = true
+	}
+	result.ClaudeOAuthSystemPrompt = settings[SettingKeyClaudeOAuthSystemPrompt]
+	result.ClaudeOAuthSystemPromptBlocks = settings[SettingKeyClaudeOAuthSystemPromptBlocks]
 
 	// Web search emulation: quick enabled check from the JSON config
 	if raw := settings[SettingKeyWebSearchEmulationConfig]; raw != "" {

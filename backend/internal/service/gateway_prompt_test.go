@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func TestIsClaudeCodeClient(t *testing.T) {
@@ -406,7 +408,7 @@ func TestRewriteSystemForNonClaudeCode(t *testing.T) {
 			//   [1] Claude Code prompt block (带 cache_control)
 			systemArr, ok := parsed["system"].([]any)
 			require.True(t, ok, "system should be an array, got %T", parsed["system"])
-			require.Len(t, systemArr, 2, "system array should have exactly 2 blocks (billing + cc prompt)")
+			require.Len(t, systemArr, 3, "system array should have exactly 3 blocks (billing + cc prompt + expansion)")
 
 			billingBlock, ok := systemArr[0].(map[string]any)
 			require.True(t, ok)
@@ -420,8 +422,13 @@ func TestRewriteSystemForNonClaudeCode(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, "text", systemBlock["type"])
 			require.Equal(t, tt.wantSystemText, systemBlock["text"])
-			cc, ok := systemBlock["cache_control"].(map[string]any)
-			require.True(t, ok, "cc prompt block should have cache_control")
+			_, hasCC := systemBlock["cache_control"]
+			require.False(t, hasCC, "cc prompt block 不带 cache_control，断点落在扩充块上")
+
+			expansionBlock, ok := systemArr[2].(map[string]any)
+			require.True(t, ok)
+			cc, ok := expansionBlock["cache_control"].(map[string]any)
+			require.True(t, ok, "expansion block should have cache_control")
 			require.Equal(t, "ephemeral", cc["type"])
 
 			// 检查 messages
@@ -456,4 +463,63 @@ func TestRewriteSystemForNonClaudeCode(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRewriteSystemForNonClaudeCodeWithPromptBlocks_UsesConfiguredBlocks(t *testing.T) {
+	body := []byte(`{"model":"claude-3","system":"Project instructions","messages":[{"role":"user","content":"hello"}]}`)
+	blocks := `{
+		"blocks": [
+			{"type":"text","text":"prefix {cc_version}.{fp}","cache_control":true},
+			{"enabled":false,"type":"text","text":"disabled"},
+			{"type":"text","text":"{claude_code_system_prompt}"},
+			{"type":"text","text":"tail","cache_control":{"type":"ephemeral","ttl":"1h"}}
+		]
+	}`
+
+	result := rewriteSystemForNonClaudeCodeWithPromptBlocks(body, "Project instructions", "", blocks)
+
+	system := gjson.GetBytes(result, "system")
+	require.True(t, system.IsArray())
+	arr := system.Array()
+	require.Len(t, arr, 3)
+	require.Contains(t, arr[0].Get("text").String(), "prefix "+claude.EffectiveCLIVersion()+".")
+	require.Equal(t, "ephemeral", arr[0].Get("cache_control.type").String())
+	require.Equal(t, claude.DefaultCacheControlTTL, arr[0].Get("cache_control.ttl").String())
+	require.Equal(t, claudeCodeSystemPrompt, arr[1].Get("text").String())
+	require.False(t, arr[1].Get("cache_control").Exists())
+	require.Equal(t, "tail", arr[2].Get("text").String())
+	require.Equal(t, "1h", arr[2].Get("cache_control.ttl").String())
+}
+
+// Fable 家族去掉扩充块：上游对扩充块返回 stop_reason=refusal 且零输出。
+func TestRewriteSystemForNonClaudeCode_FableOmitsRefusedExpansion(t *testing.T) {
+	body := []byte(`{"model":"claude-fable-5","system":"Project instructions","messages":[{"role":"user","content":"hello"}]}`)
+	blocks := claudeOAuthSystemPromptBlocksForModel("claude-fable-5", "")
+
+	result := rewriteSystemForNonClaudeCodeWithPromptBlocks(body, "Project instructions", "", blocks)
+
+	system := gjson.GetBytes(result, "system").Array()
+	require.Contains(t, system[0].Get("text").String(), "x-anthropic-billing-header")
+	require.Equal(t, claudeCodeSystemPrompt, system[1].Get("text").String())
+	require.NotContains(t, string(result), claudeCodeSystemPromptExpansion)
+	require.Contains(t, gjson.GetBytes(result, "messages.0.content.0.text").String(), "Project instructions")
+	require.Equal(t, "hello", gjson.GetBytes(result, "messages.2.content").String())
+}
+
+// 经代理的真实 CC 流量：body 带 billing attribution block 时识别为 CC 客户端，跳过重写。
+func TestSystemHasBillingAttributionBlock(t *testing.T) {
+	billing, err := buildBillingAttributionText([]byte(`{"messages":[]}`), "2.1.258")
+	require.NoError(t, err)
+	withBlock := []byte(`{"system":[{"type":"text","text":"` + billing + `"}]}`)
+	require.True(t, systemHasBillingAttributionBlock(withBlock))
+	require.False(t, systemHasBillingAttributionBlock([]byte(`{"system":[{"type":"text","text":"You are Claude Code."}]}`)))
+	require.False(t, systemHasBillingAttributionBlock([]byte(`{"system":"plain string"}`)))
+}
+
+func TestValidateClaudeOAuthSystemPromptBlocksConfig(t *testing.T) {
+	require.NoError(t, ValidateClaudeOAuthSystemPromptBlocksConfig(""))
+	require.NoError(t, ValidateClaudeOAuthSystemPromptBlocksConfig(`[{"type":"text","text":"x"}]`))
+	require.Error(t, ValidateClaudeOAuthSystemPromptBlocksConfig(`not json`))
+	require.Error(t, ValidateClaudeOAuthSystemPromptBlocksConfig(`[{"type":"image","text":"x"}]`))
+	require.Error(t, ValidateClaudeOAuthSystemPromptBlocksConfig(`[{"type":"text","text":"x","cache_control":"bad"}]`))
 }

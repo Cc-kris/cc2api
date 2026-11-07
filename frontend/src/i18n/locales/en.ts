@@ -6987,6 +6987,12 @@ export default {
         claudeCodeVersionAutoSync: 'Auto-sync Claude Code version',
         claudeCodeVersionAutoSyncHint: 'Fetches the latest Claude Code client version from the official release channel every hour, so you never need to upgrade this service just to keep the version current. When disabled, only the version above or the environment-variable fallback is used.',
         claudeCodeVersionSyncedValue: 'Currently synced: {version}',
+        claudeOAuthSystemPromptInjection: 'Claude OAuth system injection',
+        claudeOAuthSystemPromptInjectionHint: 'Injects the Claude Code system prompt and billing attribution block for OAuth requests from non-Claude-Code clients, keeping the outbound identity consistent with the real CLI. When disabled, the client system is left untouched.',
+        claudeOAuthSystemPrompt: 'Expansion prompt',
+        claudeOAuthSystemPromptHint: 'Generic prompt paragraph appended after the Claude Code identity block. Leave empty to use the built-in default.',
+        claudeOAuthSystemPromptBlocks: 'System blocks config (JSON)',
+        claudeOAuthSystemPromptBlocksHint: 'Custom system block sequence. Supports {billing_header}, {cc_version}, {fp}, {claude_code_system_prompt}, {claude_code_expansion_prompt} placeholders and cache_control. Leave empty for the default 3 blocks.',
       },
       webSearchEmulation: {
         title: 'Web Search Emulation',

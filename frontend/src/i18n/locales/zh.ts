@@ -7147,6 +7147,12 @@ export default {
         claudeCodeVersionAutoSync: '自动同步 Claude Code 版本号',
         claudeCodeVersionAutoSyncHint: '每小时从官方发布渠道获取最新版本的 Claude Code 客户端版本号，无需为了跟版本而升级本服务。关闭后仅使用上方手填版本或环境变量兜底。',
         claudeCodeVersionSyncedValue: '当前同步到：{version}',
+        claudeOAuthSystemPromptInjection: 'Claude OAuth system 注入',
+        claudeOAuthSystemPromptInjectionHint: '对非 Claude Code 客户端的 OAuth 请求注入 Claude Code system 提示词与 billing 归因块，保持与真实 CLI 一致的出站身份。关闭后不再改写客户端 system。',
+        claudeOAuthSystemPrompt: '扩充提示词',
+        claudeOAuthSystemPromptHint: '追加在 Claude Code 身份块之后的通用提示词段落。留空使用内置默认。',
+        claudeOAuthSystemPromptBlocks: 'System blocks 配置（JSON）',
+        claudeOAuthSystemPromptBlocksHint: '自定义 system 块序列，支持 {billing_header}、{cc_version}、{fp}、{claude_code_system_prompt}、{claude_code_expansion_prompt} 占位符与 cache_control。留空使用默认 3 块。',
       },
       webSearchEmulation: {
         title: 'Web Search 模拟',

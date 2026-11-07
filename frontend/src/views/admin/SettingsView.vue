@@ -4016,6 +4016,82 @@
                 </div>
                 <Toggle v-model="form.claude_code_version_auto_sync_enabled" />
               </div>
+
+              <!-- Claude OAuth system 注入 -->
+              <div class="flex items-center justify-between">
+                <div>
+                  <label
+                    class="text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {{
+                      t(
+                        "admin.settings.gatewayForwarding.claudeOAuthSystemPromptInjection",
+                      )
+                    }}
+                  </label>
+                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                    {{
+                      t(
+                        "admin.settings.gatewayForwarding.claudeOAuthSystemPromptInjectionHint",
+                      )
+                    }}
+                  </p>
+                </div>
+                <Toggle
+                  v-model="form.enable_claude_oauth_system_prompt_injection"
+                />
+              </div>
+
+              <!-- 扩充提示词 -->
+              <div v-if="form.enable_claude_oauth_system_prompt_injection">
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{
+                    t(
+                      "admin.settings.gatewayForwarding.claudeOAuthSystemPrompt",
+                    )
+                  }}
+                </label>
+                <textarea
+                  v-model="form.claude_oauth_system_prompt"
+                  rows="4"
+                  class="input w-full font-mono text-sm"
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{
+                    t(
+                      "admin.settings.gatewayForwarding.claudeOAuthSystemPromptHint",
+                    )
+                  }}
+                </p>
+              </div>
+
+              <!-- blocks JSON -->
+              <div v-if="form.enable_claude_oauth_system_prompt_injection">
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{
+                    t(
+                      "admin.settings.gatewayForwarding.claudeOAuthSystemPromptBlocks",
+                    )
+                  }}
+                </label>
+                <textarea
+                  v-model="form.claude_oauth_system_prompt_blocks"
+                  rows="6"
+                  class="input w-full font-mono text-sm"
+                  placeholder='[{"type":"text","text":"{billing_header}"}]'
+                />
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{
+                    t(
+                      "admin.settings.gatewayForwarding.claudeOAuthSystemPromptBlocksHint",
+                    )
+                  }}
+                </p>
+              </div>
             </div>
           </div>
           <!-- Web Search Emulation -->
@@ -7695,6 +7771,9 @@ const form = reactive<SettingsForm>({
   // 只读展示：自动同步任务写入的官方最新版本，不参与提交
   claude_code_client_version_synced: "",
   claude_code_version_auto_sync_enabled: true,
+  enable_claude_oauth_system_prompt_injection: true,
+  claude_oauth_system_prompt: "",
+  claude_oauth_system_prompt_blocks: "",
   // 余额、订阅到期与账号限额通知
   balance_low_notify_enabled: false,
   balance_low_notify_threshold: 0,
@@ -9029,6 +9108,11 @@ async function saveSettings() {
       claude_code_client_version: form.claude_code_client_version?.trim() || "",
       claude_code_version_auto_sync_enabled:
         form.claude_code_version_auto_sync_enabled,
+      enable_claude_oauth_system_prompt_injection:
+        form.enable_claude_oauth_system_prompt_injection,
+      claude_oauth_system_prompt: form.claude_oauth_system_prompt || "",
+      claude_oauth_system_prompt_blocks:
+        form.claude_oauth_system_prompt_blocks || "",
       // Payment configuration
       payment_enabled: form.payment_enabled,
       risk_control_enabled: form.risk_control_enabled,

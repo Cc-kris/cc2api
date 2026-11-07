@@ -227,6 +227,9 @@ type SystemSettings struct {
 	ClaudeCodeClientVersion            string // 出站声明的 Claude Code CLI 客户端版本号（管理员覆写）；空值跟随自动同步值
 	ClaudeCodeClientVersionSynced      string // 自动同步到的官方最新版本号（只读展示）
 	ClaudeCodeVersionAutoSyncEnabled   bool   // 是否启用 Claude Code 客户端版本号自动同步（默认 true）
+	EnableClaudeOAuthSystemPromptInjection bool   // 是否对非 CC 客户端的 OAuth 请求注入 CC system（默认 true）
+	ClaudeOAuthSystemPrompt                string // 自定义扩充提示词；空值使用内置
+	ClaudeOAuthSystemPromptBlocks          string // system blocks JSON；空值默认 3 块
 
 	// Web Search Emulation
 	WebSearchEmulationEnabled bool // 是否启用 web search 模拟
