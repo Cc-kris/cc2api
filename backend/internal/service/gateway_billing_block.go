@@ -74,7 +74,7 @@ func extractFirstUserText(body []byte) string {
 // buildBillingAttributionBlockJSON 构造 system 数组的 billing attribution block。
 //
 // 形态严格对齐真实 Claude Code CLI：
-//
+//	{"type":"text","text":"x-anthropic-billing-hdr: cc_version=2.1.92.abc; cc_entrypoint=cli;"}
 //	{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.92.{fp}; cc_entrypoint=cli; cch=00000;"}
 //
 // cch=00000 是签名占位符，由 signBillingHeaderCCH 在 buildUpstreamRequest 阶段
@@ -100,7 +100,7 @@ func buildBillingAttributionText(body []byte, cliVersion string) (string, error)
 	}
 	fp := computeClaudeCodeFingerprint(body, cliVersion)
 	return fmt.Sprintf(
-		"x-anthropic-billing-header: cc_version=%s.%s; cc_entrypoint=cli; cch=00000;",
+		"x-anthropic-billing-header: cc_version=%s.%s; cc_entrypoint=cli;",
 		cliVersion, fp,
 	), nil
 }
