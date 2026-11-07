@@ -160,6 +160,17 @@ const openAICodexUserAgentCacheTTL = 60 * time.Second
 const openAICodexUserAgentErrorTTL = 5 * time.Second
 const openAICodexUserAgentDBTimeout = 5 * time.Second
 
+// cachedOpenAICodexClientVersion 缓存出站 Codex 客户端版本号（进程内缓存，60s TTL）。
+type cachedOpenAICodexClientVersion struct {
+	version   string
+	expiresAt int64 // unix nano
+}
+
+const openAICodexClientVersionCacheTTL = 60 * time.Second
+const openAICodexClientVersionErrorTTL = 5 * time.Second
+const openAICodexClientVersionDBTimeout = 5 * time.Second
+const openAICodexClientVersionSFKey = "openai_codex_client_version"
+
 // DefaultSubscriptionGroupReader validates group references used by default subscriptions.
 type DefaultSubscriptionGroupReader interface {
 	GetByID(ctx context.Context, id int64) (*Group, error)
@@ -183,6 +194,8 @@ type SettingService struct {
 	antigravityUAVersionSF     singleflight.Group
 	openAICodexUACache         atomic.Value // *cachedOpenAICodexUserAgent
 	openAICodexUASF            singleflight.Group
+	openAICodexVersionCache    atomic.Value // *cachedOpenAICodexClientVersion
+	openAICodexVersionSF       singleflight.Group
 	claudeCodeVersionCache     atomic.Value // *cachedClaudeCodeClientVersion
 	claudeCodeVersionSF        singleflight.Group
 	salesPricingVersionCache   atomic.Value // *cachedSalesPricingVersion
@@ -1314,15 +1327,78 @@ func (s *SettingService) GetOpenAICodexUserAgent(ctx context.Context) string {
 	return fallback
 }
 
-// GetOpenAICodexCanonicalUserAgent 返回出站规范 Codex User-Agent（上游 setting_gateway_runtime.go:509）。
+// GetOpenAICodexClientVersion 返回出站声明的 Codex 客户端版本号。
+// 优先级：管理员面板覆写 → 自动同步的官方最新稳定版 → 内置常量。
+func (s *SettingService) GetOpenAICodexClientVersion(ctx context.Context) string {
+	fallback := codexCLIVersion
+	if s == nil || s.settingRepo == nil {
+		return fallback
+	}
+	if cached, ok := s.openAICodexVersionCache.Load().(*cachedOpenAICodexClientVersion); ok && cached != nil {
+		if time.Now().UnixNano() < cached.expiresAt {
+			return cached.version
+		}
+	}
+
+	result, _, _ := s.openAICodexVersionSF.Do(openAICodexClientVersionSFKey, func() (any, error) {
+		if cached, ok := s.openAICodexVersionCache.Load().(*cachedOpenAICodexClientVersion); ok && cached != nil {
+			if time.Now().UnixNano() < cached.expiresAt {
+				return cached.version, nil
+			}
+		}
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), openAICodexClientVersionDBTimeout)
+		defer cancel()
+		values, err := s.settingRepo.GetMultiple(dbCtx, []string{
+			SettingKeyOpenAICodexClientVersion,
+			SettingKeyOpenAICodexClientVersionSynced,
+		})
+		if err != nil {
+			slog.Warn("failed to get openai codex client version setting", "error", err)
+			s.openAICodexVersionCache.Store(&cachedOpenAICodexClientVersion{
+				version:   fallback,
+				expiresAt: time.Now().Add(openAICodexClientVersionErrorTTL).UnixNano(),
+			})
+			return fallback, nil
+		}
+		version := NormalizeCodexClientVersion(values[SettingKeyOpenAICodexClientVersion])
+		if version == "" {
+			version = NormalizeCodexClientVersion(values[SettingKeyOpenAICodexClientVersionSynced])
+		}
+		if version == "" {
+			version = fallback
+		}
+		s.openAICodexVersionCache.Store(&cachedOpenAICodexClientVersion{
+			version:   version,
+			expiresAt: time.Now().Add(openAICodexClientVersionCacheTTL).UnixNano(),
+		})
+		return version, nil
+	})
+	if version, ok := result.(string); ok && version != "" {
+		return version
+	}
+	return fallback
+}
+
+// InvalidateOpenAICodexClientVersionCache 丢弃版本号缓存，下次读取回源。
+// 面板保存与自动同步写入后调用。
+func (s *SettingService) InvalidateOpenAICodexClientVersionCache() {
+	if s == nil {
+		return
+	}
+	s.openAICodexVersionSF.Forget(openAICodexClientVersionSFKey)
+	s.openAICodexVersionCache.Store((*cachedOpenAICodexClientVersion)(nil))
+}
+
+// GetOpenAICodexCanonicalUserAgent 返回出站规范 Codex User-Agent。
 // 面板 UA 只贡献客户端名与 OS / 架构 / 终端指纹，版本段一律用生效版本重建。
-// 生效版本目前是内置基线 codexCLIVersion；T16 接入管理员版本和自动同步后改为
-// GetOpenAICodexClientVersion。
 func (s *SettingService) GetOpenAICodexCanonicalUserAgent(ctx context.Context) string {
 	if s == nil {
 		return codexCLIUserAgent
 	}
-	version := codexCLIVersion
+	version := s.GetOpenAICodexClientVersion(ctx)
 	ua := s.GetOpenAICodexUserAgent(ctx)
 	if _, pairedUA, ok := openai.PairCodexClientIdentity(ua); ok {
 		if rebuilt := openai.SetCodexUserAgentVersion(pairedUA, version); rebuilt != "" {
@@ -2215,6 +2291,9 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyLocalResponseCacheEnabled] = strconv.FormatBool(settings.LocalResponseCacheEnabled)
 	updates[SettingKeyAntigravityUserAgentVersion] = antigravity.NormalizeUserAgentVersion(settings.AntigravityUserAgentVersion)
 	updates[SettingKeyOpenAICodexUserAgent] = strings.TrimSpace(settings.OpenAICodexUserAgent)
+	updates[SettingKeyOpenAICodexClientVersion] = NormalizeCodexClientVersion(settings.OpenAICodexClientVersion)
+	updates[SettingKeyOpenAICodexVersionAutoSyncEnabled] = strconv.FormatBool(settings.OpenAICodexVersionAutoSyncEnabled)
+	// SettingKeyOpenAICodexClientVersionSynced 由自动同步任务独占写入，此处不得覆盖。
 	updates[SettingKeyClaudeCodeClientVersion] = NormalizeClaudeCodeClientVersion(settings.ClaudeCodeClientVersion)
 	updates[SettingKeyClaudeCodeVersionAutoSyncEnabled] = strconv.FormatBool(settings.ClaudeCodeVersionAutoSyncEnabled)
 	// SettingKeyClaudeCodeClientVersionSynced 由自动同步任务独占写入，此处不得覆盖，
@@ -2382,6 +2461,8 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 		value:     codexUA,
 		expiresAt: time.Now().Add(openAICodexUserAgentCacheTTL).UnixNano(),
 	})
+	// 版本号还取决于自动同步写入的 synced 键，此处只失效缓存，不回填陈旧值。
+	s.InvalidateOpenAICodexClientVersionCache()
 	openAIAdvancedSchedulerSettingSF.Forget(openAIAdvancedSchedulerSettingKey)
 	openAIAdvancedSchedulerSettingCache.Store(&cachedOpenAIAdvancedSchedulerSetting{
 		enabled:   settings.OpenAIAdvancedSchedulerEnabled,
@@ -3069,6 +3150,9 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyClaudeCodeClientVersion:                   "",
 		SettingKeyClaudeCodeClientVersionSynced:             "",
 		SettingKeyClaudeCodeVersionAutoSyncEnabled:          "true",
+		SettingKeyOpenAICodexClientVersion:                  "",
+		SettingKeyOpenAICodexClientVersionSynced:            "",
+		SettingKeyOpenAICodexVersionAutoSyncEnabled:         "true",
 		SettingKeyEnableClaudeOAuthSystemPromptInjection:    "true",
 		SettingKeyClaudeOAuthSystemPrompt:                   "",
 		SettingKeyClaudeOAuthSystemPromptBlocks:             "",
@@ -3784,6 +3868,14 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.LocalResponseCacheEnabled = settings[SettingKeyLocalResponseCacheEnabled] == "true"
 	result.AntigravityUserAgentVersion = antigravity.NormalizeUserAgentVersion(settings[SettingKeyAntigravityUserAgentVersion])
 	result.OpenAICodexUserAgent = strings.TrimSpace(settings[SettingKeyOpenAICodexUserAgent])
+	result.OpenAICodexClientVersion = NormalizeCodexClientVersion(settings[SettingKeyOpenAICodexClientVersion])
+	result.OpenAICodexClientVersionSynced = NormalizeCodexClientVersion(settings[SettingKeyOpenAICodexClientVersionSynced])
+	// 自动同步默认开启：缺失/空值一律视为开启。
+	if v, ok := settings[SettingKeyOpenAICodexVersionAutoSyncEnabled]; ok && v != "" {
+		result.OpenAICodexVersionAutoSyncEnabled = v == "true"
+	} else {
+		result.OpenAICodexVersionAutoSyncEnabled = true
+	}
 	result.ClaudeCodeClientVersion = NormalizeClaudeCodeClientVersion(settings[SettingKeyClaudeCodeClientVersion])
 	result.ClaudeCodeClientVersionSynced = NormalizeClaudeCodeClientVersion(settings[SettingKeyClaudeCodeClientVersionSynced])
 	// 自动同步默认开启：缺失/空值一律视为开启。

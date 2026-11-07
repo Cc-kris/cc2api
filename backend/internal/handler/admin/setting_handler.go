@@ -280,6 +280,9 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		LocalResponseCacheEnabled:               settings.LocalResponseCacheEnabled,
 		AntigravityUserAgentVersion:             settings.AntigravityUserAgentVersion,
 		OpenAICodexUserAgent:                    settings.OpenAICodexUserAgent,
+		OpenAICodexClientVersion:                settings.OpenAICodexClientVersion,
+		OpenAICodexClientVersionSynced:          settings.OpenAICodexClientVersionSynced,
+		OpenAICodexVersionAutoSyncEnabled:       settings.OpenAICodexVersionAutoSyncEnabled,
 		ClaudeCodeClientVersion:                 settings.ClaudeCodeClientVersion,
 		ClaudeCodeClientVersionSynced:           settings.ClaudeCodeClientVersionSynced,
 		ClaudeCodeVersionAutoSyncEnabled:        settings.ClaudeCodeVersionAutoSyncEnabled,
@@ -634,6 +637,8 @@ type UpdateSettingsRequest struct {
 	LocalResponseCacheEnabled              *bool   `json:"local_response_cache_enabled"`
 	AntigravityUserAgentVersion            *string `json:"antigravity_user_agent_version"`
 	OpenAICodexUserAgent                   *string `json:"openai_codex_user_agent"`
+	OpenAICodexClientVersion               *string `json:"openai_codex_client_version"`
+	OpenAICodexVersionAutoSyncEnabled      *bool   `json:"openai_codex_version_auto_sync_enabled"`
 	ClaudeCodeClientVersion                *string `json:"claude_code_client_version"`
 	ClaudeCodeVersionAutoSyncEnabled       *bool   `json:"claude_code_version_auto_sync_enabled"`
 	EnableClaudeOAuthSystemPromptInjection *bool   `json:"enable_claude_oauth_system_prompt_injection"`
@@ -1600,6 +1605,15 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			return
 		}
 	}
+	if req.OpenAICodexClientVersion != nil {
+		// 该值会被拼进出站 User-Agent 与 version 头；空串表示跟随自动同步。
+		normalized := strings.TrimSpace(*req.OpenAICodexClientVersion)
+		if normalized != "" && service.NormalizeCodexClientVersion(normalized) == "" {
+			response.Error(c, http.StatusBadRequest, "openai_codex_client_version must be empty or a valid version (e.g. 0.146.0)")
+			return
+		}
+		req.OpenAICodexClientVersion = &normalized
+	}
 	if req.ClaudeCodeClientVersion != nil {
 		raw := strings.TrimSpace(*req.ClaudeCodeClientVersion)
 		normalized := service.NormalizeClaudeCodeClientVersion(raw)
@@ -1849,6 +1863,20 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 				return *req.OpenAICodexUserAgent
 			}
 			return previousSettings.OpenAICodexUserAgent
+		}(),
+		OpenAICodexClientVersion: func() string {
+			if req.OpenAICodexClientVersion != nil {
+				return *req.OpenAICodexClientVersion
+			}
+			return previousSettings.OpenAICodexClientVersion
+		}(),
+		// 同步值由自动同步任务独占写入，面板保存时原样带回，避免被清空。
+		OpenAICodexClientVersionSynced: previousSettings.OpenAICodexClientVersionSynced,
+		OpenAICodexVersionAutoSyncEnabled: func() bool {
+			if req.OpenAICodexVersionAutoSyncEnabled != nil {
+				return *req.OpenAICodexVersionAutoSyncEnabled
+			}
+			return previousSettings.OpenAICodexVersionAutoSyncEnabled
 		}(),
 		ClaudeCodeClientVersion: func() string {
 			if req.ClaudeCodeClientVersion != nil {
@@ -2322,6 +2350,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		LocalResponseCacheEnabled:               updatedSettings.LocalResponseCacheEnabled,
 		AntigravityUserAgentVersion:             updatedSettings.AntigravityUserAgentVersion,
 		OpenAICodexUserAgent:                    updatedSettings.OpenAICodexUserAgent,
+		OpenAICodexClientVersion:                updatedSettings.OpenAICodexClientVersion,
+		OpenAICodexClientVersionSynced:          updatedSettings.OpenAICodexClientVersionSynced,
+		OpenAICodexVersionAutoSyncEnabled:       updatedSettings.OpenAICodexVersionAutoSyncEnabled,
 		ClaudeCodeClientVersion:                 updatedSettings.ClaudeCodeClientVersion,
 		ClaudeCodeClientVersionSynced:           updatedSettings.ClaudeCodeClientVersionSynced,
 		ClaudeCodeVersionAutoSyncEnabled:        updatedSettings.ClaudeCodeVersionAutoSyncEnabled,
@@ -2834,6 +2865,12 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.OpenAICodexUserAgent != after.OpenAICodexUserAgent {
 		changed = append(changed, "openai_codex_user_agent")
+	}
+	if before.OpenAICodexClientVersion != after.OpenAICodexClientVersion {
+		changed = append(changed, "openai_codex_client_version")
+	}
+	if before.OpenAICodexVersionAutoSyncEnabled != after.OpenAICodexVersionAutoSyncEnabled {
+		changed = append(changed, "openai_codex_version_auto_sync_enabled")
 	}
 	if before.ClaudeCodeClientVersion != after.ClaudeCodeClientVersion {
 		changed = append(changed, "claude_code_client_version")

@@ -349,6 +349,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	balanceLowNotifyScanner := service.ProvideBalanceLowNotifyScanner(balanceNotifyService)
 	accountExpiryService := service.ProvideAccountExpiryService(accountRepository)
 	claudeCodeVersionSyncService := service.ProvideClaudeCodeVersionSyncService(settingRepository, settingService, gitHubReleaseClient)
+	openAICodexVersionSyncService := service.ProvideOpenAICodexVersionSyncService(settingRepository, settingService, gitHubReleaseClient)
 	subscriptionExpiryService := service.ProvideSubscriptionExpiryService(userSubscriptionRepository, settingRepository, notificationEmailService)
 	scheduledTestRunnerService := service.ProvideScheduledTestRunnerService(scheduledTestPlanRepository, scheduledTestService, accountTestService, rateLimitService, configConfig)
 	paymentOrderExpiryService := service.ProvidePaymentOrderExpiryService(paymentService)
@@ -359,7 +360,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	financeRevenueRecognitionService := service.NewFinanceRevenueRecognitionService(financeRevenueRecognitionRepository, configConfig)
 	financeRuntime := service.ProvideFinanceRuntime(financeCatalogVersionSync, financeUsageScanner, financeAlertService, financeRevenueRecognitionService, financeBackfillService, financeExportService)
 	upstreamFinanceSyncRuntime := service.ProvideUpstreamFinanceSyncRuntime(upstreamFinanceSyncService, upstreamFinanceSyncRepository)
-	v3 := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, schedulerSnapshotService, tokenRefreshService, balanceLowNotifyScanner, accountExpiryService, claudeCodeVersionSyncService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, customGroupUsageRollup, financeRuntime, upstreamFinanceSyncRuntime)
+	v3 := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, schedulerSnapshotService, tokenRefreshService, balanceLowNotifyScanner, accountExpiryService, claudeCodeVersionSyncService, openAICodexVersionSyncService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, customGroupUsageRollup, financeRuntime, upstreamFinanceSyncRuntime)
 	application := &Application{
 		Server:  httpServer,
 		Cleanup: v3,
@@ -399,6 +400,7 @@ func provideCleanup(
 	balanceLowNotifyScanner *service.BalanceLowNotifyScanner,
 	accountExpiry *service.AccountExpiryService,
 	claudeCodeVersionSync *service.ClaudeCodeVersionSyncService,
+	codexVersionSync *service.OpenAICodexVersionSyncService,
 	subscriptionExpiry *service.SubscriptionExpiryService,
 	usageCleanup *service.UsageCleanupService,
 	idempotencyCleanup *service.IdempotencyCleanupService,
@@ -519,6 +521,10 @@ func provideCleanup(
 			}},
 			{"ClaudeCodeVersionSyncService", func() error {
 				claudeCodeVersionSync.Stop()
+				return nil
+			}},
+			{"OpenAICodexVersionSyncService", func() error {
+				codexVersionSync.Stop()
 				return nil
 			}},
 			{"SubscriptionExpiryService", func() error {
