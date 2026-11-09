@@ -218,11 +218,20 @@ func (r *dashboardAggregationRepository) CleanupUsageLogs(ctx context.Context, c
 		return r.dropUsageLogsPartitions(ctx, cutoff)
 	}
 	for {
+		// [CLEANUP-FK-FIX] 2026-11-09：usage_logs 上有 4 个 ON DELETE RESTRICT 外键
+		// (usage_finance_records / usage_revenue_allocations /
+		//  usage_cost_settlement_allocations / usage_upstream_attempts)。
+		// 旧实现在 victims 里只按时间取最旧的批量行，其中任何一行被引用就整批回滚，
+		// 于是保留清理每次必然失败、且永远删不动数据。选行阶段直接跳过被引用的行。
 		res, err := r.sql.ExecContext(ctx, `
 			WITH victims AS (
-				SELECT ctid
-				FROM usage_logs
-				WHERE created_at < $1
+				SELECT ul.ctid
+				FROM usage_logs ul
+				WHERE ul.created_at < $1
+				  AND NOT EXISTS (SELECT 1 FROM usage_finance_records x WHERE x.usage_log_id = ul.id)
+				  AND NOT EXISTS (SELECT 1 FROM usage_revenue_allocations x WHERE x.usage_log_id = ul.id)
+				  AND NOT EXISTS (SELECT 1 FROM usage_cost_settlement_allocations x WHERE x.usage_log_id = ul.id)
+				  AND NOT EXISTS (SELECT 1 FROM usage_upstream_attempts x WHERE x.usage_log_id = ul.id)
 				LIMIT $2
 			)
 			DELETE FROM usage_logs
@@ -517,12 +526,42 @@ func (r *dashboardAggregationRepository) dropUsageLogsPartitions(ctx context.Con
 		}
 		month = month.UTC()
 		if month.Before(cutoffMonth) {
+			// [CLEANUP-FK-FIX] 2026-11-09：分区里只要还有被 ON DELETE RESTRICT
+			// 外键引用的行，DROP TABLE 就会触发外键校验失败（removing partition
+			// violates foreign key constraint），整轮保留清理随之报错。
+			// 这种分区直接跳过，等引用数据被清理后再回收。
+			referenced, err := r.partitionHasReferencedRows(ctx, name)
+			if err != nil {
+				return err
+			}
+			if referenced {
+				log.Printf("[DashboardAggregation] 跳过分区 %s：仍被财务/上游外键引用，待引用数据清理后再回收", name)
+				continue
+			}
 			if _, err := r.sql.ExecContext(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", pq.QuoteIdentifier(name))); err != nil {
 				return err
 			}
 		}
 	}
 	return rows.Err()
+}
+
+// partitionHasReferencedRows 判断某个 usage_logs 分区里是否存在被 RESTRICT 外键引用的行。
+func (r *dashboardAggregationRepository) partitionHasReferencedRows(ctx context.Context, partition string) (bool, error) {
+	query := fmt.Sprintf(`
+		SELECT EXISTS(
+			SELECT 1 FROM %s ul
+			WHERE EXISTS (SELECT 1 FROM usage_finance_records x WHERE x.usage_log_id = ul.id)
+			   OR EXISTS (SELECT 1 FROM usage_revenue_allocations x WHERE x.usage_log_id = ul.id)
+			   OR EXISTS (SELECT 1 FROM usage_cost_settlement_allocations x WHERE x.usage_log_id = ul.id)
+			   OR EXISTS (SELECT 1 FROM usage_upstream_attempts x WHERE x.usage_log_id = ul.id)
+		)
+	`, pq.QuoteIdentifier(partition))
+	var found bool
+	if err := scanSingleRow(ctx, r.sql, query, nil, &found); err != nil {
+		return false, err
+	}
+	return found, nil
 }
 
 func (r *dashboardAggregationRepository) createUsageLogsPartition(ctx context.Context, month time.Time) error {

@@ -71,7 +71,7 @@
       :data-testid="`${testIdPrefix}-create-account-submit`"
       type="button"
       class="btn btn-primary w-full"
-      :disabled="isSubmitting || !email.trim() || password.length < 6 || (invitationCodeEnabled && !invitationCode.trim())"
+      :disabled="isSubmitting || !email.trim() || password.length < 6 || (invitationCodeEnabled && !invitationCode.trim()) || (turnstileEnabled && !turnstileToken)"
       @click="handleSubmit"
     >
       {{ isSubmitting ? t('common.processing') : t('auth.createAccount') }}
@@ -241,6 +241,15 @@ async function handleSendCode() {
 function handleSubmit() {
   const trimmedEmail = email.value.trim()
   if (!trimmedEmail || password.value.length < 6) {
+    return
+  }
+
+  // Turnstile 票据一次性：发送验证码已消耗上一枚，reset 后要等新票据回调。
+  // 缺票时不能提交。注意：CCAI 的 create-account 端点本身不校验 Turnstile，
+  // 后端只在 send-verify-code 上校验，这里是前端侧的门。
+  // 表单的隐式提交（输入框回车）绕得过按钮的 disabled，所以这里必须再挡一次。
+  if (turnstileEnabled.value && !turnstileToken.value) {
+    sendCodeError.value = t('auth.completeVerification')
     return
   }
 

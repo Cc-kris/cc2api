@@ -2204,7 +2204,6 @@ func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Co
 	// 处理错误响应
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
-		contentType := resp.Header.Get("Content-Type")
 		// 尽早关闭原始响应体，释放连接；后续逻辑仍可能需要读取 body，因此用内存副本重新包装。
 		_ = resp.Body.Close()
 		resp.Body = io.NopCloser(bytes.NewReader(respBody))
@@ -2306,7 +2305,6 @@ func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Co
 							Header:     retryResp.Header.Clone(),
 							Body:       io.NopCloser(bytes.NewReader(retryRespBody)),
 						}
-						contentType = resp.Header.Get("Content-Type")
 					}
 				} else {
 					if switchErr, ok := IsAntigravityAccountSwitchError(retryErr); ok {
@@ -2390,9 +2388,6 @@ func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Co
 			})
 			return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: unwrappedForOps}
 		}
-		if contentType == "" {
-			contentType = "application/json"
-		}
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 			Platform:           account.Platform,
 			AccountID:          account.ID,
@@ -2404,7 +2399,9 @@ func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Co
 			Detail:             upstreamDetail,
 		})
 		logger.LegacyPrintf("service.antigravity_gateway", "[antigravity-Forward] upstream error status=%d body=%s", resp.StatusCode, truncateForLog(unwrappedForOps, 500))
-		c.Data(resp.StatusCode, contentType, unwrappedForOps)
+		MarkResponseCommitted(c)
+		// 原始上游错误体仅保留在 ops 日志中；返回客户端的错误体需脱敏，避免泄露账号池身份（项目号/服务账号等）
+		c.Data(resp.StatusCode, "application/json", buildAntigravityClientErrorBody(resp.StatusCode, unwrappedForOps))
 		return nil, fmt.Errorf("antigravity upstream error: %d", resp.StatusCode)
 	}
 
@@ -4199,6 +4196,67 @@ func filterEmptyPartsFromGeminiRequest(body []byte) ([]byte, error) {
 	return json.Marshal(payload)
 }
 
+// antigravityClaudeErrorTypes 是 Anthropic 公开的错误类型闭集，上游给出其他取值时按状态码兜底。
+var antigravityClaudeErrorTypes = map[string]struct{}{
+	"invalid_request_error": {},
+	"authentication_error":  {},
+	"permission_error":      {},
+	"not_found_error":       {},
+	"request_too_large":     {},
+	"rate_limit_error":      {},
+	"api_error":             {},
+	"overloaded_error":      {},
+}
+
+func antigravityClaudeErrorTypeFromHTTP(statusCode int) string {
+	switch statusCode {
+	case http.StatusBadRequest:
+		return "invalid_request_error"
+	case http.StatusUnauthorized:
+		return "authentication_error"
+	case http.StatusForbidden:
+		return "permission_error"
+	case http.StatusNotFound:
+		return "not_found_error"
+	case http.StatusRequestEntityTooLarge:
+		return "request_too_large"
+	case http.StatusTooManyRequests:
+		return "rate_limit_error"
+	case 529:
+		return "overloaded_error"
+	default:
+		return "api_error"
+	}
+}
+
+// buildAntigravityClaudeClientErrorBody 为 ForwardUpstream（Claude 协议）构造返回客户端的错误体：
+// 只保留 Claude 风格的 type/error.type/error.message，message 经 sanitizeAntigravityErrorText 脱敏，
+// 丢弃上游的其他字段。Gemini 协议出口见 buildAntigravityClientErrorBody。
+func buildAntigravityClaudeClientErrorBody(statusCode int, body []byte) []byte {
+	errType := strings.TrimSpace(gjson.GetBytes(body, "error.type").String())
+	if _, ok := antigravityClaudeErrorTypes[errType]; !ok {
+		errType = antigravityClaudeErrorTypeFromHTTP(statusCode)
+	}
+	message := strings.TrimSpace(extractUpstreamErrorMessage(body))
+	if message == "" {
+		message = http.StatusText(statusCode)
+		if message == "" {
+			message = "Upstream request failed"
+		}
+	}
+	out, err := json.Marshal(map[string]any{
+		"type": "error",
+		"error": map[string]any{
+			"type":    errType,
+			"message": sanitizeAntigravityErrorText(message),
+		},
+	})
+	if err != nil {
+		return []byte(`{"type":"error","error":{"type":"api_error","message":"Upstream request failed"}}`)
+	}
+	return out
+}
+
 // ForwardUpstream 使用 base_url + /v1/messages + 双 header 认证透传上游 Claude 请求
 func (s *AntigravityGatewayService) ForwardUpstream(ctx context.Context, c *gin.Context, account *Account, body []byte) (*ForwardResult, error) {
 	startTime := time.Now()
@@ -4268,10 +4326,23 @@ func (s *AntigravityGatewayService) ForwardUpstream(ctx context.Context, c *gin.
 			s.handleUpstreamError(ctx, prefix, account, resp.StatusCode, resp.Header, respBody, originalModel, 0, "", false)
 		}
 
-		// 透传上游错误
-		c.Header("Content-Type", resp.Header.Get("Content-Type"))
-		c.Status(resp.StatusCode)
-		_, _ = c.Writer.Write(respBody)
+		// 原始上游错误体只进 ops 日志；返回客户端的错误体保持 Claude 错误格式，
+		// message 脱敏，避免泄露账号池身份（项目号/服务账号等）。
+		upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody)))
+		upstreamDetail := s.getUpstreamErrorDetail(respBody)
+		setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
+		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			Platform:           account.Platform,
+			AccountID:          account.ID,
+			AccountName:        account.Name,
+			UpstreamStatusCode: resp.StatusCode,
+			UpstreamRequestID:  resp.Header.Get("x-request-id"),
+			Kind:               "http_error",
+			Message:            upstreamMsg,
+			Detail:             upstreamDetail,
+		})
+		MarkResponseCommitted(c)
+		c.Data(resp.StatusCode, "application/json", buildAntigravityClaudeClientErrorBody(resp.StatusCode, respBody))
 
 		return &ForwardResult{
 			Model: originalModel,

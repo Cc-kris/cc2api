@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"html"
 	"strconv"
 	"strings"
 	"sync"
@@ -167,11 +168,11 @@ type CreateAPIKeyRequest struct {
 
 // UpdateAPIKeyRequest 更新API Key请求
 type UpdateAPIKeyRequest struct {
-	Name        *string  `json:"name"`
-	GroupID     *int64   `json:"group_id"`
-	Status      *string  `json:"status"`
-	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单（空数组清空）
-	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单（空数组清空）
+	Name        *string   `json:"name"`
+	GroupID     *int64    `json:"group_id"`
+	Status      *string   `json:"status"`
+	IPWhitelist *[]string `json:"ip_whitelist"` // IP 白名单（nil 不修改，空数组清空）
+	IPBlacklist *[]string `json:"ip_blacklist"` // IP 黑名单（nil 不修改，空数组清空）
 
 	// Quota fields
 	Quota           *float64   `json:"quota"`       // Quota limit in USD (nil = no change, 0 = unlimited)
@@ -399,7 +400,7 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 	apiKey := &APIKey{
 		UserID:      userID,
 		Key:         key,
-		Name:        req.Name,
+		Name:        escapeAPIKeyName(req.Name),
 		GroupID:     req.GroupID,
 		Status:      StatusActive,
 		IPWhitelist: req.IPWhitelist,
@@ -519,26 +520,26 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 
 	// 验证所有权
 	if apiKey.UserID != userID {
-		return nil, ErrInsufficientPerms
+		return nil, ErrAPIKeyNotFound // 与不存在的 Key 同一响应，不泄露存在性（V01-R11）
 	}
 
 	// 验证 IP 白名单格式
-	if len(req.IPWhitelist) > 0 {
-		if invalid := ip.ValidateIPPatterns(req.IPWhitelist); len(invalid) > 0 {
+	if req.IPWhitelist != nil && len(*req.IPWhitelist) > 0 {
+		if invalid := ip.ValidateIPPatterns(*req.IPWhitelist); len(invalid) > 0 {
 			return nil, fmt.Errorf("%w: %v", ErrInvalidIPPattern, invalid)
 		}
 	}
 
 	// 验证 IP 黑名单格式
-	if len(req.IPBlacklist) > 0 {
-		if invalid := ip.ValidateIPPatterns(req.IPBlacklist); len(invalid) > 0 {
+	if req.IPBlacklist != nil && len(*req.IPBlacklist) > 0 {
+		if invalid := ip.ValidateIPPatterns(*req.IPBlacklist); len(invalid) > 0 {
 			return nil, fmt.Errorf("%w: %v", ErrInvalidIPPattern, invalid)
 		}
 	}
 
 	// 更新字段
 	if req.Name != nil {
-		apiKey.Name = *req.Name
+		apiKey.Name = escapeAPIKeyName(*req.Name)
 	}
 
 	if req.GroupID != nil {
@@ -597,9 +598,13 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 		}
 	}
 
-	// 更新 IP 限制（空数组会清空设置）
-	apiKey.IPWhitelist = req.IPWhitelist
-	apiKey.IPBlacklist = req.IPBlacklist
+	// 更新 IP 限制（nil 不修改，空数组清空设置）
+	if req.IPWhitelist != nil {
+		apiKey.IPWhitelist = *req.IPWhitelist
+	}
+	if req.IPBlacklist != nil {
+		apiKey.IPBlacklist = *req.IPBlacklist
+	}
 
 	// Update rate limit configuration
 	if req.RateLimit5h != nil {
@@ -645,7 +650,7 @@ func (s *APIKeyService) Delete(ctx context.Context, id int64, userID int64) erro
 
 	// 验证当前用户是否为该 API Key 的所有者
 	if ownerID != userID {
-		return ErrInsufficientPerms
+		return ErrAPIKeyNotFound // 与不存在的 Key 同一响应，不泄露存在性（V01-R11）
 	}
 
 	// 清除Redis缓存（使用 userID 而非 apiKey.UserID）
@@ -880,4 +885,11 @@ func (s *APIKeyService) UpdateRateLimitUsage(ctx context.Context, apiKeyID int64
 		return nil
 	}
 	return s.apiKeyRepo.IncrementRateLimitUsage(ctx, apiKeyID, cost)
+}
+
+// escapeAPIKeyName 按 HTML 转义存储 Key 名称（V01-R11，上游 0ae332961）。
+// 先反转义再转义，保证幂等：前端编辑弹窗会把已转义的名称原样提交回来，
+// 直接 EscapeString 会每保存一次就多转义一层（A&B → A&amp;B → A&amp;amp;B）。
+func escapeAPIKeyName(name string) string {
+	return html.EscapeString(html.UnescapeString(name))
 }

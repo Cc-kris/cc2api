@@ -6,16 +6,22 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/Wei-Shaw/sub2api/internal/repository"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 )
 
@@ -789,4 +795,102 @@ func TestUserHandlerStartIdentityBindingReturnsAuthorizeURL(t *testing.T) {
 	require.Contains(t, resp.Data.AuthorizeURL, "/api/v1/auth/oauth/wechat/bind/start")
 	require.Contains(t, resp.Data.AuthorizeURL, "intent=bind_current_user")
 	require.Contains(t, resp.Data.AuthorizeURL, "redirect=%2Fsettings%2Fprofile")
+}
+
+func (s *userHandlerEmailCacheStub) IncrVerificationCodeAttempts(context.Context, string) (int, error) {
+	if s.data == nil {
+		return 0, errors.New("verification code not found")
+	}
+	s.data.Attempts++
+	return s.data.Attempts, nil
+}
+
+func (s *userHandlerEmailCacheStub) IncrNotifyVerifyCodeAttempts(context.Context, string) (int, error) {
+	return 0, errors.New("notify verification code not found")
+}
+
+func (s *userHandlerEmailCacheStub) ConsumePasswordResetToken(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
+// V01-AC28：通知邮箱验证码并发错误码，计数原子递增，不能突破 5 次上限；
+// 达到上限后正确的码也被拒（429 VERIFY_CODE_MAX_ATTEMPTS）。
+func TestUserHandlerVerifyNotifyEmailConcurrentWrongCodesCannotExceedAttemptCap(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { _ = rdb.Close() })
+	emailCache := repository.NewEmailCache(rdb)
+
+	const email = "notify-extra@example.com"
+	ctx := context.Background()
+	require.NoError(t, emailCache.SetNotifyVerifyCode(ctx, email, &service.VerificationCodeData{
+		Code:      "123456",
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(15 * time.Minute),
+	}, 15*time.Minute))
+
+	repo := &userHandlerRepoStub{
+		user: &service.User{
+			ID:       21,
+			Email:    "notify-owner@example.com",
+			Username: "notify-owner",
+			Role:     service.RoleUser,
+			Status:   service.StatusActive,
+		},
+	}
+	handler := NewUserHandler(service.NewUserService(repo, nil, nil, nil), nil, nil, emailCache, nil, nil)
+
+	verify := func(code string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		body := []byte(`{"email":"` + email + `","code":"` + code + `"}`)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/user/notify-email/verify", bytes.NewReader(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 21})
+		handler.VerifyNotifyEmail(c)
+		return recorder
+	}
+	reasonOf := func(recorder *httptest.ResponseRecorder) string {
+		var resp struct {
+			Reason string `json:"reason"`
+		}
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+		return resp.Reason
+	}
+
+	const workers = 20
+	var invalid, maxed atomic.Int32
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rec := verify("000000")
+			switch {
+			case rec.Code == http.StatusBadRequest && reasonOf(rec) == "INVALID_VERIFY_CODE":
+				invalid.Add(1)
+			case rec.Code == http.StatusTooManyRequests && reasonOf(rec) == "VERIFY_CODE_MAX_ATTEMPTS":
+				maxed.Add(1)
+			default:
+				t.Errorf("unexpected response: %d %s", rec.Code, rec.Body.String())
+			}
+		}()
+	}
+	wg.Wait()
+
+	// 只有第 1-4 次错误返回 400，第 5 次起全部 429。
+	require.LessOrEqual(t, int(invalid.Load()), 4)
+	require.Equal(t, workers, int(invalid.Load()+maxed.Load()))
+
+	data, err := emailCache.GetNotifyVerifyCode(ctx, email)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, data.Attempts, 5)
+
+	// 达到上限后正确的码也被拒。
+	rec := verify("123456")
+	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+	require.Equal(t, "VERIFY_CODE_MAX_ATTEMPTS", reasonOf(rec))
+	require.Empty(t, repo.user.BalanceNotifyExtraEmails)
 }

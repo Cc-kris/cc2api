@@ -6375,7 +6375,41 @@ func resolveOpenAICompactSessionID(c *gin.Context) string {
 	return uuid.NewString()
 }
 
+// openAIResponsesRequestPathSuffix 返回可拼接到上游 /responses URL 后面的子路径。
+// 不可转发的子路径返回空串（退化为裸 /responses）；真正的拒绝由入口守卫
+// IsForwardableOpenAIResponsesRequestPath 负责。这样即便将来新增路由漏挂守卫，
+// 拼进上游 URL 的也只会是合规片段。
 func openAIResponsesRequestPathSuffix(c *gin.Context) string {
+	suffix, ok := sanitizedUpstreamPathSuffix(rawOpenAIResponsesRequestPathSuffix(c))
+	if !ok {
+		return ""
+	}
+	return suffix
+}
+
+// IsForwardableOpenAIResponsesRequestPath 判断入站请求携带的 /responses 子路径
+// 是否可以安全转发。路由层用它在鉴权后、调度前直接拒绝畸形子路径。
+//
+// 除了实际转发的后缀（最后一个 /responses 之后），还要校验路由通配符匹配到的
+// 整段子路径：否则 /responses/%2e%2e/responses/compact 这类请求，不合规片段
+// 藏在后一个 /responses 之前，会躲过校验进入调度。
+func IsForwardableOpenAIResponsesRequestPath(c *gin.Context) bool {
+	if _, ok := sanitizedUpstreamPathSuffix(rawOpenAIResponsesRequestPathSuffix(c)); !ok {
+		return false
+	}
+	if c == nil {
+		return true
+	}
+	if subpath := c.Param("subpath"); subpath != "" && subpath != "/" {
+		if _, ok := sanitizedUpstreamPathSuffix(strings.TrimRight(subpath, "/")); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// rawOpenAIResponsesRequestPathSuffix 仅做提取，不做任何安全判断。
+func rawOpenAIResponsesRequestPathSuffix(c *gin.Context) string {
 	if c == nil || c.Request == nil || c.Request.URL == nil {
 		return ""
 	}
@@ -6399,8 +6433,9 @@ func openAIResponsesRequestPathSuffix(c *gin.Context) string {
 
 func appendOpenAIResponsesRequestPathSuffix(baseURL, suffix string) string {
 	trimmedBase := strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	trimmedSuffix := strings.TrimSpace(suffix)
-	if trimmedBase == "" || trimmedSuffix == "" {
+	// 兜底：调用方漏了校验时，这里也不会把不合规的片段拼进上游 URL。
+	trimmedSuffix, ok := sanitizedUpstreamPathSuffix(suffix)
+	if !ok || trimmedBase == "" || trimmedSuffix == "" {
 		return trimmedBase
 	}
 	return trimmedBase + trimmedSuffix
@@ -6739,6 +6774,8 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	}()
 
 	if billingErr != nil {
+		usageLog.ActualCost = 0
+		writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.openai_gateway")
 		return billingErr
 	}
 	writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.openai_gateway")

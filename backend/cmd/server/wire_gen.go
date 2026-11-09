@@ -351,7 +351,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	userVideoGenerationHandler := handler.NewUserVideoGenerationHandler(apiKeyService, seedaceVideoService, seedaceVideoHistoryService)
 	handlerSettingHandler := handler.ProvideSettingHandler(settingService, buildInfo, notificationEmailService)
 	totpHandler := handler.NewTotpHandler(totpService)
-	handlerPaymentHandler := handler.NewPaymentHandler(paymentService, paymentConfigService, channelService)
+	handlerPaymentHandler := handler.NewPaymentHandler(paymentService, paymentConfigService)
 	paymentWebhookHandler := handler.NewPaymentWebhookHandler(paymentService, registry)
 	availableChannelHandler := handler.NewAvailableChannelHandler(channelService, apiKeyService, settingService)
 	modelSquareService := service.NewModelSquareService(groupRepository, accountRepository, userRepository, userGroupRateRepository, channelService, pricingService, modelPricingResolver, settingService, configConfig)

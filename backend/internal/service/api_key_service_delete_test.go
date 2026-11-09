@@ -211,7 +211,7 @@ func (s *apiKeyCacheStub) SubscribeAuthCacheInvalidation(ctx context.Context, ha
 // 预期行为：
 //   - GetKeyAndOwnerID 返回所有者 ID 为 1
 //   - 调用者 userID 为 2（不匹配）
-//   - 返回 ErrInsufficientPerms 错误
+//   - 返回 ErrAPIKeyNotFound（与不存在的 Key 一致，V01-R11）
 //   - Delete 方法不被调用
 //   - 缓存不被清除
 func TestApiKeyService_Delete_OwnerMismatch(t *testing.T) {
@@ -222,7 +222,7 @@ func TestApiKeyService_Delete_OwnerMismatch(t *testing.T) {
 	svc := &APIKeyService{apiKeyRepo: repo, cache: cache}
 
 	err := svc.Delete(context.Background(), 10, 2) // API Key ID=10, 调用者 userID=2
-	require.ErrorIs(t, err, ErrInsufficientPerms)
+	require.ErrorIs(t, err, ErrAPIKeyNotFound)
 	require.Empty(t, repo.deletedIDs)   // 验证删除操作未被调用
 	require.Empty(t, cache.invalidated) // 验证缓存未被清除
 	require.Empty(t, cache.deleteAuthKeys)

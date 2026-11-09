@@ -1920,8 +1920,8 @@ func TestLoad_DefaultGatewayUsageRecordConfig(t *testing.T) {
 	if cfg.Gateway.UsageRecord.TaskTimeoutSeconds != 5 {
 		t.Fatalf("task_timeout_seconds = %d, want 5", cfg.Gateway.UsageRecord.TaskTimeoutSeconds)
 	}
-	if cfg.Gateway.UsageRecord.OverflowPolicy != UsageRecordOverflowPolicySample {
-		t.Fatalf("overflow_policy = %s, want %s", cfg.Gateway.UsageRecord.OverflowPolicy, UsageRecordOverflowPolicySample)
+	if cfg.Gateway.UsageRecord.OverflowPolicy != UsageRecordOverflowPolicySync {
+		t.Fatalf("overflow_policy = %s, want %s", cfg.Gateway.UsageRecord.OverflowPolicy, UsageRecordOverflowPolicySync)
 	}
 	if cfg.Gateway.UsageRecord.OverflowSamplePercent != 10 {
 		t.Fatalf("overflow_sample_percent = %d, want 10", cfg.Gateway.UsageRecord.OverflowSamplePercent)
@@ -1953,6 +1953,43 @@ func TestLoad_DefaultGatewayUsageRecordConfig(t *testing.T) {
 	if cfg.Gateway.UsageRecord.AutoScaleCooldownSeconds != 10 {
 		t.Fatalf("auto_scale_cooldown_seconds = %d, want 10", cfg.Gateway.UsageRecord.AutoScaleCooldownSeconds)
 	}
+}
+
+// 默认值改为 sync 后，显式配置 sample/drop 的部署必须保持原样（V01-AC46）。
+func TestLoad_ExplicitGatewayUsageRecordOverflowPolicyPreserved(t *testing.T) {
+	t.Run("config file sample", func(t *testing.T) {
+		resetViperWithJWTSecret(t)
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "config.yaml")
+		require.NoError(t, os.WriteFile(configPath, []byte("gateway:\n  usage_record:\n    overflow_policy: sample\n    overflow_sample_percent: 25\n"), 0o644))
+		t.Setenv("DATA_DIR", tempDir)
+
+		cfg, err := Load()
+		require.NoError(t, err)
+		require.Equal(t, UsageRecordOverflowPolicySample, cfg.Gateway.UsageRecord.OverflowPolicy)
+		require.Equal(t, 25, cfg.Gateway.UsageRecord.OverflowSamplePercent)
+	})
+
+	t.Run("config file drop", func(t *testing.T) {
+		resetViperWithJWTSecret(t)
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "config.yaml")
+		require.NoError(t, os.WriteFile(configPath, []byte("gateway:\n  usage_record:\n    overflow_policy: drop\n"), 0o644))
+		t.Setenv("DATA_DIR", tempDir)
+
+		cfg, err := Load()
+		require.NoError(t, err)
+		require.Equal(t, UsageRecordOverflowPolicyDrop, cfg.Gateway.UsageRecord.OverflowPolicy)
+	})
+
+	t.Run("env sample", func(t *testing.T) {
+		resetViperWithJWTSecret(t)
+		t.Setenv("GATEWAY_USAGE_RECORD_OVERFLOW_POLICY", "sample")
+
+		cfg, err := Load()
+		require.NoError(t, err)
+		require.Equal(t, UsageRecordOverflowPolicySample, cfg.Gateway.UsageRecord.OverflowPolicy)
+	})
 }
 
 func TestLoad_DefaultGatewayImageStreamConfig(t *testing.T) {
