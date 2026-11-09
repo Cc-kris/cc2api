@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/moduleflags"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 )
 
@@ -21,7 +22,10 @@ type UpstreamFinanceSyncRuntime struct {
 func ProvideUpstreamFinanceSyncRuntime(service *UpstreamFinanceSyncService, repo UpstreamFinanceSyncRepository) *UpstreamFinanceSyncRuntime {
 	host, _ := os.Hostname()
 	runtime := &UpstreamFinanceSyncRuntime{service: service, repo: repo, owner: fmt.Sprintf("%s:%d", host, os.Getpid())}
-	runtime.Start()
+	// [FINANCE-OFF] 财务板块已整体停用，不再启动上游财务同步任务。
+	if moduleflags.FinanceEnabled {
+		runtime.Start()
+	}
 	return runtime
 }
 

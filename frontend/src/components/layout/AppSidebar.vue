@@ -187,7 +187,7 @@ import { useAdminSettingsStore, useAppStore, useAuthStore, useOnboardingStore } 
 import VersionBadge from '@/components/common/VersionBadge.vue'
 import { canAccessAdminPath, hasScopedAdminAccess, isPlatformOwnerRole, normalizeAdminViewerRole } from '@/utils/adminAccess'
 import { sanitizeSvg } from '@/utils/sanitize'
-import { FeatureFlags, makeSidebarFlag } from '@/utils/featureFlags'
+import { FeatureFlags, FINANCE_MODULE_ENABLED, makeSidebarFlag } from '@/utils/featureFlags'
 
 interface NavItem {
   path: string
@@ -739,7 +739,10 @@ const adminNavItems = computed((): NavItem[] => {
     },
     { path: '/admin/subscriptions', label: t('nav.subscriptions'), icon: CreditCardIcon, hideInSimpleMode: true },
     { path: '/admin/accounts', label: t('nav.accounts'), icon: GlobeIcon },
-    { path: '/admin/finance', label: t('nav.financeStats'), icon: CreditCardIcon },
+    // [FINANCE-OFF] 财务板块入口（模块开关关闭时不渲染）
+    ...(FINANCE_MODULE_ENABLED
+      ? [{ path: '/admin/finance', label: t('nav.financeStats'), icon: CreditCardIcon }]
+      : []),
     { path: '/admin/announcements', label: t('nav.announcements'), icon: BellIcon },
     { path: '/admin/proxies', label: t('nav.proxies'), icon: ServerIcon },
     { path: '/admin/risk-control', label: t('nav.riskControl'), icon: ShieldIcon, hideInSimpleMode: true, featureFlag: flagRiskControl },

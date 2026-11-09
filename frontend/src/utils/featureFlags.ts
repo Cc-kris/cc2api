@@ -147,3 +147,13 @@ export function isFeatureFlagEnabled(flag: FeatureFlagDefinition): boolean {
 export function makeSidebarFlag(flag: FeatureFlagDefinition): () => boolean {
   return () => isFeatureFlagEnabled(flag)
 }
+
+/**
+ * 编译期模块开关（**不是** public settings 驱动的运行时 flag）。
+ *
+ * [FINANCE-OFF] 2026-11-09：用户决定不再使用财务板块（Business & Finance）。
+ * 关闭后：侧边栏不显示财务入口、路由不挂载 /admin/finance，后端对应接口也不再注册。
+ * 与后端 `backend/internal/moduleflags/finance.go` 的 FinanceEnabled 保持同步。
+ */
+export const FINANCE_MODULE_ENABLED = false
+

@@ -12,6 +12,7 @@ import { resolveModelSquareEnabled } from './modelSquareGuard'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
 import { getSetupStatus } from '@/api/setup'
 import { canAccessAdminPath, resolveAdminHomePath } from '@/utils/adminAccess'
+import { FINANCE_MODULE_ENABLED } from '@/utils/featureFlags'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
 import { resolveDocumentTitle } from './title'
 
@@ -559,12 +560,17 @@ const routes: RouteRecordRaw[] = [
       descriptionKey: 'admin.accounts.description'
     }
   },
-  {
-    path: '/admin/finance',
-    name: 'AdminFinanceStats',
-    component: () => import('@/views/admin/FinanceStatsView.vue'),
-    meta: { requiresAuth: true, requiresAdmin: true, title: 'Business & Finance', titleKey: 'nav.financeStats' }
-  },
+  // [FINANCE-OFF] 财务板块路由（模块开关关闭时不挂载）
+  ...(FINANCE_MODULE_ENABLED
+    ? [
+        {
+          path: '/admin/finance',
+          name: 'AdminFinanceStats',
+          component: () => import('@/views/admin/FinanceStatsView.vue'),
+          meta: { requiresAuth: true, requiresAdmin: true, title: 'Business & Finance', titleKey: 'nav.financeStats' }
+        }
+      ]
+    : []),
   {
     path: '/admin/announcements',
     name: 'AdminAnnouncements',
