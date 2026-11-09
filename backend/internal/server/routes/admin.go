@@ -3,6 +3,7 @@ package routes
 
 import (
 	"github.com/Wei-Shaw/sub2api/internal/handler"
+	"github.com/Wei-Shaw/sub2api/internal/moduleflags"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -101,8 +102,11 @@ func RegisterAdminRoutes(
 
 		// 上游维护与财务统计
 		registerUpstreamRoutes(admin, h)
-		registerFinanceRoutes(admin, h)
-		registerUpstreamFinanceProtocolRoutes(admin, h)
+		// [FINANCE-OFF] 财务板块整体停用：路由不注册，前端请求直接 404。
+		if moduleflags.FinanceEnabled {
+			registerFinanceRoutes(admin, h)
+			registerUpstreamFinanceProtocolRoutes(admin, h)
+		}
 	}
 }
 
@@ -305,18 +309,23 @@ func registerUpstreamRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		wallets.DELETE("/:id", h.Admin.UpstreamWallet.Delete)
 		wallets.POST("/:id/accounts", h.Admin.UpstreamWallet.AssignAccounts)
 		wallets.POST("/:id/probe", h.Admin.UpstreamWallet.Probe)
-		wallets.POST("/:id/sync-pricing", h.Admin.UpstreamWallet.SyncPricing)
 		wallets.POST("/:id/sync-balance", h.Admin.UpstreamWallet.SyncBalance)
 		wallets.POST("/:id/sync-quota", h.Admin.UpstreamWallet.SyncQuota)
-		wallets.POST("/:id/sync-funding", h.Admin.UpstreamWallet.SyncFunding)
 		wallets.POST("/:id/sync-account-usage", h.Admin.UpstreamWallet.SyncAccountUsage)
-		wallets.GET("/:id/prices", h.Admin.UpstreamWallet.ListPrices)
-		wallets.POST("/:id/prices/import", h.Admin.UpstreamWallet.ImportPrices)
 		wallets.GET("/:id/sync-history", h.Admin.UpstreamWallet.SyncHistory)
-		wallets.GET("/:id/fund-events", h.Admin.UpstreamWallet.ListFundEvents)
-		wallets.POST("/:id/fund-events", h.Admin.UpstreamWallet.CreateFundEvent)
+		// [FINANCE-OFF] 资金流水 / 上游价格 / 汇率同步属于财务板块，整组停用。
+		if moduleflags.FinanceEnabled {
+			wallets.POST("/:id/sync-pricing", h.Admin.UpstreamWallet.SyncPricing)
+			wallets.POST("/:id/sync-funding", h.Admin.UpstreamWallet.SyncFunding)
+			wallets.GET("/:id/prices", h.Admin.UpstreamWallet.ListPrices)
+			wallets.POST("/:id/prices/import", h.Admin.UpstreamWallet.ImportPrices)
+			wallets.GET("/:id/fund-events", h.Admin.UpstreamWallet.ListFundEvents)
+			wallets.POST("/:id/fund-events", h.Admin.UpstreamWallet.CreateFundEvent)
+		}
 	}
-	admin.GET("/finance/stats", h.Admin.Upstream.FinanceStats)
+	if moduleflags.FinanceEnabled {
+		admin.GET("/finance/stats", h.Admin.Upstream.FinanceStats)
+	}
 }
 
 func registerDashboardRoutes(admin *gin.RouterGroup, h *handler.Handlers) {

@@ -291,18 +291,29 @@ func (r *usageCleanupRepository) DeleteUsageLogsBatch(ctx context.Context, filte
 		return 0, fmt.Errorf("cleanup filters missing time range")
 	}
 	args = append(args, limit)
+	// [CLEANUP-FK-FIX] 2026-11-09：usage_logs 上有 4 个 ON DELETE RESTRICT 外键
+	// (usage_finance_records / usage_revenue_allocations /
+	//  usage_cost_settlement_allocations / usage_upstream_attempts)。
+	// 旧实现只选择 LIMIT 内的最旧行就整批 DELETE，只要其中一行被引用就整批回滚，
+	// 保留清理任务每分钟失败一次且永远删不动。这里在选择阶段就把被引用的行排除，
+	// 既不会触发外键错误，也保证清理能越过这些行继续删更晚的数据。
+	const restrictExclusion = `
+			AND NOT EXISTS (SELECT 1 FROM usage_finance_records x WHERE x.usage_log_id = ul.id)
+			AND NOT EXISTS (SELECT 1 FROM usage_revenue_allocations x WHERE x.usage_log_id = ul.id)
+			AND NOT EXISTS (SELECT 1 FROM usage_cost_settlement_allocations x WHERE x.usage_log_id = ul.id)
+			AND NOT EXISTS (SELECT 1 FROM usage_upstream_attempts x WHERE x.usage_log_id = ul.id)`
 	query := fmt.Sprintf(`
 		WITH target AS (
-			SELECT id
-			FROM usage_logs
-			WHERE %s
-			ORDER BY created_at ASC, id ASC
+			SELECT ul.id
+			FROM usage_logs ul
+			WHERE %s%s
+			ORDER BY ul.created_at ASC, ul.id ASC
 			LIMIT $%d
 		)
-		DELETE FROM usage_logs
-		WHERE id IN (SELECT id FROM target)
-		RETURNING id
-	`, whereClause, len(args))
+		DELETE FROM usage_logs ul
+		WHERE ul.id IN (SELECT id FROM target)
+		RETURNING ul.id
+	`, whereClause, restrictExclusion, len(args))
 
 	rows, err := r.sql.QueryContext(ctx, query, args...)
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/moduleflags"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 )
 
@@ -25,7 +26,10 @@ func ProvideFinanceRuntime(catalogSync *FinanceCatalogVersionSync, scanner *Fina
 		backfill.revenue = revenue
 	}
 	runtime := &FinanceRuntime{catalogSync: catalogSync, scanner: scanner, alerts: alerts, revenue: revenue, backfill: backfill, exporter: exporter}
-	runtime.Start()
+	// [FINANCE-OFF] 财务板块已整体停用，不再启动后台定时任务（catalog 同步 / 用量扫描 / 预警 / 收入确认 / 回填 / 导出）。
+	if moduleflags.FinanceEnabled {
+		runtime.Start()
+	}
 	return runtime
 }
 
