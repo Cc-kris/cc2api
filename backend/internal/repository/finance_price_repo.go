@@ -262,16 +262,9 @@ func (r *financePriceLookupRepository) ensureFXRateVersion(ctx context.Context, 
 	if !dbent.IsNotFound(err) {
 		return nil, err
 	}
-	created, err := r.client.FinanceFXRateVersion.Create().
-		SetCurrency(currency).
-		SetRateToUsd(rate).
-		SetSource(source).
-		SetObservedAt(observedAt).
-		SetEffectiveFrom(effectiveFrom).
-		SetChecksum(checksum).
-		Save(ctx)
+	created, err := r.createFXRateVersionWithInterval(ctx, currency, rate, source, observedAt, effectiveFrom, checksum)
 	if err == nil {
-		return &created.ID, nil
+		return &created, nil
 	}
 	existing, queryErr := r.client.FinanceFXRateVersion.Query().Where(
 		financefxrateversion.CurrencyEQ(currency),
@@ -283,6 +276,69 @@ func (r *financePriceLookupRepository) ensureFXRateVersion(ctx context.Context, 
 		return nil, err
 	}
 	return &existing.ID, nil
+}
+
+// createFXRateVersionWithInterval 在事务里写入一条新的 FX 汇率版本。
+//
+// [FX-INTERVAL-FIX] 2026-11-09：finance_fx_rate_versions 上有触发器
+// finance_fx_rate_no_overlap（迁移 202），任何与既有区间重叠的写入都会抛
+// 23P01。旧实现只做 INSERT 而从不闭合上一条开区间（effective_to 为空），
+// 于是新版本必然重叠、写入永久失败，并被价格查询路径反复重试（曾达每秒十余次、
+// 单日 116 万条错误日志，把磁盘刷到 93%）。因此这里必须在同一事务内：
+//  1. 把覆盖新起点的旧区间闭合到新起点；
+//  2. 用下一条版本的起点作为新版本的 effective_to（没有下一条才留空区间）。
+func (r *financePriceLookupRepository) createFXRateVersionWithInterval(ctx context.Context, currency string, rate decimal.Decimal, source string, observedAt, effectiveFrom time.Time, checksum string) (int64, error) {
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// 1) 闭合与新起点重叠的旧区间：起点更早、且结束时间晚于（或未设置）新起点。
+	if _, err := tx.FinanceFXRateVersion.Update().
+		Where(
+			financefxrateversion.CurrencyEQ(currency),
+			financefxrateversion.EffectiveFromLT(effectiveFrom),
+			financefxrateversion.Or(
+				financefxrateversion.EffectiveToIsNil(),
+				financefxrateversion.EffectiveToGT(effectiveFrom),
+			),
+		).
+		SetEffectiveTo(effectiveFrom).
+		Save(ctx); err != nil {
+		return 0, err
+	}
+
+	create := tx.FinanceFXRateVersion.Create().
+		SetCurrency(currency).
+		SetRateToUsd(rate).
+		SetSource(source).
+		SetObservedAt(observedAt).
+		SetEffectiveFrom(effectiveFrom).
+		SetChecksum(checksum)
+
+	// 2) 新版本的有效区间在下一条已存在版本的起点处结束。
+	next, nextErr := tx.FinanceFXRateVersion.Query().
+		Where(
+			financefxrateversion.CurrencyEQ(currency),
+			financefxrateversion.EffectiveFromGT(effectiveFrom),
+		).
+		Order(dbent.Asc(financefxrateversion.FieldEffectiveFrom), dbent.Asc(financefxrateversion.FieldID)).
+		First(ctx)
+	if nextErr == nil {
+		create.SetEffectiveTo(next.EffectiveFrom)
+	} else if !dbent.IsNotFound(nextErr) {
+		return 0, nextErr
+	}
+
+	saved, err := create.Save(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return saved.ID, nil
 }
 
 func financeFXEvidence(currency, priceSource string, fallback time.Time, maps ...map[string]any) (string, time.Time) {
