@@ -4,9 +4,11 @@ import BulkEditAccountModal from '../BulkEditAccountModal.vue'
 import ModelWhitelistSelector from '../ModelWhitelistSelector.vue'
 import { adminAPI } from '@/api/admin'
 
+const { showError } = vi.hoisted(() => ({ showError: vi.fn() }))
+
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
-    showError: vi.fn(),
+    showError,
     showSuccess: vi.fn(),
     showInfo: vi.fn()
   })
@@ -81,6 +83,7 @@ describe('BulkEditAccountModal', () => {
   beforeEach(() => {
     vi.mocked(adminAPI.accounts.bulkUpdate).mockReset()
     vi.mocked(adminAPI.accounts.checkMixedChannelRisk).mockReset()
+    showError.mockReset()
 
     vi.mocked(adminAPI.accounts.bulkUpdate).mockResolvedValue({
       success: 2,
@@ -409,5 +412,84 @@ describe('BulkEditAccountModal', () => {
 
     expect((baseURLInput.element as HTMLInputElement).value).toBe('https://retry.example.invalid')
     expect(wrapper.find('#bulk-edit-account-form').exists()).toBe(true)
+  })
+
+  describe('上游请求 ID 头', () => {
+    it('未勾选时输入框禁用，请求体不带该字段', async () => {
+      const wrapper = mountModal({ selectedPlatforms: ['openai'], selectedTypes: ['apikey'] })
+      const input = wrapper.get('#bulk-edit-upstream-request-id-header')
+      expect((input.element as HTMLInputElement).disabled).toBe(true)
+
+      await wrapper.get('#bulk-edit-status-enabled').setValue(true)
+      await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+      await flushPromises()
+
+      expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], { status: 'active' })
+    })
+
+    it('勾选并填写后写入 extra.upstream_request_id_header（去掉首尾空白）', async () => {
+      const wrapper = mountModal({ selectedPlatforms: ['openai'], selectedTypes: ['apikey'] })
+      await wrapper.get('#bulk-edit-upstream-request-id-header-enabled').setValue(true)
+      const input = wrapper.get('#bulk-edit-upstream-request-id-header')
+      expect((input.element as HTMLInputElement).disabled).toBe(false)
+      await input.setValue('  X-Oneapi-Request-Id ')
+      await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+      await flushPromises()
+
+      expect(showError).not.toHaveBeenCalled()
+      expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
+        extra: { upstream_request_id_header: 'X-Oneapi-Request-Id' }
+      })
+    })
+
+    it('和其他 extra 字段一起提交时合并到同一个 extra', async () => {
+      const wrapper = mountModal({ selectedPlatforms: ['openai'], selectedTypes: ['oauth'] })
+      await wrapper.get('#bulk-edit-openai-codex-cli-only-enabled').setValue(true)
+      await wrapper.get('#bulk-edit-upstream-request-id-header-enabled').setValue(true)
+      await wrapper.get('#bulk-edit-upstream-request-id-header').setValue('x-request-id')
+      await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+      await flushPromises()
+
+      expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
+        extra: { codex_cli_only: false, upstream_request_id_header: 'x-request-id' }
+      })
+    })
+
+    it('头名不合法时提示错误且不提交', async () => {
+      const wrapper = mountModal({ selectedPlatforms: ['openai'], selectedTypes: ['apikey'] })
+      await wrapper.get('#bulk-edit-upstream-request-id-header-enabled').setValue(true)
+      await wrapper.get('#bulk-edit-upstream-request-id-header').setValue('bad header:')
+      expect(wrapper.find('[data-testid="upstream-request-id-header-error"]').exists()).toBe(true)
+
+      await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+      await flushPromises()
+
+      expect(showError).toHaveBeenCalledWith('admin.accounts.upstreamRequestIdHeaderInvalid')
+      expect(adminAPI.accounts.bulkUpdate).not.toHaveBeenCalled()
+    })
+
+    it('勾选后留空时提示批量不能清空且不提交', async () => {
+      const wrapper = mountModal({ selectedPlatforms: ['openai'], selectedTypes: ['apikey'] })
+      await wrapper.get('#bulk-edit-upstream-request-id-header-enabled').setValue(true)
+      await wrapper.get('#bulk-edit-upstream-request-id-header').setValue('   ')
+      await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+      await flushPromises()
+
+      expect(showError).toHaveBeenCalledWith('admin.accounts.bulkEdit.upstreamRequestIdHeaderRequired')
+      expect(adminAPI.accounts.bulkUpdate).not.toHaveBeenCalled()
+    })
+
+    it('不能和上游倍率同时提交', async () => {
+      const wrapper = mountModal({ selectedPlatforms: ['openai'], selectedTypes: ['apikey'] })
+      await wrapper.get('#bulk-edit-upstream-multiplier-enabled').setValue(true)
+      await wrapper.get('[data-testid="bulk-upstream-multiplier-reason"]').setValue('上游供应商统一调价')
+      await wrapper.get('#bulk-edit-upstream-request-id-header-enabled').setValue(true)
+      await wrapper.get('#bulk-edit-upstream-request-id-header').setValue('x-request-id')
+      await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+      await flushPromises()
+
+      expect(showError).toHaveBeenCalledWith('admin.accounts.bulkEdit.upstreamSeparateOnly')
+      expect(adminAPI.accounts.bulkUpdate).not.toHaveBeenCalled()
+    })
   })
 })

@@ -1340,6 +1340,7 @@ func isModelNotFoundError(statusCode int, body []byte) bool {
 //	          ├─ 成功 → 正常返回
 //	          └─ 失败 → 设置模型限流 + 清除粘性绑定 → 切换账号
 func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte, isStickySession bool) (*ForwardResult, error) {
+	beginUpstreamResponseModelObservation(c) // V03-R11：每次转发尝试重置上游响应模型观测（本路径未接观测时保持为空，避免沿用上次尝试的值）
 	// 上游透传账号直接转发，不走 OAuth token 刷新
 	if account.Type == AccountTypeUpstream {
 		return s.ForwardUpstream(ctx, c, account, body)
@@ -2073,6 +2074,7 @@ func stripSignatureSensitiveBlocksFromClaudeRequest(req *antigravity.ClaudeReque
 //	          ├─ 成功 → 正常返回
 //	          └─ 失败 → 设置模型限流 + 清除粘性绑定 → 切换账号
 func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Context, account *Account, originalModel string, action string, stream bool, body []byte, isStickySession bool) (*ForwardResult, error) {
+	beginUpstreamResponseModelObservation(c) // V03-R11：每次转发尝试重置上游响应模型观测（本路径未接观测时保持为空，避免沿用上次尝试的值）
 	startTime := time.Now()
 
 	sessionID := getSessionID(c)
@@ -4072,6 +4074,9 @@ func (s *AntigravityGatewayService) extractImageInputSize(body []byte) string {
 
 	return ""
 }
+
+// IsImageGenerationModel 导出 isImageGenerationModel（在途预占估算判断 Gemini 图片模型）。
+func IsImageGenerationModel(model string) bool { return isImageGenerationModel(model) }
 
 // isImageGenerationModel 判断模型是否为图片生成模型
 // 支持的模型：gemini-3.1-flash-image, gemini-3-pro-image, gemini-2.5-flash-image 等

@@ -30,7 +30,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, image_output_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, video_count, video_resolution, video_duration_seconds, video_task_id, service_tier, reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, created_at, upstream_cost_multiplier, sales_model, sales_pricing_effective_model, sales_pricing_legacy_source, sales_pricing_version, sales_pricing_source, sales_pricing_checksum, sales_pricing_snapshot, sales_pricing_shadow_snapshot, sales_pricing_shadow_delta, usage_list_value, upstream_multiplier_change_id, upstream_multiplier_source, upstream_multiplier_effective_at, account_finance_profile_id"
+const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, image_output_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, user_agent, ip_address, image_count, image_size, image_input_size, image_output_size, image_size_source, image_size_breakdown, video_count, video_resolution, video_duration_seconds, video_task_id, service_tier, reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, created_at, upstream_cost_multiplier, sales_model, sales_pricing_effective_model, sales_pricing_legacy_source, sales_pricing_version, sales_pricing_source, sales_pricing_checksum, sales_pricing_snapshot, sales_pricing_shadow_snapshot, sales_pricing_shadow_delta, usage_list_value, upstream_multiplier_change_id, upstream_multiplier_source, upstream_multiplier_effective_at, account_finance_profile_id, image_input_tokens, image_input_cost, upstream_response_model, upstream_model_mismatch, session_id, requested_reasoning_effort, upstream_request_id"
 
 // usageLogInsertArgTypes must stay in the same order as:
 //  1. prepareUsageLogInsert().args
@@ -109,6 +109,15 @@ var usageLogInsertArgTypes = [...]string{
 	"text",        // upstream_multiplier_source
 	"timestamptz", // upstream_multiplier_effective_at
 	"bigint",      // account_finance_profile_id
+	"integer",     // image_input_tokens
+	"numeric",     // image_input_cost
+	// V03-R11 用量审计字段（迁移 230），整块追加在末尾
+	"text",    // upstream_response_model
+	"boolean", // upstream_model_mismatch
+	"text",    // session_id
+	"text",    // requested_reasoning_effort
+	"text",    // upstream_request_id
+
 }
 
 const rawUsageLogModelColumn = "model"
@@ -536,7 +545,15 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
 			upstream_multiplier_change_id,
 			upstream_multiplier_source,
 			upstream_multiplier_effective_at,
-			account_finance_profile_id
+			account_finance_profile_id,
+			image_input_tokens,
+			image_input_cost,
+			upstream_response_model,
+			upstream_model_mismatch,
+			session_id,
+			requested_reasoning_effort,
+			upstream_request_id
+
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7,
 			$8, $9,
@@ -544,7 +561,8 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
 			$14, $15, $16, $17,
 			$18, $19, $20, $21, $22, $23,
 			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54,
-			$55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69
+			$55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69,
+			$70, $71, $72, $73, $74, $75, $76
 		)
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 		RETURNING id, created_at
@@ -1004,7 +1022,15 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 			upstream_multiplier_change_id,
 			upstream_multiplier_source,
 			upstream_multiplier_effective_at,
-			account_finance_profile_id
+			account_finance_profile_id,
+			image_input_tokens,
+			image_input_cost,
+			upstream_response_model,
+			upstream_model_mismatch,
+			session_id,
+			requested_reasoning_effort,
+			upstream_request_id
+
 		) AS (VALUES `)
 
 	args := make([]any, 0, len(keys)*(len(usageLogInsertArgTypes)+1))
@@ -1104,7 +1130,15 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				upstream_multiplier_change_id,
 				upstream_multiplier_source,
 				upstream_multiplier_effective_at,
-				account_finance_profile_id
+				account_finance_profile_id,
+				image_input_tokens,
+				image_input_cost,
+				upstream_response_model,
+				upstream_model_mismatch,
+				session_id,
+				requested_reasoning_effort,
+				upstream_request_id
+
 			)
 			SELECT
 				user_id,
@@ -1175,7 +1209,15 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				upstream_multiplier_change_id,
 				upstream_multiplier_source,
 				upstream_multiplier_effective_at,
-				account_finance_profile_id
+				account_finance_profile_id,
+				image_input_tokens,
+				image_input_cost,
+				upstream_response_model,
+				upstream_model_mismatch,
+				session_id,
+				requested_reasoning_effort,
+				upstream_request_id
+
 			FROM input
 			ON CONFLICT (request_id, api_key_id) DO NOTHING
 			RETURNING request_id, api_key_id, id, created_at
@@ -1286,7 +1328,15 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			upstream_multiplier_change_id,
 			upstream_multiplier_source,
 			upstream_multiplier_effective_at,
-			account_finance_profile_id
+			account_finance_profile_id,
+			image_input_tokens,
+			image_input_cost,
+			upstream_response_model,
+			upstream_model_mismatch,
+			session_id,
+			requested_reasoning_effort,
+			upstream_request_id
+
 		) AS (VALUES `)
 
 	args := make([]any, 0, len(preparedList)*len(usageLogInsertArgTypes))
@@ -1383,7 +1433,15 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			upstream_multiplier_change_id,
 			upstream_multiplier_source,
 			upstream_multiplier_effective_at,
-			account_finance_profile_id
+			account_finance_profile_id,
+			image_input_tokens,
+			image_input_cost,
+			upstream_response_model,
+			upstream_model_mismatch,
+			session_id,
+			requested_reasoning_effort,
+			upstream_request_id
+
 		)
 		SELECT
 			user_id,
@@ -1454,7 +1512,15 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			upstream_multiplier_change_id,
 			upstream_multiplier_source,
 			upstream_multiplier_effective_at,
-			account_finance_profile_id
+			account_finance_profile_id,
+			image_input_tokens,
+			image_input_cost,
+			upstream_response_model,
+			upstream_model_mismatch,
+			session_id,
+			requested_reasoning_effort,
+			upstream_request_id
+
 		FROM input
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 	`)
@@ -1533,7 +1599,15 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared 
 			upstream_multiplier_change_id,
 			upstream_multiplier_source,
 			upstream_multiplier_effective_at,
-			account_finance_profile_id
+			account_finance_profile_id,
+			image_input_tokens,
+			image_input_cost,
+			upstream_response_model,
+			upstream_model_mismatch,
+			session_id,
+			requested_reasoning_effort,
+			upstream_request_id
+
 		) VALUES (
 			$1, $2, $3, $4, $5, $6, $7,
 			$8, $9,
@@ -1541,7 +1615,8 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared 
 			$14, $15, $16, $17,
 			$18, $19, $20, $21, $22, $23,
 			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50, $51, $52, $53, $54,
-			$55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69
+			$55, $56, $57, $58, $59, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69,
+			$70, $71, $72, $73, $74, $75, $76
 		)
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 	`, prepared.args...)
@@ -1669,6 +1744,14 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 			nullString(&log.UpstreamMultiplierSource),
 			log.UpstreamMultiplierEffectiveAt,
 			log.AccountFinanceProfileID,
+			log.ImageInputTokens,
+			log.ImageInputCost,
+			// V03-R11 用量审计字段
+			nullString(log.UpstreamResponseModel),
+			nullBoolPtr(log.UpstreamModelMismatch),
+			nullString(log.SessionID),
+			nullString(log.RequestedReasoningEffort),
+			nullString(log.UpstreamRequestID),
 		},
 	}
 }
@@ -3355,6 +3438,7 @@ func (r *usageLogRepository) ListWithFilters(ctx context.Context, params paginat
 		args = append(args, int16(*filters.BillingType))
 	}
 	conditions, args = appendUsageLogBillingModeWhereCondition(conditions, args, filters.BillingMode)
+	conditions, args = appendUsageLogAuditWhereConditions(conditions, args, filters)
 	if filters.StartTime != nil {
 		conditions = append(conditions, fmt.Sprintf("created_at >= $%d", len(args)+1))
 		args = append(args, *filters.StartTime)
@@ -3385,8 +3469,30 @@ func (r *usageLogRepository) ListWithFilters(ctx context.Context, params paginat
 	return logs, page, nil
 }
 
+// appendUsageLogAuditWhereConditions 追加 V03-R11 审计筛选：
+// upstream_request_id 精确匹配（走迁移 231 的部分索引）；upstream_model_mismatch 为 true 时走迁移 232 的部分索引。
+// mismatch=false 只匹配明确比较过且一致的行，不含未观测（NULL）的行。
+func appendUsageLogAuditWhereConditions(conditions []string, args []any, filters UsageLogFilters) ([]string, []any) {
+	if upstreamRequestID := strings.TrimSpace(filters.UpstreamRequestID); upstreamRequestID != "" {
+		conditions = append(conditions, fmt.Sprintf("upstream_request_id = $%d", len(args)+1))
+		args = append(args, upstreamRequestID)
+	}
+	if filters.UpstreamModelMismatch != nil {
+		if *filters.UpstreamModelMismatch {
+			conditions = append(conditions, "upstream_model_mismatch IS TRUE")
+		} else {
+			conditions = append(conditions, "upstream_model_mismatch IS FALSE")
+		}
+	}
+	return conditions, args
+}
+
 func shouldUseFastUsageLogTotal(filters UsageLogFilters) bool {
 	if filters.ExactTotal {
+		return false
+	}
+	// 按上游请求 ID 查询结果集很小，保留精确总数。
+	if strings.TrimSpace(filters.UpstreamRequestID) != "" {
 		return false
 	}
 	// 强选择过滤下记录集通常较小，保留精确总数。
@@ -4072,6 +4178,7 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 		args = append(args, int16(*filters.BillingType))
 	}
 	conditions, args = appendUsageLogBillingModeWhereCondition(conditions, args, filters.BillingMode)
+	conditions, args = appendUsageLogAuditWhereConditions(conditions, args, filters)
 	if filters.StartTime != nil {
 		conditions = append(conditions, fmt.Sprintf("created_at >= $%d", len(args)+1))
 		args = append(args, *filters.StartTime)
@@ -4823,6 +4930,13 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		upstreamMultiplierSource      sql.NullString
 		upstreamMultiplierEffectiveAt sql.NullTime
 		accountFinanceProfileID       sql.NullInt64
+		imageInputTokens              int
+		imageInputCost                float64
+		auditUpstreamResponseModel    sql.NullString
+		auditUpstreamModelMismatch    sql.NullBool
+		auditSessionID                sql.NullString
+		auditRequestedEffort          sql.NullString
+		auditUpstreamRequestID        sql.NullString
 	)
 
 	if err := scanner.Scan(
@@ -4896,6 +5010,13 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		&upstreamMultiplierSource,
 		&upstreamMultiplierEffectiveAt,
 		&accountFinanceProfileID,
+		&imageInputTokens,
+		&imageInputCost,
+		&auditUpstreamResponseModel,
+		&auditUpstreamModelMismatch,
+		&auditSessionID,
+		&auditRequestedEffort,
+		&auditUpstreamRequestID,
 	); err != nil {
 		return nil, err
 	}
@@ -4913,6 +5034,8 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		CacheReadTokens:               cacheReadTokens,
 		CacheCreation5mTokens:         cacheCreation5m,
 		CacheCreation1hTokens:         cacheCreation1h,
+		ImageInputTokens:              imageInputTokens,
+		ImageInputCost:                imageInputCost,
 		ImageOutputTokens:             imageOutputTokens,
 		ImageOutputCost:               imageOutputCost,
 		InputCost:                     inputCost,
@@ -4948,6 +5071,15 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		UpstreamMultiplierEffectiveAt: nullTimePtr(upstreamMultiplierEffectiveAt),
 		AccountFinanceProfileID:       nullInt64Ptr(accountFinanceProfileID),
 	}
+	// V03-R11 用量审计字段
+	log.UpstreamResponseModel = nullStringPtrValue(auditUpstreamResponseModel)
+	if auditUpstreamModelMismatch.Valid {
+		mismatch := auditUpstreamModelMismatch.Bool
+		log.UpstreamModelMismatch = &mismatch
+	}
+	log.SessionID = nullStringPtrValue(auditSessionID)
+	log.RequestedReasoningEffort = nullStringPtrValue(auditRequestedEffort)
+	log.UpstreamRequestID = nullStringPtrValue(auditUpstreamRequestID)
 	// 先回填 legacy 字段，再基于 legacy + request_type 计算最终请求类型，保证历史数据兼容。
 	log.Stream = stream
 	log.OpenAIWSMode = openaiWSMode
@@ -5265,4 +5397,21 @@ func setToSlice(set map[int64]struct{}) []int64 {
 		out = append(out, id)
 	}
 	return out
+}
+
+// nullBoolPtr 把可空布尔转成 sql.NullBool（nil → NULL）。
+func nullBoolPtr(v *bool) sql.NullBool {
+	if v == nil {
+		return sql.NullBool{}
+	}
+	return sql.NullBool{Bool: *v, Valid: true}
+}
+
+// nullStringPtrValue 把 sql.NullString 转成 *string（NULL 或空串 → nil）。
+func nullStringPtrValue(v sql.NullString) *string {
+	if !v.Valid || v.String == "" {
+		return nil
+	}
+	value := v.String
+	return &value
 }

@@ -187,7 +187,13 @@ func TestUserRepositoryCreateSerializesNormalizedEmailConflictsUnderConcurrency(
 		})}
 	}()
 
-	<-firstCreateStarted
+	select {
+	case <-firstCreateStarted:
+	case result := <-results:
+		t.Fatalf("first create exited before reaching the mutation hook: %v", result.err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("first create did not reach the mutation hook")
+	}
 
 	go func() {
 		results <- createResult{err: repo.Create(ctx, &service.User{

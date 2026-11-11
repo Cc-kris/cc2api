@@ -275,6 +275,9 @@ type UsageLogFilters struct {
 	EndTime     *time.Time
 	// ExactTotal requests exact COUNT(*) for pagination. Default false for fast large-table paging.
 	ExactTotal bool
+	// V03-R11 审计筛选（仅管理员）：按直接上游请求 ID 精确查询；按上游响应模型是否不一致筛选（nil 不筛选）。
+	UpstreamRequestID     string
+	UpstreamModelMismatch *bool
 }
 
 // UsageStats represents usage statistics

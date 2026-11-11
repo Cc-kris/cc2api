@@ -281,33 +281,8 @@ func (s *SeedaceVideoService) recordCreateUsage(ctx context.Context, account *Ac
 	}
 	model, durationSeconds := normalizeSeedaceVideoMeter(req)
 	groupID := input.APIKey.GroupID
-	resolverEnabled := s.settingService == nil || s.settingService.IsSalesPricingResolverEnabled(ctx)
-	var resolved *ResolvedPricing
-	if resolverEnabled {
-		resolved = s.resolvePricing(ctx, groupID, model)
-	}
-	unitPrice := 0.0
-	if resolved != nil {
-		unitPrice = resolved.DefaultPerRequestPrice
-	}
-	if unitPrice < 0 {
-		unitPrice = 0
-	}
-	groupMultiplier := 1.0
-	if input.APIKey.Group != nil {
-		groupMultiplier = input.APIKey.Group.RateMultiplier
-	}
-	if groupMultiplier <= 0 {
-		groupMultiplier = 1.0
-	}
+	cost, groupMultiplier := s.createCost(ctx, input.APIKey, req)
 	accountRateMultiplier := account.BillingRateMultiplier()
-	var cost *CostBreakdown
-	if resolverEnabled {
-		totalCost := unitPrice * float64(durationSeconds)
-		cost = &CostBreakdown{TotalCost: totalCost, ActualCost: totalCost * groupMultiplier, BillingMode: string(BillingModePerSecond)}
-	} else {
-		cost = s.billingService.CalculateVideoCost(model, seedaceLegacyResolution(model), 1, durationSeconds, videoPriceConfigFromAPIKey(input.APIKey), groupMultiplier)
-	}
 	totalCost, actualCost := cost.TotalCost, cost.ActualCost
 
 	taskID := extractSeedaceTaskID(upstreamBody)
@@ -382,6 +357,80 @@ func (s *SeedaceVideoService) recordCreateUsage(ctx context.Context, account *Ac
 	}
 	writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.seedace_video")
 	return nil
+}
+
+// createCost 计算一次 Seedance 视频创建的费用：解析器开启时按秒价 × 时长 × 分组倍率，
+// 否则按分组视频价（CalculateVideoCost）。recordCreateUsage 计费与在途预占估算共用。
+func (s *SeedaceVideoService) createCost(ctx context.Context, apiKey *APIKey, req seedaceVideoRequest) (*CostBreakdown, float64) {
+	model, durationSeconds := normalizeSeedaceVideoMeter(req)
+	var groupID *int64
+	if apiKey != nil {
+		groupID = apiKey.GroupID
+	}
+	resolverEnabled := s.settingService == nil || s.settingService.IsSalesPricingResolverEnabled(ctx)
+	var resolved *ResolvedPricing
+	if resolverEnabled {
+		resolved = s.resolvePricing(ctx, groupID, model)
+	}
+	unitPrice := 0.0
+	if resolved != nil {
+		unitPrice = resolved.DefaultPerRequestPrice
+	}
+	if unitPrice < 0 {
+		unitPrice = 0
+	}
+	groupMultiplier := 1.0
+	if apiKey != nil && apiKey.Group != nil {
+		groupMultiplier = apiKey.Group.RateMultiplier
+	}
+	if groupMultiplier <= 0 {
+		groupMultiplier = 1.0
+	}
+	if resolverEnabled {
+		totalCost := unitPrice * float64(durationSeconds)
+		return &CostBreakdown{TotalCost: totalCost, ActualCost: totalCost * groupMultiplier, BillingMode: string(BillingModePerSecond)}, groupMultiplier
+	}
+	return s.billingService.CalculateVideoCost(model, seedaceLegacyResolution(model), 1, durationSeconds, videoPriceConfigFromAPIKey(apiKey), groupMultiplier), groupMultiplier
+}
+
+// EstimateCreateCharge 估算一次视频创建请求的确定金额（与 recordCreateUsage 同一计算，已量化）。
+// 请求体非法或无法定价时返回 (0,false)；此时 Create 会自行报错，不需要预占。
+func (s *SeedaceVideoService) EstimateCreateCharge(ctx context.Context, apiKey *APIKey, body []byte) (float64, bool) {
+	if s == nil || apiKey == nil || len(body) == 0 {
+		return 0, false
+	}
+	req, err := parseSeedaceVideoRequest(body)
+	if err != nil {
+		return 0, false
+	}
+	if err := s.ensureCreatePricingConfigured(ctx, apiKey, req); err != nil {
+		return 0, false
+	}
+	cost, _ := s.createCost(ctx, apiKey, req)
+	if cost == nil || !validInflightCost(cost.ActualCost) {
+		return 0, false
+	}
+	return QuantizeUsageBillingAmount(cost.ActualCost), true
+}
+
+// AdmitCreate 视频创建的准入：先做余额 / 订阅的现有准入检查（CheckBillingEligibility），
+// 余额模式再按本次确定费用登记在途预占（ReserveFixedCharge）。返回的句柄可能为 nil；
+// 调用方须在 Create 返回后调用 HandlerDone（Create 内同步计费，计费后释放）。
+func (s *SeedaceVideoService) AdmitCreate(ctx context.Context, apiKey *APIKey, subscription *UserSubscription, body []byte) (*InflightReservation, error) {
+	if s == nil || s.billingCacheService == nil || apiKey == nil || apiKey.User == nil {
+		return nil, nil
+	}
+	if err := s.billingCacheService.CheckBillingEligibility(ctx, apiKey.User, apiKey, apiKey.Group, subscription, PlatformSeedace); err != nil {
+		return nil, err
+	}
+	if !s.billingCacheService.InflightReservationEnabled() {
+		return nil, nil
+	}
+	amount, ok := s.EstimateCreateCharge(ctx, apiKey, body)
+	if !ok {
+		return nil, nil
+	}
+	return s.billingCacheService.ReserveFixedCharge(ctx, apiKey.User, apiKey.Group, subscription, amount)
 }
 
 func seedaceLegacyResolution(model string) string {

@@ -183,11 +183,17 @@ type PaymentConfigService struct {
 	entClient     *dbent.Client
 	settingRepo   SettingRepository
 	encryptionKey []byte
+	onUpdate      func()
 }
 
 // NewPaymentConfigService creates a new PaymentConfigService.
 func NewPaymentConfigService(entClient *dbent.Client, settingRepo SettingRepository, encryptionKey []byte) *PaymentConfigService {
 	return &PaymentConfigService{entClient: entClient, settingRepo: settingRepo, encryptionKey: encryptionKey}
+}
+
+// SetOnUpdateCallback registers the public-settings cache invalidation hook.
+func (s *PaymentConfigService) SetOnUpdateCallback(callback func()) {
+	s.onUpdate = callback
 }
 
 // IsPaymentEnabled returns whether the payment system is enabled.
@@ -335,7 +341,13 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 	} else {
 		m[SettingEnabledPaymentTypes] = ""
 	}
-	return s.settingRepo.SetMultiple(ctx, m)
+	if err := s.settingRepo.SetMultiple(ctx, m); err != nil {
+		return err
+	}
+	if s.onUpdate != nil {
+		s.onUpdate()
+	}
+	return nil
 }
 
 func formatBoolOrEmpty(v *bool) string {

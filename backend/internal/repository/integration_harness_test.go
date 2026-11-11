@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -40,6 +41,8 @@ var (
 	integrationRedis     *redisclient.Client
 
 	redisNamespaceSeq uint64
+	integrationDSN    string
+	databaseSeq       uint64
 )
 
 func TestMain(m *testing.M) {
@@ -91,6 +94,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
+	integrationDSN = dsn
 	integrationDB, err = openSQLWithRetry(ctx, dsn, 30*time.Second)
 	if err != nil {
 		log.Printf("failed to open sql db: %v", err)
@@ -203,6 +207,39 @@ func testTx(t *testing.T) *sql.Tx {
 func testEntClient(t *testing.T) *dbent.Client {
 	t.Helper()
 	return integrationEntClient
+}
+
+// isolatedSuiteClient gives list/count suites their own migrated database on
+// this run's testcontainer. Rollback alone does not hide rows committed by other
+// tests, and deleting shared rows would make shuffled execution order-dependent.
+func isolatedSuiteClient(t *testing.T) *dbent.Client {
+	t.Helper()
+	ctx := context.Background()
+	name := fmt.Sprintf("isolated_suite_%d", atomic.AddUint64(&databaseSeq, 1))
+	_, err := integrationDB.ExecContext(ctx, "CREATE DATABASE "+name)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, err := integrationDB.ExecContext(context.Background(), "DROP DATABASE "+name+" WITH (FORCE)")
+		require.NoError(t, err)
+	})
+	parsed, err := url.Parse(integrationDSN)
+	require.NoError(t, err)
+	parsed.Path = "/" + name
+	db, err := sql.Open("postgres", parsed.String())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	require.NoError(t, ApplyMigrations(ctx, db))
+	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
+	t.Cleanup(func() { _ = client.Close() })
+	return client
+}
+
+func suiteEntTx(t *testing.T, client *dbent.Client) *dbent.Tx {
+	t.Helper()
+	tx, err := client.Tx(context.Background())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback() })
+	return tx
 }
 
 // testEntTx 返回一个 ent 事务，用于需要事务隔离的测试。

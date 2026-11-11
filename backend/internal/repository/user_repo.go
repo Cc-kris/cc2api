@@ -23,6 +23,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/lib/pq"
 
+	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
 )
 
@@ -54,31 +55,41 @@ func (r *userRepository) createWithRegistrationDomainLimit(ctx context.Context, 
 
 	// 统一使用 ent 的事务：保证用户与允许分组的更新原子化，
 	// 并避免基于 *sql.Tx 手动构造 ent client 导致的 ExecQuerier 断言错误。
-	tx, err := r.client.Tx(ctx)
-	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
-		return err
-	}
-
+	//
+	// 注意：ent 的 Client.Tx 不感知上下文中的事务（只检查 driver 类型），
+	// 因此必须先检查 TxFromContext：调用方已开启外部事务（如注册时的
+	// 「建用户 + 占用邀请码」原子事务）时直接复用其 client，由调用方统一提交/回滚；
+	// 否则用户写入会落入独立事务并自行提交，外层回滚后留下孤儿用户。
 	var txClient *dbent.Client
 	txCtx := ctx
-	if err == nil {
-		defer func() { _ = tx.Rollback() }()
-		txClient = tx.Client()
-		txCtx = dbent.NewTxContext(ctx, tx)
+	var ownedTx *dbent.Tx
+	if existingTx := dbent.TxFromContext(ctx); existingTx != nil {
+		txClient = existingTx.Client()
 	} else {
-		// 已处于外部事务中（ErrTxStarted），复用当前事务 client 并由调用方负责提交/回滚。
-		if existingTx := dbent.TxFromContext(ctx); existingTx != nil {
-			txClient = existingTx.Client()
-		} else {
+		tx, err := r.client.Tx(ctx)
+		switch {
+		case errors.Is(err, dbent.ErrTxStarted):
+			// r.client 本身已是事务绑定 client：直接复用，提交/回滚由持有方负责。
 			txClient = r.client
+		case err != nil:
+			return err
+		default:
+			ownedTx = tx
+			defer func() { _ = ownedTx.Rollback() }()
+			txClient = tx.Client()
+			txCtx = dbent.NewTxContext(ctx, tx)
 		}
 	}
 	// Serialize registrations sharing a normalized domain so the service-side
 	// count and subsequent insert cannot race across application instances.
 	if domain := service.RegistrationEmailDomain(userIn.Email); domain != "" {
-		lockSQL := txAwareSQLExecutor(txCtx, r.sql, r.client)
-		if _, lockErr := lockSQL.ExecContext(txCtx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "registration-domain:"+domain); lockErr != nil {
-			return lockErr
+		// Advisory locks are PostgreSQL-specific. SQLite-backed repository tests
+		// still use the scoped email lock below and must not execute PostgreSQL SQL.
+		if txClient.Driver().Dialect() == dialect.Postgres {
+			lockSQL := txAwareSQLExecutor(txCtx, r.sql, r.client)
+			if _, lockErr := lockSQL.ExecContext(txCtx, `SELECT pg_advisory_xact_lock(hashtext($1))`, "registration-domain:"+domain); lockErr != nil {
+				return lockErr
+			}
 		}
 		if limit > 0 {
 			users, countErr := txClient.User.Query().Where(dbuser.EmailContains("@" + domain)).All(txCtx)
@@ -137,8 +148,8 @@ func (r *userRepository) createWithRegistrationDomainLimit(ctx context.Context, 
 		return err
 	}
 
-	if tx != nil {
-		if err := tx.Commit(); err != nil {
+	if ownedTx != nil {
+		if err := ownedTx.Commit(); err != nil {
 			return err
 		}
 	}
@@ -798,6 +809,49 @@ func (r *userRepository) DeductBalance(ctx context.Context, id int64, amount flo
 		return service.ErrUserNotFound
 	}
 	return nil
+}
+
+// DeductAvailableBalance 原子扣减 min(amount, max(balance, 0))，返回实际扣减额。
+// 与 DeductBalance 不同，退款专用：不会加深已有欠费，也不会因并发扣减而透支。
+// ctx 携带 ent 事务时在事务内执行。
+func (r *userRepository) DeductAvailableBalance(ctx context.Context, id int64, amount float64) (deducted float64, err error) {
+	if amount < 0 {
+		return 0, fmt.Errorf("deduction amount must be nonnegative")
+	}
+	const updateSQL = `
+		WITH target AS (
+			SELECT id, balance
+			FROM users
+			WHERE id = $2 AND deleted_at IS NULL
+			FOR UPDATE
+		), updated AS (
+			UPDATE users AS u
+			SET balance = target.balance - LEAST($1, GREATEST(target.balance, 0)), updated_at = NOW()
+			FROM target
+			WHERE u.id = target.id AND u.deleted_at IS NULL
+			RETURNING target.balance - u.balance AS deducted
+		)
+		SELECT deducted FROM updated
+	`
+	rows, err := clientFromContext(ctx, r.client).QueryContext(ctx, updateSQL, amount, id)
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
+	if !rows.Next() {
+		if rowsErr := rows.Err(); rowsErr != nil {
+			return 0, rowsErr
+		}
+		return 0, service.ErrUserNotFound
+	}
+	if err := rows.Scan(&deducted); err != nil {
+		return 0, err
+	}
+	return deducted, rows.Err()
 }
 
 func (r *userRepository) UpdateConcurrency(ctx context.Context, id int64, amount int) error {

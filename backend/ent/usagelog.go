@@ -62,10 +62,14 @@ type UsageLog struct {
 	CacheCreation5mTokens int `json:"cache_creation_5m_tokens,omitempty"`
 	// CacheCreation1hTokens holds the value of the "cache_creation_1h_tokens" field.
 	CacheCreation1hTokens int `json:"cache_creation_1h_tokens,omitempty"`
+	// ImageInputTokens holds the value of the "image_input_tokens" field.
+	ImageInputTokens int `json:"image_input_tokens,omitempty"`
 	// InputCost holds the value of the "input_cost" field.
 	InputCost float64 `json:"input_cost,omitempty"`
 	// OutputCost holds the value of the "output_cost" field.
 	OutputCost float64 `json:"output_cost,omitempty"`
+	// ImageInputCost holds the value of the "image_input_cost" field.
+	ImageInputCost float64 `json:"image_input_cost,omitempty"`
 	// CacheCreationCost holds the value of the "cache_creation_cost" field.
 	CacheCreationCost float64 `json:"cache_creation_cost,omitempty"`
 	// CacheReadCost holds the value of the "cache_read_cost" field.
@@ -142,6 +146,16 @@ type UsageLog struct {
 	VideoTaskID *string `json:"video_task_id,omitempty"`
 	// CacheTTLOverridden holds the value of the "cache_ttl_overridden" field.
 	CacheTTLOverridden bool `json:"cache_ttl_overridden,omitempty"`
+	// 上游响应声明的模型
+	UpstreamResponseModel *string `json:"upstream_response_model,omitempty"`
+	// 上游响应模型与发送模型是否不一致；NULL 表示未观测
+	UpstreamModelMismatch *bool `json:"upstream_model_mismatch,omitempty"`
+	// 客户端显式会话标识，不含粘性哈希
+	SessionID *string `json:"session_id,omitempty"`
+	// 映射前客户端请求的推理强度
+	RequestedReasoningEffort *string `json:"requested_reasoning_effort,omitempty"`
+	// 直接上游响应头声明的请求 ID
+	UpstreamRequestID *string `json:"upstream_request_id,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -231,13 +245,13 @@ func (*UsageLog) scanValues(columns []string) ([]any, error) {
 			values[i] = &sql.NullScanner{S: new(decimal.Decimal)}
 		case usagelog.FieldSalesPricingSnapshot, usagelog.FieldSalesPricingShadowSnapshot, usagelog.FieldImageSizeBreakdown:
 			values[i] = new([]byte)
-		case usagelog.FieldStream, usagelog.FieldCacheTTLOverridden:
+		case usagelog.FieldStream, usagelog.FieldCacheTTLOverridden, usagelog.FieldUpstreamModelMismatch:
 			values[i] = new(sql.NullBool)
-		case usagelog.FieldInputCost, usagelog.FieldOutputCost, usagelog.FieldCacheCreationCost, usagelog.FieldCacheReadCost, usagelog.FieldTotalCost, usagelog.FieldActualCost, usagelog.FieldRateMultiplier, usagelog.FieldAccountRateMultiplier:
+		case usagelog.FieldInputCost, usagelog.FieldOutputCost, usagelog.FieldImageInputCost, usagelog.FieldCacheCreationCost, usagelog.FieldCacheReadCost, usagelog.FieldTotalCost, usagelog.FieldActualCost, usagelog.FieldRateMultiplier, usagelog.FieldAccountRateMultiplier:
 			values[i] = new(sql.NullFloat64)
-		case usagelog.FieldID, usagelog.FieldUserID, usagelog.FieldAPIKeyID, usagelog.FieldAccountID, usagelog.FieldChannelID, usagelog.FieldGroupID, usagelog.FieldSubscriptionID, usagelog.FieldInputTokens, usagelog.FieldOutputTokens, usagelog.FieldCacheCreationTokens, usagelog.FieldCacheReadTokens, usagelog.FieldCacheCreation5mTokens, usagelog.FieldCacheCreation1hTokens, usagelog.FieldUpstreamMultiplierChangeID, usagelog.FieldAccountFinanceProfileID, usagelog.FieldBillingType, usagelog.FieldDurationMs, usagelog.FieldFirstTokenMs, usagelog.FieldImageCount, usagelog.FieldVideoDurationSeconds, usagelog.FieldVideoCount:
+		case usagelog.FieldID, usagelog.FieldUserID, usagelog.FieldAPIKeyID, usagelog.FieldAccountID, usagelog.FieldChannelID, usagelog.FieldGroupID, usagelog.FieldSubscriptionID, usagelog.FieldInputTokens, usagelog.FieldOutputTokens, usagelog.FieldCacheCreationTokens, usagelog.FieldCacheReadTokens, usagelog.FieldCacheCreation5mTokens, usagelog.FieldCacheCreation1hTokens, usagelog.FieldImageInputTokens, usagelog.FieldUpstreamMultiplierChangeID, usagelog.FieldAccountFinanceProfileID, usagelog.FieldBillingType, usagelog.FieldDurationMs, usagelog.FieldFirstTokenMs, usagelog.FieldImageCount, usagelog.FieldVideoDurationSeconds, usagelog.FieldVideoCount:
 			values[i] = new(sql.NullInt64)
-		case usagelog.FieldRequestID, usagelog.FieldModel, usagelog.FieldRequestedModel, usagelog.FieldUpstreamModel, usagelog.FieldModelMappingChain, usagelog.FieldBillingTier, usagelog.FieldBillingMode, usagelog.FieldUpstreamMultiplierSource, usagelog.FieldSalesModel, usagelog.FieldSalesPricingEffectiveModel, usagelog.FieldSalesPricingLegacySource, usagelog.FieldSalesPricingVersion, usagelog.FieldSalesPricingSource, usagelog.FieldSalesPricingChecksum, usagelog.FieldUserAgent, usagelog.FieldIPAddress, usagelog.FieldImageSize, usagelog.FieldImageInputSize, usagelog.FieldImageOutputSize, usagelog.FieldImageSizeSource, usagelog.FieldVideoResolution, usagelog.FieldVideoTaskID:
+		case usagelog.FieldRequestID, usagelog.FieldModel, usagelog.FieldRequestedModel, usagelog.FieldUpstreamModel, usagelog.FieldModelMappingChain, usagelog.FieldBillingTier, usagelog.FieldBillingMode, usagelog.FieldUpstreamMultiplierSource, usagelog.FieldSalesModel, usagelog.FieldSalesPricingEffectiveModel, usagelog.FieldSalesPricingLegacySource, usagelog.FieldSalesPricingVersion, usagelog.FieldSalesPricingSource, usagelog.FieldSalesPricingChecksum, usagelog.FieldUserAgent, usagelog.FieldIPAddress, usagelog.FieldImageSize, usagelog.FieldImageInputSize, usagelog.FieldImageOutputSize, usagelog.FieldImageSizeSource, usagelog.FieldVideoResolution, usagelog.FieldVideoTaskID, usagelog.FieldUpstreamResponseModel, usagelog.FieldSessionID, usagelog.FieldRequestedReasoningEffort, usagelog.FieldUpstreamRequestID:
 			values[i] = new(sql.NullString)
 		case usagelog.FieldUpstreamMultiplierEffectiveAt, usagelog.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -384,6 +398,12 @@ func (_m *UsageLog) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.CacheCreation1hTokens = int(value.Int64)
 			}
+		case usagelog.FieldImageInputTokens:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field image_input_tokens", values[i])
+			} else if value.Valid {
+				_m.ImageInputTokens = int(value.Int64)
+			}
 		case usagelog.FieldInputCost:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
 				return fmt.Errorf("unexpected type %T for field input_cost", values[i])
@@ -395,6 +415,12 @@ func (_m *UsageLog) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field output_cost", values[i])
 			} else if value.Valid {
 				_m.OutputCost = value.Float64
+			}
+		case usagelog.FieldImageInputCost:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field image_input_cost", values[i])
+			} else if value.Valid {
+				_m.ImageInputCost = value.Float64
 			}
 		case usagelog.FieldCacheCreationCost:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
@@ -655,6 +681,41 @@ func (_m *UsageLog) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.CacheTTLOverridden = value.Bool
 			}
+		case usagelog.FieldUpstreamResponseModel:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field upstream_response_model", values[i])
+			} else if value.Valid {
+				_m.UpstreamResponseModel = new(string)
+				*_m.UpstreamResponseModel = value.String
+			}
+		case usagelog.FieldUpstreamModelMismatch:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field upstream_model_mismatch", values[i])
+			} else if value.Valid {
+				_m.UpstreamModelMismatch = new(bool)
+				*_m.UpstreamModelMismatch = value.Bool
+			}
+		case usagelog.FieldSessionID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field session_id", values[i])
+			} else if value.Valid {
+				_m.SessionID = new(string)
+				*_m.SessionID = value.String
+			}
+		case usagelog.FieldRequestedReasoningEffort:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field requested_reasoning_effort", values[i])
+			} else if value.Valid {
+				_m.RequestedReasoningEffort = new(string)
+				*_m.RequestedReasoningEffort = value.String
+			}
+		case usagelog.FieldUpstreamRequestID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field upstream_request_id", values[i])
+			} else if value.Valid {
+				_m.UpstreamRequestID = new(string)
+				*_m.UpstreamRequestID = value.String
+			}
 		case usagelog.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
@@ -795,11 +856,17 @@ func (_m *UsageLog) String() string {
 	builder.WriteString("cache_creation_1h_tokens=")
 	builder.WriteString(fmt.Sprintf("%v", _m.CacheCreation1hTokens))
 	builder.WriteString(", ")
+	builder.WriteString("image_input_tokens=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ImageInputTokens))
+	builder.WriteString(", ")
 	builder.WriteString("input_cost=")
 	builder.WriteString(fmt.Sprintf("%v", _m.InputCost))
 	builder.WriteString(", ")
 	builder.WriteString("output_cost=")
 	builder.WriteString(fmt.Sprintf("%v", _m.OutputCost))
+	builder.WriteString(", ")
+	builder.WriteString("image_input_cost=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ImageInputCost))
 	builder.WriteString(", ")
 	builder.WriteString("cache_creation_cost=")
 	builder.WriteString(fmt.Sprintf("%v", _m.CacheCreationCost))
@@ -964,6 +1031,31 @@ func (_m *UsageLog) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("cache_ttl_overridden=")
 	builder.WriteString(fmt.Sprintf("%v", _m.CacheTTLOverridden))
+	builder.WriteString(", ")
+	if v := _m.UpstreamResponseModel; v != nil {
+		builder.WriteString("upstream_response_model=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.UpstreamModelMismatch; v != nil {
+		builder.WriteString("upstream_model_mismatch=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.SessionID; v != nil {
+		builder.WriteString("session_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.RequestedReasoningEffort; v != nil {
+		builder.WriteString("requested_reasoning_effort=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.UpstreamRequestID; v != nil {
+		builder.WriteString("upstream_request_id=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))

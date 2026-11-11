@@ -145,6 +145,34 @@
           <Select v-model="filters.group_id" :options="groupOptions" searchable @change="emitChange" />
         </div>
 
+        <!-- V03-R11 审计筛选：按上游请求 ID 查询、模型不一致（清理对话框不支持，隐藏） -->
+        <template v-if="showAuditFilters">
+          <div class="w-full sm:w-auto sm:min-w-[220px]">
+            <label class="input-label">{{ t('admin.usage.upstreamRequestId') }}</label>
+            <input
+              v-model="upstreamRequestIdInput"
+              data-testid="usage-filter-upstream-request-id"
+              type="text"
+              maxlength="128"
+              autocomplete="off"
+              spellcheck="false"
+              class="input font-mono"
+              :placeholder="t('admin.usage.upstreamRequestIdPlaceholder')"
+              @keyup.enter="applyUpstreamRequestId"
+              @blur="applyUpstreamRequestId"
+            />
+          </div>
+          <div class="w-full sm:w-auto sm:min-w-[180px]">
+            <label class="input-label">{{ t('admin.usage.upstreamModelMismatch') }}</label>
+            <Select
+              v-model="upstreamModelMismatchValue"
+              data-testid="usage-filter-upstream-model-mismatch"
+              :options="upstreamModelMismatchOptions"
+              @change="emitChange"
+            />
+          </div>
+        </template>
+
       </div>
 
       <!-- Right: actions -->
@@ -168,7 +196,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, toRef, watch } from 'vue'
+import { computed, ref, onMounted, onUnmounted, toRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
@@ -182,10 +210,12 @@ interface Props {
   startDate: string
   endDate: string
   showActions?: boolean
+  showAuditFilters?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  showActions: true
+  showActions: true,
+  showAuditFilters: false
 })
 const emit = defineEmits([
   'update:modelValue',
@@ -247,6 +277,38 @@ const billingModeOptions = ref<SelectOption[]>([
 ])
 
 const emitChange = () => emit('change')
+
+const upstreamModelMismatchOptions = ref<SelectOption[]>([
+  { value: null, label: t('admin.usage.upstreamModelMismatchAll') },
+  { value: true, label: t('admin.usage.upstreamModelMismatchOnly') },
+  { value: false, label: t('admin.usage.upstreamModelMismatchMatched') }
+])
+
+// 筛选值未设置时是 undefined，「全部」选项是 null；Select 严格相等匹配，不转换会显示「请选择」。
+// 写回时把 null 还原为 undefined，请求里不带该参数。
+const upstreamModelMismatchValue = computed<boolean | null>({
+  get: () => (typeof filters.value.upstream_model_mismatch === 'boolean' ? filters.value.upstream_model_mismatch : null),
+  set: (value) => {
+    filters.value.upstream_model_mismatch = typeof value === 'boolean' ? value : undefined
+  }
+})
+
+// 上游请求 ID 输入框：回车或失焦时才查询，避免每个字符都发请求。
+const upstreamRequestIdInput = ref<string>('')
+watch(
+  () => filters.value.upstream_request_id,
+  (value) => {
+    upstreamRequestIdInput.value = typeof value === 'string' ? value : ''
+  },
+  { immediate: true }
+)
+const applyUpstreamRequestId = () => {
+  const next = upstreamRequestIdInput.value.trim()
+  const current = typeof filters.value.upstream_request_id === 'string' ? filters.value.upstream_request_id : ''
+  if (next === current) return
+  filters.value.upstream_request_id = next || undefined
+  emitChange()
+}
 
 const debounceUserSearch = () => {
   if (userSearchTimeout) clearTimeout(userSearchTimeout)

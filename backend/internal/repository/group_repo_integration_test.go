@@ -17,6 +17,7 @@ import (
 type GroupRepoSuite struct {
 	suite.Suite
 	ctx  context.Context
+	base *dbent.Client
 	tx   *dbent.Tx
 	repo *groupRepository
 }
@@ -35,9 +36,13 @@ func (s *forbidSQLExecutor) QueryContext(ctx context.Context, query string, args
 	return nil, errors.New("unexpected sql query")
 }
 
+func (s *GroupRepoSuite) SetupSuite() {
+	s.base = isolatedSuiteClient(s.T())
+}
+
 func (s *GroupRepoSuite) SetupTest() {
 	s.ctx = context.Background()
-	tx := testEntTx(s.T())
+	tx := suiteEntTx(s.T(), s.base)
 	s.tx = tx
 	s.repo = newGroupRepositoryWithSQL(tx.Client(), tx)
 }
@@ -276,7 +281,7 @@ func (s *GroupRepoSuite) TestListWithFilters_IsExclusive() {
 
 func (s *GroupRepoSuite) TestListWithFilters_Search() {
 	newRepo := func() (*groupRepository, context.Context) {
-		tx := testEntTx(s.T())
+		tx := suiteEntTx(s.T(), s.base)
 		return newGroupRepositoryWithSQL(tx.Client(), tx), context.Background()
 	}
 

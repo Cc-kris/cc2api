@@ -432,6 +432,25 @@ func TestUpdatePaymentConfig_PersistsVisibleMethodRouting(t *testing.T) {
 	}
 }
 
+func TestUpdatePaymentConfig_NotifiesPublicSettingsCache(t *testing.T) {
+	repo := &paymentConfigSettingRepoStub{values: map[string]string{}}
+	invalidations := 0
+	svc := &PaymentConfigService{
+		settingRepo: repo,
+		onUpdate:    func() { invalidations++ },
+	}
+	enabled := true
+	if err := svc.UpdatePaymentConfig(context.Background(), UpdatePaymentConfigRequest{Enabled: &enabled}); err != nil {
+		t.Fatalf("UpdatePaymentConfig returned error: %v", err)
+	}
+	if repo.values[SettingPaymentEnabled] != "true" {
+		t.Fatalf("payment enabled = %q, want true", repo.values[SettingPaymentEnabled])
+	}
+	if invalidations != 1 {
+		t.Fatalf("public settings invalidations = %d, want 1", invalidations)
+	}
+}
+
 func paymentConfigStrPtr(value string) *string {
 	return &value
 }

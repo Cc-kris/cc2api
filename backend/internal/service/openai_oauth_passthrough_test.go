@@ -48,12 +48,21 @@ func (u *httpUpstreamRecorder) Do(req *http.Request, proxyURL string, accountID 
 	if u.err != nil {
 		return nil, u.err
 	}
+	resp := u.resp
 	if len(u.responses) > 0 {
-		resp := u.responses[0]
+		resp = u.responses[0]
 		u.responses = u.responses[1:]
-		return resp, nil
 	}
-	return u.resp, nil
+	if req != nil {
+		// Wait for the cancellation propagation that a real HTTP RoundTrip
+		// observes before it can return a response. Otherwise this synchronous
+		// recorder would make an already-canceled parent's AfterFunc racy.
+		select {
+		case <-req.Context().Done():
+		default:
+		}
+	}
+	return resp, nil
 }
 
 func (u *httpUpstreamRecorder) DoWithTLS(req *http.Request, proxyURL string, accountID int64, accountConcurrency int, profile *tlsfingerprint.Profile) (*http.Response, error) {

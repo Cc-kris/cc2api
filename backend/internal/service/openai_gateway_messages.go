@@ -33,6 +33,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (*OpenAIForwardResult, error) {
+	beginUpstreamResponseModelObservation(c) // V03-R11：每次转发尝试重置上游响应模型观测（本路径未接观测时保持为空，避免沿用上次尝试的值）
 	// Domestic providers default to the controlled Anthropic↔Chat bridge. A
 	// fixed anthropic protocol is an explicit operator declaration that this
 	// account has a native Messages endpoint, so it must use that selected URL.
@@ -881,14 +882,15 @@ func (s *OpenAIGatewayService) handleAnthropicBufferedStreamingResponse(
 	c.JSON(http.StatusOK, anthropicResp)
 
 	return &OpenAIForwardResult{
-		RequestID:     requestID,
-		ResponseID:    finalResponse.ID,
-		Usage:         usage,
-		Model:         originalModel,
-		BillingModel:  billingModel,
-		UpstreamModel: upstreamModel,
-		Stream:        false,
-		Duration:      time.Since(startTime),
+		RequestID:                   requestID,
+		ResponseID:                  finalResponse.ID,
+		Usage:                       usage,
+		Model:                       originalModel,
+		BillingModel:                billingModel,
+		UpstreamModel:               upstreamModel,
+		UpstreamResponseServiceTier: usage.ResponseServiceTier,
+		Stream:                      false,
+		Duration:                    time.Since(startTime),
 	}, nil
 }
 
@@ -899,6 +901,14 @@ func isOpenAICompatResponsesTerminalEvent(eventType string) bool {
 	default:
 		return false
 	}
+}
+
+// openAICompatTerminalServiceTier returns the processing tier declared by a
+// terminal Responses API event (V03-T13, upstream 75faedda9).
+func openAICompatTerminalServiceTier(payload string, eventType string) string {
+	var observer openAIResponseServiceTierObserver
+	observer.ObservePayload([]byte(payload), eventType)
+	return observer.ServiceTier()
 }
 
 func isOpenAICompatDoneSentinelLine(line string) bool {
@@ -999,6 +1009,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 							if event.Response.Usage != nil {
 								usage = copyOpenAIUsageFromResponsesUsage(event.Response.Usage)
 							}
+							usage.ResponseServiceTier = openAICompatTerminalServiceTier(payload, event.Type)
 							return event.Response, usage, acc, nil
 						}
 					}
@@ -1040,6 +1051,7 @@ func (s *OpenAIGatewayService) readOpenAICompatBufferedTerminal(
 				if event.Response.Usage != nil {
 					usage = copyOpenAIUsageFromResponsesUsage(event.Response.Usage)
 				}
+				usage.ResponseServiceTier = openAICompatTerminalServiceTier(payload, event.Type)
 				return event.Response, usage, acc, nil
 			}
 
@@ -1081,6 +1093,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 	state := apicompat.NewResponsesEventToAnthropicState()
 	state.Model = originalModel
 	var usage OpenAIUsage
+	var tierObserver openAIResponseServiceTierObserver
 	responseID := ""
 	var firstTokenMs *int
 	firstChunk := true
@@ -1110,15 +1123,16 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 	// resultWithUsage builds the final result snapshot.
 	resultWithUsage := func() *OpenAIForwardResult {
 		return &OpenAIForwardResult{
-			RequestID:     requestID,
-			ResponseID:    responseID,
-			Usage:         usage,
-			Model:         originalModel,
-			BillingModel:  billingModel,
-			UpstreamModel: upstreamModel,
-			Stream:        true,
-			Duration:      time.Since(startTime),
-			FirstTokenMs:  firstTokenMs,
+			RequestID:                   requestID,
+			ResponseID:                  responseID,
+			Usage:                       usage,
+			Model:                       originalModel,
+			BillingModel:                billingModel,
+			UpstreamModel:               upstreamModel,
+			UpstreamResponseServiceTier: tierObserver.ServiceTier(),
+			Stream:                      true,
+			Duration:                    time.Since(startTime),
+			FirstTokenMs:                firstTokenMs,
 		}
 	}
 
@@ -1149,6 +1163,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 				usage = copyOpenAIUsageFromResponsesUsage(event.Response.Usage)
 			}
 		}
+		tierObserver.ObservePayload([]byte(payload), event.Type)
 
 		// Convert to Anthropic events
 		events := apicompat.ResponsesEventToAnthropicEvents(&event, state)

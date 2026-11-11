@@ -17,12 +17,17 @@ type GatewayRoutingSuite struct {
 	suite.Suite
 	ctx         context.Context
 	client      *dbent.Client
+	base        *dbent.Client
 	accountRepo *accountRepository
+}
+
+func (s *GatewayRoutingSuite) SetupSuite() {
+	s.base = isolatedSuiteClient(s.T())
 }
 
 func (s *GatewayRoutingSuite) SetupTest() {
 	s.ctx = context.Background()
-	tx := testEntTx(s.T())
+	tx := suiteEntTx(s.T(), s.base)
 	s.client = tx.Client()
 	s.accountRepo = newAccountRepositoryWithSQL(s.client, tx, nil)
 }

@@ -558,6 +558,9 @@ type ClaudeUsage struct {
 	CacheCreation5mTokens    int // 5分钟缓存创建token（来自嵌套 cache_creation 对象）
 	CacheCreation1hTokens    int // 1小时缓存创建token（来自嵌套 cache_creation 对象）
 	ImageOutputTokens        int `json:"image_output_tokens,omitempty"`
+	// Speed is Anthropic usage.speed ("fast" / "standard") as declared by the
+	// upstream response; "" when absent. Only used to lower the billed tier.
+	Speed string `json:"speed,omitempty"`
 }
 
 // ForwardResult 转发结果
@@ -574,6 +577,21 @@ type ForwardResult struct {
 	ClientDisconnect       bool // 客户端是否在流式传输过程中断开
 	ReasoningEffort        *string
 	UpstreamBillingPayload []byte
+	// ServiceTier records the tier requested by the client (Anthropic speed=fast
+	// normalized to "fast"). Usage recording lowers it to UpstreamResponseServiceTier
+	// when the upstream reports a cheaper tier (see ResolveBillingServiceTier).
+	ServiceTier *string
+	// UpstreamResponseServiceTier is the tier the upstream reports having used
+	// (Anthropic usage.speed: "fast" / "standard"); "" when not declared.
+	UpstreamResponseServiceTier string
+
+	// V03-R11 用量审计（只读，不参与计费）
+	// UpstreamResponseModel 是上游原始成功响应声明的模型；handler 提交用量前从观测器补齐。
+	UpstreamResponseModel string
+	// RequestedReasoningEffort 是映射前客户端请求的推理强度。
+	RequestedReasoningEffort *string
+	// UpstreamHeaders 是直接上游的响应头快照，记账时按账户配置解析 upstream_request_id。
+	UpstreamHeaders http.Header
 
 	// 图片生成计费字段（图片生成模型使用）
 	ImageCount         int    // 生成的图片数量
@@ -624,6 +642,16 @@ type UpstreamFailoverError struct {
 	NextAccountAction        NextAccountAction
 	ClientStatusCode         int
 	ClientMessage            string
+
+	// 流式续写中断时的已观测用量快照（仅在观测到 token 时非 nil）。
+	// 只用于财务成本证据（上游尝试记录）和「续写耗尽按最后一个有用量的尝试收费」，
+	// 不改变「UpstreamFailoverError 恒配 result=nil」的不变式：handler 绝不能对中断尝试直接 RecordUsage。
+	ObservedUsage         *ClaudeUsage
+	ObservedModel         string // 计费/日志用的原始模型（ForwardResult.Model 口径）
+	ObservedUpstreamModel string // 实际发给上游的模型
+	// ObservedOpenAIUsage 是 OpenAI Responses 续写中断时的原始 OpenAI 用量（input 含缓存读），
+	// 供 OpenAI handler 构造 OpenAIForwardResult 记账；ObservedUsage 是换算后的 Claude 口径。
+	ObservedOpenAIUsage *OpenAIUsage
 }
 
 func (e *UpstreamFailoverError) Error() string {
@@ -4770,11 +4798,24 @@ func systemHasBillingAttributionBlock(body []byte) bool {
 }
 
 // Forward 转发请求到Claude API
-func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, parsed *ParsedRequest) (*ForwardResult, error) {
+func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, parsed *ParsedRequest) (result *ForwardResult, err error) {
 	startTime := time.Now()
+	beginUpstreamResponseModelObservation(c) // V03-R11：每次转发尝试重置上游响应模型观测
 	if parsed == nil {
 		return nil, fmt.Errorf("parse request: empty request")
 	}
+	// Anthropic Fast 通过 speed=fast 请求（V03-T13，上游 7dae055f2）。在共享出口统一挂上
+	// 计费档位，透传、OAuth 和部分用量结果都走同一套计费与用量记录。
+	defer func() {
+		if result != nil {
+			if tier := anthropicSpeedServiceTier(account, parsed.Speed, anthropicSpeedModel(parsed, result)); tier != nil {
+				result.ServiceTier = tier
+			}
+			if result.UpstreamResponseServiceTier == "" {
+				result.UpstreamResponseServiceTier = normalizeObservedAnthropicSpeed(result.Usage.Speed)
+			}
+		}
+	}()
 
 	// Web Search 模拟：纯 web_search 请求时，直接调用搜索 API 构造响应
 	if account != nil && s.shouldEmulateWebSearch(ctx, account, parsed.GroupID, parsed.Body) {
@@ -5388,10 +5429,17 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	if reqStream {
 		streamResult, err := s.handleStreamingResponse(ctx, resp, c, account, startTime, originalModel, reqModel, shouldMimicClaudeCode)
 		if err != nil {
+			// 「have error in stream」必须先转成 403 失败转移（结果保持 nil），排在 partial 之前。
 			if err.Error() == "have error in stream" {
 				return nil, &UpstreamFailoverError{
 					StatusCode: 403,
 				}
+			}
+			// 流中断（缺失 terminal 事件、读错误、数据间隔超时等）时保留已观测到的
+			// usage 与错误一起返回，handler 在错误处理完成后照常提交 usage 记录。
+			// 失败转移错误（含本地流式续写中断）由 partialStreamUsageResult 返回 nil。
+			if partial := partialStreamUsageResult(resp, streamResult, originalModel, mappedModel, startTime, err); partial != nil {
+				return partial, err
 			}
 			return nil, err
 		}
@@ -5454,6 +5502,7 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 	account *Account,
 	input anthropicPassthroughForwardInput,
 ) (*ForwardResult, error) {
+	beginUpstreamResponseModelObservation(c) // V03-R11：每次转发尝试重置上游响应模型观测
 	token, tokenType, err := s.GetAccessToken(ctx, account)
 	if err != nil {
 		return nil, err
@@ -5475,6 +5524,27 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 	}
 	// Pre-filter: strip empty text blocks (including nested in tool_result) to prevent upstream 400.
 	input.Body = StripEmptyTextBlocks(input.Body)
+
+	localCacheLookup, localCacheCfg := s.prepareClaudeLocalResponseCache(ctx, c, input.Body, input.RequestModel, input.APIKeyID, input.GroupID)
+	if usage, ok := s.tryWriteClaudeLocalResponseCacheHit(ctx, c, localCacheLookup, input.RequestStream); ok {
+		return &ForwardResult{
+			Usage:         *usage,
+			Model:         input.OriginalModel,
+			UpstreamModel: input.RequestModel,
+			Stream:        input.RequestStream,
+			Duration:      time.Since(input.StartTime),
+		}, nil
+	}
+	if localCacheLookup.Key != "" {
+		_ = s.probeSemanticCacheCandidate(ctx, SemanticCacheLookupRequest{
+			RequestBody: input.Body,
+			Platform:    localCacheLookup.Platform,
+			Model:       localCacheLookup.Model,
+			APIKeyID:    localCacheLookup.APIKeyID,
+			UserID:      SemanticCacheUserIDFromContext(c),
+			GroupID:     localCacheLookup.GroupID,
+		})
+	}
 
 	var resp *http.Response
 	retryStart := time.Now()
@@ -5647,20 +5717,31 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 	var clientDisconnect bool
 	var upstreamBillingPayload []byte
 	if input.RequestStream {
-		streamResult, err := s.handleStreamingResponseAnthropicAPIKeyPassthrough(ctx, resp, c, account, input.StartTime, input.RequestModel)
+		streamResult, err := s.handleStreamingResponseAnthropicAPIKeyPassthrough(ctx, resp, c, account, input.StartTime, input.RequestModel, localCacheCfg.MaxBodySize)
 		if err != nil {
+			// 流中断时保留已观测到的 usage 与错误一起返回，避免上游已计量的请求完全漏记漏计费。
+			if partial := partialStreamUsageResult(resp, streamResult, input.OriginalModel, input.RequestModel, input.StartTime, err); partial != nil {
+				return partial, err
+			}
 			return nil, err
 		}
 		usage = streamResult.usage
 		firstTokenMs = streamResult.firstTokenMs
 		clientDisconnect = streamResult.clientDisconnect
 		upstreamBillingPayload = append([]byte(nil), streamResult.billingPayload...)
+		if !clientDisconnect && streamResult.cacheBodyTooLarge {
+			s.RecordLocalResponseCacheStat(ctx, "store_skip:body_too_large")
+		} else if !clientDisconnect && len(streamResult.cacheBody) > 0 {
+			s.persistClaudeLocalResponseCache(ctx, c, localCacheLookup, localCacheCfg, input.Body, resp.StatusCode, streamResult.cacheContentType, streamResult.cacheBody)
+		}
 	} else {
 		var responseBody []byte
-		usage, responseBody, _, err = s.handleNonStreamingResponseAnthropicAPIKeyPassthrough(ctx, resp, c, account)
+		var contentType string
+		usage, responseBody, contentType, err = s.handleNonStreamingResponseAnthropicAPIKeyPassthrough(ctx, resp, c, account)
 		if err != nil {
 			return nil, err
 		}
+		s.persistClaudeLocalResponseCache(ctx, c, localCacheLookup, localCacheCfg, input.Body, resp.StatusCode, contentType, responseBody)
 		upstreamBillingPayload = append([]byte(nil), responseBody...)
 	}
 	if usage == nil {
@@ -5739,8 +5820,9 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 	account *Account,
 	startTime time.Time,
 	model string,
-	_ ...int, // retained for source compatibility; local response caching was removed
+	cacheMaxBodySize int,
 ) (*streamingResult, error) {
+	observeUpstreamResponseHeaders(c, resp.Header) // V03-T17：记下直接上游响应头，记账时解析 upstream_request_id
 	if s.rateLimitService != nil {
 		s.rateLimitService.UpdateSessionWindow(ctx, account, resp.Header)
 	}
@@ -5773,6 +5855,29 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 	var firstTokenMs *int
 	clientDisconnected := false
 	sawTerminalEvent := false
+	var cacheBody bytes.Buffer
+	cacheBodyTooLarge := false
+	appendCacheLine := func(line string) {
+		if cacheBodyTooLarge {
+			return
+		}
+		lineLen := len(line) + 1
+		if cacheMaxBodySize > 0 && cacheBody.Len()+lineLen > cacheMaxBodySize {
+			cacheBody.Reset()
+			cacheBodyTooLarge = true
+			return
+		}
+		_, _ = cacheBody.WriteString(line)
+		_ = cacheBody.WriteByte('\n')
+	}
+	completedStreamResult := func() *streamingResult {
+		result := &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: clientDisconnected, cacheBodyTooLarge: cacheBodyTooLarge}
+		if !clientDisconnected && !cacheBodyTooLarge && cacheBody.Len() > 0 {
+			result.cacheBody = append([]byte(nil), cacheBody.Bytes()...)
+			result.cacheContentType = contentType
+		}
+		return result
+	}
 
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
@@ -5860,11 +5965,11 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 					}
 					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: clientDisconnected}, fmt.Errorf("stream usage incomplete: missing terminal event")
 				}
-				return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: clientDisconnected}, nil
+				return completedStreamResult(), nil
 			}
 			if ev.err != nil {
 				if sawTerminalEvent {
-					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: clientDisconnected}, nil
+					return completedStreamResult(), nil
 				}
 				if clientDisconnected {
 					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: true}, fmt.Errorf("stream usage incomplete after disconnect: %w", ev.err)
@@ -5882,6 +5987,7 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 			line := ev.line
 			if data, ok := extractAnthropicSSEDataLine(line); ok {
 				trimmed := strings.TrimSpace(data)
+				observeAnthropicResponseModel(c, []byte(trimmed)) // V03-R11 审计：只读观测
 				if anthropicStreamEventIsTerminal("", trimmed) {
 					sawTerminalEvent = true
 				}
@@ -5906,11 +6012,13 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 					clientDisconnected = true
 					logger.LegacyPrintf("service.gateway", "[Anthropic passthrough] Client disconnected during streaming, continue draining upstream for usage: account=%d", account.ID)
 				} else if line == "" {
+					appendCacheLine(restored)
 					// 按 SSE 事件边界刷出，减少每行 flush 带来的 syscall 开销。
 					flusher.Flush()
 					lastDataAt = time.Now()
 					inPartialEvent = false
 				} else {
+					appendCacheLine(restored)
 					inPartialEvent = true
 				}
 			}
@@ -5971,6 +6079,9 @@ func (s *GatewayService) parseSSEUsagePassthrough(data string, usage *ClaudeUsag
 	case "message_start":
 		msgUsage := parsed.Get("message.usage")
 		if msgUsage.Exists() {
+			if speed := normalizeObservedAnthropicSpeed(msgUsage.Get("speed").String()); speed != "" {
+				usage.Speed = speed
+			}
 			usage.InputTokens = int(msgUsage.Get("input_tokens").Int())
 			usage.CacheCreationInputTokens = int(msgUsage.Get("cache_creation_input_tokens").Int())
 			usage.CacheReadInputTokens = int(msgUsage.Get("cache_read_input_tokens").Int())
@@ -6046,6 +6157,7 @@ func parseClaudeUsageFromResponseBody(body []byte) *ClaudeUsage {
 
 	usage.InputTokens = int(usageNode.Get("input_tokens").Int())
 	usage.OutputTokens = int(usageNode.Get("output_tokens").Int())
+	usage.Speed = normalizeObservedAnthropicSpeed(usageNode.Get("speed").String())
 	usage.CacheCreationInputTokens = int(usageNode.Get("cache_creation_input_tokens").Int())
 	usage.CacheReadInputTokens = int(usageNode.Get("cache_read_input_tokens").Int())
 
@@ -6235,6 +6347,7 @@ func (s *GatewayService) handleNonStreamingResponseAnthropicAPIKeyPassthrough(
 	c *gin.Context,
 	account *Account,
 ) (*ClaudeUsage, []byte, string, error) {
+	observeUpstreamResponseHeaders(c, resp.Header) // V03-T17：记下直接上游响应头，记账时解析 upstream_request_id
 	if s.rateLimitService != nil {
 		s.rateLimitService.UpdateSessionWindow(ctx, account, resp.Header)
 	}
@@ -6243,6 +6356,7 @@ func (s *GatewayService) handleNonStreamingResponseAnthropicAPIKeyPassthrough(
 	if err != nil {
 		return nil, nil, "", err
 	}
+	observeAnthropicResponseModel(c, body) // V03-R11 审计：只读观测
 
 	usage := parseClaudeUsageFromResponseBody(body)
 
@@ -7848,13 +7962,91 @@ func (s *GatewayService) handleRetryExhaustedError(ctx context.Context, resp *ht
 
 // streamingResult 流式响应结果
 type streamingResult struct {
-	usage            *ClaudeUsage
-	firstTokenMs     *int
-	clientDisconnect bool // 客户端是否在流式传输过程中断开
-	billingPayload   []byte
+	usage             *ClaudeUsage
+	firstTokenMs      *int
+	clientDisconnect  bool // 客户端是否在流式传输过程中断开
+	billingPayload    []byte
+	cacheBody         []byte
+	cacheContentType  string
+	cacheBodyTooLarge bool
+}
+
+// hasObservedTokens 报告流式过程中是否已观测到任何上游计量的 token。
+func (u *ClaudeUsage) hasObservedTokens() bool {
+	if u == nil {
+		return false
+	}
+	return u.InputTokens > 0 || u.OutputTokens > 0 ||
+		u.CacheCreationInputTokens > 0 || u.CacheReadInputTokens > 0 ||
+		u.CacheCreation5mTokens > 0 || u.CacheCreation1hTokens > 0 ||
+		u.ImageOutputTokens > 0
+}
+
+// attachObservedClaudeUsage 把已观测用量快照挂到续写中断错误上（无观测 token 时不挂）。
+func attachObservedClaudeUsage(foErr *UpstreamFailoverError, usage *ClaudeUsage, model, upstreamModel string) {
+	if foErr == nil || !usage.hasObservedTokens() {
+		return
+	}
+	snapshot := *usage
+	foErr.ObservedUsage = &snapshot
+	foErr.ObservedModel = model
+	foErr.ObservedUpstreamModel = upstreamModel
+}
+
+// ObservedForwardResult 把续写中断错误上的已观测用量构造成 ForwardResult，
+// 仅供 handler 在「续写耗尽且已向客户端输出过内容」时按最后一个有用量的尝试收费。
+// 没有观测用量时返回 nil。
+func (e *UpstreamFailoverError) ObservedForwardResult() *ForwardResult {
+	if e == nil || !e.ObservedUsage.hasObservedTokens() {
+		return nil
+	}
+	model := strings.TrimSpace(e.ObservedModel)
+	upstreamModel := strings.TrimSpace(e.ObservedUpstreamModel)
+	if model == "" {
+		model = upstreamModel
+	}
+	return &ForwardResult{
+		Usage:         *e.ObservedUsage,
+		Model:         model,
+		UpstreamModel: upstreamModel,
+		Stream:        true,
+	}
+}
+
+// partialStreamUsageResult 在流式转发中途出错时，把已观测到 usage 的部分结果包装为
+// ForwardResult（与错误一起返回给 handler 记录）。上游一旦下发过 message_start，
+// input/cache token 就已计量，直接丢弃会让请求完全漏记漏计费（上游 issue #5148）。
+// 无已观测 usage 时返回 nil，不生成零用量记录。
+//
+// 不变式：UpstreamFailoverError 必须保持 result=nil——failover 重试（含本地流式续写）
+// 成功后按成功请求计费，若同时返回部分 usage 会造成双重计费，此处显式拦截兜底。
+func partialStreamUsageResult(resp *http.Response, streamResult *streamingResult, model, upstreamModel string, startTime time.Time, err error) *ForwardResult {
+	if streamResult == nil || !streamResult.usage.hasObservedTokens() {
+		return nil
+	}
+	var failoverErr *UpstreamFailoverError
+	if errors.As(err, &failoverErr) {
+		return nil
+	}
+	requestID := ""
+	if resp != nil {
+		requestID = resp.Header.Get("x-request-id")
+	}
+	return &ForwardResult{
+		RequestID:              requestID,
+		Usage:                  *streamResult.usage,
+		Model:                  model,
+		UpstreamModel:          upstreamModel,
+		Stream:                 true,
+		Duration:               time.Since(startTime),
+		FirstTokenMs:           streamResult.firstTokenMs,
+		ClientDisconnect:       streamResult.clientDisconnect,
+		UpstreamBillingPayload: append([]byte(nil), streamResult.billingPayload...),
+	}
 }
 
 func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, startTime time.Time, originalModel, mappedModel string, mimicClaudeCode bool) (*streamingResult, error) {
+	observeUpstreamResponseHeaders(c, resp.Header) // V03-T17：记下直接上游响应头，记账时解析 upstream_request_id
 	// 更新5h窗口状态
 	s.rateLimitService.UpdateSessionWindow(ctx, account, resp.Header)
 
@@ -7992,7 +8184,10 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 			return nil
 		}
 		logger.LegacyPrintf("service.gateway", "Stream interrupted mid-output (account=%d), failing over with continuation: %s", account.ID, message)
-		return streamCont.NewStreamInterruptedFailover(message)
+		foErr := streamCont.NewStreamInterruptedFailover(message)
+		// 带上本次尝试已观测的用量：只进财务成本证据；续写耗尽时作为「最后一个有用量的尝试」收费。
+		attachObservedClaudeUsage(foErr, usage, originalModel, mappedModel)
+		return foErr
 	}
 	var billingPayload []byte
 	resultWithBilling := func(disconnected bool) *streamingResult {
@@ -8049,6 +8244,7 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 		}
 
 		eventType, _ := event["type"].(string)
+		observeAnthropicResponseModel(c, []byte(dataLine)) // V03-R11 审计：只读观测，不影响转发
 		if eventName == "" {
 			eventName = eventType
 		}
@@ -8208,6 +8404,12 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 				}
 				billingPayload = appendFinanceBillingPayload(billingPayload, []byte(strings.Join(outputBlocks, "")))
 
+				// 用量合并必须独立于「是否写给客户端」：续写尝试的 message_start 会被
+				// RewriteAnthropicBlock 丢弃（客户端只看到一条回复），但其中的 input/cache token
+				// 是本次上游尝试真实计量的用量，跳过会让续写成功的请求少计输入费用。
+				if data != "" && usagePatch != nil {
+					mergeSSEUsagePatch(usage, usagePatch)
+				}
 				for _, block := range outputBlocks {
 					if streamCont != nil {
 						block = streamCont.RewriteAnthropicBlock(block)
@@ -8229,9 +8431,6 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 						if firstTokenMs == nil && data != "[DONE]" {
 							ms := int(time.Since(startTime).Milliseconds())
 							firstTokenMs = &ms
-						}
-						if usagePatch != nil {
-							mergeSSEUsagePatch(usage, usagePatch)
 						}
 					}
 				}
@@ -8307,6 +8506,7 @@ type sseUsagePatch struct {
 	hasCacheCreation5m       bool
 	cacheCreation1hTokens    int
 	hasCacheCreation1h       bool
+	speed                    string
 }
 
 func (s *GatewayService) extractSSEUsagePatch(event map[string]any) *sseUsagePatch {
@@ -8324,6 +8524,9 @@ func (s *GatewayService) extractSSEUsagePatch(event map[string]any) *sseUsagePat
 		}
 
 		patch := &sseUsagePatch{}
+		if speed, ok := usageObj["speed"].(string); ok {
+			patch.speed = normalizeObservedAnthropicSpeed(speed)
+		}
 		patch.hasInputTokens = true
 		if v, ok := parseSSEUsageInt(usageObj["input_tokens"]); ok {
 			patch.inputTokens = v
@@ -8409,6 +8612,9 @@ func mergeSSEUsagePatch(usage *ClaudeUsage, patch *sseUsagePatch) {
 	}
 	if patch.hasCacheCreation1h {
 		usage.CacheCreation1hTokens = patch.cacheCreation1hTokens
+	}
+	if patch.speed != "" {
+		usage.Speed = patch.speed
 	}
 }
 
@@ -8512,6 +8718,7 @@ func (s *GatewayService) resolveCacheTTLUsageOverrideTarget(ctx context.Context,
 }
 
 func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, originalModel, mappedModel string) (*ClaudeUsage, []byte, error) {
+	observeUpstreamResponseHeaders(c, resp.Header) // V03-T17：记下直接上游响应头，记账时解析 upstream_request_id
 	// 更新5h窗口状态
 	s.rateLimitService.UpdateSessionWindow(ctx, account, resp.Header)
 
@@ -8519,6 +8726,7 @@ func (s *GatewayService) handleNonStreamingResponse(ctx context.Context, resp *h
 	if err != nil {
 		return nil, nil, err
 	}
+	observeAnthropicResponseModel(c, body) // V03-R11 审计：只读观测
 
 	// 解析usage
 	var response struct {
@@ -8625,6 +8833,7 @@ type RecordUsageInput struct {
 	UpstreamEndpoint       string             // 上游端点（标准化后的上游路径）
 	UserAgent              string             // 请求的 User-Agent
 	IPAddress              string             // 请求的客户端 IP 地址
+	SessionID              string             // V03-R11：客户端显式会话标识请求头，仅用于审计关联，不含粘性哈希
 	RequestPayloadHash     string             // 请求体语义哈希，用于降低 request_id 误复用时的静默误去重风险
 	ForceCacheBilling      bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
 	APIKeyService          APIKeyQuotaUpdater // 可选：用于更新API Key配额
@@ -8854,13 +9063,37 @@ func buildUsageBillingCommand(requestID string, usageLog *UsageLog, p *postUsage
 	return cmd
 }
 
+// quantizeUsageBillingUserCost 把用户侧扣费金额（CostBreakdown.ActualCost、
+// usageLog.ActualCost、usageLog.UsageListValue）量化到 UsageBillingMonetaryScale。
+//
+// usage_logs.actual_cost 是 DECIMAL(20,10)，不回写时会出现「用量页 0.000078125、
+// 余额减少 0.00007813」。TotalCost、InputCost 等分项不参与扣款，保持原值；
+// 财务成本侧（finance_cost_calculator 10 位）不受影响。
+func quantizeUsageBillingUserCost(usageLog *UsageLog, p *postUsageBillingParams) {
+	if p != nil && p.Cost != nil {
+		p.Cost.ActualCost = QuantizeUsageBillingAmount(p.Cost.ActualCost)
+	}
+	if usageLog == nil {
+		return
+	}
+	usageLog.ActualCost = QuantizeUsageBillingAmount(usageLog.ActualCost)
+	if usageLog.UsageListValue != nil {
+		rounded := usageLog.UsageListValue.Round(UsageBillingMonetaryScale)
+		usageLog.UsageListValue = &rounded
+	}
+}
+
 func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog, p *postUsageBillingParams, deps *billingDeps, repo UsageBillingRepository) (bool, error) {
 	if p == nil || deps == nil {
 		return false, nil
 	}
 	EnsureFinalUsageUpstreamAttempt(usageLog)
 
+	// 命令先用原始金额构建：指纹由量化前金额派生（见 UsageBillingCommand.Normalize）。
 	cmd := buildUsageBillingCommand(requestID, usageLog, p)
+	// 再把用户侧扣费金额统一到 8 位刻度，让余额、Key 配额、Redis 缓存扣减、
+	// usage_logs.actual_cost 与财务销售值 usage_list_value 逐笔相等。
+	quantizeUsageBillingUserCost(usageLog, p)
 	if cmd == nil || cmd.RequestID == "" || repo == nil {
 		postUsageBilling(ctx, p, deps)
 		return true, nil
@@ -8905,7 +9138,7 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
 			deps.billingCacheService.QueueUpdateSubscriptionUsage(p.User.ID, *p.APIKey.GroupID, p.Cost.ActualCost)
 		}
 	} else if p.Cost.ActualCost > 0 && p.User != nil {
-		deps.billingCacheService.QueueDeductBalance(p.User.ID, p.Cost.ActualCost)
+		syncBalanceCacheAfterDeduction(ctx, p, deps)
 	}
 
 	if p.Cost.ActualCost > 0 && p.APIKey != nil && p.APIKey.HasRateLimits() {
@@ -8943,6 +9176,24 @@ func finalizePostUsageBilling(ctx context.Context, p *postUsageBillingParams, de
 	// Notification checks run async — all parameters are already captured,
 	// no dependency on the request context or upstream connection.
 	go notifyAccountQuota(p, deps, result)
+}
+
+// syncBalanceCacheAfterDeduction 把本次扣费反映到余额缓存（上游 52c123e6f）。
+// 在途预占开启时同步扣减：计费任务结束后才释放预占，必须保证此时准入读到的缓存余额
+// 已包含本次扣费，否则释放与扣减之间仍有「在途=0 且余额未扣」的窗口。本函数运行在计费
+// worker 中，不在请求热路径。同步扣减失败时退回异步队列。
+func syncBalanceCacheAfterDeduction(ctx context.Context, p *postUsageBillingParams, deps *billingDeps) {
+	if p == nil || p.Cost == nil || p.User == nil || deps == nil || deps.billingCacheService == nil {
+		return
+	}
+	if deps.billingCacheService.InflightReservationEnabled() {
+		err := deps.billingCacheService.DeductBalanceCache(ctx, p.User.ID, p.Cost.ActualCost)
+		if err == nil {
+			return
+		}
+		logger.LegacyPrintf("service.gateway", "Warning: sync deduct balance cache failed for user %d, falling back to queue: %v", p.User.ID, err)
+	}
+	deps.billingCacheService.QueueDeductBalance(p.User.ID, p.Cost.ActualCost)
 }
 
 // notifyAccountQuota sends account quota threshold notification after increment.
@@ -8999,8 +9250,10 @@ func detachUpstreamContext(ctx context.Context) (context.Context, context.Cancel
 }
 
 type detachedUpstreamLifecycle struct {
+	mu               sync.Mutex
 	cancel           context.CancelFunc
 	stopParentCancel func() bool
+	responseStarted  bool
 }
 
 type detachedUpstreamLifecycleKey struct{}
@@ -9015,7 +9268,14 @@ func detachUpstreamContextWithTimeout(ctx context.Context, maxLifetime time.Dura
 
 	detachedCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), maxLifetime)
 	lifecycle := &detachedUpstreamLifecycle{cancel: cancel}
-	lifecycle.stopParentCancel = context.AfterFunc(ctx, cancel)
+	if ctx.Err() != nil {
+		// AfterFunc on an already-canceled parent runs asynchronously. Propagate
+		// this known pre-request cancellation synchronously so a fast transport
+		// cannot race the callback and accidentally start a billable drain.
+		cancel()
+	} else {
+		lifecycle.stopParentCancel = context.AfterFunc(ctx, lifecycle.cancelBeforeResponse)
+	}
 
 	trace := &httptrace.ClientTrace{
 		GotFirstResponseByte: lifecycle.markResponseStarted,
@@ -9030,10 +9290,35 @@ func detachUpstreamContextWithTimeout(ctx context.Context, maxLifetime time.Dura
 }
 
 func (l *detachedUpstreamLifecycle) markResponseStarted() {
-	if l == nil || l.stopParentCancel == nil {
+	if l == nil {
 		return
 	}
-	l.stopParentCancel()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.responseStarted {
+		return
+	}
+	l.responseStarted = true
+	if l.stopParentCancel != nil {
+		l.stopParentCancel()
+	}
+}
+
+// cancelBeforeResponse serializes an already-canceled client's AfterFunc with
+// a synchronous test transport's GotFirstResponseByte notification. A real
+// network response has the same requirement: once response processing starts,
+// draining must remain bounded by the upstream lifetime rather than a late
+// callback canceling the context.
+func (l *detachedUpstreamLifecycle) cancelBeforeResponse() {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.responseStarted {
+		return
+	}
+	l.cancel()
 }
 
 func (l *detachedUpstreamLifecycle) release() {
@@ -9111,7 +9396,7 @@ func writeUsageLogBestEffort(ctx context.Context, repo UsageLogRepository, usage
 	}
 }
 
-// recordUsageOpts 内部选项，参数化 RecordUsage 与 RecordUsageWithLongContext 的差异点。
+// recordUsageOpts 内部选项。长上下文阶梯已由目录数据驱动（V03-T11），不再在这里参数化。
 type recordUsageOpts struct {
 	// Claude Max 策略所需的 ParsedRequest（可选，仅 Claude 路径传入）
 	ParsedRequest *ParsedRequest
@@ -9119,10 +9404,6 @@ type recordUsageOpts struct {
 	// EnableClaudePath 启用 Claude 路径特有逻辑：
 	// - Claude Max 缓存计费策略
 	EnableClaudePath bool
-
-	// 长上下文计费（仅 Gemini 路径需要）
-	LongContextThreshold  int
-	LongContextMultiplier float64
 }
 
 // RecordUsage 记录使用量并扣费（或更新订阅用量）
@@ -9140,6 +9421,7 @@ func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInpu
 		UpstreamEndpoint:       input.UpstreamEndpoint,
 		UserAgent:              input.UserAgent,
 		IPAddress:              input.IPAddress,
+		SessionID:              input.SessionID,
 		RequestPayloadHash:     input.RequestPayloadHash,
 		ForceCacheBilling:      input.ForceCacheBilling,
 		APIKeyService:          input.APIKeyService,
@@ -9152,58 +9434,7 @@ func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInpu
 	})
 }
 
-// RecordUsageLongContextInput 记录使用量的输入参数（支持长上下文双倍计费）
-type RecordUsageLongContextInput struct {
-	Result                 *ForwardResult
-	APIKey                 *APIKey
-	User                   *User
-	Account                *Account
-	Subscription           *UserSubscription  // 可选：订阅信息
-	InboundEndpoint        string             // 入站端点（客户端请求路径）
-	UpstreamEndpoint       string             // 上游端点（标准化后的上游路径）
-	UserAgent              string             // 请求的 User-Agent
-	IPAddress              string             // 请求的客户端 IP 地址
-	RequestPayloadHash     string             // 请求体语义哈希，用于降低 request_id 误复用时的静默误去重风险
-	LongContextThreshold   int                // 长上下文阈值（如 200000）
-	LongContextMultiplier  float64            // 超出阈值部分的倍率（如 2.0）
-	ForceCacheBilling      bool               // 强制缓存计费：将 input_tokens 转为 cache_read 计费（用于粘性会话切换）
-	APIKeyService          APIKeyQuotaUpdater // API Key 配额服务（可选）
-	QuotaPlatform          string             // user×platform 配额计量平台：handler 在请求 ctx 内经 QuotaPlatform() 算定后传入（后扣运行在 worker 池 background ctx 上，取不到 ForcePlatform）
-	UpstreamCostMultiplier *decimal.Decimal   // 账号选中时的上游采购倍率快照
-	UpstreamAttempts       []UsageUpstreamAttempt
-
-	ChannelUsageFields // 渠道映射信息（由 handler 在 Forward 前解析）
-}
-
-// RecordUsageWithLongContext 记录使用量并扣费，支持长上下文双倍计费（用于 Gemini）
-func (s *GatewayService) RecordUsageWithLongContext(ctx context.Context, input *RecordUsageLongContextInput) error {
-	if input != nil && input.User != nil && strings.EqualFold(strings.TrimSpace(input.User.Role), RoleAdmin) {
-		ctx = WithTrustedFinanceExclusion(ctx, "admin_api_usage")
-	}
-	return s.recordUsageCore(ctx, &recordUsageCoreInput{
-		Result:                 input.Result,
-		APIKey:                 input.APIKey,
-		User:                   input.User,
-		Account:                input.Account,
-		Subscription:           input.Subscription,
-		InboundEndpoint:        input.InboundEndpoint,
-		UpstreamEndpoint:       input.UpstreamEndpoint,
-		UserAgent:              input.UserAgent,
-		IPAddress:              input.IPAddress,
-		RequestPayloadHash:     input.RequestPayloadHash,
-		ForceCacheBilling:      input.ForceCacheBilling,
-		APIKeyService:          input.APIKeyService,
-		QuotaPlatform:          input.QuotaPlatform,
-		UpstreamCostMultiplier: input.UpstreamCostMultiplier,
-		UpstreamAttempts:       input.UpstreamAttempts,
-		ChannelUsageFields:     input.ChannelUsageFields,
-	}, &recordUsageOpts{
-		LongContextThreshold:  input.LongContextThreshold,
-		LongContextMultiplier: input.LongContextMultiplier,
-	})
-}
-
-// recordUsageCoreInput 是 recordUsageCore 的公共输入字段，从两种输入结构体中提取。
+// recordUsageCoreInput 是 recordUsageCore 的公共输入字段。
 type recordUsageCoreInput struct {
 	Result                 *ForwardResult
 	APIKey                 *APIKey
@@ -9214,6 +9445,7 @@ type recordUsageCoreInput struct {
 	UpstreamEndpoint       string
 	UserAgent              string
 	IPAddress              string
+	SessionID              string
 	RequestPayloadHash     string
 	ForceCacheBilling      bool
 	APIKeyService          APIKeyQuotaUpdater
@@ -9223,10 +9455,8 @@ type recordUsageCoreInput struct {
 	ChannelUsageFields
 }
 
-// recordUsageCore 是 RecordUsage 和 RecordUsageWithLongContext 的统一实现。
-// opts 中的字段控制两者之间的差异行为：
-// - ParsedRequest != nil → 启用 Claude Max 缓存计费策略
-// - LongContextThreshold > 0 → Token 计费回退走 CalculateCostWithLongContext
+// recordUsageCore 是 RecordUsage 的实现。
+// opts.ParsedRequest != nil → 启用 Claude Max 缓存计费策略。
 func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsageCoreInput, opts *recordUsageOpts) error {
 	result := input.Result
 	apiKey := input.APIKey
@@ -9234,6 +9464,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	account := input.Account
 	subscription := input.Subscription
 	ApplyForwardImageBillingResolution(result)
+	logServiceTierBillingDowngrade("service.gateway", account, result.RequestID, ApplyForwardServiceTierBillingResolution(result))
 
 	// 强制缓存计费：将 input_tokens 转为 cache_read_input_tokens
 	// 用于粘性会话切换时的特殊计费处理
@@ -9335,11 +9566,13 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 			// Anthropic's input_tokens excludes cache_read and cache_creation (billed separately);
 			// OpenAI gateway uses actualInputTokens which also excludes cache_read for the same reason.
 			UsageTokens{
-				InputTokens:         result.Usage.InputTokens,
-				OutputTokens:        result.Usage.OutputTokens,
-				CacheCreationTokens: result.Usage.CacheCreationInputTokens,
-				CacheReadTokens:     result.Usage.CacheReadInputTokens,
-				ImageOutputTokens:   result.Usage.ImageOutputTokens,
+				InputTokens:           result.Usage.InputTokens,
+				OutputTokens:          result.Usage.OutputTokens,
+				CacheCreationTokens:   result.Usage.CacheCreationInputTokens,
+				CacheReadTokens:       result.Usage.CacheReadInputTokens,
+				CacheCreation5mTokens: result.Usage.CacheCreation5mTokens,
+				CacheCreation1hTokens: result.Usage.CacheCreation1hTokens,
+				ImageOutputTokens:     result.Usage.ImageOutputTokens,
 			},
 			cost.TotalCost,
 		)
@@ -9404,7 +9637,7 @@ func (s *GatewayService) calculateRecordUsageCost(
 
 // resolveChannelPricing 检查指定模型是否存在渠道级别定价。
 // 返回非 nil 的 ResolvedPricing 表示有渠道定价，nil 表示走默认定价路径。
-func (s *GatewayService) resolveChannelPricing(ctx context.Context, billingModel string, apiKey *APIKey) *ResolvedPricing {
+func (s *GatewayService) resolveChannelPricing(ctx context.Context, billingModel string, apiKey *APIKey, serviceTiers ...string) *ResolvedPricing {
 	if s.settingService != nil && !s.settingService.IsSalesPricingResolverEnabled(ctx) {
 		return nil
 	}
@@ -9412,7 +9645,11 @@ func (s *GatewayService) resolveChannelPricing(ctx context.Context, billingModel
 		return nil
 	}
 	gid := apiKey.Group.ID
-	resolved := s.resolver.Resolve(ctx, PricingInput{Model: billingModel, GroupID: &gid})
+	tier := ""
+	if len(serviceTiers) > 0 {
+		tier = serviceTiers[0]
+	}
+	resolved := s.resolver.Resolve(ctx, PricingInput{Model: billingModel, GroupID: &gid, ServiceTier: tier})
 	if resolved.Source == PricingSourceChannel {
 		return resolved
 	}
@@ -9464,7 +9701,8 @@ func (s *GatewayService) calculateImageCost(
 	return s.billingService.CalculateImageCost(billingModel, sizeTier, result.ImageCount, groupConfig, multiplier)
 }
 
-// calculateTokenCost 计算 Token 计费：根据 opts 决定走普通/长上下文/渠道统一计费。
+// calculateTokenCost 计算 Token 计费：渠道定价走统一计费，否则走目录价。目录长上下文
+// 阶梯（*_above_XXXk_tokens）按整请求计价，受分组「长上下文定价」开关控制。
 func (s *GatewayService) calculateTokenCost(
 	ctx context.Context,
 	result *ForwardResult,
@@ -9473,6 +9711,22 @@ func (s *GatewayService) calculateTokenCost(
 	multiplier float64,
 	opts *recordUsageOpts,
 ) *CostBreakdown {
+	cost, err := s.calculateTokenCostE(ctx, result, apiKey, billingModel, multiplier)
+	if err != nil {
+		logger.LegacyPrintf("service.gateway", "Calculate cost failed: %v", err)
+		return &CostBreakdown{ActualCost: 0}
+	}
+	return cost
+}
+
+// calculateTokenCostE 是 calculateTokenCost 的计算部分，定价失败时返回错误（在途预占估算据此判断无法定价）。
+func (s *GatewayService) calculateTokenCostE(
+	ctx context.Context,
+	result *ForwardResult,
+	apiKey *APIKey,
+	billingModel string,
+	multiplier float64,
+) (*CostBreakdown, error) {
 	tokens := UsageTokens{
 		InputTokens:           result.Usage.InputTokens,
 		OutputTokens:          result.Usage.OutputTokens,
@@ -9485,10 +9739,16 @@ func (s *GatewayService) calculateTokenCost(
 
 	var cost *CostBreakdown
 	var err error
+	serviceTier := optionalStringValue(result.ServiceTier)
 
 	// 优先尝试渠道定价 → CalculateCostUnified
-	if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey); resolved != nil {
+	if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey, serviceTier); resolved != nil {
 		gid := apiKey.Group.ID
+		costTier := serviceTier
+		if resolved.ExplicitServiceTier {
+			// 渠道显式 Fast/Flex 倍率已乘进 resolved 价格，不再叠加默认档位倍率。
+			costTier = ""
+		}
 		cost, err = s.billingService.CalculateCostUnified(CostInput{
 			Ctx:            ctx,
 			Model:          billingModel,
@@ -9496,23 +9756,17 @@ func (s *GatewayService) calculateTokenCost(
 			Tokens:         tokens,
 			RequestCount:   1,
 			RateMultiplier: multiplier,
+			ServiceTier:    costTier,
 			Resolver:       s.resolver,
 			Resolved:       resolved,
 		})
-	} else if opts.LongContextThreshold > 0 {
-		// 长上下文双倍计费（如 Gemini 200K 阈值）
-		cost, err = s.billingService.CalculateCostWithLongContext(
-			billingModel, tokens, multiplier,
-			opts.LongContextThreshold, opts.LongContextMultiplier,
-		)
 	} else {
-		cost, err = s.billingService.CalculateCost(billingModel, tokens, multiplier)
+		cost, err = s.billingService.CalculateCostForGroup(billingModel, tokens, multiplier, serviceTier, apiKey.Group)
 	}
 	if err != nil {
-		logger.LegacyPrintf("service.gateway", "Calculate cost failed: %v", err)
-		return &CostBreakdown{ActualCost: 0}
+		return nil, err
 	}
-	return cost
+	return cost, nil
 }
 
 // buildRecordUsageLog 构建使用日志并设置计费模式。
@@ -9547,6 +9801,7 @@ func (s *GatewayService) buildRecordUsageLog(
 		Model:                  result.Model,
 		RequestedModel:         requestedModel,
 		UpstreamModel:          optionalNonEqualStringPtr(result.UpstreamModel, result.Model),
+		ServiceTier:            result.ServiceTier,
 		ReasoningEffort:        result.ReasoningEffort,
 		InboundEndpoint:        optionalTrimmedStringPtr(input.InboundEndpoint),
 		UpstreamEndpoint:       optionalTrimmedStringPtr(input.UpstreamEndpoint),
@@ -9582,6 +9837,15 @@ func (s *GatewayService) buildRecordUsageLog(
 		SubscriptionID:         optionalSubscriptionID(subscription),
 		CreatedAt:              time.Now(),
 	}
+	// V03-R11 用量审计字段：只读写入，不参与任何金额计算。
+	usageLog.UsageAuditFields = buildUsageAuditFields(
+		upstreamSentModel(result.Model, result.UpstreamModel),
+		result.UpstreamResponseModel,
+		input.SessionID,
+		result.RequestedReasoningEffort,
+		result.ReasoningEffort,
+	)
+	usageLog.UpstreamRequestID = usageUpstreamRequestIDPtr(account, result.UpstreamHeaders, false)
 	if reason, excluded := trustedFinanceExclusionFromContext(ctx); excluded {
 		usageLog.FinanceExcluded = true
 		usageLog.FinanceExclusionReason = reason
@@ -9598,6 +9862,7 @@ func (s *GatewayService) buildRecordUsageLog(
 	}
 	if cost != nil {
 		usageLog.InputCost = cost.InputCost
+		usageLog.ImageInputCost = cost.ImageInputCost
 		usageLog.OutputCost = cost.OutputCost
 		usageLog.ImageOutputCost = cost.ImageOutputCost
 		usageLog.CacheCreationCost = cost.CacheCreationCost

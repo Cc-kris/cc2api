@@ -254,6 +254,20 @@ func (_c *UsageLogCreate) SetNillableCacheCreation1hTokens(v *int) *UsageLogCrea
 	return _c
 }
 
+// SetImageInputTokens sets the "image_input_tokens" field.
+func (_c *UsageLogCreate) SetImageInputTokens(v int) *UsageLogCreate {
+	_c.mutation.SetImageInputTokens(v)
+	return _c
+}
+
+// SetNillableImageInputTokens sets the "image_input_tokens" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableImageInputTokens(v *int) *UsageLogCreate {
+	if v != nil {
+		_c.SetImageInputTokens(*v)
+	}
+	return _c
+}
+
 // SetInputCost sets the "input_cost" field.
 func (_c *UsageLogCreate) SetInputCost(v float64) *UsageLogCreate {
 	_c.mutation.SetInputCost(v)
@@ -278,6 +292,20 @@ func (_c *UsageLogCreate) SetOutputCost(v float64) *UsageLogCreate {
 func (_c *UsageLogCreate) SetNillableOutputCost(v *float64) *UsageLogCreate {
 	if v != nil {
 		_c.SetOutputCost(*v)
+	}
+	return _c
+}
+
+// SetImageInputCost sets the "image_input_cost" field.
+func (_c *UsageLogCreate) SetImageInputCost(v float64) *UsageLogCreate {
+	_c.mutation.SetImageInputCost(v)
+	return _c
+}
+
+// SetNillableImageInputCost sets the "image_input_cost" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableImageInputCost(v *float64) *UsageLogCreate {
+	if v != nil {
+		_c.SetImageInputCost(*v)
 	}
 	return _c
 }
@@ -790,6 +818,76 @@ func (_c *UsageLogCreate) SetNillableCacheTTLOverridden(v *bool) *UsageLogCreate
 	return _c
 }
 
+// SetUpstreamResponseModel sets the "upstream_response_model" field.
+func (_c *UsageLogCreate) SetUpstreamResponseModel(v string) *UsageLogCreate {
+	_c.mutation.SetUpstreamResponseModel(v)
+	return _c
+}
+
+// SetNillableUpstreamResponseModel sets the "upstream_response_model" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableUpstreamResponseModel(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetUpstreamResponseModel(*v)
+	}
+	return _c
+}
+
+// SetUpstreamModelMismatch sets the "upstream_model_mismatch" field.
+func (_c *UsageLogCreate) SetUpstreamModelMismatch(v bool) *UsageLogCreate {
+	_c.mutation.SetUpstreamModelMismatch(v)
+	return _c
+}
+
+// SetNillableUpstreamModelMismatch sets the "upstream_model_mismatch" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableUpstreamModelMismatch(v *bool) *UsageLogCreate {
+	if v != nil {
+		_c.SetUpstreamModelMismatch(*v)
+	}
+	return _c
+}
+
+// SetSessionID sets the "session_id" field.
+func (_c *UsageLogCreate) SetSessionID(v string) *UsageLogCreate {
+	_c.mutation.SetSessionID(v)
+	return _c
+}
+
+// SetNillableSessionID sets the "session_id" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableSessionID(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetSessionID(*v)
+	}
+	return _c
+}
+
+// SetRequestedReasoningEffort sets the "requested_reasoning_effort" field.
+func (_c *UsageLogCreate) SetRequestedReasoningEffort(v string) *UsageLogCreate {
+	_c.mutation.SetRequestedReasoningEffort(v)
+	return _c
+}
+
+// SetNillableRequestedReasoningEffort sets the "requested_reasoning_effort" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableRequestedReasoningEffort(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetRequestedReasoningEffort(*v)
+	}
+	return _c
+}
+
+// SetUpstreamRequestID sets the "upstream_request_id" field.
+func (_c *UsageLogCreate) SetUpstreamRequestID(v string) *UsageLogCreate {
+	_c.mutation.SetUpstreamRequestID(v)
+	return _c
+}
+
+// SetNillableUpstreamRequestID sets the "upstream_request_id" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableUpstreamRequestID(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetUpstreamRequestID(*v)
+	}
+	return _c
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (_c *UsageLogCreate) SetCreatedAt(v time.Time) *UsageLogCreate {
 	_c.mutation.SetCreatedAt(v)
@@ -888,6 +986,10 @@ func (_c *UsageLogCreate) defaults() {
 		v := usagelog.DefaultCacheCreation1hTokens
 		_c.mutation.SetCacheCreation1hTokens(v)
 	}
+	if _, ok := _c.mutation.ImageInputTokens(); !ok {
+		v := usagelog.DefaultImageInputTokens
+		_c.mutation.SetImageInputTokens(v)
+	}
 	if _, ok := _c.mutation.InputCost(); !ok {
 		v := usagelog.DefaultInputCost
 		_c.mutation.SetInputCost(v)
@@ -895,6 +997,10 @@ func (_c *UsageLogCreate) defaults() {
 	if _, ok := _c.mutation.OutputCost(); !ok {
 		v := usagelog.DefaultOutputCost
 		_c.mutation.SetOutputCost(v)
+	}
+	if _, ok := _c.mutation.ImageInputCost(); !ok {
+		v := usagelog.DefaultImageInputCost
+		_c.mutation.SetImageInputCost(v)
 	}
 	if _, ok := _c.mutation.CacheCreationCost(); !ok {
 		v := usagelog.DefaultCacheCreationCost
@@ -1012,11 +1118,17 @@ func (_c *UsageLogCreate) check() error {
 	if _, ok := _c.mutation.CacheCreation1hTokens(); !ok {
 		return &ValidationError{Name: "cache_creation_1h_tokens", err: errors.New(`ent: missing required field "UsageLog.cache_creation_1h_tokens"`)}
 	}
+	if _, ok := _c.mutation.ImageInputTokens(); !ok {
+		return &ValidationError{Name: "image_input_tokens", err: errors.New(`ent: missing required field "UsageLog.image_input_tokens"`)}
+	}
 	if _, ok := _c.mutation.InputCost(); !ok {
 		return &ValidationError{Name: "input_cost", err: errors.New(`ent: missing required field "UsageLog.input_cost"`)}
 	}
 	if _, ok := _c.mutation.OutputCost(); !ok {
 		return &ValidationError{Name: "output_cost", err: errors.New(`ent: missing required field "UsageLog.output_cost"`)}
+	}
+	if _, ok := _c.mutation.ImageInputCost(); !ok {
+		return &ValidationError{Name: "image_input_cost", err: errors.New(`ent: missing required field "UsageLog.image_input_cost"`)}
 	}
 	if _, ok := _c.mutation.CacheCreationCost(); !ok {
 		return &ValidationError{Name: "cache_creation_cost", err: errors.New(`ent: missing required field "UsageLog.cache_creation_cost"`)}
@@ -1123,6 +1235,26 @@ func (_c *UsageLogCreate) check() error {
 	if _, ok := _c.mutation.CacheTTLOverridden(); !ok {
 		return &ValidationError{Name: "cache_ttl_overridden", err: errors.New(`ent: missing required field "UsageLog.cache_ttl_overridden"`)}
 	}
+	if v, ok := _c.mutation.UpstreamResponseModel(); ok {
+		if err := usagelog.UpstreamResponseModelValidator(v); err != nil {
+			return &ValidationError{Name: "upstream_response_model", err: fmt.Errorf(`ent: validator failed for field "UsageLog.upstream_response_model": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.SessionID(); ok {
+		if err := usagelog.SessionIDValidator(v); err != nil {
+			return &ValidationError{Name: "session_id", err: fmt.Errorf(`ent: validator failed for field "UsageLog.session_id": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.RequestedReasoningEffort(); ok {
+		if err := usagelog.RequestedReasoningEffortValidator(v); err != nil {
+			return &ValidationError{Name: "requested_reasoning_effort", err: fmt.Errorf(`ent: validator failed for field "UsageLog.requested_reasoning_effort": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.UpstreamRequestID(); ok {
+		if err := usagelog.UpstreamRequestIDValidator(v); err != nil {
+			return &ValidationError{Name: "upstream_request_id", err: fmt.Errorf(`ent: validator failed for field "UsageLog.upstream_request_id": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "UsageLog.created_at"`)}
 	}
@@ -1218,6 +1350,10 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 		_spec.SetField(usagelog.FieldCacheCreation1hTokens, field.TypeInt, value)
 		_node.CacheCreation1hTokens = value
 	}
+	if value, ok := _c.mutation.ImageInputTokens(); ok {
+		_spec.SetField(usagelog.FieldImageInputTokens, field.TypeInt, value)
+		_node.ImageInputTokens = value
+	}
 	if value, ok := _c.mutation.InputCost(); ok {
 		_spec.SetField(usagelog.FieldInputCost, field.TypeFloat64, value)
 		_node.InputCost = value
@@ -1225,6 +1361,10 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.OutputCost(); ok {
 		_spec.SetField(usagelog.FieldOutputCost, field.TypeFloat64, value)
 		_node.OutputCost = value
+	}
+	if value, ok := _c.mutation.ImageInputCost(); ok {
+		_spec.SetField(usagelog.FieldImageInputCost, field.TypeFloat64, value)
+		_node.ImageInputCost = value
 	}
 	if value, ok := _c.mutation.CacheCreationCost(); ok {
 		_spec.SetField(usagelog.FieldCacheCreationCost, field.TypeFloat64, value)
@@ -1377,6 +1517,26 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.CacheTTLOverridden(); ok {
 		_spec.SetField(usagelog.FieldCacheTTLOverridden, field.TypeBool, value)
 		_node.CacheTTLOverridden = value
+	}
+	if value, ok := _c.mutation.UpstreamResponseModel(); ok {
+		_spec.SetField(usagelog.FieldUpstreamResponseModel, field.TypeString, value)
+		_node.UpstreamResponseModel = &value
+	}
+	if value, ok := _c.mutation.UpstreamModelMismatch(); ok {
+		_spec.SetField(usagelog.FieldUpstreamModelMismatch, field.TypeBool, value)
+		_node.UpstreamModelMismatch = &value
+	}
+	if value, ok := _c.mutation.SessionID(); ok {
+		_spec.SetField(usagelog.FieldSessionID, field.TypeString, value)
+		_node.SessionID = &value
+	}
+	if value, ok := _c.mutation.RequestedReasoningEffort(); ok {
+		_spec.SetField(usagelog.FieldRequestedReasoningEffort, field.TypeString, value)
+		_node.RequestedReasoningEffort = &value
+	}
+	if value, ok := _c.mutation.UpstreamRequestID(); ok {
+		_spec.SetField(usagelog.FieldUpstreamRequestID, field.TypeString, value)
+		_node.UpstreamRequestID = &value
 	}
 	if value, ok := _c.mutation.CreatedAt(); ok {
 		_spec.SetField(usagelog.FieldCreatedAt, field.TypeTime, value)
@@ -1837,6 +1997,24 @@ func (u *UsageLogUpsert) AddCacheCreation1hTokens(v int) *UsageLogUpsert {
 	return u
 }
 
+// SetImageInputTokens sets the "image_input_tokens" field.
+func (u *UsageLogUpsert) SetImageInputTokens(v int) *UsageLogUpsert {
+	u.Set(usagelog.FieldImageInputTokens, v)
+	return u
+}
+
+// UpdateImageInputTokens sets the "image_input_tokens" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateImageInputTokens() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldImageInputTokens)
+	return u
+}
+
+// AddImageInputTokens adds v to the "image_input_tokens" field.
+func (u *UsageLogUpsert) AddImageInputTokens(v int) *UsageLogUpsert {
+	u.Add(usagelog.FieldImageInputTokens, v)
+	return u
+}
+
 // SetInputCost sets the "input_cost" field.
 func (u *UsageLogUpsert) SetInputCost(v float64) *UsageLogUpsert {
 	u.Set(usagelog.FieldInputCost, v)
@@ -1870,6 +2048,24 @@ func (u *UsageLogUpsert) UpdateOutputCost() *UsageLogUpsert {
 // AddOutputCost adds v to the "output_cost" field.
 func (u *UsageLogUpsert) AddOutputCost(v float64) *UsageLogUpsert {
 	u.Add(usagelog.FieldOutputCost, v)
+	return u
+}
+
+// SetImageInputCost sets the "image_input_cost" field.
+func (u *UsageLogUpsert) SetImageInputCost(v float64) *UsageLogUpsert {
+	u.Set(usagelog.FieldImageInputCost, v)
+	return u
+}
+
+// UpdateImageInputCost sets the "image_input_cost" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateImageInputCost() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldImageInputCost)
+	return u
+}
+
+// AddImageInputCost adds v to the "image_input_cost" field.
+func (u *UsageLogUpsert) AddImageInputCost(v float64) *UsageLogUpsert {
+	u.Add(usagelog.FieldImageInputCost, v)
 	return u
 }
 
@@ -2599,6 +2795,96 @@ func (u *UsageLogUpsert) UpdateCacheTTLOverridden() *UsageLogUpsert {
 	return u
 }
 
+// SetUpstreamResponseModel sets the "upstream_response_model" field.
+func (u *UsageLogUpsert) SetUpstreamResponseModel(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldUpstreamResponseModel, v)
+	return u
+}
+
+// UpdateUpstreamResponseModel sets the "upstream_response_model" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateUpstreamResponseModel() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldUpstreamResponseModel)
+	return u
+}
+
+// ClearUpstreamResponseModel clears the value of the "upstream_response_model" field.
+func (u *UsageLogUpsert) ClearUpstreamResponseModel() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldUpstreamResponseModel)
+	return u
+}
+
+// SetUpstreamModelMismatch sets the "upstream_model_mismatch" field.
+func (u *UsageLogUpsert) SetUpstreamModelMismatch(v bool) *UsageLogUpsert {
+	u.Set(usagelog.FieldUpstreamModelMismatch, v)
+	return u
+}
+
+// UpdateUpstreamModelMismatch sets the "upstream_model_mismatch" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateUpstreamModelMismatch() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldUpstreamModelMismatch)
+	return u
+}
+
+// ClearUpstreamModelMismatch clears the value of the "upstream_model_mismatch" field.
+func (u *UsageLogUpsert) ClearUpstreamModelMismatch() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldUpstreamModelMismatch)
+	return u
+}
+
+// SetSessionID sets the "session_id" field.
+func (u *UsageLogUpsert) SetSessionID(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldSessionID, v)
+	return u
+}
+
+// UpdateSessionID sets the "session_id" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateSessionID() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldSessionID)
+	return u
+}
+
+// ClearSessionID clears the value of the "session_id" field.
+func (u *UsageLogUpsert) ClearSessionID() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldSessionID)
+	return u
+}
+
+// SetRequestedReasoningEffort sets the "requested_reasoning_effort" field.
+func (u *UsageLogUpsert) SetRequestedReasoningEffort(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldRequestedReasoningEffort, v)
+	return u
+}
+
+// UpdateRequestedReasoningEffort sets the "requested_reasoning_effort" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateRequestedReasoningEffort() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldRequestedReasoningEffort)
+	return u
+}
+
+// ClearRequestedReasoningEffort clears the value of the "requested_reasoning_effort" field.
+func (u *UsageLogUpsert) ClearRequestedReasoningEffort() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldRequestedReasoningEffort)
+	return u
+}
+
+// SetUpstreamRequestID sets the "upstream_request_id" field.
+func (u *UsageLogUpsert) SetUpstreamRequestID(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldUpstreamRequestID, v)
+	return u
+}
+
+// UpdateUpstreamRequestID sets the "upstream_request_id" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateUpstreamRequestID() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldUpstreamRequestID)
+	return u
+}
+
+// ClearUpstreamRequestID clears the value of the "upstream_request_id" field.
+func (u *UsageLogUpsert) ClearUpstreamRequestID() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldUpstreamRequestID)
+	return u
+}
+
 // UpdateNewValues updates the mutable fields using the new values that were set on create.
 // Using this option is equivalent to using:
 //
@@ -3015,6 +3301,27 @@ func (u *UsageLogUpsertOne) UpdateCacheCreation1hTokens() *UsageLogUpsertOne {
 	})
 }
 
+// SetImageInputTokens sets the "image_input_tokens" field.
+func (u *UsageLogUpsertOne) SetImageInputTokens(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetImageInputTokens(v)
+	})
+}
+
+// AddImageInputTokens adds v to the "image_input_tokens" field.
+func (u *UsageLogUpsertOne) AddImageInputTokens(v int) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddImageInputTokens(v)
+	})
+}
+
+// UpdateImageInputTokens sets the "image_input_tokens" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateImageInputTokens() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateImageInputTokens()
+	})
+}
+
 // SetInputCost sets the "input_cost" field.
 func (u *UsageLogUpsertOne) SetInputCost(v float64) *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
@@ -3054,6 +3361,27 @@ func (u *UsageLogUpsertOne) AddOutputCost(v float64) *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) UpdateOutputCost() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateOutputCost()
+	})
+}
+
+// SetImageInputCost sets the "image_input_cost" field.
+func (u *UsageLogUpsertOne) SetImageInputCost(v float64) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetImageInputCost(v)
+	})
+}
+
+// AddImageInputCost adds v to the "image_input_cost" field.
+func (u *UsageLogUpsertOne) AddImageInputCost(v float64) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddImageInputCost(v)
+	})
+}
+
+// UpdateImageInputCost sets the "image_input_cost" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateImageInputCost() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateImageInputCost()
 	})
 }
 
@@ -3904,6 +4232,111 @@ func (u *UsageLogUpsertOne) UpdateCacheTTLOverridden() *UsageLogUpsertOne {
 	})
 }
 
+// SetUpstreamResponseModel sets the "upstream_response_model" field.
+func (u *UsageLogUpsertOne) SetUpstreamResponseModel(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamResponseModel(v)
+	})
+}
+
+// UpdateUpstreamResponseModel sets the "upstream_response_model" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateUpstreamResponseModel() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamResponseModel()
+	})
+}
+
+// ClearUpstreamResponseModel clears the value of the "upstream_response_model" field.
+func (u *UsageLogUpsertOne) ClearUpstreamResponseModel() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamResponseModel()
+	})
+}
+
+// SetUpstreamModelMismatch sets the "upstream_model_mismatch" field.
+func (u *UsageLogUpsertOne) SetUpstreamModelMismatch(v bool) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamModelMismatch(v)
+	})
+}
+
+// UpdateUpstreamModelMismatch sets the "upstream_model_mismatch" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateUpstreamModelMismatch() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamModelMismatch()
+	})
+}
+
+// ClearUpstreamModelMismatch clears the value of the "upstream_model_mismatch" field.
+func (u *UsageLogUpsertOne) ClearUpstreamModelMismatch() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamModelMismatch()
+	})
+}
+
+// SetSessionID sets the "session_id" field.
+func (u *UsageLogUpsertOne) SetSessionID(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSessionID(v)
+	})
+}
+
+// UpdateSessionID sets the "session_id" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateSessionID() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSessionID()
+	})
+}
+
+// ClearSessionID clears the value of the "session_id" field.
+func (u *UsageLogUpsertOne) ClearSessionID() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSessionID()
+	})
+}
+
+// SetRequestedReasoningEffort sets the "requested_reasoning_effort" field.
+func (u *UsageLogUpsertOne) SetRequestedReasoningEffort(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetRequestedReasoningEffort(v)
+	})
+}
+
+// UpdateRequestedReasoningEffort sets the "requested_reasoning_effort" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateRequestedReasoningEffort() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateRequestedReasoningEffort()
+	})
+}
+
+// ClearRequestedReasoningEffort clears the value of the "requested_reasoning_effort" field.
+func (u *UsageLogUpsertOne) ClearRequestedReasoningEffort() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearRequestedReasoningEffort()
+	})
+}
+
+// SetUpstreamRequestID sets the "upstream_request_id" field.
+func (u *UsageLogUpsertOne) SetUpstreamRequestID(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamRequestID(v)
+	})
+}
+
+// UpdateUpstreamRequestID sets the "upstream_request_id" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateUpstreamRequestID() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamRequestID()
+	})
+}
+
+// ClearUpstreamRequestID clears the value of the "upstream_request_id" field.
+func (u *UsageLogUpsertOne) ClearUpstreamRequestID() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamRequestID()
+	})
+}
+
 // Exec executes the query.
 func (u *UsageLogUpsertOne) Exec(ctx context.Context) error {
 	if len(u.create.conflict) == 0 {
@@ -4486,6 +4919,27 @@ func (u *UsageLogUpsertBulk) UpdateCacheCreation1hTokens() *UsageLogUpsertBulk {
 	})
 }
 
+// SetImageInputTokens sets the "image_input_tokens" field.
+func (u *UsageLogUpsertBulk) SetImageInputTokens(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetImageInputTokens(v)
+	})
+}
+
+// AddImageInputTokens adds v to the "image_input_tokens" field.
+func (u *UsageLogUpsertBulk) AddImageInputTokens(v int) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddImageInputTokens(v)
+	})
+}
+
+// UpdateImageInputTokens sets the "image_input_tokens" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateImageInputTokens() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateImageInputTokens()
+	})
+}
+
 // SetInputCost sets the "input_cost" field.
 func (u *UsageLogUpsertBulk) SetInputCost(v float64) *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
@@ -4525,6 +4979,27 @@ func (u *UsageLogUpsertBulk) AddOutputCost(v float64) *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) UpdateOutputCost() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateOutputCost()
+	})
+}
+
+// SetImageInputCost sets the "image_input_cost" field.
+func (u *UsageLogUpsertBulk) SetImageInputCost(v float64) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetImageInputCost(v)
+	})
+}
+
+// AddImageInputCost adds v to the "image_input_cost" field.
+func (u *UsageLogUpsertBulk) AddImageInputCost(v float64) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.AddImageInputCost(v)
+	})
+}
+
+// UpdateImageInputCost sets the "image_input_cost" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateImageInputCost() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateImageInputCost()
 	})
 }
 
@@ -5372,6 +5847,111 @@ func (u *UsageLogUpsertBulk) SetCacheTTLOverridden(v bool) *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) UpdateCacheTTLOverridden() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateCacheTTLOverridden()
+	})
+}
+
+// SetUpstreamResponseModel sets the "upstream_response_model" field.
+func (u *UsageLogUpsertBulk) SetUpstreamResponseModel(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamResponseModel(v)
+	})
+}
+
+// UpdateUpstreamResponseModel sets the "upstream_response_model" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateUpstreamResponseModel() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamResponseModel()
+	})
+}
+
+// ClearUpstreamResponseModel clears the value of the "upstream_response_model" field.
+func (u *UsageLogUpsertBulk) ClearUpstreamResponseModel() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamResponseModel()
+	})
+}
+
+// SetUpstreamModelMismatch sets the "upstream_model_mismatch" field.
+func (u *UsageLogUpsertBulk) SetUpstreamModelMismatch(v bool) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamModelMismatch(v)
+	})
+}
+
+// UpdateUpstreamModelMismatch sets the "upstream_model_mismatch" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateUpstreamModelMismatch() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamModelMismatch()
+	})
+}
+
+// ClearUpstreamModelMismatch clears the value of the "upstream_model_mismatch" field.
+func (u *UsageLogUpsertBulk) ClearUpstreamModelMismatch() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamModelMismatch()
+	})
+}
+
+// SetSessionID sets the "session_id" field.
+func (u *UsageLogUpsertBulk) SetSessionID(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetSessionID(v)
+	})
+}
+
+// UpdateSessionID sets the "session_id" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateSessionID() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateSessionID()
+	})
+}
+
+// ClearSessionID clears the value of the "session_id" field.
+func (u *UsageLogUpsertBulk) ClearSessionID() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearSessionID()
+	})
+}
+
+// SetRequestedReasoningEffort sets the "requested_reasoning_effort" field.
+func (u *UsageLogUpsertBulk) SetRequestedReasoningEffort(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetRequestedReasoningEffort(v)
+	})
+}
+
+// UpdateRequestedReasoningEffort sets the "requested_reasoning_effort" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateRequestedReasoningEffort() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateRequestedReasoningEffort()
+	})
+}
+
+// ClearRequestedReasoningEffort clears the value of the "requested_reasoning_effort" field.
+func (u *UsageLogUpsertBulk) ClearRequestedReasoningEffort() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearRequestedReasoningEffort()
+	})
+}
+
+// SetUpstreamRequestID sets the "upstream_request_id" field.
+func (u *UsageLogUpsertBulk) SetUpstreamRequestID(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetUpstreamRequestID(v)
+	})
+}
+
+// UpdateUpstreamRequestID sets the "upstream_request_id" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateUpstreamRequestID() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateUpstreamRequestID()
+	})
+}
+
+// ClearUpstreamRequestID clears the value of the "upstream_request_id" field.
+func (u *UsageLogUpsertBulk) ClearUpstreamRequestID() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearUpstreamRequestID()
 	})
 }
 

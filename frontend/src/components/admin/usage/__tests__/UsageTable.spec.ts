@@ -364,3 +364,41 @@ describe('admin UsageTable tooltip', () => {
     expect(text).not.toContain('(2K)')
   })
 })
+
+describe('admin UsageTable 8-decimal display (V03-AC01)', () => {
+  it('renders the quantized actual cost with 8 decimals', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [
+          {
+            request_id: 'req-admin-8dp',
+            model: 'gemini-2.5-pro',
+            actual_cost: 0.00007813,
+            total_cost: 0.00007813,
+            account_rate_multiplier: 1,
+            rate_multiplier: 1.25,
+            input_cost: 0.0000125,
+            output_cost: 0.00005,
+            cache_creation_cost: 0,
+            cache_read_cost: 0,
+            input_tokens: 10,
+            output_tokens: 5,
+          },
+        ],
+        loading: false,
+        columns: [],
+      },
+      global: {
+        stubs: {
+          DataTable: DataTableStub,
+          EmptyState: true,
+          Icon: true,
+          Teleport: true,
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('$0.00007813')
+    expect(wrapper.text()).not.toMatch(/\$0\.000078(?!\d)/)
+  })
+})

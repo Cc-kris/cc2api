@@ -175,6 +175,20 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 		return
 	}
 
+	// 余额模式在途预占（V03-R12）：生成请求按张 / 按视频估算；状态与内容查询不预占。
+	inflightDone, inflightErr := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription,
+		grokMediaInflightEstimate(endpoint, requestModel, requestInfo, body))
+	if inflightErr != nil {
+		reqLog.Info("grok_media.inflight_reservation_rejected", zap.Error(inflightErr))
+		status, code, message, retryAfter := billingErrorDetails(inflightErr)
+		if retryAfter > 0 {
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+		}
+		h.errorResponse(c, status, code, message)
+		return
+	}
+	defer inflightDone()
+
 	sessionSeed := body
 	if len(sessionSeed) == 0 && strings.TrimSpace(requestID) != "" {
 		sessionSeed = []byte(requestID)
@@ -495,6 +509,9 @@ func recordGrokMediaUsage(
 		ChannelMappedModel: requestModel,
 	}
 	upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
+	// V03-R11 审计：在 gin.Context 有效时补齐只读审计字段。
+	stampOpenAIUsageAudit(c, result)
+	usageSessionID := service.ExtractClientSessionID(c)
 	recordTask := func(ctx context.Context) {
 		if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 			Result:                 result,
@@ -507,6 +524,7 @@ func recordGrokMediaUsage(
 			UpstreamEndpoint:       upstreamEndpoint,
 			UserAgent:              userAgent,
 			IPAddress:              clientIP,
+			SessionID:              usageSessionID,
 			RequestPayloadHash:     service.HashUsageRequestPayload(payloadForHash),
 			APIKeyService:          h.apiKeyService,
 			ChannelUsageFields:     channelUsageFields,
@@ -523,5 +541,5 @@ func recordGrokMediaUsage(
 			reqLog.Debug("grok_media.record_usage_failed", zap.Error(err))
 		}
 	}
-	h.submitOpenAIUsageRecordTask(result, recordTask)
+	h.submitOpenAIUsageRecordTask(c.Request.Context(), result, recordTask)
 }

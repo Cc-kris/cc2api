@@ -332,6 +332,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 
 	state := apicompat.NewChatCompletionsToResponsesStreamState(originalModel)
 	var usage OpenAIUsage
+	var tierObserver openAIResponseServiceTierObserver
 	var firstTokenMs *int
 	clientDisconnected := false
 	sawDone := false
@@ -395,6 +396,9 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 		if u := extractCCStreamUsage(payload); u != nil {
 			usage = *u
 		}
+		// V03-T13：CC chunk 携带上游实际处理档位，RecordUsage 经 Usage.ResponseServiceTier 只降不升。
+		tierObserver.ObservePayload([]byte(payload), "")
+		usage.ResponseServiceTier = tierObserver.ServiceTier()
 
 		var chunk apicompat.ChatCompletionsChunk
 		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {

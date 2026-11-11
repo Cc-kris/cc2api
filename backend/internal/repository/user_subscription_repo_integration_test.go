@@ -18,12 +18,17 @@ type UserSubscriptionRepoSuite struct {
 	suite.Suite
 	ctx    context.Context
 	client *dbent.Client
+	base   *dbent.Client
 	repo   *userSubscriptionRepository
+}
+
+func (s *UserSubscriptionRepoSuite) SetupSuite() {
+	s.base = isolatedSuiteClient(s.T())
 }
 
 func (s *UserSubscriptionRepoSuite) SetupTest() {
 	s.ctx = context.Background()
-	tx := testEntTx(s.T())
+	tx := suiteEntTx(s.T(), s.base)
 	s.client = tx.Client()
 	s.repo = NewUserSubscriptionRepository(s.client).(*userSubscriptionRepository)
 }
@@ -704,7 +709,7 @@ func (s *UserSubscriptionRepoSuite) TestIncrementUsage_Concurrent() {
 }
 
 func (s *UserSubscriptionRepoSuite) TestTxContext_RollbackIsolation() {
-	baseClient := testEntClient(s.T())
+	baseClient := s.base
 	tx, err := baseClient.Tx(context.Background())
 	s.Require().NoError(err, "begin tx")
 	defer func() {

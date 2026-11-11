@@ -4,6 +4,8 @@ package repository
 
 import (
 	"context"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -479,6 +481,77 @@ func (s *UserRepoSuite) TestDeductBalance_AllowsOverdraft() {
 	got, err := s.repo.GetByID(s.ctx, user.ID)
 	s.Require().NoError(err)
 	s.Require().InDelta(-5.0, got.Balance, 1e-6, "Balance should be -5.0 after overdraft")
+}
+
+func (s *UserRepoSuite) TestDeductAvailableBalance_ClampsToNonnegativeBalance() {
+	for _, tc := range []struct {
+		name        string
+		balance     float64
+		requested   float64
+		wantDeduct  float64
+		wantBalance float64
+	}{
+		{name: "enough balance", balance: 150, requested: 100, wantDeduct: 100, wantBalance: 50},
+		{name: "insufficient balance", balance: 30, requested: 100, wantDeduct: 30, wantBalance: 0},
+		{name: "negative balance unchanged", balance: -3, requested: 10, wantDeduct: 0, wantBalance: -3},
+		{name: "zero request", balance: 10, requested: 0, wantDeduct: 0, wantBalance: 10},
+	} {
+		s.Run(tc.name, func() {
+			user := s.mustCreateUser(&service.User{Email: "available-" + strings.ReplaceAll(tc.name, " ", "-") + "@test.com", Balance: tc.balance})
+			deducted, err := s.repo.DeductAvailableBalance(s.ctx, user.ID, tc.requested)
+			s.Require().NoError(err)
+			s.Require().InDelta(tc.wantDeduct, deducted, 1e-9)
+			got, err := s.repo.GetByID(s.ctx, user.ID)
+			s.Require().NoError(err)
+			s.Require().InDelta(tc.wantBalance, got.Balance, 1e-9)
+		})
+	}
+}
+
+func (s *UserRepoSuite) TestDeductAvailableBalance_RejectsNegativeAndMissingUser() {
+	user := s.mustCreateUser(&service.User{Email: "available-neg@test.com", Balance: 10})
+	_, err := s.repo.DeductAvailableBalance(s.ctx, user.ID, -1)
+	s.Require().Error(err)
+
+	_, err = s.repo.DeductAvailableBalance(s.ctx, user.ID+100000, 1)
+	s.Require().ErrorIs(err, service.ErrUserNotFound)
+}
+
+// 并发扣减时 FOR UPDATE 串行化：总扣减不超过初始余额，余额不会变负。
+func (s *UserRepoSuite) TestDeductAvailableBalance_ConcurrentNeverOverdraws() {
+	user := s.mustCreateUser(&service.User{Email: "available-concurrent@test.com", Balance: 150})
+
+	const workers = 10
+	var (
+		wg    sync.WaitGroup
+		mu    sync.Mutex
+		total float64
+		errs  []error
+	)
+	start := make(chan struct{})
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			deducted, err := s.repo.DeductAvailableBalance(context.Background(), user.ID, 100)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				errs = append(errs, err)
+				return
+			}
+			total += deducted
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	s.Require().Empty(errs)
+	s.Require().InDelta(150.0, total, 1e-9)
+	got, err := s.repo.GetByID(s.ctx, user.ID)
+	s.Require().NoError(err)
+	s.Require().InDelta(0.0, got.Balance, 1e-9)
 }
 
 // --- Concurrency ---

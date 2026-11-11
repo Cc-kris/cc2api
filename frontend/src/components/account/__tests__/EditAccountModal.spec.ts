@@ -417,3 +417,48 @@ describe('EditAccountModal', () => {
   })
 
 })
+
+// V03-R11：账号 extra.upstream_request_id_header（上游请求 ID 头）
+describe('EditAccountModal upstream request id header', () => {
+  const prepare = (extra: Record<string, unknown> = {}) => {
+    const account = buildAccount()
+    account.extra = extra
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+    return { account, wrapper: mountModal(account) }
+  }
+
+  it('loads the configured header and saves the trimmed value into extra', async () => {
+    const { wrapper } = prepare({ upstream_request_id_header: 'request-id', base_rpm: 5 })
+    const input = wrapper.get('[data-testid="upstream-request-id-header"]')
+    expect((input.element as HTMLInputElement).value).toBe('request-id')
+
+    await input.setValue('  X-Oneapi-Request-Id  ')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    const extra = updateAccountMock.mock.calls[0]?.[1]?.extra
+    expect(extra.upstream_request_id_header).toBe('X-Oneapi-Request-Id')
+  })
+
+  it('clearing the field removes the key so the backend default x-request-id applies', async () => {
+    const { wrapper } = prepare({ upstream_request_id_header: 'request-id' })
+    await wrapper.get('[data-testid="upstream-request-id-header"]').setValue('')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('upstream_request_id_header')
+  })
+
+  it('blocks submit for a 65-character or newline header name (AC32)', async () => {
+    for (const bad of ['x'.repeat(65), 'X Request Id']) {
+      const { wrapper } = prepare()
+      await wrapper.get('[data-testid="upstream-request-id-header"]').setValue(bad)
+      expect(wrapper.find('[data-testid="upstream-request-id-header-error"]').exists()).toBe(true)
+      await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+      expect(updateAccountMock).not.toHaveBeenCalled()
+    }
+  })
+})

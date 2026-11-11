@@ -111,6 +111,14 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // upstream_multiplier_source
 			sqlmock.AnyArg(), // upstream_multiplier_effective_at
 			sqlmock.AnyArg(), // account_finance_profile_id
+			sqlmock.AnyArg(), // image_input_tokens
+			sqlmock.AnyArg(), // image_input_cost
+			sqlmock.AnyArg(), // upstream_response_model
+			sqlmock.AnyArg(), // upstream_model_mismatch
+			sqlmock.AnyArg(), // session_id
+			sqlmock.AnyArg(), // requested_reasoning_effort
+			sqlmock.AnyArg(), // upstream_request_id
+
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(99), createdAt))
 
@@ -213,6 +221,14 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // upstream_multiplier_source
 			sqlmock.AnyArg(), // upstream_multiplier_effective_at
 			sqlmock.AnyArg(), // account_finance_profile_id
+			sqlmock.AnyArg(), // image_input_tokens
+			sqlmock.AnyArg(), // image_input_cost
+			sqlmock.AnyArg(), // upstream_response_model
+			sqlmock.AnyArg(), // upstream_model_mismatch
+			sqlmock.AnyArg(), // session_id
+			sqlmock.AnyArg(), // requested_reasoning_effort
+			sqlmock.AnyArg(), // upstream_request_id
+
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "created_at"}).AddRow(int64(100), createdAt))
 
@@ -759,6 +775,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{},
 			decimal.NullDecimal{}, decimal.NullDecimal{},
 			sql.NullInt64{}, sql.NullString{}, sql.NullTime{}, sql.NullInt64{},
+			0, 0.0, // image input fields
+			sql.NullString{}, sql.NullBool{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, // V03-R11 审计字段
+
 		}})
 		require.NoError(t, err)
 		require.Equal(t, 2, log.ImageCount)
@@ -843,6 +862,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{},
 			decimal.NullDecimal{}, decimal.NullDecimal{},
 			sql.NullInt64{}, sql.NullString{}, sql.NullTime{}, sql.NullInt64{},
+			0, 0.0, // image input fields
+			sql.NullString{}, sql.NullBool{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, // V03-R11 审计字段
+
 		}})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
@@ -904,6 +926,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{},
 			decimal.NullDecimal{}, decimal.NullDecimal{},
 			sql.NullInt64{}, sql.NullString{}, sql.NullTime{}, sql.NullInt64{},
+			0, 0.0, // image input fields
+			sql.NullString{}, sql.NullBool{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, // V03-R11 审计字段
+
 		}})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)
@@ -965,6 +990,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{}, sql.NullString{}, sql.NullString{}, sql.NullString{},
 			decimal.NullDecimal{}, decimal.NullDecimal{},
 			sql.NullInt64{}, sql.NullString{}, sql.NullTime{}, sql.NullInt64{},
+			0, 0.0, // image input fields
+			sql.NullString{}, sql.NullBool{}, sql.NullString{}, sql.NullString{}, sql.NullString{}, // V03-R11 审计字段
+
 		}})
 		require.NoError(t, err)
 		require.NotNil(t, log.ServiceTier)

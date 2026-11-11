@@ -51,6 +51,15 @@ type FailoverState struct {
 	ForceCacheBilling     bool
 	hasBoundSession       bool
 
+	// LastObservedResult 是最后一个带已观测用量的续写中断尝试（UpstreamFailoverError.ObservedUsage）。
+	// 续写全部失败（换号耗尽）且已向客户端输出过内容时，按它向用户收费一次；
+	// 续写成功时不使用（最终尝试正常返回 result，按成功路径记账）。
+	LastObservedResult *service.ForwardResult
+	// LastObservedAccountID 是 LastObservedResult 对应的账号。
+	LastObservedAccountID int64
+	// LastObservedForceCacheBilling 是该尝试发生时的强制缓存计费状态（本次失败触发的换号不影响它）。
+	LastObservedForceCacheBilling bool
+
 	// anyErrorCfg 非 nil 且开启 FailoverOnAnyError 时，任意错误都会依次尝试分组内所有账号。
 	anyErrorCfg *config.Config
 	// backoffMaxSwitches 单账号 503 退避重试的上限，保持原配置值，避免放开切换上限后退避循环过长。
@@ -90,9 +99,15 @@ func (s *FailoverState) HandleFailoverError(
 	failoverErr *service.UpstreamFailoverError,
 ) FailoverAction {
 	s.LastFailoverErr = failoverErr
+	if observed := failoverErr.ObservedForwardResult(); observed != nil {
+		s.LastObservedResult = observed
+		s.LastObservedAccountID = accountID
+		s.LastObservedForceCacheBilling = s.ForceCacheBilling
+	}
 
-	// 缓存计费判断
-	if needForceCacheBilling(s.hasBoundSession, failoverErr) {
+	// 缓存计费判断：同账号重试不算切换账号，粘性会话仅在实际切换时强制缓存计费。
+	// 两个同账号重试分支（RetryableOnSameAccount、任意错误换号）的判断与下方保持一致。
+	if needForceCacheBilling(s.hasBoundSession, failoverErr, s.willRetrySameAccount(accountID, failoverErr)) {
 		s.ForceCacheBilling = true
 	}
 
@@ -195,10 +210,29 @@ func (s *FailoverState) HandleSelectionExhausted(ctx context.Context) FailoverAc
 	return FailoverExhausted
 }
 
+// willRetrySameAccount 判断本次 HandleFailoverError 是否会走同账号重试分支
+// （不修改计数）。条件必须与 HandleFailoverError 中两个同账号重试分支一致：
+//   - 上游标记 RetryableOnSameAccount 且未达 maxSameAccountRetries；
+//   - 任意错误换号开启、非 RetryableOnSameAccount、未达 anyErrorSameAccountRetryLimitEnabled。
+func (s *FailoverState) willRetrySameAccount(accountID int64, failoverErr *service.UpstreamFailoverError) bool {
+	if failoverErr == nil {
+		return false
+	}
+	retryCount := s.SameAccountRetryCount[accountID]
+	if failoverErr.RetryableOnSameAccount {
+		return retryCount < maxSameAccountRetries
+	}
+	if s.anyErrorCfg != nil {
+		return retryCount < anyErrorSameAccountRetryLimitEnabled(s.anyErrorCfg, failoverErr)
+	}
+	return false
+}
+
 // needForceCacheBilling 判断 failover 时是否需要强制缓存计费。
-// 粘性会话切换账号、或上游明确标记时，将 input_tokens 转为 cache_read 计费。
-func needForceCacheBilling(hasBoundSession bool, failoverErr *service.UpstreamFailoverError) bool {
-	return hasBoundSession || (failoverErr != nil && failoverErr.ForceCacheBilling)
+// 粘性会话实际切换账号、或上游明确标记时，将 input_tokens 转为 cache_read 计费。
+// 同账号重试（sameAccountRetry=true）不触发粘性会话的强制缓存计费。
+func needForceCacheBilling(hasBoundSession bool, failoverErr *service.UpstreamFailoverError, sameAccountRetry bool) bool {
+	return (hasBoundSession && !sameAccountRetry) || (failoverErr != nil && failoverErr.ForceCacheBilling)
 }
 
 // failoverClientGone stops account switching once the downstream request is gone.

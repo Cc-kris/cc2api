@@ -263,6 +263,22 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 		return
 	}
 
+	// 余额模式在途预占（V03-R12）：用与计费相同的函数估算本次最高费用，计费落库后释放。
+	// 续写换号、普通换号都在下面的循环里，复用这一个预占。
+	inflightEstimate := tokenInflightEstimate(reqModel, body, service.InflightAnthropicSpeedTier(parsedReq.Speed, reqModel, channelMapping.MappedModel))
+	inflightEstimate = withGeminiImageEstimate(inflightEstimate, body, reqModel, channelMapping.MappedModel)
+	inflightDone, err := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, inflightEstimate)
+	if err != nil {
+		reqLog.Info("gateway.inflight_reservation_rejected", zap.Error(err))
+		status, code, message, retryAfter := billingErrorDetails(err)
+		if retryAfter > 0 {
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+		}
+		h.handleStreamingAwareError(c, status, code, message, streamStarted)
+		return
+	}
+	defer func() { inflightDone() }()
+
 	// 设置请求所属分组 ID（用于渠道级功能判断，如 WebSearch 模拟）
 	parsedReq.GroupID = apiKey.GroupID
 
@@ -514,7 +530,10 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			// 使用量记录通过有界 worker 池提交，避免请求热路径创建无界 goroutine。
 			quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 			upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
-			h.submitUsageRecordTask(func(ctx context.Context) {
+			// V03-R11 审计：在 gin.Context 有效时补齐只读审计字段。
+			stampForwardUsageAudit(c, result)
+			usageSessionID := service.ExtractClientSessionID(c)
+			h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 				if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 					Result:                 result,
 					ParsedRequest:          parsedReq,
@@ -528,6 +547,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					UpstreamEndpoint:       upstreamEndpoint,
 					UserAgent:              userAgent,
 					IPAddress:              clientIP,
+					SessionID:              usageSessionID,
 					RequestPayloadHash:     requestPayloadHash,
 					ForceCacheBilling:      fs.ForceCacheBilling,
 					APIKeyService:          h.apiKeyService,
@@ -567,6 +587,74 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 		fs := NewFailoverState(h.maxAccountSwitches, hasBoundSession).WithAnyErrorFailover(c.Request.Context(), h.cfg)
 		retryWithFallback := false
 
+		// 提交 usage 记录。成功路径、「流中断但 Forward 已观测到 usage 的部分结果」错误路径、
+		// 「续写耗尽按最后一个有用量的尝试收费」路径共用；每个客户端请求最多调用一次。
+		submitUsageFor := func(account *service.Account, result *service.ForwardResult, forceCacheBilling bool) {
+			// 捕获请求信息（用于异步记录，避免在 goroutine 中访问 gin.Context）
+			userAgent := c.GetHeader("User-Agent")
+			clientIP := ip.GetClientIP(c)
+			requestPayloadHash := service.HashUsageRequestPayload(body)
+			inboundEndpoint := GetInboundEndpoint(c)
+			upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
+
+			if result.ReasoningEffort == nil {
+				result.ReasoningEffort = service.NormalizeClaudeOutputEffort(parsedReq.OutputEffort)
+			}
+
+			// 使用量记录通过有界 worker 池提交，避免请求热路径创建无界 goroutine。
+			quotaPlatform := service.QuotaPlatform(c.Request.Context(), currentAPIKey)
+			upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
+			// V03-R11 审计：在 gin.Context 有效时补齐只读审计字段。
+			stampForwardUsageAudit(c, result)
+			usageSessionID := service.ExtractClientSessionID(c)
+			h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
+				if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
+					Result:                 result,
+					ParsedRequest:          parsedReq,
+					QuotaPlatform:          quotaPlatform,
+					APIKey:                 currentAPIKey,
+					User:                   currentAPIKey.User,
+					Account:                account,
+					UpstreamCostMultiplier: service.CloneDecimalSnapshot(account.UpstreamCostMultiplier),
+					Subscription:           currentSubscription,
+					InboundEndpoint:        inboundEndpoint,
+					UpstreamEndpoint:       upstreamEndpoint,
+					UserAgent:              userAgent,
+					IPAddress:              clientIP,
+					SessionID:              usageSessionID,
+					RequestPayloadHash:     requestPayloadHash,
+					ForceCacheBilling:      forceCacheBilling,
+					APIKeyService:          h.apiKeyService,
+					ChannelUsageFields:     channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+					UpstreamAttempts:       service.CloneUsageUpstreamAttempts(upstreamAttempts),
+				}); err != nil {
+					logger.L().With(
+						zap.String("component", "handler.gateway.messages"),
+						zap.Int64("user_id", subject.UserID),
+						zap.Int64("api_key_id", currentAPIKey.ID),
+						zap.Any("group_id", currentAPIKey.GroupID),
+						zap.String("model", reqModel),
+						zap.Int64("account_id", account.ID),
+					).Error("gateway.record_usage_failed", zap.Error(err))
+				}
+			})
+		}
+		// lastObservedAccount 是 fs.LastObservedResult 对应的账号对象（RecordUsage 需要完整账号）。
+		var lastObservedAccount *service.Account
+		// billLastObservedAttempt：续写耗尽 / 放弃续写且已向客户端输出过内容时，
+		// 按最后一个有用量的续写中断尝试收费一次。没有输出过内容或没有观测用量时不收费。
+		billLastObservedAttempt := func() {
+			if !streamStarted || fs.LastObservedResult == nil || lastObservedAccount == nil {
+				return
+			}
+			reqLog.Warn("gateway.stream_continuation_exhausted_bill_last_observed",
+				zap.Int64("account_id", lastObservedAccount.ID),
+				zap.Int("input_tokens", fs.LastObservedResult.Usage.InputTokens),
+				zap.Int("output_tokens", fs.LastObservedResult.Usage.OutputTokens),
+			)
+			submitUsageFor(lastObservedAccount, fs.LastObservedResult, fs.LastObservedForceCacheBilling)
+		}
+
 		for {
 			// 选择支持该模型的账号
 			reqLog.Info("sticky.selecting_account",
@@ -598,6 +686,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				case FailoverCanceled:
 					return
 				default: // FailoverExhausted
+					billLastObservedAttempt()
 					if fs.LastFailoverErr != nil {
 						h.handleFailoverExhausted(c, fs.LastFailoverErr, platform, streamStarted)
 					} else {
@@ -805,6 +894,11 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			if accountReleaseFunc != nil {
 				accountReleaseFunc()
 			}
+
+			submitUsage := func(result *service.ForwardResult) {
+				submitUsageFor(account, result, fs.ForceCacheBilling)
+			}
+
 			if err != nil {
 				// Beta policy block: return 400 immediately, no failover
 				var betaBlockedErr *service.BetaBlockedError
@@ -847,6 +941,18 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 							h.handleStreamingAwareError(c, status, code, message, streamStarted)
 							return
 						}
+						// 兜底分组按余额计费：原分组是订阅分组时还没有预占，这里补登记；已有预占则沿用。
+						fallbackDone, err := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, fallbackAPIKey, nil, inflightEstimate)
+						if err != nil {
+							status, code, message, retryAfter := billingErrorDetails(err)
+							if retryAfter > 0 {
+								c.Header("Retry-After", strconv.Itoa(retryAfter))
+							}
+							h.handleStreamingAwareError(c, status, code, message, streamStarted)
+							return
+						}
+						prevDone := inflightDone
+						inflightDone = func() { fallbackDone(); prevDone() }
 						// 兜底重试按"直接请求兜底分组"处理：清除强制平台，允许按分组平台调度
 						ctx := context.WithValue(c.Request.Context(), ctxkey.ForcePlatform, "")
 						c.Request = c.Request.WithContext(ctx)
@@ -861,10 +967,13 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				}
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
+					// 续写中断尝试的已观测用量只进财务成本证据（上游尝试记录），这里绝不 RecordUsage。
 					appendBillableUsageAttemptFromFailover(c, account, reqModel, failoverErr)
 					// 流式内容已写入客户端：只有支持续写的中断（SafeToFailoverAfterWrite）才能换号接着写
 					wroteDuringForward := c.Writer.Size() != writerSizeBeforeForward
 					if wroteDuringForward && !failoverErr.SafeToFailoverAfterWrite {
+						streamStarted = true
+						billLastObservedAttempt()
 						h.handleFailoverExhausted(c, failoverErr, account.Platform, true)
 						return
 					}
@@ -872,13 +981,18 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						streamStarted = true
 					}
 					action := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, failoverErr)
+					if failoverErr.ObservedUsage != nil && fs.LastObservedAccountID == account.ID {
+						lastObservedAccount = account
+					}
 					switch action {
 					case FailoverContinue:
 						continue
 					case FailoverExhausted:
+						billLastObservedAttempt()
 						h.handleFailoverExhausted(c, fs.LastFailoverErr, account.Platform, streamStarted)
 						return
 					case FailoverCanceled:
+						billLastObservedAttempt()
 						return
 					}
 				}
@@ -901,6 +1015,14 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					forwardFailedFields = append(forwardFailedFields, zap.Int64p("proxy_id", account.ProxyID))
 				}
 				reqLog.Error("gateway.forward_failed", forwardFailedFields...)
+				// Forward 与错误一起返回的部分结果：流中断前上游已计量的 usage 照常入账。
+				// 失败转移错误（含续写中断）恒定 result=nil，已在上面的分支处理，不会走到这里重复计费。
+				if result != nil {
+					submitUsage(result)
+				} else {
+					// 续写尝试以普通错误结束且自身没有观测用量：按最后一个有用量的续写中断尝试收费。
+					billLastObservedAttempt()
+				}
 				return
 			}
 
@@ -924,50 +1046,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				}
 			}
 
-			// 捕获请求信息（用于异步记录，避免在 goroutine 中访问 gin.Context）
-			userAgent := c.GetHeader("User-Agent")
-			clientIP := ip.GetClientIP(c)
-			requestPayloadHash := service.HashUsageRequestPayload(body)
-			inboundEndpoint := GetInboundEndpoint(c)
-			upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
-
-			if result.ReasoningEffort == nil {
-				result.ReasoningEffort = service.NormalizeClaudeOutputEffort(parsedReq.OutputEffort)
-			}
-
-			// 使用量记录通过有界 worker 池提交，避免请求热路径创建无界 goroutine。
-			quotaPlatform := service.QuotaPlatform(c.Request.Context(), currentAPIKey)
-			upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
-			h.submitUsageRecordTask(func(ctx context.Context) {
-				if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
-					Result:                 result,
-					ParsedRequest:          parsedReq,
-					QuotaPlatform:          quotaPlatform,
-					APIKey:                 currentAPIKey,
-					User:                   currentAPIKey.User,
-					Account:                account,
-					UpstreamCostMultiplier: service.CloneDecimalSnapshot(account.UpstreamCostMultiplier),
-					Subscription:           currentSubscription,
-					InboundEndpoint:        inboundEndpoint,
-					UpstreamEndpoint:       upstreamEndpoint,
-					UserAgent:              userAgent,
-					IPAddress:              clientIP,
-					RequestPayloadHash:     requestPayloadHash,
-					ForceCacheBilling:      fs.ForceCacheBilling,
-					APIKeyService:          h.apiKeyService,
-					ChannelUsageFields:     channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
-					UpstreamAttempts:       service.CloneUsageUpstreamAttempts(upstreamAttempts),
-				}); err != nil {
-					logger.L().With(
-						zap.String("component", "handler.gateway.messages"),
-						zap.Int64("user_id", subject.UserID),
-						zap.Int64("api_key_id", currentAPIKey.ID),
-						zap.Any("group_id", currentAPIKey.GroupID),
-						zap.String("model", reqModel),
-						zap.Int64("account_id", account.ID),
-					).Error("gateway.record_usage_failed", zap.Error(err))
-				}
-			})
+			submitUsage(result)
 			return
 		}
 		if !retryWithFallback {
@@ -2052,15 +2131,27 @@ func (h *GatewayHandler) maybeLogCompatibilityFallbackMetrics(reqLog *zap.Logger
 	)
 }
 
-func (h *GatewayHandler) submitUsageRecordTask(task service.UsageRecordTask) {
+// submitUsageRecordTask 提交计费任务。parent 是请求 context：任务接管其上的在途预占引用，
+// 计费落库后归还；任务被丢弃时立即归还（V03-R12）。
+func (h *GatewayHandler) submitUsageRecordTask(parent context.Context, task service.UsageRecordTask) {
 	if task == nil {
 		return
 	}
+	task, abandon := wrapUsageRecordTaskInflight(parent, task)
 	if h.usageRecordWorkerPool != nil {
-		h.usageRecordWorkerPool.Submit(task)
-		return
+		if mode := h.usageRecordWorkerPool.Submit(task); mode != service.UsageRecordSubmitModeDroppedStopped {
+			if mode.Dropped() {
+				abandon()
+			}
+			return
+		}
+		// 池已停止（进程关停窗口）：计费任务不能静默丢失，降级为内联同步执行。
+		// 显式配置的 drop/sample 溢出丢弃仍按配置语义保留。
+		logger.L().With(
+			zap.String("component", "handler.gateway.messages"),
+		).Warn("gateway.usage_record_task_stopped_sync_fallback")
 	}
-	// 回退路径：worker 池未注入时同步执行，避免退回到无界 goroutine 模式。
+	// 回退路径：worker 池未注入或已停止时同步执行，避免退回到无界 goroutine 模式。
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	defer func() {

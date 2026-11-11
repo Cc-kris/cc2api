@@ -75,18 +75,21 @@ type AccountStatsPricingRule struct {
 
 // ChannelModelPricing 渠道模型定价条目
 type ChannelModelPricing struct {
-	ID               int64
-	ChannelID        int64
-	Platform         string            // 所属平台（anthropic/openai/gemini/...）
-	Models           []string          // 绑定的模型列表
-	BillingMode      BillingMode       // 计费模式
-	InputPrice       *float64          // 每 token 输入价格（USD）— 向后兼容 flat 定价
-	OutputPrice      *float64          // 每 token 输出价格（USD）
-	CacheWritePrice  *float64          // 缓存写入价格
-	CacheReadPrice   *float64          // 缓存读取价格
-	ImageOutputPrice *float64          // 图片输出价格（向后兼容）
-	PerRequestPrice  *float64          // 默认按次计费价格（USD）
-	Intervals        []PricingInterval // 区间定价列表
+	ID              int64
+	ChannelID       int64
+	Platform        string      // 所属平台（anthropic/openai/gemini/...）
+	Models          []string    // 绑定的模型列表
+	BillingMode     BillingMode // 计费模式
+	InputPrice      *float64    // 每 token 输入价格（USD）— 向后兼容 flat 定价
+	OutputPrice     *float64    // 每 token 输出价格（USD）
+	CacheWritePrice *float64    // 缓存写入价格（5m；未配置 1h 价时同时作用于 1h）
+	// CacheWrite1hPrice 1h 缓存写入价；nil 时 1h 写入沿用 CacheWritePrice（V03-R07）。
+	CacheWrite1hPrice *float64
+	CacheReadPrice    *float64          // 缓存读取价格
+	ImageInputPrice   *float64          // 图片输入 token 单价；nil 时按 InputPrice 计（V03-T14）
+	ImageOutputPrice  *float64          // 图片输出价格（向后兼容）
+	PerRequestPrice   *float64          // 默认按次计费价格（USD）
+	Intervals         []PricingInterval // 区间定价列表
 	// TimePricing defines optional timezone-aware period multipliers. NULL/empty means 1.
 	TimePricing    *TimePricingConfig
 	FastMultiplier *float64
@@ -146,7 +149,7 @@ func (p *ChannelModelPricing) MultiplierAt(at time.Time, tier string) float64 {
 		}
 	}
 	switch strings.ToLower(strings.TrimSpace(tier)) {
-	case "fast":
+	case "fast", "priority":
 		if p.FastMultiplier != nil && *p.FastMultiplier > 0 {
 			m *= *p.FastMultiplier
 		}
@@ -192,11 +195,13 @@ type PricingInterval struct {
 	InputPrice      *float64 // token 模式：每 token 输入价
 	OutputPrice     *float64 // token 模式：每 token 输出价
 	CacheWritePrice *float64 // token 模式：缓存写入价
-	CacheReadPrice  *float64 // token 模式：缓存读取价
-	PerRequestPrice *float64 // 按次/图片模式：每次请求价格
-	SortOrder       int
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	// CacheWrite1hPrice token 模式：区间 1h 缓存写入价；nil 时沿用 CacheWritePrice。
+	CacheWrite1hPrice *float64
+	CacheReadPrice    *float64 // token 模式：缓存读取价
+	PerRequestPrice   *float64 // 按次/图片模式：每次请求价格
+	SortOrder         int
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 // IsActive 判断渠道是否启用
@@ -430,6 +435,7 @@ func validateIntervalPrices(iv *PricingInterval, idx int) error {
 		{"input_price", iv.InputPrice},
 		{"output_price", iv.OutputPrice},
 		{"cache_write_price", iv.CacheWritePrice},
+		{"cache_write_1h_price", iv.CacheWrite1hPrice},
 		{"cache_read_price", iv.CacheReadPrice},
 		{"per_request_price", iv.PerRequestPrice},
 	}

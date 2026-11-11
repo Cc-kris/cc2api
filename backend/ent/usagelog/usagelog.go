@@ -52,10 +52,14 @@ const (
 	FieldCacheCreation5mTokens = "cache_creation_5m_tokens"
 	// FieldCacheCreation1hTokens holds the string denoting the cache_creation_1h_tokens field in the database.
 	FieldCacheCreation1hTokens = "cache_creation_1h_tokens"
+	// FieldImageInputTokens holds the string denoting the image_input_tokens field in the database.
+	FieldImageInputTokens = "image_input_tokens"
 	// FieldInputCost holds the string denoting the input_cost field in the database.
 	FieldInputCost = "input_cost"
 	// FieldOutputCost holds the string denoting the output_cost field in the database.
 	FieldOutputCost = "output_cost"
+	// FieldImageInputCost holds the string denoting the image_input_cost field in the database.
+	FieldImageInputCost = "image_input_cost"
 	// FieldCacheCreationCost holds the string denoting the cache_creation_cost field in the database.
 	FieldCacheCreationCost = "cache_creation_cost"
 	// FieldCacheReadCost holds the string denoting the cache_read_cost field in the database.
@@ -132,6 +136,16 @@ const (
 	FieldVideoTaskID = "video_task_id"
 	// FieldCacheTTLOverridden holds the string denoting the cache_ttl_overridden field in the database.
 	FieldCacheTTLOverridden = "cache_ttl_overridden"
+	// FieldUpstreamResponseModel holds the string denoting the upstream_response_model field in the database.
+	FieldUpstreamResponseModel = "upstream_response_model"
+	// FieldUpstreamModelMismatch holds the string denoting the upstream_model_mismatch field in the database.
+	FieldUpstreamModelMismatch = "upstream_model_mismatch"
+	// FieldSessionID holds the string denoting the session_id field in the database.
+	FieldSessionID = "session_id"
+	// FieldRequestedReasoningEffort holds the string denoting the requested_reasoning_effort field in the database.
+	FieldRequestedReasoningEffort = "requested_reasoning_effort"
+	// FieldUpstreamRequestID holds the string denoting the upstream_request_id field in the database.
+	FieldUpstreamRequestID = "upstream_request_id"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// EdgeUser holds the string denoting the user edge name in mutations.
@@ -205,8 +219,10 @@ var Columns = []string{
 	FieldCacheReadTokens,
 	FieldCacheCreation5mTokens,
 	FieldCacheCreation1hTokens,
+	FieldImageInputTokens,
 	FieldInputCost,
 	FieldOutputCost,
+	FieldImageInputCost,
 	FieldCacheCreationCost,
 	FieldCacheReadCost,
 	FieldTotalCost,
@@ -245,6 +261,11 @@ var Columns = []string{
 	FieldVideoResolution,
 	FieldVideoTaskID,
 	FieldCacheTTLOverridden,
+	FieldUpstreamResponseModel,
+	FieldUpstreamModelMismatch,
+	FieldSessionID,
+	FieldRequestedReasoningEffort,
+	FieldUpstreamRequestID,
 	FieldCreatedAt,
 }
 
@@ -285,10 +306,14 @@ var (
 	DefaultCacheCreation5mTokens int
 	// DefaultCacheCreation1hTokens holds the default value on creation for the "cache_creation_1h_tokens" field.
 	DefaultCacheCreation1hTokens int
+	// DefaultImageInputTokens holds the default value on creation for the "image_input_tokens" field.
+	DefaultImageInputTokens int
 	// DefaultInputCost holds the default value on creation for the "input_cost" field.
 	DefaultInputCost float64
 	// DefaultOutputCost holds the default value on creation for the "output_cost" field.
 	DefaultOutputCost float64
+	// DefaultImageInputCost holds the default value on creation for the "image_input_cost" field.
+	DefaultImageInputCost float64
 	// DefaultCacheCreationCost holds the default value on creation for the "cache_creation_cost" field.
 	DefaultCacheCreationCost float64
 	// DefaultCacheReadCost holds the default value on creation for the "cache_read_cost" field.
@@ -339,6 +364,14 @@ var (
 	VideoTaskIDValidator func(string) error
 	// DefaultCacheTTLOverridden holds the default value on creation for the "cache_ttl_overridden" field.
 	DefaultCacheTTLOverridden bool
+	// UpstreamResponseModelValidator is a validator for the "upstream_response_model" field. It is called by the builders before save.
+	UpstreamResponseModelValidator func(string) error
+	// SessionIDValidator is a validator for the "session_id" field. It is called by the builders before save.
+	SessionIDValidator func(string) error
+	// RequestedReasoningEffortValidator is a validator for the "requested_reasoning_effort" field. It is called by the builders before save.
+	RequestedReasoningEffortValidator func(string) error
+	// UpstreamRequestIDValidator is a validator for the "upstream_request_id" field. It is called by the builders before save.
+	UpstreamRequestIDValidator func(string) error
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
 	DefaultCreatedAt func() time.Time
 )
@@ -446,6 +479,11 @@ func ByCacheCreation1hTokens(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCacheCreation1hTokens, opts...).ToFunc()
 }
 
+// ByImageInputTokens orders the results by the image_input_tokens field.
+func ByImageInputTokens(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldImageInputTokens, opts...).ToFunc()
+}
+
 // ByInputCost orders the results by the input_cost field.
 func ByInputCost(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldInputCost, opts...).ToFunc()
@@ -454,6 +492,11 @@ func ByInputCost(opts ...sql.OrderTermOption) OrderOption {
 // ByOutputCost orders the results by the output_cost field.
 func ByOutputCost(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOutputCost, opts...).ToFunc()
+}
+
+// ByImageInputCost orders the results by the image_input_cost field.
+func ByImageInputCost(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldImageInputCost, opts...).ToFunc()
 }
 
 // ByCacheCreationCost orders the results by the cache_creation_cost field.
@@ -629,6 +672,31 @@ func ByVideoTaskID(opts ...sql.OrderTermOption) OrderOption {
 // ByCacheTTLOverridden orders the results by the cache_ttl_overridden field.
 func ByCacheTTLOverridden(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCacheTTLOverridden, opts...).ToFunc()
+}
+
+// ByUpstreamResponseModel orders the results by the upstream_response_model field.
+func ByUpstreamResponseModel(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamResponseModel, opts...).ToFunc()
+}
+
+// ByUpstreamModelMismatch orders the results by the upstream_model_mismatch field.
+func ByUpstreamModelMismatch(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamModelMismatch, opts...).ToFunc()
+}
+
+// BySessionID orders the results by the session_id field.
+func BySessionID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSessionID, opts...).ToFunc()
+}
+
+// ByRequestedReasoningEffort orders the results by the requested_reasoning_effort field.
+func ByRequestedReasoningEffort(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRequestedReasoningEffort, opts...).ToFunc()
+}
+
+// ByUpstreamRequestID orders the results by the upstream_request_id field.
+func ByUpstreamRequestID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUpstreamRequestID, opts...).ToFunc()
 }
 
 // ByCreatedAt orders the results by the created_at field.

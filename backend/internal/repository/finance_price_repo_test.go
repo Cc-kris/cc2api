@@ -40,7 +40,7 @@ func TestFinanceExchangeRate(t *testing.T) {
 }
 
 func TestEnsureFXRateVersionReusesSameCurrencyAndEffectiveFrom(t *testing.T) {
-	db, err := sql.Open("sqlite", "file:"+t.Name()+"?mode=memory&cache=shared&_fk=1")
+	db, err := sql.Open("sqlite", "file:"+t.Name()+"?mode=memory&cache=shared&_pragma=foreign_keys(1)")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	drv := entsql.OpenDB(dialect.SQLite, db)

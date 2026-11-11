@@ -168,7 +168,7 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 	}
 	_, err := tx.ExecContext(ctx, `
 		UPDATE usage_billing_dedup
-		SET finance_business_type=$3,promotion_credit_used=COALESCE($4,0),finance_excluded=$5,
+		SET finance_business_type=$3,promotion_credit_used=COALESCE($4::numeric,0),finance_excluded=$5,
 		    finance_exclusion_reason=NULLIF($6,''),finance_classification_recorded=TRUE
 		WHERE request_id=$1 AND api_key_id=$2`,
 		cmd.RequestID, cmd.APIKeyID, result.FinanceBusinessType, promotionUsed, result.FinanceExcluded, result.FinanceExclusionReason)

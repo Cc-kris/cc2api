@@ -92,6 +92,7 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (*OpenAIForwardResult, error) {
+	beginUpstreamResponseModelObservation(c) // V03-R11：每次转发尝试重置上游响应模型观测（本路径未接观测时保持为空，避免沿用上次尝试的值）
 	return s.forwardAsChatCompletions(ctx, c, account, body, promptCacheKey, defaultMappedModel, false)
 }
 
@@ -509,14 +510,15 @@ func (s *OpenAIGatewayService) handleChatBufferedStreamingResponse(
 
 	billingPayload, _ := json.Marshal(finalResponse)
 	return &OpenAIForwardResult{
-		RequestID:              requestID,
-		Usage:                  usage,
-		Model:                  originalModel,
-		BillingModel:           billingModel,
-		UpstreamModel:          upstreamModel,
-		Stream:                 false,
-		Duration:               time.Since(startTime),
-		UpstreamBillingPayload: billingPayload,
+		RequestID:                   requestID,
+		Usage:                       usage,
+		Model:                       originalModel,
+		BillingModel:                billingModel,
+		UpstreamModel:               upstreamModel,
+		UpstreamResponseServiceTier: usage.ResponseServiceTier,
+		Stream:                      false,
+		Duration:                    time.Since(startTime),
+		UpstreamBillingPayload:      billingPayload,
 	}, nil
 }
 
@@ -555,6 +557,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 	state.IncludeUsage = includeUsage
 
 	var usage OpenAIUsage
+	var tierObserver openAIResponseServiceTierObserver
 	var firstTokenMs *int
 	var billingPayload []byte
 	firstChunk := true
@@ -586,15 +589,16 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 
 	resultWithUsage := func() *OpenAIForwardResult {
 		return &OpenAIForwardResult{
-			RequestID:              requestID,
-			Usage:                  usage,
-			Model:                  originalModel,
-			BillingModel:           billingModel,
-			UpstreamModel:          upstreamModel,
-			Stream:                 true,
-			Duration:               time.Since(startTime),
-			FirstTokenMs:           firstTokenMs,
-			UpstreamBillingPayload: append([]byte(nil), billingPayload...),
+			RequestID:                   requestID,
+			Usage:                       usage,
+			Model:                       originalModel,
+			BillingModel:                billingModel,
+			UpstreamModel:               upstreamModel,
+			UpstreamResponseServiceTier: tierObserver.ServiceTier(),
+			Stream:                      true,
+			Duration:                    time.Since(startTime),
+			FirstTokenMs:                firstTokenMs,
+			UpstreamBillingPayload:      append([]byte(nil), billingPayload...),
 		}
 	}
 
@@ -624,6 +628,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 		if isTerminalEvent && event.Response != nil && event.Response.Usage != nil {
 			usage = copyOpenAIUsageFromResponsesUsage(event.Response.Usage)
 		}
+		tierObserver.ObservePayload([]byte(payload), event.Type)
 
 		chunks := apicompat.ResponsesEventToChatChunks(&event, state)
 		if !clientDisconnected {

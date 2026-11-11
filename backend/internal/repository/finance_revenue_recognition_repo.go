@@ -51,7 +51,7 @@ WITH eligible AS (
         CASE WHEN refund_at IS NULL THEN NULL ELSE (refund_at AT TIME ZONE $2)::date END AS refund_date
  FROM payment_orders po
  WHERE order_type='subscription'
-   AND status IN ('PAID','RECHARGING','COMPLETED','REFUND_REQUESTED','REFUNDING','PARTIALLY_REFUNDED','REFUNDED','REFUND_FAILED')
+   AND status IN ('PAID','RECHARGING','COMPLETED','REFUND_REQUESTED','REFUNDING','REFUND_PENDING','PARTIALLY_REFUNDED','REFUNDED','REFUND_FAILED')
    AND paid_at IS NOT NULL AND subscription_days IS NOT NULL AND subscription_days>0
    AND NOT EXISTS (SELECT 1 FROM users finance_admin WHERE finance_admin.id=po.user_id AND finance_admin.role=$3)
 ), candidate_days AS (
@@ -90,7 +90,7 @@ SELECT id,user_id,subscription_group_id,amount::text,COALESCE(refund_amount,0)::
        paid_at,subscription_days,refund_at
 FROM payment_orders po
 WHERE order_type='subscription'
-  AND status IN ('PAID','RECHARGING','COMPLETED','REFUND_REQUESTED','REFUNDING','PARTIALLY_REFUNDED','REFUNDED','REFUND_FAILED')
+  AND status IN ('PAID','RECHARGING','COMPLETED','REFUND_REQUESTED','REFUNDING','REFUND_PENDING','PARTIALLY_REFUNDED','REFUNDED','REFUND_FAILED')
   AND paid_at IS NOT NULL
   AND subscription_days IS NOT NULL
   AND subscription_days > 0

@@ -61,7 +61,7 @@ func (c *PricingServiceModelCatalog) SnapshotForPlatform(platform string) (Model
 		return naturalModelLess(models[i], models[j])
 	})
 	return ModelCatalogSnapshot{
-		Provider: provider, Checksum: c.pricing.localHash,
+		Provider: provider, Checksum: c.pricing.catalogChecksumLocked(),
 		UpdatedAt: c.pricing.lastUpdated, Models: models,
 	}, nil
 }

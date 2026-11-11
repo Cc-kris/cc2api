@@ -67,7 +67,7 @@
           <TokenUsageTrend :trend-data="trendData" :loading="chartsLoading" />
         </div>
       </div>
-      <UsageFilters v-model="filters" :start-date="startDate" :end-date="endDate" :exporting="exporting" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
+      <UsageFilters v-model="filters" show-audit-filters :start-date="startDate" :end-date="endDate" :exporting="exporting" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
         <template #after-reset>
           <div class="relative" ref="columnDropdownRef">
             <button
@@ -169,6 +169,7 @@ import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'; import { adminAPI } from '@/api/admin'; import { adminUsageAPI } from '@/api/admin/usage'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import { formatReasoningEffort } from '@/utils/format'
+import { upstreamModelConsistencyCell } from '@/utils/reasoningEffortDisplay'
 import { resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usageRequestType'
 import AppLayout from '@/components/layout/AppLayout.vue'; import Pagination from '@/components/common/Pagination.vue'; import Select from '@/components/common/Select.vue'; import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'; import UsageFilters from '@/components/admin/usage/UsageFilters.vue'
@@ -183,6 +184,7 @@ import ModelDistributionChart from '@/components/charts/ModelDistributionChart.v
 import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
 import UserTokenRanking from '@/components/admin/usage/UserTokenRanking.vue'
 import Icon from '@/components/icons/Icon.vue'
+import { resolveHiddenColumns, serializeHiddenColumns } from '@/utils/columnVisibility'
 import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat, AdminUser } from '@/types'; import type { AdminUsageStatsResponse, AdminUsageQueryParams } from '@/api/admin/usage'
 
 const { t } = useI18n()
@@ -498,7 +500,7 @@ const resetFilters = () => {
   const range = getLast24HoursRangeDates()
   startDate.value = range.start
   endDate.value = range.end
-  filters.value = { start_date: startDate.value, end_date: endDate.value, request_type: undefined, billing_type: null, billing_mode: undefined }
+  filters.value = { start_date: startDate.value, end_date: endDate.value, request_type: undefined, billing_type: null, billing_mode: undefined, upstream_request_id: undefined, upstream_model_mismatch: undefined }
   granularity.value = getGranularityForRange(startDate.value, endDate.value)
   applyFilters()
 }
@@ -532,12 +534,13 @@ const exportToExcel = async () => {
       t('usage.inboundEndpoint'), t('usage.upstreamEndpoint'),
       t('usage.type'),
       t('admin.usage.inputTokens'), t('admin.usage.outputTokens'),
-      t('admin.usage.cacheReadTokens'), t('admin.usage.cacheCreationTokens'),
-      t('admin.usage.inputCost'), t('admin.usage.outputCost'),
+      t('admin.usage.cacheReadTokens'), t('admin.usage.cacheCreationTokens'), t('admin.usage.imageInputTokensCsv'),
+      t('admin.usage.inputCost'), t('admin.usage.imageInputCost'), t('admin.usage.outputCost'),
       t('admin.usage.cacheReadCost'), t('admin.usage.cacheCreationCost'),
       t('usage.rate'), t('usage.accountMultiplier'), t('usage.original'), t('usage.userBilled'), t('usage.accountBilled'),
       t('usage.firstToken'), t('usage.duration'),
-      t('admin.usage.requestId'), t('usage.userAgent'), t('admin.usage.ipAddress')
+      t('admin.usage.requestId'), t('usage.userAgent'), t('admin.usage.ipAddress'),
+      t('admin.usage.upstreamRequestId'), t('admin.usage.sessionId'), t('admin.usage.upstreamResponseModel'), t('admin.usage.upstreamModelMismatch'), t('usage.requestedReasoningEffort')
     ]
     const ws = XLSX.utils.aoa_to_sheet([headers])
     while (true) {
@@ -550,13 +553,16 @@ const exportToExcel = async () => {
         log.created_at, log.user?.email || '', log.api_key?.name || '', log.account?.name || '', log.model,
         log.upstream_model || '', formatReasoningEffort(log.reasoning_effort), log.group?.name || '',
         log.inbound_endpoint || '', log.upstream_endpoint || '', getRequestTypeLabel(log),
-        log.input_tokens, log.output_tokens, log.cache_read_tokens, log.cache_creation_tokens,
-        log.input_cost?.toFixed(6) || '0.000000', log.output_cost?.toFixed(6) || '0.000000',
-        log.cache_read_cost?.toFixed(6) || '0.000000', log.cache_creation_cost?.toFixed(6) || '0.000000',
+        log.input_tokens, log.output_tokens, log.cache_read_tokens, log.cache_creation_tokens, log.image_input_tokens ?? 0,
+        log.input_cost?.toFixed(8) || '0.00000000', (log.image_input_cost ?? 0).toFixed(8), log.output_cost?.toFixed(8) || '0.00000000',
+        log.cache_read_cost?.toFixed(8) || '0.00000000', log.cache_creation_cost?.toFixed(8) || '0.00000000',
         log.rate_multiplier?.toPrecision(4) || '1.00', (log.account_rate_multiplier ?? 1).toPrecision(4),
-        log.total_cost?.toFixed(6) || '0.000000', log.actual_cost?.toFixed(6) || '0.000000',
-        ((log.account_stats_cost ?? log.total_cost) * (log.account_rate_multiplier ?? 1)).toFixed(6), log.first_token_ms ?? '', log.duration_ms,
-        log.request_id || '', log.user_agent || '', log.ip_address || ''
+        log.total_cost?.toFixed(8) || '0.00000000', log.actual_cost?.toFixed(8) || '0.00000000',
+        ((log.account_stats_cost ?? log.total_cost) * (log.account_rate_multiplier ?? 1)).toFixed(8), log.first_token_ms ?? '', log.duration_ms,
+        log.request_id || '', log.user_agent || '', log.ip_address || '',
+        log.upstream_request_id || '', log.session_id || '', log.upstream_response_model || '',
+        upstreamModelConsistencyCell(log.upstream_model_mismatch, { yes: t('common.yes'), no: t('common.no') }),
+        log.requested_reasoning_effort ? formatReasoningEffort(log.requested_reasoning_effort) : ''
       ])
       if (rows.length) {
         XLSX.utils.sheet_add_aoa(ws, rows, { origin: -1 })
@@ -578,7 +584,9 @@ const exportToExcel = async () => {
 
 // Column visibility
 const ALWAYS_VISIBLE = ['user', 'created_at']
-const DEFAULT_HIDDEN_COLUMNS = ['reasoning_effort', 'user_agent']
+const DEFAULT_HIDDEN_COLUMNS = ['reasoning_effort', 'user_agent', 'upstream_request_id', 'session_id']
+// V03-T17 新增的列：旧数组格式存档里没有它们，读取时按默认隐藏处理。
+const LEGACY_NEW_COLUMNS = ['upstream_request_id', 'session_id']
 const HIDDEN_COLUMNS_KEY = 'usage-hidden-columns'
 
 const allColumns = computed(() => [
@@ -595,10 +603,14 @@ const allColumns = computed(() => [
   { key: 'cost', label: t('usage.cost'), sortable: false },
   { key: 'latency_health', label: `${t('usage.firstToken')} / ${t('usage.duration')}`, sortable: false },
   { key: 'request_id', label: t('admin.usage.requestId'), sortable: false },
+  { key: 'upstream_request_id', label: t('admin.usage.upstreamRequestId'), sortable: false },
+  { key: 'session_id', label: t('admin.usage.sessionId'), sortable: false },
   { key: 'created_at', label: t('usage.time'), sortable: true },
   { key: 'user_agent', label: t('usage.userAgent'), sortable: false },
   { key: 'ip_address', label: t('admin.usage.ipAddress'), sortable: false }
 ])
+
+const columnKeys = () => allColumns.value.map(col => col.key)
 
 const hiddenColumns = reactive<Set<string>>(new Set())
 
@@ -621,29 +633,26 @@ const toggleColumn = (key: string) => {
     hiddenColumns.add(key)
   }
   try {
-    localStorage.setItem(HIDDEN_COLUMNS_KEY, JSON.stringify([...hiddenColumns]))
+    localStorage.setItem(HIDDEN_COLUMNS_KEY, serializeHiddenColumns(hiddenColumns, columnKeys()))
   } catch (e) {
     console.error('Failed to save columns:', e)
   }
 }
 
 const loadSavedColumns = () => {
+  let saved: string | null = null
   try {
-    const saved = localStorage.getItem(HIDDEN_COLUMNS_KEY)
-    if (saved) {
-      (JSON.parse(saved) as string[]).forEach((key) => {
-        hiddenColumns.add(key)
-      })
-    } else {
-      DEFAULT_HIDDEN_COLUMNS.forEach((key) => {
-        hiddenColumns.add(key)
-      })
-    }
+    saved = localStorage.getItem(HIDDEN_COLUMNS_KEY)
   } catch {
-    DEFAULT_HIDDEN_COLUMNS.forEach((key) => {
-      hiddenColumns.add(key)
-    })
+    saved = null
   }
+  resolveHiddenColumns(saved, {
+    columns: columnKeys(),
+    defaultHidden: DEFAULT_HIDDEN_COLUMNS,
+    legacyNewColumns: LEGACY_NEW_COLUMNS
+  }).forEach((key) => {
+    hiddenColumns.add(key)
+  })
 }
 
 // 错误请求 Tab 与明细共用当前时间、用户、模型、账号和分组筛选。

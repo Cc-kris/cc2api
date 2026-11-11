@@ -1018,14 +1018,35 @@ pricing:
   # Local data directory for caching
   # 本地数据缓存目录
   data_dir: "./data"
-  # Fallback pricing file
-  # 备用定价文件
+  # Fallback pricing file: used as the whole catalog only when neither the remote
+  # catalog nor the local cache can be loaded. While in fallback mode, edits are
+  # detected by content hash at the next hash check and reloaded without restart.
+  # 备用定价文件：远程目录和本地缓存都不可用时整份作为目录使用。处于备用模式时，
+  # 修改后在下一次哈希检查时按内容哈希自动重载，无需重启。
   fallback_file: "./resources/model-pricing/model_prices_and_context_window.json"
+  # Override patch file (optional, highest priority): entries are shallow-merged
+  # field-by-field over the catalog; a null field value removes that field.
+  # Model names must match catalog keys exactly; models absent from the catalog are
+  # added when the entry carries price fields. Edits are detected by content hash at
+  # the next hash check and reloaded without restart. Every effective change creates
+  # a new finance system price version.
+  # 覆盖补丁文件（可选，优先级最高）：条目按字段浅合并覆盖目录数据，字段值为 null
+  # 表示删除该字段。模型名须与目录键完全一致；目录中没有的模型带价格字段时作为新条目
+  # 并入。修改后在下一次哈希检查时按内容哈希自动重载，无需重启；每次生效的修改都会
+  # 让财务新增一版系统价格，不要频繁小改。
+  # 示例 / example: {"gpt-5.5": {"input_cost_per_token": 6e-06}}
+  # override_file: "./data/model_pricing_overrides.json"
+  override_file: ""
   # Update interval in hours
   # 更新间隔（小时）
   update_interval_hours: 24
-  # Hash check interval in minutes
-  # 哈希检查间隔（分钟）
+  # Hash check interval in minutes. Each check compares the remote catalog hash and
+  # the override file contents (and the fallback file while in fallback mode).
+  # Deleting the override file drops its patches at the next check; a present but
+  # non-JSON file keeps the previous data and is retried next check.
+  # 哈希检查间隔（分钟）。每次检查同时比对远程目录哈希与 override 文件内容（备用模式下
+  # 还比对 fallback 文件）；删除 override 文件会在下次检查时撤销补丁，文件存在但不是
+  # JSON 时保留旧数据、下次检查再试。
   hash_check_interval_minutes: 10
 
 # =============================================================================
@@ -1049,6 +1070,37 @@ billing:
   # Cache TTL (seconds) for per-user × per-platform quota records
   # 用户 × 平台 quota 缓存 TTL（秒），默认 86400=1天，覆盖典型 daily 窗口
   user_platform_quota_cache_ttl_seconds: 86400
+  # In-flight balance reservation (Redis, balance mode only). At admission the
+  # gateway estimates the request's maximum cost with the same pricing function
+  # used for billing (input ~ body bytes / 4, output = max_tokens) and atomically
+  # requires cached_balance - other in-flight reservations >= estimate.
+  # A user with no in-flight request is always admitted (same as before).
+  # Reservations are released after the request's billing lands; long streams are
+  # renewed every ttl/3. Subscription groups are not reserved. Redis errors fail open.
+  # 余额模式在途预占：准入时用与计费相同的定价函数估算本次最高费用（输入≈请求体字节/4，
+  # 输出=max_tokens），要求「缓存余额 − 其他在途预占合计 ≥ 本次估算」，否则返回余额不足；
+  # 用户没有在途请求时只要余额 > 0 就放行（与旧行为一致）。计费落库后释放，长流式按 ttl/3 续期。
+  # 订阅分组不预占；Redis 故障放行不预占（日志 fail-open）。
+  inflight_reservation:
+    # Master switch / 总开关
+    enabled: true
+    # Max lifetime of one reservation; leaked reservations expire by themselves
+    # 单条预占最长存活时间（秒），泄漏的预占到期自动失效
+    ttl_seconds: 900
+    # Output tokens assumed when the request has no max_tokens
+    # 请求没带 max_tokens 时假定的输出 token 数
+    default_max_tokens: 8192
+    # Caps for estimated output / input tokens. Input above max_input_tokens is
+    # clamped, so >200k-token long-context tiers are not reflected in the estimate.
+    # 估算输出 / 输入 token 上限；输入被封顶后不会进入 200k/272k 以上的长上下文档
+    max_output_tokens: 128000
+    max_input_tokens: 200000
+    # Cap for a single reservation in USD (0 = no cap)
+    # 单请求预占封顶（USD，0 不封顶）
+    max_reservation_usd: 0
+    # Reject requests whose cost cannot be estimated (no pricing for the model)
+    # 无法定价时拒绝请求（默认 false：放行不预占）
+    fail_closed_on_unpriced: false
 
 # =============================================================================
 # Turnstile Configuration

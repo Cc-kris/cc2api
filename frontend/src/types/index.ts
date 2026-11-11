@@ -529,6 +529,8 @@ export interface Group {
   monthly_limit_usd: number | null
   // 图片生成计费配置
   allow_image_generation: boolean
+  // 专用图片端点按实际返回张数计费（V03-T15），仅 openai 且允许图片生成时生效
+  image_count_billing?: boolean
   image_rate_independent: boolean
   image_rate_multiplier: number
   image_price_1k: number | null
@@ -664,6 +666,7 @@ export interface CreateGroupRequest {
   weekly_limit_usd?: number | null
   monthly_limit_usd?: number | null
   allow_image_generation?: boolean
+  image_count_billing?: boolean
   image_rate_independent?: boolean
   image_rate_multiplier?: number
   image_price_1k?: number | null
@@ -700,6 +703,7 @@ export interface UpdateGroupRequest {
   weekly_limit_usd?: number | null
   monthly_limit_usd?: number | null
   allow_image_generation?: boolean
+  image_count_billing?: boolean
   image_rate_independent?: boolean
   image_rate_multiplier?: number
   image_price_1k?: number | null
@@ -1317,6 +1321,8 @@ export interface UsageLog {
   model: string
   service_tier?: string | null
   reasoning_effort?: string | null
+  // V03-R11：映射前客户端请求的推理强度
+  requested_reasoning_effort?: string | null
   inbound_endpoint?: string | null
   upstream_endpoint?: string | null
 
@@ -1325,6 +1331,8 @@ export interface UsageLog {
 
   input_tokens: number
   output_tokens: number
+  // image_input_tokens 是 input_tokens 中图片部分的数量；image_input_cost 从 input_cost 中拆出（V03-T14）
+  image_input_tokens?: number
   image_output_tokens: number
   cache_creation_tokens: number
   cache_read_tokens: number
@@ -1332,6 +1340,7 @@ export interface UsageLog {
   cache_creation_1h_tokens: number
 
   input_cost: number
+  image_input_cost?: number
   output_cost: number
   image_output_cost: number
   cache_creation_cost: number
@@ -1398,6 +1407,14 @@ export interface AdminUsageLog extends UsageLog {
 
   // 用户请求 IP（仅管理员可见）
   ip_address?: string | null
+
+  // V03-R11 用量审计字段（仅管理员可见）
+  upstream_response_model?: string | null
+  // null/缺失表示上游没有声明模型
+  upstream_model_mismatch?: boolean | null
+  session_id?: string | null
+  // 直接上游的请求 ID；与财务上游计费单号不是一个字段
+  upstream_request_id?: string | null
 
   // 最小账号信息（仅管理员接口返回）
   account?: UsageLogAccountSummary

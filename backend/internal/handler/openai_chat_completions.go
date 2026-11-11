@@ -137,6 +137,20 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		return
 	}
 
+	// 余额模式在途预占（V03-R12），计费落库后释放；换号复用同一个预占。
+	inflightDone, inflightErr := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription,
+		tokenInflightEstimate(reqModel, body, service.InflightOpenAIServiceTier(body)))
+	if inflightErr != nil {
+		reqLog.Info("openai_chat_completions.inflight_reservation_rejected", zap.Error(inflightErr))
+		status, code, message, retryAfter := billingErrorDetails(inflightErr)
+		if retryAfter > 0 {
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+		}
+		h.handleStreamingAwareError(c, status, code, message, streamStarted)
+		return
+	}
+	defer inflightDone()
+
 	// Keep HTTP Chat Completions turns on the account that owns the upstream
 	// prompt cache when the client does not provide an explicit session key.
 	sessionHash := h.gatewayService.GenerateHTTPStableSessionHash(c, body)
@@ -308,7 +322,10 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		upstreamEndpoint := resolveRawCCUpstreamEndpoint(c, account)
 
 		upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
-		h.submitOpenAIUsageRecordTask(result, func(ctx context.Context) {
+		// V03-R11 审计：在 gin.Context 有效时补齐只读审计字段。
+		stampOpenAIUsageAudit(c, result)
+		usageSessionID := service.ExtractClientSessionID(c)
+		h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 				Result:                 result,
 				APIKey:                 apiKey,
@@ -320,6 +337,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 				UpstreamEndpoint:       upstreamEndpoint,
 				UserAgent:              userAgent,
 				IPAddress:              clientIP,
+				SessionID:              usageSessionID,
 				APIKeyService:          h.apiKeyService,
 				ChannelUsageFields:     channelMapping.ToUsageFields(reqModel, result.UpstreamModel),
 				UpstreamAttempts:       service.CloneUsageUpstreamAttempts(upstreamAttempts),

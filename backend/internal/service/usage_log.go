@@ -136,6 +136,9 @@ type UsageLog struct {
 	CacheCreation5mTokens int `gorm:"column:cache_creation_5m_tokens"`
 	CacheCreation1hTokens int `gorm:"column:cache_creation_1h_tokens"`
 
+	// ImageInputTokens 是 InputTokens 中图片部分的数量；ImageInputCost 从 InputCost 中拆出（V03-T14）。
+	ImageInputTokens  int
+	ImageInputCost    float64
 	ImageOutputTokens int
 	ImageOutputCost   float64
 
@@ -185,6 +188,9 @@ type UsageLog struct {
 	FirstTokenMs *int
 	UserAgent    *string
 	IPAddress    *string
+
+	// V03-R11 用量审计字段（只读审计，不参与任何计费金额计算）。
+	UsageAuditFields
 
 	// Cache TTL Override 标记（管理员强制替换了缓存 TTL 计费）
 	CacheTTLOverridden bool

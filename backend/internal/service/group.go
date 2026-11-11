@@ -29,6 +29,7 @@ type Group struct {
 
 	// 图片生成计费配置（antigravity 和 gemini 平台使用）
 	AllowImageGeneration bool
+	ImageCountBilling    bool // 专用图片端点按实际返回张数计费（V03-T15）；仅 openai 且允许图片生成时有效
 	ImageRateIndependent bool
 	ImageRateMultiplier  float64
 	ImagePrice1K         *float64

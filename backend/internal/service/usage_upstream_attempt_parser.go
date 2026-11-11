@@ -79,6 +79,49 @@ func BuildBillableUsageAttemptFromResponse(
 	}, true
 }
 
+// BuildBillableUsageAttemptFromUsage 用已观测的 Claude 口径用量构造上游尝试记录，
+// 用于流式续写中断的尝试：其 ResponseBody 是本地合成的错误 JSON，不带 usage，
+// 但该尝试已在上游产生计量，必须进入财务成本分段。只写财务证据，不扣用户钱。
+func BuildBillableUsageAttemptFromUsage(
+	usage *ClaudeUsage,
+	requestID string,
+	attemptNo int,
+	accountID int64,
+	channelID *int64,
+	upstreamModel string,
+	serviceTier *string,
+	multiplier *decimal.Decimal,
+	createdAt time.Time,
+) (UsageUpstreamAttempt, bool) {
+	if !usage.hasObservedTokens() || accountID <= 0 || strings.TrimSpace(upstreamModel) == "" {
+		return UsageUpstreamAttempt{}, false
+	}
+	if attemptNo <= 0 {
+		attemptNo = 1
+	}
+	if createdAt.IsZero() {
+		createdAt = time.Now()
+	}
+	return UsageUpstreamAttempt{
+		RequestID:              strings.TrimSpace(requestID),
+		AttemptNo:              attemptNo,
+		AccountID:              accountID,
+		ChannelID:              cloneInt64Pointer(channelID),
+		UpstreamModel:          strings.TrimSpace(upstreamModel),
+		ServiceTier:            cloneStringPointer(serviceTier),
+		InputTokens:            int64(max(usage.InputTokens, 0)),
+		OutputTokens:           int64(max(usage.OutputTokens, 0)),
+		CacheReadTokens:        int64(max(usage.CacheReadInputTokens, 0)),
+		CacheCreationTokens:    int64(max(usage.CacheCreationInputTokens, 0)),
+		CacheCreation5mTokens:  int64(max(usage.CacheCreation5mTokens, 0)),
+		CacheCreation1hTokens:  int64(max(usage.CacheCreation1hTokens, 0)),
+		UpstreamCostMultiplier: cloneDecimal(multiplier),
+		Billable:               true,
+		CompletedAt:            createdAt,
+		CreatedAt:              createdAt,
+	}, true
+}
+
 func financeUsageObject(payload map[string]any) map[string]any {
 	if usage := usageMap(payload, "usage", "usageMetadata", "usage_metadata"); usage != nil {
 		return usage

@@ -10,20 +10,50 @@ import (
 	"testing"
 	"time"
 
+	dbent "github.com/Wei-Shaw/sub2api/ent"
 	dbaccount "github.com/Wei-Shaw/sub2api/ent/account"
 	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
 
+// Bulk updates own their transactions, so these fixtures are committed. Remove
+// only this test's rows to keep later list/routing suites independent of order.
+func bulkTestAccount(t *testing.T, input *service.Account) *service.Account {
+	t.Helper()
+	account := mustCreateAccount(t, integrationEntClient, input)
+	t.Cleanup(func() {
+		_, err := integrationDB.ExecContext(context.Background(), "DELETE FROM account_groups WHERE account_id = $1", account.ID)
+		require.NoError(t, err)
+		_, err = integrationDB.ExecContext(context.Background(), "DELETE FROM accounts WHERE id = $1", account.ID)
+		require.NoError(t, err)
+	})
+	return account
+}
+
+func bulkTestGroup(t *testing.T, name string) (*dbent.Group, error) {
+	t.Helper()
+	group, err := integrationEntClient.Group.Create().SetName(name).Save(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	t.Cleanup(func() {
+		_, err := integrationDB.ExecContext(context.Background(), "DELETE FROM account_groups WHERE group_id = $1", group.ID)
+		require.NoError(t, err)
+		_, err = integrationDB.ExecContext(context.Background(), "DELETE FROM groups WHERE id = $1", group.ID)
+		require.NoError(t, err)
+	})
+	return group, nil
+}
+
 func TestBulkUpdateWithGroupsRollsBackAccountFieldsWhenBindingFails(t *testing.T) {
 	ctx := context.Background()
-	account := mustCreateAccount(t, integrationEntClient, &service.Account{
+	account := bulkTestAccount(t, &service.Account{
 		Name:     "bulk-atomic-account",
 		Priority: 10,
 		Extra:    map[string]any{"before": true},
 	})
-	group, err := integrationEntClient.Group.Create().SetName("bulk-atomic-group").Save(ctx)
+	group, err := bulkTestGroup(t, "bulk-atomic-group")
 	require.NoError(t, err)
 
 	repo := NewAccountRepository(integrationEntClient, integrationDB, nil).(*accountRepository)
@@ -46,8 +76,8 @@ func TestBulkUpdateWithGroupsRollsBackAccountFieldsWhenBindingFails(t *testing.T
 
 func TestBulkUpdateWithGroupsRejectsMissingTargetAndRollsBack(t *testing.T) {
 	ctx := context.Background()
-	account := mustCreateAccount(t, integrationEntClient, &service.Account{Name: "bulk-missing-target", Priority: 1})
-	group, err := integrationEntClient.Group.Create().SetName("bulk-live-target-group").Save(ctx)
+	account := bulkTestAccount(t, &service.Account{Name: "bulk-missing-target", Priority: 1})
+	group, err := bulkTestGroup(t, "bulk-live-target-group")
 	require.NoError(t, err)
 
 	repo := NewAccountRepository(integrationEntClient, integrationDB, nil).(*accountRepository)
@@ -62,7 +92,7 @@ func TestBulkUpdateWithGroupsRejectsMissingTargetAndRollsBack(t *testing.T) {
 
 func TestBulkUpdateWithGroupsRejectsInapplicableField(t *testing.T) {
 	ctx := context.Background()
-	account := mustCreateAccount(t, integrationEntClient, &service.Account{Name: "bulk-inapplicable", Platform: service.PlatformAnthropic, Type: service.AccountTypeAPIKey, Priority: 2})
+	account := bulkTestAccount(t, &service.Account{Name: "bulk-inapplicable", Platform: service.PlatformAnthropic, Type: service.AccountTypeAPIKey, Priority: 2})
 	repo := NewAccountRepository(integrationEntClient, integrationDB, nil).(*accountRepository)
 	mode := service.OpenAIWSIngressModePassthrough
 	_, err := repo.BulkUpdateWithGroups(ctx, []int64{account.ID}, service.AccountBulkUpdate{Extra: map[string]any{"openai_oauth_responses_websockets_v2_mode": mode}}, nil)
@@ -75,8 +105,8 @@ func TestBulkUpdateWithGroupsRejectsInapplicableField(t *testing.T) {
 
 func TestBulkUpdateWithGroupsWritesExpectedOutboxEvents(t *testing.T) {
 	ctx := context.Background()
-	account := mustCreateAccount(t, integrationEntClient, &service.Account{Name: "bulk-outbox", Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Priority: 3})
-	group, err := integrationEntClient.Group.Create().SetName("bulk-outbox-group").Save(ctx)
+	account := bulkTestAccount(t, &service.Account{Name: "bulk-outbox", Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Priority: 3})
+	group, err := bulkTestGroup(t, "bulk-outbox-group")
 	require.NoError(t, err)
 	_, err = integrationDB.ExecContext(ctx, "DELETE FROM scheduler_outbox WHERE account_id = $1", account.ID)
 	require.NoError(t, err)
@@ -116,10 +146,10 @@ func TestBulkUpdateWithGroupsWritesExpectedOutboxEvents(t *testing.T) {
 
 func TestBulkUpdateWithGroupsNotifiesRemovedAndAddedGroups(t *testing.T) {
 	ctx := context.Background()
-	account := mustCreateAccount(t, integrationEntClient, &service.Account{Name: "bulk-group-move", Priority: 3})
-	oldGroup, err := integrationEntClient.Group.Create().SetName("bulk-group-old").Save(ctx)
+	account := bulkTestAccount(t, &service.Account{Name: "bulk-group-move", Priority: 3})
+	oldGroup, err := bulkTestGroup(t, "bulk-group-old")
 	require.NoError(t, err)
-	newGroup, err := integrationEntClient.Group.Create().SetName("bulk-group-new").Save(ctx)
+	newGroup, err := bulkTestGroup(t, "bulk-group-new")
 	require.NoError(t, err)
 	_, err = integrationEntClient.AccountGroup.Create().SetAccountID(account.ID).SetGroupID(oldGroup.ID).SetPriority(1).Save(ctx)
 	require.NoError(t, err)
@@ -143,9 +173,9 @@ func TestBulkUpdateWithGroupsNotifiesRemovedAndAddedGroups(t *testing.T) {
 
 func TestBulkUpdateWithGroupsRejectsMixedPlatformsInSameBatch(t *testing.T) {
 	ctx := context.Background()
-	antigravity := mustCreateAccount(t, integrationEntClient, &service.Account{Name: "bulk-mixed-antigravity", Platform: service.PlatformAntigravity, Type: service.AccountTypeOAuth})
-	anthropic := mustCreateAccount(t, integrationEntClient, &service.Account{Name: "bulk-mixed-anthropic", Platform: service.PlatformAnthropic, Type: service.AccountTypeOAuth})
-	group, err := integrationEntClient.Group.Create().SetName("bulk-mixed-empty-group").Save(ctx)
+	antigravity := bulkTestAccount(t, &service.Account{Name: "bulk-mixed-antigravity", Platform: service.PlatformAntigravity, Type: service.AccountTypeOAuth})
+	anthropic := bulkTestAccount(t, &service.Account{Name: "bulk-mixed-anthropic", Platform: service.PlatformAnthropic, Type: service.AccountTypeOAuth})
+	group, err := bulkTestGroup(t, "bulk-mixed-empty-group")
 	require.NoError(t, err)
 
 	repo := NewAccountRepository(integrationEntClient, integrationDB, nil).(*accountRepository)
@@ -161,9 +191,9 @@ func TestBulkUpdateWithGroupsRejectsMixedPlatformsInSameBatch(t *testing.T) {
 
 func TestBulkUpdateWithGroupsSerializesConcurrentMixedPlatformBindings(t *testing.T) {
 	ctx := context.Background()
-	antigravity := mustCreateAccount(t, integrationEntClient, &service.Account{Name: "bulk-concurrent-mixed-antigravity", Platform: service.PlatformAntigravity, Type: service.AccountTypeOAuth})
-	anthropic := mustCreateAccount(t, integrationEntClient, &service.Account{Name: "bulk-concurrent-mixed-anthropic", Platform: service.PlatformAnthropic, Type: service.AccountTypeOAuth})
-	group, err := integrationEntClient.Group.Create().SetName("bulk-concurrent-mixed-group").Save(ctx)
+	antigravity := bulkTestAccount(t, &service.Account{Name: "bulk-concurrent-mixed-antigravity", Platform: service.PlatformAntigravity, Type: service.AccountTypeOAuth})
+	anthropic := bulkTestAccount(t, &service.Account{Name: "bulk-concurrent-mixed-anthropic", Platform: service.PlatformAnthropic, Type: service.AccountTypeOAuth})
+	group, err := bulkTestGroup(t, "bulk-concurrent-mixed-group")
 	require.NoError(t, err)
 	repo := NewAccountRepository(integrationEntClient, integrationDB, nil).(*accountRepository)
 
@@ -192,8 +222,8 @@ func TestBulkUpdateWithGroupsSerializesConcurrentMixedPlatformBindings(t *testin
 
 func TestBulkUpdateWithGroupsRollsBackWhenOutboxWriteFails(t *testing.T) {
 	ctx := context.Background()
-	account := mustCreateAccount(t, integrationEntClient, &service.Account{Name: "bulk-outbox-failure", Priority: 6})
-	group, err := integrationEntClient.Group.Create().SetName("bulk-outbox-failure-group").Save(ctx)
+	account := bulkTestAccount(t, &service.Account{Name: "bulk-outbox-failure", Priority: 6})
+	group, err := bulkTestGroup(t, "bulk-outbox-failure-group")
 	require.NoError(t, err)
 	_, err = integrationEntClient.AccountGroup.Create().SetAccountID(account.ID).SetGroupID(group.ID).SetPriority(1).Save(ctx)
 	require.NoError(t, err)
@@ -232,8 +262,8 @@ func TestBulkUpdateWithGroupsRollsBackWhenOutboxWriteFails(t *testing.T) {
 
 func TestBulkUpdateWithGroupsRejectsConcurrentSoftDelete(t *testing.T) {
 	ctx := context.Background()
-	account := mustCreateAccount(t, integrationEntClient, &service.Account{Name: "bulk-concurrent-delete", Priority: 4})
-	group, err := integrationEntClient.Group.Create().SetName("bulk-concurrent-delete-group").Save(ctx)
+	account := bulkTestAccount(t, &service.Account{Name: "bulk-concurrent-delete", Priority: 4})
+	group, err := bulkTestGroup(t, "bulk-concurrent-delete-group")
 	require.NoError(t, err)
 	lockTx, err := integrationDB.BeginTx(ctx, nil)
 	require.NoError(t, err)
@@ -260,7 +290,7 @@ func TestBulkUpdateWithGroupsRejectsConcurrentSoftDelete(t *testing.T) {
 
 func TestBulkUpdateWithGroupsRejectsConcurrentTypeChange(t *testing.T) {
 	ctx := context.Background()
-	account := mustCreateAccount(t, integrationEntClient, &service.Account{
+	account := bulkTestAccount(t, &service.Account{
 		Name:     "bulk-concurrent-type",
 		Platform: service.PlatformOpenAI,
 		Type:     service.AccountTypeOAuth,

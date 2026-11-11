@@ -73,3 +73,64 @@ func TestAPIKeyRepository_GetByKeyForAuth_PreservesMessagesDispatchModelConfig_S
 	require.NotNil(t, got.Group)
 	require.Equal(t, group.MessagesDispatchModelConfig, got.Group.MessagesDispatchModelConfig)
 }
+
+// V03-T11 回归：鉴权查询必须带出 long_context_pricing_enabled，否则鉴权缓存里的分组恒为
+// false，CalculateCostForGroup 会把目录长上下文阶梯全部关掉。
+func TestAPIKeyRepository_GetByKeyForAuth_SelectsLongContextPricingEnabled_SQLite(t *testing.T) {
+	repo, client := newAPIKeyRepoSQLite(t)
+	ctx := context.Background()
+	user := mustCreateAPIKeyRepoUser(t, ctx, client, "getbykey-auth-longctx-unit@test.com")
+
+	for _, enabled := range []bool{true, false} {
+		group, err := client.Group.Create().
+			SetName("g-auth-longctx-" + map[bool]string{true: "on", false: "off"}[enabled]).
+			SetPlatform(service.PlatformOpenAI).
+			SetStatus(service.StatusActive).
+			SetSubscriptionType(service.SubscriptionTypeStandard).
+			SetRateMultiplier(1).
+			SetLongContextPricingEnabled(enabled).
+			Save(ctx)
+		require.NoError(t, err)
+
+		key := &service.APIKey{
+			UserID:  user.ID,
+			Key:     "sk-getbykey-auth-longctx-" + map[bool]string{true: "on", false: "off"}[enabled],
+			Name:    "LongCtx Key",
+			GroupID: &group.ID,
+			Status:  service.StatusActive,
+		}
+		require.NoError(t, repo.Create(ctx, key))
+
+		got, err := repo.GetByKeyForAuth(ctx, key.Key)
+		require.NoError(t, err)
+		require.NotNil(t, got.Group)
+		require.Equal(t, enabled, got.Group.LongContextPricingEnabled)
+	}
+}
+
+// V03-T15：image_count_billing 经分组写入、鉴权查询读回。
+func TestAPIKeyRepository_GetByKeyForAuth_SelectsImageCountBilling_SQLite(t *testing.T) {
+	repo, client := newAPIKeyRepoSQLite(t)
+	ctx := context.Background()
+	user := mustCreateAPIKeyRepoUser(t, ctx, client, "getbykey-auth-imgcount-unit@test.com")
+
+	group, err := client.Group.Create().
+		SetName("g-auth-imgcount").
+		SetPlatform(service.PlatformOpenAI).
+		SetStatus(service.StatusActive).
+		SetSubscriptionType(service.SubscriptionTypeStandard).
+		SetRateMultiplier(1).
+		SetAllowImageGeneration(true).
+		SetImageCountBilling(true).
+		Save(ctx)
+	require.NoError(t, err)
+
+	key := &service.APIKey{UserID: user.ID, Key: "sk-getbykey-auth-imgcount", Name: "ImgCount Key", GroupID: &group.ID, Status: service.StatusActive}
+	require.NoError(t, repo.Create(ctx, key))
+
+	got, err := repo.GetByKeyForAuth(ctx, key.Key)
+	require.NoError(t, err)
+	require.NotNil(t, got.Group)
+	require.True(t, got.Group.ImageCountBilling)
+	require.True(t, groupEntityToService(group).ImageCountBilling)
+}

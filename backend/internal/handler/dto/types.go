@@ -106,6 +106,7 @@ type Group struct {
 
 	// 图片生成计费配置（仅 antigravity 平台使用）
 	AllowImageGeneration bool     `json:"allow_image_generation"`
+	ImageCountBilling    bool     `json:"image_count_billing"`
 	ImageRateIndependent bool     `json:"image_rate_independent"`
 	ImageRateMultiplier  float64  `json:"image_rate_multiplier"`
 	ImagePrice1K         *float64 `json:"image_price_1k"`
@@ -451,6 +452,8 @@ type UsageLog struct {
 	// ReasoningEffort is the request's reasoning effort level.
 	// OpenAI: "low"/"medium"/"high"/"xhigh"; Claude: "low"/"medium"/"high"/"max".
 	ReasoningEffort *string `json:"reasoning_effort,omitempty"`
+	// RequestedReasoningEffort 是映射前客户端请求的推理强度（V03-R11，用户可见）。
+	RequestedReasoningEffort *string `json:"requested_reasoning_effort,omitempty"`
 	// InboundEndpoint is the client-facing API endpoint path, e.g. /v1/chat/completions.
 	InboundEndpoint *string `json:"inbound_endpoint,omitempty"`
 	// UpstreamEndpoint is the normalized upstream endpoint path, e.g. /v1/responses.
@@ -461,6 +464,7 @@ type UsageLog struct {
 
 	InputTokens         int `json:"input_tokens"`
 	OutputTokens        int `json:"output_tokens"`
+	ImageInputTokens    int `json:"image_input_tokens"` // input_tokens 中图片部分的数量（V03-T14）
 	ImageOutputTokens   int `json:"image_output_tokens"`
 	CacheCreationTokens int `json:"cache_creation_tokens"`
 	CacheReadTokens     int `json:"cache_read_tokens"`
@@ -469,6 +473,7 @@ type UsageLog struct {
 	CacheCreation1hTokens int `json:"cache_creation_1h_tokens"`
 
 	InputCost         float64 `json:"input_cost"`
+	ImageInputCost    float64 `json:"image_input_cost"` // 从 input_cost 中拆出的图片输入费用（V03-T14）
 	OutputCost        float64 `json:"output_cost"`
 	ImageOutputCost   float64 `json:"image_output_cost"`
 	CacheCreationCost float64 `json:"cache_creation_cost"`
@@ -534,6 +539,16 @@ type AdminUsageLog struct {
 
 	// IPAddress 用户请求 IP（仅管理员可见）
 	IPAddress *string `json:"ip_address,omitempty"`
+
+	// V03-R11 用量审计字段（仅管理员可见）
+	// UpstreamResponseModel 是上游响应声明的模型。
+	UpstreamResponseModel *string `json:"upstream_response_model,omitempty"`
+	// UpstreamModelMismatch 为 nil 表示上游没有声明模型。
+	UpstreamModelMismatch *bool `json:"upstream_model_mismatch,omitempty"`
+	// SessionID 是客户端显式会话标识。
+	SessionID *string `json:"session_id,omitempty"`
+	// UpstreamRequestID 是直接上游的请求 ID，和财务上游计费单号 upstream_billing_request_id 不是一个字段。
+	UpstreamRequestID *string `json:"upstream_request_id,omitempty"`
 
 	// Account 最小账号信息（避免泄露敏感字段）
 	Account *AccountSummary `json:"account,omitempty"`

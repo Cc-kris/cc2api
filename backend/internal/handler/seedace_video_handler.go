@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -34,6 +35,18 @@ func (h *SeedaceVideoHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"type": "invalid_request_error", "message": "Failed to read request body"}})
 		return
 	}
+	// 准入（V03-R12）：原来只有 api_key_auth 看认证缓存余额 > 0。现在先走 CheckBillingEligibility，
+	// 余额模式再按本次确定费用（秒价 × 时长 × 分组倍率）预占；Create 内同步计费，返回后释放。
+	reservation, err := h.service.AdmitCreate(c.Request.Context(), apiKey, subscription, body)
+	if err != nil {
+		status, code, message, retryAfter := billingErrorDetails(err)
+		if retryAfter > 0 {
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+		}
+		c.JSON(status, gin.H{"error": gin.H{"type": code, "message": message}})
+		return
+	}
+	defer reservation.HandlerDone()
 	result, err := h.service.Create(c.Request.Context(), service.SeedaceVideoCreateInput{
 		APIKey:       apiKey,
 		Subscription: subscription,

@@ -78,12 +78,19 @@ func (UsageLog) Fields() []ent.Field {
 			Default(0),
 		field.Int("cache_creation_1h_tokens").
 			Default(0),
+		// image_input_tokens: input_tokens 中图片部分的数量（V03-T14，迁移 226）。
+		field.Int("image_input_tokens").
+			Default(0),
 
 		// 成本字段
 		field.Float("input_cost").
 			Default(0).
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
 		field.Float("output_cost").
+			Default(0).
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
+		// image_input_cost: 从 input_cost 中拆出的图片输入费用（V03-T14，迁移 226）。
+		field.Float("image_input_cost").
 			Default(0).
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
 		field.Float("cache_creation_cost").
@@ -223,6 +230,13 @@ func (UsageLog) Fields() []ent.Field {
 		// Cache TTL Override 标记（管理员强制替换了缓存 TTL 计费）
 		field.Bool("cache_ttl_overridden").
 			Default(false),
+
+		// V03-R11 用量审计字段（迁移 230，只读审计，不参与计费）
+		field.String("upstream_response_model").MaxLen(200).Optional().Nillable().Comment("上游响应声明的模型"),
+		field.Bool("upstream_model_mismatch").Optional().Nillable().Comment("上游响应模型与发送模型是否不一致；NULL 表示未观测"),
+		field.String("session_id").MaxLen(255).Optional().Nillable().Comment("客户端显式会话标识，不含粘性哈希"),
+		field.String("requested_reasoning_effort").MaxLen(20).Optional().Nillable().Comment("映射前客户端请求的推理强度"),
+		field.String("upstream_request_id").MaxLen(128).Optional().Nillable().Comment("直接上游响应头声明的请求 ID"),
 
 		// 时间戳（只有 created_at，日志不可修改）
 		field.Time("created_at").

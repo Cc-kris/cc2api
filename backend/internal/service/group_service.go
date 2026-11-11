@@ -50,6 +50,7 @@ type CreateGroupRequest struct {
 	RateMultiplier       float64  `json:"rate_multiplier"`
 	IsExclusive          bool     `json:"is_exclusive"`
 	AllowImageGeneration bool     `json:"allow_image_generation"`
+	ImageCountBilling    bool     `json:"image_count_billing"`
 	ImageRateIndependent bool     `json:"image_rate_independent"`
 	ImageRateMultiplier  *float64 `json:"image_rate_multiplier"`
 	VideoRateIndependent bool     `json:"video_rate_independent"`
@@ -64,6 +65,7 @@ type UpdateGroupRequest struct {
 	IsExclusive          *bool    `json:"is_exclusive"`
 	Status               *string  `json:"status"`
 	AllowImageGeneration *bool    `json:"allow_image_generation"`
+	ImageCountBilling    *bool    `json:"image_count_billing"`
 	ImageRateIndependent *bool    `json:"image_rate_independent"`
 	ImageRateMultiplier  *float64 `json:"image_rate_multiplier"`
 	VideoRateIndependent *bool    `json:"video_rate_independent"`
@@ -86,6 +88,10 @@ func NewGroupService(groupRepo GroupRepository, authCacheInvalidator APIKeyAuthC
 
 // Create 创建分组
 func (s *GroupService) Create(ctx context.Context, req CreateGroupRequest) (*Group, error) {
+	// 该入口固定创建 Anthropic 分组，按张计费只支持 openai 分组，拒绝写入永远不生效的开关（上游 aa1a1b11c）。
+	if req.ImageCountBilling {
+		return nil, fmt.Errorf("image_count_billing is only supported for openai groups with image generation enabled")
+	}
 	imageRateMultiplier := 1.0
 	if req.ImageRateMultiplier != nil {
 		if *req.ImageRateMultiplier < 0 {
@@ -196,6 +202,15 @@ func (s *GroupService) Update(ctx context.Context, id int64, req UpdateGroupRequ
 	}
 	if req.AllowImageGeneration != nil {
 		group.AllowImageGeneration = *req.AllowImageGeneration
+	}
+	if req.ImageCountBilling != nil {
+		if *req.ImageCountBilling && !imageCountBillingAllowed(group.Platform, group.AllowImageGeneration) {
+			return nil, fmt.Errorf("image_count_billing requires image generation enabled on openai groups")
+		}
+		group.ImageCountBilling = *req.ImageCountBilling
+	}
+	if !imageCountBillingAllowed(group.Platform, group.AllowImageGeneration) {
+		group.ImageCountBilling = false
 	}
 	if req.ImageRateIndependent != nil {
 		group.ImageRateIndependent = *req.ImageRateIndependent

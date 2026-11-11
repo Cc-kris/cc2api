@@ -1137,7 +1137,10 @@ func TestGatewayService_AnthropicAPIKeyPassthrough_StreamingLocalResponseCacheSk
 
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "missing terminal event")
-	require.Nil(t, result)
+	// V03-R05：流中断时随错误返回已观测 usage（供 handler 计费），但仍不得写入本地响应缓存。
+	require.NotNil(t, result)
+	require.Equal(t, 12, result.Usage.InputTokens)
+	require.Equal(t, 7, result.Usage.OutputTokens)
 	require.Empty(t, store.entries, "incomplete stream must not be cached")
 }
 

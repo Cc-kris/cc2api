@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -481,4 +482,65 @@ func TestUsageBillingRepositoryApply_DeduplicatesAgainstArchivedKey(t *testing.T
 	var balance float64
 	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT balance FROM users WHERE id = $1", user.ID).Scan(&balance))
 	require.InDelta(t, 98.75, balance, 0.000001)
+}
+
+// V03-AC03：命令金额量化到 8 位后，促销消耗、余额扣减、Key 配额用的是同一个金额。
+func TestUsageBillingRepositoryApply_QuantizedPromotionAndBalance(t *testing.T) {
+	ctx := context.Background()
+	client := testEntClient(t)
+	repo := NewUsageBillingRepository(client, integrationDB)
+
+	user := mustCreateUser(t, client, &service.User{
+		Email:        fmt.Sprintf("usage-billing-quantize-%d@example.com", time.Now().UnixNano()),
+		PasswordHash: "hash",
+		Balance:      1,
+	})
+	apiKey := mustCreateApiKey(t, client, &service.APIKey{
+		UserID: user.ID,
+		Key:    "sk-usage-billing-quantize-" + uuid.NewString(),
+		Name:   "quantize-billing",
+		Quota:  10,
+	})
+	account := mustCreateAccount(t, client, &service.Account{
+		Name: "usage-billing-quantize-account-" + uuid.NewString(),
+		Type: service.AccountTypeAPIKey,
+	})
+
+	var promoCodeID int64
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `
+		INSERT INTO promo_codes(code, bonus_amount) VALUES($1, 0.00005) RETURNING id
+	`, "PROMO-"+strings.ToUpper(strings.ReplaceAll(uuid.NewString(), "-", ""))[:20]).Scan(&promoCodeID))
+	_, err := integrationDB.ExecContext(ctx, `
+		INSERT INTO promo_code_usages(promo_code_id, user_id, bonus_amount) VALUES($1, $2, 0.00005)
+	`, promoCodeID, user.ID)
+	require.NoError(t, err)
+
+	// 10×1.25e-6 + 5×1e-5 = 0.0000625，×1.25 = 0.000078125
+	const rawCost = 0.000078125
+	requestID := uuid.NewString()
+	result, err := repo.Apply(ctx, &service.UsageBillingCommand{
+		RequestID:       requestID,
+		APIKeyID:        apiKey.ID,
+		UserID:          user.ID,
+		AccountID:       account.ID,
+		AccountType:     service.AccountTypeAPIKey,
+		BalanceCost:     rawCost,
+		APIKeyQuotaCost: rawCost,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+	require.Equal(t, "promotion", result.FinanceBusinessType)
+	require.NotNil(t, result.PromotionCreditUsed)
+	require.Equal(t, "0.00005", result.PromotionCreditUsed.String())
+
+	var balance, quotaUsed string
+	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT balance::text FROM users WHERE id=$1", user.ID).Scan(&balance))
+	require.NoError(t, integrationDB.QueryRowContext(ctx, "SELECT quota_used::text FROM api_keys WHERE id=$1", apiKey.ID).Scan(&quotaUsed))
+	require.Equal(t, "0.99992187", balance)
+	require.Equal(t, "0.00007813", quotaUsed)
+
+	// 付费收入 = 销售值 − 促销消耗 = 0.00007813 − 0.00005 = 0.00002813
+	usageListValue := decimal.NewFromFloat(service.QuantizeUsageBillingAmount(rawCost))
+	paid := usageListValue.Sub(*result.PromotionCreditUsed)
+	require.Equal(t, "0.00002813", paid.String())
 }

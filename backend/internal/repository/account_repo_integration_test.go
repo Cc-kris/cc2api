@@ -18,6 +18,7 @@ type AccountRepoSuite struct {
 	suite.Suite
 	ctx    context.Context
 	client *dbent.Client
+	base   *dbent.Client
 	repo   *accountRepository
 }
 
@@ -85,9 +86,13 @@ func (s *schedulerCacheRecorder) SetOutboxWatermark(ctx context.Context, id int6
 	return nil
 }
 
+func (s *AccountRepoSuite) SetupSuite() {
+	s.base = isolatedSuiteClient(s.T())
+}
+
 func (s *AccountRepoSuite) SetupTest() {
 	s.ctx = context.Background()
-	tx := testEntTx(s.T())
+	tx := suiteEntTx(s.T(), s.base)
 	s.client = tx.Client()
 	s.repo = newAccountRepositoryWithSQL(s.client, tx, nil)
 }
@@ -438,7 +443,7 @@ func (s *AccountRepoSuite) TestListWithFilters() {
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
 			// 每个 case 重新获取隔离资源
-			tx := testEntTx(s.T())
+			tx := suiteEntTx(s.T(), s.base)
 			client := tx.Client()
 			repo := newAccountRepositoryWithSQL(client, tx, nil)
 			ctx := context.Background()

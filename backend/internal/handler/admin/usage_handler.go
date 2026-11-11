@@ -111,6 +111,10 @@ func (h *UsageHandler) List(c *gin.Context) {
 
 	model := c.Query("model")
 	billingMode := strings.TrimSpace(c.Query("billing_mode"))
+	upstreamRequestID, upstreamModelMismatch, ok := parseUsageAuditFilters(c)
+	if !ok {
+		return
+	}
 
 	var requestType *int16
 	var stream *bool
@@ -181,9 +185,12 @@ func (h *UsageHandler) List(c *gin.Context) {
 		Stream:      stream,
 		BillingType: billingType,
 		BillingMode: billingMode,
-		StartTime:   startTime,
-		EndTime:     endTime,
-		ExactTotal:  exactTotal,
+		// V03-R11 审计筛选
+		UpstreamRequestID:     upstreamRequestID,
+		UpstreamModelMismatch: upstreamModelMismatch,
+		StartTime:             startTime,
+		EndTime:               endTime,
+		ExactTotal:            exactTotal,
 	}
 
 	records, result, err := h.usageService.ListWithFilters(c.Request.Context(), params, filters)
@@ -242,6 +249,10 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 
 	model := c.Query("model")
 	billingMode := strings.TrimSpace(c.Query("billing_mode"))
+	upstreamRequestID, upstreamModelMismatch, ok := parseUsageAuditFilters(c)
+	if !ok {
+		return
+	}
 
 	var requestType *int16
 	var stream *bool
@@ -321,8 +332,11 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 		Stream:      stream,
 		BillingType: billingType,
 		BillingMode: billingMode,
-		StartTime:   &startTime,
-		EndTime:     &endTime,
+		// V03-R11 审计筛选
+		UpstreamRequestID:     upstreamRequestID,
+		UpstreamModelMismatch: upstreamModelMismatch,
+		StartTime:             &startTime,
+		EndTime:               &endTime,
 	}
 
 	stats, err := h.usageService.GetStatsWithFilters(c.Request.Context(), filters)
@@ -591,4 +605,27 @@ func (h *UsageHandler) CancelCleanupTask(c *gin.Context) {
 	}
 	logger.LegacyPrintf("handler.admin.usage", "[UsageCleanup] 清理任务已取消: task=%d operator=%d", taskID, subject.UserID)
 	response.Success(c, gin.H{"id": taskID, "status": service.UsageCleanupStatusCanceled})
+}
+
+// maxUpstreamRequestIDFilterLen 与 usage_logs.upstream_request_id VARCHAR(128) 对齐。
+const maxUpstreamRequestIDFilterLen = 128
+
+// parseUsageAuditFilters 解析 V03-R11 审计筛选参数 upstream_request_id、upstream_model_mismatch；
+// 参数非法时写 400 并返回 ok=false。
+func parseUsageAuditFilters(c *gin.Context) (string, *bool, bool) {
+	upstreamRequestID := strings.TrimSpace(c.Query("upstream_request_id"))
+	if len(upstreamRequestID) > maxUpstreamRequestIDFilterLen {
+		response.BadRequest(c, "Invalid upstream_request_id, at most 128 characters")
+		return "", nil, false
+	}
+	var mismatch *bool
+	if raw := strings.TrimSpace(c.Query("upstream_model_mismatch")); raw != "" {
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			response.BadRequest(c, "Invalid upstream_model_mismatch value, use true or false")
+			return "", nil, false
+		}
+		mismatch = &parsed
+	}
+	return upstreamRequestID, mismatch, true
 }

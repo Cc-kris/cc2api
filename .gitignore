@@ -142,6 +142,10 @@ docs/*
 frontend/coverage/
 frontend/playwright-report/
 frontend/test-results/
+# Isolated V03 acceptance: bootstrap secrets, screenshots, downloads and traces.
+/.e2e-runtime/
+/frontend/e2e/v042-ui/test-results/
+/frontend/e2e/v042-ui/shots/
 aicodex
 output/
 

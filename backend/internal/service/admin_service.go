@@ -195,6 +195,7 @@ type CreateGroupInput struct {
 	MonthlyLimitUSD  *float64 // 月限额 (USD)
 	// 图片生成计费配置（仅 antigravity 平台使用）
 	AllowImageGeneration bool
+	ImageCountBilling    bool
 	ImageRateIndependent bool
 	ImageRateMultiplier  *float64
 	ImagePrice1K         *float64
@@ -245,6 +246,7 @@ type UpdateGroupInput struct {
 	MonthlyLimitUSD  *float64 // 月限额 (USD)
 	// 图片生成计费配置（仅 antigravity 平台使用）
 	AllowImageGeneration *bool
+	ImageCountBilling    *bool
 	ImageRateIndependent *bool
 	ImageRateMultiplier  *float64
 	ImagePrice1K         *float64
@@ -1868,6 +1870,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		WeeklyLimitUSD:                  weeklyLimit,
 		MonthlyLimitUSD:                 monthlyLimit,
 		AllowImageGeneration:            input.AllowImageGeneration,
+		ImageCountBilling:               imageCountBillingAllowed(platform, input.AllowImageGeneration) && input.ImageCountBilling,
 		ImageRateIndependent:            input.ImageRateIndependent,
 		ImageRateMultiplier:             imageRateMultiplier,
 		ImagePrice1K:                    imagePrice1K,
@@ -2065,6 +2068,9 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if input.AllowImageGeneration != nil {
 		group.AllowImageGeneration = *input.AllowImageGeneration
 	}
+	if input.ImageCountBilling != nil {
+		group.ImageCountBilling = *input.ImageCountBilling
+	}
 	if input.ImageRateIndependent != nil {
 		group.ImageRateIndependent = *input.ImageRateIndependent
 	}
@@ -2176,6 +2182,10 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 	if input.FailoverOnAnyError != nil {
 		group.FailoverOnAnyError = *input.FailoverOnAnyError
+	}
+	// 平台或图片生成开关改变后，按张计费开关不再适用时自动关闭（上游 fd998129e）。
+	if !imageCountBillingAllowed(group.Platform, group.AllowImageGeneration) {
+		group.ImageCountBilling = false
 	}
 	sanitizeGroupMessagesDispatchFields(group)
 
@@ -2653,6 +2663,9 @@ func normalizeGrokMediaEligibilityUpdateExtra(account *Account, input *UpdateAcc
 }
 
 func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccountInput) (*Account, error) {
+	if err := ValidateUpstreamRequestIDHeaderExtra(input.Extra); err != nil {
+		return nil, err
+	}
 	accountExtra, err := normalizeGrokMediaEligibilityExtra(input.Platform, input.Extra)
 	if err != nil {
 		return nil, err
@@ -2777,6 +2790,11 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 }
 
 func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *UpdateAccountInput) (*Account, error) {
+	if input != nil {
+		if err := ValidateUpstreamRequestIDHeaderExtra(input.Extra); err != nil {
+			return nil, err
+		}
+	}
 	account, err := s.accountRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -2966,6 +2984,9 @@ func (s *adminServiceImpl) ListAccountUpstreamMultiplierChanges(ctx context.Cont
 // BulkUpdateAccounts updates multiple accounts in one request.
 // It merges credentials/extra keys instead of overwriting the whole object.
 func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUpdateAccountsInput) (*BulkUpdateAccountsResult, error) {
+	if err := ValidateUpstreamRequestIDHeaderExtra(input.Extra); err != nil {
+		return nil, err
+	}
 	if len(input.AccountIDs) == 0 && input.Filters != nil {
 		accountIDs, err := s.resolveBulkUpdateTargetIDs(ctx, input.Filters)
 		if err != nil {

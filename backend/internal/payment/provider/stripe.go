@@ -231,6 +231,8 @@ func (s *Stripe) Refund(ctx context.Context, req payment.RefundRequest) (*paymen
 		Reason:        stripe.String(string(stripe.RefundReasonRequestedByCustomer)),
 	}
 	params.Context = ctx
+	// 同一订单同一金额的重复提交（超时重试、并发点击）复用同一幂等键，Stripe 只退一次。
+	params.SetIdempotencyKey(fmt.Sprintf("re-%s-%d", req.OrderID, amountInMinorUnit))
 
 	r, err := s.sc.V1Refunds.Create(ctx, params)
 	if err != nil {
@@ -246,6 +248,50 @@ func (s *Stripe) Refund(ctx context.Context, req payment.RefundRequest) (*paymen
 		RefundID: r.ID,
 		Status:   refundStatus,
 	}, nil
+}
+
+// QueryRefund retrieves a Stripe refund by refund ID when available, otherwise
+// falls back to the latest refund for the PaymentIntent.
+func (s *Stripe) QueryRefund(ctx context.Context, req payment.RefundQueryRequest) (*payment.RefundResponse, error) {
+	s.ensureInit()
+
+	var r *stripe.Refund
+	var err error
+	if refundID := strings.TrimSpace(req.RefundID); refundID != "" {
+		r, err = s.sc.V1Refunds.Retrieve(ctx, refundID, nil)
+		if err != nil {
+			return nil, fmt.Errorf("stripe query refund: %w", err)
+		}
+	} else {
+		tradeNo := strings.TrimSpace(req.TradeNo)
+		if tradeNo == "" {
+			return nil, fmt.Errorf("stripe query refund: missing payment intent id")
+		}
+		params := &stripe.RefundListParams{PaymentIntent: stripe.String(tradeNo)}
+		params.Limit = stripe.Int64(1)
+		list := s.sc.V1Refunds.List(ctx, params)
+		if list.Err() != nil {
+			return nil, fmt.Errorf("stripe query refund: %w", list.Err())
+		}
+		refunds := list.Data()
+		if len(refunds) == 0 {
+			return nil, fmt.Errorf("stripe query refund: no refund found")
+		}
+		r = refunds[0]
+	}
+
+	return &payment.RefundResponse{RefundID: r.ID, Status: stripeRefundProviderStatus(r.Status)}, nil
+}
+
+func stripeRefundProviderStatus(status stripe.RefundStatus) string {
+	switch status {
+	case stripe.RefundStatusSucceeded:
+		return payment.ProviderStatusSuccess
+	case stripe.RefundStatusFailed, stripe.RefundStatusCanceled:
+		return payment.ProviderStatusFailed
+	default:
+		return payment.ProviderStatusPending
+	}
 }
 
 func stripeIntentCurrency(raw stripe.Currency, fallback string) string {
@@ -304,5 +350,6 @@ func (s *Stripe) CancelPayment(ctx context.Context, tradeNo string) error {
 var (
 	_ payment.Provider                 = (*Stripe)(nil)
 	_ payment.CancelableProvider       = (*Stripe)(nil)
+	_ payment.RefundQueryProvider      = (*Stripe)(nil)
 	_ payment.MerchantIdentityProvider = (*Stripe)(nil)
 )

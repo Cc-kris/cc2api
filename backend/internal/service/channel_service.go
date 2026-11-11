@@ -741,6 +741,8 @@ func checkPricesNotNegative(p ChannelModelPricing) error {
 		{"input_price", p.InputPrice},
 		{"output_price", p.OutputPrice},
 		{"cache_write_price", p.CacheWritePrice},
+		{"cache_write_1h_price", p.CacheWrite1hPrice},
+		{"image_input_price", p.ImageInputPrice},
 		{"cache_read_price", p.CacheReadPrice},
 		{"image_output_price", p.ImageOutputPrice},
 		{"per_request_price", p.PerRequestPrice},
@@ -756,7 +758,7 @@ func checkPricesNotNegative(p ChannelModelPricing) error {
 func checkIntervalsHavePrices(p ChannelModelPricing) error {
 	for _, iv := range p.Intervals {
 		if iv.InputPrice == nil && iv.OutputPrice == nil &&
-			iv.CacheWritePrice == nil && iv.CacheReadPrice == nil &&
+			iv.CacheWritePrice == nil && iv.CacheWrite1hPrice == nil && iv.CacheReadPrice == nil &&
 			iv.PerRequestPrice == nil {
 			return infraerrors.BadRequest(
 				"INTERVAL_MISSING_PRICE",

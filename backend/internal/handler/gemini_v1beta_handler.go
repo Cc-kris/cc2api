@@ -270,6 +270,20 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		return
 	}
 
+	// 余额模式在途预占（V03-R12），计费落库后释放；换号复用同一个预占。
+	inflightDone, err := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription,
+		withGeminiImageEstimate(tokenInflightEstimate(reqModel, body, ""), body, reqModel, modelName))
+	if err != nil {
+		reqLog.Info("gemini.inflight_reservation_rejected", zap.Error(err))
+		status, _, message, retryAfter := billingErrorDetails(err)
+		if retryAfter > 0 {
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+		}
+		googleError(c, status, message)
+		return
+	}
+	defer inflightDone()
+
 	// 3) select account (sticky session based on request body)
 	// 优先使用 Gemini CLI 的会话标识（privileged-user-id + tmp 目录哈希）
 	sessionHash := extractGeminiCLISessionHash(c, body)
@@ -543,8 +557,13 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
 		quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 		upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
-		h.submitUsageRecordTask(func(ctx context.Context) {
-			if err := h.gatewayService.RecordUsageWithLongContext(ctx, &service.RecordUsageLongContextInput{
+		// V03-R11 审计：在 gin.Context 有效时补齐只读审计字段。
+		stampForwardUsageAudit(c, result)
+		usageSessionID := service.ExtractClientSessionID(c)
+		h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
+			// 长上下文阶梯由目录数据驱动（*_above_XXXk_tokens，整请求按高档价），统一在计费路径内生效，
+			// 入口不再声明写死的 200K/2x 边际规则（V03-T11，上游 530fb20f2）。
+			if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 				Result:                 result,
 				QuotaPlatform:          quotaPlatform,
 				APIKey:                 apiKey,
@@ -556,9 +575,8 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 				UpstreamEndpoint:       upstreamEndpoint,
 				UserAgent:              userAgent,
 				IPAddress:              clientIP,
+				SessionID:              usageSessionID,
 				RequestPayloadHash:     requestPayloadHash,
-				LongContextThreshold:   200000, // Gemini 200K 阈值
-				LongContextMultiplier:  2.0,    // 超出部分双倍计费
 				ForceCacheBilling:      fs.ForceCacheBilling,
 				APIKeyService:          h.apiKeyService,
 				ChannelUsageFields:     channelMapping.ToUsageFields(reqModel, result.UpstreamModel),

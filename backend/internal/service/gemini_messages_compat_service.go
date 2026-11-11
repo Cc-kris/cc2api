@@ -190,162 +190,156 @@ func getAPIKeyGroupIDFromContext(c *gin.Context) *int64 {
 }
 
 func (s *GeminiMessagesCompatService) prepareGeminiLocalResponseCache(ctx context.Context, c *gin.Context, body []byte, model string, apiKeyID int64, groupID *int64, action string, stream bool, useUpstreamStream bool) (LocalResponseCacheLookup, LocalResponseCacheConfig) {
-	return LocalResponseCacheLookup{Reason: "disabled"}, DefaultLocalResponseCacheConfig()
-	/*
-		cfg := s.LocalResponseCacheConfig(ctx)
-		cacheableGenerate := action == "generateContent" && !stream && !useUpstreamStream
-		cacheableStream := action == "streamGenerateContent" && stream && useUpstreamStream
-		if !cacheableGenerate && !cacheableStream {
-			reason := "unsupported_action"
-			if stream || useUpstreamStream {
-				reason = "stream"
-			}
-			if cfg.Enabled && s != nil {
-				s.RecordLocalResponseCacheStat(ctx, "lookup_bypass:"+reason)
-			}
-			return LocalResponseCacheLookup{Reason: reason}, cfg
+	cfg := s.LocalResponseCacheConfig(ctx)
+	cacheableGenerate := action == "generateContent" && !stream && !useUpstreamStream
+	cacheableStream := action == "streamGenerateContent" && stream && useUpstreamStream
+	if !cacheableGenerate && !cacheableStream {
+		reason := "unsupported_action"
+		if stream || useUpstreamStream {
+			reason = "stream"
 		}
-		explicitBypass := false
-		headers := http.Header{}
-		if c != nil && c.Request != nil {
-			explicitBypass = strings.EqualFold(strings.TrimSpace(c.GetHeader("X-Sub2API-Cache-Control")), "bypass")
-			headers = c.Request.Header.Clone()
+		if cfg.Enabled && s != nil {
+			s.RecordLocalResponseCacheStat(ctx, "lookup_bypass:"+reason)
 		}
-		if strings.TrimSpace(headers.Get("Content-Type")) == "" {
-			headers.Set("Content-Type", "application/json")
-		}
-		endpoint := "/v1beta/models/:model:generateContent"
-		if cacheableStream {
-			endpoint = "/v1beta/models/:model:streamGenerateContent"
-		}
-		lookup := BuildLocalResponseCacheLookupWithOptions(cfg, apiKeyID, groupID, endpoint, PlatformGemini, model, body, explicitBypass, LocalResponseCacheKeyOptions{
-			Headers: LocalResponseCacheKeyHeadersFromHTTP(headers),
-		})
-		if lookup.Key == "" && cfg.Enabled && s != nil {
-			s.RecordLocalResponseCacheStat(ctx, "lookup_bypass:"+lookup.Reason)
-		}
-		return lookup, cfg */
+		return LocalResponseCacheLookup{Reason: reason}, cfg
+	}
+	explicitBypass := false
+	headers := http.Header{}
+	if c != nil && c.Request != nil {
+		explicitBypass = strings.EqualFold(strings.TrimSpace(c.GetHeader("X-Sub2API-Cache-Control")), "bypass")
+		headers = c.Request.Header.Clone()
+	}
+	if strings.TrimSpace(headers.Get("Content-Type")) == "" {
+		headers.Set("Content-Type", "application/json")
+	}
+	endpoint := "/v1beta/models/:model:generateContent"
+	if cacheableStream {
+		endpoint = "/v1beta/models/:model:streamGenerateContent"
+	}
+	lookup := BuildLocalResponseCacheLookupWithOptions(cfg, apiKeyID, groupID, endpoint, PlatformGemini, model, body, explicitBypass, LocalResponseCacheKeyOptions{
+		Headers: LocalResponseCacheKeyHeadersFromHTTP(headers),
+	})
+	if lookup.Key == "" && cfg.Enabled && s != nil {
+		s.RecordLocalResponseCacheStat(ctx, "lookup_bypass:"+lookup.Reason)
+	}
+	return lookup, cfg
 }
 
 func (s *GeminiMessagesCompatService) tryWriteGeminiLocalResponseCacheHit(ctx context.Context, c *gin.Context, lookup LocalResponseCacheLookup, requestStream bool) (*ClaudeUsage, bool) {
-	return nil, false
-	/*
-		if lookup.Key == "" {
-			return nil, false
-		}
-		entry, err := s.GetLocalResponseCache(ctx, lookup.Key)
-		if err != nil && strings.TrimSpace(lookup.LegacyKey) != "" {
-			entry, err = s.GetLocalResponseCache(ctx, lookup.LegacyKey)
-		}
-		if err != nil || entry == nil || len(entry.Body) == 0 {
-			if s != nil {
-				s.RecordLocalResponseCacheStat(ctx, "lookup_miss")
-			}
-			return nil, false
-		}
-		if !isGeminiLocalResponseCacheEntryCompatible(requestStream, entry.ContentType) {
-			if s != nil {
-				s.RecordLocalResponseCacheStat(ctx, "lookup_miss:content_type_mismatch")
-			}
-			return nil, false
-		}
-		if c != nil {
-			for k, v := range entry.Headers {
-				if strings.TrimSpace(k) != "" && strings.TrimSpace(v) != "" {
-					c.Header(k, v)
-				}
-			}
-			contentType := entry.ContentType
-			if contentType == "" {
-				contentType = "application/json"
-			}
-			c.Header("Content-Type", contentType)
-			c.Header(LocalResponseCacheHeader, LocalResponseCacheHeaderHit)
-			status := entry.StatusCode
-			if status == 0 {
-				status = http.StatusOK
-			}
-			c.Data(status, contentType, entry.Body)
-		}
-		usage := parseGeminiUsageFromCachedLocalResponse(entry.ContentType, entry.Body)
+	if lookup.Key == "" {
+		return nil, false
+	}
+	entry, err := s.GetLocalResponseCache(ctx, lookup.Key)
+	if err != nil && strings.TrimSpace(lookup.LegacyKey) != "" {
+		entry, err = s.GetLocalResponseCache(ctx, lookup.LegacyKey)
+	}
+	if err != nil || entry == nil || len(entry.Body) == 0 {
 		if s != nil {
-			s.RecordLocalResponseCacheStat(ctx, "lookup_hit")
-			hitTokens := int64(0)
-			if usage != nil {
-				hitTokens = int64(usage.InputTokens + usage.OutputTokens)
-			}
-			s.RecordLocalResponseCacheHotspot(ctx, lookup, hitTokens)
+			s.RecordLocalResponseCacheStat(ctx, "lookup_miss")
 		}
-		return usage, true */
+		return nil, false
+	}
+	if !isGeminiLocalResponseCacheEntryCompatible(requestStream, entry.ContentType) {
+		if s != nil {
+			s.RecordLocalResponseCacheStat(ctx, "lookup_miss:content_type_mismatch")
+		}
+		return nil, false
+	}
+	if c != nil {
+		for k, v := range entry.Headers {
+			if strings.TrimSpace(k) != "" && strings.TrimSpace(v) != "" {
+				c.Header(k, v)
+			}
+		}
+		contentType := entry.ContentType
+		if contentType == "" {
+			contentType = "application/json"
+		}
+		c.Header("Content-Type", contentType)
+		c.Header(LocalResponseCacheHeader, LocalResponseCacheHeaderHit)
+		status := entry.StatusCode
+		if status == 0 {
+			status = http.StatusOK
+		}
+		c.Data(status, contentType, entry.Body)
+	}
+	usage := parseGeminiUsageFromCachedLocalResponse(entry.ContentType, entry.Body)
+	if s != nil {
+		s.RecordLocalResponseCacheStat(ctx, "lookup_hit")
+		hitTokens := int64(0)
+		if usage != nil {
+			hitTokens = int64(usage.InputTokens + usage.OutputTokens)
+		}
+		s.RecordLocalResponseCacheHotspot(ctx, lookup, hitTokens)
+	}
+	return usage, true
 }
 
 func (s *GeminiMessagesCompatService) persistGeminiLocalResponseCache(ctx context.Context, c *gin.Context, lookup LocalResponseCacheLookup, cfg LocalResponseCacheConfig, requestBody []byte, status int, contentType string, body []byte, requestStream bool) {
-	return
-	/*
-		if lookup.Key == "" {
-			return
-		}
-		if status != http.StatusOK || len(body) == 0 {
-			if s != nil {
-				if status != http.StatusOK {
-					s.RecordLocalResponseCacheStat(ctx, "store_skip:status_not_ok")
-				} else {
-					s.RecordLocalResponseCacheStat(ctx, "store_skip:empty_body")
-				}
-			}
-			return
-		}
-		if cfg.MaxBodySize > 0 && len(body) > cfg.MaxBodySize {
-			if s != nil {
-				s.RecordLocalResponseCacheStat(ctx, "store_skip:body_too_large")
-			}
-			return
-		}
-		if !isGeminiLocalResponseCacheEntryCompatible(requestStream, contentType) {
-			if s != nil {
-				s.RecordLocalResponseCacheStat(ctx, "store_skip:content_type")
-			}
-			return
-		}
-		entry := &LocalResponseCacheEntry{
-			StatusCode:  status,
-			ContentType: contentType,
-			Body:        append([]byte(nil), body...),
-			Headers: map[string]string{
-				"Content-Type": contentType,
-			},
-			CreatedAt: time.Now(),
-			Platform:  lookup.Platform,
-			Model:     lookup.Model,
-			GroupID:   lookup.GroupID,
-			APIKeyID:  lookup.APIKeyID,
-		}
-		if setErr := s.SetLocalResponseCache(ctx, lookup.Key, entry, cfg.TTL); setErr != nil {
-			if s != nil {
-				s.RecordLocalResponseCacheStat(ctx, "store_failed")
-			}
-			return
-		}
-		if c != nil {
-			c.Header(LocalResponseCacheHeader, LocalResponseCacheHeaderMiss)
-		}
+	if lookup.Key == "" {
+		return
+	}
+	if status != http.StatusOK || len(body) == 0 {
 		if s != nil {
-			s.RecordLocalResponseCacheStat(ctx, "store_success")
-			if s.semanticCacheWriter != nil {
-				s.semanticCacheWriter.Enqueue(SemanticCacheWriteRequest{
-					Protocol:         PlatformGemini,
-					RequestBody:      requestBody,
-					ResponseCacheKey: lookup.Key,
-					Platform:         lookup.Platform,
-					Model:            lookup.Model,
-					APIKeyID:         lookup.APIKeyID,
-					UserID:           SemanticCacheUserIDFromContext(c),
-					GroupID:          lookup.GroupID,
-					TTL:              cfg.TTL,
-					StoredAt:         entry.CreatedAt,
-				})
+			if status != http.StatusOK {
+				s.RecordLocalResponseCacheStat(ctx, "store_skip:status_not_ok")
+			} else {
+				s.RecordLocalResponseCacheStat(ctx, "store_skip:empty_body")
 			}
-		} */
+		}
+		return
+	}
+	if cfg.MaxBodySize > 0 && len(body) > cfg.MaxBodySize {
+		if s != nil {
+			s.RecordLocalResponseCacheStat(ctx, "store_skip:body_too_large")
+		}
+		return
+	}
+	if !isGeminiLocalResponseCacheEntryCompatible(requestStream, contentType) {
+		if s != nil {
+			s.RecordLocalResponseCacheStat(ctx, "store_skip:content_type")
+		}
+		return
+	}
+	entry := &LocalResponseCacheEntry{
+		StatusCode:  status,
+		ContentType: contentType,
+		Body:        append([]byte(nil), body...),
+		Headers: map[string]string{
+			"Content-Type": contentType,
+		},
+		CreatedAt: time.Now(),
+		Platform:  lookup.Platform,
+		Model:     lookup.Model,
+		GroupID:   lookup.GroupID,
+		APIKeyID:  lookup.APIKeyID,
+	}
+	if setErr := s.SetLocalResponseCache(ctx, lookup.Key, entry, cfg.TTL); setErr != nil {
+		if s != nil {
+			s.RecordLocalResponseCacheStat(ctx, "store_failed")
+		}
+		return
+	}
+	if c != nil {
+		c.Header(LocalResponseCacheHeader, LocalResponseCacheHeaderMiss)
+	}
+	if s != nil {
+		s.RecordLocalResponseCacheStat(ctx, "store_success")
+		if s.semanticCacheWriter != nil {
+			s.semanticCacheWriter.Enqueue(SemanticCacheWriteRequest{
+				Protocol:         PlatformGemini,
+				RequestBody:      requestBody,
+				ResponseCacheKey: lookup.Key,
+				Platform:         lookup.Platform,
+				Model:            lookup.Model,
+				APIKeyID:         lookup.APIKeyID,
+				UserID:           SemanticCacheUserIDFromContext(c),
+				GroupID:          lookup.GroupID,
+				TTL:              cfg.TTL,
+				StoredAt:         entry.CreatedAt,
+			})
+		}
+	}
 }
 
 func isGeminiLocalResponseCacheEntryCompatible(requestStream bool, contentType string) bool {
@@ -870,6 +864,8 @@ func (s *GeminiMessagesCompatService) SelectAccountForAIStudioEndpoints(ctx cont
 }
 
 func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*ForwardResult, error) {
+	beginUpstreamResponseModelObservation(c) // V03-R11: reset per-attempt audit observation.
+	beginGeminiImageOutputObservation(c)
 	startTime := time.Now()
 
 	var req struct {
@@ -1338,6 +1334,8 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	clientDisconnect := false
+	streamFinished := false
 	if req.Stream {
 		streamRes, err := s.handleStreamingResponse(c, resp, startTime, originalModel)
 		if err != nil {
@@ -1345,6 +1343,8 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		clientDisconnect = streamRes.clientDisconnect
+		streamFinished = streamRes.finished
 	} else {
 		if useUpstreamStream {
 			collected, usageObj, err := collectGeminiSSE(resp.Body, true)
@@ -1352,6 +1352,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 				return nil, s.writeClaudeError(c, http.StatusBadGateway, "upstream_error", "Failed to read upstream stream")
 			}
 			collectedBytes, _ := json.Marshal(collected)
+			observeGeminiImageOutputs(c, collectedBytes)
 			claudeResp, usageObj2 := convertGeminiToClaudeMessage(collected, originalModel, collectedBytes)
 			c.JSON(http.StatusOK, claudeResp)
 			usage = usageObj2
@@ -1366,25 +1367,26 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		}
 	}
 
-	// 图片生成计费
-	imageCount := 0
+	// 图片生成计费：按上游实际回吐的图片张数（V03-T15，上游 b6eb6c1ef / 917dbdc70）。
 	imageInputSize := s.extractImageInputSize(body)
 	imageSize := normalizeOpenAIImageSizeTier(imageInputSize)
-	if isImageGenerationModel(originalModel) {
-		imageCount = 1
+	imageCount := resolveGeminiImageCount(c, originalModel, mappedModel)
+	if clientDisconnect && !streamFinished {
+		imageCount = 0
 	}
 
 	return &ForwardResult{
-		RequestID:      requestID,
-		Usage:          *usage,
-		Model:          originalModel,
-		UpstreamModel:  mappedModel,
-		Stream:         req.Stream,
-		Duration:       time.Since(startTime),
-		FirstTokenMs:   firstTokenMs,
-		ImageCount:     imageCount,
-		ImageSize:      imageSize,
-		ImageInputSize: imageInputSize,
+		RequestID:        requestID,
+		Usage:            *usage,
+		Model:            originalModel,
+		UpstreamModel:    mappedModel,
+		Stream:           req.Stream,
+		Duration:         time.Since(startTime),
+		FirstTokenMs:     firstTokenMs,
+		ClientDisconnect: clientDisconnect,
+		ImageCount:       imageCount,
+		ImageSize:        imageSize,
+		ImageInputSize:   imageInputSize,
 	}, nil
 }
 
@@ -1397,6 +1399,8 @@ func isGeminiSignatureRelatedError(respBody []byte) bool {
 }
 
 func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.Context, account *Account, originalModel string, action string, stream bool, body []byte) (*ForwardResult, error) {
+	beginUpstreamResponseModelObservation(c) // V03-R11: reset per-attempt audit observation.
+	beginGeminiImageOutputObservation(c)
 	startTime := time.Now()
 
 	if strings.TrimSpace(originalModel) == "" {
@@ -1443,6 +1447,27 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		upstreamAction = "streamGenerateContent"
 	}
 	forceAIStudio := action == "countTokens"
+
+	localCacheLookup, localCacheCfg := s.prepareGeminiLocalResponseCache(ctx, c, body, mappedModel, getAPIKeyIDFromContext(c), getAPIKeyGroupIDFromContext(c), action, stream, useUpstreamStream)
+	if usage, ok := s.tryWriteGeminiLocalResponseCacheHit(ctx, c, localCacheLookup, stream); ok {
+		return &ForwardResult{
+			Usage:         *usage,
+			Model:         originalModel,
+			UpstreamModel: mappedModel,
+			Stream:        stream,
+			Duration:      time.Since(startTime),
+		}, nil
+	}
+	if localCacheLookup.Key != "" {
+		_ = s.probeSemanticCacheCandidate(ctx, SemanticCacheLookupRequest{
+			RequestBody: body,
+			Platform:    localCacheLookup.Platform,
+			Model:       localCacheLookup.Model,
+			APIKeyID:    localCacheLookup.APIKeyID,
+			UserID:      SemanticCacheUserIDFromContext(c),
+			GroupID:     localCacheLookup.GroupID,
+		})
+	}
 
 	var requestIDHeader string
 	var buildReq func(ctx context.Context) (*http.Request, string, error)
@@ -1860,14 +1885,25 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 
 	var usage *ClaudeUsage
 	var firstTokenMs *int
+	clientDisconnect := false
+	streamFinished := false
 
 	if stream {
-		streamRes, err := s.handleNativeStreamingResponse(c, resp, startTime, isOAuth)
+		streamRes, err := s.handleNativeStreamingResponse(c, resp, startTime, isOAuth, localCacheCfg.MaxBodySize)
 		if err != nil {
 			return nil, err
 		}
 		usage = streamRes.usage
 		firstTokenMs = streamRes.firstTokenMs
+		clientDisconnect = streamRes.clientDisconnect
+		streamFinished = streamRes.finished
+		if localCacheLookup.Key != "" && streamRes.cacheBodyTooLarge {
+			s.RecordLocalResponseCacheStat(ctx, "store_skip:body_too_large")
+		} else if localCacheLookup.Key != "" && (!streamRes.cacheComplete || clientDisconnect) {
+			s.RecordLocalResponseCacheStat(ctx, "store_skip:stream_incomplete")
+		} else if streamRes.cacheComplete && !clientDisconnect && len(streamRes.cacheBody) > 0 {
+			s.persistGeminiLocalResponseCache(ctx, c, localCacheLookup, localCacheCfg, body, resp.StatusCode, streamRes.cacheContentType, streamRes.cacheBody, true)
+		}
 	} else {
 		if useUpstreamStream {
 			collected, usageObj, err := collectGeminiSSE(resp.Body, isOAuth)
@@ -1875,14 +1911,16 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 				return nil, s.writeGoogleError(c, http.StatusBadGateway, "Failed to read upstream stream")
 			}
 			b, _ := json.Marshal(collected)
+			observeGeminiImageOutputs(c, b)
 			c.Data(http.StatusOK, "application/json", b)
 			usage = usageObj
 		} else {
-			usageResp, _, _, err := s.handleNativeNonStreamingResponseWithBody(c, resp, isOAuth)
+			usageResp, responseBody, contentType, err := s.handleNativeNonStreamingResponseWithBody(c, resp, isOAuth)
 			if err != nil {
 				return nil, err
 			}
 			usage = usageResp
+			s.persistGeminiLocalResponseCache(ctx, c, localCacheLookup, localCacheCfg, body, resp.StatusCode, contentType, responseBody, false)
 		}
 	}
 
@@ -1890,25 +1928,27 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		usage = &ClaudeUsage{}
 	}
 
-	// 图片生成计费
-	imageCount := 0
+	// 图片生成计费：按上游实际回吐的图片张数（V03-T15，上游 b6eb6c1ef / 917dbdc70）。
+	// 客户端中途断开的流应改用 resolveGeminiStreamImageCount 只计已送达图片（见该函数）。
 	imageInputSize := s.extractImageInputSize(body)
 	imageSize := normalizeOpenAIImageSizeTier(imageInputSize)
-	if isImageGenerationModel(originalModel) {
-		imageCount = 1
+	imageCount := resolveGeminiImageCount(c, originalModel, mappedModel)
+	if clientDisconnect && !streamFinished {
+		imageCount = 0
 	}
 
 	return &ForwardResult{
-		RequestID:      requestID,
-		Usage:          *usage,
-		Model:          originalModel,
-		UpstreamModel:  mappedModel,
-		Stream:         stream,
-		Duration:       time.Since(startTime),
-		FirstTokenMs:   firstTokenMs,
-		ImageCount:     imageCount,
-		ImageSize:      imageSize,
-		ImageInputSize: imageInputSize,
+		RequestID:        requestID,
+		Usage:            *usage,
+		Model:            originalModel,
+		UpstreamModel:    mappedModel,
+		Stream:           stream,
+		Duration:         time.Since(startTime),
+		FirstTokenMs:     firstTokenMs,
+		ClientDisconnect: clientDisconnect,
+		ImageCount:       imageCount,
+		ImageSize:        imageSize,
+		ImageInputSize:   imageInputSize,
 	}, nil
 }
 
@@ -2226,8 +2266,10 @@ func mapGeminiStatusToClaudeErrorType(status string) string {
 }
 
 type geminiStreamResult struct {
-	usage        *ClaudeUsage
-	firstTokenMs *int
+	usage            *ClaudeUsage
+	firstTokenMs     *int
+	clientDisconnect bool // 客户端在流式传输中途断开，结果为断开前已收集的部分
+	finished         bool // 断开前已收到上游 finishReason
 }
 
 func (s *GeminiMessagesCompatService) handleNonStreamingResponse(c *gin.Context, resp *http.Response, originalModel string) (*ClaudeUsage, error) {
@@ -2240,6 +2282,7 @@ func (s *GeminiMessagesCompatService) handleNonStreamingResponse(c *gin.Context,
 	if err != nil {
 		return nil, s.writeClaudeError(c, http.StatusBadGateway, "upstream_error", "Failed to parse upstream response")
 	}
+	observeGeminiImageOutputs(c, unwrappedBody)
 
 	var geminiResp map[string]any
 	if err := json.Unmarshal(unwrappedBody, &geminiResp); err != nil {
@@ -2302,6 +2345,15 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil && !errors.Is(err, io.EOF) {
+			if geminiStreamAbortedWithBillableOutput(c, err, &usage) {
+				logger.LegacyPrintf("service.gemini_messages_compat", "[GeminiAPI] Client disconnected during messages stream, billing collected usage: %v", err)
+				return &geminiStreamResult{
+					usage:            &usage,
+					firstTokenMs:     firstTokenMs,
+					clientDisconnect: true,
+					finished:         finishReason != "",
+				}, nil
+			}
 			return nil, fmt.Errorf("stream read error: %w", err)
 		}
 
@@ -2323,6 +2375,7 @@ func (s *GeminiMessagesCompatService) handleStreamingResponse(c *gin.Context, re
 		if err != nil {
 			continue
 		}
+		observeGeminiImageOutputs(c, unwrappedBytes)
 
 		var geminiResp map[string]any
 		if err := json.Unmarshal(unwrappedBytes, &geminiResp); err != nil {
@@ -2699,8 +2752,14 @@ func mergeCollectedTextParts(response map[string]any, textParts []string) map[st
 }
 
 type geminiNativeStreamResult struct {
-	usage        *ClaudeUsage
-	firstTokenMs *int
+	usage             *ClaudeUsage
+	firstTokenMs      *int
+	clientDisconnect  bool // 客户端在流式传输中途断开，结果为断开前已收集的部分
+	finished          bool // 断开前已收到上游 finishReason
+	cacheBody         []byte
+	cacheContentType  string
+	cacheComplete     bool
+	cacheBodyTooLarge bool
 }
 
 func isGeminiInsufficientScope(headers http.Header, body []byte) bool {
@@ -2796,6 +2855,7 @@ func (s *GeminiMessagesCompatService) handleNativeNonStreamingResponseWithBody(c
 			respBody = unwrappedBody
 		}
 	}
+	observeGeminiImageOutputs(c, respBody)
 
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 
@@ -2811,7 +2871,7 @@ func (s *GeminiMessagesCompatService) handleNativeNonStreamingResponseWithBody(c
 	return &ClaudeUsage{}, respBody, contentType, nil
 }
 
-func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Context, resp *http.Response, startTime time.Time, isOAuth bool) (*geminiNativeStreamResult, error) {
+func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Context, resp *http.Response, startTime time.Time, isOAuth bool, cacheMaxBodySize ...int) (*geminiNativeStreamResult, error) {
 	if s.cfg != nil && s.cfg.Gateway.GeminiDebugResponseHeaders {
 		logger.LegacyPrintf("service.gemini_messages_compat", "[GeminiAPI] ========== Streaming Response Headers ==========")
 		for key, values := range resp.Header {
@@ -2845,23 +2905,55 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 	reader := bufio.NewReader(resp.Body)
 	usage := &ClaudeUsage{}
 	var firstTokenMs *int
+	var cacheBody bytes.Buffer
+	cacheBodyTooLarge := false
+	cacheComplete := false
+	maxCacheBodySize := 0
+	if len(cacheMaxBodySize) > 0 {
+		maxCacheBodySize = cacheMaxBodySize[0]
+	}
+	// 客户端断开后停止写下游、继续读上游，按最后一份 usageMetadata 计费（上游 2b1f12938）。
+	clientDisconnect := false
+	finished := false
 	write := func(data string) error {
-		_, err := io.WriteString(c.Writer, data)
-		return err
+		if !clientDisconnect {
+			if _, err := io.WriteString(c.Writer, data); err != nil {
+				clientDisconnect = true
+				logger.LegacyPrintf("service.gemini_messages_compat", "[GeminiAPI] Client disconnected during native stream, continuing to drain upstream for billing: %v", err)
+			}
+		}
+		if !cacheBodyTooLarge {
+			if maxCacheBodySize > 0 && cacheBody.Len()+len(data) > maxCacheBodySize {
+				cacheBody.Reset()
+				cacheBodyTooLarge = true
+			} else {
+				_, _ = cacheBody.WriteString(data)
+			}
+		}
+		return nil
+	}
+	flush := func() {
+		if !clientDisconnect {
+			flusher.Flush()
+		}
 	}
 
 	for {
 		line, err := reader.ReadString('\n')
-		if len(line) > 0 {
+		// 读错误时 line 是未以换行结尾的残行，不透传也不参与用量统计；EOF 时的末行完整有效。
+		if len(line) > 0 && (err == nil || errors.Is(err, io.EOF)) {
 			trimmed := strings.TrimRight(line, "\r\n")
 			if strings.HasPrefix(trimmed, "data:") {
 				payload := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
 				// Keepalive / done markers
 				if payload == "" || payload == "[DONE]" {
+					if payload == "[DONE]" {
+						cacheComplete = true
+					}
 					if err := write(line); err != nil {
 						return nil, err
 					}
-					flusher.Flush()
+					flush()
 				} else {
 					var rawToWrite string
 					rawToWrite = payload
@@ -2880,6 +2972,11 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 					if u := extractGeminiUsage(rawBytes); u != nil {
 						usage = u
 					}
+					if gjson.GetBytes(rawBytes, "candidates.0.finishReason").String() != "" {
+						finished = true
+						cacheComplete = true
+					}
+					chunkImages := observeGeminiImageOutputs(c, rawBytes)
 					if firstTokenMs == nil {
 						ms := int(time.Since(startTime).Milliseconds())
 						firstTokenMs = &ms
@@ -2896,13 +2993,16 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 							return nil, err
 						}
 					}
-					flusher.Flush()
+					flush()
+					if !clientDisconnect {
+						markGeminiImageOutputsDelivered(c, chunkImages)
+					}
 				}
 			} else {
 				if err := write(line); err != nil {
 					return nil, err
 				}
-				flusher.Flush()
+				flush()
 			}
 		}
 
@@ -2910,13 +3010,30 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 			break
 		}
 		if err != nil {
-			return nil, err
+			if clientDisconnect && usage.hasObservedTokens() {
+				logger.LegacyPrintf("service.gemini_messages_compat", "[GeminiAPI] Upstream read error after client disconnect, billing collected usage: %v", err)
+				break
+			}
+			if !geminiStreamAbortedWithBillableOutput(c, err, usage) {
+				return nil, err
+			}
+			clientDisconnect = true
+			logger.LegacyPrintf("service.gemini_messages_compat", "[GeminiAPI] Client disconnected during native stream, billing collected usage: %v", err)
+			break
 		}
 	}
 
 	result := &geminiNativeStreamResult{
-		usage:        usage,
-		firstTokenMs: firstTokenMs,
+		usage:             usage,
+		firstTokenMs:      firstTokenMs,
+		clientDisconnect:  clientDisconnect,
+		finished:          finished,
+		cacheContentType:  contentType,
+		cacheComplete:     cacheComplete,
+		cacheBodyTooLarge: cacheBodyTooLarge,
+	}
+	if cacheComplete && !cacheBodyTooLarge && cacheBody.Len() > 0 {
+		result.cacheBody = append([]byte(nil), cacheBody.Bytes()...)
 	}
 	return result, nil
 }

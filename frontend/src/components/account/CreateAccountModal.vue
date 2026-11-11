@@ -2739,6 +2739,12 @@
         <ProxySelector v-model="form.proxy_id" :proxies="proxies" />
       </div>
 
+      <UpstreamRequestIdHeaderField
+        v-model="upstreamRequestIdHeader"
+        :platform="form.platform"
+        :type="accountCategory === 'apikey' ? 'apikey' : form.type"
+      />
+
       <div class="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <div>
           <label class="input-label">{{ t('admin.accounts.concurrency') }}</label>
@@ -3505,6 +3511,8 @@ import Select from '@/components/common/Select.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
+import UpstreamRequestIdHeaderField from '@/components/account/UpstreamRequestIdHeaderField.vue'
+import { applyUpstreamRequestIdHeader, isValidUpstreamRequestIdHeader } from '@/utils/upstreamRequestIdHeader'
 import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
@@ -4453,6 +4461,21 @@ const openMixedChannelDialog = (opts: {
   showMixedChannelWarning.value = true
 }
 
+// V03-R11：账号 extra.upstream_request_id_header，留空表示默认读 x-request-id
+const upstreamRequestIdHeader = ref('')
+
+// 所有创建入口统一经过这里，把上游请求 ID 头名并入 extra，并在提交前做与后端一致的校验。
+const createAccountWithAudit = (payload: CreateAccountRequest) => {
+  if (!isValidUpstreamRequestIdHeader(upstreamRequestIdHeader.value)) {
+    appStore.showError(t('admin.accounts.upstreamRequestIdHeaderInvalid'))
+    return Promise.reject(new Error(t('admin.accounts.upstreamRequestIdHeaderInvalid')))
+  }
+  return adminAPI.accounts.create({
+    ...payload,
+    extra: applyUpstreamRequestIdHeader(payload.extra as Record<string, unknown> | undefined, upstreamRequestIdHeader.value) as CreateAccountRequest['extra']
+  })
+}
+
 const withAntigravityConfirmFlag = (payload: CreateAccountRequest): CreateAccountRequest => {
   if (needsMixedChannelCheck(payload.platform) && antigravityMixedChannelConfirmed.value) {
     return {
@@ -4498,7 +4521,7 @@ const ensureAntigravityMixedChannelConfirmed = async (onConfirm: () => Promise<v
 const submitCreateAccount = async (payload: CreateAccountRequest) => {
   submitting.value = true
   try {
-    await adminAPI.accounts.create(withAntigravityConfirmFlag({
+    await createAccountWithAudit(withAntigravityConfirmFlag({
       ...payload,
       upstream_cost_multiplier: upstreamMultiplierText()
     }))
@@ -4531,6 +4554,7 @@ const resetForm = () => {
   form.type = 'oauth'
   form.credentials = {}
   form.proxy_id = null
+  upstreamRequestIdHeader.value = ''
   form.concurrency = 10
   form.load_factor = null
   form.priority = 1
@@ -5203,7 +5227,7 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
           return
         }
 
-        await adminAPI.accounts.create({
+        await createAccountWithAudit({
           name: accountName,
           notes: form.notes,
           platform: 'grok',
@@ -5371,7 +5395,7 @@ const handleOpenAIExchange = async (authCode: string) => {
     }
 
     if (shouldCreateOpenAI) {
-      await adminAPI.accounts.create({
+      await createAccountWithAudit({
         name: form.name,
         notes: form.notes,
         platform: 'openai',
@@ -5577,7 +5601,7 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
         const accountName = refreshTokens.length > 1 ? `${baseName} #${i + 1}` : baseName
 
         if (shouldCreateOpenAI) {
-          await adminAPI.accounts.create({
+          await createAccountWithAudit({
             name: accountName,
             notes: form.notes,
             platform: 'openai',
@@ -5693,7 +5717,7 @@ const handleAntigravityValidateRT = async (refreshTokenInput: string) => {
           expires_at: form.expires_at,
           auto_pause_on_expired: autoPauseOnExpired.value
         })
-        await adminAPI.accounts.create(createPayload)
+        await createAccountWithAudit(createPayload)
         successCount++
       } catch (error: any) {
         failedCount++
@@ -6057,7 +6081,7 @@ const handleCookieAuth = async (sessionKey: string) => {
           credentials.temp_unschedulable_rules = tempUnschedPayload
         }
 
-        await adminAPI.accounts.create({
+        await createAccountWithAudit({
           name: accountName,
           notes: form.notes,
           platform: form.platform,

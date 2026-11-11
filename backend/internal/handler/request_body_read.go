@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
+	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,7 +27,10 @@ func readRequestBodyWithDiagnostics(c *gin.Context) ([]byte, error) {
 	body, err := httputil.ReadRequestBodyWithPrealloc(c.Request)
 	if err != nil {
 		setOpsRequestBodyDiagnostics(c, err, time.Since(startedAt))
+		return body, err
 	}
+	// V03-R11 审计：在任何改写之前记下客户端请求的推理强度（只读）。
+	service.CaptureRequestedReasoningEffort(c, body)
 	return body, err
 }
 

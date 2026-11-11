@@ -43,8 +43,19 @@ type ResolvedPricing struct {
 	SupportsCacheBreakdown bool
 	RuleLayer              string
 	TimeMultiplier         float64
-	ServiceTier            string
-	ExplicitServiceTier    bool
+	// IntervalImageInputPrice 区间定价模式下渠道级图片输入单价（区间本身不带此价）；0 回退文本输入价。
+	IntervalImageInputPrice float64
+	ServiceTier             string
+	ExplicitServiceTier     bool
+
+	// LongContextPricingDisabled 为 true 表示分组关闭了「长上下文定价」，目录长上下文阶梯
+	// 不生效。零值即启用：无分组、分组查不到时都按启用处理（V03-R10 门控只看分组）。
+	LongContextPricingDisabled bool
+}
+
+// LongContextPricingEnabled 报告目录长上下文阶梯是否可以生效。
+func (r *ResolvedPricing) LongContextPricingEnabled() bool {
+	return r == nil || !r.LongContextPricingDisabled
 }
 
 // ModelPricingResolver 统一模型定价解析器。
@@ -97,6 +108,7 @@ func (r *ModelPricingResolver) Resolve(ctx context.Context, input PricingInput) 
 				r.applyRequestTierOverrides(chPricing, resolved)
 				if input.GroupID != nil && r.groupRepo != nil {
 					if group, err := r.groupRepo.GetByIDLite(ctx, *input.GroupID); err == nil && group != nil {
+						resolved.LongContextPricingDisabled = !LongContextPricingEnabledForGroup(group)
 						r.applyGroupOverrides(input.Model, group, resolved)
 					}
 				}
@@ -126,6 +138,7 @@ func (r *ModelPricingResolver) Resolve(ctx context.Context, input PricingInput) 
 	}
 	if input.GroupID != nil && r.groupRepo != nil {
 		if group, err := r.groupRepo.GetByIDLite(ctx, *input.GroupID); err == nil && group != nil {
+			resolved.LongContextPricingDisabled = !LongContextPricingEnabledForGroup(group)
 			r.applyGroupOverrides(input.Model, group, resolved)
 		}
 	}
@@ -137,6 +150,18 @@ func (r *ModelPricingResolver) Resolve(ctx context.Context, input PricingInput) 
 	}
 
 	return resolved
+}
+
+// ApplyGroupLongContextGate 按分组「长上下文定价」开关设置 resolved 的目录阶梯门控。
+// 用于不带 GroupID 调用 Resolve 的路径（如销售定价 v2），保证门控只看分组且与 Resolve 一致。
+// 分组查不到时保持启用。
+func (r *ModelPricingResolver) ApplyGroupLongContextGate(ctx context.Context, groupID *int64, resolved *ResolvedPricing) {
+	if r == nil || resolved == nil || groupID == nil || r.groupRepo == nil {
+		return
+	}
+	if group, err := r.groupRepo.GetByIDLite(ctx, *groupID); err == nil && group != nil {
+		resolved.LongContextPricingDisabled = !LongContextPricingEnabledForGroup(group)
+	}
 }
 
 func (r *ModelPricingResolver) applyChannelModifiers(chPricing *ChannelModelPricing, resolved *ResolvedPricing, input PricingInput) {
@@ -152,7 +177,7 @@ func (r *ModelPricingResolver) applyChannelModifiers(chPricing *ChannelModelPric
 	resolved.TimeMultiplier = multiplier
 	resolved.ServiceTier = tier
 	resolved.ExplicitServiceTier = false
-	if tier == "priority" && chPricing.FastMultiplier != nil {
+	if isFastServiceTier(tier) && chPricing.FastMultiplier != nil {
 		resolved.ExplicitServiceTier = true
 	}
 	if tier == "flex" && chPricing.FlexMultiplier != nil {
@@ -163,6 +188,7 @@ func (r *ModelPricingResolver) applyChannelModifiers(chPricing *ChannelModelPric
 	}
 	resolved.BasePricing = multiplyModelPricing(resolved.BasePricing, multiplier)
 	resolved.Intervals = multiplyPricingIntervals(resolved.Intervals, multiplier)
+	resolved.IntervalImageInputPrice *= multiplier
 	resolved.RequestTiers = multiplyPricingIntervals(resolved.RequestTiers, multiplier)
 	if resolved.DefaultPerRequestPricePresent {
 		resolved.DefaultPerRequestPrice *= multiplier
@@ -183,6 +209,7 @@ func multiplyModelPricing(pricing *ModelPricing, multiplier float64) *ModelPrici
 	copy.CacheReadPricePerTokenPriority *= multiplier
 	copy.CacheCreation5mPrice *= multiplier
 	copy.CacheCreation1hPrice *= multiplier
+	copy.ImageInputPricePerToken *= multiplier
 	copy.ImageOutputPricePerToken *= multiplier
 	return &copy
 }
@@ -196,6 +223,7 @@ func multiplyPricingIntervals(intervals []PricingInterval, multiplier float64) [
 		copy[i].InputPrice = multiplyPrice(copy[i].InputPrice, multiplier)
 		copy[i].OutputPrice = multiplyPrice(copy[i].OutputPrice, multiplier)
 		copy[i].CacheWritePrice = multiplyPrice(copy[i].CacheWritePrice, multiplier)
+		copy[i].CacheWrite1hPrice = multiplyPrice(copy[i].CacheWrite1hPrice, multiplier)
 		copy[i].CacheReadPrice = multiplyPrice(copy[i].CacheReadPrice, multiplier)
 		copy[i].PerRequestPrice = multiplyPrice(copy[i].PerRequestPrice, multiplier)
 	}
@@ -320,6 +348,16 @@ func (r *ModelPricingResolver) applyTokenOverrides(chPricing *ChannelModelPricin
 	// 如果有有效的区间定价，使用区间
 	if len(validIntervals) > 0 {
 		resolved.Intervals = validIntervals
+		for i := range validIntervals {
+			if validIntervals[i].CacheWrite1hPrice != nil {
+				resolved.SupportsCacheBreakdown = true
+				break
+			}
+		}
+		// 区间不携带图片输入价，沿用渠道级配置（上游 06e03f467），由 GetIntervalPricing 带入命中区间。
+		if chPricing.ImageInputPrice != nil {
+			resolved.IntervalImageInputPrice = *chPricing.ImageInputPrice
+		}
 		return
 	}
 
@@ -341,19 +379,18 @@ func (r *ModelPricingResolver) applyTokenOverrides(chPricing *ChannelModelPricin
 		resolved.BasePricing.Presence.Output = true
 		resolved.BasePricing.Presence.FastOutput = false
 	}
-	if chPricing.CacheWritePrice != nil {
-		resolved.BasePricing.CacheCreationPricePerToken = *chPricing.CacheWritePrice
-		resolved.BasePricing.CacheCreation5mPrice = *chPricing.CacheWritePrice
-		resolved.BasePricing.CacheCreation1hPrice = *chPricing.CacheWritePrice
-		resolved.BasePricing.Presence.CacheWrite = true
-		resolved.BasePricing.Presence.CacheWrite5m = true
-		resolved.BasePricing.Presence.CacheWrite1h = true
+	applyChannelCacheWritePrices(resolved.BasePricing, chPricing.CacheWritePrice, chPricing.CacheWrite1hPrice)
+	if chPricing.CacheWrite1hPrice != nil {
+		resolved.SupportsCacheBreakdown = true
 	}
 	if chPricing.CacheReadPrice != nil {
 		resolved.BasePricing.CacheReadPricePerToken = *chPricing.CacheReadPrice
 		resolved.BasePricing.CacheReadPricePerTokenPriority = *chPricing.CacheReadPrice
 		resolved.BasePricing.Presence.CacheRead = true
 		resolved.BasePricing.Presence.FastCacheRead = false
+	}
+	if chPricing.ImageInputPrice != nil {
+		resolved.BasePricing.ImageInputPricePerToken = *chPricing.ImageInputPrice
 	}
 	if chPricing.ImageOutputPrice != nil {
 		resolved.BasePricing.ImageOutputPricePerToken = *chPricing.ImageOutputPrice
@@ -376,7 +413,7 @@ func filterValidIntervals(intervals []PricingInterval) []PricingInterval {
 	var valid []PricingInterval
 	for _, iv := range intervals {
 		if iv.InputPrice != nil || iv.OutputPrice != nil ||
-			iv.CacheWritePrice != nil || iv.CacheReadPrice != nil ||
+			iv.CacheWritePrice != nil || iv.CacheWrite1hPrice != nil || iv.CacheReadPrice != nil ||
 			iv.PerRequestPrice != nil {
 			valid = append(valid, iv)
 		}
@@ -396,7 +433,9 @@ func (r *ModelPricingResolver) GetIntervalPricing(resolved *ResolvedPricing, tot
 		return resolved.BasePricing
 	}
 
-	return intervalToModelPricing(iv, resolved.SupportsCacheBreakdown)
+	pricing := intervalToModelPricing(iv, resolved.SupportsCacheBreakdown)
+	pricing.ImageInputPricePerToken = resolved.IntervalImageInputPrice
+	return pricing
 }
 
 // intervalToModelPricing 将区间定价转换为 ModelPricing
@@ -415,14 +454,7 @@ func intervalToModelPricing(iv *PricingInterval, supportsCacheBreakdown bool) *M
 		pricing.OutputPricePerTokenPriority = *iv.OutputPrice
 		pricing.Presence.Output = true
 	}
-	if iv.CacheWritePrice != nil {
-		pricing.CacheCreationPricePerToken = *iv.CacheWritePrice
-		pricing.CacheCreation5mPrice = *iv.CacheWritePrice
-		pricing.CacheCreation1hPrice = *iv.CacheWritePrice
-		pricing.Presence.CacheWrite = true
-		pricing.Presence.CacheWrite5m = true
-		pricing.Presence.CacheWrite1h = true
-	}
+	applyChannelCacheWritePrices(pricing, iv.CacheWritePrice, iv.CacheWrite1hPrice)
 	if iv.CacheReadPrice != nil {
 		pricing.CacheReadPricePerToken = *iv.CacheReadPrice
 		pricing.CacheReadPricePerTokenPriority = *iv.CacheReadPrice

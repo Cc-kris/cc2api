@@ -422,6 +422,28 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 
+	// 余额模式在途预占（V03-R12），计费落库后释放；续写换号复用同一个预占。
+	// x_search 走固定单价（FixedRequestPrice），按确定金额预占，余额必须覆盖单价。
+	var inflightDone func()
+	var inflightErr error
+	if xSearchPrice := openAIXSearchFixedPrice(c); xSearchPrice != nil {
+		inflightDone, inflightErr = reserveInflightFixedCharge(c, h.billingCacheService, apiKey, subscription, xSearchPrice.InexactFloat64())
+	} else {
+		inflightEstimate := tokenInflightEstimate(reqModel, body, service.InflightOpenAIServiceTier(body))
+		inflightEstimate.MayGenerateImage = imageIntent
+		inflightDone, inflightErr = reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, inflightEstimate)
+	}
+	if inflightErr != nil {
+		reqLog.Info("openai.inflight_reservation_rejected", zap.Error(inflightErr))
+		status, code, message, retryAfter := billingErrorDetails(inflightErr)
+		if retryAfter > 0 {
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+		}
+		h.handleStreamingAwareError(c, status, code, message, streamStarted)
+		return
+	}
+	defer inflightDone()
+
 	// HTTP Responses requests without an explicit client session use a stable
 	// prompt-prefix affinity key. This keeps later turns on the account whose
 	// upstream prompt cache was populated by the first turn.
@@ -435,6 +457,67 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	sameAccountRetryCount := make(map[int64]int)
 	var lastFailoverErr *service.UpstreamFailoverError
 	var oauth429FailoverState service.OpenAIOAuth429FailoverState
+
+	// 提交 Responses 用量记录。成功路径与「续写耗尽按最后一个有用量的尝试收费」共用；
+	// 每个客户端请求最多调用一次。
+	submitResponsesUsage := func(account *service.Account, result *service.OpenAIForwardResult, usageChannelMapping service.ChannelMappingResult) {
+		// 捕获请求信息（用于异步记录，避免在 goroutine 中访问 gin.Context）
+		userAgent := c.GetHeader("User-Agent")
+		clientIP := ip.GetClientIP(c)
+		requestPayloadHash := service.HashUsageRequestPayload(body)
+		inboundEndpoint := GetInboundEndpoint(c)
+		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
+
+		// 使用量记录通过有界 worker 池提交，避免请求热路径创建无界 goroutine。
+		upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
+		fixedRequestPrice := service.CloneDecimalSnapshot(openAIXSearchFixedPrice(c))
+		// V03-R11 审计：在 gin.Context 有效时补齐只读审计字段。
+		stampOpenAIUsageAudit(c, result)
+		usageSessionID := service.ExtractClientSessionID(c)
+		h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
+			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
+				Result:                 result,
+				APIKey:                 apiKey,
+				User:                   apiKey.User,
+				Account:                account,
+				UpstreamCostMultiplier: service.CloneDecimalSnapshot(account.UpstreamCostMultiplier),
+				Subscription:           subscription,
+				InboundEndpoint:        inboundEndpoint,
+				UpstreamEndpoint:       upstreamEndpoint,
+				UserAgent:              userAgent,
+				IPAddress:              clientIP,
+				SessionID:              usageSessionID,
+				RequestPayloadHash:     requestPayloadHash,
+				APIKeyService:          h.apiKeyService,
+				ChannelUsageFields:     usageChannelMapping.ToUsageFields(reqModel, result.UpstreamModel),
+				UpstreamAttempts:       service.CloneUsageUpstreamAttempts(upstreamAttempts),
+				FixedRequestPrice:      fixedRequestPrice,
+			}); err != nil {
+				logger.L().With(
+					zap.String("component", "handler.openai_gateway.responses"),
+					zap.Int64("user_id", subject.UserID),
+					zap.Int64("api_key_id", apiKey.ID),
+					zap.Any("group_id", apiKey.GroupID),
+					zap.String("model", reqModel),
+					zap.Int64("account_id", account.ID),
+				).Error("openai.record_usage_failed", zap.Error(err))
+			}
+		})
+	}
+	// 续写中断尝试的已观测用量（只用于续写耗尽且已输出内容时收费一次）。
+	var lastObservedResult *service.OpenAIForwardResult
+	var lastObservedAccount *service.Account
+	billLastObservedResponsesAttempt := func() {
+		if !streamStarted || lastObservedResult == nil || lastObservedAccount == nil {
+			return
+		}
+		reqLog.Warn("openai.stream_continuation_exhausted_bill_last_observed",
+			zap.Int64("account_id", lastObservedAccount.ID),
+			zap.Int("input_tokens", lastObservedResult.Usage.InputTokens),
+			zap.Int("output_tokens", lastObservedResult.Usage.OutputTokens),
+		)
+		submitResponsesUsage(lastObservedAccount, lastObservedResult, usageChannelMapping)
+	}
 
 	for {
 		// Select account supporting the requested model
@@ -472,6 +555,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				h.handleStreamingAwareError(c, cls.Status, cls.ErrType, cls.Message, streamStarted)
 				return
 			}
+			billLastObservedResponsesAttempt()
 			if lastFailoverErr != nil {
 				h.handleFailoverExhausted(c, lastFailoverErr, streamStarted)
 			} else {
@@ -581,10 +665,17 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			} else {
 				var failoverErr *service.UpstreamFailoverError
 				if errors.As(err, &failoverErr) {
+					// 续写中断尝试的已观测用量只进财务成本证据（上游尝试记录），这里绝不 RecordUsage。
 					appendBillableUsageAttemptFromFailover(c, account, reqModel, failoverErr)
+					if observed := failoverErr.ObservedOpenAIForwardResult(); observed != nil {
+						lastObservedResult = observed
+						lastObservedAccount = account
+					}
 					// 已写出内容时，只有可续写的中断（SafeToFailoverAfterWrite）才能换号接着写
 					wroteDuringForward := c.Writer.Size() != writerSizeBeforeForward
 					if wroteDuringForward && !failoverErr.SafeToFailoverAfterWrite {
+						streamStarted = true
+						billLastObservedResponsesAttempt()
 						h.handleFailoverExhausted(c, failoverErr, true)
 						return
 					}
@@ -604,6 +695,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 							)
 							select {
 							case <-c.Request.Context().Done():
+								billLastObservedResponsesAttempt()
 								return
 							case <-time.After(sameAccountRetryDelay):
 							}
@@ -617,10 +709,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					if teamWorkspaceFailure && !h.gatewayService.IsOpenAITeamLinkedResolverEnabled(c.Request.Context()) {
 						// Rollback mode preserves the legacy single-account 402 contract;
 						// never perform the Team-wide cross-account switch.
+						billLastObservedResponsesAttempt()
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}
 					if teamWorkspaceSwitchCount >= 1 {
+						billLastObservedResponsesAttempt()
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}
@@ -628,11 +722,13 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 						teamWorkspaceSwitchCount++
 					}
 					if switchCount >= maxAccountSwitches && !teamWorkspaceFailure {
+						billLastObservedResponsesAttempt()
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}
 					switchCount++
 					if shouldRespectOAuth429StormStop(c.Request.Context(), h.cfg) && h.gatewayService.ShouldStopOpenAIOAuth429Failover(account, failoverErr.StatusCode, switchCount, &oauth429FailoverState) {
+						billLastObservedResponsesAttempt()
 						h.handleFailoverExhausted(c, failoverErr, streamStarted)
 						return
 					}
@@ -645,6 +741,8 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					continue
 				}
 				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+				// 续写尝试以普通错误结束：按最后一个有用量的续写中断尝试收费。
+				billLastObservedResponsesAttempt()
 				wroteFallback := h.ensureForwardErrorResponse(c, streamStarted)
 				fields := []zap.Field{
 					zap.Int64("account_id", account.ID),
@@ -698,44 +796,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			usageChannelMapping.MappedModel = reqModel
 			usageChannelMapping.BillingModelSource = service.BillingModelSourceRequested
 		}
-		// 捕获请求信息（用于异步记录，避免在 goroutine 中访问 gin.Context）
-		userAgent := c.GetHeader("User-Agent")
-		clientIP := ip.GetClientIP(c)
-		requestPayloadHash := service.HashUsageRequestPayload(body)
-		inboundEndpoint := GetInboundEndpoint(c)
-		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
-
-		// 使用量记录通过有界 worker 池提交，避免请求热路径创建无界 goroutine。
-		upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
-		fixedRequestPrice := service.CloneDecimalSnapshot(openAIXSearchFixedPrice(c))
-		h.submitOpenAIUsageRecordTask(result, func(ctx context.Context) {
-			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
-				Result:                 result,
-				APIKey:                 apiKey,
-				User:                   apiKey.User,
-				Account:                account,
-				UpstreamCostMultiplier: service.CloneDecimalSnapshot(account.UpstreamCostMultiplier),
-				Subscription:           subscription,
-				InboundEndpoint:        inboundEndpoint,
-				UpstreamEndpoint:       upstreamEndpoint,
-				UserAgent:              userAgent,
-				IPAddress:              clientIP,
-				RequestPayloadHash:     requestPayloadHash,
-				APIKeyService:          h.apiKeyService,
-				ChannelUsageFields:     usageChannelMapping.ToUsageFields(reqModel, result.UpstreamModel),
-				UpstreamAttempts:       service.CloneUsageUpstreamAttempts(upstreamAttempts),
-				FixedRequestPrice:      fixedRequestPrice,
-			}); err != nil {
-				logger.L().With(
-					zap.String("component", "handler.openai_gateway.responses"),
-					zap.Int64("user_id", subject.UserID),
-					zap.Int64("api_key_id", apiKey.ID),
-					zap.Any("group_id", apiKey.GroupID),
-					zap.String("model", reqModel),
-					zap.Int64("account_id", account.ID),
-				).Error("openai.record_usage_failed", zap.Error(err))
-			}
-		})
+		submitResponsesUsage(account, result, usageChannelMapping)
 		reqLog.Debug("openai.request_completed",
 			zap.Int64("account_id", account.ID),
 			zap.Int("switch_count", switchCount),
@@ -930,6 +991,20 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 		h.anthropicStreamingAwareError(c, status, code, message, streamStarted)
 		return
 	}
+
+	// 余额模式在途预占（V03-R12），计费落库后释放；续写换号复用同一个预占。
+	inflightDone, inflightErr := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription,
+		tokenInflightEstimate(reqModel, body, service.InflightOpenAIMessagesServiceTier(c.GetHeader("anthropic-beta"), body)))
+	if inflightErr != nil {
+		reqLog.Info("openai_messages.inflight_reservation_rejected", zap.Error(inflightErr))
+		status, code, message, retryAfter := billingErrorDetails(inflightErr)
+		if retryAfter > 0 {
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+		}
+		h.anthropicStreamingAwareError(c, status, code, message, streamStarted)
+		return
+	}
+	defer inflightDone()
 
 	sessionHash := h.gatewayService.GenerateSessionHash(c, body)
 	promptCacheKey := h.gatewayService.ExtractSessionID(c, body)
@@ -1126,7 +1201,10 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 
 		upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
 		fixedRequestPrice := service.CloneDecimalSnapshot(openAIXSearchFixedPrice(c))
-		h.submitOpenAIUsageRecordTask(result, func(ctx context.Context) {
+		// V03-R11 审计：在 gin.Context 有效时补齐只读审计字段。
+		stampOpenAIUsageAudit(c, result)
+		usageSessionID := service.ExtractClientSessionID(c)
+		h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 				Result:                 result,
 				APIKey:                 apiKey,
@@ -1138,6 +1216,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 				UpstreamEndpoint:       upstreamEndpoint,
 				UserAgent:              userAgent,
 				IPAddress:              clientIP,
+				SessionID:              usageSessionID,
 				RequestPayloadHash:     requestPayloadHash,
 				APIKeyService:          h.apiKeyService,
 				ChannelUsageFields:     channelMappingMsg.ToUsageFields(reqModel, result.UpstreamModel),
@@ -1695,6 +1774,19 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		return
 	}
 
+	// 余额模式在途预占（V03-R12，会话级）：按首帧估算一次，会话期间续期；每轮计费任务接管引用，
+	// 会话结束且所有轮次计费落库后释放。HTTP 回退路径从 c.Request 取 context，所以两处都更新。
+	inflightCtx, inflightDone, inflightErr := reserveInflightBalanceCtx(ctx, h.billingCacheService, h.gatewayService, apiKey, subscription,
+		tokenInflightEstimate(reqModel, firstMessage, service.InflightOpenAIServiceTier(firstMessage)))
+	if inflightErr != nil {
+		reqLog.Info("openai.websocket_inflight_reservation_rejected", zap.Error(inflightErr))
+		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "billing check failed")
+		return
+	}
+	defer inflightDone()
+	ctx = inflightCtx
+	c.Request = c.Request.WithContext(ctx)
+
 	sessionHash := h.gatewayService.GenerateSessionHashWithFallback(
 		c,
 		firstMessage,
@@ -1979,7 +2071,10 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				inboundEndpoint := GetInboundEndpoint(c)
 				upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
 				upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
-				h.submitOpenAIUsageRecordTask(result, func(taskCtx context.Context) {
+				// V03-R11 审计：在 gin.Context 有效时补齐只读审计字段。
+				stampOpenAIUsageAudit(c, result)
+				usageSessionID := service.ExtractClientSessionID(c)
+				h.submitOpenAIUsageRecordTask(ctx, result, func(taskCtx context.Context) {
 					if err := h.gatewayService.RecordUsage(taskCtx, &service.OpenAIRecordUsageInput{
 						Result:                 result,
 						APIKey:                 apiKey,
@@ -1991,6 +2086,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 						UpstreamEndpoint:       upstreamEndpoint,
 						UserAgent:              userAgent,
 						IPAddress:              clientIP,
+						SessionID:              usageSessionID,
 						RequestPayloadHash:     service.HashUsageRequestPayload(firstMessage),
 						APIKeyService:          h.apiKeyService,
 						ChannelUsageFields:     usageChannelMappingWS.ToUsageFields(reqModel, result.UpstreamModel),
@@ -2182,7 +2278,10 @@ func (h *OpenAIGatewayHandler) tryFallbackOpenAIWebSocketIngressToHTTP(
 			usageChannelMapping.BillingModelSource = service.BillingModelSourceRequested
 		}
 		upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
-		h.submitOpenAIUsageRecordTask(result, func(taskCtx context.Context) {
+		// V03-R11 审计：在 gin.Context 有效时补齐只读审计字段。
+		stampOpenAIUsageAudit(c, result)
+		usageSessionID := service.ExtractClientSessionID(c)
+		h.submitOpenAIUsageRecordTask(c.Request.Context(), result, func(taskCtx context.Context) {
 			if err := h.gatewayService.RecordUsage(taskCtx, &service.OpenAIRecordUsageInput{
 				Result:                 result,
 				APIKey:                 apiKey,
@@ -2193,6 +2292,7 @@ func (h *OpenAIGatewayHandler) tryFallbackOpenAIWebSocketIngressToHTTP(
 				UpstreamEndpoint:       upstreamEndpoint,
 				UserAgent:              strings.TrimSpace(c.GetHeader("User-Agent")),
 				IPAddress:              ip.GetClientIP(c),
+				SessionID:              usageSessionID,
 				RequestPayloadHash:     service.HashUsageRequestPayload(body),
 				APIKeyService:          h.apiKeyService,
 				ChannelUsageFields:     usageChannelMapping.ToUsageFields(requestedModel, result.UpstreamModel),
@@ -2423,15 +2523,27 @@ func getContextInt64(c *gin.Context, key string) (int64, bool) {
 	}
 }
 
-func (h *OpenAIGatewayHandler) submitUsageRecordTask(task service.UsageRecordTask) {
+// submitUsageRecordTask 提交计费任务。parent 是请求 context：任务接管其上的在途预占引用，
+// 计费落库后归还；任务被丢弃时立即归还（V03-R12）。
+func (h *OpenAIGatewayHandler) submitUsageRecordTask(parent context.Context, task service.UsageRecordTask) {
 	if task == nil {
 		return
 	}
+	task, abandon := wrapUsageRecordTaskInflight(parent, task)
 	if h.usageRecordWorkerPool != nil {
-		h.usageRecordWorkerPool.Submit(task)
-		return
+		if mode := h.usageRecordWorkerPool.Submit(task); mode != service.UsageRecordSubmitModeDroppedStopped {
+			if mode.Dropped() {
+				abandon()
+			}
+			return
+		}
+		// 池已停止（进程关停窗口）：计费任务不能静默丢失，降级为内联同步执行。
+		// 显式配置的 drop/sample 溢出丢弃仍按配置语义保留。
+		logger.L().With(
+			zap.String("component", "handler.openai_gateway.responses"),
+		).Warn("openai.usage_record_task_stopped_sync_fallback")
 	}
-	// 回退路径：worker 池未注入时同步执行，避免退回到无界 goroutine 模式。
+	// 回退路径：worker 池未注入或已停止时同步执行，避免退回到无界 goroutine 模式。
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	defer func() {
@@ -2445,20 +2557,22 @@ func (h *OpenAIGatewayHandler) submitUsageRecordTask(task service.UsageRecordTas
 	task(ctx)
 }
 
-func (h *OpenAIGatewayHandler) submitOpenAIUsageRecordTask(result *service.OpenAIForwardResult, task service.UsageRecordTask) {
+func (h *OpenAIGatewayHandler) submitOpenAIUsageRecordTask(parent context.Context, result *service.OpenAIForwardResult, task service.UsageRecordTask) {
 	if result != nil && result.ImageCount > 0 {
-		h.submitMandatoryUsageRecordTask(task)
+		h.submitMandatoryUsageRecordTask(parent, task)
 		return
 	}
-	h.submitUsageRecordTask(task)
+	h.submitUsageRecordTask(parent, task)
 }
 
-func (h *OpenAIGatewayHandler) submitMandatoryUsageRecordTask(task service.UsageRecordTask) {
+func (h *OpenAIGatewayHandler) submitMandatoryUsageRecordTask(parent context.Context, task service.UsageRecordTask) {
 	if task == nil {
 		return
 	}
+	// 必达任务：丢弃时同步执行，引用在执行结束时归还。
+	task, _ = wrapUsageRecordTaskInflight(parent, task)
 	if h.usageRecordWorkerPool != nil {
-		if mode := h.usageRecordWorkerPool.Submit(task); mode != service.UsageRecordSubmitModeDropped {
+		if mode := h.usageRecordWorkerPool.Submit(task); !mode.Dropped() {
 			return
 		}
 		logger.L().With(

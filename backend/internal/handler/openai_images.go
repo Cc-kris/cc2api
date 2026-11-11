@@ -165,6 +165,25 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		return
 	}
 
+	// 余额模式在途预占（V03-R12）：按张（取 1K/2K/4K 最高价 × n）与 token 计价渠道两种口径取最高。
+	inflightDone, inflightErr := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription, service.InflightEstimateRequest{
+		Model:         parsed.Model,
+		BodyBytes:     len(body),
+		Kind:          service.InflightEstimateImage,
+		Units:         parsed.N,
+		ImageEndpoint: true,
+	})
+	if inflightErr != nil {
+		reqLog.Info("openai.images.inflight_reservation_rejected", zap.Error(inflightErr))
+		status, code, message, retryAfter := billingErrorDetails(inflightErr)
+		if retryAfter > 0 {
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+		}
+		h.handleStreamingAwareError(c, status, code, message, streamStarted)
+		return
+	}
+	defer inflightDone()
+
 	sessionHash := h.gatewayService.GenerateExplicitSessionHash(c, body)
 
 	maxAccountSwitches := effectiveMaxAccountSwitches(c.Request.Context(), h.cfg, h.maxAccountSwitches)
@@ -360,7 +379,10 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 			upstreamModel = result.UpstreamModel
 		}
 		upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
-		h.submitMandatoryUsageRecordTask(func(ctx context.Context) {
+		// V03-R11 审计：在 gin.Context 有效时补齐只读审计字段。
+		stampOpenAIUsageAudit(c, result)
+		usageSessionID := service.ExtractClientSessionID(c)
+		h.submitMandatoryUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.OpenAIRecordUsageInput{
 				Result:                 result,
 				APIKey:                 apiKey,
@@ -372,6 +394,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 				UpstreamEndpoint:       upstreamEndpoint,
 				UserAgent:              userAgent,
 				IPAddress:              clientIP,
+				SessionID:              usageSessionID,
 				RequestPayloadHash:     requestPayloadHash,
 				APIKeyService:          h.apiKeyService,
 				ChannelUsageFields:     channelMapping.ToUsageFields(parsed.Model, upstreamModel),

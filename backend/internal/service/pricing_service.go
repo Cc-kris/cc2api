@@ -1,15 +1,19 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,16 +26,31 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	openAIGPT54BaselineLongContextThreshold        = 272000
+	openAIGPT54BaselineLongContextInputMultiplier  = 2.0
+	openAIGPT54BaselineLongContextOutputMultiplier = 1.5
+)
+
 var (
-	openAIModelDatePattern     = regexp.MustCompile(`-\d{8}$`)
-	openAIModelBasePattern     = regexp.MustCompile(`^(gpt-\d+(?:\.\d+)?)(?:-|$)`)
+	// openAIGPT54BaselineModelPattern 匹配享有基线 272K 阶梯的 GPT-5.4/5.5 主型号
+	// （含 openai/ 前缀与日期后缀）；mini/nano 等变体不匹配。
+	openAIGPT54BaselineModelPattern = regexp.MustCompile(`^(?:openai/)?gpt-?5\.[45](?:-\d{4}-\d{2}-\d{2}|-\d{8})?$`)
+	openAIModelDatePattern          = regexp.MustCompile(`-\d{8}$`)
+	openAIModelBasePattern          = regexp.MustCompile(`^(gpt-\d+(?:\.\d+)?)(?:-|$)`)
+	// aboveTierPricePattern 匹配 LiteLLM 长上下文绝对价字段名
+	// （input_cost_per_token_above_272k_tokens / output_cost_per_token_above_200k_tokens 等）。
+	// 带 _flex/_priority/_batches 服务档后缀的变体与 cache 侧字段不参与阈值/倍率折算。
+	aboveTierPricePattern = regexp.MustCompile(`^(input|output)_cost_per_token_above_(\d+)k_tokens$`)
+	// GPT-5.4/5.5 的 272K 长上下文阶梯基线（输入 2x、输出 1.5x，整次会话）：目录没有给出阶梯
+	// （含随包 fallback 文件缺少 above_272k 字段）时保持基线计费；目录或 override 给出的阶梯优先。
 	openAIGPT54FallbackPricing = &LiteLLMModelPricing{
 		InputCostPerToken:               2.5e-06, // $2.5 per MTok
 		OutputCostPerToken:              1.5e-05, // $15 per MTok
 		CacheReadInputTokenCost:         2.5e-07, // $0.25 per MTok
-		LongContextInputTokenThreshold:  272000,
-		LongContextInputCostMultiplier:  2.0,
-		LongContextOutputCostMultiplier: 1.5,
+		LongContextInputTokenThreshold:  openAIGPT54BaselineLongContextThreshold,
+		LongContextInputCostMultiplier:  openAIGPT54BaselineLongContextInputMultiplier,
+		LongContextOutputCostMultiplier: openAIGPT54BaselineLongContextOutputMultiplier,
 		LiteLLMProvider:                 "openai",
 		Mode:                            "chat",
 		SupportsPromptCaching:           true,
@@ -93,12 +112,19 @@ type LiteLLMModelPricing struct {
 	LongContextInputTokenThreshold      int     `json:"long_context_input_token_threshold,omitempty"`
 	LongContextInputCostMultiplier      float64 `json:"long_context_input_cost_multiplier,omitempty"`
 	LongContextOutputCostMultiplier     float64 `json:"long_context_output_cost_multiplier,omitempty"`
-	SupportsServiceTier                 bool    `json:"supports_service_tier"`
-	LiteLLMProvider                     string  `json:"litellm_provider"`
-	Mode                                string  `json:"mode"`
-	SupportsPromptCaching               bool    `json:"supports_prompt_caching"`
-	OutputCostPerImage                  float64 `json:"output_cost_per_image"`       // 图片生成模型每张图片价格
-	OutputCostPerImageToken             float64 `json:"output_cost_per_image_token"` // 图片输出 token 价格
+	// LongContextCacheReadCostMultiplier 显式的长上下文缓存读取倍率；0 表示跟随输入倍率。
+	LongContextCacheReadCostMultiplier float64 `json:"long_context_cache_read_cost_multiplier,omitempty"`
+	// LongContextThresholdInclusive 为 true 时输入达到阈值即进入高档（xAI、显式声明的条目），
+	// 默认严格大于阈值。
+	LongContextThresholdInclusive bool `json:"long_context_threshold_inclusive,omitempty"`
+	// FastCostMultiplier 来自 provider_specific_entry.fast（Anthropic Fast 档倍率）；0 表示未声明。
+	FastCostMultiplier      float64 `json:"fast_cost_multiplier,omitempty"`
+	SupportsServiceTier     bool    `json:"supports_service_tier"`
+	LiteLLMProvider         string  `json:"litellm_provider"`
+	Mode                    string  `json:"mode"`
+	SupportsPromptCaching   bool    `json:"supports_prompt_caching"`
+	OutputCostPerImage      float64 `json:"output_cost_per_image"`       // 图片生成模型每张图片价格
+	OutputCostPerImageToken float64 `json:"output_cost_per_image_token"` // 图片输出 token 价格
 }
 
 // PricingRemoteClient 远程价格数据获取接口
@@ -123,6 +149,15 @@ type LiteLLMRawEntry struct {
 	SupportsPromptCaching               bool     `json:"supports_prompt_caching"`
 	OutputCostPerImage                  *float64 `json:"output_cost_per_image"`
 	OutputCostPerImageToken             *float64 `json:"output_cost_per_image_token"`
+	// 显式长上下文字段（如 glm-5）。任一存在即以显式配置为准，不再折算 above_XXXk 字段。
+	LongContextInputTokenThreshold     *int     `json:"long_context_input_token_threshold"`
+	LongContextInputCostMultiplier     *float64 `json:"long_context_input_cost_multiplier"`
+	LongContextOutputCostMultiplier    *float64 `json:"long_context_output_cost_multiplier"`
+	LongContextCacheReadCostMultiplier *float64 `json:"long_context_cache_read_cost_multiplier"`
+	LongContextThresholdInclusive      *bool    `json:"long_context_threshold_inclusive"`
+	ProviderSpecificEntry              *struct {
+		Fast *float64 `json:"fast"`
+	} `json:"provider_specific_entry"`
 }
 
 // PricingCatalogSnapshot is an immutable copy of the active catalog for
@@ -142,6 +177,17 @@ type PricingService struct {
 	pricingData  map[string]*LiteLLMModelPricing
 	lastUpdated  time.Time
 	localHash    string
+	// fallback/override 文件在最近一次成功重建时的内容指纹，定时器据此判断是否
+	// 需要从本地目录缓存重建叠加层。
+	customFilesHash string
+	// overlayUpdatedAt 是叠加层最近一次参与重建的时间；overlayReloaded 表示发生过热重载。
+	// 两者只用于财务价格版本的 checksum 和生效时间，见 catalogChecksumLocked。
+	overlayUpdatedAt time.Time
+	overlayReloaded  bool
+	// usingFallback 表示当前目录正文来自 fallback_file（远程与本地缓存都不可用时）。
+	// CCAI 的 fallback 文件只作灾备目录，不与远程目录合并；只有在灾备模式下它的
+	// 内容变化才需要热重载。
+	usingFallback bool
 
 	// 停止信号
 	stopCh chan struct{}
@@ -188,9 +234,13 @@ func (s *PricingService) Stop() {
 	logger.LegacyPrintf("service.pricing", "%s", "[Pricing] Service stopped")
 }
 
-// startUpdateScheduler 启动定时更新调度器
+// startUpdateScheduler 启动定时调度器：每个周期先做远程目录同步，再比对 fallback/override
+// 文件指纹做本地热重载（配置了任一文件时）。
 func (s *PricingService) startUpdateScheduler() {
-	// 定期检查哈希更新
+	if s == nil || s.cfg == nil {
+		return
+	}
+	watchCustom := s.hasCustomPricingFiles()
 	hashInterval := time.Duration(s.cfg.Pricing.HashCheckIntervalMinutes) * time.Minute
 	if hashInterval < time.Minute {
 		hashInterval = 10 * time.Minute
@@ -208,13 +258,16 @@ func (s *PricingService) startUpdateScheduler() {
 				if err := s.syncWithRemote(); err != nil {
 					logger.LegacyPrintf("service.pricing", "[Pricing] Sync failed: %v", err)
 				}
+				if watchCustom {
+					s.reloadIfCustomFilesChanged()
+				}
 			case <-s.stopCh:
 				return
 			}
 		}
 	}()
 
-	logger.LegacyPrintf("service.pricing", "[Pricing] Update scheduler started (check every %v)", hashInterval)
+	logger.LegacyPrintf("service.pricing", "[Pricing] Update scheduler started (check every %v, custom file watch=%t)", hashInterval, watchCustom)
 }
 
 // checkAndUpdatePricing 检查并更新价格数据
@@ -315,6 +368,146 @@ func (s *PricingService) syncWithRemote() error {
 	return nil
 }
 
+// hasCustomPricingFiles 报告是否配置了 fallback/override 任一文件路径（不要求文件存在）。
+func (s *PricingService) hasCustomPricingFiles() bool {
+	if s == nil || s.cfg == nil {
+		return false
+	}
+	return strings.TrimSpace(s.cfg.Pricing.FallbackFile) != "" || strings.TrimSpace(s.cfg.Pricing.OverrideFile) != ""
+}
+
+// hasOverrideFile 报告是否配置了 override 文件路径。
+func (s *PricingService) hasOverrideFile() bool {
+	return s != nil && s.cfg != nil && strings.TrimSpace(s.cfg.Pricing.OverrideFile) != ""
+}
+
+// watchedCustomPricingFiles 返回参与热重载指纹的文件：override 始终参与；fallback
+// 只在灾备模式（目录正文就是 fallback 文件）下参与。
+func (s *PricingService) watchedCustomPricingFiles() []string {
+	fallback := ""
+	if s.usingFallback {
+		fallback = s.cfg.Pricing.FallbackFile
+	}
+	return []string{fallback, s.cfg.Pricing.OverrideFile}
+}
+
+// catalogSourcePath 返回热重载时读取的目录正文：灾备模式下是 fallback 文件，否则是本地缓存。
+func (s *PricingService) catalogSourcePath() string {
+	if s.usingFallback && strings.TrimSpace(s.cfg.Pricing.FallbackFile) != "" {
+		return s.cfg.Pricing.FallbackFile
+	}
+	return s.getPricingFilePath()
+}
+
+// customPricingFilesFingerprint 返回被监视文件当前内容的联合 sha256。
+// 每个文件以"长度前缀 + 正文"参与计算，不可读的文件按空正文处理；未配置任何文件返回空串。
+func (s *PricingService) customPricingFilesFingerprint() string {
+	if !s.hasCustomPricingFiles() {
+		return ""
+	}
+	h := sha256.New()
+	for _, path := range s.watchedCustomPricingFiles() {
+		var body []byte
+		if p := strings.TrimSpace(path); p != "" {
+			body, _ = os.ReadFile(p)
+		}
+		var size [8]byte
+		binary.BigEndian.PutUint64(size[:], uint64(len(body)))
+		_, _ = h.Write(size[:])
+		_, _ = h.Write(body)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// validateCustomPricingFiles 要求每个已配置且存在的 fallback/override 文件可读且为 JSON
+// 对象，任一不满足即返回带路径的错误；文件不存在视为该层为空，属合法状态。
+func (s *PricingService) validateCustomPricingFiles() error {
+	for _, path := range s.watchedCustomPricingFiles() {
+		p := strings.TrimSpace(path)
+		if p == "" {
+			continue
+		}
+		body, err := os.ReadFile(p)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		var entries map[string]json.RawMessage
+		if err := json.Unmarshal(body, &entries); err != nil {
+			return fmt.Errorf("%s: %w", p, err)
+		}
+	}
+	return nil
+}
+
+// reloadIfCustomFilesChanged 比对 fallback/override 文件指纹，与最近一次重建时不同则从
+// 本地目录缓存重建内存数据。文件被删除视为该层清空，照常重建；文件存在但不可读或不是
+// JSON 对象时保留当前数据且不更新指纹，下一轮会再次尝试并重复告警。远程同步锚点
+// (localHash) 不受本路径影响。
+func (s *PricingService) reloadIfCustomFilesChanged() {
+	s.mu.RLock()
+	fingerprint := s.customPricingFilesFingerprint()
+	unchanged := fingerprint == s.customFilesHash
+	s.mu.RUnlock()
+	if unchanged {
+		return
+	}
+	if err := s.reloadCustomPricingLayers(); err != nil {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Warning: custom pricing file changed but previous data kept: %v", err)
+	}
+}
+
+// reloadCustomPricingLayers 读取本地目录缓存并重新叠加 fallback/override，只替换内存数据
+// 与叠加层指纹。
+func (s *PricingService) reloadCustomPricingLayers() error {
+	s.mu.RLock()
+	pricingFile := s.catalogSourcePath()
+	fromFallback := s.usingFallback
+	s.mu.RUnlock()
+	// 定价层文件可能在读取期间被替换。只有构建前后指纹一致时才提交，
+	// 否则丢弃这次混合快照并重试，避免短暂应用不匹配的 fallback/override。
+	var data map[string]*LiteLLMModelPricing
+	var fingerprint string
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		if validateErr := s.validateCustomPricingFiles(); validateErr != nil {
+			return fmt.Errorf("validate custom pricing files: %w", validateErr)
+		}
+		before := s.customPricingFilesFingerprint()
+		body, readErr := os.ReadFile(pricingFile)
+		if readErr != nil {
+			return fmt.Errorf("read file failed: %w", readErr)
+		}
+		data, fingerprint, err = s.buildPricingDataFor(body, fromFallback)
+		if err != nil {
+			return fmt.Errorf("parse pricing data: %w", err)
+		}
+		after := s.customPricingFilesFingerprint()
+		if validateErr := s.validateCustomPricingFiles(); validateErr != nil {
+			return fmt.Errorf("validate custom pricing files: %w", validateErr)
+		}
+		if before == after && after == fingerprint {
+			break
+		}
+		if attempt == 2 {
+			return fmt.Errorf("custom pricing files changed during reload")
+		}
+	}
+
+	s.mu.Lock()
+	warnDroppedLongContextLadders(s.pricingData, data)
+	s.pricingData = data
+	s.customFilesHash = fingerprint
+	s.overlayReloaded = true
+	s.overlayUpdatedAt = time.Now()
+	s.mu.Unlock()
+
+	logger.LegacyPrintf("service.pricing", "[Pricing] Custom pricing files changed, reloaded %d models from %s", len(data), pricingFile)
+	return nil
+}
+
 // downloadPricingData 从远程下载价格数据
 func (s *PricingService) downloadPricingData() error {
 	remoteURL, err := s.validatePricingURL(s.cfg.Pricing.RemoteURL)
@@ -349,8 +542,7 @@ func (s *PricingService) downloadPricingData() error {
 			remoteHash[:min(8, len(remoteHash))], dataHashStr[:8])
 	}
 
-	// 解析JSON数据（使用灵活的解析方式）
-	data, err := s.parsePricingData(body)
+	data, customFilesHash, err := s.buildPricingDataFor(body, false)
 	if err != nil {
 		return fmt.Errorf("parse pricing data: %w", err)
 	}
@@ -374,9 +566,12 @@ func (s *PricingService) downloadPricingData() error {
 
 	// 更新内存数据
 	s.mu.Lock()
+	warnDroppedLongContextLadders(s.pricingData, data)
 	s.pricingData = data
 	s.lastUpdated = time.Now()
 	s.localHash = syncHash
+	s.usingFallback = false
+	s.commitCustomFilesHashLocked(customFilesHash)
 	s.mu.Unlock()
 
 	logger.LegacyPrintf("service.pricing", "[Pricing] Downloaded %d models successfully", len(data))
@@ -390,6 +585,7 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 	if err := json.Unmarshal(body, &rawData); err != nil {
 		return nil, fmt.Errorf("parse raw JSON: %w", err)
 	}
+	rawData = s.applyPricingOverrides(rawData)
 
 	result := make(map[string]*LiteLLMModelPricing)
 	skipped := 0
@@ -450,6 +646,37 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 			pricing.OutputCostPerImageToken = *entry.OutputCostPerImageToken
 		}
 
+		if entry.ProviderSpecificEntry != nil && entry.ProviderSpecificEntry.Fast != nil && *entry.ProviderSpecificEntry.Fast > 0 {
+			pricing.FastCostMultiplier = *entry.ProviderSpecificEntry.Fast
+		}
+
+		hasExplicitLongContext := entry.LongContextInputTokenThreshold != nil ||
+			entry.LongContextInputCostMultiplier != nil ||
+			entry.LongContextOutputCostMultiplier != nil
+		if hasExplicitLongContext {
+			if entry.LongContextInputTokenThreshold != nil {
+				pricing.LongContextInputTokenThreshold = *entry.LongContextInputTokenThreshold
+			}
+			if entry.LongContextInputCostMultiplier != nil {
+				pricing.LongContextInputCostMultiplier = *entry.LongContextInputCostMultiplier
+			}
+			if entry.LongContextOutputCostMultiplier != nil {
+				pricing.LongContextOutputCostMultiplier = *entry.LongContextOutputCostMultiplier
+			}
+			if entry.LongContextCacheReadCostMultiplier != nil {
+				pricing.LongContextCacheReadCostMultiplier = *entry.LongContextCacheReadCostMultiplier
+			}
+		} else {
+			deriveLongContextFromAboveTierFields(rawEntry, pricing)
+			applyOpenAIGPT54BaselineLongContext(modelName, rawEntry, pricing)
+		}
+		if entry.LongContextThresholdInclusive != nil {
+			pricing.LongContextThresholdInclusive = *entry.LongContextThresholdInclusive
+		} else if strings.EqualFold(pricing.LiteLLMProvider, "xai") {
+			// xAI 的长上下文阈值语义为"达到即进高档"（LiteLLM 同口径）。
+			pricing.LongContextThresholdInclusive = true
+		}
+
 		result[modelName] = pricing
 	}
 
@@ -471,8 +698,8 @@ func (s *PricingService) loadPricingData(filePath string) error {
 		return fmt.Errorf("read file failed: %w", err)
 	}
 
-	// 使用灵活的解析方式
-	pricingData, err := s.parsePricingData(data)
+	fromFallback := s.isFallbackFilePath(filePath)
+	pricingData, customFilesHash, err := s.buildPricingDataFor(data, fromFallback)
 	if err != nil {
 		return fmt.Errorf("parse pricing data: %w", err)
 	}
@@ -482,8 +709,11 @@ func (s *PricingService) loadPricingData(filePath string) error {
 	hashStr := hex.EncodeToString(hash[:])
 
 	s.mu.Lock()
+	warnDroppedLongContextLadders(s.pricingData, pricingData)
 	s.pricingData = pricingData
 	s.localHash = hashStr
+	s.usingFallback = fromFallback
+	s.commitCustomFilesHashLocked(customFilesHash)
 
 	info, _ := os.Stat(filePath)
 	if info != nil {
@@ -495,6 +725,291 @@ func (s *PricingService) loadPricingData(filePath string) error {
 
 	logger.LegacyPrintf("service.pricing", "[Pricing] Loaded %d models from %s", len(pricingData), filePath)
 	return nil
+}
+
+// applyOpenAIGPT54BaselineLongContext 在目录条目既无显式 long_context_* 字段、也无任何
+// *_above_* 阶梯字段时，为 GPT-5.4/5.5 补回基线 272K 阶梯。显式字段（含 override 写的
+// threshold=0）和目录给出的阶梯都不会被覆盖。
+func applyOpenAIGPT54BaselineLongContext(modelName string, rawEntry json.RawMessage, pricing *LiteLLMModelPricing) {
+	if pricing == nil ||
+		pricing.LongContextInputTokenThreshold > 0 ||
+		pricing.LongContextInputCostMultiplier > 0 ||
+		pricing.LongContextOutputCostMultiplier > 0 ||
+		bytes.Contains(rawEntry, []byte("_above_")) ||
+		!openAIGPT54BaselineModelPattern.MatchString(strings.ToLower(strings.TrimSpace(modelName))) {
+		return
+	}
+	pricing.LongContextInputTokenThreshold = openAIGPT54BaselineLongContextThreshold
+	pricing.LongContextInputCostMultiplier = openAIGPT54BaselineLongContextInputMultiplier
+	pricing.LongContextOutputCostMultiplier = openAIGPT54BaselineLongContextOutputMultiplier
+}
+
+// deriveLongContextFromAboveTierFields 把 LiteLLM 目录的 *_above_XXXk_tokens 绝对价字段
+// 折算成 long_context_* 阈值+倍率：阈值取自字段名，倍率 = above 价 ÷ 基础价。条目显式
+// 携带任一 long_context_* 字段（含显式 0）时由调用方跳过折算，以显式配置为准——显式写
+// threshold=0 或 multiplier=1 均可关闭该模型的阶梯。多个阈值并存时取最小阈值。
+// cache_read/cache_creation 的 above 档在计费中统一跟随输入倍率，不单独折算。
+// 移植自上游 530fb20f2。
+func deriveLongContextFromAboveTierFields(rawEntry json.RawMessage, pricing *LiteLLMModelPricing) {
+	if pricing == nil ||
+		pricing.LongContextInputTokenThreshold > 0 ||
+		pricing.LongContextInputCostMultiplier > 0 ||
+		pricing.LongContextOutputCostMultiplier > 0 {
+		return
+	}
+	if !bytes.Contains(rawEntry, []byte("_above_")) {
+		return
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(rawEntry, &fields); err != nil {
+		return
+	}
+	type tierPrices struct{ input, output float64 }
+	tiers := make(map[int]*tierPrices)
+	for key, value := range fields {
+		m := aboveTierPricePattern.FindStringSubmatch(key)
+		if m == nil {
+			continue
+		}
+		price, ok := value.(float64)
+		if !ok || price <= 0 {
+			continue
+		}
+		thousands, err := strconv.Atoi(m[2])
+		if err != nil || thousands <= 0 {
+			continue
+		}
+		threshold := thousands * 1000
+		tp := tiers[threshold]
+		if tp == nil {
+			tp = &tierPrices{}
+			tiers[threshold] = tp
+		}
+		if m[1] == "input" {
+			tp.input = price
+		} else {
+			tp.output = price
+		}
+	}
+	if len(tiers) == 0 {
+		return
+	}
+	threshold := 0
+	for t := range tiers {
+		if threshold == 0 || t < threshold {
+			threshold = t
+		}
+	}
+	tp := tiers[threshold]
+	inputMultiplier, outputMultiplier := 1.0, 1.0
+	if tp.input > 0 && pricing.InputCostPerToken > 0 {
+		inputMultiplier = tp.input / pricing.InputCostPerToken
+	}
+	if tp.output > 0 && pricing.OutputCostPerToken > 0 {
+		outputMultiplier = tp.output / pricing.OutputCostPerToken
+	}
+	// above 价不高于基础价时视为无附加费，不生成阶梯。
+	if inputMultiplier <= 1 && outputMultiplier <= 1 {
+		return
+	}
+	pricing.LongContextInputTokenThreshold = threshold
+	pricing.LongContextInputCostMultiplier = inputMultiplier
+	pricing.LongContextOutputCostMultiplier = outputMultiplier
+}
+
+// applyPricingOverrides 把 override 文件的条目逐字段修补进原始目录数据。目录与回退
+// 文件的解析都经过 parsePricingData，因此 override 是最高优先级的数据源。这里只修补
+// 已存在的条目：目录/回退里都没有的模型由 mergeOverrideOnlyModels 在两层数据合并后
+// 统一并入，避免纯 override 条目挡住回退文件中同名完整条目的合并。
+func (s *PricingService) applyPricingOverrides(rawData map[string]json.RawMessage) map[string]json.RawMessage {
+	overrides := s.loadPricingOverrideEntries()
+	if len(overrides) == 0 {
+		return rawData
+	}
+	for name, patch := range overrides {
+		base, ok := rawData[name]
+		if !ok {
+			continue
+		}
+		merged, valid := mergePricingOverrideEntry(base, patch)
+		if !valid {
+			logger.LegacyPrintf("service.pricing", "[Pricing] Warning: override entry %q skipped: not a JSON object", name)
+			continue
+		}
+		rawData[name] = merged
+	}
+	return rawData
+}
+
+// loadPricingOverrideEntries 读取 override 文件的原始条目。未配置或文件不存在返回 nil；
+// 读取或解析失败打日志并跳过，不影响目录加载。
+func (s *PricingService) loadPricingOverrideEntries() map[string]json.RawMessage {
+	if !s.hasOverrideFile() {
+		return nil
+	}
+	body, err := os.ReadFile(strings.TrimSpace(s.cfg.Pricing.OverrideFile))
+	if err != nil {
+		if !os.IsNotExist(err) {
+			logger.LegacyPrintf("service.pricing", "[Pricing] Warning: override merge skipped: %v", err)
+		}
+		return nil
+	}
+	var entries map[string]json.RawMessage
+	if err := json.Unmarshal(body, &entries); err != nil {
+		logger.LegacyPrintf("service.pricing", "[Pricing] Warning: override merge skipped: %v", err)
+		return nil
+	}
+	return entries
+}
+
+// mergePricingOverrideEntry 在 JSON 字段层浅合并：patch 字段覆盖 base 同名字段，
+// 值为 null 的 patch 字段从结果中删除，base 为空时结果即 patch 本身。
+// patch 不是 JSON 对象时返回 ok=false。
+func mergePricingOverrideEntry(base, patch json.RawMessage) (json.RawMessage, bool) {
+	var patchFields map[string]any
+	if err := json.Unmarshal(patch, &patchFields); err != nil || patchFields == nil {
+		return nil, false
+	}
+	merged := make(map[string]any, len(patchFields))
+	if len(base) > 0 {
+		if err := json.Unmarshal(base, &merged); err != nil {
+			merged = make(map[string]any, len(patchFields))
+		}
+	}
+	for k, v := range patchFields {
+		if v == nil {
+			delete(merged, k)
+			continue
+		}
+		merged[k] = v
+	}
+	out, err := json.Marshal(merged)
+	if err != nil {
+		return nil, false
+	}
+	return out, true
+}
+
+// mergeOverrideOnlyModels 把 override 中目录/回退两层都不存在的模型作为独立条目并入
+// （条目须自带价格字段才能通过有效性过滤），并对最终仍未生效的条目打 WARN：
+// 模型名拼错、或纯补丁条目落在不存在的模型上时会被静默丢弃。
+func (s *PricingService) mergeOverrideOnlyModels(data map[string]*LiteLLMModelPricing) map[string]*LiteLLMModelPricing {
+	overrides := s.loadPricingOverrideEntries()
+	if len(overrides) == 0 {
+		return data
+	}
+	if data == nil {
+		data = make(map[string]*LiteLLMModelPricing)
+	}
+	leftover := make(map[string]json.RawMessage)
+	for name, patch := range overrides {
+		if _, ok := data[name]; !ok {
+			leftover[name] = patch
+		}
+	}
+	if len(leftover) == 0 {
+		return data
+	}
+	// 复用主解析路径；applyPricingOverrides 对已存在条目做的自我修补是幂等的。
+	if body, err := json.Marshal(leftover); err == nil {
+		if parsed, err := s.parsePricingData(body); err == nil {
+			maps.Copy(data, parsed)
+		}
+	}
+	var missing []string
+	for name := range leftover {
+		if _, ok := data[name]; !ok {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) == 0 {
+		return data
+	}
+	sort.Strings(missing)
+	logger.LegacyPrintf("service.pricing", "[Pricing] Warning: override had no effect for %d model(s): %s (unknown model name, or patch-only entry without price fields)", len(missing), strings.Join(missing, ", "))
+	return data
+}
+
+// buildPricingDataFor 解析目录正文并叠加 override 层，返回合并结果与叠加层文件指纹。
+// fromFallback 指明这份正文是否来自灾备 fallback 文件，决定指纹包含哪些文件。指纹在
+// 合并读取之前采样：并发改文件只会让存下的指纹落后于实际合并的数据、不会领先，
+// 下一轮定时比对因此会再次重建。
+func (s *PricingService) buildPricingDataFor(body []byte, fromFallback bool) (map[string]*LiteLLMModelPricing, string, error) {
+	s.mu.Lock()
+	prev := s.usingFallback
+	s.usingFallback = fromFallback
+	fingerprint := s.customPricingFilesFingerprint()
+	s.usingFallback = prev
+	s.mu.Unlock()
+	data, err := s.parsePricingData(body)
+	if err != nil {
+		return nil, "", err
+	}
+	data = s.mergeOverrideOnlyModels(data)
+	return data, fingerprint, nil
+}
+
+// isFallbackFilePath 判断路径是否就是配置的 fallback 文件。
+func (s *PricingService) isFallbackFilePath(path string) bool {
+	fallback := strings.TrimSpace(s.cfg.Pricing.FallbackFile)
+	if fallback == "" {
+		return false
+	}
+	a, errA := filepath.Abs(path)
+	b, errB := filepath.Abs(fallback)
+	if errA != nil || errB != nil {
+		return filepath.Clean(path) == filepath.Clean(fallback)
+	}
+	return a == b
+}
+
+// commitCustomFilesHashLocked 记录叠加层指纹；配置了 override 时同时刷新叠加层时间。
+// 调用方需持有 s.mu 写锁。
+func (s *PricingService) commitCustomFilesHashLocked(fingerprint string) {
+	s.customFilesHash = fingerprint
+	if s.hasOverrideFile() {
+		s.overlayUpdatedAt = time.Now()
+	}
+}
+
+// catalogChecksumLocked 返回当前生效目录的版本校验和。未配置 override 且没有发生过
+// 热重载时等于远程同步锚点 localHash（升级前后财务版本不变）；否则并入叠加层指纹，
+// override 或热重载改动目录后校验和随之变化，财务据此生成新的系统价版本。
+// 调用方需持有 s.mu 读锁或写锁。
+func (s *PricingService) catalogChecksumLocked() string {
+	base := strings.TrimSpace(s.localHash)
+	if base == "" || s.customFilesHash == "" || (!s.hasOverrideFile() && !s.overlayReloaded) {
+		return base
+	}
+	sum := sha256.Sum256([]byte(base + "|" + s.customFilesHash))
+	return "overlay:" + hex.EncodeToString(sum[:])
+}
+
+// warnDroppedLongContextLadders 对比新旧目录数据：原本带长上下文阶梯的条目在新数据里
+// 丢失阈值时打 WARN。阶梯由目录数据驱动，数据源误提交会把阶梯静默变成基础价少收。
+// 调用方需持有 s.mu 写锁。
+func warnDroppedLongContextLadders(old, next map[string]*LiteLLMModelPricing) {
+	if len(old) == 0 {
+		return
+	}
+	var dropped []string
+	for name, prev := range old {
+		if prev == nil || prev.LongContextInputTokenThreshold <= 0 {
+			continue
+		}
+		if cur, ok := next[name]; ok && (cur == nil || cur.LongContextInputTokenThreshold <= 0) {
+			dropped = append(dropped, name)
+		}
+	}
+	if len(dropped) == 0 {
+		return
+	}
+	sort.Strings(dropped)
+	total := len(dropped)
+	if total > 20 {
+		dropped = append(dropped[:20], "...")
+	}
+	logger.LegacyPrintf("service.pricing", "[Pricing] Warning: long-context ladder dropped for %d model(s) after reload: %s (verify catalog/override data if unintended)", total, strings.Join(dropped, ", "))
 }
 
 // useFallbackPricing 使用回退价格文件
@@ -1076,13 +1591,17 @@ func (s *PricingService) Snapshot() PricingCatalogSnapshot {
 			models[name] = *pricing
 		}
 	}
-	checksum := strings.TrimSpace(s.localHash)
+	checksum := s.catalogChecksumLocked()
 	if checksum == "" {
 		encoded, _ := json.Marshal(models)
 		sum := sha256.Sum256(encoded)
 		checksum = "sha256:" + hex.EncodeToString(sum[:])
 	}
-	return PricingCatalogSnapshot{Checksum: checksum, UpdatedAt: s.lastUpdated, Models: models}
+	updatedAt := s.lastUpdated
+	if checksum != strings.TrimSpace(s.localHash) && s.overlayUpdatedAt.After(updatedAt) {
+		updatedAt = s.overlayUpdatedAt
+	}
+	return PricingCatalogSnapshot{Checksum: checksum, UpdatedAt: updatedAt, Models: models}
 }
 
 // isNumeric 检查字符串是否为纯数字

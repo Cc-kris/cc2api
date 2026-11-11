@@ -122,6 +122,46 @@ func TestForwardAsRawChatCompletions_ForcesStreamUsageUpstreamAndPassesUsageDown
 	require.Contains(t, rec.Body.String(), "data: [DONE]")
 }
 
+func TestExtractCCStreamUsage_PreservesImageInputTokens(t *testing.T) {
+	t.Parallel()
+
+	usage := extractCCStreamUsage(`{"choices":[],"usage":{"prompt_tokens":1500,"completion_tokens":200,"prompt_tokens_details":{"cached_tokens":100,"image_tokens":1000}}}`)
+	require.NotNil(t, usage)
+	require.Equal(t, 1500, usage.InputTokens)
+	require.Equal(t, 200, usage.OutputTokens)
+	require.Equal(t, 100, usage.CacheReadInputTokens)
+	require.Equal(t, 1000, usage.ImageInputTokens)
+
+	plain := extractCCStreamUsage(`{"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":2}}`)
+	require.NotNil(t, plain)
+	require.Zero(t, plain.ImageInputTokens)
+}
+
+func TestForwardAsRawChatCompletions_PreservesImageInputTokensNonStreaming(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := []byte(`{"model":"gpt-5.5","messages":[{"role":"user","content":"hello"}],"stream":false}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body: io.NopCloser(strings.NewReader(
+			`{"id":"chatcmpl_image","object":"chat.completion","model":"gpt-5.5","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1500,"completion_tokens":200,"total_tokens":1700,"prompt_tokens_details":{"cached_tokens":100,"image_tokens":1000}}}`,
+		)),
+	}}
+	svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream}
+
+	result, err := svc.forwardAsRawChatCompletions(context.Background(), c, rawChatCompletionsTestAccount(), body, "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1500, result.Usage.InputTokens)
+	require.Equal(t, 200, result.Usage.OutputTokens)
+	require.Equal(t, 100, result.Usage.CacheReadInputTokens)
+	require.Equal(t, 1000, result.Usage.ImageInputTokens)
+}
+
 func TestForwardAsRawChatCompletions_PreservesDeepSeekReasoningContentNonStreaming(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -473,7 +513,7 @@ func TestForwardAsRawChatCompletions_ClientDisconnectDrainsUsage(t *testing.T) {
 	require.True(t, gjson.GetBytes(upstream.lastBody, "stream_options.include_usage").Bool())
 }
 
-func TestForwardAsRawChatCompletions_UpstreamRequestIgnoresClientCancel(t *testing.T) {
+func TestForwardAsRawChatCompletions_UpstreamRequestCancelsBeforeResponseStarts(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	reqCtx, cancel := context.WithCancel(context.Background())
@@ -506,7 +546,7 @@ func TestForwardAsRawChatCompletions_UpstreamRequestIgnoresClientCancel(t *testi
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, upstream.lastReq)
-	require.NoError(t, upstream.lastReq.Context().Err())
+	require.ErrorIs(t, upstream.lastReq.Context().Err(), context.Canceled)
 }
 
 func TestForwardAsChatCompletions_UnknownResponsesSupportFallbackUsesVersionedChatURL(t *testing.T) {

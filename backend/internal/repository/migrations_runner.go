@@ -254,13 +254,39 @@ func applyMigrationsFS(ctx context.Context, db *sql.DB, fsys fs.FS) error {
 	return nil
 }
 
+// usageLogAuditIndexMigrations 是 V03-R11 用量审计的 CONCURRENTLY 索引迁移 → 索引名。
+// CONCURRENTLY 建索引失败会留下 INVALID 索引，IF NOT EXISTS 会永远跳过它，所以重试前先删掉。
+// 对应上游 db0bff82c / de27905e8 在 runner 里登记的失效索引清理。
+var usageLogAuditIndexMigrations = map[string]string{
+	"231_usage_log_upstream_request_id_index_notx.sql":     "idx_usage_logs_upstream_request_id",
+	"232_usage_log_upstream_model_mismatch_index_notx.sql": "idx_usage_logs_upstream_model_mismatch_created_at",
+}
+
 func prepareNonTransactionalMigration(ctx context.Context, db *sql.DB, name string) error {
 	switch name {
 	case paymentOrdersOutTradeNoUniqueMigration:
 		return preparePaymentOrdersOutTradeNoUniqueMigration(ctx, db)
 	default:
+		if indexName, ok := usageLogAuditIndexMigrations[name]; ok {
+			return dropInvalidIndexIfPresent(ctx, db, indexName)
+		}
 		return nil
 	}
+}
+
+// dropInvalidIndexIfPresent 删除 CONCURRENTLY 构建失败遗留的 INVALID 索引；索引不存在或有效时什么都不做。
+func dropInvalidIndexIfPresent(ctx context.Context, db *sql.DB, indexName string) error {
+	invalid, err := indexIsInvalid(ctx, db, indexName)
+	if err != nil {
+		return fmt.Errorf("check invalid index %s: %w", indexName, err)
+	}
+	if !invalid {
+		return nil
+	}
+	if _, err := db.ExecContext(ctx, fmt.Sprintf("DROP INDEX CONCURRENTLY IF EXISTS %s", indexName)); err != nil {
+		return fmt.Errorf("drop invalid index %s: %w", indexName, err)
+	}
+	return nil
 }
 
 func preparePaymentOrdersOutTradeNoUniqueMigration(ctx context.Context, db *sql.DB) error {

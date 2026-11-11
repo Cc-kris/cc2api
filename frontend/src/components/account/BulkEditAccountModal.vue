@@ -523,6 +523,30 @@
         </div>
       </div>
 
+      <!-- Upstream request ID header（V03-R11，所有平台） -->
+      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <UpstreamRequestIdHeaderField
+          v-model="upstreamRequestIdHeader"
+          :platform="upstreamRequestIdHeaderPlatform"
+          :type="upstreamRequestIdHeaderType"
+          :disabled="!enableUpstreamRequestIdHeader"
+          input-id="bulk-edit-upstream-request-id-header"
+          label-id="bulk-edit-upstream-request-id-header-label"
+          label-for="bulk-edit-upstream-request-id-header-enabled"
+          :hint="t('admin.accounts.bulkEdit.upstreamRequestIdHeaderHint')"
+        >
+          <template #label-action>
+            <input
+              v-model="enableUpstreamRequestIdHeader"
+              id="bulk-edit-upstream-request-id-header-enabled"
+              type="checkbox"
+              aria-controls="bulk-edit-upstream-request-id-header"
+              class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+          </template>
+        </UpstreamRequestIdHeaderField>
+      </div>
+
       <!-- Concurrency & Priority -->
       <div class="grid grid-cols-2 gap-4 border-t border-gray-200 pt-4 dark:border-dark-600 lg:grid-cols-4">
         <div>
@@ -1193,6 +1217,8 @@ import Select from '@/components/common/Select.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
+import UpstreamRequestIdHeaderField from '@/components/account/UpstreamRequestIdHeaderField.vue'
+import { isValidUpstreamRequestIdHeader, UPSTREAM_REQUEST_ID_HEADER_EXTRA_KEY } from '@/utils/upstreamRequestIdHeader'
 import Icon from '@/components/icons/Icon.vue'
 import {
   buildModelMappingObject as buildModelMappingPayload,
@@ -1319,6 +1345,7 @@ const enableStructuredOutputMode = ref(false)
 const enableOpenAICompactMode = ref(false)
 const enableOpenAICompactModelMapping = ref(false)
 const enableRpmLimit = ref(false)
+const enableUpstreamRequestIdHeader = ref(false)
 
 // State - field values
 const submitting = ref(false)
@@ -1357,6 +1384,16 @@ const bulkBaseRpm = ref<number | null>(null)
 const bulkRpmStrategy = ref<'tiered' | 'sticky_exempt'>('tiered')
 const bulkRpmStickyBuffer = ref<number | null>(null)
 const userMsgQueueMode = ref<string | null>(null)
+// V03-R11：批量写入 extra.upstream_request_id_header。后端批量更新按 JSONB 合并且会丢弃空值，
+// 所以批量只能设置头名、不能清空，勾选后必须填写。
+const upstreamRequestIdHeader = ref('')
+// 帮助提示里的头名示例：只有单一平台时给出官方头名；含 API Key 账号时给出中继示例。
+const upstreamRequestIdHeaderPlatform = computed(() =>
+  targetSelectedPlatforms.value.length === 1 ? targetSelectedPlatforms.value[0] : undefined
+)
+const upstreamRequestIdHeaderType = computed(() =>
+  targetSelectedTypes.value.includes('apikey') ? 'apikey' : targetSelectedTypes.value[0]
+)
 
 const upstreamMultiplierText = () => {
   const numeric = Number(upstreamCostMultiplier.value)
@@ -1687,6 +1724,11 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
     updates.extra = extra
   }
 
+  if (enableUpstreamRequestIdHeader.value) {
+    const extra = ensureExtra()
+    extra[UPSTREAM_REQUEST_ID_HEADER_EXTRA_KEY] = upstreamRequestIdHeader.value.trim()
+  }
+
   // UMQ mode（独立于 RPM 保存）
   if (userMsgQueueMode.value !== null) {
     const umqExtra = ensureExtra()
@@ -1769,6 +1811,7 @@ const handleSubmit = async () => {
     enableOpenAICompactMode.value ||
     enableOpenAICompactModelMapping.value ||
     enableRpmLimit.value ||
+    enableUpstreamRequestIdHeader.value ||
     userMsgQueueMode.value !== null
 
   if (!hasAnyFieldEnabled) {
@@ -1798,6 +1841,7 @@ const handleSubmit = async () => {
       enableOpenAICompactMode.value ||
       enableOpenAICompactModelMapping.value ||
       enableRpmLimit.value ||
+      enableUpstreamRequestIdHeader.value ||
       userMsgQueueMode.value !== null
     if (otherFieldEnabled) {
       appStore.showError(t('admin.accounts.bulkEdit.upstreamSeparateOnly'))
@@ -1810,6 +1854,17 @@ const handleSubmit = async () => {
     const reason = upstreamCostMultiplierChangeReason.value.trim()
     if (reason.length < 5 || reason.length > 500) {
       appStore.showError(t('admin.accounts.upstreamCostMultiplierChangeReasonHint'))
+      return
+    }
+  }
+
+  if (enableUpstreamRequestIdHeader.value) {
+    if (!upstreamRequestIdHeader.value.trim()) {
+      appStore.showError(t('admin.accounts.bulkEdit.upstreamRequestIdHeaderRequired'))
+      return
+    }
+    if (!isValidUpstreamRequestIdHeader(upstreamRequestIdHeader.value)) {
+      appStore.showError(t('admin.accounts.upstreamRequestIdHeaderInvalid'))
       return
     }
   }
@@ -1939,6 +1994,7 @@ watch(
       enableOpenAICompactMode.value = false
       enableOpenAICompactModelMapping.value = false
       enableRpmLimit.value = false
+      enableUpstreamRequestIdHeader.value = false
 
       // Reset all values
       baseUrl.value = ''
@@ -1970,6 +2026,7 @@ watch(
       bulkRpmStrategy.value = 'tiered'
       bulkRpmStickyBuffer.value = null
       userMsgQueueMode.value = null
+      upstreamRequestIdHeader.value = ''
 
       // Reset mixed channel warning state
       showMixedChannelWarning.value = false

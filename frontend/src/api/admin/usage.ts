@@ -81,6 +81,9 @@ export interface AdminUsageQueryParams extends UsageQueryParams {
   user_id?: number
   exact_total?: boolean
   billing_mode?: string
+  // V03-R11 审计筛选
+  upstream_request_id?: string
+  upstream_model_mismatch?: boolean
   sort_by?: string
   sort_order?: 'asc' | 'desc'
 }
@@ -120,6 +123,8 @@ export async function getStats(params: {
   start_date?: string
   end_date?: string
   timezone?: string
+  upstream_request_id?: string
+  upstream_model_mismatch?: boolean
 }): Promise<AdminUsageStatsResponse> {
   const { data } = await apiClient.get<AdminUsageStatsResponse>('/admin/usage/stats', {
     params

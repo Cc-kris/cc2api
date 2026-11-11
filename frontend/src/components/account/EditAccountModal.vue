@@ -1520,6 +1520,12 @@
         <ProxySelector v-model="form.proxy_id" :proxies="proxies" />
       </div>
 
+      <UpstreamRequestIdHeaderField
+        v-model="upstreamRequestIdHeader"
+        :platform="account.platform"
+        :type="account.type"
+      />
+
       <div class="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <div>
           <label class="input-label">{{ t('admin.accounts.concurrency') }}</label>
@@ -2477,6 +2483,8 @@ import Select from '@/components/common/Select.vue'
 import Toggle from '@/components/common/Toggle.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
+import UpstreamRequestIdHeaderField from '@/components/account/UpstreamRequestIdHeaderField.vue'
+import { applyUpstreamRequestIdHeader, isValidUpstreamRequestIdHeader, readUpstreamRequestIdHeader } from '@/utils/upstreamRequestIdHeader'
 import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
@@ -2640,6 +2648,8 @@ const maxSessions = ref<number | null>(null)
 const sessionIdleTimeout = ref<number | null>(null)
 const rpmLimitEnabled = ref(false)
 const baseRpm = ref<number | null>(null)
+// V03-R11：账号 extra.upstream_request_id_header，留空表示默认读 x-request-id
+const upstreamRequestIdHeader = ref('')
 const rpmStrategy = ref<'tiered' | 'sticky_exempt'>('tiered')
 const rpmStickyBuffer = ref<number | null>(null)
 const userMsgQueueMode = ref('')
@@ -2924,6 +2934,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   form.name = newAccount.name
   form.notes = newAccount.notes || ''
   form.proxy_id = newAccount.proxy_id
+  upstreamRequestIdHeader.value = readUpstreamRequestIdHeader(newAccount.extra)
   form.concurrency = newAccount.concurrency
   form.load_factor = newAccount.load_factor ?? null
   form.priority = newAccount.priority
@@ -3774,6 +3785,11 @@ const handleSubmit = async () => {
     }
   }
 
+  if (!isValidUpstreamRequestIdHeader(upstreamRequestIdHeader.value)) {
+    appStore.showError(t('admin.accounts.upstreamRequestIdHeaderInvalid'))
+    return
+  }
+
   const updatePayload: Record<string, unknown> = { ...form }
   try {
     if (!upstreamMultiplierChanged.value) {
@@ -4367,6 +4383,13 @@ const handleSubmit = async () => {
       writeQuotaNotifyToExtra(newExtra, 'update')
       removeUpstreamPrepaidFromExtra(newExtra)
       updatePayload.extra = newExtra
+    }
+
+    // V03-R11：上游请求 ID 头名。其他分支没动 extra 且头名未变时不发送 extra。
+    const originalUpstreamRequestIdHeader = readUpstreamRequestIdHeader(props.account.extra)
+    if (updatePayload.extra || upstreamRequestIdHeader.value.trim() !== originalUpstreamRequestIdHeader) {
+      const baseExtra = (updatePayload.extra as Record<string, unknown>) || (props.account.extra as Record<string, unknown>) || {}
+      updatePayload.extra = applyUpstreamRequestIdHeader({ ...baseExtra }, upstreamRequestIdHeader.value)
     }
 
     const canContinue = await ensureAntigravityMixedChannelConfirmed(async () => {

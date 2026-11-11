@@ -397,6 +397,27 @@ func (_u *UsageLogUpdate) AddCacheCreation1hTokens(v int) *UsageLogUpdate {
 	return _u
 }
 
+// SetImageInputTokens sets the "image_input_tokens" field.
+func (_u *UsageLogUpdate) SetImageInputTokens(v int) *UsageLogUpdate {
+	_u.mutation.ResetImageInputTokens()
+	_u.mutation.SetImageInputTokens(v)
+	return _u
+}
+
+// SetNillableImageInputTokens sets the "image_input_tokens" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableImageInputTokens(v *int) *UsageLogUpdate {
+	if v != nil {
+		_u.SetImageInputTokens(*v)
+	}
+	return _u
+}
+
+// AddImageInputTokens adds value to the "image_input_tokens" field.
+func (_u *UsageLogUpdate) AddImageInputTokens(v int) *UsageLogUpdate {
+	_u.mutation.AddImageInputTokens(v)
+	return _u
+}
+
 // SetInputCost sets the "input_cost" field.
 func (_u *UsageLogUpdate) SetInputCost(v float64) *UsageLogUpdate {
 	_u.mutation.ResetInputCost()
@@ -436,6 +457,27 @@ func (_u *UsageLogUpdate) SetNillableOutputCost(v *float64) *UsageLogUpdate {
 // AddOutputCost adds value to the "output_cost" field.
 func (_u *UsageLogUpdate) AddOutputCost(v float64) *UsageLogUpdate {
 	_u.mutation.AddOutputCost(v)
+	return _u
+}
+
+// SetImageInputCost sets the "image_input_cost" field.
+func (_u *UsageLogUpdate) SetImageInputCost(v float64) *UsageLogUpdate {
+	_u.mutation.ResetImageInputCost()
+	_u.mutation.SetImageInputCost(v)
+	return _u
+}
+
+// SetNillableImageInputCost sets the "image_input_cost" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableImageInputCost(v *float64) *UsageLogUpdate {
+	if v != nil {
+		_u.SetImageInputCost(*v)
+	}
+	return _u
+}
+
+// AddImageInputCost adds value to the "image_input_cost" field.
+func (_u *UsageLogUpdate) AddImageInputCost(v float64) *UsageLogUpdate {
+	_u.mutation.AddImageInputCost(v)
 	return _u
 }
 
@@ -1234,6 +1276,106 @@ func (_u *UsageLogUpdate) SetNillableCacheTTLOverridden(v *bool) *UsageLogUpdate
 	return _u
 }
 
+// SetUpstreamResponseModel sets the "upstream_response_model" field.
+func (_u *UsageLogUpdate) SetUpstreamResponseModel(v string) *UsageLogUpdate {
+	_u.mutation.SetUpstreamResponseModel(v)
+	return _u
+}
+
+// SetNillableUpstreamResponseModel sets the "upstream_response_model" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableUpstreamResponseModel(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetUpstreamResponseModel(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamResponseModel clears the value of the "upstream_response_model" field.
+func (_u *UsageLogUpdate) ClearUpstreamResponseModel() *UsageLogUpdate {
+	_u.mutation.ClearUpstreamResponseModel()
+	return _u
+}
+
+// SetUpstreamModelMismatch sets the "upstream_model_mismatch" field.
+func (_u *UsageLogUpdate) SetUpstreamModelMismatch(v bool) *UsageLogUpdate {
+	_u.mutation.SetUpstreamModelMismatch(v)
+	return _u
+}
+
+// SetNillableUpstreamModelMismatch sets the "upstream_model_mismatch" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableUpstreamModelMismatch(v *bool) *UsageLogUpdate {
+	if v != nil {
+		_u.SetUpstreamModelMismatch(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamModelMismatch clears the value of the "upstream_model_mismatch" field.
+func (_u *UsageLogUpdate) ClearUpstreamModelMismatch() *UsageLogUpdate {
+	_u.mutation.ClearUpstreamModelMismatch()
+	return _u
+}
+
+// SetSessionID sets the "session_id" field.
+func (_u *UsageLogUpdate) SetSessionID(v string) *UsageLogUpdate {
+	_u.mutation.SetSessionID(v)
+	return _u
+}
+
+// SetNillableSessionID sets the "session_id" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableSessionID(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetSessionID(*v)
+	}
+	return _u
+}
+
+// ClearSessionID clears the value of the "session_id" field.
+func (_u *UsageLogUpdate) ClearSessionID() *UsageLogUpdate {
+	_u.mutation.ClearSessionID()
+	return _u
+}
+
+// SetRequestedReasoningEffort sets the "requested_reasoning_effort" field.
+func (_u *UsageLogUpdate) SetRequestedReasoningEffort(v string) *UsageLogUpdate {
+	_u.mutation.SetRequestedReasoningEffort(v)
+	return _u
+}
+
+// SetNillableRequestedReasoningEffort sets the "requested_reasoning_effort" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableRequestedReasoningEffort(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetRequestedReasoningEffort(*v)
+	}
+	return _u
+}
+
+// ClearRequestedReasoningEffort clears the value of the "requested_reasoning_effort" field.
+func (_u *UsageLogUpdate) ClearRequestedReasoningEffort() *UsageLogUpdate {
+	_u.mutation.ClearRequestedReasoningEffort()
+	return _u
+}
+
+// SetUpstreamRequestID sets the "upstream_request_id" field.
+func (_u *UsageLogUpdate) SetUpstreamRequestID(v string) *UsageLogUpdate {
+	_u.mutation.SetUpstreamRequestID(v)
+	return _u
+}
+
+// SetNillableUpstreamRequestID sets the "upstream_request_id" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableUpstreamRequestID(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetUpstreamRequestID(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamRequestID clears the value of the "upstream_request_id" field.
+func (_u *UsageLogUpdate) ClearUpstreamRequestID() *UsageLogUpdate {
+	_u.mutation.ClearUpstreamRequestID()
+	return _u
+}
+
 // SetUser sets the "user" edge to the User entity.
 func (_u *UsageLogUpdate) SetUser(v *User) *UsageLogUpdate {
 	return _u.SetUserID(v.ID)
@@ -1433,6 +1575,26 @@ func (_u *UsageLogUpdate) check() error {
 			return &ValidationError{Name: "video_task_id", err: fmt.Errorf(`ent: validator failed for field "UsageLog.video_task_id": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.UpstreamResponseModel(); ok {
+		if err := usagelog.UpstreamResponseModelValidator(v); err != nil {
+			return &ValidationError{Name: "upstream_response_model", err: fmt.Errorf(`ent: validator failed for field "UsageLog.upstream_response_model": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SessionID(); ok {
+		if err := usagelog.SessionIDValidator(v); err != nil {
+			return &ValidationError{Name: "session_id", err: fmt.Errorf(`ent: validator failed for field "UsageLog.session_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RequestedReasoningEffort(); ok {
+		if err := usagelog.RequestedReasoningEffortValidator(v); err != nil {
+			return &ValidationError{Name: "requested_reasoning_effort", err: fmt.Errorf(`ent: validator failed for field "UsageLog.requested_reasoning_effort": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.UpstreamRequestID(); ok {
+		if err := usagelog.UpstreamRequestIDValidator(v); err != nil {
+			return &ValidationError{Name: "upstream_request_id", err: fmt.Errorf(`ent: validator failed for field "UsageLog.upstream_request_id": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "UsageLog.user"`)
 	}
@@ -1538,6 +1700,12 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedCacheCreation1hTokens(); ok {
 		_spec.AddField(usagelog.FieldCacheCreation1hTokens, field.TypeInt, value)
 	}
+	if value, ok := _u.mutation.ImageInputTokens(); ok {
+		_spec.SetField(usagelog.FieldImageInputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedImageInputTokens(); ok {
+		_spec.AddField(usagelog.FieldImageInputTokens, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.InputCost(); ok {
 		_spec.SetField(usagelog.FieldInputCost, field.TypeFloat64, value)
 	}
@@ -1549,6 +1717,12 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedOutputCost(); ok {
 		_spec.AddField(usagelog.FieldOutputCost, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.ImageInputCost(); ok {
+		_spec.SetField(usagelog.FieldImageInputCost, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedImageInputCost(); ok {
+		_spec.AddField(usagelog.FieldImageInputCost, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.CacheCreationCost(); ok {
 		_spec.SetField(usagelog.FieldCacheCreationCost, field.TypeFloat64, value)
@@ -1798,6 +1972,36 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.CacheTTLOverridden(); ok {
 		_spec.SetField(usagelog.FieldCacheTTLOverridden, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.UpstreamResponseModel(); ok {
+		_spec.SetField(usagelog.FieldUpstreamResponseModel, field.TypeString, value)
+	}
+	if _u.mutation.UpstreamResponseModelCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamResponseModel, field.TypeString)
+	}
+	if value, ok := _u.mutation.UpstreamModelMismatch(); ok {
+		_spec.SetField(usagelog.FieldUpstreamModelMismatch, field.TypeBool, value)
+	}
+	if _u.mutation.UpstreamModelMismatchCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamModelMismatch, field.TypeBool)
+	}
+	if value, ok := _u.mutation.SessionID(); ok {
+		_spec.SetField(usagelog.FieldSessionID, field.TypeString, value)
+	}
+	if _u.mutation.SessionIDCleared() {
+		_spec.ClearField(usagelog.FieldSessionID, field.TypeString)
+	}
+	if value, ok := _u.mutation.RequestedReasoningEffort(); ok {
+		_spec.SetField(usagelog.FieldRequestedReasoningEffort, field.TypeString, value)
+	}
+	if _u.mutation.RequestedReasoningEffortCleared() {
+		_spec.ClearField(usagelog.FieldRequestedReasoningEffort, field.TypeString)
+	}
+	if value, ok := _u.mutation.UpstreamRequestID(); ok {
+		_spec.SetField(usagelog.FieldUpstreamRequestID, field.TypeString, value)
+	}
+	if _u.mutation.UpstreamRequestIDCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamRequestID, field.TypeString)
 	}
 	if _u.mutation.UserCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -2327,6 +2531,27 @@ func (_u *UsageLogUpdateOne) AddCacheCreation1hTokens(v int) *UsageLogUpdateOne 
 	return _u
 }
 
+// SetImageInputTokens sets the "image_input_tokens" field.
+func (_u *UsageLogUpdateOne) SetImageInputTokens(v int) *UsageLogUpdateOne {
+	_u.mutation.ResetImageInputTokens()
+	_u.mutation.SetImageInputTokens(v)
+	return _u
+}
+
+// SetNillableImageInputTokens sets the "image_input_tokens" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableImageInputTokens(v *int) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetImageInputTokens(*v)
+	}
+	return _u
+}
+
+// AddImageInputTokens adds value to the "image_input_tokens" field.
+func (_u *UsageLogUpdateOne) AddImageInputTokens(v int) *UsageLogUpdateOne {
+	_u.mutation.AddImageInputTokens(v)
+	return _u
+}
+
 // SetInputCost sets the "input_cost" field.
 func (_u *UsageLogUpdateOne) SetInputCost(v float64) *UsageLogUpdateOne {
 	_u.mutation.ResetInputCost()
@@ -2366,6 +2591,27 @@ func (_u *UsageLogUpdateOne) SetNillableOutputCost(v *float64) *UsageLogUpdateOn
 // AddOutputCost adds value to the "output_cost" field.
 func (_u *UsageLogUpdateOne) AddOutputCost(v float64) *UsageLogUpdateOne {
 	_u.mutation.AddOutputCost(v)
+	return _u
+}
+
+// SetImageInputCost sets the "image_input_cost" field.
+func (_u *UsageLogUpdateOne) SetImageInputCost(v float64) *UsageLogUpdateOne {
+	_u.mutation.ResetImageInputCost()
+	_u.mutation.SetImageInputCost(v)
+	return _u
+}
+
+// SetNillableImageInputCost sets the "image_input_cost" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableImageInputCost(v *float64) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetImageInputCost(*v)
+	}
+	return _u
+}
+
+// AddImageInputCost adds value to the "image_input_cost" field.
+func (_u *UsageLogUpdateOne) AddImageInputCost(v float64) *UsageLogUpdateOne {
+	_u.mutation.AddImageInputCost(v)
 	return _u
 }
 
@@ -3164,6 +3410,106 @@ func (_u *UsageLogUpdateOne) SetNillableCacheTTLOverridden(v *bool) *UsageLogUpd
 	return _u
 }
 
+// SetUpstreamResponseModel sets the "upstream_response_model" field.
+func (_u *UsageLogUpdateOne) SetUpstreamResponseModel(v string) *UsageLogUpdateOne {
+	_u.mutation.SetUpstreamResponseModel(v)
+	return _u
+}
+
+// SetNillableUpstreamResponseModel sets the "upstream_response_model" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableUpstreamResponseModel(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetUpstreamResponseModel(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamResponseModel clears the value of the "upstream_response_model" field.
+func (_u *UsageLogUpdateOne) ClearUpstreamResponseModel() *UsageLogUpdateOne {
+	_u.mutation.ClearUpstreamResponseModel()
+	return _u
+}
+
+// SetUpstreamModelMismatch sets the "upstream_model_mismatch" field.
+func (_u *UsageLogUpdateOne) SetUpstreamModelMismatch(v bool) *UsageLogUpdateOne {
+	_u.mutation.SetUpstreamModelMismatch(v)
+	return _u
+}
+
+// SetNillableUpstreamModelMismatch sets the "upstream_model_mismatch" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableUpstreamModelMismatch(v *bool) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetUpstreamModelMismatch(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamModelMismatch clears the value of the "upstream_model_mismatch" field.
+func (_u *UsageLogUpdateOne) ClearUpstreamModelMismatch() *UsageLogUpdateOne {
+	_u.mutation.ClearUpstreamModelMismatch()
+	return _u
+}
+
+// SetSessionID sets the "session_id" field.
+func (_u *UsageLogUpdateOne) SetSessionID(v string) *UsageLogUpdateOne {
+	_u.mutation.SetSessionID(v)
+	return _u
+}
+
+// SetNillableSessionID sets the "session_id" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableSessionID(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetSessionID(*v)
+	}
+	return _u
+}
+
+// ClearSessionID clears the value of the "session_id" field.
+func (_u *UsageLogUpdateOne) ClearSessionID() *UsageLogUpdateOne {
+	_u.mutation.ClearSessionID()
+	return _u
+}
+
+// SetRequestedReasoningEffort sets the "requested_reasoning_effort" field.
+func (_u *UsageLogUpdateOne) SetRequestedReasoningEffort(v string) *UsageLogUpdateOne {
+	_u.mutation.SetRequestedReasoningEffort(v)
+	return _u
+}
+
+// SetNillableRequestedReasoningEffort sets the "requested_reasoning_effort" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableRequestedReasoningEffort(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetRequestedReasoningEffort(*v)
+	}
+	return _u
+}
+
+// ClearRequestedReasoningEffort clears the value of the "requested_reasoning_effort" field.
+func (_u *UsageLogUpdateOne) ClearRequestedReasoningEffort() *UsageLogUpdateOne {
+	_u.mutation.ClearRequestedReasoningEffort()
+	return _u
+}
+
+// SetUpstreamRequestID sets the "upstream_request_id" field.
+func (_u *UsageLogUpdateOne) SetUpstreamRequestID(v string) *UsageLogUpdateOne {
+	_u.mutation.SetUpstreamRequestID(v)
+	return _u
+}
+
+// SetNillableUpstreamRequestID sets the "upstream_request_id" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableUpstreamRequestID(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetUpstreamRequestID(*v)
+	}
+	return _u
+}
+
+// ClearUpstreamRequestID clears the value of the "upstream_request_id" field.
+func (_u *UsageLogUpdateOne) ClearUpstreamRequestID() *UsageLogUpdateOne {
+	_u.mutation.ClearUpstreamRequestID()
+	return _u
+}
+
 // SetUser sets the "user" edge to the User entity.
 func (_u *UsageLogUpdateOne) SetUser(v *User) *UsageLogUpdateOne {
 	return _u.SetUserID(v.ID)
@@ -3376,6 +3722,26 @@ func (_u *UsageLogUpdateOne) check() error {
 			return &ValidationError{Name: "video_task_id", err: fmt.Errorf(`ent: validator failed for field "UsageLog.video_task_id": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.UpstreamResponseModel(); ok {
+		if err := usagelog.UpstreamResponseModelValidator(v); err != nil {
+			return &ValidationError{Name: "upstream_response_model", err: fmt.Errorf(`ent: validator failed for field "UsageLog.upstream_response_model": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SessionID(); ok {
+		if err := usagelog.SessionIDValidator(v); err != nil {
+			return &ValidationError{Name: "session_id", err: fmt.Errorf(`ent: validator failed for field "UsageLog.session_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.RequestedReasoningEffort(); ok {
+		if err := usagelog.RequestedReasoningEffortValidator(v); err != nil {
+			return &ValidationError{Name: "requested_reasoning_effort", err: fmt.Errorf(`ent: validator failed for field "UsageLog.requested_reasoning_effort": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.UpstreamRequestID(); ok {
+		if err := usagelog.UpstreamRequestIDValidator(v); err != nil {
+			return &ValidationError{Name: "upstream_request_id", err: fmt.Errorf(`ent: validator failed for field "UsageLog.upstream_request_id": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "UsageLog.user"`)
 	}
@@ -3498,6 +3864,12 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	if value, ok := _u.mutation.AddedCacheCreation1hTokens(); ok {
 		_spec.AddField(usagelog.FieldCacheCreation1hTokens, field.TypeInt, value)
 	}
+	if value, ok := _u.mutation.ImageInputTokens(); ok {
+		_spec.SetField(usagelog.FieldImageInputTokens, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedImageInputTokens(); ok {
+		_spec.AddField(usagelog.FieldImageInputTokens, field.TypeInt, value)
+	}
 	if value, ok := _u.mutation.InputCost(); ok {
 		_spec.SetField(usagelog.FieldInputCost, field.TypeFloat64, value)
 	}
@@ -3509,6 +3881,12 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if value, ok := _u.mutation.AddedOutputCost(); ok {
 		_spec.AddField(usagelog.FieldOutputCost, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.ImageInputCost(); ok {
+		_spec.SetField(usagelog.FieldImageInputCost, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedImageInputCost(); ok {
+		_spec.AddField(usagelog.FieldImageInputCost, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.CacheCreationCost(); ok {
 		_spec.SetField(usagelog.FieldCacheCreationCost, field.TypeFloat64, value)
@@ -3758,6 +4136,36 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 	}
 	if value, ok := _u.mutation.CacheTTLOverridden(); ok {
 		_spec.SetField(usagelog.FieldCacheTTLOverridden, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.UpstreamResponseModel(); ok {
+		_spec.SetField(usagelog.FieldUpstreamResponseModel, field.TypeString, value)
+	}
+	if _u.mutation.UpstreamResponseModelCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamResponseModel, field.TypeString)
+	}
+	if value, ok := _u.mutation.UpstreamModelMismatch(); ok {
+		_spec.SetField(usagelog.FieldUpstreamModelMismatch, field.TypeBool, value)
+	}
+	if _u.mutation.UpstreamModelMismatchCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamModelMismatch, field.TypeBool)
+	}
+	if value, ok := _u.mutation.SessionID(); ok {
+		_spec.SetField(usagelog.FieldSessionID, field.TypeString, value)
+	}
+	if _u.mutation.SessionIDCleared() {
+		_spec.ClearField(usagelog.FieldSessionID, field.TypeString)
+	}
+	if value, ok := _u.mutation.RequestedReasoningEffort(); ok {
+		_spec.SetField(usagelog.FieldRequestedReasoningEffort, field.TypeString, value)
+	}
+	if _u.mutation.RequestedReasoningEffortCleared() {
+		_spec.ClearField(usagelog.FieldRequestedReasoningEffort, field.TypeString)
+	}
+	if value, ok := _u.mutation.UpstreamRequestID(); ok {
+		_spec.SetField(usagelog.FieldUpstreamRequestID, field.TypeString, value)
+	}
+	if _u.mutation.UpstreamRequestIDCleared() {
+		_spec.ClearField(usagelog.FieldUpstreamRequestID, field.TypeString)
 	}
 	if _u.mutation.UserCleared() {
 		edge := &sqlgraph.EdgeSpec{

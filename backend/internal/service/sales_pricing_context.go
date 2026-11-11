@@ -58,6 +58,7 @@ type SalesPricingUsageSnapshot struct {
 	CacheReadTokens       int `json:"cache_read_tokens"`
 	CacheCreation5mTokens int `json:"cache_creation_5m_tokens"`
 	CacheCreation1hTokens int `json:"cache_creation_1h_tokens"`
+	ImageInputTokens      int `json:"image_input_tokens,omitempty"`
 	ImageOutputTokens     int `json:"image_output_tokens"`
 	ImageCount            int `json:"image_count"`
 	VideoCount            int `json:"video_count"`
@@ -69,6 +70,7 @@ type SalesPricingAmountSnapshot struct {
 	Output          string `json:"output"`
 	CacheCreation   string `json:"cache_creation"`
 	CacheRead       string `json:"cache_read"`
+	ImageInput      string `json:"image_input,omitempty"`
 	ImageOutput     string `json:"image_output"`
 	OriginalTotal   string `json:"original_total"`
 	MultiplierTotal string `json:"multiplier_total"`
@@ -150,6 +152,7 @@ func resolveUnifiedSalesPricing(ctx context.Context, resolver *ModelPricingResol
 	if resolved == nil {
 		return nil, errors.New("sales pricing is unavailable")
 	}
+	resolver.ApplyGroupLongContextGate(ctx, groupID, resolved)
 	return resolved, nil
 }
 
@@ -192,6 +195,7 @@ func CalculateUnifiedSalesPricingCost(
 		GroupID: groupID,
 		Tokens: UsageTokens{
 			InputTokens:           log.InputTokens,
+			ImageInputTokens:      log.ImageInputTokens,
 			OutputTokens:          log.OutputTokens,
 			CacheCreationTokens:   log.CacheCreationTokens,
 			CacheReadTokens:       log.CacheReadTokens,
@@ -245,6 +249,7 @@ func ApplyCostBreakdownToUsageLog(log *UsageLog, cost *CostBreakdown) {
 		return
 	}
 	log.InputCost = cost.InputCost
+	log.ImageInputCost = cost.ImageInputCost
 	log.OutputCost = cost.OutputCost
 	log.ImageOutputCost = cost.ImageOutputCost
 	log.CacheCreationCost = cost.CacheCreationCost
@@ -499,6 +504,7 @@ func buildSalesPricingUsageSnapshot(log *UsageLog, pricing *SalesPricingContext,
 			CacheReadTokens:       log.CacheReadTokens,
 			CacheCreation5mTokens: log.CacheCreation5mTokens,
 			CacheCreation1hTokens: log.CacheCreation1hTokens,
+			ImageInputTokens:      log.ImageInputTokens,
 			ImageOutputTokens:     log.ImageOutputTokens,
 			ImageCount:            log.ImageCount,
 			VideoCount:            log.VideoCount,
@@ -510,6 +516,7 @@ func buildSalesPricingUsageSnapshot(log *UsageLog, pricing *SalesPricingContext,
 			CacheCreation:   decimal.NewFromFloat(cost.CacheCreationCost).StringFixed(10),
 			CacheRead:       decimal.NewFromFloat(cost.CacheReadCost).StringFixed(10),
 			ImageOutput:     decimal.NewFromFloat(cost.ImageOutputCost).StringFixed(10),
+			ImageInput:      imageInputAmountSnapshot(cost.ImageInputCost),
 			OriginalTotal:   decimal.NewFromFloat(cost.TotalCost).StringFixed(10),
 			MultiplierTotal: decimal.NewFromFloat(cost.ActualCost).StringFixed(10),
 		},
@@ -522,6 +529,14 @@ func buildSalesPricingUsageSnapshot(log *UsageLog, pricing *SalesPricingContext,
 		snapshot.BillingTier = strings.TrimSpace(*log.BillingTier)
 	}
 	return snapshotMap(snapshot)
+}
+
+// imageInputAmountSnapshot 只在有图片输入费用时写入快照，旧快照结构保持不变。
+func imageInputAmountSnapshot(cost float64) string {
+	if cost == 0 {
+		return ""
+	}
+	return decimal.NewFromFloat(cost).StringFixed(10)
 }
 
 func normalizeSalesPricingSource(source string) string {

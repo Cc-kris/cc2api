@@ -154,6 +154,20 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 
+	// 余额模式在途预占（V03-R12），计费落库后释放；换号复用同一个预占。
+	inflightDone, err := reserveInflightBalance(c, h.billingCacheService, h.gatewayService, apiKey, subscription,
+		withGeminiImageEstimate(tokenInflightEstimate(reqModel, body, ""), body, reqModel, channelMapping.MappedModel))
+	if err != nil {
+		reqLog.Info("gateway.responses.inflight_reservation_rejected", zap.Error(err))
+		status, code, message, retryAfter := billingErrorDetails(err)
+		if retryAfter > 0 {
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
+		}
+		h.responsesErrorResponse(c, status, code, message)
+		return
+	}
+	defer inflightDone()
+
 	// Parse request for session hash
 	parsedReq, _ := service.ParseGatewayRequest(body, "responses")
 	if parsedReq == nil {
@@ -280,7 +294,10 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 
 		quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 		upstreamAttempts := usageUpstreamAttemptsSnapshot(c)
-		h.submitUsageRecordTask(func(ctx context.Context) {
+		// V03-R11 审计：在 gin.Context 有效时补齐只读审计字段。
+		stampForwardUsageAudit(c, result)
+		usageSessionID := service.ExtractClientSessionID(c)
+		h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {
 			if err := h.gatewayService.RecordUsage(ctx, &service.RecordUsageInput{
 				Result:                 result,
 				QuotaPlatform:          quotaPlatform,
@@ -293,6 +310,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 				UpstreamEndpoint:       upstreamEndpoint,
 				UserAgent:              userAgent,
 				IPAddress:              clientIP,
+				SessionID:              usageSessionID,
 				RequestPayloadHash:     requestPayloadHash,
 				APIKeyService:          h.apiKeyService,
 				ChannelUsageFields:     channelMapping.ToUsageFields(reqModel, result.UpstreamModel),

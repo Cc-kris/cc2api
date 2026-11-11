@@ -344,6 +344,7 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 	scanner.Buffer(make([]byte, 0, 64*1024), maxLineSize)
 
 	var usage OpenAIUsage
+	var tierObserver openAIResponseServiceTierObserver
 	var firstTokenMs *int
 	clientDisconnected := false
 	clientOutputStarted := false
@@ -392,6 +393,7 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 				if u := extractCCStreamUsage(payload); u != nil {
 					usage = *u
 				}
+				tierObserver.ObservePayload([]byte(payload), gjson.Get(payload, "type").String())
 				if firstTokenMs == nil && !usageOnlyChunk {
 					elapsed := int(time.Since(startTime).Milliseconds())
 					firstTokenMs = &elapsed
@@ -442,16 +444,17 @@ func (s *OpenAIGatewayService) streamRawChatCompletions(
 	}
 
 	return &OpenAIForwardResult{
-		RequestID:       requestID,
-		Usage:           usage,
-		Model:           originalModel,
-		BillingModel:    billingModel,
-		UpstreamModel:   upstreamModel,
-		ReasoningEffort: reasoningEffort,
-		ServiceTier:     serviceTier,
-		Stream:          true,
-		Duration:        time.Since(startTime),
-		FirstTokenMs:    firstTokenMs,
+		RequestID:                   requestID,
+		Usage:                       usage,
+		Model:                       originalModel,
+		BillingModel:                billingModel,
+		UpstreamModel:               upstreamModel,
+		UpstreamResponseServiceTier: tierObserver.ServiceTier(),
+		ReasoningEffort:             reasoningEffort,
+		ServiceTier:                 serviceTier,
+		Stream:                      true,
+		Duration:                    time.Since(startTime),
+		FirstTokenMs:                firstTokenMs,
 	}, nil
 }
 
@@ -491,6 +494,9 @@ func extractCCStreamUsage(payload string) *OpenAIUsage {
 	if cached := gjson.Get(payload, "usage.prompt_tokens_details.cached_tokens"); cached.Exists() {
 		u.CacheReadInputTokens = int(cached.Int())
 	}
+	// Raw Chat Completions upstreams can report image input tokens separately
+	// under prompt_tokens_details, just like the Responses conversion path.
+	u.ImageInputTokens = max(int(gjson.Get(payload, "usage.prompt_tokens_details.image_tokens").Int()), 0)
 	return &u
 }
 
@@ -530,6 +536,9 @@ func (s *OpenAIGatewayService) bufferRawChatCompletions(
 			if ccResp.Usage.PromptTokensDetails != nil {
 				usage.CacheReadInputTokens = ccResp.Usage.PromptTokensDetails.CachedTokens
 			}
+			// ChatTokenDetails intentionally mirrors OpenAI's standard fields and
+			// does not include the extended image_tokens field; parse it directly.
+			usage.ImageInputTokens = max(int(gjson.GetBytes(respBody, "usage.prompt_tokens_details.image_tokens").Int()), 0)
 		}
 	}
 
@@ -544,17 +553,20 @@ func (s *OpenAIGatewayService) bufferRawChatCompletions(
 	c.Writer.WriteHeader(http.StatusOK)
 	_, _ = c.Writer.Write(respBody)
 
+	var tierObserver openAIResponseServiceTierObserver
+	tierObserver.ObservePayload(respBody, gjson.GetBytes(respBody, "type").String())
 	return &OpenAIForwardResult{
-		RequestID:              requestID,
-		Usage:                  usage,
-		Model:                  originalModel,
-		BillingModel:           billingModel,
-		UpstreamModel:          upstreamModel,
-		ReasoningEffort:        reasoningEffort,
-		ServiceTier:            serviceTier,
-		Stream:                 false,
-		Duration:               time.Since(startTime),
-		UpstreamBillingPayload: append([]byte(nil), respBody...),
+		RequestID:                   requestID,
+		Usage:                       usage,
+		Model:                       originalModel,
+		BillingModel:                billingModel,
+		UpstreamModel:               upstreamModel,
+		UpstreamResponseServiceTier: tierObserver.ServiceTier(),
+		ReasoningEffort:             reasoningEffort,
+		ServiceTier:                 serviceTier,
+		Stream:                      false,
+		Duration:                    time.Since(startTime),
+		UpstreamBillingPayload:      append([]byte(nil), respBody...),
 	}, nil
 }
 

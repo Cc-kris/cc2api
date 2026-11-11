@@ -22,13 +22,17 @@ type FrameConn interface {
 
 type Usage struct {
 	InputTokens              int
+	ImageInputTokens         int // InputTokens 中图片部分的数量（上游 b6a157c19）
 	OutputTokens             int
 	CacheCreationInputTokens int
 	CacheReadInputTokens     int
 }
 
 type RelayResult struct {
-	RequestModel            string
+	RequestModel string
+	// ResponseServiceTier is the raw service_tier declared by the last terminal
+	// response event; "" when that turn never declared one (V03-T13, 75faedda9).
+	ResponseServiceTier     string
 	Usage                   Usage
 	RequestID               string
 	TerminalEventType       string
@@ -40,12 +44,15 @@ type RelayResult struct {
 }
 
 type RelayTurnResult struct {
-	RequestModel      string
-	Usage             Usage
-	RequestID         string
-	TerminalEventType string
-	Duration          time.Duration
-	FirstTokenMs      *int
+	RequestModel string
+	// ResponseServiceTier is the raw service_tier declared by this turn's
+	// terminal event. Non-terminal events echo the requested tier and are ignored.
+	ResponseServiceTier string
+	Usage               Usage
+	RequestID           string
+	TerminalEventType   string
+	Duration            time.Duration
+	FirstTokenMs        *int
 }
 
 type RelayExit struct {
@@ -76,13 +83,14 @@ type RelayTraceEvent struct {
 }
 
 type relayState struct {
-	usage             Usage
-	requestModel      string
-	lastResponseID    string
-	terminalEventType string
-	firstTokenMs      *int
-	turnTimingByID    map[string]*relayTurnTiming
-	activeTurn        *relayTurnTiming
+	usage                   Usage
+	requestModel            string
+	lastResponseID          string
+	lastResponseServiceTier string
+	terminalEventType       string
+	firstTokenMs            *int
+	turnTimingByID          map[string]*relayTurnTiming
+	activeTurn              *relayTurnTiming
 }
 
 type relayExitSignal struct {
@@ -93,12 +101,13 @@ type relayExitSignal struct {
 }
 
 type observedUpstreamEvent struct {
-	terminal   bool
-	eventType  string
-	responseID string
-	usage      Usage
-	duration   time.Duration
-	firstToken *int
+	terminal            bool
+	eventType           string
+	responseID          string
+	responseServiceTier string
+	usage               Usage
+	duration            time.Duration
+	firstToken          *int
 }
 
 type relayTurnTiming struct {
@@ -578,6 +587,9 @@ func observeUpstreamMessage(
 	}
 	observed.terminal = true
 	state.terminalEventType = eventType
+	// 只取终止事件声明的档位；每轮重新赋值，未声明的轮次不继承上一轮。
+	observed.responseServiceTier = terminalRelayResponseServiceTier(message)
+	state.lastResponseServiceTier = observed.responseServiceTier
 	if responseID != "" {
 		state.lastResponseID = responseID
 		if turnTiming, ok := openAIWSRelayDeleteTurnTiming(state, responseID); ok {
@@ -609,13 +621,30 @@ func emitTurnComplete(
 		requestModel = state.requestModel
 	}
 	onTurnComplete(RelayTurnResult{
-		RequestModel:      requestModel,
-		Usage:             observed.usage,
-		RequestID:         responseID,
-		TerminalEventType: observed.eventType,
-		Duration:          observed.duration,
-		FirstTokenMs:      openAIWSRelayCloneIntPtr(observed.firstToken),
+		RequestModel:        requestModel,
+		ResponseServiceTier: observed.responseServiceTier,
+		Usage:               observed.usage,
+		RequestID:           responseID,
+		TerminalEventType:   observed.eventType,
+		Duration:            observed.duration,
+		FirstTokenMs:        openAIWSRelayCloneIntPtr(observed.firstToken),
 	})
+}
+
+func terminalRelayResponseServiceTier(message []byte) string {
+	if len(message) == 0 {
+		return ""
+	}
+	values := gjson.GetManyBytes(message, "response.service_tier", "service_tier")
+	for _, value := range values {
+		if value.Type != gjson.String {
+			continue
+		}
+		if tier := strings.TrimSpace(value.String()); tier != "" {
+			return tier
+		}
+	}
+	return ""
 }
 
 func openAIWSRelayGetOrInitTurnTiming(state *relayState, responseID string, now time.Time) *relayTurnTiming {
@@ -708,14 +737,20 @@ func parseUsageAndAccumulate(
 		// 解析失败时不做部分字段累加，避免计费 usage 出现“半有效”状态。
 		return Usage{}
 	}
+	imageInputTokens := gjson.GetBytes(message, "response.usage.input_tokens_details.image_tokens").Int()
+	if imageInputTokens <= 0 {
+		imageInputTokens = gjson.GetBytes(message, "response.usage.prompt_tokens_details.image_tokens").Int()
+	}
 	parsedUsage := Usage{
 		InputTokens:              inputTokens,
+		ImageInputTokens:         int(max(imageInputTokens, 0)),
 		OutputTokens:             outputTokens,
 		CacheCreationInputTokens: cacheCreationTokens,
 		CacheReadInputTokens:     cachedTokens,
 	}
 
 	state.usage.InputTokens += parsedUsage.InputTokens
+	state.usage.ImageInputTokens += parsedUsage.ImageInputTokens
 	state.usage.OutputTokens += parsedUsage.OutputTokens
 	state.usage.CacheCreationInputTokens += parsedUsage.CacheCreationInputTokens
 	state.usage.CacheReadInputTokens += parsedUsage.CacheReadInputTokens
@@ -751,6 +786,7 @@ func enrichResult(result *RelayResult, state *relayState, duration time.Duration
 		return
 	}
 	result.RequestModel = state.requestModel
+	result.ResponseServiceTier = state.lastResponseServiceTier
 	result.Usage = state.usage
 	result.RequestID = state.lastResponseID
 	result.TerminalEventType = state.terminalEventType

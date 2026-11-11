@@ -65,6 +65,7 @@ type APIKeyAuthGroupSnapshot struct {
 	WeeklyLimitUSD                  *float64 `json:"weekly_limit_usd,omitempty"`
 	MonthlyLimitUSD                 *float64 `json:"monthly_limit_usd,omitempty"`
 	AllowImageGeneration            bool     `json:"allow_image_generation"`
+	ImageCountBilling               bool     `json:"image_count_billing"`
 	ImageRateIndependent            bool     `json:"image_rate_independent"`
 	ImageRateMultiplier             float64  `json:"image_rate_multiplier"`
 	ImagePrice1K                    *float64 `json:"image_price_1k,omitempty"`
@@ -98,6 +99,9 @@ type APIKeyAuthGroupSnapshot struct {
 
 	// FailoverOnAnyError 分组级任意错误换号开关；nil（旧缓存条目）视为开启。
 	FailoverOnAnyError *bool `json:"failover_on_any_error,omitempty"`
+
+	// LongContextPricingEnabled 分组长上下文定价开关，售价侧目录阶梯门控（V03-R10）。
+	LongContextPricingEnabled bool `json:"long_context_pricing_enabled"`
 }
 
 // APIKeyAuthCacheEntry 缓存条目，支持负缓存

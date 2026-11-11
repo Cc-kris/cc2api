@@ -239,6 +239,68 @@ type OpenAIUsage struct {
 	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
 	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 	ImageOutputTokens        int `json:"image_output_tokens,omitempty"`
+	// ResponseServiceTier is the processing tier declared by the response body or
+	// terminal event ("priority" / "default" / "flex" / "scale"); "" when absent.
+	ResponseServiceTier string `json:"-"`
+}
+
+// hasObservedTokens 报告 OpenAI 流式过程中是否已观测到任何上游计量的 token。
+func (u *OpenAIUsage) hasObservedTokens() bool {
+	if u == nil {
+		return false
+	}
+	return u.InputTokens > 0 || u.OutputTokens > 0 || u.CacheCreationInputTokens > 0 ||
+		u.CacheReadInputTokens > 0 || u.ImageInputTokens > 0 || u.ImageOutputTokens > 0
+}
+
+// claudeUsageFromOpenAIUsage 把 OpenAI 用量换算成 Claude 口径（input 不含缓存读），
+// 与 RecordUsage 里 actualInputTokens 的口径一致，用于财务上游尝试记录。
+func claudeUsageFromOpenAIUsage(u *OpenAIUsage) *ClaudeUsage {
+	if u == nil {
+		return nil
+	}
+	input := u.InputTokens - u.CacheReadInputTokens
+	if input < 0 {
+		input = 0
+	}
+	return &ClaudeUsage{
+		InputTokens:              input,
+		OutputTokens:             u.OutputTokens,
+		CacheCreationInputTokens: u.CacheCreationInputTokens,
+		CacheReadInputTokens:     u.CacheReadInputTokens,
+		ImageOutputTokens:        u.ImageOutputTokens,
+	}
+}
+
+// attachObservedOpenAIUsage 把 OpenAI Responses 续写中断时的已观测用量挂到错误上（无观测 token 时不挂）。
+func attachObservedOpenAIUsage(foErr *UpstreamFailoverError, usage *OpenAIUsage, model, upstreamModel string) {
+	if foErr == nil || !usage.hasObservedTokens() {
+		return
+	}
+	snapshot := *usage
+	foErr.ObservedOpenAIUsage = &snapshot
+	foErr.ObservedUsage = claudeUsageFromOpenAIUsage(&snapshot)
+	foErr.ObservedModel = model
+	foErr.ObservedUpstreamModel = upstreamModel
+}
+
+// ObservedOpenAIForwardResult 把 OpenAI Responses 续写中断错误上的已观测用量构造成 OpenAIForwardResult，
+// 仅供 handler 在「续写耗尽且已向客户端输出过内容」时按最后一个有用量的尝试收费。
+func (e *UpstreamFailoverError) ObservedOpenAIForwardResult() *OpenAIForwardResult {
+	if e == nil || !e.ObservedOpenAIUsage.hasObservedTokens() {
+		return nil
+	}
+	model := strings.TrimSpace(e.ObservedModel)
+	upstreamModel := strings.TrimSpace(e.ObservedUpstreamModel)
+	if model == "" {
+		model = upstreamModel
+	}
+	return &OpenAIForwardResult{
+		Usage:         *e.ObservedOpenAIUsage,
+		Model:         model,
+		UpstreamModel: upstreamModel,
+		Stream:        true,
+	}
 }
 
 type OpenAIAuxiliaryUsage struct {
@@ -281,9 +343,15 @@ type OpenAIForwardResult struct {
 	// Empty when no mapping was applied (requested model was used as-is).
 	UpstreamModel    string
 	UpstreamEndpoint string
-	// ServiceTier records the OpenAI Responses API service tier, e.g. "priority" / "flex".
-	// Nil means the request did not specify a recognized tier.
+	// ServiceTier records the OpenAI Responses API service tier requested by the
+	// client, e.g. "priority" / "flex". Nil means the request did not specify a
+	// recognized tier. Usage recording lowers it to UpstreamResponseServiceTier
+	// when the upstream reports a cheaper tier (see ResolveBillingServiceTier).
 	ServiceTier *string
+	// UpstreamResponseServiceTier is the tier the upstream reports having used;
+	// "" when not declared. When empty, RecordUsage falls back to the tier
+	// observed while parsing usage (Usage.ResponseServiceTier).
+	UpstreamResponseServiceTier string
 	// ReasoningEffort is extracted from request body (reasoning.effort) or derived from model suffix.
 	// Stored for usage records display; nil means not provided / not applicable.
 	ReasoningEffort        *string
@@ -292,24 +360,30 @@ type OpenAIForwardResult struct {
 	UpstreamTerminalEvent  string
 	UpstreamBillingPayload []byte
 	ResponseHeaders        http.Header
-	Duration               time.Duration
-	FirstTokenMs           *int
-	ImageCount             int
-	DuplicateSuppressed    bool
-	ImageSize              string
-	ImageInputSize         string
-	ImageOutputSize        string
-	ImageOutputSizes       []string
-	ImageSizeSource        string
-	ImageSizeBreakdown     map[string]int
-	VideoCount             int
-	VideoResolution        string
-	VideoDurationSeconds   int
-	WebSearchCalls         int
-	AuxiliaryUsages        []OpenAIAuxiliaryUsage
-	GrokMediaResponseBody  []byte
-	GrokMediaStatusCode    int
-	GrokMediaBuffered      bool
+	// V03-R11 用量审计（只读，不参与计费）
+	UpstreamResponseModel    string
+	RequestedReasoningEffort *string
+	// UpstreamHeaders 是直接上游的响应头快照，记账时按账户配置解析 upstream_request_id；WS 轮次为空。
+	UpstreamHeaders       http.Header
+	Duration              time.Duration
+	FirstTokenMs          *int
+	ImageCount            int
+	ImageEndpoint         bool // Dedicated image endpoint; per-image billing applies only to this path.
+	DuplicateSuppressed   bool
+	ImageSize             string
+	ImageInputSize        string
+	ImageOutputSize       string
+	ImageOutputSizes      []string
+	ImageSizeSource       string
+	ImageSizeBreakdown    map[string]int
+	VideoCount            int
+	VideoResolution       string
+	VideoDurationSeconds  int
+	WebSearchCalls        int
+	AuxiliaryUsages       []OpenAIAuxiliaryUsage
+	GrokMediaResponseBody []byte
+	GrokMediaStatusCode   int
+	GrokMediaBuffered     bool
 
 	wsReplayInput       []json.RawMessage
 	wsReplayInputExists bool
@@ -2417,6 +2491,7 @@ func (s *OpenAIGatewayService) handleFailoverSideEffects(ctx context.Context, re
 // Forward forwards request to OpenAI API
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
 	startTime := time.Now()
+	beginUpstreamResponseModelObservation(c) // V03-R11：每次转发尝试重置上游响应模型观测
 
 	restrictionResult := s.detectCodexClientRestriction(c, account)
 	apiKeyID := getAPIKeyIDFromContext(c)
@@ -4069,6 +4144,7 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 	originalModel string,
 	mappedModel string,
 ) (*openaiStreamingResultPassthrough, error) {
+	observeUpstreamResponseHeaders(c, resp.Header) // V03-T17：记下直接上游响应头，记账时解析 upstream_request_id
 	writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 
 	// SSE headers
@@ -4140,6 +4216,8 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 		if data, ok := extractOpenAISSEDataLine(line); ok {
 			dataBytes := []byte(data)
 			trimmedData := strings.TrimSpace(data)
+			// V03-R11 审计：在模型名替换之前观测上游原始响应模型（只读）。
+			observeOpenAIResponseModel(c, dataBytes, gjson.GetBytes(dataBytes, "type").String())
 			if needModelReplace && strings.Contains(data, mappedModel) {
 				line = s.replaceModelInSSELine(line, mappedModel, originalModel)
 				if replacedData, replaced := extractOpenAISSEDataLine(line); replaced {
@@ -4272,10 +4350,12 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	originalModel string,
 	mappedModel string,
 ) (*openaiNonStreamingResultPassthrough, error) {
+	observeUpstreamResponseHeaders(c, resp.Header) // V03-T17：记下直接上游响应头，记账时解析 upstream_request_id
 	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		return nil, err
 	}
+	observeOpenAIResponseBody(c, body) // V03-R11 审计：只读观测
 
 	// Detect SSE responses from upstream and convert to JSON.
 	// Some upstreams (e.g. other sub2api instances) may return SSE even when
@@ -4926,6 +5006,7 @@ type openaiNonStreamingResult struct {
 }
 
 func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, startTime time.Time, originalModel, mappedModel string) (*openaiStreamingResult, error) {
+	observeUpstreamResponseHeaders(c, resp.Header) // V03-T17：记下直接上游响应头，记账时解析 upstream_request_id
 	if s.responseHeaderFilter != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	}
@@ -5029,7 +5110,10 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 			return nil
 		}
 		logger.LegacyPrintf("service.openai_gateway", "Stream interrupted mid-output (account=%d), failing over with continuation: %s", account.ID, message)
-		return streamCont.NewStreamInterruptedFailover(message)
+		foErr := streamCont.NewStreamInterruptedFailover(message)
+		// 带上本次尝试已观测的用量：只进财务成本证据；续写耗尽时作为「最后一个有用量的尝试」收费。
+		attachObservedOpenAIUsage(foErr, usage, originalModel, mappedModel)
+		return foErr
 	}
 	sendErrorEvent := func(reason string) {
 		if errorEventSent || clientDisconnected {
@@ -5159,6 +5243,8 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 		}
 		// Extract data from SSE line (supports both "data: " and "data:" formats)
 		if data, ok := extractOpenAISSEDataLine(line); ok {
+			// V03-R11 审计：在模型名替换之前观测上游原始响应模型（只读）。
+			observeOpenAIResponseModel(c, []byte(data), gjson.Get(data, "type").String())
 			// Replace model in response if needed.
 			// Fast path: most events do not contain model field values.
 			if needModelReplace && mappedModel != "" && strings.Contains(data, mappedModel) {
@@ -5543,10 +5629,14 @@ func extractOpenAIUsageFromJSONBytes(body []byte) (OpenAIUsage, bool) {
 	if len(body) == 0 || !gjson.ValidBytes(body) {
 		return OpenAIUsage{}, false
 	}
-	if usage, ok := openAIUsageFromGJSON(gjson.GetBytes(body, "usage")); ok {
-		return usage, true
+	usage, ok := openAIUsageFromGJSON(gjson.GetBytes(body, "usage"))
+	if !ok {
+		usage, ok = openAIUsageFromGJSON(gjson.GetBytes(body, "response.usage"))
 	}
-	return openAIUsageFromGJSON(gjson.GetBytes(body, "response.usage"))
+	if ok {
+		usage.ResponseServiceTier = observeOpenAIResponseServiceTier(body)
+	}
+	return usage, ok
 }
 
 func ExtractOpenAIUsageFromJSONBytes(body []byte) (OpenAIUsage, bool) {
@@ -5583,8 +5673,18 @@ func openAIUsageFromGJSON(value gjson.Result) (OpenAIUsage, bool) {
 	if imageOutputTokens == 0 {
 		imageOutputTokens = value.Get("completion_tokens_details.image_tokens").Int()
 	}
+	// 图片输入 token（如 gpt-image-2 图片编辑、图文混合输入）在 input_tokens_details.image_tokens
+	// 单独回传，用于图/文输入分价计费（上游 62d57c02d）。普通文本请求为 0，行为不变。
+	imageInputTokens := value.Get("input_tokens_details.image_tokens").Int()
+	if imageInputTokens <= 0 {
+		imageInputTokens = value.Get("prompt_tokens_details.image_tokens").Int()
+	}
+	if imageInputTokens < 0 {
+		imageInputTokens = 0
+	}
 	return OpenAIUsage{
 		InputTokens:              int(inputTokens),
+		ImageInputTokens:         int(imageInputTokens),
 		OutputTokens:             int(outputTokens),
 		CacheCreationInputTokens: int(cacheCreationTokens),
 		CacheReadInputTokens:     int(cacheReadTokens),
@@ -5593,10 +5693,12 @@ func openAIUsageFromGJSON(value gjson.Result) (OpenAIUsage, bool) {
 }
 
 func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, originalModel, mappedModel string) (*openaiNonStreamingResult, error) {
+	observeUpstreamResponseHeaders(c, resp.Header) // V03-T17：记下直接上游响应头，记账时解析 upstream_request_id
 	body, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
 	if err != nil {
 		return nil, err
 	}
+	observeOpenAIResponseBody(c, body) // V03-R11 审计：只读观测
 
 	// Detect SSE responses for ALL account types via Content-Type header.
 	// Some OpenAI-compatible upstreams (including other sub2api instances)
@@ -6464,6 +6566,7 @@ type OpenAIRecordUsageInput struct {
 	UpstreamEndpoint       string
 	UserAgent              string // 请求的 User-Agent
 	IPAddress              string // 请求的客户端 IP 地址
+	SessionID              string // V03-R11：客户端显式会话标识请求头，仅用于审计关联，不含粘性哈希
 	RequestPayloadHash     string
 	APIKeyService          APIKeyQuotaUpdater
 	UpstreamCostMultiplier *decimal.Decimal // 账号选中时的上游采购倍率快照
@@ -6503,6 +6606,10 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	if !isGrokVideoUsageResult(result, nil) {
 		ApplyOpenAIImageBillingResolution(result)
 	}
+	if result.UpstreamResponseServiceTier == "" {
+		result.UpstreamResponseServiceTier = result.Usage.ResponseServiceTier
+	}
+	logServiceTierBillingDowngrade("service.openai_gateway", account, result.RequestID, ApplyOpenAIServiceTierBillingResolution(account, result))
 
 	// 计算实际的新输入token（减去缓存读取的token）
 	// 因为 input_tokens 包含了 cache_read_tokens，而缓存读取的token不应按输入价格计费
@@ -6514,6 +6621,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	// Calculate cost
 	tokens := UsageTokens{
 		InputTokens:         actualInputTokens,
+		ImageInputTokens:    min(result.Usage.ImageInputTokens, actualInputTokens),
 		OutputTokens:        result.Usage.OutputTokens,
 		CacheCreationTokens: result.Usage.CacheCreationInputTokens,
 		CacheReadTokens:     result.Usage.CacheReadInputTokens,
@@ -6627,6 +6735,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		OutputTokens:           result.Usage.OutputTokens,
 		CacheCreationTokens:    result.Usage.CacheCreationInputTokens,
 		CacheReadTokens:        result.Usage.CacheReadInputTokens,
+		ImageInputTokens:       min(result.Usage.ImageInputTokens, actualInputTokens),
 		ImageOutputTokens:      result.Usage.ImageOutputTokens,
 		ImageCount:             result.ImageCount,
 		ImageSize:              optionalTrimmedStringPtr(result.ImageSize),
@@ -6636,6 +6745,15 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		ImageSizeBreakdown:     result.ImageSizeBreakdown,
 		UpstreamBillingPayload: append([]byte(nil), result.UpstreamBillingPayload...),
 	}
+	// V03-R11 用量审计字段：只读写入，不参与任何金额计算。
+	usageLog.UsageAuditFields = buildUsageAuditFields(
+		upstreamSentModel(result.Model, result.UpstreamModel),
+		result.UpstreamResponseModel,
+		input.SessionID,
+		result.RequestedReasoningEffort,
+		result.ReasoningEffort,
+	)
+	usageLog.UpstreamRequestID = usageUpstreamRequestIDPtr(account, result.UpstreamHeaders, result.OpenAIWSMode)
 	isVideoUsage := isGrokVideoUsageResult(result, billingModels)
 	if isVideoUsage {
 		usageLog.VideoCount = result.VideoCount
@@ -6646,6 +6764,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	}
 	if cost != nil {
 		usageLog.InputCost = cost.InputCost
+		usageLog.ImageInputCost = cost.ImageInputCost
 		usageLog.OutputCost = cost.OutputCost
 		usageLog.ImageOutputCost = cost.ImageOutputCost
 		usageLog.CacheCreationCost = cost.CacheCreationCost
@@ -6836,6 +6955,11 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(
 		}
 	}
 	if result != nil && result.ImageCount > 0 {
+		// 分组开启按张计费且来自图片端点时强制按张（V03-T15，上游 fd998129e / aa1a1b11c）：
+		// 渠道 token 定价被跳过，按次/图片模式渠道价或分组图片价按实际张数结算。
+		if imageCountBillingApplies(apiKey, result.ImageEndpoint) {
+			return s.calculateOpenAIImageCost(ctx, billingModel, apiKey, result, imageMultiplier), nil
+		}
 		if resolved := s.resolveOpenAIChannelPricing(ctx, billingModel, apiKey); resolved != nil {
 			gid := apiKey.Group.ID
 			channelMultiplier := imageMultiplier
@@ -6929,6 +7053,7 @@ func usageTokensFromOpenAIUsage(usage OpenAIUsage) UsageTokens {
 	}
 	return UsageTokens{
 		InputTokens:         actualInputTokens,
+		ImageInputTokens:    min(usage.ImageInputTokens, actualInputTokens),
 		OutputTokens:        usage.OutputTokens,
 		CacheCreationTokens: usage.CacheCreationInputTokens,
 		CacheReadTokens:     usage.CacheReadInputTokens,
@@ -6938,6 +7063,7 @@ func usageTokensFromOpenAIUsage(usage OpenAIUsage) UsageTokens {
 
 func subtractUsageTokens(total, sub UsageTokens) UsageTokens {
 	total.InputTokens = max(total.InputTokens-sub.InputTokens, 0)
+	total.ImageInputTokens = min(max(total.ImageInputTokens-sub.ImageInputTokens, 0), total.InputTokens)
 	total.OutputTokens = max(total.OutputTokens-sub.OutputTokens, 0)
 	total.CacheCreationTokens = max(total.CacheCreationTokens-sub.CacheCreationTokens, 0)
 	total.CacheReadTokens = max(total.CacheReadTokens-sub.CacheReadTokens, 0)
@@ -6952,6 +7078,7 @@ func addCostBreakdown(dst, src *CostBreakdown) {
 		return
 	}
 	dst.InputCost += src.InputCost
+	dst.ImageInputCost += src.ImageInputCost
 	dst.OutputCost += src.OutputCost
 	dst.ImageOutputCost += src.ImageOutputCost
 	dst.CacheCreationCost += src.CacheCreationCost
@@ -7010,7 +7137,7 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageTokenCost(
 			Resolver:       s.resolver,
 		})
 	}
-	return s.billingService.CalculateCostWithServiceTier(billingModel, tokens, multiplier, serviceTier)
+	return s.billingService.CalculateCostForGroup(billingModel, tokens, multiplier, serviceTier, apiKey.Group)
 }
 
 func (s *OpenAIGatewayService) calculateOpenAIImageCost(

@@ -51,11 +51,31 @@
             </div>
           </div>
           <span v-else class="font-medium text-gray-900 dark:text-white">{{ row.model }}</span>
+          <!-- V03-R11：上游响应模型；与实际发送模型不一致时标红 -->
+          <div
+            v-if="row.upstream_response_model && (row.upstream_model_mismatch || row.upstream_response_model !== (row.upstream_model || row.model))"
+            data-testid="usage-upstream-response-model"
+            class="mt-0.5 flex items-center gap-1 break-all text-[11px]"
+            :class="row.upstream_model_mismatch ? 'text-rose-600 dark:text-rose-400' : 'text-gray-500 dark:text-gray-400'"
+            :title="t('admin.usage.upstreamResponseModelHint')"
+          >
+            <span
+              v-if="row.upstream_model_mismatch"
+              data-testid="usage-upstream-model-mismatch-badge"
+              class="inline-flex shrink-0 items-center rounded px-1 py-px text-[10px] font-medium leading-tight bg-rose-100 text-rose-600 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/20 dark:text-rose-400 dark:ring-rose-500/30"
+            >{{ t('admin.usage.upstreamModelMismatchBadge') }}</span>
+            <span>{{ t('admin.usage.upstreamResponseModelShort') }}: {{ row.upstream_response_model }}</span>
+          </div>
         </template>
 
         <template #cell-reasoning_effort="{ row }">
-          <span class="text-sm text-gray-900 dark:text-white">
-            {{ formatReasoningEffort(row.reasoning_effort) }}
+          <!-- V03-R11：主行显示客户端请求值，有映射时 ↳ 显示实际转发值 -->
+          <div v-if="hasReasoningEffortMapping(row)" class="space-y-0.5 text-xs">
+            <div class="font-medium text-gray-900 dark:text-white">{{ formatReasoningEffort(row.requested_reasoning_effort) }}</div>
+            <div class="text-gray-500 dark:text-gray-400"><span class="mr-0.5">↳</span>{{ formatReasoningEffort(row.reasoning_effort) }}</div>
+          </div>
+          <span v-else class="text-sm text-gray-900 dark:text-white">
+            {{ formatReasoningEffort(row.requested_reasoning_effort || row.reasoning_effort) }}
           </span>
         </template>
 
@@ -107,6 +127,7 @@
                 <div class="inline-flex items-center gap-1">
                   <Icon name="arrowDown" size="sm" class="h-3.5 w-3.5 text-emerald-500" />
                   <span class="font-medium text-gray-900 dark:text-white">{{ row.input_tokens?.toLocaleString() || 0 }}</span>
+                  <span v-if="(row.image_input_tokens ?? 0) > 0" :title="t('usage.imageInputBadgeHint') + ': ' + (row.image_input_tokens ?? 0).toLocaleString()" class="inline-flex items-center rounded px-1 py-px text-[10px] font-medium leading-tight bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-400 dark:ring-emerald-500/30 cursor-help">{{ t('usage.imageInputBadge') }} {{ (row.image_input_tokens ?? 0).toLocaleString() }}</span>
                 </div>
                 <div class="inline-flex items-center gap-1">
                   <Icon name="arrowUp" size="sm" class="h-3.5 w-3.5 text-violet-500" />
@@ -142,7 +163,7 @@
         <template #cell-cost="{ row }">
           <div class="text-sm">
             <div class="flex items-center gap-1.5">
-              <span class="font-medium text-green-700 dark:text-green-300">${{ row.actual_cost?.toFixed(6) || '0.000000' }}</span>
+              <span class="font-medium text-green-700 dark:text-green-300">${{ row.actual_cost?.toFixed(8) || '0.00000000' }}</span>
               <!-- Cost Detail Tooltip -->
               <div
                 class="group relative"
@@ -155,7 +176,7 @@
               </div>
             </div>
             <div v-if="row.account_rate_multiplier != null" class="mt-0.5 text-[11px] text-orange-700 dark:text-orange-300">
-              A ${{ accountBilled(row).toFixed(6) }}
+              A ${{ accountBilled(row).toFixed(8) }}
             </div>
           </div>
         </template>
@@ -172,6 +193,23 @@
 
         <template #cell-request_id="{ row }">
           <button v-if="row.request_id" type="button" class="max-w-[180px] truncate font-mono text-xs text-primary-700 underline decoration-dashed underline-offset-2 dark:text-primary-300" :title="row.request_id" @click="$emit('requestClick', row.request_id)">{{ row.request_id }}</button>
+          <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
+        </template>
+
+        <template #cell-upstream_request_id="{ row }">
+          <button
+            v-if="row.upstream_request_id"
+            type="button"
+            data-testid="usage-upstream-request-id"
+            class="max-w-[180px] truncate font-mono text-xs text-gray-700 underline decoration-dashed underline-offset-2 dark:text-gray-300"
+            :title="row.upstream_request_id"
+            @click="copyText(row.upstream_request_id)"
+          >{{ row.upstream_request_id }}</button>
+          <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
+        </template>
+
+        <template #cell-session_id="{ row }">
+          <span v-if="row.session_id" class="block max-w-[180px] truncate font-mono text-xs text-gray-600 dark:text-gray-400" :title="row.session_id">{{ row.session_id }}</span>
           <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
         </template>
 
@@ -211,6 +249,10 @@
             <div v-if="tokenTooltipData && tokenTooltipData.input_tokens > 0" class="flex items-center justify-between gap-4">
               <span class="text-gray-400">{{ t('admin.usage.inputTokens') }}</span>
               <span class="font-medium text-white">{{ tokenTooltipData.input_tokens.toLocaleString() }}</span>
+            </div>
+            <div v-if="tokenTooltipData && (tokenTooltipData.image_input_tokens ?? 0) > 0" class="flex items-center justify-between gap-4">
+              <span class="text-gray-400">{{ t('admin.usage.imageInputTokens') }}</span>
+              <span class="font-medium text-emerald-300">{{ (tokenTooltipData.image_input_tokens ?? 0).toLocaleString() }}</span>
             </div>
             <div v-if="tokenTooltipData && tokenTooltipData.output_tokens > 0" class="flex items-center justify-between gap-4">
               <span class="text-gray-400">{{ t('admin.usage.outputTokens') }}</span>
@@ -279,11 +321,15 @@
             <div class="text-xs font-semibold text-gray-300 mb-1">{{ t('usage.costDetails') }}</div>
             <div v-if="tooltipData && tooltipData.input_cost > 0" class="flex items-center justify-between gap-4">
               <span class="text-gray-400">{{ t('admin.usage.inputCost') }}</span>
-              <span class="font-medium text-white">${{ tooltipData.input_cost.toFixed(6) }}</span>
+              <span class="font-medium text-white">${{ tooltipData.input_cost.toFixed(8) }}</span>
+            </div>
+            <div v-if="tooltipData && (tooltipData.image_input_cost ?? 0) > 0" class="flex items-center justify-between gap-4">
+              <span class="text-gray-400">{{ t('admin.usage.imageInputCost') }}</span>
+              <span class="font-medium text-white">${{ (tooltipData.image_input_cost ?? 0).toFixed(8) }}</span>
             </div>
             <div v-if="outputCostForDisplay(tooltipData) > 0" class="flex items-center justify-between gap-4">
               <span class="text-gray-400">{{ t('admin.usage.outputCost') }}</span>
-              <span class="font-medium text-white">${{ outputCostForDisplay(tooltipData).toFixed(6) }}</span>
+              <span class="font-medium text-white">${{ outputCostForDisplay(tooltipData).toFixed(8) }}</span>
             </div>
             <!-- Per-image billing: show image metadata and unit price -->
             <template v-if="tooltipData && getDisplayBillingMode(tooltipData) === BILLING_MODE_IMAGE">
@@ -313,17 +359,21 @@
               </div>
               <div class="flex items-center justify-between gap-4">
                 <span class="text-gray-400">{{ t('usage.imageUnitPrice') }}</span>
-                <span class="font-medium text-sky-300">${{ imageUnitPrice(tooltipData).toFixed(6) }}</span>
+                <span class="font-medium text-sky-300">${{ imageUnitPrice(tooltipData).toFixed(8) }}</span>
               </div>
               <div class="flex items-center justify-between gap-4">
                 <span class="text-gray-400">{{ t('usage.imageTotalPrice') }}</span>
-                <span class="font-medium text-white">${{ tooltipData.total_cost?.toFixed(6) || '0.000000' }}</span>
+                <span class="font-medium text-white">${{ tooltipData.total_cost?.toFixed(8) || '0.00000000' }}</span>
               </div>
             </template>
             <template v-else-if="!getDisplayBillingMode(tooltipData) || getDisplayBillingMode(tooltipData) === BILLING_MODE_TOKEN">
-              <div v-if="tooltipData && tooltipData.input_tokens > 0" class="flex items-center justify-between gap-4">
+              <div v-if="tooltipData && textInputTokens(tooltipData) > 0" class="flex items-center justify-between gap-4">
                 <span class="text-gray-400">{{ t('usage.inputTokenPrice') }}</span>
-                <span class="font-medium text-sky-300">{{ formatTokenPricePerMillion(tooltipData.input_cost, tooltipData.input_tokens) }} {{ t('usage.perMillionTokens') }}</span>
+                <span class="font-medium text-sky-300">{{ formatTokenPricePerMillion(tooltipData.input_cost, textInputTokens(tooltipData)) }} {{ t('usage.perMillionTokens') }}</span>
+              </div>
+              <div v-if="tooltipData && (tooltipData.image_input_tokens ?? 0) > 0" class="flex items-center justify-between gap-4">
+                <span class="text-gray-400">{{ t('usage.imageInputTokenPrice') }}</span>
+                <span class="font-medium text-emerald-300">{{ formatTokenPricePerMillion(tooltipData.image_input_cost ?? 0, tooltipData.image_input_tokens ?? 0) }} {{ t('usage.perMillionTokens') }}</span>
               </div>
               <div v-if="tooltipData && tooltipData.output_tokens > 0" class="flex items-center justify-between gap-4">
                 <span class="text-gray-400">{{ t('usage.outputTokenPrice') }}</span>
@@ -332,15 +382,15 @@
             </template>
             <div v-else class="flex items-center justify-between gap-4">
               <span class="text-gray-400">{{ t('usage.unitPrice') }}</span>
-              <span class="font-medium text-sky-300">${{ tooltipData?.total_cost?.toFixed(6) || '0.000000' }}</span>
+              <span class="font-medium text-sky-300">${{ tooltipData?.total_cost?.toFixed(8) || '0.00000000' }}</span>
             </div>
             <div v-if="tooltipData && tooltipData.cache_creation_cost > 0" class="flex items-center justify-between gap-4">
               <span class="text-gray-400">{{ t('admin.usage.cacheCreationCost') }}</span>
-              <span class="font-medium text-white">${{ tooltipData.cache_creation_cost.toFixed(6) }}</span>
+              <span class="font-medium text-white">${{ tooltipData.cache_creation_cost.toFixed(8) }}</span>
             </div>
             <div v-if="tooltipData && tooltipData.cache_read_cost > 0" class="flex items-center justify-between gap-4">
               <span class="text-gray-400">{{ t('admin.usage.cacheReadCost') }}</span>
-              <span class="font-medium text-white">${{ tooltipData.cache_read_cost.toFixed(6) }}</span>
+              <span class="font-medium text-white">${{ tooltipData.cache_read_cost.toFixed(8) }}</span>
             </div>
           </div>
           <!-- Rate and Summary -->
@@ -354,11 +404,11 @@
           </div>
           <div class="flex items-center justify-between gap-6">
             <span class="text-gray-400">{{ t('usage.original') }}</span>
-            <span class="font-medium text-white">${{ tooltipData?.total_cost?.toFixed(6) || '0.000000' }}</span>
+            <span class="font-medium text-white">${{ tooltipData?.total_cost?.toFixed(8) || '0.00000000' }}</span>
           </div>
           <div class="flex items-center justify-between gap-6">
             <span class="text-gray-400">{{ t('usage.userBilled') }}</span>
-            <span class="font-semibold text-green-400">${{ tooltipData?.actual_cost?.toFixed(6) || '0.000000' }}</span>
+            <span class="font-semibold text-green-400">${{ tooltipData?.actual_cost?.toFixed(8) || '0.00000000' }}</span>
           </div>
           <!-- Account billing (separated from user billing) -->
           <div class="flex items-center justify-between gap-6 border-t border-gray-700 pt-1.5">
@@ -372,7 +422,7 @@
                 total_cost: tooltipData?.total_cost,
                 account_stats_cost: tooltipData?.account_stats_cost,
                 account_rate_multiplier: tooltipData?.account_rate_multiplier,
-              }).toFixed(6) }}
+              }).toFixed(8) }}
             </span>
           </div>
         </div>
@@ -427,6 +477,11 @@ function getDisplayBillingMode(row: Pick<AdminUsageLog, 'billing_mode' | 'image_
   return row?.billing_mode
 }
 
+// 文本输入 token：input_tokens 含图片输入，input_cost 只计文本部分（V03-T14）。
+function textInputTokens(row: Pick<AdminUsageLog, 'input_tokens' | 'image_input_tokens'> | null | undefined): number {
+  return Math.max((row?.input_tokens ?? 0) - (row?.image_input_tokens ?? 0), 0)
+}
+
 function outputCostForDisplay(row: Pick<AdminUsageLog, 'output_cost' | 'image_output_cost'> | null | undefined): number {
   return (row?.output_cost ?? 0) + (row?.image_output_cost ?? 0)
 }
@@ -437,6 +492,8 @@ import Icon from '@/components/icons/Icon.vue'
 import type { AdminUsageLog } from '@/types'
 import type { Column } from '@/components/common/types'
 import UsageLatencyHealth from './UsageLatencyHealth.vue'
+import { useClipboard } from '@/composables/useClipboard'
+import { hasReasoningEffortMapping } from '@/utils/reasoningEffortDisplay'
 
 interface Props {
   data: AdminUsageLog[]
@@ -459,6 +516,9 @@ defineEmits<{
   requestClick: [requestID: string]
 }>()
 const { t } = useI18n()
+// 点击时才取剪贴板组合函数（它依赖 store），组件 setup 不依赖 pinia。
+const copyText = (value: string) => { void useClipboard().copyToClipboard(value) }
+
 
 // Tooltip state - cost
 const tooltipVisible = ref(false)

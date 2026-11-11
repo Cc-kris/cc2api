@@ -722,6 +722,34 @@
               />
               {{ t("admin.groups.imagePricing.independentMultiplier") }}
             </label>
+            <div
+              v-if="createForm.allow_image_generation && createForm.platform === 'openai'"
+              class="md:col-span-2"
+              data-testid="create-image-count-billing"
+            >
+              <!-- 两列网格：第一行复选框 + 标签，提示在第二行与标签文字对齐，不挤占标签 -->
+              <div class="grid grid-cols-[auto_1fr] items-center gap-x-2">
+                <input
+                  id="create-image-count-billing-input"
+                  v-model="createForm.image_count_billing"
+                  type="checkbox"
+                  aria-describedby="create-image-count-billing-hint"
+                  class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <label
+                  for="create-image-count-billing-input"
+                  class="whitespace-nowrap text-sm text-gray-700 dark:text-gray-300"
+                >
+                  {{ t("admin.groups.imagePricing.imageCountBilling") }}
+                </label>
+                <p
+                  id="create-image-count-billing-hint"
+                  class="col-start-2 mt-1 text-xs text-gray-500 dark:text-gray-400"
+                >
+                  {{ t("admin.groups.imagePricing.imageCountBillingHint") }}
+                </p>
+              </div>
+            </div>
           </div>
           <div
             v-if="createForm.image_rate_independent"
@@ -1984,6 +2012,34 @@
               />
               {{ t("admin.groups.imagePricing.independentMultiplier") }}
             </label>
+            <div
+              v-if="editForm.allow_image_generation && editForm.platform === 'openai'"
+              class="md:col-span-2"
+              data-testid="edit-image-count-billing"
+            >
+              <!-- 两列网格：第一行复选框 + 标签，提示在第二行与标签文字对齐，不挤占标签 -->
+              <div class="grid grid-cols-[auto_1fr] items-center gap-x-2">
+                <input
+                  id="edit-image-count-billing-input"
+                  v-model="editForm.image_count_billing"
+                  type="checkbox"
+                  aria-describedby="edit-image-count-billing-hint"
+                  class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <label
+                  for="edit-image-count-billing-input"
+                  class="whitespace-nowrap text-sm text-gray-700 dark:text-gray-300"
+                >
+                  {{ t("admin.groups.imagePricing.imageCountBilling") }}
+                </label>
+                <p
+                  id="edit-image-count-billing-hint"
+                  class="col-start-2 mt-1 text-xs text-gray-500 dark:text-gray-400"
+                >
+                  {{ t("admin.groups.imagePricing.imageCountBillingHint") }}
+                </p>
+              </div>
+            </div>
           </div>
           <div
             v-if="editForm.image_rate_independent"
@@ -3030,6 +3086,7 @@ import {
   type MessagesDispatchMappingRow,
 } from "./groupsMessagesDispatch";
 import { normalizeSupportedModelScopesForPlatform } from "./groupsSupportedModelScopes";
+import { normalizeImageCountBilling } from "./groupsImageCountBilling";
 
 const { t } = useI18n();
 const appStore = useAppStore();
@@ -3305,6 +3362,7 @@ const createForm = reactive({
   monthly_limit_usd: null as number | null,
   // 图片生成计费配置
   allow_image_generation: false,
+  image_count_billing: false,
   image_rate_independent: false,
   image_rate_multiplier: 1,
   image_price_1k: null as number | null,
@@ -3599,6 +3657,7 @@ const editForm = reactive({
   monthly_limit_usd: null as number | null,
   // 图片生成计费配置
   allow_image_generation: false,
+  image_count_billing: false,
   image_rate_independent: false,
   image_rate_multiplier: 1,
   image_price_1k: null as number | null,
@@ -3862,6 +3921,7 @@ const closeCreateModal = () => {
   createForm.weekly_limit_usd = null;
   createForm.monthly_limit_usd = null;
   createForm.allow_image_generation = false;
+  createForm.image_count_billing = false;
   createForm.image_rate_independent = false;
   createForm.image_rate_multiplier = 1;
   createForm.image_price_1k = null;
@@ -3953,6 +4013,7 @@ const handleCreateGroup = async () => {
         createForm.platform,
         createForm.supported_model_scopes,
       ),
+      image_count_billing: normalizeImageCountBilling(createForm),
       messages_dispatch_model_config:
         supportsMessagesDispatchPlatform(createForm.platform)
           ? messagesDispatchFormStateToConfig({
@@ -4007,6 +4068,7 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.weekly_limit_usd = group.weekly_limit_usd;
   editForm.monthly_limit_usd = group.monthly_limit_usd;
   editForm.allow_image_generation = group.allow_image_generation ?? false;
+  editForm.image_count_billing = group.image_count_billing ?? false;
   editForm.image_rate_independent = group.image_rate_independent ?? false;
   editForm.image_rate_multiplier = group.image_rate_multiplier ?? 1;
   editForm.image_price_1k = group.image_price_1k;
@@ -4107,6 +4169,7 @@ const handleUpdateGroup = async () => {
         editForm.platform,
         editForm.supported_model_scopes,
       ),
+      image_count_billing: normalizeImageCountBilling(editForm),
       messages_dispatch_model_config:
         supportsMessagesDispatchPlatform(editForm.platform)
           ? messagesDispatchFormStateToConfig({
@@ -4237,6 +4300,21 @@ watch(
       editForm.require_oauth_only = false;
       editForm.require_privacy_set = false;
     }
+  },
+);
+
+// 「允许生图」关闭或平台不是 openai 时，按张计费不适用，表单同步置为 false。
+watch(
+  () => [createForm.platform, createForm.allow_image_generation],
+  () => {
+    createForm.image_count_billing = normalizeImageCountBilling(createForm);
+  },
+);
+
+watch(
+  () => [editForm.platform, editForm.allow_image_generation],
+  () => {
+    editForm.image_count_billing = normalizeImageCountBilling(editForm);
   },
 );
 

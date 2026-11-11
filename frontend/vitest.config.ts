@@ -4,6 +4,10 @@ import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
   plugins: [vue()],
+  define: {
+    // 与 vite.config.ts 保持一致：运行时版本 + JIT 编译，测试里 t() 才能解析真实文案
+    __INTLIFY_JIT_COMPILATION__: true
+  },
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),

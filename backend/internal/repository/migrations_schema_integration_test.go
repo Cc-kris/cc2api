@@ -97,6 +97,15 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 	requireColumn(t, tx, "usage_logs", "sales_pricing_version", "character varying", 10, true)
 	requireColumn(t, tx, "usage_logs", "sales_pricing_snapshot", "jsonb", 0, true)
 	requireColumn(t, tx, "usage_logs", "usage_list_value", "numeric", 0, true)
+	// V03-R11 用量审计字段（迁移 230、231、232）
+	requireColumn(t, tx, "usage_logs", "upstream_response_model", "character varying", 200, true)
+	requireColumn(t, tx, "usage_logs", "upstream_model_mismatch", "boolean", 0, true)
+	requireColumn(t, tx, "usage_logs", "session_id", "character varying", 255, true)
+	requireColumn(t, tx, "usage_logs", "requested_reasoning_effort", "character varying", 20, true)
+	requireColumn(t, tx, "usage_logs", "upstream_request_id", "character varying", 128, true)
+	requireColumnDefaultAbsent(t, tx, "usage_logs", "upstream_response_model", "upstream_model_mismatch", "session_id", "requested_reasoning_effort", "upstream_request_id")
+	requireValidIndexDefinition(t, tx, "usage_logs", "idx_usage_logs_upstream_request_id", "(upstream_request_id)", "upstream_request_id IS NOT NULL")
+	requireValidIndexDefinition(t, tx, "usage_logs", "idx_usage_logs_upstream_model_mismatch_created_at", "created_at DESC", "id DESC", "upstream_model_mismatch IS TRUE")
 	requireConstraintDefinitionContains(
 		t,
 		tx,
@@ -395,5 +404,40 @@ WHERE table_schema = 'public'
 		require.Equal(t, "YES", row.Nullable, "nullable mismatch for %s.%s", table, column)
 	} else {
 		require.Equal(t, "NO", row.Nullable, "nullable mismatch for %s.%s", table, column)
+	}
+}
+
+func requireColumnDefaultAbsent(t *testing.T, tx *sql.Tx, table string, columns ...string) {
+	t.Helper()
+	for _, column := range columns {
+		var columnDefault sql.NullString
+		err := tx.QueryRowContext(context.Background(), `
+			SELECT column_default FROM information_schema.columns
+			WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2
+		`, table, column).Scan(&columnDefault)
+		require.NoError(t, err, "query column default %s.%s", table, column)
+		require.False(t, columnDefault.Valid, "%s.%s must not have a default, got %q", table, column, columnDefault.String)
+	}
+}
+
+// requireValidIndexDefinition 断言索引存在、indisvalid=true（CONCURRENTLY 构建成功），且定义包含给定片段。
+func requireValidIndexDefinition(t *testing.T, tx *sql.Tx, table, index string, fragments ...string) {
+	t.Helper()
+	var (
+		valid bool
+		def   string
+	)
+	err := tx.QueryRowContext(context.Background(), `
+SELECT i.indisvalid, pg_get_indexdef(i.indexrelid)
+FROM pg_class idx
+JOIN pg_index i ON i.indexrelid = idx.oid
+JOIN pg_class tbl ON tbl.oid = i.indrelid
+JOIN pg_namespace ns ON ns.oid = tbl.relnamespace
+WHERE ns.nspname = 'public' AND tbl.relname = $1 AND idx.relname = $2
+`, table, index).Scan(&valid, &def)
+	require.NoError(t, err, "query index definition for %s.%s", table, index)
+	require.True(t, valid, "index %s must be valid", index)
+	for _, fragment := range fragments {
+		require.Contains(t, def, fragment, "index %s definition", index)
 	}
 }

@@ -41,6 +41,10 @@
                 {{ t('payment.admin.approveRefund') }}
               </button>
             </template>
+            <button v-else-if="row.status === 'REFUND_PENDING'" :disabled="refundQueryingIds.has(row.id)" @click="handleQueryRefund(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-orange-600 hover:bg-orange-50 disabled:opacity-60 dark:text-orange-400 dark:hover:bg-orange-900/20">
+              <Icon name="refresh" size="sm" :class="refundQueryingIds.has(row.id) ? 'animate-spin' : ''" />
+              {{ t('payment.admin.queryRefundStatus') }}
+            </button>
             <button v-else-if="row.status === 'REFUND_FAILED'" @click="openRefundDialog(row)" class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20">
               <Icon name="refresh" size="sm" />
               {{ t('payment.admin.retryRefund') }}
@@ -107,7 +111,7 @@
       </div>
     </BaseDialog>
 
-    <AdminRefundDialog :show="showRefundDialog" :order="selectedOrder" :submitting="refundSubmitting" @confirm="handleRefund" @cancel="showRefundDialog = false" />
+    <AdminRefundDialog :show="showRefundDialog" :order="selectedOrder" :submitting="refundSubmitting" :user-balance="refundUserBalance" :require-force="refundRequireForce" :warning="refundWarning" @confirm="handleRefund" @cancel="closeRefundDialog" />
   </AppLayout>
 </template>
 
@@ -116,6 +120,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminPaymentAPI } from '@/api/admin/payment'
+import { adminAPI } from '@/api/admin'
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import { formatOrderDateTime } from '@/components/payment/orderUtils'
 import type { PaymentOrder } from '@/types/payment'
@@ -148,6 +153,10 @@ const selectedOrder = ref<PaymentOrder | null>(null)
 const showDetailDialog = ref(false)
 const showRefundDialog = ref(false)
 const refundSubmitting = ref(false)
+const refundRequireForce = ref(false)
+const refundWarning = ref('')
+const refundUserBalance = ref<number | null>(null)
+const refundQueryingIds = ref(new Set<number>())
 const orderAuditLogs = ref<AuditLog[]>([])
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -184,6 +193,7 @@ const statusFilterOptions = computed(() => [
   { value: 'FAILED', label: t('payment.status.failed') },
   { value: 'REFUNDED', label: t('payment.status.refunded') },
   { value: 'REFUND_REQUESTED', label: t('payment.status.refund_requested') },
+  { value: 'REFUND_PENDING', label: t('payment.status.refund_pending') },
   { value: 'REFUND_FAILED', label: t('payment.status.refund_failed') },
 ])
 
@@ -223,16 +233,79 @@ async function handleRetryOrder(order: PaymentOrder) {
   catch (err: unknown) { appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error'))) }
 }
 
-function openRefundDialog(order: PaymentOrder) { selectedOrder.value = order; showRefundDialog.value = true }
+function openRefundDialog(order: PaymentOrder) {
+  selectedOrder.value = order
+  refundRequireForce.value = false
+  refundWarning.value = ''
+  refundUserBalance.value = null
+  showRefundDialog.value = true
+  // 余额充值订单展示用户当前余额，弹窗据此按本次申请金额提示余额不足；取不到时不提示，由后端 require_force 兜底。
+  if (order.order_type === 'balance') {
+    const orderId = order.id
+    adminAPI.users.getById(order.user_id)
+      .then((user) => { if (selectedOrder.value?.id === orderId && showRefundDialog.value) refundUserBalance.value = user.balance })
+      .catch(() => { /* keep balance unknown */ })
+  }
+}
+
+function closeRefundDialog() {
+  showRefundDialog.value = false
+  refundRequireForce.value = false
+  refundWarning.value = ''
+  refundUserBalance.value = null
+}
+
+function isRefundPendingWarning(warning: string | undefined): boolean {
+  return /pending|处理中|待/.test(String(warning || '').toLowerCase())
+}
 
 async function handleRefund(data: { amount: number; reason: string; deduct_balance: boolean; force: boolean }) {
   if (!selectedOrder.value) return
   refundSubmitting.value = true
   try {
-    await adminPaymentAPI.refundOrder(selectedOrder.value.id, { amount: data.amount, reason: data.reason, deduct_balance: data.deduct_balance, force: data.force })
-    appStore.showSuccess(t('payment.admin.refundSuccess')); showRefundDialog.value = false; loadOrders()
+    const res = await adminPaymentAPI.refundOrder(selectedOrder.value.id, { amount: data.amount, reason: data.reason, deduct_balance: data.deduct_balance, force: data.force })
+    if (res.data.success) {
+      appStore.showSuccess(t('payment.admin.refundSuccess'))
+      closeRefundDialog()
+      loadOrders()
+      return
+    }
+    if (res.data.require_force) {
+      // 余额不足等情况需要管理员显式确认：保持弹窗打开，显示强制选项和后端提示。
+      refundRequireForce.value = true
+      refundWarning.value = t('payment.admin.refundRequireForce')
+      return
+    }
+    if (isRefundPendingWarning(res.data.warning)) {
+      appStore.showSuccess(t('payment.admin.refundPending'))
+      closeRefundDialog()
+      loadOrders()
+      return
+    }
+    appStore.showError(res.data.warning || t('common.error'))
   } catch (err: unknown) { appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error'))) }
   finally { refundSubmitting.value = false }
+}
+
+async function handleQueryRefund(order: PaymentOrder) {
+  refundQueryingIds.value = new Set(refundQueryingIds.value).add(order.id)
+  try {
+    const res = await adminPaymentAPI.queryRefund(order.id)
+    if (res.data.success) {
+      appStore.showSuccess(t('payment.admin.refundSuccess'))
+    } else if (isRefundPendingWarning(res.data.warning)) {
+      appStore.showSuccess(t('payment.admin.refundPending'))
+    } else {
+      appStore.showError(res.data.warning || t('common.error'))
+    }
+    loadOrders()
+  } catch (err: unknown) {
+    appStore.showError(extractI18nErrorMessage(err, t, 'payment.errors', t('common.error')))
+  } finally {
+    const next = new Set(refundQueryingIds.value)
+    next.delete(order.id)
+    refundQueryingIds.value = next
+  }
 }
 
 function formatDateTime(dateStr: string): string { return formatOrderDateTime(dateStr) }

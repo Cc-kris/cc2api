@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "types": ["node", "@playwright/test"]
+  },
+  "include": [
+    "playwright.v042.config.ts",
+    "e2e/v042-ui/**/*.ts"
+  ]
+}

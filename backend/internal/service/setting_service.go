@@ -1414,6 +1414,14 @@ func (s *SettingService) SetOnUpdateCallback(callback func()) {
 	s.onUpdate = callback
 }
 
+// NotifySettingsUpdated lets services that share the settings repository trigger
+// the same cache invalidation as a direct SettingService update.
+func (s *SettingService) NotifySettingsUpdated() {
+	if s != nil && s.onUpdate != nil {
+		s.onUpdate()
+	}
+}
+
 // SetVersion sets the application version for injection into public settings
 func (s *SettingService) SetVersion(version string) {
 	s.version = version

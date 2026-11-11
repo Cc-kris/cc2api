@@ -221,13 +221,16 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 		Status:       StatusActive,
 	}
 
-	if err := s.createUserWithRegistrationPolicy(ctx, user); err != nil {
+	if err := s.createUserAndClaimInvitation(ctx, user, invitationRedeemCode); err != nil {
 		// 优先检查邮箱冲突错误（竞态条件下可能发生）
 		if errors.Is(err, ErrEmailExists) {
 			return "", nil, ErrEmailExists
 		}
 		if errors.Is(err, ErrRegistrationDomainLimit) {
 			return "", nil, ErrRegistrationDomainLimit
+		}
+		if errors.Is(err, ErrInvitationCodeInvalid) {
+			return "", nil, ErrInvitationCodeInvalid
 		}
 		logger.LegacyPrintf("service.auth", "[Auth] Database error creating user: %v", err)
 		return "", nil, ErrServiceUnavailable
@@ -248,13 +251,8 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 		}
 	}
 
-	// 标记邀请码为已使用（如果使用了邀请码）
-	if invitationRedeemCode != nil {
-		if err := s.redeemRepo.Use(ctx, invitationRedeemCode.ID, user.ID); err != nil {
-			// 邀请码标记失败不影响注册，只记录日志
-			logger.LegacyPrintf("service.auth", "[Auth] Failed to mark invitation code as used for user %d: %v", user.ID, err)
-		}
-	}
+	// 邀请码已由 createUserAndClaimInvitation 在「建用户 + 占用邀请码」同一事务内占用，此处不再单独标记。
+	// 返利绑定（上方）与优惠码（下方）仍在事务外 best-effort，失败不影响注册。
 	// 应用优惠码（如果提供且功能已启用）
 	if promoCode != "" && s.promoService != nil && s.settingService != nil && s.settingService.IsPromoCodeEnabled(ctx) {
 		if err := s.promoService.ApplyPromoCode(ctx, user.ID, promoCode); err != nil {
@@ -712,7 +710,8 @@ func (s *AuthService) LoginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 					s.bindOAuthAffiliate(ctx, user.ID, affiliateCode)
 				}
 			} else {
-				if err := s.createUserWithRegistrationPolicy(ctx, newUser); err != nil {
+				// 无邀请码或 entClient 缺失：走 createUserAndClaimInvitation，占用失败不做注册后初始化。
+				if err := s.createUserAndClaimInvitation(ctx, newUser, invitationRedeemCode); err != nil {
 					if errors.Is(err, ErrEmailExists) {
 						user, err = s.userRepo.GetByEmail(ctx, email)
 						if err != nil {
@@ -721,6 +720,8 @@ func (s *AuthService) LoginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 						}
 					} else if errors.Is(err, ErrRegistrationDomainLimit) {
 						return nil, nil, ErrRegistrationDomainLimit
+					} else if errors.Is(err, ErrInvitationCodeInvalid) {
+						return nil, nil, ErrInvitationCodeInvalid
 					} else {
 						logger.LegacyPrintf("service.auth", "[Auth] Database error creating oauth user: %v", err)
 						return nil, nil, ErrServiceUnavailable
@@ -732,11 +733,6 @@ func (s *AuthService) LoginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 					// snapshot user × platform quota（fail-open）
 					_ = s.snapshotPlatformQuotaDefaults(ctx, user.ID, &grantPlan)
 					s.bindOAuthAffiliate(ctx, user.ID, affiliateCode)
-					if invitationRedeemCode != nil {
-						if err := s.redeemRepo.Use(ctx, invitationRedeemCode.ID, user.ID); err != nil {
-							return nil, nil, ErrInvitationCodeInvalid
-						}
-					}
 				}
 			}
 		} else {
@@ -1094,6 +1090,55 @@ func (s *AuthService) createUserWithRegistrationPolicy(ctx context.Context, user
 		return creator.CreateWithRegistrationDomainLimit(ctx, user, s.settingService.GetRegistrationDomainLimitPerDomain(ctx))
 	}
 	return s.userRepo.Create(ctx, user)
+}
+
+// createUserAndClaimInvitation 原子完成「建用户 + 占用邀请码」。
+//
+// 邀请码是一次性凭证。旧实现先 CanUse() 检查、再建用户、最后才 redeemRepo.Use()（失败只记日志），
+// 检查与占用分离且不在同一事务，并发注册可以用同一个码各自建号（TOCTOU）。
+//
+// 这里把两步放进同一个数据库事务：
+//   - 占用走 redeemRepo.Use 的条件更新（WHERE status='unused'），并发下只有一个事务占用成功；
+//   - 占用失败返回 ErrInvitationCodeInvalid 并回滚，用户创建一并撤销，不留孤儿用户，也不烧掉邀请码；
+//   - user_repo 的建号逻辑会复用 ctx 中的外部事务（见 createWithRegistrationDomainLimit）。
+//
+// 无邀请码时保持原来的单次创建；entClient 缺失（仅测试或异常配置）时退化为顺序执行，
+// 仍由 Use 的条件更新保证不会放行第二个注册。
+func (s *AuthService) createUserAndClaimInvitation(ctx context.Context, user *User, invitation *RedeemCode) error {
+	createAndClaim := func(execCtx context.Context) error {
+		if err := s.createUserWithRegistrationPolicy(execCtx, user); err != nil {
+			return err
+		}
+		if invitation == nil {
+			return nil
+		}
+		if err := s.redeemRepo.Use(execCtx, invitation.ID, user.ID); err != nil {
+			logger.LegacyPrintf("service.auth",
+				"[Auth] Rejected registration: invitation code %d already claimed (user_id=%d err=%v)",
+				invitation.ID, user.ID, err)
+			return ErrInvitationCodeInvalid
+		}
+		return nil
+	}
+
+	if invitation == nil || s.entClient == nil || dbent.TxFromContext(ctx) != nil {
+		return createAndClaim(ctx)
+	}
+
+	tx, err := s.entClient.Tx(ctx)
+	if err != nil {
+		logger.LegacyPrintf("service.auth", "[Auth] Failed to start registration transaction: %v", err)
+		return ErrServiceUnavailable
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := createAndClaim(dbent.NewTxContext(ctx, tx)); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		logger.LegacyPrintf("service.auth", "[Auth] Failed to commit registration transaction: %v", err)
+		return ErrServiceUnavailable
+	}
+	return nil
 }
 
 func buildEmailSuffixNotAllowedError(whitelist []string) error {

@@ -370,6 +370,8 @@ func TestAPIContracts(t *testing.T) {
 						"require_oauth_only": false,
 						"require_privacy_set": false,
 						"rpm_limit": 0,
+						"failover_on_any_error": false,
+						"image_count_billing": false,
 						"created_at": "2025-01-02T03:04:05Z",
 						"updated_at": "2025-01-02T03:04:05Z"
 					}
@@ -569,12 +571,14 @@ func TestAPIContracts(t *testing.T) {
 								"subscription_id": null,
 							"input_tokens": 10,
 							"output_tokens": 20,
+							"image_input_tokens": 0,
 							"image_output_tokens": 0,
 							"cache_creation_tokens": 1,
 							"cache_read_tokens": 2,
 							"cache_creation_5m_tokens": 0,
 							"cache_creation_1h_tokens": 0,
 							"input_cost": 0,
+							"image_input_cost": 0,
 							"output_cost": 0,
 							"image_output_cost": 0,
 							"cache_creation_cost": 0,
@@ -2017,6 +2021,10 @@ func (stubUserSubscriptionRepo) Create(ctx context.Context, sub *service.UserSub
 }
 func (stubUserSubscriptionRepo) GetByID(ctx context.Context, id int64) (*service.UserSubscription, error) {
 	return nil, errors.New("not implemented")
+}
+
+func (r stubUserSubscriptionRepo) GetByIDForUpdate(ctx context.Context, id int64) (*service.UserSubscription, error) {
+	return r.GetByID(ctx, id)
 }
 func (stubUserSubscriptionRepo) GetByUserIDAndGroupID(ctx context.Context, userID, groupID int64) (*service.UserSubscription, error) {
 	return nil, errors.New("not implemented")

@@ -101,7 +101,7 @@
             {{ t('admin.channels.form.defaultPrices', '默认价格（未命中区间时使用）') }}
             <span class="ml-1 font-normal text-gray-400">$/MTok</span>
           </label>
-          <div class="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <div class="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             <div>
               <label class="text-xs text-gray-400">{{ t('admin.channels.form.inputPrice', '输入') }}</label>
               <input :value="entry.input_price" @input="emitField('input_price', ($event.target as HTMLInputElement).value)"
@@ -118,9 +118,19 @@
                 type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder', '默认')" />
             </div>
             <div>
+              <label class="text-xs text-gray-400" :title="t('admin.channels.form.cacheWrite1hPriceHint')">{{ t('admin.channels.form.cacheWrite1hPrice') }}</label>
+              <input :value="entry.cache_write_1h_price" @input="emitField('cache_write_1h_price', ($event.target as HTMLInputElement).value)"
+                type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.cacheWrite1hPricePlaceholder')" />
+            </div>
+            <div>
               <label class="text-xs text-gray-400">{{ t('admin.channels.form.cacheReadPrice', '缓存读取') }}</label>
               <input :value="entry.cache_read_price" @input="emitField('cache_read_price', ($event.target as HTMLInputElement).value)"
                 type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.pricePlaceholder', '默认')" />
+            </div>
+            <div v-if="showImageInputPrice">
+              <label class="text-xs text-gray-400" :title="t('admin.channels.form.imageInputPriceHint')">{{ t('admin.channels.form.imageInputPrice') }}</label>
+              <input :value="entry.image_input_price" @input="emitField('image_input_price', ($event.target as HTMLInputElement).value)"
+                type="number" step="any" min="0" class="input mt-0.5 text-sm" :placeholder="t('admin.channels.form.imageInputPricePlaceholder')" />
             </div>
             <div>
               <label class="text-xs text-gray-400">{{ t('admin.channels.form.imageTokenPrice', '图片输出') }}</label>
@@ -273,6 +283,8 @@ const { t } = useI18n()
 const props = defineProps<{
   entry: PricingFormEntry
   platform?: string
+  // 图片输入价只存在于渠道模型定价；账号统计定价规则没有此列，不显示（V03-T14）。
+  showImageInputPrice?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -387,6 +399,10 @@ async function onModelsUpdate(newModels: string[]) {
         cache_write_price: perTokenToMTok(result.cache_write_price ?? null),
         cache_read_price: perTokenToMTok(result.cache_read_price ?? null),
         image_output_price: perTokenToMTok(result.image_output_price ?? null),
+        // 目录不提供图片输入价（恒为 0），只在有正值时回填，避免把「回退输入价」显示成 0。
+        ...(props.showImageInputPrice && (result.image_input_price ?? 0) > 0
+          ? { image_input_price: perTokenToMTok(result.image_input_price ?? null) }
+          : {}),
       })
     }
   } catch {
