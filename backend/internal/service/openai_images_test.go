@@ -417,7 +417,8 @@ func TestAccountSupportsOpenAIImageCapability_OAuthSupportsNative(t *testing.T) 
 	require.True(t, account.SupportsOpenAIImageCapability(OpenAIImagesCapabilityNative))
 }
 
-func TestAccountSupportsOpenAIImageRequestRejectsAPIKeyTextMapping(t *testing.T) {
+func TestAccountSupportsOpenAIImageRequestAcceptsArbitraryModel(t *testing.T) {
+	// 图片模型名不再参与账号筛选：映射结果非空即可，模型是否存在由上游判定。
 	apiKeyAccount := &Account{
 		Platform: PlatformOpenAI,
 		Type:     AccountTypeAPIKey,
@@ -425,12 +426,12 @@ func TestAccountSupportsOpenAIImageRequestRejectsAPIKeyTextMapping(t *testing.T)
 			"model_mapping": map[string]any{"gpt-*": "gpt-5.5"},
 		},
 	}
-	require.False(t, apiKeyAccount.SupportsOpenAIImageRequest(OpenAIImagesCapabilityNative, "gpt-image-2"))
+	require.True(t, apiKeyAccount.SupportsOpenAIImageRequest(OpenAIImagesCapabilityNative, "gpt-image-2"))
 
 	apiKeyAccount.Credentials = map[string]any{
-		"model_mapping": map[string]any{"gpt-image-2": "gpt-image-2"},
+		"model_mapping": map[string]any{"NovelAI-V4.5": "无限制-NovelAI-V4.5"},
 	}
-	require.True(t, apiKeyAccount.SupportsOpenAIImageRequest(OpenAIImagesCapabilityNative, "gpt-image-2"))
+	require.True(t, apiKeyAccount.SupportsOpenAIImageRequest(OpenAIImagesCapabilityNative, "NovelAI-V4.5"))
 
 	oauthAccount := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}
 	require.True(t, oauthAccount.SupportsOpenAIImageRequest(OpenAIImagesCapabilityBasic, "gpt-image-2"))
@@ -1853,4 +1854,46 @@ func TestOpenAIGatewayServiceForwardImages_OAuthStreamingDrainsAfterClientDiscon
 	require.Equal(t, 5, result.Usage.InputTokens)
 	require.Equal(t, 9, result.Usage.OutputTokens)
 	require.Equal(t, 4, result.Usage.ImageOutputTokens)
+}
+
+// 回归：images 端点不再按模型名过滤——自定义中文模型名 + 账号映射应原样转发上游。
+func TestOpenAIGatewayServiceForwardImages_APIKeyArbitraryModelNameForwarded(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"NovelAI-V4.5","prompt":"draw a cat","n":1}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = req
+	svc := &OpenAIGatewayService{
+		cfg: &config.Config{},
+		httpUpstream: &httpUpstreamRecorder{resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body: io.NopCloser(strings.NewReader(
+				`{"created":1710000008,"data":[{"url":"https://api.image2pro.top/vimg/abc"}]}`)),
+		}},
+	}
+	parsed, err := svc.ParseOpenAIImagesRequest(c, body)
+	require.NoError(t, err)
+	account := &Account{
+		ID: 203, Name: "rsup", Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key":       "test-key",
+			"base_url":      "https://rsupai.top/v1",
+			"model_mapping": map[string]any{"NovelAI-V4.5": "无限制-NovelAI-V4.5"},
+		},
+	}
+	result, err := svc.ForwardImages(context.Background(), c, account, body, parsed, "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, result.ImageCount)
+	require.Equal(t, "NovelAI-V4.5", result.Model)
+	require.Equal(t, "无限制-NovelAI-V4.5", result.UpstreamModel)
+	upstream, ok := svc.httpUpstream.(*httpUpstreamRecorder)
+	require.True(t, ok)
+	require.Equal(t, "https://rsupai.top/v1/images/generations", upstream.lastReq.URL.String())
+	require.Equal(t, "无限制-NovelAI-V4.5", gjson.GetBytes(upstream.lastBody, "model").String())
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "https://api.image2pro.top/vimg/abc", gjson.Get(rec.Body.String(), "data.0.url").String())
 }

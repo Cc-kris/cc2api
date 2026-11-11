@@ -66,7 +66,9 @@ type schedulerTestConcurrencyCache struct {
 	skipDefaultLoad bool
 }
 
-func TestOpenAIAccountSchedulerRejectsImageRequestMappedToText(t *testing.T) {
+func TestOpenAIAccountSchedulerAcceptsImageRequestWithArbitraryMappedModel(t *testing.T) {
+	// images 端点不再按模型名过滤：映射到文本模型名的图片请求也应被调度到该账号，
+	// 模型是否可用由上游判定，网关不再预先拒绝。
 	scheduler := &defaultOpenAIAccountScheduler{}
 	account := &Account{
 		ID:       75,
@@ -76,16 +78,16 @@ func TestOpenAIAccountSchedulerRejectsImageRequestMappedToText(t *testing.T) {
 			"model_mapping": map[string]any{"gpt-*": "gpt-5.5"},
 		},
 	}
-	require.False(t, scheduler.isAccountRequestCompatible(context.Background(), account, OpenAIAccountScheduleRequest{
+	require.True(t, scheduler.isAccountRequestCompatible(context.Background(), account, OpenAIAccountScheduleRequest{
 		RequestedModel:          "gpt-image-2",
 		RequiredImageCapability: OpenAIImagesCapabilityNative,
 	}))
 
 	account.Credentials = map[string]any{
-		"model_mapping": map[string]any{"gpt-image-2": "gpt-image-2"},
+		"model_mapping": map[string]any{"NovelAI-V4.5": "无限制-NovelAI-V4.5"},
 	}
 	require.True(t, scheduler.isAccountRequestCompatible(context.Background(), account, OpenAIAccountScheduleRequest{
-		RequestedModel:          "gpt-image-2",
+		RequestedModel:          "NovelAI-V4.5",
 		RequiredImageCapability: OpenAIImagesCapabilityNative,
 	}))
 }
