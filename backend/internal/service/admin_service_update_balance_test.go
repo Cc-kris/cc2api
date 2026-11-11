@@ -25,7 +25,7 @@ func (s *balanceUserRepoStub) Update(ctx context.Context, user *User) error {
 	clone := *user
 	s.updated = append(s.updated, &clone)
 	if s.userRepoStub != nil {
-		s.userRepoStub.user = &clone
+		s.user = &clone
 	}
 	return nil
 }

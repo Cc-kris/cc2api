@@ -81,8 +81,10 @@ func TestAntigravityForwardGemini_UpstreamErrorBodyIsSanitized(t *testing.T) {
 	// ops 日志仍保留原始 body
 	detail, ok := c.Get(OpsUpstreamErrorDetailKey)
 	require.True(t, ok)
-	require.Contains(t, detail.(string), "pool-sa@my-gcp-proj.iam.gserviceaccount.com")
-	require.Contains(t, detail.(string), "projects/123456789")
+	detailStr, ok := detail.(string)
+	require.True(t, ok, "detail should be a string")
+	require.Contains(t, detailStr, "pool-sa@my-gcp-proj.iam.gserviceaccount.com")
+	require.Contains(t, detailStr, "projects/123456789")
 }
 
 // TestAntigravityForwardUpstream_UpstreamErrorBodyIsSanitized：Claude 协议的上游透传账号
@@ -126,7 +128,9 @@ func TestAntigravityForwardUpstream_UpstreamErrorBodyIsSanitized(t *testing.T) {
 
 	detail, ok := c.Get(OpsUpstreamErrorDetailKey)
 	require.True(t, ok)
-	require.Contains(t, detail.(string), "sa@x.iam.gserviceaccount.com")
+	detailStr, ok := detail.(string)
+	require.True(t, ok, "detail should be a string")
+	require.Contains(t, detailStr, "sa@x.iam.gserviceaccount.com")
 }
 
 func TestBuildAntigravityClaudeClientErrorBody_NonJSONAndUnknownType(t *testing.T) {

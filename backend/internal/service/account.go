@@ -170,7 +170,7 @@ func (a *Account) IsCNProvider() bool {
 	return a != nil && isDomesticOpenAICompatiblePlatform(a.Platform)
 }
 
-func parseQuotaSnapshotNumber(value any) (float64, bool) {
+func parseQuotaSnapshotNumber(value any) (float64, bool) { //nolint:unused // local-fork helper retained from earlier upstream syncs; re-wiring is out of scope for the lint fix
 	switch n := value.(type) {
 	case float64:
 		return n, true
@@ -1255,7 +1255,7 @@ func ValidateDomesticOpenAIAccountCredentials(platform, accountType string, cred
 	return nil
 }
 
-func stringCredential(credentials map[string]any, key string) string {
+func stringCredential(credentials map[string]any, key string) string { //nolint:unused // local-fork helper retained from earlier upstream syncs; re-wiring is out of scope for the lint fix
 	value, _ := credentials[key].(string)
 	return value
 }

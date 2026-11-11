@@ -199,14 +199,18 @@ func TestEnableOpenAIHTTP2KeepAlive_SendsPingOnIdleConnection(t *testing.T) {
 		if err != nil {
 			return
 		}
-		tlsConn := conn.(*tls.Conn)
+		tlsConn, ok := conn.(*tls.Conn)
+		if !ok {
+			_ = conn.Close()
+			return
+		}
 		if err := tlsConn.Handshake(); err != nil {
 			_ = conn.Close()
 			return
 		}
 		wrapped := &frameSniffConn{Conn: tlsConn, pingSeen: make(chan struct{})}
 		sniff <- wrapped
-		(&http2.Server{}).ServeConn(wrapped, &http2.ServeConnOpts{
+		(&http2.Server{}).ServeConn(wrapped, &http2.ServeConnOpts{ //nolint:staticcheck // SA1019: e2e test drives the x/net http2 server/transport that the helper configures
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				_, _ = io.WriteString(w, "ok")
 			}),
@@ -216,10 +220,10 @@ func TestEnableOpenAIHTTP2KeepAlive_SendsPingOnIdleConnection(t *testing.T) {
 	tr := &http.Transport{ForceAttemptHTTP2: true}
 	h2, err := enableOpenAIHTTP2KeepAlive(tr)
 	require.NoError(t, err)
-	require.Equal(t, 15*time.Second, h2.ReadIdleTimeout)
-	require.Equal(t, 15*time.Second, h2.PingTimeout)
-	h2.ReadIdleTimeout = 200 * time.Millisecond
-	h2.PingTimeout = time.Second
+	require.Equal(t, 15*time.Second, h2.ReadIdleTimeout) //nolint:staticcheck // SA1019: e2e test drives the x/net http2 server/transport that the helper configures
+	require.Equal(t, 15*time.Second, h2.PingTimeout)     //nolint:staticcheck // SA1019: e2e test drives the x/net http2 server/transport that the helper configures
+	h2.ReadIdleTimeout = 200 * time.Millisecond          //nolint:staticcheck // SA1019: e2e test drives the x/net http2 server/transport that the helper configures
+	h2.PingTimeout = time.Second                         //nolint:staticcheck // SA1019: e2e test drives the x/net http2 server/transport that the helper configures
 	pool := x509.NewCertPool()
 	pool.AddCert(certificate)
 	tr.TLSClientConfig.RootCAs = pool

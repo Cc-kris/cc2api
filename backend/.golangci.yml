@@ -15,10 +15,13 @@ linters:
     depguard:
       rules:
         # Enforce: service must not depend on repository.
+        # Layering applies to production code only. "!$test" exempts *_test.go, which
+        # wire real repositories/redis (miniredis, sqlite) for integration-style cases.
         service-no-repository:
           list-mode: original
           files:
             - "**/internal/service/**"
+            - "!$test"
             - "!**/internal/service/ops_aggregation_service.go"
             - "!**/internal/service/ops_alert_evaluator_service.go"
             - "!**/internal/service/ops_cleanup_service.go"
@@ -36,6 +39,7 @@ linters:
           list-mode: original
           files:
             - "**/internal/handler/**"
+            - "!$test"
           deny:
             - pkg: github.com/Wei-Shaw/sub2api/internal/repository
               desc: "handler must not import repository"
@@ -84,6 +88,17 @@ linters:
         - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln
+        # strings.Builder / bytes.Buffer writes are documented to always return a nil error.
+        # These are errcheck's own built-in exclusions, which disable-default-exclusions
+        # turned off; only these infallible in-memory writers are restored.
+        - (*strings.Builder).Write
+        - (*strings.Builder).WriteByte
+        - (*strings.Builder).WriteRune
+        - (*strings.Builder).WriteString
+        - (*bytes.Buffer).Write
+        - (*bytes.Buffer).WriteByte
+        - (*bytes.Buffer).WriteRune
+        - (*bytes.Buffer).WriteString
       # Display function signature instead of selector.
       # Default: false
       verbose: true

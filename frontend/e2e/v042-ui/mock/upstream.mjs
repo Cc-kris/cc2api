@@ -15,13 +15,13 @@ let state = {
   releases: 0
 }
 
-function persist() { try { fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2)) } catch {} }
+function persist() { try { fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2)) } catch { /* best-effort state snapshot */ } }
 try {
   if (fs.existsSync(STATE_FILE)) {
     const saved = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'))
     state = { ...state, ...saved, payment: { ...state.payment, ...(saved.payment || {}) } }
   }
-} catch {}
+} catch { /* missing or corrupt state file: start from defaults */ }
 function log(...a) { console.log(new Date().toISOString(), ...a) }
 function readBody(req) { return new Promise((resolve) => { const cs = []; req.on('data', (c) => cs.push(c)); req.on('end', () => resolve(Buffer.concat(cs).toString('utf8'))) }) }
 function sendJSON(res, status, obj, extra = {}) {
@@ -51,7 +51,7 @@ function scenarioFor(req) {
     if (m) creds.push(m[1].trim())
     if (k === 'x-api-key' || k === 'x-goog-api-key' || k === 'api-key') creds.push(val.trim())
   }
-  try { const u = new URL(req.url, 'http://x'); const qk = u.searchParams.get('key'); if (qk) creds.push(qk) } catch {}
+  try { const u = new URL(req.url, 'http://x'); const qk = u.searchParams.get('key'); if (qk) creds.push(qk) } catch { /* unparsable URL: no query credential */ }
   for (const c of creds) { if (c && state.scenarios[c]) return { key: c, scenario: pickScenario(c, state.scenarios[c]) } }
   return { key: '*', scenario: pickScenario('*', state.scenarios['*'] || null) }
 }
@@ -106,11 +106,11 @@ function serveAnthropic(req, res, sc, body) {
     // 断在正文中间：已经输出内容，但还没有 stop_reason / message_stop，可换号续写。
     // usage 仍带上本次已观测输出，供续写耗尽时计费与尝试记录。
     sse(res, 'message_delta', { type: 'message_delta', delta: { stop_reason: null, stop_sequence: null }, usage: deltaUsage })
-    setTimeout(() => { try { req.socket.destroy() } catch {} }, 30)
+    setTimeout(() => { try { req.socket.destroy() } catch { /* socket already closed */ } }, 30)
     return
   }
   sse(res, 'message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: deltaUsage })
-  if (mode === 'disconnect_after_usage') { setTimeout(() => { try { req.socket.destroy() } catch {} }, 30); return }
+  if (mode === 'disconnect_after_usage') { setTimeout(() => { try { req.socket.destroy() } catch { /* socket already closed */ } }, 30); return }
   sse(res, 'message_stop', { type: 'message_stop' })
   res.end()
 }
@@ -140,7 +140,7 @@ function serveOpenAI(req, res, sc, body) {
   res.write(chunk({ content: sc.text || 'mock reply' }))
   res.write('data: ' + JSON.stringify({ ...base, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] }) + '\n\n')
   res.write('data: ' + JSON.stringify({ ...base, choices: [], usage: openaiUsage(sc), ...(sc.service_tier ? { service_tier: sc.service_tier } : {}) }) + '\n\n')
-  if (mode === 'disconnect_after_usage') { setTimeout(() => { try { req.socket.destroy() } catch {} }, 30); return }
+  if (mode === 'disconnect_after_usage') { setTimeout(() => { try { req.socket.destroy() } catch { /* socket already closed */ } }, 30); return }
   res.write('data: [DONE]\n\n'); res.end()
 }
 function serveOpenAIResponses(req, res, sc, body) {

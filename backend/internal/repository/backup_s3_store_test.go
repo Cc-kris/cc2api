@@ -65,7 +65,7 @@ func TestS3BackupStoreDownloadPartUsesDeterministicPartKey(t *testing.T) {
 
 	body, err := store.DownloadPart(context.Background(), "daily/database.sql.gz", 12)
 	require.NoError(t, err)
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	data, err := io.ReadAll(body)
 	require.NoError(t, err)
 	require.Equal(t, "part-data", string(data))

@@ -1845,13 +1845,13 @@ func TestAccount_IsMixedSchedulingEnabled(t *testing.T) {
 }
 
 // mockConcurrencyService for testing
-type mockConcurrencyService struct {
+type mockConcurrencyService struct { //nolint:unused // test helper kept for the unit-tagged suite; not referenced by the current tests
 	accountLoads      map[int64]*AccountLoadInfo
 	accountWaitCounts map[int64]int
 	acquireResults    map[int64]bool
 }
 
-func (m *mockConcurrencyService) GetAccountsLoadBatch(ctx context.Context, accounts []AccountWithConcurrency) (map[int64]*AccountLoadInfo, error) {
+func (m *mockConcurrencyService) GetAccountsLoadBatch(ctx context.Context, accounts []AccountWithConcurrency) (map[int64]*AccountLoadInfo, error) { //nolint:unused // test helper kept for the unit-tagged suite; not referenced by the current tests
 	if m.accountLoads == nil {
 		return map[int64]*AccountLoadInfo{}, nil
 	}
@@ -1871,7 +1871,7 @@ func (m *mockConcurrencyService) GetAccountsLoadBatch(ctx context.Context, accou
 	return result, nil
 }
 
-func (m *mockConcurrencyService) GetAccountWaitingCount(ctx context.Context, accountID int64) (int, error) {
+func (m *mockConcurrencyService) GetAccountWaitingCount(ctx context.Context, accountID int64) (int, error) { //nolint:unused // test helper kept for the unit-tagged suite; not referenced by the current tests
 	if m.accountWaitCounts == nil {
 		return 0, nil
 	}

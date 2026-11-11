@@ -19,7 +19,8 @@ func TestCoderOpenAIWSClientDialer_CapturesHandshakeErrorBody(t *testing.T) {
 	}))
 	defer server.Close()
 
-	dialer := newDefaultOpenAIWSClientDialer().(*coderOpenAIWSClientDialer)
+	dialer, ok := newDefaultOpenAIWSClientDialer().(*coderOpenAIWSClientDialer)
+	require.True(t, ok, "default dialer should be *coderOpenAIWSClientDialer")
 	_, status, headers, err := dialer.Dial(t.Context(), "ws"+strings.TrimPrefix(server.URL, "http"), nil, "")
 	require.Error(t, err)
 	require.Equal(t, http.StatusPaymentRequired, status)

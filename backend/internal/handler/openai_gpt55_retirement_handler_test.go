@@ -48,7 +48,8 @@ func TestOpenAIMessages_DispatchToGPT55OnOAuthOnlyGroupIsBlocked(t *testing.T) {
 	upstream := &openAIHTTPPassthroughSSEStatusUpstream{}
 	h := newOpenAINoAccountTestHandler(t, []service.Account{oauthOnlyGPT55Account(9952)}, upstream)
 	c, rec := newOpenAINoAccountTestContext("/v1/messages", `{"model":"claude-opus-4-6","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}`)
-	apiKey := c.MustGet(string(middleware2.ContextKeyAPIKey)).(*service.APIKey)
+	apiKey, ok := c.MustGet(string(middleware2.ContextKeyAPIKey)).(*service.APIKey)
+	require.True(t, ok, "api key in context should be *service.APIKey")
 	apiKey.Group.AllowMessagesDispatch = true
 	apiKey.Group.MessagesDispatchModelConfig = service.OpenAIMessagesDispatchModelConfig{OpusMappedModel: "gpt-5.5"}
 

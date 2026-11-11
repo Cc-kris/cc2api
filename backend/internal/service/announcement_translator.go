@@ -87,7 +87,7 @@ func (t *openAIAnnouncementTranslator) Translate(
 	if err != nil {
 		return AnnouncementTranslation{}, fmt.Errorf("send translation request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	responseBody, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	if err != nil {
 		return AnnouncementTranslation{}, fmt.Errorf("read translation response: %w", err)

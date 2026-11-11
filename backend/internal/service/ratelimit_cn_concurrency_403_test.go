@@ -13,11 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type kimiConcurrencyRateLimitFailureRepo struct {
+type kimiConcurrencyRateLimitFailureRepo struct { //nolint:unused // test helper kept for the unit-tagged suite; not referenced by the current tests
 	rateLimitAccountRepoStub
 }
 
-func (repo *kimiConcurrencyRateLimitFailureRepo) SetRateLimited(ctx context.Context, accountID int64, resetAt time.Time) error {
+func (repo *kimiConcurrencyRateLimitFailureRepo) SetRateLimited(ctx context.Context, accountID int64, resetAt time.Time) error { //nolint:unused // test helper kept for the unit-tagged suite; not referenced by the current tests
 	_ = repo.rateLimitAccountRepoStub.SetRateLimited(ctx, accountID, resetAt)
 	return errors.New("repository unavailable")
 }

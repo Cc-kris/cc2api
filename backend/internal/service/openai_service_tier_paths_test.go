@@ -482,7 +482,8 @@ func runTierPathIngress(t *testing.T, svc *OpenAIGatewayService, account *Accoun
 	}
 	_ = clientConn.Close(coderws.StatusNormalClosure, "done")
 	select {
-	case <-serverErrCh:
+	case serverErr := <-serverErrCh:
+		_ = serverErr // 退出原因由前面的断言覆盖，这里只确认服务端已结束
 	case <-time.After(5 * time.Second):
 		t.Fatal("等待 ingress websocket 结束超时")
 	}

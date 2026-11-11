@@ -34,7 +34,7 @@ start_environment() {
   chmod 700 "$RUNTIME"
   # A production frontend build is embedded and served by the real backend.
   pnpm --dir "$FRONTEND" install --frozen-lockfile
-  pnpm --dir "$FRONTEND" build
+  (cd "$FRONTEND" && ./node_modules/.bin/vue-tsc -b && ./node_modules/.bin/vite build)
   test -s "$BACKEND/internal/web/dist/index.html"
   (cd "$BACKEND" && go build -tags='embed e2e_payment' -o bin/sub2api-e2e-payment ./cmd/server)
   # The normal production binary must not include the local payment transport.

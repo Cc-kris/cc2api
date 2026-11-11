@@ -5312,7 +5312,6 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 					return
 				}
 				if rewritten != data {
-					data = rewritten
 					line = "data: " + rewritten
 				}
 			}

@@ -47,7 +47,7 @@ func encryptWebhookProviderConfig(t *testing.T, config map[string]string) string
 	data, err := json.Marshal(config)
 	require.NoError(t, err)
 
-	encrypted, err := payment.Encrypt(string(data), []byte(webhookProviderTestEncryptionKey))
+	encrypted, err := payment.Encrypt(string(data), []byte(webhookProviderTestEncryptionKey)) //nolint:staticcheck // SA1019: Encrypt is kept only to seed legacy ciphertext fixtures
 	require.NoError(t, err)
 	return encrypted
 }

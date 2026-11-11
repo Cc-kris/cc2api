@@ -63,7 +63,7 @@ func (r *GroupUsageRollupRepository) GetGroupUsageSummary(ctx context.Context, t
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []usagestats.GroupUsageSummary
 	for rows.Next() {
 		var s usagestats.GroupUsageSummary
@@ -81,7 +81,7 @@ func (r *GroupUsageRollupRepository) listGroupUsageSource(ctx context.Context, s
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []usagestats.GroupUsageSummary
 	for rows.Next() {
 		var item usagestats.GroupUsageSummary
@@ -108,7 +108,7 @@ func (r *GroupUsageRollupRepository) ListRegisteredTimezones(ctx context.Context
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []string
 	for rows.Next() {
 		var timezone string
@@ -285,7 +285,7 @@ func (r *GroupUsageRollupRepository) listInvalidatedBuckets(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []invalidatedBucket
 	for rows.Next() {
 		var item invalidatedBucket
@@ -303,7 +303,7 @@ func (r *GroupUsageRollupRepository) RecalculateBucket(ctx context.Context, grou
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	loc, err := time.LoadLocation(timezone)
 	if err != nil {
 		return fmt.Errorf("load rollup timezone %q: %w", timezone, err)

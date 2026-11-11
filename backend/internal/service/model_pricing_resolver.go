@@ -286,9 +286,8 @@ func (r *ModelPricingResolver) applyGroupOverrides(model string, group *Group, r
 		resolved.BasePricing.CacheReadPricePerTokenPriority = *v
 		resolved.BasePricing.Presence.CacheRead = true
 	}
-	if resolved.Source == PricingSourceChannel {
-		resolved.Source = PricingSourceMixed
-	} else if resolved.Source == PricingSourceLiteLLM || resolved.Source == PricingSourceFallback {
+	switch resolved.Source {
+	case PricingSourceChannel, PricingSourceLiteLLM, PricingSourceFallback:
 		resolved.Source = PricingSourceMixed
 	}
 	resolved.RuleLayer = "group"

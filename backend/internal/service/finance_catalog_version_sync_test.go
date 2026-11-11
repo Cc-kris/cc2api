@@ -52,7 +52,7 @@ func TestFinanceCatalogVersionSyncIsChecksumIdempotent(t *testing.T) {
 	require.Len(t, repository.versions, 1)
 	require.Equal(t, "4", repository.versions[0].PriceDetail["input"])
 	require.Equal(t, "12", repository.versions[0].PriceDetail["output"])
-	fast := repository.versions[0].PriceDetail["fast"].(map[string]any)
+	fast := mustAs[map[string]any](t, repository.versions[0].PriceDetail["fast"])
 	require.Equal(t, "8", fast["input"])
 
 	changed, err = syncer.Sync(context.Background())

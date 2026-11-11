@@ -717,7 +717,9 @@ func (s *BackupService) CreateBackup(ctx context.Context, triggeredBy string, ex
 		_ = s.saveRecord(ctx, record)
 		return record, fmt.Errorf("backup upload: %w", err)
 	}
-	<-gzipDone // 确保 gzip goroutine 已退出
+	if gzExitErr := <-gzipDone; gzExitErr != nil { // 确保 gzip goroutine 已退出
+		logger.LegacyPrintf("service.backup", "[Backup] gzip goroutine exit error after upload: %v", gzExitErr)
+	}
 
 	record.SizeBytes = sizeBytes
 	record.Status = "completed"
@@ -894,7 +896,9 @@ func (s *BackupService) executeBackup(record *BackupRecord, objectStore BackupOb
 		_ = s.saveRecord(context.Background(), record)
 		return
 	}
-	<-gzipDone // 确保 gzip goroutine 已退出
+	if gzExitErr := <-gzipDone; gzExitErr != nil { // 确保 gzip goroutine 已退出
+		logger.LegacyPrintf("service.backup", "[Backup] gzip goroutine exit error after upload: %v", gzExitErr)
+	}
 
 	record.SizeBytes = sizeBytes
 	record.Status = "completed"

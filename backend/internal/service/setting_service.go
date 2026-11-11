@@ -225,8 +225,8 @@ func (s *SettingService) IsOpenAITeamLinkedResolverEnabled(ctx context.Context) 
 			s.openAITeamLinkedRuntime.Store(&cachedOpenAITeamLinkedRuntime{enabled: true})
 			return true
 		}
-		if cached := s.openAITeamLinkedRuntime.Load(); cached != nil {
-			return cached.(*cachedOpenAITeamLinkedRuntime).enabled
+		if cached, ok := s.openAITeamLinkedRuntime.Load().(*cachedOpenAITeamLinkedRuntime); ok && cached != nil {
+			return cached.enabled
 		}
 		return false
 	}
@@ -1069,9 +1069,9 @@ func (s *SettingService) GetGroupUsageRollupRuntime(ctx context.Context) GroupUs
 			s.setGroupUsageRollupRuntime(true, false)
 			return GroupUsageRollupRuntime{Enabled: true, Known: true}
 		}
-		if cached := s.groupUsageRollupRuntime.Load(); cached != nil {
+		if cached, ok := s.groupUsageRollupRuntime.Load().(*cachedGroupUsageRollupRuntime); ok && cached != nil {
 			slog.Warn("group usage rollup setting unavailable; retaining last known state", "error", err)
-			return GroupUsageRollupRuntime{Enabled: cached.(*cachedGroupUsageRollupRuntime).enabled, Known: true}
+			return GroupUsageRollupRuntime{Enabled: cached.enabled, Known: true}
 		}
 		slog.Warn("group usage rollup setting unavailable before first read; pausing rollup", "error", err)
 		return GroupUsageRollupRuntime{Known: false}
@@ -1094,10 +1094,10 @@ func (s *SettingService) RegisterGroupUsageRollupListener(listener func(bool)) {
 	}
 	s.groupUsageRollupListenerMu.Lock()
 	s.groupUsageRollupListeners = append(s.groupUsageRollupListeners, listener)
-	cached := s.groupUsageRollupRuntime.Load()
+	cached, _ := s.groupUsageRollupRuntime.Load().(*cachedGroupUsageRollupRuntime)
 	s.groupUsageRollupListenerMu.Unlock()
 	if cached != nil {
-		listener(cached.(*cachedGroupUsageRollupRuntime).enabled)
+		listener(cached.enabled)
 	}
 }
 
@@ -1105,8 +1105,8 @@ func (s *SettingService) setGroupUsageRollupRuntime(enabled bool, notify bool) {
 	if s == nil {
 		return
 	}
-	previous := s.groupUsageRollupRuntime.Load()
-	changed := previous == nil || previous.(*cachedGroupUsageRollupRuntime).enabled != enabled
+	previous, _ := s.groupUsageRollupRuntime.Load().(*cachedGroupUsageRollupRuntime)
+	changed := previous == nil || previous.enabled != enabled
 	s.groupUsageRollupRuntime.Store(&cachedGroupUsageRollupRuntime{enabled: enabled})
 	if !notify || !changed {
 		return

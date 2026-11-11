@@ -132,7 +132,8 @@ func TestInitializeDatabaseWithRetryAllowsIdempotentMigrationRetry(t *testing.T)
 func TestIsTransientDatabaseInitializationErrorRealConnectionRefused(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	addr := ln.Addr().(*net.TCPAddr)
+	addr, ok := ln.Addr().(*net.TCPAddr)
+	require.True(t, ok, "listener address should be *net.TCPAddr")
 	require.NoError(t, ln.Close())
 
 	db, err := sql.Open("postgres", fmt.Sprintf("host=127.0.0.1 port=%d user=x dbname=x sslmode=disable connect_timeout=2", addr.Port))

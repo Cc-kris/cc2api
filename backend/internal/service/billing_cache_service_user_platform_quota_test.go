@@ -98,7 +98,7 @@ type fakeFullCache struct {
 }
 
 // getDeleteCalls 线程安全地读取 deleteCalls。
-func (f *fakeFullCache) getDeleteCalls() int {
+func (f *fakeFullCache) getDeleteCalls() int { //nolint:unused // test helper kept for the unit-tagged suite; not referenced by the current tests
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.deleteCalls

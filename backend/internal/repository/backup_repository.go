@@ -100,7 +100,7 @@ func (r *BackupRepository) ListBackupManifestParts(ctx context.Context, id strin
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	parts := make([]service.BackupManifestPart, 0)
 	for rows.Next() {
 		var p service.BackupManifestPart

@@ -28,8 +28,8 @@ import (
 // user-authored prose like "Today is foo." or "His date is 2026-06-30." from
 // being touched.
 var (
-	datelineRegexHyphen = regexp.MustCompile("Today(['’ʼʹ])s date is (\\d{4})-(\\d{2})-(\\d{2})\\.")
-	datelineRegexSlash  = regexp.MustCompile("Today(['’ʼʹ])s date is (\\d{4})/(\\d{2})/(\\d{2})\\.")
+	datelineRegexHyphen = regexp.MustCompile(`Today(['’ʼʹ])s date is (\d{4})-(\d{2})-(\d{2})\.`)
+	datelineRegexSlash  = regexp.MustCompile(`Today(['’ʼʹ])s date is (\d{4})/(\d{2})/(\d{2})\.`)
 )
 
 // systemReminderRegex matches a <system-reminder> block. The dateline lives in

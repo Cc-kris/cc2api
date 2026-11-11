@@ -195,7 +195,8 @@ func newGatewayRecordUsageServiceForFastTest(usageRepo UsageLogRepository) *Gate
 
 func recordFastUsage(t *testing.T, svc *GatewayService, apiKey *APIKey, account *Account, model string, requested *string, observed string) *UsageLog {
 	t.Helper()
-	repo := svc.usageLogRepo.(*tierUsageLogRepo)
+	repo, ok := svc.usageLogRepo.(*tierUsageLogRepo)
+	require.True(t, ok, "usage log repo should be *tierUsageLogRepo")
 	repo.lastLog = nil
 	err := svc.RecordUsage(context.Background(), &RecordUsageInput{
 		Result: &ForwardResult{

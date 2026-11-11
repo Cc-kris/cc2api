@@ -84,7 +84,7 @@ func peekUserContentRejection(resp *http.Response) bool {
 }
 
 // failoverOnAnyHTTPErrorWithBody 是带响应体的版本：内容审核/图片用户错误不换号。
-func failoverOnAnyHTTPErrorWithBody(ctx context.Context, cfg *config.Config, statusCode int, body []byte) bool {
+func failoverOnAnyHTTPErrorWithBody(ctx context.Context, cfg *config.Config, statusCode int, body []byte) bool { //nolint:unused // local-fork helper retained from earlier upstream syncs; re-wiring is out of scope for the lint fix
 	if isUserContentRejectionBody(body) {
 		return false
 	}

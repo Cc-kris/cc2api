@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func ptrString[T ~string](v T) *string {
+func ptrString[T ~string](v T) *string { //nolint:unused // test helper kept for the unit-tagged suite; not referenced by the current tests
 	s := string(v)
 	return &s
 }
@@ -1103,7 +1103,7 @@ func TestAdminServiceGroupPricingWritesBlockedWhenSalesPricingResolverDisabled(t
 	enabled := true
 	_, err = svc.UpdateGroup(context.Background(), 1, &UpdateGroupInput{LongContextPricingEnabled: &enabled})
 	require.ErrorIs(t, err, ErrSalesPricingResolverDisabled)
-	require.Nil(t, svc.groupRepo.(*groupRepoStubForAdmin).updated)
+	require.Nil(t, mustAs[*groupRepoStubForAdmin](t, svc.groupRepo).updated)
 }
 
 func TestAdminServiceGroupNonPricingUpdateAllowedWhenSalesPricingResolverDisabled(t *testing.T) {

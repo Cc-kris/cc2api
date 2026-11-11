@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-test('TASK-040B exposes the fixed browser project infrastructure', ({}, testInfo) => {
+test('TASK-040B exposes the fixed browser project infrastructure', ({ browserName: _browserName }, testInfo) => {
   expect([
     'chromium',
     'tablet-chrome',

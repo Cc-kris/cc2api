@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -184,7 +185,11 @@ type countingInflightCache struct {
 }
 
 func (c *countingInflightCache) ReserveInflightBalance(ctx context.Context, userID int64, requestID string, amount, balance float64, ttl time.Duration) (bool, float64, error) {
-	ok, sum, err := c.BillingCache.(service.InflightBalanceReservationCache).ReserveInflightBalance(ctx, userID, requestID, amount, balance, ttl)
+	reserver, isReserver := c.BillingCache.(service.InflightBalanceReservationCache)
+	if !isReserver {
+		return false, 0, errors.New("billing cache does not implement InflightBalanceReservationCache")
+	}
+	ok, sum, err := reserver.ReserveInflightBalance(ctx, userID, requestID, amount, balance, ttl)
 	if ok && err == nil {
 		c.reserves.Add(1)
 	}
@@ -192,7 +197,11 @@ func (c *countingInflightCache) ReserveInflightBalance(ctx context.Context, user
 }
 
 func (c *countingInflightCache) ReserveInflightBalanceCovered(ctx context.Context, userID int64, requestID string, amount, balance float64, ttl time.Duration) (bool, float64, error) {
-	ok, sum, err := c.BillingCache.(service.InflightBalanceCoveredReserver).ReserveInflightBalanceCovered(ctx, userID, requestID, amount, balance, ttl)
+	reserver, isReserver := c.BillingCache.(service.InflightBalanceCoveredReserver)
+	if !isReserver {
+		return false, 0, errors.New("billing cache does not implement InflightBalanceCoveredReserver")
+	}
+	ok, sum, err := reserver.ReserveInflightBalanceCovered(ctx, userID, requestID, amount, balance, ttl)
 	if ok && err == nil {
 		c.reserves.Add(1)
 	}
@@ -201,11 +210,19 @@ func (c *countingInflightCache) ReserveInflightBalanceCovered(ctx context.Contex
 
 func (c *countingInflightCache) ReleaseInflightBalance(ctx context.Context, userID int64, requestID string) error {
 	c.releases.Add(1)
-	return c.BillingCache.(service.InflightBalanceReservationCache).ReleaseInflightBalance(ctx, userID, requestID)
+	releaser, isReleaser := c.BillingCache.(service.InflightBalanceReservationCache)
+	if !isReleaser {
+		return errors.New("billing cache does not implement InflightBalanceReservationCache")
+	}
+	return releaser.ReleaseInflightBalance(ctx, userID, requestID)
 }
 
 func (c *countingInflightCache) RenewInflightBalance(ctx context.Context, userID int64, requestID string, ttl time.Duration) (bool, error) {
-	return c.BillingCache.(service.InflightBalanceReservationRenewer).RenewInflightBalance(ctx, userID, requestID, ttl)
+	renewer, isRenewer := c.BillingCache.(service.InflightBalanceReservationRenewer)
+	if !isRenewer {
+		return false, errors.New("billing cache does not implement InflightBalanceReservationRenewer")
+	}
+	return renewer.RenewInflightBalance(ctx, userID, requestID, ttl)
 }
 
 // zcard 读 billing:inflight:{uid}。

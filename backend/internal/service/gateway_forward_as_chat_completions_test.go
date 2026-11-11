@@ -170,10 +170,10 @@ func assertToolCallWireNameAndArguments(t *testing.T, body, expectedName, expect
 			function, _ := toolCall["function"].(map[string]any)
 			if wireName, exists := function["name"]; exists {
 				require.NotEmpty(t, wireName)
-				name = wireName.(string)
+				name = mustAs[string](t, wireName)
 			}
 			if wireArguments, exists := function["arguments"]; exists {
-				arguments += wireArguments.(string)
+				arguments += mustAs[string](t, wireArguments)
 			}
 		}
 	}

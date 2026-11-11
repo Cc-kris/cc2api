@@ -12,7 +12,7 @@ export async function raw(method: string, url: string, body?: any, token?: strin
   })
   const text = await res.text()
   let json = null
-  try { json = JSON.parse(text) } catch {}
+  try { json = JSON.parse(text) } catch { /* non-JSON body: callers use text */ }
   return { status: res.status, text, json }
 }
 

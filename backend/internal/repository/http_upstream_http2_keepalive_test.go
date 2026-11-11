@@ -44,9 +44,9 @@ func TestEnableOpenAIHTTP2KeepAlive_EnablesPingHealthCheck(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, h2, "必须返回已配置的 *http2.Transport")
 
-	require.Positive(t, h2.ReadIdleTimeout, "必须启用空闲 PING 探测以剔除死连接")
-	require.Equal(t, openAIHTTP2ReadIdleTimeout, h2.ReadIdleTimeout)
-	require.Equal(t, openAIHTTP2PingTimeout, h2.PingTimeout, "PING 无响应必须有超时判定")
+	require.Positive(t, h2.ReadIdleTimeout, "必须启用空闲 PING 探测以剔除死连接")             //nolint:staticcheck // SA1019: asserts the x/net http2 ping settings returned by enableOpenAIHTTP2KeepAlive
+	require.Equal(t, openAIHTTP2ReadIdleTimeout, h2.ReadIdleTimeout)            //nolint:staticcheck // SA1019: asserts the x/net http2 ping settings returned by enableOpenAIHTTP2KeepAlive
+	require.Equal(t, openAIHTTP2PingTimeout, h2.PingTimeout, "PING 无响应必须有超时判定") //nolint:staticcheck // SA1019: asserts the x/net http2 ping settings returned by enableOpenAIHTTP2KeepAlive
 	requireHTTP2Configured(t, tr, "http2 必须已挂到底层 http.Transport 上")
 }
 

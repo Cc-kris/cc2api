@@ -203,7 +203,7 @@ func normalizeObservedOpenAIServiceTier(raw string) string {
 // observeAnthropicUsageSpeed returns usage.speed from an Anthropic response body
 // or SSE frame (message_start carries it under message.usage, non-streaming
 // bodies at the top level, message_delta under usage).
-func observeAnthropicUsageSpeed(payload []byte) string {
+func observeAnthropicUsageSpeed(payload []byte) string { //nolint:unused // local-fork helper retained from earlier upstream syncs; re-wiring is out of scope for the lint fix
 	if len(payload) == 0 || !strings.Contains(string(payload), `"speed"`) {
 		return ""
 	}

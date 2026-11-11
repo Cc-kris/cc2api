@@ -148,7 +148,7 @@ func TestFinanceCostCalculatorUsesGenericCacheWriteWithoutTTLBreakdown(t *testin
 	require.Equal(t, "0.0005000000", result.Amount.StringFixed(10))
 	require.Len(t, result.Items, 1)
 	require.Equal(t, "cache_write", result.Items[0].Item)
-	require.Equal(t, int64(100), result.Detail["usage"].(map[string]any)["cache_creation_tokens"])
+	require.Equal(t, int64(100), mustAs[map[string]any](t, result.Detail["usage"])["cache_creation_tokens"])
 }
 
 func TestFinanceCostCalculatorFastUsesFastCardWithoutStandardStacking(t *testing.T) {

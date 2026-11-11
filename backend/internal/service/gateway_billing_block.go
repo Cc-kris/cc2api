@@ -74,6 +74,7 @@ func extractFirstUserText(body []byte) string {
 // buildBillingAttributionBlockJSON 构造 system 数组的 billing attribution block。
 //
 // 形态严格对齐真实 Claude Code CLI：
+//
 //	{"type":"text","text":"x-anthropic-billing-hdr: cc_version=2.1.92.abc; cc_entrypoint=cli;"}
 //	{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.92.{fp}; cc_entrypoint=cli; cch=00000;"}
 //
@@ -82,7 +83,7 @@ func extractFirstUserText(body []byte) string {
 //
 // 此 block 不带 cache_control（与真实 CLI 一致；cache breakpoint 由后续的
 // Claude Code prompt block 承担）。
-func buildBillingAttributionBlockJSON(body []byte, cliVersion string) ([]byte, error) {
+func buildBillingAttributionBlockJSON(body []byte, cliVersion string) ([]byte, error) { //nolint:unused // local-fork helper retained from earlier upstream syncs; re-wiring is out of scope for the lint fix
 	text, err := buildBillingAttributionText(body, cliVersion)
 	if err != nil {
 		return nil, err

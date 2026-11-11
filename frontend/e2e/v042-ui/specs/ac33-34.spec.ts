@@ -40,7 +40,7 @@ test('AC34 无在途预占时低余额首个请求正常放行', async ({ page }
   // Configuration-only cases are tested through the real gateway; no fabricated UI toggle.
   const low = await seed({ prefix: 'ac34-low', balance: 0.01 })
   await scenario(low.upstreamKey, { usage: { input: 10, output: 5 }, stream: false })
-  let r = await gatewayTry({ path: '/v1/messages', apiKey: low.key.key, body: body('low balance') })
+  const r = await gatewayTry({ path: '/v1/messages', apiKey: low.key.key, body: body('low balance') })
   expect(r.status, r.text).toBe(200)
   // Keep the explicit subscription/Redis/fail-closed assertions in the service integration suite.
   // This browser-facing test records the ordinary balance-path behavior without claiming those branches.

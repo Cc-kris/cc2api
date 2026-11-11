@@ -16,9 +16,9 @@ var ccVersionWithFingerprintInBillingRe = regexp.MustCompile(`cc_version=\d+\.\d
 
 // cchPlaceholderRe matches the cch=00000 placeholder in billing header text,
 // scoped to x-anthropic-billing-header to avoid touching user content.
-var cchPlaceholderRe = regexp.MustCompile(`(x-anthropic-billing-header:[^"]*?\bcch=)(00000)(;)`)
+var cchPlaceholderRe = regexp.MustCompile(`(x-anthropic-billing-header:[^"]*?\bcch=)(00000)(;)`) //nolint:unused // local-fork helper retained from earlier upstream syncs; re-wiring is out of scope for the lint fix
 
-const cchSeed uint64 = 0x6E52736AC806831E
+const cchSeed uint64 = 0x6E52736AC806831E //nolint:unused // local-fork helper retained from earlier upstream syncs; re-wiring is out of scope for the lint fix
 
 // effectiveBillingUserAgent 选择写进 x-anthropic-billing-header 的 User-Agent。
 // OAuth mimicry 强制使用调用方传入的 mimicUserAgent（与出站 User-Agent 头同源、
@@ -70,4 +70,3 @@ func syncBillingHeaderVersion(body []byte, userAgent string) []byte {
 
 	return body
 }
-

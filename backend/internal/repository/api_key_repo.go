@@ -747,18 +747,18 @@ func groupEntityToService(g *dbent.Group) *service.Group {
 	}
 }
 
-func groupModelPricingJSON(v map[string]service.GroupModelPricing) map[string]interface{} {
+func groupModelPricingJSON(v map[string]service.GroupModelPricing) map[string]any {
 	if v == nil {
-		return map[string]interface{}{}
+		return map[string]any{}
 	}
-	out := make(map[string]interface{}, len(v))
+	out := make(map[string]any, len(v))
 	for k, p := range v {
 		out[k] = p
 	}
 	return out
 }
 
-func decodeGroupModelPricing(v map[string]interface{}) map[string]service.GroupModelPricing {
+func decodeGroupModelPricing(v map[string]any) map[string]service.GroupModelPricing {
 	if len(v) == 0 {
 		return map[string]service.GroupModelPricing{}
 	}

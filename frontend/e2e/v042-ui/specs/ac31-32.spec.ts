@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
-import { expect, test, type Page, type TestInfo } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import { login, navigate, screenshot, ADMIN_EMAIL, ADMIN_PASSWORD } from '../helpers/ui'
 import { anthropicBody, gatewayTry, raw } from '../helpers/api'
 import { scenario } from '../helpers/mock'

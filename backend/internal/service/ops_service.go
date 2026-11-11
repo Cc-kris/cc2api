@@ -1083,7 +1083,7 @@ func opsUnifiedRecommendedActions(category string, subcategory string) []string 
 	}
 }
 
-func truncateRunes(s string, max int) string {
+func truncateRunes(s string, max int) string { //nolint:unused // local-fork helper retained from earlier upstream syncs; re-wiring is out of scope for the lint fix
 	s = strings.TrimSpace(s)
 	if max <= 0 {
 		return ""

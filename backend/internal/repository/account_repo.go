@@ -2275,7 +2275,7 @@ func uniqueInt64s(ids []int64) []int64 {
 	return out
 }
 
-func validateBulkUpdateTargets(accounts []*service.Account, updates service.AccountBulkUpdate, expected []service.AccountBulkUpdateTarget) error {
+func validateBulkUpdateTargets(accounts []*service.Account, updates service.AccountBulkUpdate, expected []service.AccountBulkUpdateTarget) error { //nolint:unused // local-fork helper retained from earlier upstream syncs; re-wiring is out of scope for the lint fix
 	targets := make([]service.AccountBulkUpdateTarget, 0, len(accounts))
 	for _, account := range accounts {
 		if account != nil {
@@ -2347,7 +2347,7 @@ func loadAccountGroupIDsForUpdate(ctx context.Context, tx *sql.Tx, accountIDs []
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var accountID, groupID int64
 		if err := rows.Scan(&accountID, &groupID); err != nil {
@@ -2407,7 +2407,7 @@ func validateMixedChannelTargets(ctx context.Context, tx *sql.Tx, targets []serv
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var groupID int64
 		var other string

@@ -821,9 +821,9 @@ type redirectRoundTripper struct {
 	transport http.RoundTripper
 }
 
-type roundTripperFunc func(*http.Request) (*http.Response, error)
+type roundTripperFunc func(*http.Request) (*http.Response, error) //nolint:unused // test helper kept for the unit-tagged suite; not referenced by the current tests
 
-func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) { //nolint:unused // test helper kept for the unit-tagged suite; not referenced by the current tests
 	return f(req)
 }
 

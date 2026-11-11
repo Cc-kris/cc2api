@@ -36,7 +36,7 @@ func (r *OpenAITeamBlockRepository) BlockTeamAtomically(ctx context.Context, tea
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if err := lockOpenAITeam(ctx, tx, teamID); err != nil {
 		return false, err
 	}
@@ -96,7 +96,7 @@ func (r *OpenAITeamBlockRepository) ListDueProbeTargets(ctx context.Context, lim
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	targets := make([]service.OpenAITeamProbeTarget, 0)
 	for rows.Next() {
 		var target service.OpenAITeamProbeTarget
@@ -137,7 +137,7 @@ func (r *OpenAITeamBlockRepository) GetActiveBlockStatus(ctx context.Context, te
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var accountID int64
 		if err := rows.Scan(&accountID); err != nil {
@@ -168,7 +168,7 @@ func (r *OpenAITeamBlockRepository) claimProbe(ctx context.Context, teamID, owne
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if err := lockOpenAITeam(ctx, tx, teamID); err != nil {
 		return nil, err
 	}
@@ -205,7 +205,7 @@ func (r *OpenAITeamBlockRepository) ClearTeamAfterProbe(ctx context.Context, lea
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if err := lockOpenAITeam(ctx, tx, lease.TeamID); err != nil {
 		return false, err
 	}
@@ -249,7 +249,7 @@ func (r *OpenAITeamBlockRepository) ReblockTeamAfterProbe(ctx context.Context, l
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if err := lockOpenAITeam(ctx, tx, lease.TeamID); err != nil {
 		return false, err
 	}
@@ -278,7 +278,7 @@ func (r *OpenAITeamBlockRepository) ReblockTeamAfterProbe(ctx context.Context, l
 // rows on the PostgreSQL connection, so interleaving an outbox INSERT while
 // those rows are still open corrupts the transaction protocol.
 func collectReturnedAccountIDs(rows *sql.Rows) ([]int64, error) {
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	accountIDs := make([]int64, 0)
 	for rows.Next() {
 		var accountID int64

@@ -78,7 +78,8 @@ func TestModelSquareHandlerListGroupsContract(t *testing.T) {
 	var response map[string]any
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
 	require.Equal(t, float64(0), response["code"])
-	data := response["data"].(map[string]any)
+	data, ok := response["data"].(map[string]any)
+	require.True(t, ok, "data should be an object")
 	require.Contains(t, data, "groups")
 	require.Equal(t, updatedAt.Format(time.RFC3339), data["catalog_updated_at"])
 }

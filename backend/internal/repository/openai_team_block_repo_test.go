@@ -14,7 +14,7 @@ import (
 func TestOpenAITeamBlockRepositoryBlockTeamAtomically(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	repo := NewOpenAITeamBlockRepository(db)
 	until := time.Now().Add(15 * time.Minute)
 	mock.ExpectBegin()
@@ -33,7 +33,7 @@ func TestOpenAITeamBlockRepositoryBlockTeamAtomically(t *testing.T) {
 func TestOpenAITeamBlockRepositoryClaimDueProbe(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	repo := NewOpenAITeamBlockRepository(db)
 	probeUntil := time.Now().Add(time.Minute)
 	mock.ExpectBegin()
@@ -51,7 +51,7 @@ func TestOpenAITeamBlockRepositoryClaimDueProbe(t *testing.T) {
 func TestOpenAITeamBlockRepositoryListDueProbeTargets(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	repo := NewOpenAITeamBlockRepository(db)
 	mock.ExpectQuery(regexp.QuoteMeta("WITH transitioned AS (")).WithArgs(10).WillReturnRows(sqlmock.NewRows([]string{"team_id", "id"}).AddRow("team-a", 7))
 	targets, err := repo.ListDueProbeTargets(context.Background(), 0)
@@ -63,7 +63,7 @@ func TestOpenAITeamBlockRepositoryListDueProbeTargets(t *testing.T) {
 func TestOpenAITeamBlockRepositoryClearTeamAfterProbe(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	repo := NewOpenAITeamBlockRepository(db)
 	mock.ExpectBegin()
 	lease := service.OpenAITeamProbeLease{EventID: 1, MaxEventID: 3, TeamID: "team-a", Owner: "worker-a"}
@@ -83,7 +83,7 @@ func TestOpenAITeamBlockRepositoryClearTeamAfterProbe(t *testing.T) {
 func TestOpenAITeamBlockRepositoryClearTeamAfterProbeKeepsNewerActiveBlock(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	repo := NewOpenAITeamBlockRepository(db)
 	lease := service.OpenAITeamProbeLease{EventID: 1, MaxEventID: 1, TeamID: "team-a", Owner: "worker-a"}
 	mock.ExpectBegin()
@@ -101,7 +101,7 @@ func TestOpenAITeamBlockRepositoryClearTeamAfterProbeKeepsNewerActiveBlock(t *te
 func TestOpenAITeamBlockRepositoryReblockTeamAfterProbe(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	repo := NewOpenAITeamBlockRepository(db)
 	until := time.Now().Add(15 * time.Minute)
 	mock.ExpectBegin()

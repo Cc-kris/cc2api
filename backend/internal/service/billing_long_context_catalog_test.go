@@ -47,7 +47,7 @@ func newStubPricingServiceFromJSON(t *testing.T, body string) *PricingService {
 	return svc
 }
 
-func newTestBillingServiceWithOpenAILadderCatalog(t *testing.T) *BillingService {
+func newTestBillingServiceWithOpenAILadderCatalog(t *testing.T) *BillingService { //nolint:unused // only referenced by unit-tagged billing tests
 	t.Helper()
 	return NewBillingService(&config.Config{}, newStubPricingServiceFromJSON(t, openAILadderCatalogJSON))
 }
