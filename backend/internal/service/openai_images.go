@@ -472,15 +472,18 @@ func isOpenAIImageGenerationModel(model string) bool {
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "gpt-image-") || isGrokImageGenerationModel(model)
 }
 
+// validateOpenAIImagesModel only rejects an empty model name.
+//
+// Earlier versions required a gpt-image-*/grok-imagine prefix here, which made
+// the images endpoint unusable for self-hosted/relay upstreams whose image
+// models carry arbitrary names (e.g. "无限制-NovelAI-V4.5"). The name is passed
+// upstream verbatim, so whether it exists is the upstream's call; the gateway no
+// longer filters by model name.
 func validateOpenAIImagesModel(model string) error {
-	model = strings.TrimSpace(model)
-	if isOpenAIImageGenerationModel(model) {
-		return nil
+	if strings.TrimSpace(model) == "" {
+		return fmt.Errorf("images endpoint requires a model")
 	}
-	if model == "" {
-		return fmt.Errorf("images endpoint requires an image model")
-	}
-	return fmt.Errorf("images endpoint requires an image model, got %q", model)
+	return nil
 }
 
 func normalizeOpenAIImagesEndpointPath(path string) string {

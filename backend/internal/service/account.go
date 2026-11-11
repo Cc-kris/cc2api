@@ -1367,6 +1367,12 @@ func (a *Account) SupportsOpenAIImageCapability(capability OpenAIImagesCapabilit
 // and the final model produced by account-level mapping. API-key accounts must
 // keep an image model after mapping; OAuth accounts implement Images through
 // the Responses bridge and therefore do not apply this model constraint.
+// SupportsOpenAIImageRequest validates the account transport capability and that
+// account-level mapping yields a non-empty model. API-key accounts forward the
+// mapped model name upstream verbatim, so any model name is accepted: self-hosted
+// and relay upstreams use their own image model names, and requiring a
+// gpt-image-*/grok-imagine prefix here would silently exclude every account for
+// such upstreams.
 func (a *Account) SupportsOpenAIImageRequest(capability OpenAIImagesCapability, requestedModel string) bool {
 	if !a.SupportsOpenAIImageCapability(capability) {
 		return false
@@ -1377,7 +1383,7 @@ func (a *Account) SupportsOpenAIImageRequest(capability OpenAIImagesCapability, 
 	if a.Type != AccountTypeAPIKey {
 		return false
 	}
-	return isOpenAIImageGenerationModel(a.GetMappedModel(requestedModel))
+	return strings.TrimSpace(a.GetMappedModel(requestedModel)) != ""
 }
 
 func (a *Account) GetChatGPTUserID() string {
