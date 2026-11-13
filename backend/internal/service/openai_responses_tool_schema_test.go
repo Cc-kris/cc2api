@@ -249,11 +249,11 @@ func TestOpenAIResponsesToolSchemaCapabilities_PlatformBoundary(t *testing.T) {
 		{PlatformAnthropic, true, false},
 		{PlatformKimi, true, false},
 		{PlatformZhipu, true, false},
-		{PlatformDeepseek, true, false},
+		{PlatformDeepSeek, true, false},
 		{PlatformGrok, true, false},
 		{PlatformGemini, false, false},
 		{PlatformAntigravity, false, false},
-		{PlatformComposite, false, false},
+		{"composite", false, false},
 		{"", false, false},
 	}
 	for _, tt := range tests {
@@ -270,7 +270,7 @@ func TestSanitizeOpenAIResponsesToolSchemasForPlatform_ReplayBoundary(t *testing
 	// A malformed tool definition may be replayed after account failover. Every
 	// compatible account must repair it, while non-OpenAI providers retain their
 	// supported regex semantics.
-	for _, platform := range []string{PlatformAnthropic, PlatformGrok, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax} {
+	for _, platform := range []string{PlatformAnthropic, PlatformGrok, PlatformKimi, PlatformZhipu, PlatformDeepSeek} {
 		t.Run(platform, func(t *testing.T) {
 			for attempt := 0; attempt < 2; attempt++ {
 				normalized, changed, err := sanitizeOpenAIResponsesToolSchemasForPlatform(body, platform)

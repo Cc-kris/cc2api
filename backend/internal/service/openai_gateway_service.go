@@ -2534,6 +2534,15 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		return nil, errors.New("codex_cli_only restriction: only codex official clients are allowed")
 	}
 
+	// 工具 Schema 净化必须先于所有分流：OAuth / API Key / 透传 / CN / Grok / WS
+	// 上游都会把 tools 原样带给上游，坏 schema（type:null、required:null、
+	// 根级联合、lookaround pattern）会在账号池里反复重放出 400。
+	if sanitizedBody, schemaChanged, schemaErr := sanitizeOpenAIResponsesToolSchemasForPlatform(body, account.Platform); schemaErr != nil {
+		return nil, schemaErr
+	} else if schemaChanged {
+		body = sanitizedBody
+	}
+
 	originalBody := body
 	reqModel, reqStream, promptCacheKey := extractOpenAIRequestMetaFromBody(body)
 	originalModel := reqModel
@@ -7636,6 +7645,17 @@ func extractOpenAIRequestMetaFromBody(body []byte) (model string, stream bool, p
 	stream = gjson.GetBytes(body, "stream").Bool()
 	promptCacheKey = strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
 	return model, stream, promptCacheKey
+}
+
+// normalizeOpenAIResponsesWebSocketCompatibilityBody 对 WS 入站 response.create
+// 报文做与 HTTP 转发路径一致的兼容归一化。当前覆盖工具 Schema 净化；后续
+// namespace / Responses Lite 归一化也接在这里，保证两条路径共用同一入口。
+// 非 OpenAI 平台账号不走 WS 原生链路（Grok 强制 HTTP bridge），保持原样。
+func normalizeOpenAIResponsesWebSocketCompatibilityBody(body []byte, account *Account, responsesLite bool) ([]byte, bool, error) {
+	if account == nil || !account.IsOpenAI() {
+		return body, false, nil
+	}
+	return sanitizeOpenAIResponsesToolSchemasForPlatform(body, account.Platform)
 }
 
 // normalizeOpenAIPassthroughOAuthBody 将透传 OAuth 请求体收敛为旧链路关键行为：
