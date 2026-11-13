@@ -155,6 +155,10 @@ func TransformClaudeToGeminiWithOptions(claudeReq *ClaudeRequest, projectID, map
 	}
 	if len(tools) > 0 {
 		innerRequest.Tools = tools
+		if hasMixedToolInvocations(tools) {
+			enabled := true
+			innerRequest.ToolConfig.IncludeServerSideToolInvocations = &enabled
+		}
 	}
 
 	// 如果提供了 metadata.user_id，优先使用
@@ -679,6 +683,19 @@ func isWebSearchTool(tool ClaudeTool) bool {
 	default:
 		return false
 	}
+}
+
+func hasMixedToolInvocations(declarations []GeminiToolDeclaration) bool {
+	hasFunc, hasBuiltin := false, false
+	for _, declaration := range declarations {
+		if len(declaration.FunctionDeclarations) > 0 {
+			hasFunc = true
+		}
+		if declaration.GoogleSearch != nil {
+			hasBuiltin = true
+		}
+	}
+	return hasFunc && hasBuiltin
 }
 
 // buildTools 构建 tools

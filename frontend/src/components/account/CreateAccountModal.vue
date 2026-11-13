@@ -1169,7 +1169,7 @@
               form.platform === 'openai'
                 ? 'sk-proj-...'
                 : form.platform === 'gemini'
-                  ? 'AIza...'
+                  ? 'AQ.Ab...'
                   : form.platform === 'grok'
                     ? 'xai-...'
                   : form.platform === 'seedace'

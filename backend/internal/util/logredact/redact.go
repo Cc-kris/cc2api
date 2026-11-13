@@ -45,6 +45,7 @@ type textRedactPatterns struct {
 var (
 	reGOCSPX                       = regexp.MustCompile(`GOCSPX-[0-9A-Za-z_-]{24,}`)
 	reAIza                         = regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`)
+	reGeminiAuthKey                = regexp.MustCompile(`AQ\.Ab[0-9A-Za-z_-]{40,}`)
 	reEmail                        = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
 	reToken                        = regexp.MustCompile(`(?i)\b(?:sk|ak|pk|rk|ya29|ghp|gho|ghu|ghs|github_pat)[-_A-Za-z0-9]{8,}\b`)
 	reAuthorizationBearer          = regexp.MustCompile(`(?i)\bauthorization\s*[:=]?\s*bearer\s+[^\s,"'\x60]+`)
@@ -107,6 +108,7 @@ func RedactText(input string, extraKeys ...string) string {
 	out := input
 	out = reGOCSPX.ReplaceAllString(out, "GOCSPX-***")
 	out = reAIza.ReplaceAllString(out, "AIza***")
+	out = reGeminiAuthKey.ReplaceAllString(out, "AQ.***")
 	out = reEmail.ReplaceAllStringFunc(out, RedactEmail)
 	out = reToken.ReplaceAllString(out, "******")
 	out = reAuthorizationBearer.ReplaceAllString(out, "Authorization: Bearer ***")
