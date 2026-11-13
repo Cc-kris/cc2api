@@ -33,6 +33,13 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (*OpenAIForwardResult, error) {
+	// 工具 Schema 清洗必须先于所有分流：每条下游路径都会把 tools 原样带给上游，
+	// 严格校验方会因 input_schema 里的 required:null 或 type:null 直接 400。
+	if sanitizedBody, schemaChanged, schemaErr := sanitizeOpenAIResponsesToolSchemasForPlatform(body, account.Platform); schemaErr != nil {
+		return nil, schemaErr
+	} else if schemaChanged {
+		body = sanitizedBody
+	}
 	beginUpstreamResponseModelObservation(c) // V03-R11：每次转发尝试重置上游响应模型观测（本路径未接观测时保持为空，避免沿用上次尝试的值）
 	// Domestic providers default to the controlled Anthropic↔Chat bridge. A
 	// fixed anthropic protocol is an explicit operator declaration that this

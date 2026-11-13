@@ -81,6 +81,7 @@ var openaiAllowedHeaders = map[string]bool{
 	"x-codex-beta-features": true,
 	"x-codex-turn-state":    true,
 	"x-codex-turn-metadata": true,
+	responsesLiteHeaderKey:  true,
 }
 
 // OpenAI passthrough allowed headers whitelist.
@@ -97,6 +98,7 @@ var openaiPassthroughAllowedHeaders = map[string]bool{
 	"x-codex-beta-features": true,
 	"x-codex-turn-state":    true,
 	"x-codex-turn-metadata": true,
+	responsesLiteHeaderKey:  true,
 }
 
 // codex_cli_only 拒绝时记录的请求头白名单（仅用于诊断日志，不参与上游透传）
@@ -2514,6 +2516,8 @@ func (s *OpenAIGatewayService) handleFailoverSideEffects(ctx context.Context, re
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
 	startTime := time.Now()
 	beginUpstreamResponseModelObservation(c) // V03-R11：每次转发尝试重置上游响应模型观测
+	// failover 会在同一个 *gin.Context 上重试下一个账号，先清掉上一次摊平名映射。
+	clearOpenAIResponsesNamespaceNames(c)
 	// V04：WS 执行作用域按原始请求体捕获一次，后续重试复用首次记录。
 	if c != nil {
 		if _, captured := c.Get(openAIWSOriginalExecutionScopeKey); !captured {
@@ -2532,6 +2536,15 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			},
 		})
 		return nil, errors.New("codex_cli_only restriction: only codex official clients are allowed")
+	}
+
+	// 工具 Schema 净化必须先于所有分流：OAuth / API Key / 透传 / CN / Grok / WS
+	// 上游都会把 tools 原样带给上游，坏 schema（type:null、required:null、
+	// 根级联合、lookaround pattern）会在账号池里反复重放出 400。
+	if sanitizedBody, schemaChanged, schemaErr := sanitizeOpenAIResponsesToolSchemasForPlatform(body, account.Platform); schemaErr != nil {
+		return nil, schemaErr
+	} else if schemaChanged {
+		body = sanitizedBody
 	}
 
 	originalBody := body
@@ -2588,6 +2601,72 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		return nil, errors.New("openai ws v1 is temporarily unsupported; use ws v2")
 	}
 	passthroughEnabled := account.IsOpenAIPassthroughEnabled()
+	// namespace 工具处理必须在图片意图判定之后、上游序列化之前：handler 层
+	// （ClassifyCodexImageRequest / PrepareCodexImageRouteRequest）已读完
+	// input[].namespace=image_gen 的续写信号；下面的摊平显式排除 image_gen，
+	// 清理只动 input 顶层条目的 namespace，Forward 内的图片意图判定读 tools/tool_choice。
+	compactPath := isOpenAIResponsesCompactPath(c)
+	namespaceBodyChanged := false
+	if shouldFlattenOpenAIResponsesNamespaces(account, wsDecision.Transport, passthroughEnabled, compactPath) {
+		flattened, flattenErr := flattenOpenAIResponsesNamespaces(c, body)
+		if flattenErr != nil {
+			setOpsUpstreamError(c, http.StatusBadRequest, flattenErr.Error(), "")
+			writeOpenAIJSONResponse(c, http.StatusBadRequest, gin.H{
+				"error": gin.H{
+					"type":    "invalid_request_error",
+					"message": flattenErr.Error(),
+					"param":   "tools",
+				},
+			})
+			return nil, flattenErr
+		}
+		if !bytes.Equal(flattened, body) {
+			body = flattened
+			namespaceBodyChanged = true
+		}
+	}
+	if shouldStripOpenAIResponsesInputNamespaces(account, wsDecision.Transport, passthroughEnabled) {
+		keepToolCallNamespaces := shouldKeepOpenAIResponsesToolCallNamespaces(
+			account, wsDecision.Transport, passthroughEnabled, compactPath, body,
+		)
+		stripped, stripErr := stripOpenAIResponsesInputNamespaces(body, keepToolCallNamespaces)
+		if stripErr != nil {
+			setOpsUpstreamError(c, http.StatusBadRequest, stripErr.Error(), "")
+			writeOpenAIJSONResponse(c, http.StatusBadRequest, gin.H{
+				"error": gin.H{
+					"type":    "invalid_request_error",
+					"message": stripErr.Error(),
+					"param":   "input",
+				},
+			})
+			return nil, stripErr
+		}
+		if !bytes.Equal(stripped, body) {
+			body = stripped
+			namespaceBodyChanged = true
+		}
+	}
+	if namespaceBodyChanged {
+		// handler 预校验缓存的是改写前的请求体；后续 reqBody 重新序列化会把旧 namespace 写回。
+		originalBody = body
+		releaseOpenAIParsedRequestBody(c)
+	}
+	responsesLite := isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader)) || isOpenAIResponsesLiteWebSocketPayload(body)
+	if responsesLite {
+		liteBody, changed, liteErr := normalizeOpenAIResponsesLitePayloadForAccount(body, account)
+		if liteErr != nil {
+			setOpsUpstreamError(c, http.StatusBadRequest, liteErr.Error(), "")
+			writeOpenAIJSONResponse(c, http.StatusBadRequest, gin.H{"error": gin.H{
+				"type": "invalid_request_error", "message": liteErr.Error(), "param": "tools",
+			}})
+			return nil, liteErr
+		}
+		if changed {
+			body = liteBody
+			originalBody = body
+			releaseOpenAIParsedRequestBody(c)
+		}
+	}
 	if sc := StreamContinuationFromContext(c); sc.Active() && (passthroughEnabled || account.IsGrok() ||
 		(account.Type == AccountTypeAPIKey && !openai_compat.ShouldUseResponsesAPI(account.Extra))) {
 		// 续写进行中：透传 / Grok / Chat 兼容路径不支持流拼接，换下一个账号
@@ -2820,12 +2899,17 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				IsCompact:               isCompactRequest,
 				SkipDefaultInstructions: true,
 				PreserveToolCallIDs:     true,
+				ResponsesLite:           responsesLite,
 			})
 			ensureCodexOAuthInstructionsField(reqBody)
 			bodyModified = true
 			disablePatch()
 		} else {
-			codexResult = applyCodexOAuthTransform(reqBody, isCodexCLI, isCompactRequest)
+			codexResult = applyCodexOAuthTransformWithOptions(reqBody, codexOAuthTransformOptions{
+				IsCodexCLI:    isCodexCLI,
+				IsCompact:     isCompactRequest,
+				ResponsesLite: responsesLite,
+			})
 		}
 		if codexResult.Modified {
 			bodyModified = true
@@ -3478,6 +3562,16 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		if normalized {
 			body = normalizedBody
 		}
+		compatBody, compatChanged, compatErr := normalizeOpenAIResponsesCompatibilityBodyWithOptions(body, account, openAIResponsesCompatibilityOptions{
+			ResponsesLite: isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader)) || isOpenAIResponsesLiteWebSocketPayload(body),
+			Compact:       isOpenAIResponsesCompactPath(c),
+		})
+		if compatErr != nil {
+			return nil, fmt.Errorf("normalize passthrough Responses compatibility: %w", compatErr)
+		}
+		if compatChanged {
+			body = compatBody
+		}
 		reqStream = gjson.GetBytes(body, "stream").Bool()
 	}
 
@@ -3889,6 +3983,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	}
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http_passthrough", req.Header, body, "not_applicable")
+	if err := applyMappedGPT55LiteCompatibility(req, account, body); err != nil {
+		return nil, err
+	}
 
 	if isOpenAIResponsesCompactPath(c) {
 		req.Header.Set("accept", "application/json")
@@ -4338,6 +4435,17 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 					line = "data: " + string(normalizedData)
 				}
 			}
+			if trimmedData != "[DONE]" {
+				restoredData, restoreErr := restoreOpenAIResponsesNamespacePayload(c, dataBytes)
+				if restoreErr != nil {
+					return resultWithUsage(), fmt.Errorf("restore OpenAI passthrough namespace response: %w", restoreErr)
+				}
+				if !bytes.Equal(restoredData, dataBytes) {
+					dataBytes = restoredData
+					trimmedData = strings.TrimSpace(string(restoredData))
+					line = "data: " + string(restoredData)
+				}
+			}
 			eventType := strings.TrimSpace(gjson.Get(trimmedData, "type").String())
 			if eventType == "response.failed" {
 				failedMessage = extractOpenAISSEErrorMessage(dataBytes)
@@ -4503,6 +4611,10 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	if err != nil {
 		return nil, fmt.Errorf("restore Grok Responses client tool response: %w", err)
 	}
+	body, err = restoreOpenAIResponsesNamespacePayload(c, body)
+	if err != nil {
+		return nil, fmt.Errorf("restore OpenAI passthrough namespace response: %w", err)
+	}
 	s.relayOpenAICodexTurnState(c, firstOpenAIResponseAccount(accounts), resp.Header)
 	if !writeOpenAICompactSSEBridge(c, resp.StatusCode, body) {
 		c.Data(resp.StatusCode, contentType, body)
@@ -4546,6 +4658,11 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 		body = normalizeOpenAICompactResponseBody(c, body)
 		// Correct tool calls in final response
 		body = s.correctToolCallsInResponseBody(body)
+		restoredBody, restoreErr := restoreOpenAIResponsesNamespacePayload(c, body)
+		if restoreErr != nil {
+			return nil, fmt.Errorf("restore OpenAI passthrough namespace response: %w", restoreErr)
+		}
+		body = restoredBody
 	} else {
 		terminalType, terminalPayload, terminalOK := extractOpenAISSETerminalEvent(bodyText)
 		if terminalOK && terminalType == "response.failed" {
@@ -4755,6 +4872,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	// 路由提示（V02-T17）：按最终出站 body 的 model 和 service_tier 生成，入站同名头先删。
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http", req.Header, body, "not_applicable")
+	if err := applyMappedGPT55LiteCompatibility(req, account, body); err != nil {
+		return nil, err
+	}
 
 	if isOpenAIResponsesCompactPath(c) {
 		req.Header.Set("accept", "application/json")
@@ -5424,6 +5544,18 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 				}
 			}
 			if strings.TrimSpace(data) != "[DONE]" {
+				restoredData, restoreErr := restoreOpenAIResponsesNamespacePayload(c, dataBytes)
+				if restoreErr != nil {
+					streamFailoverErr = fmt.Errorf("restore OpenAI namespace response: %w", restoreErr)
+					return
+				}
+				if !bytes.Equal(restoredData, dataBytes) {
+					dataBytes = restoredData
+					data = string(restoredData)
+					line = "data: " + data
+				}
+			}
+			if strings.TrimSpace(data) != "[DONE]" {
 				billingPayload = appendFinanceBillingPayload(billingPayload, []byte("data: "+string(dataBytes)+"\n\n"))
 			}
 			if openAIStreamEventIsTerminal(data) {
@@ -5887,6 +6019,10 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 	if err != nil {
 		return nil, fmt.Errorf("restore Grok Responses client tool response: %w", err)
 	}
+	body, err = restoreOpenAIResponsesNamespacePayload(c, body)
+	if err != nil {
+		return nil, fmt.Errorf("restore OpenAI namespace response: %w", err)
+	}
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 
 	contentType := "application/json"
@@ -5956,6 +6092,10 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 		restoredBody, restoreErr := restoreGrokResponsesClientToolPayload(c, body)
 		if restoreErr != nil {
 			return nil, fmt.Errorf("restore Grok Responses client tool response: %w", restoreErr)
+		}
+		restoredBody, restoreErr = restoreOpenAIResponsesNamespacePayload(c, restoredBody)
+		if restoreErr != nil {
+			return nil, fmt.Errorf("restore OpenAI namespace response: %w", restoreErr)
 		}
 		body = restoredBody
 	} else {
@@ -7636,6 +7776,43 @@ func extractOpenAIRequestMetaFromBody(body []byte) (model string, stream bool, p
 	stream = gjson.GetBytes(body, "stream").Bool()
 	promptCacheKey = strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
 	return model, stream, promptCacheKey
+}
+
+// normalizeOpenAIResponsesWebSocketCompatibilityBody 对 WS 入站 response.create
+// 报文做与 HTTP 转发路径一致的兼容归一化。当前覆盖工具 Schema 净化；后续
+// namespace / Responses Lite 归一化也接在这里，保证两条路径共用同一入口。
+// 非 OpenAI 平台账号不走 WS 原生链路（Grok 强制 HTTP bridge），保持原样。
+func normalizeOpenAIResponsesWebSocketCompatibilityBody(body []byte, account *Account, responsesLite bool) ([]byte, bool, error) {
+	return normalizeOpenAIResponsesCompatibilityBodyWithOptions(body, account, openAIResponsesCompatibilityOptions{ResponsesLite: responsesLite})
+}
+
+type openAIResponsesCompatibilityOptions struct {
+	ResponsesLite bool
+	Compact       bool
+}
+
+func normalizeOpenAIResponsesCompatibilityBodyWithOptions(body []byte, account *Account, opts openAIResponsesCompatibilityOptions) ([]byte, bool, error) {
+	responsesLite := opts.ResponsesLite
+	if account == nil || !account.IsOpenAI() {
+		return body, false, nil
+	}
+	normalized, changed, err := sanitizeOpenAIResponsesToolSchemasForPlatform(body, account.Platform)
+	if err != nil {
+		return normalized, changed, err
+	}
+	if account.IsOpenAIOAuthLike() && !opts.Compact {
+		webSearchBody, webSearchChanged, webSearchErr := ensureOpenAIOAuthWebSearchToolForHistoryBody(normalized, responsesLite)
+		if webSearchErr != nil {
+			return body, false, fmt.Errorf("normalize web search history: %w", webSearchErr)
+		}
+		normalized = webSearchBody
+		changed = changed || webSearchChanged
+	}
+	if !responsesLite {
+		return normalized, changed, nil
+	}
+	liteBody, liteChanged, err := normalizeOpenAIResponsesLitePayloadForAccount(normalized, account)
+	return liteBody, changed || liteChanged, err
 }
 
 // normalizeOpenAIPassthroughOAuthBody 将透传 OAuth 请求体收敛为旧链路关键行为：

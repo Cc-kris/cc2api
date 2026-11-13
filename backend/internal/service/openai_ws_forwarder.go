@@ -2861,6 +2861,14 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			}
 			normalized = next
 		}
+		// 工具 Schema 净化与 HTTP 路径共用同一入口：WS 每轮 response.create
+		// 都会重放 tools，坏 schema 不修就会在会话里每轮触发 400。
+		if compatiblePayload, _, compatErr := normalizeOpenAIResponsesWebSocketCompatibilityBody(
+			normalized, account, isOpenAIResponsesLiteWebSocketPayload(normalized)); compatErr != nil {
+			return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", compatErr)
+		} else {
+			normalized = compatiblePayload
+		}
 		imagePermissionIntent := IsImageGenerationPermissionIntent(openAIResponsesEndpoint, originalModel, normalized)
 		groupAllowsImageGeneration := GroupAllowsImageGeneration(apiKeyGroup(getAPIKeyFromContext(c)))
 		if imagePermissionIntent && !groupAllowsImageGeneration {
