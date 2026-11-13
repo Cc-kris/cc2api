@@ -246,6 +246,10 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		if upstreamMsg == "" {
 			upstreamMsg = http.StatusText(resp.StatusCode)
 		}
+		if resp.StatusCode == http.StatusBadRequest && extractUpstreamErrorCode(respBody) == openAIWSFallbackReasonInvalidEncryptedContent {
+			// 记录被上游拒绝的密文摘要；错误照旧透传，下一轮进场时按摘要预剥离。
+			s.markOpenAIWSInvalidEncryptedContentLineageFromPayload(c, payload, "ingress_ws_http_bridge_invalid_encrypted_lineage_mark", account.ID, turn)
+		}
 		shouldFailover := s.shouldFailoverOpenAIUpstreamResponse(ctx, resp.StatusCode, upstreamMsg, respBody)
 		if account.Platform == PlatformGrok {
 			shouldFailover = s.shouldFailoverGrokUpstreamError(ctx, resp.StatusCode, respBody)
@@ -412,6 +416,9 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			errMessage := strings.TrimSpace(errMsgRaw)
 			if errMessage == "" {
 				errMessage = "upstream error event"
+			}
+			if fallbackReason, _ := classifyOpenAIWSErrorEventFromRaw(errCodeRaw, errTypeRaw, errMsgRaw); fallbackReason == openAIWSFallbackReasonInvalidEncryptedContent {
+				s.markOpenAIWSInvalidEncryptedContentLineageFromPayload(c, payload, "ingress_ws_http_bridge_invalid_encrypted_lineage_mark", account.ID, turn)
 			}
 			statusCode := openAIWSErrorHTTPStatusFromRaw(errCodeRaw, errTypeRaw)
 			shouldFailover := s.shouldFailoverOpenAIUpstreamResponse(ctx, statusCode, errMessage, upstreamMessage)
