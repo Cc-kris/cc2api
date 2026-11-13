@@ -1058,6 +1058,10 @@ func extractPromptLikeInstructionsFromInput(reqBody map[string]any) string {
 }
 
 // applyInstructions 处理 instructions 字段：仅在 instructions 为空时填充默认值。
+func defaultCodexSynthInstructions(model string) string {
+	return "You are a helpful coding assistant."
+}
+
 func applyInstructions(reqBody map[string]any, isCodexCLI bool) bool {
 	if !isInstructionsEmpty(reqBody) {
 		return false
