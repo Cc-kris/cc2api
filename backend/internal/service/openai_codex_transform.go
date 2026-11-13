@@ -1,6 +1,8 @@
 package service
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -85,6 +87,34 @@ type codexOAuthTransformOptions struct {
 	IsCompact               bool
 	SkipDefaultInstructions bool
 	PreserveToolCallIDs     bool
+}
+
+const (
+	codexCallIDMaxLength = 64
+	codexCallIDPrefix    = "fc_"
+)
+
+func normalizeCodexCallID(id string) string {
+	candidate := id
+	switch {
+	case id == "":
+		return ""
+	case strings.HasPrefix(id, "fc"):
+	case strings.HasPrefix(id, "call_"):
+		candidate = codexCallIDPrefix + strings.TrimPrefix(id, "call_")
+	default:
+		candidate = codexCallIDPrefix + id
+	}
+	if len(candidate) <= codexCallIDMaxLength {
+		return candidate
+	}
+	return compactCodexCallID(candidate)
+}
+
+func compactCodexCallID(id string) string {
+	digest := sha256.Sum256([]byte("sub2api:codex-call-id:v1:" + id))
+	encoded := hex.EncodeToString(digest[:])
+	return codexCallIDPrefix + encoded[:codexCallIDMaxLength-len(codexCallIDPrefix)]
 }
 
 const (
@@ -1118,15 +1148,12 @@ func filterCodexInputWithOptions(input []any, opts codexInputFilterOptions) []an
 		// 若 item_reference 指向 legacy call_* 标识，则仅修正该引用本身。
 		fixCallIDPrefix := func(id string) string {
 			if opts.PreserveCallIDs {
-				return id
+				if len(id) <= codexCallIDMaxLength {
+					return id
+				}
+				return compactCodexCallID(id)
 			}
-			if id == "" || strings.HasPrefix(id, "fc") {
-				return id
-			}
-			if strings.HasPrefix(id, "call_") {
-				return "fc_" + strings.TrimPrefix(id, "call_")
-			}
-			return "fc_" + id
+			return normalizeCodexCallID(id)
 		}
 
 		if typ == "item_reference" {
@@ -1206,6 +1233,20 @@ func filterCodexInputWithOptions(input []any, opts codexInputFilterOptions) []an
 		filtered = append(filtered, newItem)
 	}
 	return filtered
+}
+
+func isCodexToolCallInputType(typ string) bool {
+	switch typ {
+	case "function_call",
+		"tool_call",
+		"local_shell_call",
+		"tool_search_call",
+		"custom_tool_call",
+		"mcp_tool_call":
+		return true
+	default:
+		return false
+	}
 }
 
 func isCodexToolCallItemType(typ string) bool {
