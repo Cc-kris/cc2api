@@ -472,6 +472,8 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	sameAccountRetryCount := make(map[int64]int)
 	var lastFailoverErr *service.UpstreamFailoverError
 	var oauth429FailoverState service.OpenAIOAuth429FailoverState
+	var passthroughFailoverState openAIPassthroughFailoverState
+	prevAttemptBodySanitized := false
 
 	// 提交 Responses 用量记录。成功路径与「续写耗尽按最后一个有用量的尝试收费」共用；
 	// 每个客户端请求最多调用一次。
@@ -654,13 +656,23 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		if streamCont == nil && reqStream && anyErrorFailoverEnabled(c.Request.Context(), h.cfg) {
 			streamCont = service.AttachStreamContinuation(c)
 		}
+		// 跨 passthrough 边界的 failover：从 Kiro 等透传账号切到 Bedrock 等非透传账号前，
+		// 从不可变的 canonical forwardBody 派生本次尝试 body 并整块剔除上游私有的加密
+		// reasoning item（含耦合的 id/summary），避免非透传上游 400 拒绝 Kiro reasoning 形态。
+		attemptBody := h.deriveOpenAIForwardAttemptBody(reqLog, forwardBody, account, &passthroughFailoverState)
+		if attemptSanitized := !bytes.Equal(attemptBody, forwardBody); attemptSanitized || prevAttemptBodySanitized {
+			// 本次 body 与已缓存的解析结果不一致（被净化，或从净化态切回 canonical），
+			// 必须让 service 重新解析，否则 Forward 会读到另一账号语义下的旧 map。
+			c.Set(service.OpenAIParsedRequestBodyKey, nil)
+			prevAttemptBodySanitized = attemptSanitized
+		}
 		result, err := func() (*service.OpenAIForwardResult, error) {
 			defer func() {
 				if accountReleaseFunc != nil {
 					accountReleaseFunc()
 				}
 			}()
-			return h.gatewayService.Forward(c.Request.Context(), c, account, forwardBody)
+			return h.gatewayService.Forward(c.Request.Context(), c, account, attemptBody)
 		}()
 		forwardDurationMs := time.Since(forwardStart).Milliseconds()
 		upstreamLatencyMs, _ := getContextInt64(c, service.OpsUpstreamLatencyMsKey)
