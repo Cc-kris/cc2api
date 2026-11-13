@@ -228,11 +228,9 @@ func (s *AntigravityGatewayService) handleSmartRetry(p antigravityRetryLoopParam
 			p.prefix, resp.StatusCode, modelName, p.account.ID, rateLimitDuration, truncateForLog(respBody, 200))
 
 		resetAt := time.Now().Add(rateLimitDuration)
-		if !setModelRateLimitByModelName(p.ctx, p.accountRepo, p.account.ID, modelName, p.prefix, resp.StatusCode, resetAt, false) {
+		if !s.setAntigravityModelRateLimits(p.ctx, p.accountRepo, p.account, modelName, p.prefix, resp.StatusCode, resetAt, false) {
 			p.handleError(p.ctx, p.prefix, p.account, resp.StatusCode, resp.Header, respBody, p.requestedModel, p.groupID, p.sessionHash, p.isStickySession)
 			logger.LegacyPrintf("service.antigravity_gateway", "%s status=%d rate_limited account=%d (no model mapping)", p.prefix, resp.StatusCode, p.account.ID)
-		} else {
-			s.updateAccountModelRateLimitInCache(p.ctx, p.account, modelName, resetAt)
 		}
 
 		// 返回账号切换信号，让上层切换账号重试
@@ -393,13 +391,7 @@ func (s *AntigravityGatewayService) handleSmartRetry(p antigravityRetryLoopParam
 
 		resetAt := time.Now().Add(rateLimitDuration)
 		if p.accountRepo != nil && modelName != "" {
-			if err := p.accountRepo.SetModelRateLimit(p.ctx, p.account.ID, modelName, resetAt); err != nil {
-				logger.LegacyPrintf("service.antigravity_gateway", "%s status=%d model_rate_limit_failed model=%s error=%v", p.prefix, resp.StatusCode, modelName, err)
-			} else {
-				logger.LegacyPrintf("service.antigravity_gateway", "%s status=%d model_rate_limited_after_smart_retry model=%s account=%d reset_in=%v",
-					p.prefix, resp.StatusCode, modelName, p.account.ID, rateLimitDuration)
-				s.updateAccountModelRateLimitInCache(p.ctx, p.account, modelName, resetAt)
-			}
+			s.setAntigravityModelRateLimits(p.ctx, p.accountRepo, p.account, modelName, p.prefix, resp.StatusCode, resetAt, true)
 		}
 
 		// 清除粘性会话绑定，避免下次请求仍命中限流账号
@@ -2587,6 +2579,23 @@ func isSingleAccountRetry(ctx context.Context) bool {
 	return v
 }
 
+// setAntigravityModelRateLimits shares a Gemini text-model cooldown while
+// keeping image-model limits isolated to the exact model key.
+func (s *AntigravityGatewayService) setAntigravityModelRateLimits(ctx context.Context, repo AccountRepository, account *Account, modelName, prefix string, statusCode int, resetAt time.Time, afterSmartRetry bool) bool {
+	if account == nil || repo == nil {
+		return false
+	}
+	keys := antigravityModelRateLimitKeys(modelName)
+	success := false
+	for _, key := range keys {
+		if setModelRateLimitByModelName(ctx, repo, account.ID, key, prefix, statusCode, resetAt, afterSmartRetry) {
+			s.updateAccountModelRateLimitInCache(ctx, account, key, resetAt)
+			success = true
+		}
+	}
+	return success
+}
+
 // setModelRateLimitByModelName 使用官方模型 ID 设置模型级限流
 // 直接使用上游返回的模型 ID（如 claude-sonnet-4-5）作为限流 key
 // 返回是否已成功设置（若模型名为空或 repo 为 nil 将返回 false）
@@ -2859,13 +2868,8 @@ func (s *AntigravityGatewayService) setModelRateLimitAndClearSession(p *handleMo
 	logger.LegacyPrintf("service.antigravity_gateway", "%s status=%d model_rate_limited model=%s account=%d reset_in=%v",
 		p.prefix, p.statusCode, info.ModelName, p.account.ID, info.RetryDelay)
 
-	// 设置模型限流状态（数据库）
-	if err := s.accountRepo.SetModelRateLimit(p.ctx, p.account.ID, info.ModelName, resetAt); err != nil {
-		logger.LegacyPrintf("service.antigravity_gateway", "%s model_rate_limit_failed model=%s error=%v", p.prefix, info.ModelName, err)
-	}
-
-	// 立即更新 Redis 快照中账号的限流状态，避免并发请求重复选中
-	s.updateAccountModelRateLimitInCache(p.ctx, p.account, info.ModelName, resetAt)
+	// 设置模型限流状态（数据库和调度快照）
+	s.setAntigravityModelRateLimits(p.ctx, s.accountRepo, p.account, info.ModelName, p.prefix, p.statusCode, resetAt, false)
 
 	// 清除粘性会话绑定
 	if p.cache != nil && p.sessionHash != "" {
@@ -3137,6 +3141,9 @@ func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context
 	if s.settingService.cfg != nil && s.settingService.cfg.Gateway.StreamKeepaliveInterval > 0 {
 		keepaliveInterval = time.Duration(s.settingService.cfg.Gateway.StreamKeepaliveInterval) * time.Second
 	}
+	if keepaliveInterval > 0 && downstreamRejectsSSEComments(c) {
+		keepaliveInterval = 0
+	}
 	var keepaliveTicker *time.Ticker
 	if keepaliveInterval > 0 {
 		keepaliveTicker = time.NewTicker(keepaliveInterval)
@@ -3224,6 +3231,10 @@ func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context
 				}
 
 				cw.Fprintf("data: %s\n\n", payload)
+				continue
+			}
+
+			if trimmed == "" {
 				continue
 			}
 
@@ -3366,6 +3377,14 @@ func (s *AntigravityGatewayService) handleGeminiStreamToNonStreaming(c *gin.Cont
 			if firstTokenMs == nil {
 				ms := int(time.Since(startTime).Milliseconds())
 				firstTokenMs = &ms
+			}
+
+			if extractGeminiFinishReason(parsed) == "MALFORMED_FUNCTION_CALL" {
+				return nil, &UpstreamFailoverError{
+					StatusCode:             http.StatusBadGateway,
+					ResponseBody:           []byte(`{"error":"upstream returned MALFORMED_FUNCTION_CALL"}`),
+					RetryableOnSameAccount: true,
+				}
 			}
 
 			last = parsed
@@ -3831,6 +3850,10 @@ func (s *AntigravityGatewayService) handleClaudeStreamToNonStreaming(c *gin.Cont
 				firstTokenMs = &ms
 			}
 
+			if extractGeminiFinishReason(parsed) == "MALFORMED_FUNCTION_CALL" {
+				return nil, antigravity.ErrMalformedFunctionCall
+			}
+
 			last = parsed
 
 			// 保留最后一个有 parts 的响应，并收集所有 parts
@@ -4029,6 +4052,13 @@ func (s *AntigravityGatewayService) handleClaudeStreamingResponse(c *gin.Context
 					return nil, &UpstreamFailoverError{
 						StatusCode:             http.StatusBadGateway,
 						ResponseBody:           []byte(`{"error":"empty stream response from upstream"}`),
+						RetryableOnSameAccount: true,
+					}
+				}
+				if !processor.HasContent() && !cw.Disconnected() {
+					return nil, &UpstreamFailoverError{
+						StatusCode:             http.StatusBadGateway,
+						ResponseBody:           []byte(`{"error":"upstream returned no substantive content"}`),
 						RetryableOnSameAccount: true,
 					}
 				}

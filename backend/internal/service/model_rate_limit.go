@@ -7,7 +7,10 @@ import (
 	"time"
 )
 
-const modelRateLimitsKey = "model_rate_limits"
+const (
+	modelRateLimitsKey                 = "model_rate_limits"
+	antigravityGeminiModelRateLimitKey = "antigravity:gemini"
+)
 
 // isRateLimitActiveForKey 检查指定 key 的限流是否生效
 func (a *Account) isRateLimitActiveForKey(key string) bool {
@@ -41,7 +44,7 @@ func (a *Account) isModelRateLimitedWithContext(ctx context.Context, requestedMo
 	if modelKey == "" {
 		return false
 	}
-	return a.isRateLimitActiveForKey(modelKey)
+	return a.isRateLimitActiveForKey(modelKey) || isAntigravityFamilyRateLimited(a, modelKey)
 }
 
 // GetModelRateLimitRemainingTime 获取模型限流剩余时间
@@ -63,7 +66,13 @@ func (a *Account) GetModelRateLimitRemainingTimeWithContext(ctx context.Context,
 	if modelKey == "" {
 		return 0
 	}
-	return a.getRateLimitRemainingForKey(modelKey)
+	remaining := a.getRateLimitRemainingForKey(modelKey)
+	if isAntigravityFamilyRateLimited(a, modelKey) {
+		if familyRemaining := a.getRateLimitRemainingForKey(antigravityGeminiModelRateLimitKey); familyRemaining > remaining {
+			remaining = familyRemaining
+		}
+	}
+	return remaining
 }
 
 func resolveFinalAntigravityModelKey(ctx context.Context, account *Account, requestedModel string) string {
@@ -76,6 +85,33 @@ func resolveFinalAntigravityModelKey(ctx context.Context, account *Account, requ
 		modelKey = applyThinkingModelSuffix(modelKey, enabled)
 	}
 	return modelKey
+}
+
+func isAntigravityGeminiModel(model string) bool {
+	return strings.HasPrefix(normalizeAntigravityModelName(model), "gemini-")
+}
+
+func isAntigravityGeminiImageModel(model string) bool {
+	normalized := normalizeAntigravityModelName(model)
+	return strings.HasPrefix(normalized, "gemini-") && strings.Contains(normalized, "-image")
+}
+
+func isAntigravityFamilyRateLimited(a *Account, model string) bool {
+	return a.Platform == PlatformAntigravity && isAntigravityGeminiModel(model) &&
+		!isAntigravityGeminiImageModel(model) && model != antigravityGeminiModelRateLimitKey &&
+		a.isRateLimitActiveForKey(antigravityGeminiModelRateLimitKey)
+}
+
+func antigravityModelRateLimitKeys(model string) []string {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return nil
+	}
+	keys := []string{model}
+	if isAntigravityGeminiModel(model) && !isAntigravityGeminiImageModel(model) && model != antigravityGeminiModelRateLimitKey {
+		keys = append(keys, antigravityGeminiModelRateLimitKey)
+	}
+	return keys
 }
 
 func (a *Account) modelRateLimitResetAt(scope string) *time.Time {
