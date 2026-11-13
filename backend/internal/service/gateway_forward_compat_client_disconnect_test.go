@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -112,7 +113,7 @@ func TestHandleResponsesStreamingResponse_ClientDisconnectDrainsUpstreamUsage(t 
 
 	result, err := (&GatewayService{}).handleResponsesStreamingResponse(
 		&http.Response{Header: http.Header{}, Body: io.NopCloser(strings.NewReader(anthropicStreamWithMidStreamText("claude-sonnet-4-6", 20, 11, 4, 42)))},
-		c, "claude-sonnet-4-6", "claude-sonnet-4-6", nil, time.Now(),
+		c, "claude-sonnet-4-6", "claude-sonnet-4-6", nil, time.Now(), apicompat.ResponsesClientToolMapping{},
 	)
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -142,7 +143,7 @@ func TestAnthropicCompatStreaming_ClientDisconnectBillsFullUpstreamUsage(t *test
 			return svc.handleCCStreamingFromAnthropic(resp, c, "claude-opus-4-7", "claude-opus-4-7", nil, time.Now(), true)
 		},
 		"responses": func(svc *GatewayService, resp *http.Response, c *gin.Context) (*ForwardResult, error) {
-			return svc.handleResponsesStreamingResponse(resp, c, "claude-opus-4-7", "claude-opus-4-7", nil, time.Now())
+			return svc.handleResponsesStreamingResponse(resp, c, "claude-opus-4-7", "claude-opus-4-7", nil, time.Now(), apicompat.ResponsesClientToolMapping{})
 		},
 	}
 	for name, handle := range handlers {
