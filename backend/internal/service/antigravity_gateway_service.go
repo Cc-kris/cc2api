@@ -989,6 +989,18 @@ func mapAntigravityModel(account *Account, requestedModel string) string {
 // getMappedModel 获取映射后的模型名
 // 完全依赖映射配置：账户映射（通配符）→ 默认映射兜底
 func (s *AntigravityGatewayService) getMappedModel(account *Account, requestedModel string) string {
+	return s.getMappedModelForThinkingLevel(account, requestedModel, "")
+}
+
+// getMappedModelForThinkingLevel 在常规映射之前先把裸 Gemini 模型名
+// （gemini-3.x-flash）解析到上游目录里真实存在的 -low/-medium/-high/-tiered 变体。
+// Antigravity 目录只登记带后缀的变体，裸名直接转发会被上游以
+// 404 "Requested entity was not found." 拒绝，因此所有转发入口都必须经过这一步。
+// thinkingLevel 为空时按 high 兜底；调用方可按自身协议传入推导出的档位。
+func (s *AntigravityGatewayService) getMappedModelForThinkingLevel(account *Account, requestedModel string, thinkingLevel string) string {
+	if mapped, ok := resolveGeminiThinkingVariantForLevel(account, requestedModel, thinkingLevel); ok {
+		return mapped
+	}
 	return mapAntigravityModel(account, requestedModel)
 }
 
@@ -1361,7 +1373,12 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 	}
 
 	originalModel := claudeReq.Model
-	mappedModel := s.getMappedModel(account, claudeReq.Model)
+	// 裸 Gemini 模型名按 Claude thinking.budget_tokens 解析到 -low/-medium/-high 变体（上游 27f4398b5）
+	mappedModel := s.getMappedModelForThinkingLevel(
+		account,
+		claudeReq.Model,
+		geminiThinkingLevelFromClaudeThinking(claudeReq.Thinking),
+	)
 	if mappedModel == "" {
 		return nil, s.writeClaudeError(c, http.StatusForbidden, "permission_error", fmt.Sprintf("model %s not in whitelist", claudeReq.Model))
 	}
@@ -2112,7 +2129,9 @@ func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Co
 		return nil, s.writeGoogleError(c, http.StatusNotFound, "Unsupported action: "+action)
 	}
 
-	mappedModel := s.getMappedModel(account, originalModel)
+	// 裸模型名（gemini-3.8-flash）按 thinkingConfig 解析到 -low/-medium/-high 变体；
+	// 裸名有显式映射时保持原行为（上游 0f4d8acaa、27f4398b5）。
+	mappedModel := s.getMappedModelForThinkingLevel(account, originalModel, geminiThinkingLevelFromBody(body))
 	if mappedModel == "" {
 		return nil, s.writeGoogleError(c, http.StatusForbidden, fmt.Sprintf("model %s not in whitelist", originalModel))
 	}
