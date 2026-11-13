@@ -1,5 +1,3 @@
-//go:build unit
-
 package service
 
 import (
@@ -7,8 +5,8 @@ import (
 	"time"
 )
 
-// GatewayCache 新增 reasoning 缓存方法后，各测试桩在此统一补全空实现，
-// 避免逐个桩类型散落重复方法。
+// GatewayCache 新增 reasoning 缓存方法后，各测试桩补全空实现。
+// 按桩类型所在测试文件的构建标签拆成两个文件。
 
 func (c *stubGatewayCache) SetReasoningContent(context.Context, string, string, time.Duration) error {
 	return nil
@@ -23,22 +21,6 @@ func (s *stickyGatewayCacheHotpathStub) SetReasoningContent(context.Context, str
 }
 
 func (s *stickyGatewayCacheHotpathStub) GetReasoningContent(context.Context, string) (string, error) {
-	return "", ErrReasoningContentNotFound
-}
-
-func (m *mockGatewayCacheForPlatform) SetReasoningContent(context.Context, string, string, time.Duration) error {
-	return nil
-}
-
-func (m *mockGatewayCacheForPlatform) GetReasoningContent(context.Context, string) (string, error) {
-	return "", ErrReasoningContentNotFound
-}
-
-func (m *mockGatewayCacheForGemini) SetReasoningContent(context.Context, string, string, time.Duration) error {
-	return nil
-}
-
-func (m *mockGatewayCacheForGemini) GetReasoningContent(context.Context, string) (string, error) {
 	return "", ErrReasoningContentNotFound
 }
 
