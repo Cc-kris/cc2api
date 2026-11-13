@@ -5803,6 +5803,17 @@ func (s *GatewayService) buildUpstreamRequestAnthropicAPIKeyPassthrough(
 		targetURL = validatedURL + "/v1/messages?beta=true"
 	}
 
+	// 能力维度 sanitize：API-key 透传路径按客户端 anthropic-beta（再过一遍 BetaPolicy
+	// filter）决定 body 中 fallbacks / fallback_credit_token 的去留。
+	if c != nil && c.Request != nil {
+		if clientBeta := getHeaderRaw(c.Request.Header, "anthropic-beta"); clientBeta != "" {
+			finalBeta := stripBetaTokensWithSet(clientBeta, mergeDropSets(s.getBetaPolicyFilterSet(ctx, c, account, "")))
+			if sanitized, changed := sanitizeAnthropicBodyForBetaTokens(body, finalBeta); changed {
+				body = sanitized
+			}
+		}
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -6940,7 +6951,23 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 			// - 保留 incoming beta 的同时，确保 OAuth 所需 beta 存在
 			applyClaudeCodeMimicHeaders(req, reqStream, mimicUserAgent)
 
-			incomingBeta := getHeaderRaw(req.Header, "anthropic-beta")
+			incomingBeta := ""
+			// 客户端显式请求的兼容性 beta（structured outputs / tool changes）不能
+			// 被 mimic 的固定 beta 集覆盖丢掉；未知 beta 仍然排除，policy drop 优先。
+			// 缺失的伴随 token 不推断补齐。
+			clientBeta := getHeaderRaw(clientHeaders, "anthropic-beta")
+			for _, token := range []string{
+				claude.BetaStructuredOutputs,
+				claude.BetaMidConversationToolChanges,
+				claude.BetaInlineTools,
+			} {
+				if containsBetaToken(clientBeta, token) {
+					if incomingBeta != "" {
+						incomingBeta += ","
+					}
+					incomingBeta += token
+				}
+			}
 			// Claude Code OAuth credentials are scoped to Claude Code.
 			// 所有模型统一使用完整 Claude Code beta，Haiku 不再旁路：真实 CLI 对
 			// Haiku 也发送同样的 beta 集，旁路会让伪装流量与真实流量可区分。
@@ -6974,6 +7001,16 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 		}
 	}
 
+	// 能力维度 sanitize：按最终发送的 anthropic-beta header 决定 body 中 beta 专有
+	// 字段（fallbacks / fallback_credit_token）的去留，避免 header 与 body 不对称导致
+	// 上游 Pydantic 以 "Extra inputs are not permitted" 拒收。
+	if sanitized, changed := sanitizeAnthropicBodyForBetaTokens(body, getHeaderRaw(req.Header, "anthropic-beta")); changed {
+		body = sanitized
+		_ = req.Body.Close()
+		req.Body = io.NopCloser(bytes.NewReader(body))
+		req.ContentLength = int64(len(body))
+	}
+
 	// === DEBUG: 打印上游转发请求（headers + body 摘要），与 CLIENT_ORIGINAL 对比 ===
 	s.debugLogGatewaySnapshot("UPSTREAM_FORWARD", req.Header, body, map[string]string{
 		"url":                 req.URL.String(),
@@ -6996,6 +7033,48 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	return req, nil
 }
 
+// vertexSupportedBetaTokens 是 Vertex AI 的 Anthropic 端点接受的 anthropic-beta
+// 白名单。Vertex 对任何未知 token 直接 HTTP 400，故采用白名单（与 Bedrock 的
+// bedrockSupportedBetaTokens 同思路）而非黑名单：未来 Claude Code 新增的、Vertex 尚未
+// 支持的 token 天然被剥离。当 Vertex 新增支持某 beta 时在此补充。
+//
+// 明确排除（issue #3358 中 Vertex 报 400 的 token）：advisor-tool-2026-03-01、
+// prompt-caching-scope-2026-01-05、redact-thinking-2026-02-12、
+// thinking-token-count-2026-05-13；以及 claude-code-20250219 / oauth-2025-04-20 等
+// 客户端身份 beta——Vertex service_account 走 Bearer 鉴权，不需要它们。
+var vertexSupportedBetaTokens = map[string]bool{
+	"context-1m-2025-08-07":                  true,
+	"context-management-2025-06-27":          true,
+	"fine-grained-tool-streaming-2025-05-14": true,
+	"interleaved-thinking-2025-05-14":        true,
+}
+
+// filterVertexBetaTokens 解析 client 的 anthropic-beta header，先剔除 drop 集合中的
+// token（BetaPolicy filter + 默认 drop），再只保留 Vertex 支持的 token，去重后逗号拼接。
+// 返回最终 header（可能为空字符串）。
+func filterVertexBetaTokens(header string, drop map[string]struct{}) string {
+	tokens := parseAnthropicBetaHeader(header)
+	if len(tokens) == 0 {
+		return ""
+	}
+	out := make([]string, 0, len(tokens))
+	seen := make(map[string]bool, len(tokens))
+	for _, t := range tokens {
+		if _, dropped := drop[t]; dropped {
+			continue
+		}
+		if !vertexSupportedBetaTokens[t] {
+			continue
+		}
+		if seen[t] {
+			continue
+		}
+		seen[t] = true
+		out = append(out, t)
+	}
+	return strings.Join(out, ",")
+}
+
 func (s *GatewayService) buildUpstreamRequestAnthropicVertex(
 	ctx context.Context,
 	c *gin.Context,
@@ -7009,6 +7088,30 @@ func (s *GatewayService) buildUpstreamRequestAnthropicVertex(
 	if err != nil {
 		return nil, err
 	}
+
+	// 计算最终 outgoing anthropic-beta。Vertex AI 的 Anthropic 端点只接受一小撮
+	// beta token，未知 token 会直接 HTTP 400——近期 Claude Code CLI 透传的
+	// advisor-tool-2026-03-01 / prompt-caching-scope-2026-01-05 /
+	// redact-thinking-2026-02-12 / thinking-token-count-2026-05-13 都不被 Vertex 接受
+	// （issue #3358）。这里复用 BetaPolicy 的 block 检查（与 Bedrock 的
+	// resolveBedrockBetaTokensForRequest 对称），再按 vertexSupportedBetaTokens 白名单
+	// 剥离其余 token，使该路径与 Anthropic 直连 / Bedrock 路径行为一致。
+	clientBeta := ""
+	if c != nil && c.Request != nil {
+		clientBeta = getHeaderRaw(c.Request.Header, "anthropic-beta")
+	}
+	policy := s.evaluateBetaPolicy(ctx, clientBeta, account, modelID)
+	if policy.blockErr != nil {
+		return nil, policy.blockErr
+	}
+	finalBeta := filterVertexBetaTokens(clientBeta, mergeDropSets(policy.filterSet))
+
+	// 能力维度 sanitize：基于最终 beta（而非原始 client 值）决定是否保留 body 中的
+	// beta 专有字段，与 Anthropic 直连 / Bedrock 路径对称。
+	if sanitized, changed := sanitizeAnthropicBodyForBetaTokens(vertexBody, finalBeta); changed {
+		vertexBody = sanitized
+	}
+
 	fullURL, err := buildVertexAnthropicURL(account.VertexProjectID(), account.VertexLocation(modelID), modelID, reqStream)
 	if err != nil {
 		return nil, err
@@ -7038,6 +7141,13 @@ func (s *GatewayService) buildUpstreamRequestAnthropicVertex(
 	req.Header.Del("anthropic-version")
 	setHeaderRaw(req.Header, "authorization", "Bearer "+token)
 	setHeaderRaw(req.Header, "content-type", "application/json")
+
+	// 覆盖上面白名单 loop 写入的原始 client anthropic-beta，使用过滤后的最终值。
+	// finalBeta 为空（全部被剥离）时不下发该 header，与 Vertex 无 beta 请求一致。
+	setHeaderRaw(req.Header, "anthropic-beta", finalBeta)
+	if finalBeta == "" {
+		delete(req.Header, "anthropic-beta")
+	}
 
 	s.debugLogGatewaySnapshot("UPSTREAM_FORWARD_VERTEX_ANTHROPIC", req.Header, vertexBody, map[string]string{
 		"url":        req.URL.String(),

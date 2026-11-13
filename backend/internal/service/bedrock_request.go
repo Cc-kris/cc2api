@@ -263,6 +263,11 @@ func PrepareBedrockRequestBodyWithTokens(body []byte, modelID string, betaTokens
 	// 清理 cache_control 中 Bedrock 不支持的字段
 	body = sanitizeBedrockCacheControl(body, modelID)
 
+	// server-side refusal fallback（fallbacks / fallback_credit_token）是 Anthropic
+	// 直连 beta API 专有字段；fallback beta token 不在 Bedrock 白名单内，Bedrock
+	// Invoke 永远不支持，无条件剥除。
+	body = stripBedrockFallbackFields(body)
+
 	// CC 兼容模式：修复 CC 发送的 Bedrock 不兼容字段
 	if ccCompat {
 		body = sanitizeBedrockThinking(body, modelID)
@@ -766,10 +771,25 @@ func sanitizeIDField(body []byte, id, path string) []byte {
 
 const defaultCCMaxTokens = 81920
 
+// stripBedrockFallbackFields 无条件移除 server-side refusal fallback 字段。
+// Bedrock Invoke 没有对应 beta（fallback beta 也不在 bedrockSupportedBetaTokens
+// 白名单内），因此这两个字段永远不能被转发。
+func stripBedrockFallbackFields(body []byte) []byte {
+	if gjson.GetBytes(body, "fallbacks").Exists() {
+		body, _ = sjson.DeleteBytes(body, "fallbacks")
+	}
+	if gjson.GetBytes(body, "fallback_credit_token").Exists() {
+		body, _ = sjson.DeleteBytes(body, "fallback_credit_token")
+	}
+	return body
+}
+
 // sanitizeBedrockCCFields 处理 Claude Code 发送的 Bedrock 不兼容字段：
 //   - 移除 service_tier（Anthropic API 专有，Bedrock 不支持）
 //   - 移除 interface_geo（Anthropic API 专有，Bedrock 不支持）
 //   - 移除 context_management（Anthropic API 专有，Bedrock 不支持，CC v2.1.87+ 默认携带）
+//   - 无条件移除 fallbacks / fallback_credit_token（server-side refusal fallback，
+//     Anthropic 直连 beta API 专有；Bedrock Invoke 无对应 beta，永不支持）
 //   - 注入 max_tokens 默认值 81920（CC 可能省略，Bedrock 要求必须提供）
 //   - 注入 anthropic_version（CC 通过 HTTP 头发送，Bedrock 需要放在请求体中）
 func sanitizeBedrockCCFields(body []byte) []byte {
@@ -782,6 +802,7 @@ func sanitizeBedrockCCFields(body []byte) []byte {
 	if gjson.GetBytes(body, "context_management").Exists() {
 		body, _ = sjson.DeleteBytes(body, "context_management")
 	}
+	body = stripBedrockFallbackFields(body)
 	if !gjson.GetBytes(body, "max_tokens").Exists() {
 		body, _ = sjson.SetBytes(body, "max_tokens", defaultCCMaxTokens)
 	}
