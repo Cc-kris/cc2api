@@ -284,7 +284,7 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsResponses(
 		})
 		return nil, fmt.Errorf("parse chat completions response: %w", err)
 	}
-	responsesResp := apicompat.ChatCompletionsResponseToResponses(&ccResp, originalModel, nil, false, nil)
+	responsesResp := apicompat.ChatCompletionsResponseToResponses(&ccResp, originalModel, nil, nil, false, nil)
 	s.cacheReasoningItemsFromOutput(responsesResp.Output)
 
 	usage := OpenAIUsage{}

@@ -2514,6 +2514,7 @@ func (s *OpenAIGatewayService) handleFailoverSideEffects(ctx context.Context, re
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
 	startTime := time.Now()
 	beginUpstreamResponseModelObservation(c) // V03-R11：每次转发尝试重置上游响应模型观测
+	clearOpenAIResponsesClientToolMapping(c)
 	// V04：WS 执行作用域按原始请求体捕获一次，后续重试复用首次记录。
 	if c != nil {
 		if _, captured := c.Get(openAIWSOriginalExecutionScopeKey); !captured {
@@ -3481,6 +3482,16 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		reqStream = gjson.GetBytes(body, "stream").Bool()
 	}
 
+	if account != nil && account.Platform == PlatformOpenAI && account.Type == AccountTypeAPIKey &&
+		!isOpenAIResponsesCompactPath(c) && needsOpenAIResponsesClientToolAdaptation(body) {
+		adaptedBody, mapping, adaptErr := adaptOpenAIResponsesClientTools(body)
+		if adaptErr != nil {
+			return nil, adaptErr
+		}
+		body = adaptedBody
+		c.Set(openAIResponsesClientToolMappingContextKey, mapping)
+	}
+
 	sanitizedBody, sanitized, err := sanitizeEmptyBase64InputImagesInOpenAIBody(body)
 	if err != nil {
 		return nil, err
@@ -3679,6 +3690,13 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			}
 		}
 		return nil, s.handleErrorResponsePassthrough(ctx, resp, c, account, body)
+	}
+	if mapping, ok := openAIResponsesClientToolMapping(c); ok && isEventStreamResponse(resp.Header) {
+		maxLineSize := defaultMaxLineSize
+		if s.cfg != nil && s.cfg.Gateway.MaxLineSize > 0 {
+			maxLineSize = s.cfg.Gateway.MaxLineSize
+		}
+		resp.Body = newGrokResponsesClientToolStreamBody(resp.Body, mapping, maxLineSize)
 	}
 
 	serviceTier := extractOpenAIServiceTierFromBody(body)
@@ -4502,6 +4520,12 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	body, err = restoreGrokResponsesClientToolPayload(c, body)
 	if err != nil {
 		return nil, fmt.Errorf("restore Grok Responses client tool response: %w", err)
+	}
+	if mapping, ok := openAIResponsesClientToolMapping(c); ok && json.Valid(body) {
+		body, _, err = apicompat.RestoreResponsesClientToolPayload(body, mapping)
+		if err != nil {
+			return nil, fmt.Errorf("restore OpenAI Responses client tools: %w", err)
+		}
 	}
 	s.relayOpenAICodexTurnState(c, firstOpenAIResponseAccount(accounts), resp.Header)
 	if !writeOpenAICompactSSEBridge(c, resp.StatusCode, body) {
