@@ -1256,20 +1256,33 @@ func injectIdentityPatchToGeminiRequest(body []byte) ([]byte, error) {
 		return nil, fmt.Errorf("解析 Gemini 请求失败: %w", err)
 	}
 
-	// 检查现有 systemInstruction 是否已包含身份提示词
+	identityFound := false
+	systemChanged := false
+	// 检查现有 systemInstruction 是否已包含身份提示词，同时中和客户端遗留的身份声明
 	if sysInst, ok := request["systemInstruction"].(map[string]any); ok {
 		if parts, ok := sysInst["parts"].([]any); ok {
 			for _, part := range parts {
 				if partMap, ok := part.(map[string]any); ok {
 					if text, ok := partMap["text"].(string); ok {
-						if strings.Contains(text, "You are Antigravity") {
-							// 已包含身份提示词，直接返回原始请求
-							return body, nil
+						neutral := antigravity.NeutralizeSystemIdentity(text)
+						if neutral != text {
+							partMap["text"] = neutral
+							systemChanged = true
+						}
+						if strings.Contains(neutral, "You are Antigravity") {
+							identityFound = true
 						}
 					}
 				}
 			}
 		}
+	}
+	if identityFound {
+		if systemChanged {
+			return json.Marshal(request)
+		}
+		// 已包含身份提示词且无需改写，直接返回原始请求
+		return body, nil
 	}
 
 	// 获取默认身份提示词
@@ -2171,6 +2184,15 @@ func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Co
 	} else {
 		logger.LegacyPrintf("service.antigravity_gateway", "[Antigravity] Failed to clean schema: %v", err)
 	}
+
+	// Antigravity v1internal 不接受内置工具（googleSearch/codeExecution）与 functionDeclarations 混用，
+	// 存在客户端函数工具时丢弃内置工具，避免整单 400。
+	if mixedBody, mixErr := dropBuiltinToolsWhenFunctionDeclarationsPresent(injectedBody); mixErr == nil {
+		injectedBody = mixedBody
+	} else {
+		logger.LegacyPrintf("service.antigravity_gateway", "[Antigravity] Failed to normalize mixed tools: %v", mixErr)
+	}
+	injectedBody = ensureGeminiFunctionCallThoughtSignatures(injectedBody)
 
 	// 包装请求
 	wrappedBody, err := s.wrapV1InternalRequest(projectID, mappedModel, injectedBody)
@@ -4100,6 +4122,70 @@ func isImageGenerationModel(model string) bool {
 		modelLower == "gemini-2.5-flash-image" ||
 		modelLower == "gemini-2.5-flash-image-preview" ||
 		strings.HasPrefix(modelLower, "gemini-2.5-flash-image-")
+}
+
+// dropBuiltinToolsWhenFunctionDeclarationsPresent 在请求同时带 functionDeclarations 与内置工具
+// （googleSearch / codeExecution）时丢弃内置工具，并移除 toolConfig.includeServerSideToolInvocations，
+// toolConfig 清空后整体删除。没有 functionDeclarations 或没有内置工具时原样返回。
+func dropBuiltinToolsWhenFunctionDeclarationsPresent(body []byte) ([]byte, error) {
+	var request map[string]any
+	if err := json.Unmarshal(body, &request); err != nil {
+		return nil, err
+	}
+
+	tools, ok := request["tools"].([]any)
+	if !ok || len(tools) == 0 {
+		return body, nil
+	}
+
+	hasFunctionDeclarations := false
+	for _, rawTool := range tools {
+		tool, ok := rawTool.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, key := range []string{"functionDeclarations", "function_declarations"} {
+			if decls, ok := tool[key].([]any); ok && len(decls) > 0 {
+				hasFunctionDeclarations = true
+			}
+		}
+	}
+	if !hasFunctionDeclarations {
+		return body, nil
+	}
+
+	filtered := make([]any, 0, len(tools))
+	droppedBuiltin := false
+	for _, rawTool := range tools {
+		tool, ok := rawTool.(map[string]any)
+		if !ok {
+			filtered = append(filtered, rawTool)
+			continue
+		}
+		for _, key := range []string{"googleSearch", "google_search", "codeExecution", "code_execution"} {
+			if _, has := tool[key]; has {
+				delete(tool, key)
+				droppedBuiltin = true
+			}
+		}
+		if len(tool) == 0 {
+			continue
+		}
+		filtered = append(filtered, tool)
+	}
+	if !droppedBuiltin {
+		return body, nil
+	}
+
+	request["tools"] = filtered
+	if toolConfig, ok := request["toolConfig"].(map[string]any); ok {
+		delete(toolConfig, "includeServerSideToolInvocations")
+		delete(toolConfig, "include_server_side_tool_invocations")
+		if len(toolConfig) == 0 {
+			delete(request, "toolConfig")
+		}
+	}
+	return json.Marshal(request)
 }
 
 // cleanGeminiRequest 清理 Gemini 请求体中的 Schema

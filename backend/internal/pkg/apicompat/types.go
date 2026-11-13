@@ -265,9 +265,12 @@ type ResponsesInputItem struct {
 
 // ResponsesContentPart is a typed content part in a Responses message.
 type ResponsesContentPart struct {
-	Type     string `json:"type"` // "input_text" | "output_text" | "input_image"
+	Type     string `json:"type"` // "input_text" | "output_text" | "input_image" | "input_file"
 	Text     string `json:"text,omitempty"`
 	ImageURL string `json:"image_url,omitempty"` // data URI for input_image
+	Filename string `json:"filename,omitempty"`  // input_file
+	FileData string `json:"file_data,omitempty"` // data URI for input_file
+	FileID   string `json:"file_id,omitempty"`   // input_file
 }
 
 // ResponsesTool describes a tool in the Responses API.

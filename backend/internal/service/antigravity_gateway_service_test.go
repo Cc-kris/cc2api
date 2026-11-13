@@ -18,6 +18,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 // antigravityFailingWriter 模拟客户端断开连接的 gin.ResponseWriter
@@ -1493,4 +1494,114 @@ func generateLargeUnwrapJSON(minSize int) []byte {
 	outer := map[string]any{"response": inner}
 	b, _ := json.Marshal(outer)
 	return b
+}
+
+func TestAntigravityGatewayService_ForwardGemini_StripsBuiltinsWhenClientFunctionsPresent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"contents":[{"role":"user","parts":[{"text":"hello"}]}],"tools":[{"functionDeclarations":[{"name":"get_weather","parameters":{"type":"object","additionalProperties":false}}]},{"googleSearch":{}}],"toolConfig":{"includeServerSideToolInvocations":true}}`)
+	writer := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(writer)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-2.5-flash:generateContent", bytes.NewReader(body))
+
+	upstream := &queuedHTTPUpstreamStub{responses: []*http.Response{{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body:       io.NopCloser(strings.NewReader("data: {\"response\":{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"ok\"}]},\"finishReason\":\"STOP\"}],\"usageMetadata\":{}}}\n\n")),
+	}}}
+	svc := &AntigravityGatewayService{
+		settingService: NewSettingService(&antigravitySettingRepoStub{}, &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}),
+		tokenProvider:  &AntigravityTokenProvider{},
+		httpUpstream:   upstream,
+	}
+	account := &Account{
+		ID: 103, Name: "native-gemini", Platform: PlatformAntigravity, Type: AccountTypeOAuth, Status: StatusActive, Concurrency: 1,
+		Credentials: map[string]any{"access_token": "token", "project_id": "project-103", "model_mapping": map[string]any{"gemini-2.5-flash": "gemini-2.5-flash"}},
+	}
+
+	result, err := svc.ForwardGemini(context.Background(), c, account, "gemini-2.5-flash", "generateContent", false, body, false)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, upstream.requestBodies, 1)
+
+	var wrapped map[string]any
+	require.NoError(t, json.Unmarshal(upstream.requestBodies[0], &wrapped))
+	request, ok := wrapped["request"].(map[string]any)
+	require.True(t, ok)
+	tools, ok := request["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, tools, 1)
+	tool, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	require.Contains(t, tool, "functionDeclarations")
+	require.NotContains(t, tool, "googleSearch")
+	if toolConfig, exists := request["toolConfig"].(map[string]any); exists {
+		require.NotContains(t, toolConfig, "includeServerSideToolInvocations")
+	}
+}
+
+func TestInjectAntigravityGeminiSystemIdentity(t *testing.T) {
+	const identity = "You are Codex, based on GPT-6."
+	const mention = "Example: You are GPT-5.6 running in the Codex CLI."
+	for _, existingIdentity := range []bool{false, true} {
+		t.Run(fmt.Sprintf("existing identity=%t", existingIdentity), func(t *testing.T) {
+			parts := []map[string]any{
+				{"text": "x-anthropic-billing-header: cc_version=example;"},
+				{"text": identity, "custom": "preserved"},
+				{"text": mention},
+				{"text": `"You are Codex, based on GPT-6."`},
+			}
+			if existingIdentity {
+				parts = append([]map[string]any{{"text": "You are Antigravity."}}, parts...)
+			}
+			body, err := json.Marshal(map[string]any{
+				"systemInstruction": map[string]any{"parts": parts},
+				"contents":          []map[string]any{{"role": "user", "parts": []map[string]string{{"text": identity}}}},
+				"tools":             []map[string]any{{"functionDeclarations": []map[string]string{{"name": "example", "description": identity}}}},
+			})
+			require.NoError(t, err)
+			got, err := injectIdentityPatchToGeminiRequest(body)
+			require.NoError(t, err)
+			require.Equal(t, "You are an AI agent.", gjson.GetBytes(got, "systemInstruction.parts.2.text").String())
+			require.Equal(t, "preserved", gjson.GetBytes(got, "systemInstruction.parts.2.custom").String())
+			require.Equal(t, mention, gjson.GetBytes(got, "systemInstruction.parts.3.text").String())
+			require.Equal(t, `"You are Codex, based on GPT-6."`, gjson.GetBytes(got, "systemInstruction.parts.4.text").String())
+			for _, field := range []string{"contents", "tools"} {
+				require.JSONEq(t, gjson.GetBytes(body, field).Raw, gjson.GetBytes(got, field).Raw)
+			}
+			again, err := injectIdentityPatchToGeminiRequest(got)
+			require.NoError(t, err)
+			require.Equal(t, string(got), string(again))
+		})
+	}
+}
+
+func TestDropBuiltinToolsWhenFunctionDeclarationsPresent(t *testing.T) {
+	t.Run("builtins dropped and server-side flag removed", func(t *testing.T) {
+		body := []byte(`{"tools":[{"functionDeclarations":[{"name":"a"}]},{"googleSearch":{}},{"codeExecution":{}}],"toolConfig":{"includeServerSideToolInvocations":true}}`)
+		got, err := dropBuiltinToolsWhenFunctionDeclarationsPresent(body)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(gjson.GetBytes(got, "tools").Array()))
+		require.NotContains(t, string(got), "googleSearch")
+		require.NotContains(t, string(got), "codeExecution")
+		require.False(t, gjson.GetBytes(got, "toolConfig").Exists())
+	})
+	t.Run("other toolConfig fields preserved", func(t *testing.T) {
+		body := []byte(`{"tools":[{"functionDeclarations":[{"name":"a"}]},{"googleSearch":{}}],"toolConfig":{"includeServerSideToolInvocations":true,"functionCallingConfig":{"mode":"VALIDATED"}}}`)
+		got, err := dropBuiltinToolsWhenFunctionDeclarationsPresent(body)
+		require.NoError(t, err)
+		require.NotContains(t, string(got), "includeServerSideToolInvocations")
+		require.Equal(t, "VALIDATED", gjson.GetBytes(got, "toolConfig.functionCallingConfig.mode").String())
+	})
+	t.Run("builtin only is untouched", func(t *testing.T) {
+		body := []byte(`{"tools":[{"googleSearch":{}}],"toolConfig":{"includeServerSideToolInvocations":true}}`)
+		got, err := dropBuiltinToolsWhenFunctionDeclarationsPresent(body)
+		require.NoError(t, err)
+		require.Equal(t, string(body), string(got))
+	})
+	t.Run("function only is untouched", func(t *testing.T) {
+		body := []byte(`{"tools":[{"functionDeclarations":[{"name":"a"}]}]}`)
+		got, err := dropBuiltinToolsWhenFunctionDeclarationsPresent(body)
+		require.NoError(t, err)
+		require.Equal(t, string(body), string(got))
+	})
 }
