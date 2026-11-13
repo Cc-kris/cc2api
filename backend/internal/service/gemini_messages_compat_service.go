@@ -1230,7 +1230,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 		// 统一错误策略：自定义错误码 + 临时不可调度
 		if s.rateLimitService != nil {
-			switch s.finalErrorPolicy(ctx, account, resp.StatusCode, respBody, checkedPolicy) {
+			switch finalPolicy := s.finalErrorPolicy(ctx, account, resp.StatusCode, respBody, checkedPolicy); finalPolicy {
 			case ErrorPolicySkipped:
 				upstreamReqID := resp.Header.Get(requestIDHeader)
 				if upstreamReqID == "" {
@@ -1247,7 +1247,10 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 				// 池模式：客户端写出与 ErrorPolicyNone 相同（按上游真实状态码映射），仅跳过账号状态标记。
 				return nil, s.writeGeminiMappedError(c, account, resp.StatusCode, upstreamReqID, respBody)
 			case ErrorPolicyMatched, ErrorPolicyTempUnscheduled:
-				s.handleGeminiUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+				// TempUnscheduled 已由 CheckErrorPolicy 处理；再走 handleGeminiUpstreamError 会把首次 401 升级为 error。
+				if finalPolicy == ErrorPolicyMatched {
+					s.handleGeminiUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+				}
 				upstreamReqID := resp.Header.Get(requestIDHeader)
 				if upstreamReqID == "" {
 					upstreamReqID = resp.Header.Get("x-goog-request-id")
@@ -1787,7 +1790,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 
 		// 统一错误策略：自定义错误码 + 临时不可调度
 		if s.rateLimitService != nil {
-			switch s.finalErrorPolicy(ctx, account, resp.StatusCode, respBody, checkedPolicy) {
+			switch finalPolicy := s.finalErrorPolicy(ctx, account, resp.StatusCode, respBody, checkedPolicy); finalPolicy {
 			case ErrorPolicySkipped:
 				if failoverErr := s.skippedErrorPolicyFailoverError(ctx, c, account, resp.StatusCode, respBody, requestID); failoverErr != nil {
 					return nil, failoverErr
@@ -1800,7 +1803,10 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 				// 池模式：客户端写出与 ErrorPolicyNone 相同（状态码/响应体保真），仅跳过账号状态标记。
 				return nil, s.writeGeminiNativeUpstreamError(c, account, resp, respBody, requestID, isOAuth)
 			case ErrorPolicyMatched, ErrorPolicyTempUnscheduled:
-				s.handleGeminiUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+				// TempUnscheduled 已由 CheckErrorPolicy 处理；再走 handleGeminiUpstreamError 会把首次 401 升级为 error。
+				if finalPolicy == ErrorPolicyMatched {
+					s.handleGeminiUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+				}
 				evBody := unwrapIfNeeded(isOAuth, respBody)
 				upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(evBody))
 				upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
@@ -2058,6 +2064,12 @@ func (s *GeminiMessagesCompatService) shouldFailoverGeminiUpstreamError(ctx cont
 // （池模式账号按 pool_mode_retry_count 先同账号重试）；返回 nil 表示状态码不可 failover，
 // 由调用方决定客户端写出。Skipped 只豁免账号状态标记，不豁免换号，与 OpenAI 网关路径一致。
 func (s *GeminiMessagesCompatService) skippedErrorPolicyFailoverError(ctx context.Context, c *gin.Context, account *Account, statusCode int, respBody []byte, upstreamRequestID string) *UpstreamFailoverError {
+	// 管理员在 pool_mode_retry_status_codes 中显式排除的状态码，且分组未开启任意错误换号时，
+	// 保持 V04 的直接写出行为：排除只关闭同账号重试，不豁免分组级换号。
+	// 未配置列表时的默认列表不适用此规则，仍按 shouldFailoverGeminiUpstreamError 判断。
+	if account.IsPoolMode() && account.GetPoolModeRetryStatusCodes() != nil && !account.IsPoolModeRetryableStatus(statusCode) && !failoverOnAnyHTTPError(ctx, s.cfg, statusCode) {
+		return nil
+	}
 	if !s.shouldFailoverGeminiUpstreamError(ctx, statusCode) {
 		return nil
 	}
@@ -3364,9 +3376,10 @@ func extractGeminiUsage(data []byte) *ClaudeUsage {
 	}
 
 	// 注意：Gemini 的 promptTokenCount 包含 cachedContentTokenCount，
-	// 但 Claude 的 input_tokens 不包含 cache_read_input_tokens，需要减去
+	// 但 Claude 的 input_tokens 不包含 cache_read_input_tokens，需要减去。
+	// prompt 被拦截时上游可能只报 cachedContentTokenCount，差值下限为 0。
 	return &ClaudeUsage{
-		InputTokens:          prompt - cached,
+		InputTokens:          max(prompt-cached, 0),
 		OutputTokens:         cand + thoughts,
 		CacheReadInputTokens: cached,
 		ImageOutputTokens:    imageTokens,
