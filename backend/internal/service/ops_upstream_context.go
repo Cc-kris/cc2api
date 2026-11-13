@@ -31,6 +31,7 @@ const (
 	// OpsSkipPassthroughKey 由 applyErrorPassthroughRule 在命中 skip_monitoring=true 的规则时设置。
 	// ops_error_logger 中间件检查此 key，为 true 时跳过错误记录。
 	OpsSkipPassthroughKey = "ops_skip_passthrough"
+	OpsStreamErrorKey     = "ops_stream_error"
 
 	// Client-side configuration denials should remain visible in ops_error_logs,
 	// but should be excluded from SLA/error-rate calculations.
@@ -88,6 +89,109 @@ func HasOpsClientBusinessLimited(c *gin.Context) bool {
 	return marked
 }
 
+// OpsStreamError describes an error carried inside an otherwise successful response.
+// RequestScoped results are client policy outcomes and must not inherit stale upstream attribution.
+type OpsStreamError struct {
+	ErrType         string
+	Code            string
+	Message         string
+	IntendedStatus  int
+	CountTowardsSLA bool
+	SkipMonitoring  bool
+	RequestScoped   bool
+	NonStream       bool
+	UpstreamStatus  int
+	UpstreamMessage string
+	UpstreamDetail  string
+	UpstreamErrors  []*OpsUpstreamErrorEvent
+}
+
+// MarkOpsStreamFailure records an in-band upstream failure that counts toward SLA.
+func MarkOpsStreamFailure(c *gin.Context, errType, code, message string, intendedStatus int) {
+	MarkOpsStreamErrorValue(c, OpsStreamError{ErrType: errType, Code: code, Message: message, IntendedStatus: intendedStatus, CountTowardsSLA: true})
+}
+
+// MarkOpsStreamErrorValue records the first in-band failure without changing client bytes.
+func MarkOpsStreamErrorValue(c *gin.Context, streamErr OpsStreamError) {
+	if c == nil {
+		return
+	}
+	if _, exists := c.Get(OpsStreamErrorKey); exists {
+		return
+	}
+	streamErr.ErrType = strings.TrimSpace(streamErr.ErrType)
+	streamErr.Code = strings.TrimSpace(streamErr.Code)
+	streamErr.Message = strings.TrimSpace(streamErr.Message)
+	if streamErr.RequestScoped {
+		c.Set(OpsStreamErrorKey, streamErr)
+		return
+	}
+	streamErr.SkipMonitoring = currentOpsFailureSkipMonitoring(c)
+	if status, ok := c.Get(OpsUpstreamStatusCodeKey); ok {
+		switch value := status.(type) {
+		case int:
+			streamErr.UpstreamStatus = value
+		case int64:
+			streamErr.UpstreamStatus = int(value)
+		}
+	}
+	if value, ok := c.Get(OpsUpstreamErrorMessageKey); ok {
+		streamErr.UpstreamMessage, _ = value.(string)
+	}
+	if value, ok := c.Get(OpsUpstreamErrorDetailKey); ok {
+		streamErr.UpstreamDetail, _ = value.(string)
+	}
+	if events, ok := c.Get(OpsUpstreamErrorsKey); ok {
+		if values, ok := events.([]*OpsUpstreamErrorEvent); ok {
+			streamErr.UpstreamErrors = make([]*OpsUpstreamErrorEvent, 0, len(values))
+			for _, event := range values {
+				if event == nil {
+					streamErr.UpstreamErrors = append(streamErr.UpstreamErrors, nil)
+					continue
+				}
+				copyOfEvent := *event
+				streamErr.UpstreamErrors = append(streamErr.UpstreamErrors, &copyOfEvent)
+			}
+		}
+	}
+	c.Set(OpsStreamErrorKey, streamErr)
+}
+
+func currentOpsFailureSkipMonitoring(c *gin.Context) bool {
+	if c == nil {
+		return false
+	}
+	if skip, _ := c.Get(OpsSkipPassthroughKey); skip == true {
+		return true
+	}
+	if events, ok := c.Get(OpsUpstreamErrorsKey); ok {
+		if values, ok := events.([]*OpsUpstreamErrorEvent); ok {
+			for i := len(values) - 1; i >= 0; i-- {
+				if values[i] != nil {
+					return values[i].SkipMonitoring
+				}
+			}
+		}
+	}
+	return false
+}
+
+func GetOpsStreamError(c *gin.Context) (OpsStreamError, bool) {
+	if c == nil {
+		return OpsStreamError{}, false
+	}
+	value, ok := c.Get(OpsStreamErrorKey)
+	streamErr, valid := value.(OpsStreamError)
+	return streamErr, ok && valid
+}
+
+func GetOpsStreamErrors(c *gin.Context) []OpsStreamError {
+	if streamErr, ok := GetOpsStreamError(c); ok {
+		return []OpsStreamError{streamErr}
+	}
+	return nil
+}
+
 // SetOpsUpstreamError is the exported wrapper for setOpsUpstreamError, used by
 // handler-layer code (e.g. failover-exhausted paths) that needs to record the
 // original upstream status code before mapping it to a client-facing code.
@@ -120,9 +224,10 @@ type OpsUpstreamErrorEvent struct {
 	Passthrough bool `json:"passthrough,omitempty"`
 
 	// Context
-	Platform    string `json:"platform,omitempty"`
-	AccountID   int64  `json:"account_id,omitempty"`
-	AccountName string `json:"account_name,omitempty"`
+	Platform       string `json:"platform,omitempty"`
+	AccountID      int64  `json:"account_id,omitempty"`
+	AccountName    string `json:"account_name,omitempty"`
+	SkipMonitoring bool   `json:"-"`
 
 	// Outcome
 	UpstreamStatusCode int    `json:"upstream_status_code,omitempty"`
@@ -210,7 +315,7 @@ func checkSkipMonitoringForUpstreamEvent(c *gin.Context, ev *OpsUpstreamErrorEve
 
 	rule := svc.MatchRule(ev.Platform, ev.UpstreamStatusCode, []byte(body))
 	if rule != nil && rule.SkipMonitoring {
-		c.Set(OpsSkipPassthroughKey, true)
+		ev.SkipMonitoring = true
 	}
 }
 

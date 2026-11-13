@@ -643,3 +643,26 @@ func TestTransformClaudeToGemini_ToolResultImagesReachUpstream(t *testing.T) {
 	require.Equal(t, "image/jpeg", userParts[3].InlineData.MimeType)
 	require.Equal(t, "d29ybGQ=", userParts[3].InlineData.Data)
 }
+
+func TestGeminiToolConfig_IncludeServerSideToolInvocations(t *testing.T) {
+	t.Run("serialize and deserialize toolConfig with includeServerSideToolInvocations", func(t *testing.T) {
+		trueVal := true
+		cfg := GeminiToolConfig{
+			FunctionCallingConfig: &GeminiFunctionCallingConfig{
+				Mode: "VALIDATED",
+			},
+			IncludeServerSideToolInvocations: &trueVal,
+		}
+
+		data, err := json.Marshal(cfg)
+		require.NoError(t, err)
+		require.Contains(t, string(data), `"includeServerSideToolInvocations":true`)
+
+		var decoded GeminiToolConfig
+		err = json.Unmarshal(data, &decoded)
+		require.NoError(t, err)
+		require.NotNil(t, decoded.IncludeServerSideToolInvocations)
+		require.True(t, *decoded.IncludeServerSideToolInvocations)
+		require.Equal(t, "VALIDATED", decoded.FunctionCallingConfig.Mode)
+	})
+}

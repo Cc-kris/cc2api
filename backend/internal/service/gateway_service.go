@@ -5861,7 +5861,7 @@ func (s *GatewayService) buildUpstreamRequestAnthropicAPIKeyPassthrough(
 		if err != nil {
 			return nil, err
 		}
-		targetURL = validatedURL + "/v1/messages?beta=true"
+		targetURL = buildAnthropicMessagesURL(validatedURL)
 	}
 
 	// 能力维度 sanitize：API-key 透传路径按客户端 anthropic-beta（再过一遍 BetaPolicy
@@ -6898,7 +6898,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 			if err != nil {
 				return nil, err
 			}
-			targetURL = validatedURL + "/v1/messages?beta=true"
+			targetURL = buildAnthropicMessagesURL(validatedURL)
 		}
 	} else if account.IsCustomBaseURLEnabled() {
 		customURL := account.GetCustomBaseURL()

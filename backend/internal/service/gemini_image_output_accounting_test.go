@@ -253,7 +253,7 @@ func TestGeminiNativeStream_MarksDeliveredImagesOnlyAfterSuccessfulWrite(t *test
 	beginGeminiImageOutputObservation(c)
 
 	svc := &GeminiMessagesCompatService{cfg: &config.Config{}}
-	result, err := svc.handleNativeStreamingResponse(c, resp, time.Now(), false)
+	result, err := svc.handleNativeStreamingResponse(c, resp, time.Now(), false, 0, nil, "")
 	require.NoError(t, err, "V03-T05 keeps draining upstream after a client write failure")
 	require.True(t, result.clientDisconnect)
 	require.Equal(t, 2, observedGeminiImageOutputs(c))
