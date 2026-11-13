@@ -352,8 +352,6 @@ func (s *GeminiMessagesCompatService) markGeminiResponseSignal(c *gin.Context, a
 		kind = "stream_failed"
 	}
 	event := OpsUpstreamErrorEvent{
-		ProxyID:            opsUpstreamProxyID(account),
-		ProxyName:          opsUpstreamProxyName(account),
 		Platform:           PlatformGemini,
 		UpstreamStatusCode: sig.Status,
 		UpstreamRequestID:  strings.TrimSpace(upstreamRequestID),
