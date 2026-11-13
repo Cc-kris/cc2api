@@ -2514,6 +2514,8 @@ func (s *OpenAIGatewayService) handleFailoverSideEffects(ctx context.Context, re
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
 	startTime := time.Now()
 	beginUpstreamResponseModelObservation(c) // V03-R11：每次转发尝试重置上游响应模型观测
+	// failover 会在同一个 *gin.Context 上重试下一个账号，先清掉上一次摊平名映射。
+	clearOpenAIResponsesNamespaceNames(c)
 	// V04：WS 执行作用域按原始请求体捕获一次，后续重试复用首次记录。
 	if c != nil {
 		if _, captured := c.Get(openAIWSOriginalExecutionScopeKey); !captured {
@@ -2597,6 +2599,56 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		return nil, errors.New("openai ws v1 is temporarily unsupported; use ws v2")
 	}
 	passthroughEnabled := account.IsOpenAIPassthroughEnabled()
+	// namespace 工具处理必须在图片意图判定之后、上游序列化之前：handler 层
+	// （ClassifyCodexImageRequest / PrepareCodexImageRouteRequest）已读完
+	// input[].namespace=image_gen 的续写信号；下面的摊平显式排除 image_gen，
+	// 清理只动 input 顶层条目的 namespace，Forward 内的图片意图判定读 tools/tool_choice。
+	compactPath := isOpenAIResponsesCompactPath(c)
+	namespaceBodyChanged := false
+	if shouldFlattenOpenAIResponsesNamespaces(account, wsDecision.Transport, passthroughEnabled, compactPath) {
+		flattened, flattenErr := flattenOpenAIResponsesNamespaces(c, body)
+		if flattenErr != nil {
+			setOpsUpstreamError(c, http.StatusBadRequest, flattenErr.Error(), "")
+			writeOpenAIJSONResponse(c, http.StatusBadRequest, gin.H{
+				"error": gin.H{
+					"type":    "invalid_request_error",
+					"message": flattenErr.Error(),
+					"param":   "tools",
+				},
+			})
+			return nil, flattenErr
+		}
+		if !bytes.Equal(flattened, body) {
+			body = flattened
+			namespaceBodyChanged = true
+		}
+	}
+	if shouldStripOpenAIResponsesInputNamespaces(account, wsDecision.Transport, passthroughEnabled) {
+		keepToolCallNamespaces := shouldKeepOpenAIResponsesToolCallNamespaces(
+			account, wsDecision.Transport, passthroughEnabled, compactPath, body,
+		)
+		stripped, stripErr := stripOpenAIResponsesInputNamespaces(body, keepToolCallNamespaces)
+		if stripErr != nil {
+			setOpsUpstreamError(c, http.StatusBadRequest, stripErr.Error(), "")
+			writeOpenAIJSONResponse(c, http.StatusBadRequest, gin.H{
+				"error": gin.H{
+					"type":    "invalid_request_error",
+					"message": stripErr.Error(),
+					"param":   "input",
+				},
+			})
+			return nil, stripErr
+		}
+		if !bytes.Equal(stripped, body) {
+			body = stripped
+			namespaceBodyChanged = true
+		}
+	}
+	if namespaceBodyChanged {
+		// handler 预校验缓存的是改写前的请求体；后续 reqBody 重新序列化会把旧 namespace 写回。
+		originalBody = body
+		releaseOpenAIParsedRequestBody(c)
+	}
 	if sc := StreamContinuationFromContext(c); sc.Active() && (passthroughEnabled || account.IsGrok() ||
 		(account.Type == AccountTypeAPIKey && !openai_compat.ShouldUseResponsesAPI(account.Extra))) {
 		// 续写进行中：透传 / Grok / Chat 兼容路径不支持流拼接，换下一个账号
@@ -4347,6 +4399,17 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 					line = "data: " + string(normalizedData)
 				}
 			}
+			if trimmedData != "[DONE]" {
+				restoredData, restoreErr := restoreOpenAIResponsesNamespacePayload(c, dataBytes)
+				if restoreErr != nil {
+					return resultWithUsage(), fmt.Errorf("restore OpenAI passthrough namespace response: %w", restoreErr)
+				}
+				if !bytes.Equal(restoredData, dataBytes) {
+					dataBytes = restoredData
+					trimmedData = strings.TrimSpace(string(restoredData))
+					line = "data: " + string(restoredData)
+				}
+			}
 			eventType := strings.TrimSpace(gjson.Get(trimmedData, "type").String())
 			if eventType == "response.failed" {
 				failedMessage = extractOpenAISSEErrorMessage(dataBytes)
@@ -4512,6 +4575,10 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	if err != nil {
 		return nil, fmt.Errorf("restore Grok Responses client tool response: %w", err)
 	}
+	body, err = restoreOpenAIResponsesNamespacePayload(c, body)
+	if err != nil {
+		return nil, fmt.Errorf("restore OpenAI passthrough namespace response: %w", err)
+	}
 	s.relayOpenAICodexTurnState(c, firstOpenAIResponseAccount(accounts), resp.Header)
 	if !writeOpenAICompactSSEBridge(c, resp.StatusCode, body) {
 		c.Data(resp.StatusCode, contentType, body)
@@ -4555,6 +4622,11 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 		body = normalizeOpenAICompactResponseBody(c, body)
 		// Correct tool calls in final response
 		body = s.correctToolCallsInResponseBody(body)
+		restoredBody, restoreErr := restoreOpenAIResponsesNamespacePayload(c, body)
+		if restoreErr != nil {
+			return nil, fmt.Errorf("restore OpenAI passthrough namespace response: %w", restoreErr)
+		}
+		body = restoredBody
 	} else {
 		terminalType, terminalPayload, terminalOK := extractOpenAISSETerminalEvent(bodyText)
 		if terminalOK && terminalType == "response.failed" {
@@ -5433,6 +5505,18 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 				}
 			}
 			if strings.TrimSpace(data) != "[DONE]" {
+				restoredData, restoreErr := restoreOpenAIResponsesNamespacePayload(c, dataBytes)
+				if restoreErr != nil {
+					streamFailoverErr = fmt.Errorf("restore OpenAI namespace response: %w", restoreErr)
+					return
+				}
+				if !bytes.Equal(restoredData, dataBytes) {
+					dataBytes = restoredData
+					data = string(restoredData)
+					line = "data: " + data
+				}
+			}
+			if strings.TrimSpace(data) != "[DONE]" {
 				billingPayload = appendFinanceBillingPayload(billingPayload, []byte("data: "+string(dataBytes)+"\n\n"))
 			}
 			if openAIStreamEventIsTerminal(data) {
@@ -5896,6 +5980,10 @@ func (s *OpenAIGatewayService) handleNonStreamingResponse(ctx context.Context, r
 	if err != nil {
 		return nil, fmt.Errorf("restore Grok Responses client tool response: %w", err)
 	}
+	body, err = restoreOpenAIResponsesNamespacePayload(c, body)
+	if err != nil {
+		return nil, fmt.Errorf("restore OpenAI namespace response: %w", err)
+	}
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 
 	contentType := "application/json"
@@ -5965,6 +6053,10 @@ func (s *OpenAIGatewayService) handleSSEToJSON(resp *http.Response, c *gin.Conte
 		restoredBody, restoreErr := restoreGrokResponsesClientToolPayload(c, body)
 		if restoreErr != nil {
 			return nil, fmt.Errorf("restore Grok Responses client tool response: %w", restoreErr)
+		}
+		restoredBody, restoreErr = restoreOpenAIResponsesNamespacePayload(c, restoredBody)
+		if restoreErr != nil {
+			return nil, fmt.Errorf("restore OpenAI namespace response: %w", restoreErr)
 		}
 		body = restoredBody
 	} else {

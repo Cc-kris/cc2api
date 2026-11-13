@@ -22,7 +22,9 @@ func TestV043RejectedFieldNativeAndPassthroughForward(t *testing.T) {
 	for _, passthrough := range []bool{false, true} {
 		for _, test := range []struct{ name, request, param string }{
 			{"max_output_tokens", `"max_output_tokens":100,`, "max_output_tokens"},
-			{"tool_namespace", ``, "input[0].namespace"},
+			// V05-T05：未声明 namespace 工具的 API Key 请求会在首发前主动剥离调用项 namespace，
+			// 因此用例声明 namespace 工具使首发保留该字段，继续覆盖「上游拒绝后反应式剥离」路径。
+			{"tool_namespace", `"tools":[{"type":"namespace","name":"unwanted","tools":[{"type":"function","name":"tool","parameters":{"type":"object"}}]}],`, "input[0].namespace"},
 		} {
 			t.Run(fmt.Sprintf("%v/%s", passthrough, test.name), func(t *testing.T) {
 				hits := 0
