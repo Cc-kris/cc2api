@@ -821,6 +821,40 @@ func TestSetModelRateLimitByModelName_NotConvertToScope(t *testing.T) {
 	require.NotEqual(t, "claude_sonnet", call.modelKey, "should NOT be scope")
 }
 
+func TestSetAntigravityModelRateLimits_GeminiWritesFamilyScope(t *testing.T) {
+	repo := &stubAntigravityAccountRepo{}
+	svc := &AntigravityGatewayService{}
+	account := &Account{ID: 789, Platform: PlatformAntigravity}
+	resetAt := time.Now().Add(30 * time.Second)
+	require.True(t, svc.setAntigravityModelRateLimits(context.Background(), repo, account, "gemini-3-flash", "[test]", 429, resetAt, false))
+	require.Len(t, repo.modelRateLimitCalls, 2)
+	require.Equal(t, "gemini-3-flash", repo.modelRateLimitCalls[0].modelKey)
+	require.Equal(t, antigravityGeminiModelRateLimitKey, repo.modelRateLimitCalls[1].modelKey)
+}
+
+func TestSetAntigravityModelRateLimits_ImageDoesNotWriteFamilyScope(t *testing.T) {
+	repo := &stubAntigravityAccountRepo{}
+	svc := &AntigravityGatewayService{}
+	account := &Account{ID: 789, Platform: PlatformAntigravity}
+	resetAt := time.Now().Add(30 * time.Second)
+	require.True(t, svc.setAntigravityModelRateLimits(context.Background(), repo, account, "gemini-3.1-flash-image-preview", "[test]", 429, resetAt, false))
+	require.Len(t, repo.modelRateLimitCalls, 1)
+	require.Equal(t, "gemini-3.1-flash-image-preview", repo.modelRateLimitCalls[0].modelKey)
+}
+
+func TestIsModelRateLimited_AntigravityImageDoesNotInheritGeminiFamilyLimit(t *testing.T) {
+	future := time.Now().Add(10 * time.Minute).Format(time.RFC3339)
+	account := &Account{Platform: PlatformAntigravity, Extra: map[string]any{modelRateLimitsKey: map[string]any{
+		antigravityGeminiModelRateLimitKey: map[string]any{"rate_limit_reset_at": future},
+	}}}
+	for _, model := range []string{"gemini-3.1-flash-image", "gemini-3.1-flash-image-preview", "gemini-3-pro-image"} {
+		require.False(t, account.isModelRateLimitedWithContext(context.Background(), model), model)
+	}
+	require.True(t, account.isModelRateLimitedWithContext(context.Background(), "gemini-3-flash"))
+	setAccountModelRateLimitSnapshot(account, "gemini-3.1-flash-image", time.Now().Add(time.Hour), "test", time.Now())
+	require.True(t, account.isModelRateLimitedWithContext(context.Background(), "gemini-3-pro-image-preview"))
+}
+
 func TestAntigravityRetryLoop_PreCheck_SwitchesWhenRateLimited(t *testing.T) {
 	upstream := &recordingOKUpstream{}
 	account := &Account{

@@ -119,30 +119,41 @@ func cleanJSONSchemaRecursive(value any) any {
 	// 0. [NEW] 合并 allOf
 	mergeAllOf(schemaMap)
 
+	// Convert Draft 2020-12 tuples to Gemini's single items schema.
+	if prefixItemsVal, hasPrefix := schemaMap["prefixItems"]; hasPrefix {
+		if prefixItems, ok := prefixItemsVal.([]any); ok && len(prefixItems) > 0 {
+			itemsVal, hasItems := schemaMap["items"]
+			_, itemsIsBool := itemsVal.(bool)
+			if !hasItems || itemsVal == nil || itemsIsBool {
+				best := extractBestSchemaFromUnion(prefixItems)
+				if best == nil {
+					best = map[string]any{"type": "string"}
+				}
+				schemaMap["items"] = best
+			}
+		}
+		delete(schemaMap, "prefixItems")
+	}
+
 	// 1. [CRITICAL] 深度递归处理子项
 	if props, ok := schemaMap["properties"].(map[string]any); ok {
 		for _, v := range props {
 			cleanJSONSchemaRecursive(v)
 		}
-		// Go 中不需要像 Rust 那样显式处理 nullable_keys remove required，
-		// 因为我们在子项处理中会正确设置 type 和 description
-	} else if items, ok := schemaMap["items"]; ok {
+	}
+	if items, ok := schemaMap["items"]; ok {
 		// [FIX] Gemini 期望 "items" 是单个 Schema 对象（列表验证），而不是数组（元组验证）。
 		if itemsArr, ok := items.([]any); ok {
-			// 策略：将元组 [A, B] 视为 A、B 中的最佳匹配项。
 			best := extractBestSchemaFromUnion(itemsArr)
 			if best == nil {
-				// 回退到通用字符串
 				best = map[string]any{"type": "string"}
 			}
-			// 用处理后的对象替换原有数组
-			cleanedBest := cleanJSONSchemaRecursive(best)
-			schemaMap["items"] = cleanedBest
+			schemaMap["items"] = cleanJSONSchemaRecursive(best)
 		} else {
 			cleanJSONSchemaRecursive(items)
 		}
-	} else {
-		// 遍历所有值递归
+	}
+	if !hasKey(schemaMap, "properties") && !hasKey(schemaMap, "items") {
 		for _, v := range schemaMap {
 			if _, isMap := v.(map[string]any); isMap {
 				cleanJSONSchemaRecursive(v)
@@ -205,6 +216,16 @@ func cleanJSONSchemaRecursive(value any) any {
 						schemaMap[k] = deepCopy(v)
 					}
 				}
+				delete(schemaMap, "anyOf")
+				delete(schemaMap, "oneOf")
+				if props, ok := schemaMap["properties"].(map[string]any); ok {
+					for _, pv := range props {
+						cleanJSONSchemaRecursive(pv)
+					}
+				}
+				if items, ok := schemaMap["items"]; ok {
+					cleanJSONSchemaRecursive(items)
+				}
 			}
 		}
 	}
@@ -214,13 +235,44 @@ func cleanJSONSchemaRecursive(value any) any {
 		hasKey(schemaMap, "properties") ||
 		hasKey(schemaMap, "items") ||
 		hasKey(schemaMap, "enum") ||
+		hasKey(schemaMap, "const") ||
 		hasKey(schemaMap, "anyOf") ||
 		hasKey(schemaMap, "oneOf") ||
 		hasKey(schemaMap, "allOf")
 
 	if looksLikeSchema {
-		// 4. [ROBUST] 约束迁移
+		// 4. [ROBUST] 约束迁移与 const 规范化
 		migrateConstraints(schemaMap)
+
+		// Gemini uses enum for constants. If both constraints exist, retain
+		// their intersection rather than accidentally widening the input.
+		if constVal, exists := schemaMap["const"]; exists {
+			if existing, hasEnum := schemaMap["enum"].([]any); hasEnum {
+				values := make([]any, 0, 1)
+				for _, value := range existing {
+					if value == constVal {
+						values = append(values, value)
+						break
+					}
+				}
+				schemaMap["enum"] = values
+			} else {
+				schemaMap["enum"] = []any{constVal}
+			}
+			if _, hasType := schemaMap["type"]; !hasType {
+				switch constVal.(type) {
+				case int, int32, int64:
+					schemaMap["type"] = "integer"
+				case float32, float64:
+					schemaMap["type"] = "number"
+				case bool:
+					schemaMap["type"] = "boolean"
+				default:
+					schemaMap["type"] = "string"
+				}
+			}
+			delete(schemaMap, "const")
+		}
 
 		// 5. [CRITICAL] 白名单过滤
 		allowedFields := map[string]bool{
@@ -309,9 +361,38 @@ func cleanJSONSchemaRecursive(value any) any {
 			// 如果没有 type，但有 properties，补一个
 			if hasKey(schemaMap, "properties") {
 				schemaMap["type"] = "object"
+			} else if hasKey(schemaMap, "items") {
+				schemaMap["type"] = "array"
+			} else if enumArr, ok := schemaMap["enum"].([]any); ok && len(enumArr) > 0 {
+				switch enumArr[0].(type) {
+				case int, int32, int64:
+					schemaMap["type"] = "integer"
+				case float32, float64:
+					schemaMap["type"] = "number"
+				case bool:
+					schemaMap["type"] = "boolean"
+				default:
+					schemaMap["type"] = "string"
+				}
+			} else if hasKey(schemaMap, "enum") {
+				schemaMap["type"] = "string"
 			} else {
 				// 默认为 string ? or object? Gemini 通常需要明确 type
 				schemaMap["type"] = "object"
+			}
+		}
+
+		// Gemini rejects an array without a valid item schema.
+		if t, _ := schemaMap["type"].(string); t == "array" {
+			itemsVal, hasItems := schemaMap["items"]
+			needDefaultItems := !hasItems || itemsVal == nil
+			if itemsMap, ok := itemsVal.(map[string]any); ok && len(itemsMap) == 0 {
+				needDefaultItems = true
+			} else if _, isBool := itemsVal.(bool); isBool {
+				needDefaultItems = true
+			}
+			if needDefaultItems {
+				schemaMap["items"] = map[string]any{"type": "string"}
 			}
 		}
 
@@ -490,6 +571,9 @@ func scoreSchemaOption(val any) int {
 	}
 	if hasKey(m, "items") || typeStr == "array" {
 		return 2
+	}
+	if hasKey(m, "enum") || hasKey(m, "const") {
+		return 1
 	}
 	if typeStr != "" && typeStr != "null" {
 		return 1

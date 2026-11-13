@@ -228,11 +228,9 @@ func (s *AntigravityGatewayService) handleSmartRetry(p antigravityRetryLoopParam
 			p.prefix, resp.StatusCode, modelName, p.account.ID, rateLimitDuration, truncateForLog(respBody, 200))
 
 		resetAt := time.Now().Add(rateLimitDuration)
-		if !setModelRateLimitByModelName(p.ctx, p.accountRepo, p.account.ID, modelName, p.prefix, resp.StatusCode, resetAt, false) {
+		if !s.setAntigravityModelRateLimits(p.ctx, p.accountRepo, p.account, modelName, p.prefix, resp.StatusCode, resetAt, false) {
 			p.handleError(p.ctx, p.prefix, p.account, resp.StatusCode, resp.Header, respBody, p.requestedModel, p.groupID, p.sessionHash, p.isStickySession)
 			logger.LegacyPrintf("service.antigravity_gateway", "%s status=%d rate_limited account=%d (no model mapping)", p.prefix, resp.StatusCode, p.account.ID)
-		} else {
-			s.updateAccountModelRateLimitInCache(p.ctx, p.account, modelName, resetAt)
 		}
 
 		// 返回账号切换信号，让上层切换账号重试
@@ -393,13 +391,7 @@ func (s *AntigravityGatewayService) handleSmartRetry(p antigravityRetryLoopParam
 
 		resetAt := time.Now().Add(rateLimitDuration)
 		if p.accountRepo != nil && modelName != "" {
-			if err := p.accountRepo.SetModelRateLimit(p.ctx, p.account.ID, modelName, resetAt); err != nil {
-				logger.LegacyPrintf("service.antigravity_gateway", "%s status=%d model_rate_limit_failed model=%s error=%v", p.prefix, resp.StatusCode, modelName, err)
-			} else {
-				logger.LegacyPrintf("service.antigravity_gateway", "%s status=%d model_rate_limited_after_smart_retry model=%s account=%d reset_in=%v",
-					p.prefix, resp.StatusCode, modelName, p.account.ID, rateLimitDuration)
-				s.updateAccountModelRateLimitInCache(p.ctx, p.account, modelName, resetAt)
-			}
+			s.setAntigravityModelRateLimits(p.ctx, p.accountRepo, p.account, modelName, p.prefix, resp.StatusCode, resetAt, true)
 		}
 
 		// 清除粘性会话绑定，避免下次请求仍命中限流账号
@@ -989,6 +981,18 @@ func mapAntigravityModel(account *Account, requestedModel string) string {
 // getMappedModel 获取映射后的模型名
 // 完全依赖映射配置：账户映射（通配符）→ 默认映射兜底
 func (s *AntigravityGatewayService) getMappedModel(account *Account, requestedModel string) string {
+	return s.getMappedModelForThinkingLevel(account, requestedModel, "")
+}
+
+// getMappedModelForThinkingLevel 在常规映射之前先把裸 Gemini 模型名
+// （gemini-3.x-flash）解析到上游目录里真实存在的 -low/-medium/-high/-tiered 变体。
+// Antigravity 目录只登记带后缀的变体，裸名直接转发会被上游以
+// 404 "Requested entity was not found." 拒绝，因此所有转发入口都必须经过这一步。
+// thinkingLevel 为空时按 high 兜底；调用方可按自身协议传入推导出的档位。
+func (s *AntigravityGatewayService) getMappedModelForThinkingLevel(account *Account, requestedModel string, thinkingLevel string) string {
+	if mapped, ok := resolveGeminiThinkingVariantForLevel(account, requestedModel, thinkingLevel); ok {
+		return mapped
+	}
 	return mapAntigravityModel(account, requestedModel)
 }
 
@@ -1244,20 +1248,33 @@ func injectIdentityPatchToGeminiRequest(body []byte) ([]byte, error) {
 		return nil, fmt.Errorf("解析 Gemini 请求失败: %w", err)
 	}
 
-	// 检查现有 systemInstruction 是否已包含身份提示词
+	identityFound := false
+	systemChanged := false
+	// 检查现有 systemInstruction 是否已包含身份提示词，同时中和客户端遗留的身份声明
 	if sysInst, ok := request["systemInstruction"].(map[string]any); ok {
 		if parts, ok := sysInst["parts"].([]any); ok {
 			for _, part := range parts {
 				if partMap, ok := part.(map[string]any); ok {
 					if text, ok := partMap["text"].(string); ok {
-						if strings.Contains(text, "You are Antigravity") {
-							// 已包含身份提示词，直接返回原始请求
-							return body, nil
+						neutral := antigravity.NeutralizeSystemIdentity(text)
+						if neutral != text {
+							partMap["text"] = neutral
+							systemChanged = true
+						}
+						if strings.Contains(neutral, "You are Antigravity") {
+							identityFound = true
 						}
 					}
 				}
 			}
 		}
+	}
+	if identityFound {
+		if systemChanged {
+			return json.Marshal(request)
+		}
+		// 已包含身份提示词且无需改写，直接返回原始请求
+		return body, nil
 	}
 
 	// 获取默认身份提示词
@@ -1361,7 +1378,12 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 	}
 
 	originalModel := claudeReq.Model
-	mappedModel := s.getMappedModel(account, claudeReq.Model)
+	// 裸 Gemini 模型名按 Claude thinking.budget_tokens 解析到 -low/-medium/-high 变体（上游 27f4398b5）
+	mappedModel := s.getMappedModelForThinkingLevel(
+		account,
+		claudeReq.Model,
+		geminiThinkingLevelFromClaudeThinking(claudeReq.Thinking),
+	)
 	if mappedModel == "" {
 		return nil, s.writeClaudeError(c, http.StatusForbidden, "permission_error", fmt.Sprintf("model %s not in whitelist", claudeReq.Model))
 	}
@@ -2112,7 +2134,9 @@ func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Co
 		return nil, s.writeGoogleError(c, http.StatusNotFound, "Unsupported action: "+action)
 	}
 
-	mappedModel := s.getMappedModel(account, originalModel)
+	// 裸模型名（gemini-3.8-flash）按 thinkingConfig 解析到 -low/-medium/-high 变体；
+	// 裸名有显式映射时保持原行为（上游 0f4d8acaa、27f4398b5）。
+	mappedModel := s.getMappedModelForThinkingLevel(account, originalModel, geminiThinkingLevelFromBody(body))
 	if mappedModel == "" {
 		return nil, s.writeGoogleError(c, http.StatusForbidden, fmt.Sprintf("model %s not in whitelist", originalModel))
 	}
@@ -2152,6 +2176,15 @@ func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Co
 	} else {
 		logger.LegacyPrintf("service.antigravity_gateway", "[Antigravity] Failed to clean schema: %v", err)
 	}
+
+	// Antigravity v1internal 不接受内置工具（googleSearch/codeExecution）与 functionDeclarations 混用，
+	// 存在客户端函数工具时丢弃内置工具，避免整单 400。
+	if mixedBody, mixErr := dropBuiltinToolsWhenFunctionDeclarationsPresent(injectedBody); mixErr == nil {
+		injectedBody = mixedBody
+	} else {
+		logger.LegacyPrintf("service.antigravity_gateway", "[Antigravity] Failed to normalize mixed tools: %v", mixErr)
+	}
+	injectedBody = ensureGeminiFunctionCallThoughtSignatures(injectedBody)
 
 	// 包装请求
 	wrappedBody, err := s.wrapV1InternalRequest(projectID, mappedModel, injectedBody)
@@ -2546,6 +2579,23 @@ func isSingleAccountRetry(ctx context.Context) bool {
 	return v
 }
 
+// setAntigravityModelRateLimits shares a Gemini text-model cooldown while
+// keeping image-model limits isolated to the exact model key.
+func (s *AntigravityGatewayService) setAntigravityModelRateLimits(ctx context.Context, repo AccountRepository, account *Account, modelName, prefix string, statusCode int, resetAt time.Time, afterSmartRetry bool) bool {
+	if account == nil || repo == nil {
+		return false
+	}
+	keys := antigravityModelRateLimitKeys(modelName)
+	success := false
+	for _, key := range keys {
+		if setModelRateLimitByModelName(ctx, repo, account.ID, key, prefix, statusCode, resetAt, afterSmartRetry) {
+			s.updateAccountModelRateLimitInCache(ctx, account, key, resetAt)
+			success = true
+		}
+	}
+	return success
+}
+
 // setModelRateLimitByModelName 使用官方模型 ID 设置模型级限流
 // 直接使用上游返回的模型 ID（如 claude-sonnet-4-5）作为限流 key
 // 返回是否已成功设置（若模型名为空或 repo 为 nil 将返回 false）
@@ -2818,13 +2868,8 @@ func (s *AntigravityGatewayService) setModelRateLimitAndClearSession(p *handleMo
 	logger.LegacyPrintf("service.antigravity_gateway", "%s status=%d model_rate_limited model=%s account=%d reset_in=%v",
 		p.prefix, p.statusCode, info.ModelName, p.account.ID, info.RetryDelay)
 
-	// 设置模型限流状态（数据库）
-	if err := s.accountRepo.SetModelRateLimit(p.ctx, p.account.ID, info.ModelName, resetAt); err != nil {
-		logger.LegacyPrintf("service.antigravity_gateway", "%s model_rate_limit_failed model=%s error=%v", p.prefix, info.ModelName, err)
-	}
-
-	// 立即更新 Redis 快照中账号的限流状态，避免并发请求重复选中
-	s.updateAccountModelRateLimitInCache(p.ctx, p.account, info.ModelName, resetAt)
+	// 设置模型限流状态（数据库和调度快照）
+	s.setAntigravityModelRateLimits(p.ctx, s.accountRepo, p.account, info.ModelName, p.prefix, p.statusCode, resetAt, false)
 
 	// 清除粘性会话绑定
 	if p.cache != nil && p.sessionHash != "" {
@@ -3096,6 +3141,9 @@ func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context
 	if s.settingService.cfg != nil && s.settingService.cfg.Gateway.StreamKeepaliveInterval > 0 {
 		keepaliveInterval = time.Duration(s.settingService.cfg.Gateway.StreamKeepaliveInterval) * time.Second
 	}
+	if keepaliveInterval > 0 && downstreamRejectsSSEComments(c) {
+		keepaliveInterval = 0
+	}
 	var keepaliveTicker *time.Ticker
 	if keepaliveInterval > 0 {
 		keepaliveTicker = time.NewTicker(keepaliveInterval)
@@ -3183,6 +3231,10 @@ func (s *AntigravityGatewayService) handleGeminiStreamingResponse(c *gin.Context
 				}
 
 				cw.Fprintf("data: %s\n\n", payload)
+				continue
+			}
+
+			if trimmed == "" {
 				continue
 			}
 
@@ -3325,6 +3377,14 @@ func (s *AntigravityGatewayService) handleGeminiStreamToNonStreaming(c *gin.Cont
 			if firstTokenMs == nil {
 				ms := int(time.Since(startTime).Milliseconds())
 				firstTokenMs = &ms
+			}
+
+			if extractGeminiFinishReason(parsed) == "MALFORMED_FUNCTION_CALL" {
+				return nil, &UpstreamFailoverError{
+					StatusCode:             http.StatusBadGateway,
+					ResponseBody:           []byte(`{"error":"upstream returned MALFORMED_FUNCTION_CALL"}`),
+					RetryableOnSameAccount: true,
+				}
 			}
 
 			last = parsed
@@ -3790,6 +3850,10 @@ func (s *AntigravityGatewayService) handleClaudeStreamToNonStreaming(c *gin.Cont
 				firstTokenMs = &ms
 			}
 
+			if extractGeminiFinishReason(parsed) == "MALFORMED_FUNCTION_CALL" {
+				return nil, antigravity.ErrMalformedFunctionCall
+			}
+
 			last = parsed
 
 			// 保留最后一个有 parts 的响应，并收集所有 parts
@@ -3991,6 +4055,13 @@ func (s *AntigravityGatewayService) handleClaudeStreamingResponse(c *gin.Context
 						RetryableOnSameAccount: true,
 					}
 				}
+				if !processor.HasContent() && !cw.Disconnected() {
+					return nil, &UpstreamFailoverError{
+						StatusCode:             http.StatusBadGateway,
+						ResponseBody:           []byte(`{"error":"upstream returned no substantive content"}`),
+						RetryableOnSameAccount: true,
+					}
+				}
 				return &antigravityStreamResult{usage: convertUsage(agUsage), firstTokenMs: firstTokenMs, clientDisconnect: cw.Disconnected()}, nil
 			}
 			if ev.err != nil {
@@ -4083,6 +4154,70 @@ func isImageGenerationModel(model string) bool {
 		strings.HasPrefix(modelLower, "gemini-2.5-flash-image-")
 }
 
+// dropBuiltinToolsWhenFunctionDeclarationsPresent 在请求同时带 functionDeclarations 与内置工具
+// （googleSearch / codeExecution）时丢弃内置工具，并移除 toolConfig.includeServerSideToolInvocations，
+// toolConfig 清空后整体删除。没有 functionDeclarations 或没有内置工具时原样返回。
+func dropBuiltinToolsWhenFunctionDeclarationsPresent(body []byte) ([]byte, error) {
+	var request map[string]any
+	if err := json.Unmarshal(body, &request); err != nil {
+		return nil, err
+	}
+
+	tools, ok := request["tools"].([]any)
+	if !ok || len(tools) == 0 {
+		return body, nil
+	}
+
+	hasFunctionDeclarations := false
+	for _, rawTool := range tools {
+		tool, ok := rawTool.(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, key := range []string{"functionDeclarations", "function_declarations"} {
+			if decls, ok := tool[key].([]any); ok && len(decls) > 0 {
+				hasFunctionDeclarations = true
+			}
+		}
+	}
+	if !hasFunctionDeclarations {
+		return body, nil
+	}
+
+	filtered := make([]any, 0, len(tools))
+	droppedBuiltin := false
+	for _, rawTool := range tools {
+		tool, ok := rawTool.(map[string]any)
+		if !ok {
+			filtered = append(filtered, rawTool)
+			continue
+		}
+		for _, key := range []string{"googleSearch", "google_search", "codeExecution", "code_execution"} {
+			if _, has := tool[key]; has {
+				delete(tool, key)
+				droppedBuiltin = true
+			}
+		}
+		if len(tool) == 0 {
+			continue
+		}
+		filtered = append(filtered, tool)
+	}
+	if !droppedBuiltin {
+		return body, nil
+	}
+
+	request["tools"] = filtered
+	if toolConfig, ok := request["toolConfig"].(map[string]any); ok {
+		delete(toolConfig, "includeServerSideToolInvocations")
+		delete(toolConfig, "include_server_side_tool_invocations")
+		if len(toolConfig) == 0 {
+			delete(request, "toolConfig")
+		}
+	}
+	return json.Marshal(request)
+}
+
 // cleanGeminiRequest 清理 Gemini 请求体中的 Schema
 func cleanGeminiRequest(body []byte) ([]byte, error) {
 	var payload map[string]any
@@ -4128,11 +4263,45 @@ func cleanGeminiRequest(body []byte) ([]byte, error) {
 		}
 	}
 
+	if normalizeGeminiResponseSchema(payload) {
+		modified = true
+	}
+
 	if !modified {
 		return body, nil
 	}
 
 	return json.Marshal(payload)
+}
+
+// normalizeGeminiResponseSchema maps clients' JSON Schema field names to the
+// native Antigravity field. Existing responseSchema takes precedence.
+func normalizeGeminiResponseSchema(payload map[string]any) bool {
+	changed := false
+	for _, configKey := range []string{"generationConfig", "generation_config"} {
+		config, ok := payload[configKey].(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, schemaKey := range []string{"responseJsonSchema", "response_json_schema"} {
+			raw, exists := config[schemaKey]
+			if !exists {
+				continue
+			}
+			delete(config, schemaKey)
+			changed = true
+			_, hasSchema := config["responseSchema"]
+			_, hasSnakeSchema := config["response_schema"]
+			if hasSchema || hasSnakeSchema {
+				continue
+			}
+			if schema, ok := raw.(map[string]any); ok {
+				antigravity.DeepCleanUndefined(schema)
+				config["responseSchema"] = antigravity.CleanJSONSchema(schema)
+			}
+		}
+	}
+	return changed
 }
 
 // filterEmptyPartsFromGeminiRequest 过滤掉 parts 为空的消息

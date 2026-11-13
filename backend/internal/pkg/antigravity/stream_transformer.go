@@ -40,6 +40,7 @@ type StreamingProcessor struct {
 	outputTokens      int
 	cacheReadTokens   int
 	imageOutputTokens int
+	hasContent        bool
 }
 
 // NewStreamingProcessor 创建流式响应处理器
@@ -84,10 +85,15 @@ func (p *StreamingProcessor) ProcessLine(line string) []byte {
 		return nil
 	}
 
-	// 解包 v1internal 响应
+	// 解包 v1internal 响应，显式区分原生响应与包装响应。
 	var v1Resp V1InternalResponse
-	if err := json.Unmarshal([]byte(data), &v1Resp); err != nil {
-		// 尝试直接解析为 GeminiResponse
+	var envelope struct {
+		Response json.RawMessage `json:"response"`
+	}
+	if err := json.Unmarshal([]byte(data), &envelope); err != nil {
+		return nil
+	}
+	if len(envelope.Response) == 0 {
 		var directResp GeminiResponse
 		if err2 := json.Unmarshal([]byte(data), &directResp); err2 != nil {
 			return nil
@@ -95,6 +101,8 @@ func (p *StreamingProcessor) ProcessLine(line string) []byte {
 		v1Resp.Response = directResp
 		v1Resp.ResponseID = directResp.ResponseID
 		v1Resp.ModelVersion = directResp.ModelVersion
+	} else if err := json.Unmarshal([]byte(data), &v1Resp); err != nil {
+		return nil
 	}
 
 	geminiResp := &v1Resp.Response
@@ -173,6 +181,11 @@ func (p *StreamingProcessor) Finish() ([]byte, *ClaudeUsage) {
 // MessageStartSent 报告流中是否已发出过 message_start 事件（即是否收到过有效的上游数据）
 func (p *StreamingProcessor) MessageStartSent() bool {
 	return p.messageStartSent
+}
+
+// HasContent reports whether any substantive text, thinking, or tool calls were emitted.
+func (p *StreamingProcessor) HasContent() bool {
+	return p.hasContent
 }
 
 // emitMessageStart 发送 message_start 事件
@@ -296,6 +309,7 @@ func (p *StreamingProcessor) processThinking(text, signature string) []byte {
 	}
 
 	if text != "" {
+		p.hasContent = true
 		_, _ = result.Write(p.emitDelta("thinking_delta", map[string]any{
 			"thinking": text,
 		}))
@@ -350,6 +364,7 @@ func (p *StreamingProcessor) processText(text, signature string) []byte {
 		}))
 	}
 
+	p.hasContent = true
 	_, _ = result.Write(p.emitDelta("text_delta", map[string]any{
 		"text": text,
 	}))
@@ -362,6 +377,7 @@ func (p *StreamingProcessor) processFunctionCall(fc *GeminiFunctionCall, signatu
 	var result bytes.Buffer
 
 	p.usedTool = true
+	p.hasContent = true
 
 	toolID := fc.ID
 	if toolID == "" {
