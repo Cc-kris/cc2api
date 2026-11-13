@@ -14,7 +14,7 @@ import (
 func TestGatewayCacheReasoningContent(t *testing.T) {
 	mr := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	cache := NewGatewayCache(client)
+	cache := NewGatewayCache(client, nil)
 	ctx := context.Background()
 
 	// 未命中返回哨兵错误，区别于真实读取失败。
