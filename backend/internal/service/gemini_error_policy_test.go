@@ -217,7 +217,7 @@ func TestGeminiErrorPolicyIntegration(t *testing.T) {
 			expectHandleError: true,
 		},
 		{
-			name: "custom_codes_skipped_500_no_failover",
+			name: "custom_codes_skipped_500_failover",
 			account: &Account{
 				ID:       201,
 				Type:     AccountTypeAPIKey,
@@ -229,6 +229,22 @@ func TestGeminiErrorPolicyIntegration(t *testing.T) {
 			},
 			statusCode:        500,
 			respBody:          []byte(`{"error":"internal"}`),
+			expectFailover:    true,
+			expectHandleError: false,
+		},
+		{
+			name: "custom_codes_skipped_400_no_failover",
+			account: &Account{
+				ID:       205,
+				Type:     AccountTypeAPIKey,
+				Platform: PlatformGemini,
+				Credentials: map[string]any{
+					"custom_error_codes_enabled": true,
+					"custom_error_codes":         []any{float64(429)},
+				},
+			},
+			statusCode:        400,
+			respBody:          []byte(`{"error":"bad request"}`),
 			expectFailover:    false,
 			expectHandleError: false,
 		},
@@ -308,9 +324,9 @@ func TestGeminiErrorPolicyIntegration(t *testing.T) {
 			if svc.rateLimitService != nil {
 				switch svc.rateLimitService.CheckErrorPolicy(ctx, account, statusCode, respBody) {
 				case ErrorPolicySkipped:
-					// Skipped → return error directly (no handleGeminiUpstreamError, no failover)
-					gotFailover = false
+					// Skipped → 不标记账号状态；可 failover 的状态码仍换号
 					handleErrorCalled = false
+					gotFailover = svc.skippedErrorPolicyFailoverError(ctx, c, account, statusCode, respBody, "req-test") != nil
 					goto verify
 				case ErrorPolicyMatched, ErrorPolicyTempUnscheduled:
 					svc.handleGeminiUpstreamError(ctx, account, statusCode, headers, respBody)
@@ -335,6 +351,70 @@ func TestGeminiErrorPolicyIntegration(t *testing.T) {
 				require.True(t, svc.shouldFailoverGeminiUpstreamError(context.Background(), statusCode),
 					"shouldFailoverGeminiUpstreamError should return true for status %d", statusCode)
 			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// TestSkippedErrorPolicyFailoverError — ErrorPolicySkipped（池模式、或自定义
+// 错误码未命中）不豁免换号：可 failover 的状态码返回 UpstreamFailoverError，
+// 仅池模式账号可携带同账号重试标记。
+// ---------------------------------------------------------------------------
+
+func TestSkippedErrorPolicyFailoverError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := &GeminiMessagesCompatService{}
+
+	poolAccount := func(extra map[string]any) *Account {
+		creds := map[string]any{"pool_mode": true}
+		for k, v := range extra {
+			creds[k] = v
+		}
+		return &Account{ID: 300, Type: AccountTypeAPIKey, Platform: PlatformGemini, Credentials: creds}
+	}
+	customCodesAccount := &Account{
+		ID: 301, Type: AccountTypeAPIKey, Platform: PlatformGemini,
+		Credentials: map[string]any{
+			"custom_error_codes_enabled": true,
+			"custom_error_codes":         []any{float64(429)},
+		},
+	}
+
+	tests := []struct {
+		name              string
+		account           *Account
+		statusCode        int
+		expectFailover    bool
+		expectSameAccount bool
+	}{
+		{"pool_500_failover_no_same_account_retry", poolAccount(nil), 500, true, false},
+		{"pool_429_failover_with_same_account_retry", poolAccount(nil), 429, true, true},
+		{"pool_custom_retry_codes_500", poolAccount(map[string]any{
+			"pool_mode_retry_status_codes": []any{float64(500)},
+		}), 500, true, true},
+		{"pool_400_not_failover_worthy", poolAccount(nil), 400, false, false},
+		{"custom_codes_miss_500_failover_no_same_account_retry", customCodesAccount, 500, true, false},
+		{"custom_codes_miss_400_not_failover_worthy", customCodesAccount, 400, false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writer := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(writer)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+
+			body := []byte(`{"error":{"code":"bad_response_status_code","message":"openai_error"}}`)
+			failoverErr := svc.skippedErrorPolicyFailoverError(context.Background(), c, tt.account, tt.statusCode, body, "req-1")
+
+			if !tt.expectFailover {
+				require.Nil(t, failoverErr)
+				return
+			}
+			require.NotNil(t, failoverErr)
+			require.Equal(t, tt.statusCode, failoverErr.StatusCode)
+			require.Equal(t, body, failoverErr.ResponseBody)
+			require.Equal(t, tt.expectSameAccount, failoverErr.RetryableOnSameAccount)
+			require.True(t, failoverErr.ShouldRetryNextAccount())
 		})
 	}
 }

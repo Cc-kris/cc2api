@@ -115,9 +115,12 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 	)
 
 	var resp *http.Response
+	// checkedPolicy 是循环内对当前 resp 的错误策略检查结果，未检查时为 nil。
+	var checkedPolicy *ErrorPolicyResult
 	maxAttempts := s.geminiMaxAttemptsPerAccount()
 	budgetExhausted := false
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		checkedPolicy = nil
 		budgetExhausted = !account.IsPoolMode() && attempt >= maxAttempts
 		upstreamReq, idHeader, err := buildReq(ctx)
 		if err != nil {
@@ -151,11 +154,11 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 		if account.IsPoolMode() && resp.StatusCode >= 400 && account.IsPoolModeRetryableStatus(resp.StatusCode) && !peekUserContentRejection(resp) {
 			return nil, poolModeStatusFailover(resp, account)
 		}
-		if matched, rebuilt := s.checkErrorPolicyInLoop(ctx, account, resp); matched {
-			resp = rebuilt
+		checked, rebuilt := s.checkErrorPolicyInLoop(ctx, account, resp)
+		resp = rebuilt
+		checkedPolicy = checked
+		if checked != nil && *checked != ErrorPolicyNone {
 			break
-		} else {
-			resp = rebuilt
 		}
 
 		if resp.StatusCode >= 400 && s.shouldRetryGeminiUpstreamError(account, resp.StatusCode) {
@@ -216,7 +219,15 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
-		s.handleGeminiUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+		policy := ErrorPolicyNone
+		if s.rateLimitService != nil {
+			policy = s.finalErrorPolicy(ctx, account, resp.StatusCode, respBody, checkedPolicy)
+		}
+		// 与 messages 兼容层一致：只有 None / Matched 才走账号状态处理。
+		// Skipped（池模式、或自定义错误码未命中）与 TempUnscheduled 已由策略层裁决完毕。
+		if policy == ErrorPolicyNone || policy == ErrorPolicyMatched {
+			s.handleGeminiUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+		}
 		evBody := unwrapIfNeeded(account.Type == AccountTypeOAuth, respBody)
 
 		if s.shouldFailoverGeminiUpstreamError(ctx, resp.StatusCode) {
@@ -233,6 +244,11 @@ func (s *GeminiMessagesCompatService) forwardClaudeBodyAsChatCompletions(
 			return nil, &UpstreamFailoverError{SameAccountRetryBudgetExhausted: budgetExhausted, StatusCode: resp.StatusCode, ResponseBody: evBody}
 		}
 
+		if policy == ErrorPolicySkipped && account.IsCustomErrorCodesEnabled() {
+			return nil, s.writeGeminiCustomCodeSkippedError(c, account, resp.StatusCode, requestID, evBody, func() {
+				_ = s.writeChatCompletionsError(c, http.StatusInternalServerError, "api_error", geminiCustomCodeSkippedClientMessage)
+			})
+		}
 		return nil, s.writeGeminiChatCompletionsMappedError(c, account, resp.StatusCode, requestID, evBody)
 	}
 
@@ -870,7 +886,12 @@ func (s *GeminiMessagesCompatService) writeGeminiChatCompletionsMappedError(
 			errType = "invalid_request_error"
 		}
 		if errMsg == "Upstream request failed" {
-			errMsg = "Invalid request"
+			// 400 是确定性的请求错误：回传上游 message（已脱敏），客户端据此定位非法字段。
+			if upstreamMsg != "" {
+				errMsg = upstreamMsg
+			} else {
+				errMsg = "Invalid request"
+			}
 		}
 	case http.StatusNotFound:
 		statusCode = http.StatusNotFound
