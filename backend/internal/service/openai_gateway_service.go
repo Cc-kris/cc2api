@@ -2899,12 +2899,17 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				IsCompact:               isCompactRequest,
 				SkipDefaultInstructions: true,
 				PreserveToolCallIDs:     true,
+				ResponsesLite:           responsesLite,
 			})
 			ensureCodexOAuthInstructionsField(reqBody)
 			bodyModified = true
 			disablePatch()
 		} else {
-			codexResult = applyCodexOAuthTransform(reqBody, isCodexCLI, isCompactRequest)
+			codexResult = applyCodexOAuthTransformWithOptions(reqBody, codexOAuthTransformOptions{
+				IsCodexCLI:    isCodexCLI,
+				IsCompact:     isCompactRequest,
+				ResponsesLite: responsesLite,
+			})
 		}
 		if codexResult.Modified {
 			bodyModified = true
@@ -3556,6 +3561,16 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		}
 		if normalized {
 			body = normalizedBody
+		}
+		compatBody, compatChanged, compatErr := normalizeOpenAIResponsesCompatibilityBodyWithOptions(body, account, openAIResponsesCompatibilityOptions{
+			ResponsesLite: isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader)) || isOpenAIResponsesLiteWebSocketPayload(body),
+			Compact:       isOpenAIResponsesCompactPath(c),
+		})
+		if compatErr != nil {
+			return nil, fmt.Errorf("normalize passthrough Responses compatibility: %w", compatErr)
+		}
+		if compatChanged {
+			body = compatBody
 		}
 		reqStream = gjson.GetBytes(body, "stream").Bool()
 	}
@@ -7768,12 +7783,33 @@ func extractOpenAIRequestMetaFromBody(body []byte) (model string, stream bool, p
 // namespace / Responses Lite 归一化也接在这里，保证两条路径共用同一入口。
 // 非 OpenAI 平台账号不走 WS 原生链路（Grok 强制 HTTP bridge），保持原样。
 func normalizeOpenAIResponsesWebSocketCompatibilityBody(body []byte, account *Account, responsesLite bool) ([]byte, bool, error) {
+	return normalizeOpenAIResponsesCompatibilityBodyWithOptions(body, account, openAIResponsesCompatibilityOptions{ResponsesLite: responsesLite})
+}
+
+type openAIResponsesCompatibilityOptions struct {
+	ResponsesLite bool
+	Compact       bool
+}
+
+func normalizeOpenAIResponsesCompatibilityBodyWithOptions(body []byte, account *Account, opts openAIResponsesCompatibilityOptions) ([]byte, bool, error) {
+	responsesLite := opts.ResponsesLite
 	if account == nil || !account.IsOpenAI() {
 		return body, false, nil
 	}
 	normalized, changed, err := sanitizeOpenAIResponsesToolSchemasForPlatform(body, account.Platform)
-	if err != nil || !responsesLite {
+	if err != nil {
 		return normalized, changed, err
+	}
+	if account.IsOpenAIOAuthLike() && !opts.Compact {
+		webSearchBody, webSearchChanged, webSearchErr := ensureOpenAIOAuthWebSearchToolForHistoryBody(normalized, responsesLite)
+		if webSearchErr != nil {
+			return body, false, fmt.Errorf("normalize web search history: %w", webSearchErr)
+		}
+		normalized = webSearchBody
+		changed = changed || webSearchChanged
+	}
+	if !responsesLite {
+		return normalized, changed, nil
 	}
 	liteBody, liteChanged, err := normalizeOpenAIResponsesLitePayloadForAccount(normalized, account)
 	return liteBody, changed || liteChanged, err

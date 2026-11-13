@@ -85,6 +85,7 @@ type codexOAuthTransformOptions struct {
 	IsCompact               bool
 	SkipDefaultInstructions bool
 	PreserveToolCallIDs     bool
+	ResponsesLite           bool
 }
 
 const (
@@ -259,6 +260,11 @@ func applyCodexOAuthTransformWithOptions(reqBody map[string]any, opts codexOAuth
 		result.Modified = true
 	}
 
+	// Runs after input filtering so it sees the final replayed history. Compact
+	// has a different wire shape and must not receive this synthetic tool.
+	if !opts.IsCompact && ensureOpenAIOAuthWebSearchToolForHistory(reqBody, opts.ResponsesLite) {
+		result.Modified = true
+	}
 	return result
 }
 
