@@ -4596,9 +4596,15 @@ func collectCacheControlPaths(body []byte) (invalidThinking []cacheControlPath, 
 	return invalidThinking, messagePaths, toolPaths, systemPaths
 }
 
-// enforceCacheControlLimit 强制执行 cache_control 块数量限制（最多 4 个）
-// 超限时优先移除工具断点，再移除 messages 断点，最后才移除 system 断点。
+// enforceCacheControlLimit 让出站 cache_control 满足上游约束：
+// 先执行块数量限制，再修正 TTL 顺序。
 func enforceCacheControlLimit(body []byte) []byte {
+	return normalizeCacheControlTTLOrder(enforceCacheControlBlockLimit(body))
+}
+
+// enforceCacheControlBlockLimit 强制执行 cache_control 块数量限制（最多 4 个）
+// 超限时优先移除工具断点，再移除 messages 断点，最后才移除 system 断点。
+func enforceCacheControlBlockLimit(body []byte) []byte {
 	if len(body) == 0 {
 		return body
 	}
@@ -4679,6 +4685,46 @@ func enforceCacheControlLimit(body []byte) []byte {
 		return out
 	}
 	return body
+}
+
+// normalizeCacheControlTTLOrder raises earlier ephemeral breakpoints to 1h when
+// a later breakpoint uses 1h. Anthropic processes tools, system, then messages,
+// and rejects a ttl=1h breakpoint that follows a 5m one; an omitted ttl means 5m.
+// The mimic path adds its own 5m breakpoints to tools and system, so a client
+// 1h breakpoint in messages would otherwise turn a valid request into a 400.
+//
+// Raising keeps the client's choice. Tokens before a 1h breakpoint are already
+// written at the 1h rate, so the earlier breakpoints add no cache write cost.
+// Requests with a valid order are returned unchanged.
+func normalizeCacheControlTTLOrder(body []byte) []byte {
+	_, messagePaths, toolPaths, systemPaths := collectCacheControlPaths(body)
+	paths := make([]string, 0, len(toolPaths)+len(systemPaths)+len(messagePaths)+1)
+	paths = append(paths, toolPaths...)
+	paths = append(paths, systemPaths...)
+	paths = append(paths, messagePaths...)
+	// A top-level cache_control applies to the last cacheable block.
+	if gjson.GetBytes(body, "cache_control").Exists() {
+		paths = append(paths, "cache_control")
+	}
+
+	last1h := -1
+	for i, path := range paths {
+		if gjson.GetBytes(body, path+".ttl").String() == cacheTTLTarget1h {
+			last1h = i
+		}
+	}
+
+	out := body
+	for _, path := range paths[:last1h+1] {
+		cc := gjson.GetBytes(out, path)
+		if cc.Get("type").String() != "ephemeral" || cc.Get("ttl").String() == cacheTTLTarget1h {
+			continue
+		}
+		if next, err := sjson.SetBytes(out, path+".ttl", cacheTTLTarget1h); err == nil {
+			out = next
+		}
+	}
+	return out
 }
 
 // injectAnthropicCacheControlTTL1h 将已有 ephemeral cache_control 块的 ttl 强制写为 1h。
@@ -5793,6 +5839,7 @@ func (s *GatewayService) buildUpstreamRequestAnthropicAPIKeyPassthrough(
 	body []byte,
 	token string,
 ) (*http.Request, error) {
+	body = stripDeferredToolCacheControl(body)
 	targetURL := claudeAPIURL
 	baseURL := account.GetBaseURL()
 	if baseURL != "" {
@@ -6823,6 +6870,7 @@ func (s *GatewayService) handleBedrockNonStreamingResponse(
 }
 
 func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token, tokenType, modelID string, reqStream bool, mimicClaudeCode bool) (*http.Request, error) {
+	body = stripDeferredToolCacheControl(body)
 	if account.Platform == PlatformAnthropic && account.Type == AccountTypeServiceAccount {
 		return s.buildUpstreamRequestAnthropicVertex(ctx, c, account, body, token, modelID, reqStream)
 	}
@@ -10487,6 +10535,7 @@ func (s *GatewayService) buildCountTokensRequestAnthropicAPIKeyPassthrough(
 	body []byte,
 	token string,
 ) (*http.Request, error) {
+	body = stripDeferredToolCacheControl(body)
 	targetURL := claudeAPICountTokensURL
 	baseURL := account.GetBaseURL()
 	if baseURL != "" {
@@ -10496,6 +10545,7 @@ func (s *GatewayService) buildCountTokensRequestAnthropicAPIKeyPassthrough(
 		}
 		targetURL = validatedURL + "/v1/messages/count_tokens?beta=true"
 	}
+	body = sanitizeCountTokensRequestBody(body)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
 	if err != nil {
@@ -10533,6 +10583,7 @@ func (s *GatewayService) buildCountTokensRequestAnthropicAPIKeyPassthrough(
 
 // buildCountTokensRequest 构建 count_tokens 上游请求
 func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token, tokenType, modelID string, mimicClaudeCode bool) (*http.Request, error) {
+	body = stripDeferredToolCacheControl(body)
 	// 确定目标 URL
 	targetURL := claudeAPICountTokensURL
 	if account.Type == AccountTypeAPIKey {
@@ -10594,6 +10645,7 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 	if billingUA := effectiveBillingUserAgent(ctMimicUserAgent, tokenType, mimicClaudeCode, billingFingerprint); billingUA != "" {
 		body = syncBillingHeaderVersion(body, billingUA)
 	}
+	body = sanitizeCountTokensRequestBody(body)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(body))
 	if err != nil {
@@ -10688,6 +10740,20 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 	}
 
 	return req, nil
+}
+
+// sanitizeCountTokensRequestBody 删除 count_tokens 端点不接受的生成参数。
+// 本地目前只处理 max_tokens（上游 efa5a2240）：OAuth 伪装会为普通 messages
+// 请求补 max_tokens=128000，count_tokens 只接受输入类字段。
+// temperature/top_p 等字段的过滤属于上游 27600b1d2，本地未移植，不在此处理。
+func sanitizeCountTokensRequestBody(body []byte) []byte {
+	if !gjson.GetBytes(body, "max_tokens").Exists() {
+		return body
+	}
+	if next, ok := deleteJSONPathBytes(body, "max_tokens"); ok {
+		return next
+	}
+	return body
 }
 
 // countTokensError 返回 count_tokens 错误响应
