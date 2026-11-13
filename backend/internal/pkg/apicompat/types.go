@@ -139,6 +139,34 @@ type AnthropicResponse struct {
 	Usage        AnthropicUsage          `json:"usage"`
 }
 
+// MarshalJSON preserves the required empty signature on non-streaming thinking
+// blocks. Streaming content_block_start retains its established wire shape.
+func (r AnthropicResponse) MarshalJSON() ([]byte, error) {
+	type responseAlias AnthropicResponse
+	content := make([]anthropicResponseContentBlock, len(r.Content))
+	for i, block := range r.Content {
+		content[i] = anthropicResponseContentBlock(block)
+	}
+	return json.Marshal(struct {
+		Content []anthropicResponseContentBlock `json:"content"`
+		responseAlias
+	}{Content: content, responseAlias: responseAlias(r)})
+}
+
+type anthropicResponseContentBlock AnthropicContentBlock
+
+func (b anthropicResponseContentBlock) MarshalJSON() ([]byte, error) {
+	type blockAlias anthropicResponseContentBlock
+	if b.Type != "thinking" {
+		return json.Marshal(blockAlias(b))
+	}
+	return json.Marshal(struct {
+		Thinking  string `json:"thinking"`
+		Signature string `json:"signature"`
+		blockAlias
+	}{Thinking: b.Thinking, Signature: b.Signature, blockAlias: blockAlias(b)})
+}
+
 // AnthropicStopReasonPtr returns a non-nil pointer to s for final stop reasons.
 func AnthropicStopReasonPtr(s string) *string {
 	return &s
@@ -265,8 +293,9 @@ type ResponsesInputItem struct {
 
 // ResponsesContentPart is a typed content part in a Responses message.
 type ResponsesContentPart struct {
-	Type     string `json:"type"` // "input_text" | "output_text" | "input_image"
+	Type     string `json:"type"` // "input_text" | "output_text" | "reasoning_text" | "refusal" | "input_image"
 	Text     string `json:"text,omitempty"`
+	Refusal  string `json:"refusal,omitempty"`
 	ImageURL string `json:"image_url,omitempty"` // data URI for input_image
 }
 
@@ -347,6 +376,9 @@ type ResponsesOutput struct {
 	Arguments string `json:"arguments,omitempty"`
 	// 来源为 namespace 子工具时的归属命名空间（codex 按 namespace+name 路由该调用）。
 	Namespace string `json:"namespace,omitempty"`
+	// Preserve the upstream encryption marker, including explicit null/[];
+	// omitting it can make sealed arguments appear to be plaintext.
+	EncryptedFunctionArgs json.RawMessage `json:"encrypted_function_args,omitempty"`
 
 	// type=custom_tool_call（custom/freeform 工具，input 为自由文本）
 	Input string `json:"input,omitempty"`
@@ -355,26 +387,14 @@ type ResponsesOutput struct {
 	Action *WebSearchAction `json:"action,omitempty"`
 }
 
-// MarshalJSON 处理 tool_search_call 项的线上形态（复用 CallID/Arguments 字段）：
-// execution 固定为 "client"（codex 的必填字段，非 client 的调用会被静默忽略），
-// arguments 是 JSON 对象而非 function_call 语义下的字符串。其余类型走默认结构体
-// 序列化，输出逐字节不变。
+// MarshalJSON keeps message and tool_search_call items consistent with their
+// streamed representation. Other output types retain their default encoding.
 func (o ResponsesOutput) MarshalJSON() ([]byte, error) {
+	if o.Type == "message" || o.Type == "tool_search_call" {
+		return json.Marshal(responsesItemWire(&o))
+	}
 	type responsesOutputAlias ResponsesOutput
-	if o.Type != "tool_search_call" {
-		return json.Marshal(responsesOutputAlias(o))
-	}
-	m := map[string]any{
-		"type":      o.Type,
-		"id":        o.ID,
-		"call_id":   o.CallID,
-		"execution": "client",
-		"arguments": toolSearchCallArgumentsJSON(o.Arguments),
-	}
-	if o.Status != "" {
-		m["status"] = o.Status
-	}
-	return json.Marshal(m)
+	return json.Marshal(responsesOutputAlias(o))
 }
 
 // UnmarshalJSON accepts both the Responses function-call string form and the
