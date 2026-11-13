@@ -81,6 +81,7 @@ var openaiAllowedHeaders = map[string]bool{
 	"x-codex-beta-features": true,
 	"x-codex-turn-state":    true,
 	"x-codex-turn-metadata": true,
+	responsesLiteHeaderKey:  true,
 }
 
 // OpenAI passthrough allowed headers whitelist.
@@ -97,6 +98,7 @@ var openaiPassthroughAllowedHeaders = map[string]bool{
 	"x-codex-beta-features": true,
 	"x-codex-turn-state":    true,
 	"x-codex-turn-metadata": true,
+	responsesLiteHeaderKey:  true,
 }
 
 // codex_cli_only 拒绝时记录的请求头白名单（仅用于诊断日志，不参与上游透传）
@@ -2649,6 +2651,22 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		originalBody = body
 		releaseOpenAIParsedRequestBody(c)
 	}
+	responsesLite := isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader)) || isOpenAIResponsesLiteWebSocketPayload(body)
+	if responsesLite {
+		liteBody, changed, liteErr := normalizeOpenAIResponsesLitePayloadForAccount(body, account)
+		if liteErr != nil {
+			setOpsUpstreamError(c, http.StatusBadRequest, liteErr.Error(), "")
+			writeOpenAIJSONResponse(c, http.StatusBadRequest, gin.H{"error": gin.H{
+				"type": "invalid_request_error", "message": liteErr.Error(), "param": "tools",
+			}})
+			return nil, liteErr
+		}
+		if changed {
+			body = liteBody
+			originalBody = body
+			releaseOpenAIParsedRequestBody(c)
+		}
+	}
 	if sc := StreamContinuationFromContext(c); sc.Active() && (passthroughEnabled || account.IsGrok() ||
 		(account.Type == AccountTypeAPIKey && !openai_compat.ShouldUseResponsesAPI(account.Extra))) {
 		// 续写进行中：透传 / Grok / Chat 兼容路径不支持流拼接，换下一个账号
@@ -3950,6 +3968,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	}
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http_passthrough", req.Header, body, "not_applicable")
+	if err := applyMappedGPT55LiteCompatibility(req, account, body); err != nil {
+		return nil, err
+	}
 
 	if isOpenAIResponsesCompactPath(c) {
 		req.Header.Set("accept", "application/json")
@@ -4836,6 +4857,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	// 路由提示（V02-T17）：按最终出站 body 的 model 和 service_tier 生成，入站同名头先删。
 	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http", req.Header, body, "not_applicable")
+	if err := applyMappedGPT55LiteCompatibility(req, account, body); err != nil {
+		return nil, err
+	}
 
 	if isOpenAIResponsesCompactPath(c) {
 		req.Header.Set("accept", "application/json")
@@ -7747,7 +7771,12 @@ func normalizeOpenAIResponsesWebSocketCompatibilityBody(body []byte, account *Ac
 	if account == nil || !account.IsOpenAI() {
 		return body, false, nil
 	}
-	return sanitizeOpenAIResponsesToolSchemasForPlatform(body, account.Platform)
+	normalized, changed, err := sanitizeOpenAIResponsesToolSchemasForPlatform(body, account.Platform)
+	if err != nil || !responsesLite {
+		return normalized, changed, err
+	}
+	liteBody, liteChanged, err := normalizeOpenAIResponsesLitePayloadForAccount(normalized, account)
+	return liteBody, changed || liteChanged, err
 }
 
 // normalizeOpenAIPassthroughOAuthBody 将透传 OAuth 请求体收敛为旧链路关键行为：

@@ -12,6 +12,7 @@ const (
 	openAIResponsesEndpoint          = "/v1/responses"
 	openAIResponsesCompactEndpoint   = "/v1/responses/compact"
 	responsesLiteHeader              = "X-OpenAI-Internal-Codex-Responses-Lite"
+	responsesLiteHeaderKey           = "x-openai-internal-codex-responses-lite"
 	responsesLiteWSMetadataKey       = "ws_request_header_x_openai_internal_codex_responses_lite"
 	imageGenerationPermissionMessage = "Image generation is not enabled for this group"
 	codexImageGenNamespace           = "image_gen"
