@@ -2516,8 +2516,9 @@ func (s *OpenAIGatewayService) handleFailoverSideEffects(ctx context.Context, re
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
 	startTime := time.Now()
 	beginUpstreamResponseModelObservation(c) // V03-R11：每次转发尝试重置上游响应模型观测
-	// failover 会在同一个 *gin.Context 上重试下一个账号，先清掉上一次摊平名映射。
+	// failover 会在同一个 *gin.Context 上重试下一个账号，先清掉上一次请求的工具映射。
 	clearOpenAIResponsesNamespaceNames(c)
+	clearOpenAIResponsesClientToolMapping(c)
 	// V04：WS 执行作用域按原始请求体捕获一次，后续重试复用首次记录。
 	if c != nil {
 		if _, captured := c.Get(openAIWSOriginalExecutionScopeKey); !captured {
@@ -2655,9 +2656,14 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if responsesLite {
 		liteBody, changed, liteErr := normalizeOpenAIResponsesLitePayloadForAccount(body, account)
 		if liteErr != nil {
+			param := "tools"
+			var validationErr *openAIResponsesLiteValidationError
+			if errors.As(liteErr, &validationErr) && validationErr.param != "" {
+				param = validationErr.param
+			}
 			setOpsUpstreamError(c, http.StatusBadRequest, liteErr.Error(), "")
 			writeOpenAIJSONResponse(c, http.StatusBadRequest, gin.H{"error": gin.H{
-				"type": "invalid_request_error", "message": liteErr.Error(), "param": "tools",
+				"type": "invalid_request_error", "message": liteErr.Error(), "param": param,
 			}})
 			return nil, liteErr
 		}
@@ -3575,6 +3581,16 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		reqStream = gjson.GetBytes(body, "stream").Bool()
 	}
 
+	if account != nil && account.Platform == PlatformOpenAI && account.Type == AccountTypeAPIKey &&
+		!isOpenAIResponsesCompactPath(c) && needsOpenAIResponsesClientToolAdaptation(body) {
+		adaptedBody, mapping, adaptErr := adaptOpenAIResponsesClientTools(body)
+		if adaptErr != nil {
+			return nil, adaptErr
+		}
+		body = adaptedBody
+		c.Set(openAIResponsesClientToolMappingContextKey, mapping)
+	}
+
 	sanitizedBody, sanitized, err := sanitizeEmptyBase64InputImagesInOpenAIBody(body)
 	if err != nil {
 		return nil, err
@@ -3773,6 +3789,13 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			}
 		}
 		return nil, s.handleErrorResponsePassthrough(ctx, resp, c, account, body)
+	}
+	if mapping, ok := openAIResponsesClientToolMapping(c); ok && isEventStreamResponse(resp.Header) {
+		maxLineSize := defaultMaxLineSize
+		if s.cfg != nil && s.cfg.Gateway.MaxLineSize > 0 {
+			maxLineSize = s.cfg.Gateway.MaxLineSize
+		}
+		resp.Body = newGrokResponsesClientToolStreamBody(resp.Body, mapping, maxLineSize)
 	}
 
 	serviceTier := extractOpenAIServiceTierFromBody(body)
@@ -4614,6 +4637,12 @@ func (s *OpenAIGatewayService) handleNonStreamingResponsePassthrough(
 	body, err = restoreOpenAIResponsesNamespacePayload(c, body)
 	if err != nil {
 		return nil, fmt.Errorf("restore OpenAI passthrough namespace response: %w", err)
+	}
+	if mapping, ok := openAIResponsesClientToolMapping(c); ok && json.Valid(body) {
+		body, _, err = apicompat.RestoreResponsesClientToolPayload(body, mapping)
+		if err != nil {
+			return nil, fmt.Errorf("restore OpenAI Responses client tools: %w", err)
+		}
 	}
 	s.relayOpenAICodexTurnState(c, firstOpenAIResponseAccount(accounts), resp.Header)
 	if !writeOpenAICompactSSEBridge(c, resp.StatusCode, body) {
