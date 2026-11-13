@@ -895,7 +895,110 @@ func filterThinkingBlocksInternal(body []byte, _ bool) []byte {
 		!bytes.Contains(body, []byte(`"thinking" :`)) {
 		return body
 	}
+	// 带顶层 thinking 配置或已签名 thinking 历史的请求会命中上面的子串检查，
+	// 绝大多数 Claude Code 流量如此。先在借用的 gjson 视图上判断是否会丢弃任何块，
+	// 不会丢弃就原样返回，避免把整个 body 解码成 map。
+	if needs, decided := thinkingBlocksNeedFiltering(body); decided && !needs {
+		return body
+	}
+	return filterThinkingBlocksDecoded(body)
+}
 
+// thinkingBlocksNeedFiltering 报告 filterThinkingBlocksDecoded 是否会丢弃某个块，
+// 决策逻辑与它逐条对应，并按 encoding/json 的规则对重复键取最后一个值。
+// body 只在调用期间被借用。根不是对象时交给解码路径（decided=false）。
+// 无效 JSON 不需要单独扫描：解码路径对它原样返回，两种答案得到同样的 body。
+func thinkingBlocksNeedFiltering(body []byte) (needs, decided bool) {
+	view := unsafe.String(unsafe.SliceData(body), len(body))
+	root := gjson.Parse(view)
+	if !root.IsObject() {
+		return false, false
+	}
+	var thinking, messages gjson.Result
+	root.ForEach(func(key, value gjson.Result) bool {
+		switch key.String() {
+		case "thinking":
+			thinking = value
+		case "messages":
+			messages = value
+		}
+		return true
+	})
+
+	thinkingEnabled := false
+	if thinking.IsObject() {
+		var thinkType gjson.Result
+		thinking.ForEach(func(key, value gjson.Result) bool {
+			if key.String() == "type" {
+				thinkType = value
+			}
+			return true
+		})
+		if thinkType.Type == gjson.String && (thinkType.Str == "enabled" || thinkType.Str == "adaptive") {
+			thinkingEnabled = true
+		}
+	}
+	if !messages.IsArray() {
+		return false, true
+	}
+
+	messages.ForEach(func(_, msg gjson.Result) bool {
+		if !msg.IsObject() {
+			return true
+		}
+		var role, content gjson.Result
+		msg.ForEach(func(key, value gjson.Result) bool {
+			switch key.String() {
+			case "role":
+				role = value
+			case "content":
+				content = value
+			}
+			return true
+		})
+		if !content.IsArray() {
+			return true
+		}
+		isAssistant := role.Type == gjson.String && role.Str == "assistant"
+		content.ForEach(func(_, block gjson.Result) bool {
+			if !block.IsObject() {
+				return true
+			}
+			var blockType, signature gjson.Result
+			hasThinking := false
+			block.ForEach(func(key, value gjson.Result) bool {
+				switch key.String() {
+				case "type":
+					blockType = value
+				case "signature":
+					signature = value
+				case "thinking":
+					hasThinking = true
+				}
+				return true
+			})
+			typ := ""
+			if blockType.Type == gjson.String {
+				typ = blockType.Str
+			}
+			switch {
+			case typ == "thinking" || typ == "redacted_thinking":
+				if thinkingEnabled && isAssistant &&
+					signature.Type == gjson.String && signature.Str != "" && signature.Str != antigravity.DummyThoughtSignature {
+					return true
+				}
+				needs = true
+			case typ == "" && hasThinking:
+				needs = true
+			}
+			return !needs
+		})
+		return !needs
+	})
+	return needs, true
+}
+
+func filterThinkingBlocksDecoded(body []byte) []byte {
 	var req map[string]any
 	if err := json.Unmarshal(body, &req); err != nil {
 		return body
