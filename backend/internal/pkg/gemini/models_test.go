@@ -12,13 +12,9 @@ func TestDefaultModels_ContainsFallbackCatalogModels(t *testing.T) {
 	}
 
 	required := []string{
-		"models/gemini-2.5-flash-image",
+		"models/gemini-3-pro-image",
 		"models/gemini-3.1-pro-preview-customtools",
 		"models/gemini-3.1-flash-image",
-		"models/gemini-3.6-flash",
-		"models/gemini-3.7-flash",
-		"models/gemini-3.8-flash",
-		"models/gemini-4-argon",
 	}
 
 	for _, name := range required {
@@ -28,6 +24,14 @@ func TestDefaultModels_ContainsFallbackCatalogModels(t *testing.T) {
 		}
 		if len(model.SupportedGenerationMethods) == 0 {
 			t.Fatalf("expected fallback model %q to advertise generation methods", name)
+		}
+	}
+	if len(models) != 17 {
+		t.Fatalf("expected 17 current Gemini models, got %d", len(models))
+	}
+	for _, name := range []string{"models/gemini-2.0-flash", "models/gemini-2.5-flash", "models/gemini-2.5-flash-image", "models/gemini-2.5-pro", "models/gemini-3-pro-preview"} {
+		if _, ok := byName[name]; ok {
+			t.Fatalf("did not expect retired Gemini model %q", name)
 		}
 	}
 }

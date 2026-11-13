@@ -2,17 +2,32 @@ package handler
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/gemini"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+type geminiModelVisibilityUpstreamStub struct {
+	service.HTTPUpstream
+}
+
+func (*geminiModelVisibilityUpstreamStub) Do(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+	model := strings.TrimPrefix(strings.TrimSuffix(req.URL.Path, "/"), "/v1beta/models/")
+	body, err := json.Marshal(gemini.FallbackModel(model))
+	if err != nil {
+		return nil, err
+	}
+	return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(string(body)))}, nil
+}
 
 func TestGeminiModelVisibility_ExplicitListMatchesOpenAIList(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -27,8 +42,11 @@ func TestGeminiModelVisibility_ExplicitListMatchesOpenAIList(t *testing.T) {
 		"public-alias":           "private-upstream-alias",
 	}
 	h := newGatewayModelsHandlerForTest(&gatewayModelsAccountRepoStub{byGroup: map[int64][]service.Account{
-		groupID: {{ID: 1, Platform: service.PlatformGemini, Credentials: map[string]any{"model_mapping": mapping}}},
-		26:      {{ID: 2, Platform: service.PlatformGemini, Credentials: map[string]any{"model_mapping": map[string]any{"other-group-secret": "other-group-secret"}}}},
+		groupID: {
+			{ID: 1, Platform: service.PlatformGemini, Credentials: map[string]any{"model_mapping": mapping}},
+			{ID: 2, Platform: service.PlatformGemini, Credentials: map[string]any{"model_mapping": map[string]any{"gemini-3-pro-image": "private-image-model"}}},
+		},
+		26: {{ID: 3, Platform: service.PlatformGemini, Credentials: map[string]any{"model_mapping": map[string]any{"other-group-secret": "other-group-secret"}}}},
 	}})
 	request := func(path string, handler gin.HandlerFunc) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
@@ -50,7 +68,7 @@ func TestGeminiModelVisibility_ExplicitListMatchesOpenAIList(t *testing.T) {
 	for _, model := range got.Models {
 		ids = append(ids, strings.TrimPrefix(model.Name, "models/"))
 	}
-	require.Len(t, ids, 7)
+	require.Len(t, ids, 8)
 	require.ElementsMatch(t, modelIDsForTest(want.Data), ids)
 	for _, forbidden := range []string{"gemini-2.5-pro", "gemini-2.5-flash", "gemini-3-flash-preview", "private-upstream-pro", "private-upstream-alias", "other-group-secret"} {
 		require.NotContains(t, ids, forbidden)
@@ -65,11 +83,15 @@ func TestGeminiModelVisibility_GetModelHonorsWhitelistAndAliases(t *testing.T) {
 	h := newGatewayModelsHandlerForTest(&gatewayModelsAccountRepoStub{byGroup: map[int64][]service.Account{
 		groupID: {{ID: 1, Platform: service.PlatformGemini, Credentials: map[string]any{"model_mapping": map[string]any{"public-alias": "private-model", "gemini-3.*": "gemini-3.*"}}}},
 	}})
+	h.geminiCompatService = service.NewGeminiMessagesCompatService(&gatewayModelsAccountRepoStub{byGroup: map[int64][]service.Account{
+		groupID: {{ID: 1, Platform: service.PlatformGemini, Type: service.AccountTypeAPIKey, Credentials: map[string]any{"api_key": "fixture"}}},
+	}}, nil, nil, nil, nil, nil, &geminiModelVisibilityUpstreamStub{}, nil, &config.Config{})
 	for _, tt := range []struct {
 		model  string
 		status int
 	}{
 		{"public-alias", http.StatusOK},
+		{"gemini-3.8-flash", http.StatusOK},
 		{"gemini-2.5-pro", http.StatusNotFound},
 		{"private-model", http.StatusNotFound},
 		{"../models", http.StatusBadRequest},
@@ -83,7 +105,7 @@ func TestGeminiModelVisibility_GetModelHonorsWhitelistAndAliases(t *testing.T) {
 			h.GeminiV1BetaGetModel(c)
 			require.Equal(t, tt.status, rec.Code)
 			if tt.status == http.StatusOK {
-				require.Contains(t, rec.Body.String(), "models/public-alias")
+				require.Contains(t, rec.Body.String(), "models/"+tt.model)
 			}
 		})
 	}
