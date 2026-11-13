@@ -187,6 +187,25 @@ func TestBuildUpstreamRequestAnthropicAPIKeyPassthrough_StripsFallbacksWhenClien
 		"API-key passthrough + 客户端未带 fallback beta → strip body 字段")
 }
 
+// API-key passthrough + 客户端完全没有 anthropic-beta header → 同样 strip。
+// 本地补充用例：覆盖上游 passthrough 无条件调用 sanitize 的行为。
+func TestBuildUpstreamRequestAnthropicAPIKeyPassthrough_StripsFallbacksWhenNoClientBetaHeader(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+
+	body := []byte(`{"model":"claude-haiku-4-5","fallbacks":"default","fallback_credit_token":"tok_1","messages":[]}`)
+	svc := &GatewayService{cfg: &config.Config{}}
+	req, err := svc.buildUpstreamRequestAnthropicAPIKeyPassthrough(
+		context.Background(), c, newAnthropicAPIKeyPassthroughAccountForBetaTest(), body, "token",
+	)
+	require.NoError(t, err)
+	outBody := readRequestBodyForTest(t, req)
+	require.False(t, gjson.GetBytes(outBody, "fallbacks").Exists())
+	require.False(t, gjson.GetBytes(outBody, "fallback_credit_token").Exists())
+}
+
 // API-key passthrough + 客户端 header 带 fallback beta → 保留（不过度删除）
 func TestBuildUpstreamRequestAnthropicAPIKeyPassthrough_PreservesFallbacksWhenClientHeaderHasBeta(t *testing.T) {
 	gin.SetMode(gin.TestMode)

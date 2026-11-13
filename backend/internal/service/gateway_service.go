@@ -5805,13 +5805,15 @@ func (s *GatewayService) buildUpstreamRequestAnthropicAPIKeyPassthrough(
 
 	// 能力维度 sanitize：API-key 透传路径按客户端 anthropic-beta（再过一遍 BetaPolicy
 	// filter）决定 body 中 fallbacks / fallback_credit_token 的去留。
+	// 客户端不带 anthropic-beta 时 finalBeta 为空，字段同样必须剥除（上游无条件调用）。
+	finalBeta := ""
 	if c != nil && c.Request != nil {
 		if clientBeta := getHeaderRaw(c.Request.Header, "anthropic-beta"); clientBeta != "" {
-			finalBeta := stripBetaTokensWithSet(clientBeta, mergeDropSets(s.getBetaPolicyFilterSet(ctx, c, account, "")))
-			if sanitized, changed := sanitizeAnthropicBodyForBetaTokens(body, finalBeta); changed {
-				body = sanitized
-			}
+			finalBeta = stripBetaTokensWithSet(clientBeta, mergeDropSets(s.getBetaPolicyFilterSet(ctx, c, account, "")))
 		}
+	}
+	if sanitized, changed := sanitizeAnthropicBodyForBetaTokens(body, finalBeta); changed {
+		body = sanitized
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
