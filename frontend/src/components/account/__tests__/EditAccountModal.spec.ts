@@ -416,6 +416,59 @@ describe('EditAccountModal', () => {
     expect(fetchUpstreamModelsMock).not.toHaveBeenCalled()
   })
 
+  it('persists and reloads model scope while legacy rules default to account', async () => {
+    const account = buildAccount()
+    account.credentials.temp_unschedulable_enabled = true
+    account.credentials.temp_unschedulable_rules = [{ error_code: 503, keywords: ['busy'], duration_minutes: 5 }]
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+    const wrapper = mountModal(account)
+    const scope = '[aria-label="admin.accounts.tempUnschedulable.scope"]'
+    expect((wrapper.get(scope).element as HTMLSelectElement).value).toBe('account')
+    await wrapper.get(scope).setValue('model')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    const credentials = updateAccountMock.mock.calls[0]?.[1]?.credentials
+    expect(credentials.temp_unschedulable_rules[0].scope).toBe('model')
+    await wrapper.setProps({ account: { ...account, credentials }, show: false })
+    await wrapper.setProps({ show: true })
+    expect((wrapper.get(scope).element as HTMLSelectElement).value).toBe('model')
+  })
+
+  it('validates, normalizes, saves and reloads pool status codes', async () => {
+    const account = buildAccount()
+    account.credentials.pool_mode = true
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+    const wrapper = mountModal(account)
+    const selector = 'input[placeholder="400, 401, 403, 429, 502, 503, 504, 529"]'
+    await wrapper.get(selector).setValue('429.5, 700')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock).not.toHaveBeenCalled()
+    expect(wrapper.get(selector).attributes('aria-invalid')).toBe('true')
+    await wrapper.get(selector).setValue('529, 429, 429, 502')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    const credentials = updateAccountMock.mock.calls[0]?.[1]?.credentials
+    expect(credentials.pool_mode_retry_status_codes).toEqual([429, 502, 529])
+    expect(credentials.pool_mode_retry_count).toBe(2)
+    await wrapper.setProps({ account: { ...account, credentials }, show: false })
+    await wrapper.setProps({ show: true })
+    expect((wrapper.get(selector).element as HTMLInputElement).value).toBe('429, 502, 529')
+    // Explicit [] must survive edit/reload; blank remains the default policy.
+    await wrapper.get(selector).setValue('[]')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    const emptyCredentials = updateAccountMock.mock.calls[1]?.[1]?.credentials
+    expect(emptyCredentials.pool_mode_retry_status_codes).toEqual([])
+    await wrapper.setProps({ account: { ...account, credentials: emptyCredentials }, show: false })
+    await wrapper.setProps({ show: true })
+    expect((wrapper.get(selector).element as HTMLInputElement).value).toBe('[]')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[2]?.[1]?.credentials.pool_mode_retry_status_codes).toEqual([])
+    await wrapper.get(selector).setValue('')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[3]?.[1]?.credentials).not.toHaveProperty('pool_mode_retry_status_codes')
+  })
 })
 
 // V03-R11：账号 extra.upstream_request_id_header（上游请求 ID 头）

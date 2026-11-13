@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"strings"
 	"time"
@@ -84,8 +85,11 @@ func (s *AntigravityGatewayService) clearCreditsExhausted(ctx context.Context, a
 	if _, exists := rawLimits[creditsExhaustedKey]; !exists {
 		return
 	}
+	rawLimits = maps.Clone(rawLimits)
 	delete(rawLimits, creditsExhaustedKey)
-	account.Extra[modelRateLimitsKey] = rawLimits
+	extra := maps.Clone(account.Extra)
+	extra[modelRateLimitsKey] = rawLimits
+	account.Extra = extra
 	if err := s.accountRepo.UpdateExtra(ctx, account.ID, map[string]any{
 		modelRateLimitsKey: rawLimits,
 	}); err != nil {

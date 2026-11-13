@@ -145,7 +145,7 @@ func (s *OpenAIGatewayService) selectCompatiblePlatformAccount(
 		if _, excluded := excludedIDs[account.ID]; excluded {
 			continue
 		}
-		if s.isOpenAIAccountRuntimeBlocked(account) || !isOpenAICompatibleAccountEligibleForRequest(ctx, account, platform, requestedModel, false, requiredCapability) {
+		if (s.rateLimitService != nil && s.rateLimitService.ApplyAccountSchedulingThreshold(ctx, account)) || s.isOpenAIAccountRuntimeBlocked(account) || !isOpenAICompatibleAccountEligibleForRequest(ctx, account, platform, requestedModel, false, requiredCapability) {
 			continue
 		}
 		if isDomesticOpenAICompatiblePlatform(platform) && s.cnQuotaService != nil {

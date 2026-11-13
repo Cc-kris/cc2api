@@ -1044,6 +1044,26 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(getProviders).toHaveBeenCalledTimes(2);
   });
 
+  it('loads, saves and reloads usage thresholds with platform defaults', async () => {
+    getSettings.mockResolvedValueOnce({ ...baseSettingsResponse, account_scheduling_thresholds: { openai: 90 } });
+    const wrapper = mountView(); await flushPromises();
+    expect((wrapper.get('#scheduling-threshold-openai').element as HTMLInputElement).value).toBe('90');
+    expect((wrapper.get('#scheduling-threshold-anthropic').element as HTMLInputElement).value).toBe('100');
+    await wrapper.get('#scheduling-threshold-openai').setValue('85');
+    updateSettings.mockResolvedValueOnce({ ...baseSettingsResponse, account_scheduling_thresholds: { openai: 85, anthropic: 100, grok: 100 } });
+    await wrapper.find('form').trigger('submit.prevent'); await flushPromises();
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ account_scheduling_thresholds: { openai: 85, anthropic: 100, grok: 100 } }));
+    expect((wrapper.get('#scheduling-threshold-openai').element as HTMLInputElement).value).toBe('85');
+  });
+
+  it('rejects invalid thresholds without an API write', async () => {
+    const wrapper = mountView(); await flushPromises();
+    await wrapper.get('#scheduling-threshold-openai').setValue('101');
+    await wrapper.find('form').trigger('submit.prevent'); await flushPromises();
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalledWith('admin.settings.scheduling.thresholdInvalid');
+  });
+
   it("renders advanced scheduler copy as local experimental gateway policy", async () => {
     const wrapper = mountView();
 

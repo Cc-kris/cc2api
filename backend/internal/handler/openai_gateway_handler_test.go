@@ -1972,6 +1972,19 @@ type openAIWSSilentRetryAccountRepoStub struct {
 	accounts []service.Account
 }
 
+func (s *openAIWSSilentRetryAccountRepoStub) ListByGroup(ctx context.Context, groupID int64) ([]service.Account, error) {
+	accounts := make([]service.Account, 0, len(s.accounts))
+	for _, account := range s.accounts {
+		for _, id := range account.GroupIDs {
+			if id == groupID {
+				accounts = append(accounts, account)
+				break
+			}
+		}
+	}
+	return accounts, nil
+}
+
 func (s *openAIWSSilentRetryAccountRepoStub) ListSchedulableByPlatform(ctx context.Context, platform string) ([]service.Account, error) {
 	accounts := make([]service.Account, 0, len(s.accounts))
 	for _, account := range s.accounts {

@@ -832,6 +832,7 @@ export interface GeminiCredentials {
 }
 
 export interface TempUnschedulableRule {
+  scope?: 'account' | 'model'
   error_code: number
   keywords: string[]
   duration_minutes: number
@@ -839,6 +840,8 @@ export interface TempUnschedulableRule {
 }
 
 export interface TempUnschedulableState {
+  scope?: 'account' | 'model'
+  model?: string
   until_unix: number
   triggered_at_unix: number
   status_code: number
@@ -895,6 +898,7 @@ export interface Account {
   overload_until: string | null
   temp_unschedulable_until: string | null
   temp_unschedulable_reason: string | null
+  scheduler_scores?: Array<{ group_id: number | null; score: number }>
 
   // Session window fields (5-hour window)
   session_window_start: string | null

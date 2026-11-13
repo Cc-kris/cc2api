@@ -258,11 +258,13 @@
           </template>
           <template #cell-capacity="{ row }">
             <AccountCapacityCell :account="row" />
+            <p v-if="row.platform === 'openai' && row.scheduler_scores?.length" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.status.schedulerScore') }}: {{ accountSchedulerScore(row) }}</p>
           </template>
           <template #cell-status="{ row }">
             <div class="flex items-center gap-1.5">
               <AccountStatusIndicator :account="row" @show-temp-unsched="handleShowTempUnsched" />
             </div>
+            <p v-if="isSchedulingThresholdPaused(row)" class="mt-1 max-w-52 text-xs text-amber-700 dark:text-amber-300">{{ schedulingThresholdDescription(row) }}</p>
           </template>
           <template #cell-test_status="{ row }">
             <span v-if="!row.test_status" class="text-sm text-gray-400 dark:text-dark-500">-</span>
@@ -420,6 +422,18 @@ import AccountStatsModal from '@/components/admin/account/AccountStatsModal.vue'
 import ScheduledTestsPanel from '@/components/admin/account/ScheduledTestsPanel.vue'
 import type { SelectOption } from '@/components/common/Select.vue'
 import AccountStatusIndicator from '@/components/account/AccountStatusIndicator.vue'
+import { parseSchedulingThresholdReason } from '@/utils/schedulingThreshold'
+
+const accountSchedulerScore = (account: Account) => {
+ const scores = account.scheduler_scores || []
+ const score = scores.find(item => item.group_id === Number(params.group)) || scores.find(item => item.group_id === null) || scores[0]
+ return score ? score.score.toFixed(2) : '-'
+}
+const isSchedulingThresholdPaused = (account: Account) => Boolean(account.temp_unschedulable_until && new Date(account.temp_unschedulable_until).getTime() > Date.now() && parseSchedulingThresholdReason(account.temp_unschedulable_reason))
+const schedulingThresholdDescription = (account: Account) => {
+  const reason = parseSchedulingThresholdReason(account.temp_unschedulable_reason)
+  return t('admin.accounts.status.usageThresholdDetail', { window: reason?.window || '-', used: reason?.used_percent ?? '-', threshold: reason?.threshold_percent ?? '-' })
+}
 import AccountUsageCell from '@/components/account/AccountUsageCell.vue'
 import AccountTodayStatsCell from '@/components/account/AccountTodayStatsCell.vue'
 import AccountGroupsCell from '@/components/account/AccountGroupsCell.vue'
@@ -743,6 +757,7 @@ const {
 } = useTableLoader<Account, any>({
   fetchFn: adminAPI.accounts.list,
   initialParams: {
+    include_scheduler_score: true,
     platform: '',
     type: '',
     status: '',
@@ -1500,6 +1515,7 @@ const buildAccountQueryFilters = () => ({
   status: params.status || '',
   group: params.group || '',
   privacy_mode: params.privacy_mode || '',
+  include_scheduler_score: true,
   search: params.search || '',
   sort_by: sortState.sort_by,
   sort_order: sortState.sort_order

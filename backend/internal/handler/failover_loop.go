@@ -97,6 +97,7 @@ func (s *FailoverState) HandleFailoverError(
 	accountID int64,
 	platform string,
 	failoverErr *service.UpstreamFailoverError,
+	accounts ...*service.Account,
 ) FailoverAction {
 	s.LastFailoverErr = failoverErr
 	if observed := failoverErr.ObservedForwardResult(); observed != nil {
@@ -107,18 +108,19 @@ func (s *FailoverState) HandleFailoverError(
 
 	// 缓存计费判断：同账号重试不算切换账号，粘性会话仅在实际切换时强制缓存计费。
 	// 两个同账号重试分支（RetryableOnSameAccount、任意错误换号）的判断与下方保持一致。
-	if needForceCacheBilling(s.hasBoundSession, failoverErr, s.willRetrySameAccount(accountID, failoverErr)) {
+	retryLimit := failoverSameAccountPoolLimit(failoverErr, accounts...)
+	if needForceCacheBilling(s.hasBoundSession, failoverErr, s.willRetrySameAccount(accountID, failoverErr, accounts...)) {
 		s.ForceCacheBilling = true
 	}
 
 	// 同账号重试：对 RetryableOnSameAccount 的临时性错误，先在同一账号上重试
-	if failoverErr.RetryableOnSameAccount && s.SameAccountRetryCount[accountID] < maxSameAccountRetries {
+	if failoverErr.RetryableOnSameAccount && s.SameAccountRetryCount[accountID] < retryLimit {
 		s.SameAccountRetryCount[accountID]++
 		logger.FromContext(ctx).Warn("gateway.failover_same_account_retry",
 			zap.Int64("account_id", accountID),
 			zap.Int("upstream_status", failoverErr.StatusCode),
 			zap.Int("same_account_retry_count", s.SameAccountRetryCount[accountID]),
-			zap.Int("same_account_retry_max", maxSameAccountRetries),
+			zap.Int("same_account_retry_max", retryLimit),
 		)
 		if !sleepWithContext(ctx, sameAccountRetryDelay) {
 			return FailoverCanceled
@@ -127,7 +129,7 @@ func (s *FailoverState) HandleFailoverError(
 	}
 
 	// FailoverOnAnyError：非 RetryableOnSameAccount 的错误，切换前也先在同账号重试（确定性错误除外）
-	if !failoverErr.RetryableOnSameAccount && s.anyErrorCfg != nil {
+	if !failoverErr.RetryableOnSameAccount && s.anyErrorCfg != nil && !isPoolHTTPStatusFailure(firstFailoverAccount(accounts), failoverErr) {
 		limit := anyErrorSameAccountRetryLimitEnabled(s.anyErrorCfg, failoverErr)
 		if s.SameAccountRetryCount[accountID] < limit {
 			s.SameAccountRetryCount[accountID]++
@@ -214,15 +216,36 @@ func (s *FailoverState) HandleSelectionExhausted(ctx context.Context) FailoverAc
 // （不修改计数）。条件必须与 HandleFailoverError 中两个同账号重试分支一致：
 //   - 上游标记 RetryableOnSameAccount 且未达 maxSameAccountRetries；
 //   - 任意错误换号开启、非 RetryableOnSameAccount、未达 anyErrorSameAccountRetryLimitEnabled。
-func (s *FailoverState) willRetrySameAccount(accountID int64, failoverErr *service.UpstreamFailoverError) bool {
+func failoverSameAccountPoolLimit(failoverErr *service.UpstreamFailoverError, accounts ...*service.Account) int {
+	if failoverErr != nil && (failoverErr.SafeToFailoverAfterWrite || failoverErr.SameAccountRetryBudgetExhausted) {
+		return 0
+	}
+	account := firstFailoverAccount(accounts)
+	if isPoolHTTPStatusFailure(account, failoverErr) {
+		if !account.IsPoolModeRetryableStatus(failoverErr.StatusCode) {
+			return 0
+		}
+		return account.GetPoolModeRetryCount()
+	}
+	return maxSameAccountRetries
+}
+
+func firstFailoverAccount(accounts []*service.Account) *service.Account {
+	if len(accounts) > 0 {
+		return accounts[0]
+	}
+	return nil
+}
+
+func (s *FailoverState) willRetrySameAccount(accountID int64, failoverErr *service.UpstreamFailoverError, accounts ...*service.Account) bool {
 	if failoverErr == nil {
 		return false
 	}
 	retryCount := s.SameAccountRetryCount[accountID]
 	if failoverErr.RetryableOnSameAccount {
-		return retryCount < maxSameAccountRetries
+		return retryCount < failoverSameAccountPoolLimit(failoverErr, accounts...)
 	}
-	if s.anyErrorCfg != nil {
+	if s.anyErrorCfg != nil && !isPoolHTTPStatusFailure(firstFailoverAccount(accounts), failoverErr) {
 		return retryCount < anyErrorSameAccountRetryLimitEnabled(s.anyErrorCfg, failoverErr)
 	}
 	return false

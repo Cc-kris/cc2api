@@ -2666,6 +2666,10 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	if err := ValidateUpstreamRequestIDHeaderExtra(input.Extra); err != nil {
 		return nil, err
 	}
+	// V04：池模式重试状态码先做结构与范围校验，避免非法值写入 credentials。
+	if err := ValidatePoolModeRetryStatusCodes(input.Credentials); err != nil {
+		return nil, err
+	}
 	accountExtra, err := normalizeGrokMediaEligibilityExtra(input.Platform, input.Extra)
 	if err != nil {
 		return nil, err
@@ -2792,6 +2796,10 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *UpdateAccountInput) (*Account, error) {
 	if input != nil {
 		if err := ValidateUpstreamRequestIDHeaderExtra(input.Extra); err != nil {
+			return nil, err
+		}
+		// V04：池模式重试状态码先做结构与范围校验，避免非法值写入 credentials。
+		if err := ValidatePoolModeRetryStatusCodes(input.Credentials); err != nil {
 			return nil, err
 		}
 	}
@@ -2985,6 +2993,10 @@ func (s *adminServiceImpl) ListAccountUpstreamMultiplierChanges(ctx context.Cont
 // It merges credentials/extra keys instead of overwriting the whole object.
 func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUpdateAccountsInput) (*BulkUpdateAccountsResult, error) {
 	if err := ValidateUpstreamRequestIDHeaderExtra(input.Extra); err != nil {
+		return nil, err
+	}
+	// V04：池模式重试状态码先做结构与范围校验，避免非法值写入 credentials。
+	if err := ValidatePoolModeRetryStatusCodes(input.Credentials); err != nil {
 		return nil, err
 	}
 	if len(input.AccountIDs) == 0 && input.Filters != nil {

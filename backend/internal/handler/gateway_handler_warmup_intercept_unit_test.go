@@ -32,8 +32,17 @@ type fakeSchedulerCache struct {
 func (f *fakeSchedulerCache) GetSnapshot(_ context.Context, _ service.SchedulerBucket) ([]*service.Account, bool, error) {
 	return f.accounts, true, nil
 }
-func (f *fakeSchedulerCache) SetSnapshot(_ context.Context, _ service.SchedulerBucket, _ []service.Account) error {
+func (f *fakeSchedulerCache) CaptureBucketWriteToken(_ context.Context, bucket service.SchedulerBucket) (service.SchedulerBucketWriteToken, error) {
+	return service.SchedulerBucketWriteToken{Bucket: bucket, Epoch: 1}, nil
+}
+func (f *fakeSchedulerCache) SetSnapshot(_ context.Context, _ service.SchedulerBucket, _ service.SchedulerBucketWriteToken, _ []service.Account) error {
 	return nil
+}
+func (f *fakeSchedulerCache) RetireBucket(_ context.Context, _ service.SchedulerBucket) error {
+	return nil
+}
+func (f *fakeSchedulerCache) ReopenBucket(_ context.Context, bucket service.SchedulerBucket) (service.SchedulerBucketWriteToken, error) {
+	return service.SchedulerBucketWriteToken{Bucket: bucket, Epoch: 1}, nil
 }
 func (f *fakeSchedulerCache) GetAccount(_ context.Context, id int64) (*service.Account, error) {
 	for _, account := range f.accounts {
@@ -368,4 +377,11 @@ func TestGatewayHandlerMessages_InterceptWarmup_AntigravityAccount_ForcePlatform
 	require.True(t, ok, "id should be a string")
 	require.True(t, strings.HasPrefix(respID, "msg_01"))
 	require.Equal(t, "claude-sonnet-4-5", resp["model"])
+}
+
+func (c *fakeSchedulerCache) TryAcquireGroupLifecycleLease(context.Context, int64, time.Duration) (service.SchedulerGroupLifecycleLease, bool, error) {
+	return service.SchedulerGroupLifecycleLease{}, false, nil
+}
+func (c *fakeSchedulerCache) ReleaseGroupLifecycleLease(context.Context, service.SchedulerGroupLifecycleLease) error {
+	return nil
 }

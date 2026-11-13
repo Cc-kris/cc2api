@@ -245,7 +245,9 @@ type SystemSettings struct {
 	PaymentVisibleMethodWxpayEnabled  bool
 
 	// OpenAI 账号调度
+	AccountSchedulingThresholds    map[string]int
 	OpenAIAdvancedSchedulerEnabled bool
+	OpenAISchedulerSettings
 
 	// 余额不足提醒
 	BalanceLowNotifyEnabled         bool

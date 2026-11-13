@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -1056,18 +1057,30 @@ func (p *openAIWSConnPool) acquire(ctx context.Context, req openAIWSAcquireReque
 		return nil, errOpenAIWSConnQueueFull
 	}
 	target.waiters.Add(1)
+	// A non-strict request can use any released connection. Waiting only on a
+	// randomly selected busy sibling can strand a reconnect after its own old
+	// session has already released another slot. Strict preferred requests use
+	// the separate path above and must never migrate to a different connection.
+	candidates := make([]*openAIWSConn, 0, len(ap.conns))
+	for _, candidate := range ap.conns {
+		if candidate != nil {
+			candidates = append(candidates, candidate)
+		}
+	}
 	ap.mu.Unlock()
 	closeOpenAIWSConns(evicted)
 	defer target.waiters.Add(-1)
 	waitStart := time.Now()
 	p.metrics.acquireQueueWaitTotal.Add(1)
 
-	if err := target.acquire(ctx); err != nil {
+	acquired, err := acquireAnyOpenAIWSConn(ctx, candidates)
+	if err != nil {
 		if errors.Is(err, errOpenAIWSConnClosed) && retry < 1 {
 			return p.acquire(ctx, req, retry+1)
 		}
 		return nil, err
 	}
+	target = acquired
 	if p.shouldHealthCheckConn(target) {
 		if err := target.pingWithTimeout(openAIWSConnHealthCheckTO); err != nil {
 			target.release()
@@ -1086,6 +1099,34 @@ func (p *openAIWSConnPool) acquire(ctx context.Context, req openAIWSAcquireReque
 	p.metrics.acquireReuseTotal.Add(1)
 	p.ensureTargetIdleAsync(accountID)
 	return lease, nil
+}
+
+// acquireAnyOpenAIWSConn waits without polling or spawning a goroutine per
+// connection. A closed candidate restarts pool selection at the caller.
+func acquireAnyOpenAIWSConn(ctx context.Context, candidates []*openAIWSConn) (*openAIWSConn, error) {
+	cases := make([]reflect.SelectCase, 1, 1+2*len(candidates))
+	cases[0] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ctx.Done())}
+	for _, candidate := range candidates {
+		cases = append(cases,
+			reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(candidate.closedCh)},
+			reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(candidate.leaseCh)},
+		)
+	}
+	chosen, _, _ := reflect.Select(cases)
+	if chosen == 0 {
+		return nil, ctx.Err()
+	}
+	if chosen%2 == 1 {
+		return nil, errOpenAIWSConnClosed
+	}
+	conn := candidates[(chosen-1)/2]
+	select {
+	case <-conn.closedCh:
+		conn.release()
+		return nil, errOpenAIWSConnClosed
+	default:
+		return conn, nil
+	}
 }
 
 func (p *openAIWSConnPool) recordConnPickDuration(duration time.Duration) {
@@ -1669,14 +1710,8 @@ func (p *openAIWSConnPool) effectiveMaxConnsByAccount(account *Account) int {
 	if hardCap <= 0 {
 		return 0
 	}
-	if p.modeRouterV2Enabled() {
-		if account == nil {
-			return hardCap
-		}
-		if account.Concurrency <= 0 {
-			return 0
-		}
-		return account.Concurrency
+	if p.modeRouterV2Enabled() && account != nil && account.Concurrency <= 0 {
+		return 0
 	}
 	if account == nil || !p.dynamicMaxConnsEnabled() {
 		return hardCap

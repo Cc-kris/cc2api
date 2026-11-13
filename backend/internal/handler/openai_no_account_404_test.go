@@ -27,6 +27,11 @@ func newOpenAINoAccountTestHandler(t *testing.T, accounts []service.Account, ups
 	cfg.Gateway.MaxAccountSwitches = 1
 	billingCacheSvc := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
 	t.Cleanup(billingCacheSvc.Stop)
+	// Model diagnosis now queries persistent group membership rather than
+	// the transient schedulable list; these fixtures belong to the key's group.
+	for i := range accounts {
+		accounts[i].GroupIDs = []int64{4301}
+	}
 	gatewaySvc := service.NewOpenAIGatewayService(
 		&openAIWSSilentRetryAccountRepoStub{accounts: accounts},
 		nil, nil, nil, nil, nil, nil, cfg, nil, nil,

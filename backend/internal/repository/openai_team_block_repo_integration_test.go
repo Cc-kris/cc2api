@@ -57,10 +57,11 @@ func TestOpenAITeamBlockRepositoryPostgresTransaction(t *testing.T) {
 	require.NotNil(t, lease)
 	require.Equal(t, eventID, lease.EventID)
 
-	// account_changed events are deliberately deduplicated for one second;
-	// wait beyond that window so this test proves the recovery outbox writes
-	// are sent after the RETURNING rows have been closed.
-	time.Sleep(schedulerOutboxDedupWindow + 20*time.Millisecond)
+	// Claim the pending events to release their dedup keys before recovery.
+	// Preserve the existing assertion that recovery inserts two further events;
+	// pending-key deduplication no longer expires on a wall-clock window.
+	_, err = NewSchedulerOutboxRepository(integrationDB).ListAfterAndReleaseDedup(ctx, 0, 10000)
+	require.NoError(t, err)
 	cleared, err := repo.ClearTeamAfterProbe(ctx, *lease)
 	require.NoError(t, err)
 	require.True(t, cleared)

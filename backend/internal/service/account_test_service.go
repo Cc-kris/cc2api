@@ -532,7 +532,6 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	// account model mapping, and compact mode applies compact-only mapping on top.
 	testModelID = account.GetMappedModel(testModelID)
 	if mode == AccountTestModeCompact {
-		testModelID = resolveOpenAICompactForwardModel(account, testModelID)
 		return s.testOpenAICompactConnection(c, account, testModelID)
 	}
 
@@ -926,17 +925,33 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	c.Writer.Header().Set("X-Accel-Buffering", "no")
 	c.Writer.Flush()
 
-	payloadBytes, _ := json.Marshal(createOpenAICompactProbePayload(testModelID))
+	if isOAuth {
+		testModelID = normalizeOpenAIModelForUpstream(account, testModelID)
+	}
+	payloadBytes, _ := json.Marshal(createOpenAICompactProbePayload(testModelID, isOAuth))
 	s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})
 
 	newProbeRequest := func(target string) (*http.Request, error) {
-		req, err := http.NewRequestWithContext(ctx, "POST", target, bytes.NewReader(payloadBytes))
+		requestPayload := payloadBytes
+		if target == legacyCompactURL {
+			legacy := createOpenAICompactProbePayload(resolveOpenAICompactForwardModel(account, testModelID))
+			delete(legacy, "stream")
+			input := legacy["input"].([]any)
+			legacy["input"] = input[:1]
+			requestPayload, _ = json.Marshal(legacy)
+		}
+		req, err := http.NewRequestWithContext(ctx, "POST", target, bytes.NewReader(requestPayload))
 		if err != nil {
 			return nil, err
 		}
 		req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
+		if target == legacyCompactURL {
+			req.Header.Set("Accept", "application/json")
+		} else {
+			req.Header.Set("Accept", "text/event-stream")
+			ensureOpenAIRemoteCompactionV2BetaFeature(req.Header)
+		}
 		req.Header.Set("Authorization", "Bearer "+authToken)
 		req.Header.Set("OpenAI-Beta", "responses=experimental")
 		canonical := resolveCodexOutboundIdentity("")
@@ -1020,7 +1035,10 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 		return s.sendErrorAndEnd(c, fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body)))
 	}
 
-	s.sendEvent(c, TestEvent{Type: "content", Text: "Compact probe succeeded"})
+	if !openAICompactProbeFoundCompactionItem(body) {
+		return s.sendErrorAndEnd(c, "Upstream returned 2xx without a compaction output item (native remote compaction v2 unsupported on this chain)")
+	}
+	s.sendEvent(c, TestEvent{Type: "content", Text: "Compact probe succeeded (native remote compaction v2)"})
 	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 	return nil
 }

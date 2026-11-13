@@ -1659,7 +1659,9 @@ func TestOpenAIStreamingHeadersOverride(t *testing.T) {
 
 	go func() {
 		defer func() { _ = pw.Close() }()
-		_, _ = pw.Write([]byte("data: {\"type\":\"response.completed\",\"response\":{}}\n\n"))
+		// Header overrides are a success-path contract. V04-R11 intentionally
+		// rejects the former empty completed fixture, so supply real output.
+		_, _ = pw.Write([]byte("data: {\"type\":\"response.completed\",\"response\":{\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"header-fixture\"}]}],\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n"))
 	}()
 
 	_, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, &Account{ID: 1}, time.Now(), "model", "model")

@@ -1406,6 +1406,8 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 		"routing_hint_affinity",
 	)
 
+	applyOpenAICodexBetaFeatures(c, account, headers)
+	s.guardOpenAICodexTurnStateEcho(c, account, headers)
 	return headers, sessionResolution
 }
 
@@ -2035,12 +2037,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 
 	stateStore := s.getOpenAIWSStateStore()
 	groupID := getOpenAIGroupIDFromContext(c)
-	sessionHash := s.GenerateSessionHash(c, nil)
-	if sessionHash == "" {
-		var legacySessionHash string
-		sessionHash, legacySessionHash = openAIWSSessionHashesFromID(promptCacheKey)
-		attachOpenAILegacySessionHashToGin(c, legacySessionHash)
-	}
+	sessionHash := openAIHTTPWSExecutionScope(c, payloadAsJSONBytes(reqBody))
 	if turnState == "" && stateStore != nil && sessionHash != "" {
 		if savedTurnState, ok := stateStore.GetSessionTurnState(groupID, sessionHash); ok {
 			turnState = savedTurnState
@@ -2313,6 +2310,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		if clientDisconnected {
 			return
 		}
+		s.noteOpenAICodexTurnStateProvenance(c, account)
 		frame := make([]byte, 0, len(message)+8)
 		frame = append(frame, "data: "...)
 		frame = append(frame, message...)
@@ -2569,6 +2567,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 			responseID = strings.TrimSpace(gjson.GetBytes(finalResponse, "id").String())
 		}
 
+		s.noteOpenAICodexTurnStateProvenance(c, account)
 		c.Data(http.StatusOK, "application/json", finalResponse)
 	} else {
 		flushStreamWriter(true)
@@ -2632,7 +2631,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	token string,
 	firstClientMessage []byte,
 	hooks *OpenAIWSIngressHooks,
-) error {
+) (retErr error) {
 	if s == nil {
 		return errors.New("service is nil")
 	}
@@ -2647,6 +2646,17 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	}
 	if strings.TrimSpace(token) == "" {
 		return errors.New("token is empty")
+	}
+
+	ctx, cleanupPreemption, _ := s.BeginOpenAIWSIngressSessionPreemptionWithClient(ctx, c, account, firstClientMessage, clientConn)
+	defer cleanupPreemption()
+	defer func() {
+		if isOpenAIWSSessionPreempted(ctx) {
+			retErr = errOpenAIWSSessionPreempted
+		}
+	}()
+	if compaction := ParseOpenAIWSCompactionContext(firstClientMessage, c.Request.Header); compaction.NativeResponses {
+		MarkOpenAINativeCompactionV2(c)
 	}
 
 	// 预取一次 OpenAI Fast Policy settings，绑定到 ctx，让该 WS session
@@ -2768,7 +2778,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		if !gjson.ValidBytes(trimmed) {
 			return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", errors.New("invalid json"))
 		}
-		if compaction := ParseOpenAICompactionContext(trimmed, nil, "/v1/responses"); compaction.NativeResponses && s.settingService != nil && !s.settingService.IsOpenAIRemoteCompactionV2Enabled(ctx) {
+		if compaction := ParseOpenAIWSCompactionContext(trimmed, nil); compaction.NativeResponses && s.settingService != nil && !s.settingService.IsOpenAIRemoteCompactionV2Enabled(ctx) {
 			eventBytes, _ := json.Marshal(map[string]any{
 				"type": "error",
 				"error": map[string]string{
@@ -2947,7 +2957,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	turnState := strings.TrimSpace(c.GetHeader(openAIWSTurnStateHeader))
 	stateStore := s.getOpenAIWSStateStore()
 	groupID := getOpenAIGroupIDFromContext(c)
-	sessionHash := s.GenerateSessionHash(c, firstPayload.rawForHash)
+	sessionHash, _ := resolveOpenAIWSExecutionScope(c, firstClientMessage, getAPIKeyIDFromContext(c))
 	if turnState == "" && stateStore != nil && sessionHash != "" {
 		if savedTurnState, ok := stateStore.GetSessionTurnState(groupID, sessionHash); ok {
 			turnState = savedTurnState
@@ -3487,7 +3497,13 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 						)
 					}
 				}
-				if err := writeClientMessage(upstreamMessage); err != nil {
+				clientMessage := upstreamMessage
+				if eventType == "error" || eventType == "response.failed" {
+					if rewritten, changed := sanitizeOpenAICapacityShedErrorCodeForClient(clientMessage); changed {
+						clientMessage = rewritten
+					}
+				}
+				if err := writeClientMessage(clientMessage); err != nil {
 					if isOpenAIWSClientDisconnectError(err) {
 						clientDisconnected = true
 						closeStatus, closeReason := summarizeOpenAIWSReadCloseError(err)

@@ -159,6 +159,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import type { Account } from '@/types'
+import { parseSchedulingThresholdReason } from '@/utils/schedulingThreshold'
 import { formatCountdown, formatDateTime, formatCountdownWithSuffix, formatTime } from '@/utils/format'
 
 const { t } = useI18n()
@@ -367,7 +368,7 @@ const statusText = computed(() => {
     return t('admin.accounts.status.error')
   }
   if (isTempUnschedulable.value) {
-    return t('admin.accounts.status.tempUnschedulable')
+    return parseSchedulingThresholdReason(props.account.temp_unschedulable_reason) ? t('admin.accounts.status.usageThreshold') : t('admin.accounts.status.tempUnschedulable')
   }
   if (props.account.status !== 'active') {
     return t(`admin.accounts.status.${props.account.status}`)

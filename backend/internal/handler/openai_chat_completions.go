@@ -186,11 +186,13 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			)
 			if len(failedAccountIDs) == 0 {
 				// 没有账号支持该模型 → 404 model_not_found；其他原因仍 503（V02-T28）。
+				// 永久配置诊断（404）优先于瞬时冷却提示；都未命中时保留 V02 的容量占用标记（V04 AC16）。
 				cls := classifyOpenAINoAccountError(c, h.gatewayService, apiKey.GroupID, selectionModel, reqModel, requestPlatform)
-				if !cls.ModelNotFound {
+				diagnosis := classifySelectionFailureError(err, cls)
+				if !diagnosis.ModelNotFound {
 					markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
 				}
-				h.handleStreamingAwareError(c, cls.Status, cls.ErrType, cls.Message, streamStarted)
+				h.handleStreamingAwareError(c, diagnosis.Status, diagnosis.ErrType, diagnosis.Message, streamStarted)
 				return
 			} else {
 				if lastFailoverErr != nil {

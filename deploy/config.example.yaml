@@ -328,6 +328,9 @@ gateway:
       queue: 0.7
       error_rate: 0.8
       ttft: 0.5
+      # Opt-in reset proximity and quota headroom signals; zero preserves existing scoring.
+      reset: 0.0
+      quota_headroom: 0.0
   # OpenAI HTTP upstream protocol strategy.
   # OpenAI HTTP 上游协议策略（默认 HTTP/2；代理明确不兼容时可临时回退 HTTP/1.1）。
   openai_http2:
@@ -372,6 +375,15 @@ gateway:
   # Stream data interval timeout (seconds), 0=disable
   # 流数据间隔超时（秒），0=禁用
   stream_data_interval_timeout: 180
+  # Gemini transient retries on the same account (0-10; 0 means one attempt).
+  # Gemini 同账号瞬态重试次数（0-10；0 表示只请求一次）。
+  max_same_account_retries_gemini: 4
+  # Absolute deadline for first semantic OpenAI output; metadata does not reset it.
+  # 首个有效输出的绝对超时（秒）；0 禁用，但不禁用上面的流数据空闲超时。
+  openai_first_output_timeout_seconds: 0
+  # Override for high/xhigh reasoning; 0 inherits the general deadline.
+  # high/xhigh 推理首输出超时；0 使用通用配置。
+  openai_high_effort_first_output_timeout_seconds: 0
   # Stream keepalive interval (seconds), 0=disable
   # 流式 keepalive 间隔（秒），0=禁用
   stream_keepalive_interval: 10
@@ -432,6 +444,8 @@ gateway:
   # Scheduling configuration
   # 调度配置
   scheduling:
+    # Prefer the soonest future usage reset among equal-priority accounts (opt-in).
+    prefer_soonest_reset: false
     # Sticky session max waiting queue size
     # 粘性会话最大排队长度
     sticky_session_max_waiting: 3

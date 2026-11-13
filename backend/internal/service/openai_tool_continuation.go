@@ -1,6 +1,73 @@
 package service
 
-import "strings"
+import (
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
+	"strings"
+)
+
+func RemovePreviousResponseIDFromBody(body []byte) []byte {
+	coverage := AnalyzeToolCallOutputContextCoverageBytes(body)
+	if coverage.HasFunctionCallOutput && !coverage.ContextCoversAllCallIDs {
+		return body
+	}
+	result, err := sjson.DeleteBytes(body, "previous_response_id")
+	if err != nil {
+		return body
+	}
+	return result
+}
+
+type ToolCallOutputContextCoverage struct {
+	HasFunctionCallOutput   bool
+	ContextCoversAllCallIDs bool
+}
+
+// Each output must have its own context. One matching call does not authorize
+// detaching another output from the account holding previous_response_id.
+func AnalyzeToolCallOutputContextCoverageBytes(body []byte) ToolCallOutputContextCoverage {
+	result := ToolCallOutputContextCoverage{}
+	input := gjson.GetBytes(body, "input")
+	if !input.IsArray() {
+		return result
+	}
+	outputs, contexts := map[string]struct{}{}, map[string]struct{}{}
+	missing := false
+	input.ForEach(func(_, item gjson.Result) bool {
+		typ := item.Get("type").String()
+		switch {
+		case isCodexToolCallOutputItemType(typ):
+			result.HasFunctionCallOutput = true
+			id := strings.TrimSpace(item.Get("call_id").String())
+			if id == "" {
+				missing = true
+			} else {
+				outputs[id] = struct{}{}
+			}
+		case isCodexToolCallContextItemType(typ):
+			id := strings.TrimSpace(item.Get("call_id").String())
+			if id != "" {
+				contexts[id] = struct{}{}
+			}
+		case typ == "item_reference":
+			id := strings.TrimSpace(item.Get("id").String())
+			if id != "" {
+				contexts[id] = struct{}{}
+			}
+		}
+		return true
+	})
+	if !result.HasFunctionCallOutput || missing {
+		return result
+	}
+	for id := range outputs {
+		if _, ok := contexts[id]; !ok {
+			return result
+		}
+	}
+	result.ContextCoversAllCallIDs = true
+	return result
+}
 
 // ToolContinuationSignals 聚合工具续链相关信号，避免重复遍历 input。
 type ToolContinuationSignals struct {

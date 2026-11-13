@@ -217,7 +217,9 @@ type SystemSettings struct {
 	PaymentVisibleMethodWxpayEnabled  bool   `json:"payment_visible_method_wxpay_enabled"`
 
 	// OpenAI account scheduling
-	OpenAIAdvancedSchedulerEnabled bool `json:"openai_advanced_scheduler_enabled"`
+	AccountSchedulingThresholds    map[string]int `json:"account_scheduling_thresholds"`
+	OpenAIAdvancedSchedulerEnabled bool           `json:"openai_advanced_scheduler_enabled"`
+	service.OpenAISchedulerSettings
 
 	// Payment configuration
 	PaymentEnabled                   bool     `json:"payment_enabled"`

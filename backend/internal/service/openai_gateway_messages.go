@@ -52,6 +52,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	}
 	anthropicDigestReq := cloneAnthropicRequestForDigest(&anthropicReq)
 	originalModel := anthropicReq.Model
+	ctx = upstreamErrorModelContext(ctx, []string{originalModel})
 	applyOpenAICompatModelNormalization(&anthropicReq)
 	normalizedModel := anthropicReq.Model
 	clientStream := anthropicReq.Stream // client's original stream preference
@@ -428,6 +429,10 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 			)
 			return s.ForwardAsAnthropic(ctx, c, account, body, promptCacheKey, defaultMappedModel)
 		}
+		if account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode) && !isUserContentRejectionBody(respBody) && !isOpenAIDeterministicRequestError(resp.StatusCode, respBody) {
+			resp.Body = io.NopCloser(bytes.NewReader(respBody))
+			return nil, poolModeStatusFailover(resp, account)
+		}
 		if s.shouldFailoverOpenAIUpstreamResponse(ctx, resp.StatusCode, upstreamMsg, respBody) {
 			upstreamDetail := ""
 			if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
@@ -451,7 +456,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 			return nil, &UpstreamFailoverError{
 				StatusCode:             resp.StatusCode,
 				ResponseBody:           respBody,
-				RetryableOnSameAccount: isPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody),
+				RetryableOnSameAccount: account.IsPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody),
 			}
 		}
 		// Non-failover error: return Anthropic-formatted error to client
@@ -564,6 +569,10 @@ func (s *OpenAIGatewayService) forwardAnthropicViaNativeMessages(ctx context.Con
 	if resp.StatusCode >= http.StatusBadRequest {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 		upstreamMsg := sanitizeUpstreamErrorMessage(extractUpstreamErrorMessage(respBody))
+		if account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode) && !isUserContentRejectionBody(respBody) && !isOpenAIDeterministicRequestError(resp.StatusCode, respBody) {
+			resp.Body = io.NopCloser(bytes.NewReader(respBody))
+			return nil, poolModeStatusFailover(resp, account)
+		}
 		if s.shouldFailoverOpenAIUpstreamResponse(ctx, resp.StatusCode, upstreamMsg, respBody) {
 			s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
 			return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: respBody, ResponseHeaders: resp.Header.Clone()}
@@ -710,6 +719,10 @@ func (s *OpenAIGatewayService) forwardAnthropicViaRawChatCompletions(
 	if resp.StatusCode >= http.StatusBadRequest {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 		upstreamMsg := sanitizeUpstreamErrorMessage(extractUpstreamErrorMessage(respBody))
+		if account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode) && !isUserContentRejectionBody(respBody) && !isOpenAIDeterministicRequestError(resp.StatusCode, respBody) {
+			resp.Body = io.NopCloser(bytes.NewReader(respBody))
+			return nil, poolModeStatusFailover(resp, account)
+		}
 		if s.shouldFailoverOpenAIUpstreamResponse(ctx, resp.StatusCode, upstreamMsg, respBody) {
 			s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
 			return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: respBody, ResponseHeaders: resp.Header.Clone()}

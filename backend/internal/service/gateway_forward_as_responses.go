@@ -149,6 +149,13 @@ func (s *GatewayService) ForwardAsResponses(
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	// Pool responses use only the handler's retry budget, just like /messages.
+	// Preserve the pool reason even for excluded statuses so they cannot acquire
+	// an unrelated retry budget or cool down the local account.
+	if resp.StatusCode >= 400 && account.IsPoolMode() {
+		return nil, poolModeStatusFailover(resp, account)
+	}
+
 	// 12. Handle error response with failover
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))

@@ -560,7 +560,15 @@ func TestFrontendServer_Middleware(t *testing.T) {
 				router.ServeHTTP(w, req)
 
 				assert.Equal(t, http.StatusFound, w.Code)
-				assert.Equal(t, frontendLoginPath, w.Header().Get("Location"))
+				location, err := w.Result().Location()
+				require.NoError(t, err)
+				assert.Equal(t, frontendLoginPath, location.Path)
+				if path == "/" || path == "/home" {
+					assert.Empty(t, location.RawQuery)
+				} else {
+					assert.Equal(t, path, location.Query().Get("redirect"))
+				}
+				assert.Equal(t, "no-store", w.Header().Get("Cache-Control"))
 				assert.Equal(t, robotsNoIndexHeader, w.Header().Get("X-Robots-Tag"))
 			})
 		}
@@ -691,7 +699,15 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 				router.ServeHTTP(w, req)
 
 				assert.Equal(t, http.StatusFound, w.Code)
-				assert.Equal(t, frontendLoginPath, w.Header().Get("Location"))
+				location, err := w.Result().Location()
+				require.NoError(t, err)
+				assert.Equal(t, frontendLoginPath, location.Path)
+				if path == "/" || path == "/home" {
+					assert.Empty(t, location.RawQuery)
+				} else {
+					assert.Equal(t, path, location.Query().Get("redirect"))
+				}
+				assert.Equal(t, "no-store", w.Header().Get("Cache-Control"))
 				assert.Equal(t, robotsNoIndexHeader, w.Header().Get("X-Robots-Tag"))
 			})
 		}

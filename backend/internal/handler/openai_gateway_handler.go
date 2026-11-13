@@ -210,7 +210,11 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 
 	setOpsRequestContext(c, "", false)
 	sessionHashBody := body
+	service.CaptureOpenAIWSExecutionScope(c, body)
 	if service.IsOpenAIResponsesCompactPathForTest(c) {
+		if gjson.GetBytes(body, "stream").Bool() {
+			service.MarkOpenAICompactClientStream(c)
+		}
 		if compactSeed := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String()); compactSeed != "" {
 			c.Set(service.OpenAICompactSessionSeedKeyForTest(), compactSeed)
 		}
@@ -238,7 +242,13 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		h.errorResponse(c, http.StatusServiceUnavailable, "remote_compaction_v2_disabled", "OpenAI Remote Compaction V2 is temporarily disabled")
 		return
 	}
+	keepaliveInterval := 15 * time.Second
+	if h.cfg != nil {
+		keepaliveInterval = time.Duration(h.cfg.Gateway.StreamKeepaliveInterval) * time.Second
+	}
+	defer service.StartOpenAICompactSSEKeepalive(c, keepaliveInterval)()
 	if compactionContext.NativeResponses {
+		service.MarkOpenAINativeCompactionV2(c)
 		reqCtx := service.WithOpenAICompactionContext(c.Request.Context(), compactionContext)
 		c.Request = c.Request.WithContext(reqCtx)
 	}
@@ -377,6 +387,11 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		selectionGroupID = codexRoute.OrchestratorGroupID
 	}
 	selectionModel := resolveChannelMappedAccountSelectionModel(reqModel, channelMapping, !codexDecision.UsesOrchestratorGroup())
+	forwardModel := reqModel
+	if channelMapping.Mapped && !codexDecision.UsesOrchestratorGroup() {
+		forwardModel = channelMapping.MappedModel
+	}
+	c.Request = c.Request.WithContext(service.WithOpenAIForwardModel(c.Request.Context(), forwardModel, isOpenAIRemoteCompactPath(c)))
 	c.Set(service.OpenAICodexSystemBackgroundContextKey, codexSystemBackgroundTurn)
 	usageChannelMapping := channelMapping
 	if codexTextBypassTurn {
@@ -448,7 +463,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	// prompt-prefix affinity key. This keeps later turns on the account whose
 	// upstream prompt cache was populated by the first turn.
 	sessionHash := h.gatewayService.GenerateHTTPStableSessionHash(c, sessionHashBody)
-	requireCompact := isOpenAIRemoteCompactPath(c) || compactionContext.NativeResponses
+	requireCompact := isOpenAIRemoteCompactPath(c)
 
 	maxAccountSwitches := effectiveMaxAccountSwitches(c.Request.Context(), h.cfg, h.maxAccountSwitches)
 	switchCount := 0
@@ -548,11 +563,13 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					return
 				}
 				// 没有账号支持该模型 → 404 model_not_found；其他原因仍 503（V02-T28）。
+				// 永久配置诊断（404）优先于瞬时冷却提示；都未命中时保留 V02 的容量占用标记（V04 AC16）。
 				cls := classifyOpenAINoAccountError(c, h.gatewayService, selectionGroupID, selectionModel, reqModel, requestPlatform)
-				if !cls.ModelNotFound {
+				diagnosis := classifySelectionFailureError(err, cls)
+				if !diagnosis.ModelNotFound {
 					markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
 				}
-				h.handleStreamingAwareError(c, cls.Status, cls.ErrType, cls.Message, streamStarted)
+				h.handleStreamingAwareError(c, diagnosis.Status, diagnosis.ErrType, diagnosis.Message, streamStarted)
 				return
 			}
 			billLastObservedResponsesAttempt()
@@ -597,7 +614,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		// Forward request
 		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())
 		forwardStart := time.Now()
-		writerSizeBeforeForward := c.Writer.Size()
+		writerSizeBeforeForward := service.OpenAICompactKeepaliveAdjustedWrittenSize(c)
 		// Current Codex clients display generated images only after executing the
 		// local image_gen extension. Keep the channel mapping as the image-capable
 		// routing signal, but let the text orchestrator decide whether the user's
@@ -672,7 +689,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 						lastObservedAccount = account
 					}
 					// 已写出内容时，只有可续写的中断（SafeToFailoverAfterWrite）才能换号接着写
-					wroteDuringForward := c.Writer.Size() != writerSizeBeforeForward
+					wroteDuringForward := service.OpenAICompactKeepaliveAdjustedWrittenSize(c) != writerSizeBeforeForward
 					if wroteDuringForward && !failoverErr.SafeToFailoverAfterWrite {
 						streamStarted = true
 						billLastObservedResponsesAttempt()
@@ -1047,11 +1064,13 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 			)
 			if len(failedAccountIDs) == 0 {
 				if err != nil {
+					// 永久配置诊断（404）优先于瞬时冷却提示；都未命中时保留 V02 的容量占用标记（V04 AC16）。
 					cls := classifyOpenAINoAccountError(c, h.gatewayService, apiKey.GroupID, currentRoutingModel, reqModel, requestPlatform)
-					if !cls.ModelNotFound {
+					diagnosis := classifySelectionFailureError(err, cls)
+					if !diagnosis.ModelNotFound {
 						markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
 					}
-					h.anthropicStreamingAwareError(c, cls.Status, cls.ErrType, cls.Message, streamStarted)
+					h.anthropicStreamingAwareError(c, diagnosis.Status, diagnosis.ErrType, diagnosis.Message, streamStarted)
 					return
 				}
 			} else {
@@ -1600,7 +1619,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			return
 		}
 	}
-	if compaction := service.ParseOpenAICompactionContext(firstMessage, c.Request.Header, "/v1/responses"); compaction.NativeResponses && !h.gatewayService.IsOpenAIRemoteCompactionV2Enabled(ctx) {
+	if compaction := service.ParseOpenAIWSCompactionContext(firstMessage, c.Request.Header); compaction.NativeResponses && !h.gatewayService.IsOpenAIRemoteCompactionV2Enabled(ctx) {
 		writeOpenAIRemoteCompactionV2DisabledWSError(ctx, wsConn)
 		closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "remote_compaction_v2_disabled")
 		return
@@ -1811,7 +1830,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		return h.gatewayService.ReplaceModelInBody(payload, mapping.MappedModel), nil
 	}
 	excludedAccountIDs := map[int64]struct{}{}
-	canSwitchAccountSilently := previousResponseID == ""
+	toolCoverage := service.AnalyzeToolCallOutputContextCoverageBytes(firstMessage)
+	previousResponseCanMove := !toolCoverage.HasFunctionCallOutput || toolCoverage.ContextCoversAllCallIDs
+	canSwitchAccountSilently := previousResponseID == "" && previousResponseCanMove
 	ordinaryNativeImageWS := isOrdinaryNativeImage(firstMessage, reqModel, codexRouteWS)
 	selectionTransportWS := service.OpenAIUpstreamTransportResponsesWebsocketV2
 	if requestPlatform == service.PlatformGrok {
@@ -1825,6 +1846,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		requiredCapabilityWS = service.OpenAIEndpointCapabilityResponses
 	}
 
+	preemptionArmed := false
 	for attempt := 1; attempt <= maxOpenAIWSSilentSwitchAttempts; attempt++ {
 		selection, scheduleDecision, err := h.gatewayService.SelectAccountWithSchedulerForCapability(
 			ctx,
@@ -1836,7 +1858,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			selectionTransportWS,
 			requiredCapabilityWS,
 			false,
-			previousResponseID == "",
+			previousResponseCanMove,
 			true,
 			requestPlatform,
 		)
@@ -1883,6 +1905,14 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		}
 
 		account := selection.Account
+		if !preemptionArmed {
+			preemptCtx, cleanup, armed := h.gatewayService.BeginOpenAIWSIngressSessionPreemptionWithClient(ctx, c, account, firstMessage, wsConn)
+			if armed {
+				ctx = preemptCtx
+				preemptionArmed = true
+				defer cleanup()
+			}
+		}
 		useCodexImageExtensionWS := codexImageExtensionCandidateWS
 		c.Set(service.OpenAICodexImageGenerationExtensionContextKey, useCodexImageExtensionWS)
 		wsFirstMessage := firstMessage
@@ -1896,6 +1926,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				return
 			}
 			wsFirstMessage = mappedBody
+		}
+		if previousResponseID != "" && !scheduleDecision.StickyPreviousHit && previousResponseCanMove {
+			wsFirstMessage = service.RemovePreviousResponseIDFromBody(wsFirstMessage)
 		}
 		accountMaxConcurrency := account.Concurrency
 		if selection.WaitPlan != nil && selection.WaitPlan.MaxConcurrency > 0 {
@@ -2121,6 +2154,10 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		}
 
 		if err := h.gatewayService.ProxyResponsesWebSocketFromClient(ctx, c, wsConn, account, token, wsFirstMessage, hooks); err != nil {
+			if service.IsOpenAIWSSessionPreemptedError(err) {
+				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "session preempted by a newer connection")
+				return
+			}
 			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
 			closeStatus, closeReason := summarizeWSCloseErrorForLog(err)
 			reqLog.Warn("openai.websocket_proxy_failed",
@@ -2724,6 +2761,10 @@ func (h *OpenAIGatewayHandler) mapUpstreamError(statusCode int) (int, string, st
 
 // handleStreamingAwareError handles errors that may occur after streaming has started
 func (h *OpenAIGatewayHandler) handleStreamingAwareError(c *gin.Context, status int, errType, message string, streamStarted bool) {
+	if service.StopOpenAICompactSSEKeepaliveCommitted(c) {
+		service.WriteOpenAICompactSSEFailureMessage(c, status, errType, message)
+		return
+	}
 	if streamStarted {
 		// /v1/responses 的严格 SDK（Codex CLI）要求终止事件必须属于
 		// response.completed/failed/incomplete/cancelled 集合。
@@ -2780,6 +2821,10 @@ func shouldLogOpenAIForwardFailureAsWarn(c *gin.Context, wroteFallback bool) boo
 
 // errorResponse returns OpenAI API format error response
 func (h *OpenAIGatewayHandler) errorResponse(c *gin.Context, status int, errType, message string) {
+	if service.StopOpenAICompactSSEKeepaliveCommitted(c) {
+		service.WriteOpenAICompactSSEFailureMessage(c, status, errType, message)
+		return
+	}
 	c.JSON(status, gin.H{
 		"error": gin.H{
 			"type":    errType,

@@ -2314,6 +2314,28 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingPaymentVisibleMethodAlipayEnabled] = strconv.FormatBool(settings.PaymentVisibleMethodAlipayEnabled)
 	updates[SettingPaymentVisibleMethodWxpayEnabled] = strconv.FormatBool(settings.PaymentVisibleMethodWxpayEnabled)
 	updates[openAIAdvancedSchedulerSettingKey] = strconv.FormatBool(settings.OpenAIAdvancedSchedulerEnabled)
+	effectiveWeights := settings.OpenAISchedulerSettings.weights((&OpenAIGatewayService{cfg: s.cfg}).openAIWSSchedulerWeights())
+	if strings.Join([]string{settings.Priority, settings.Load, settings.Queue, settings.ErrorRate, settings.TTFT, settings.Reset}, "") != "" && effectiveWeights.Priority+effectiveWeights.Load+effectiveWeights.Queue+effectiveWeights.ErrorRate+effectiveWeights.TTFT+effectiveWeights.Reset+effectiveWeights.QuotaHeadroom <= 0 {
+		return nil, infraerrors.BadRequest("INVALID_SCHEDULER_OVERRIDE", "effective scheduler weights must not all be zero")
+	}
+	controls, controlErr := settings.OpenAISchedulerSettings.settingValues()
+	if controlErr != nil {
+		return nil, controlErr
+	}
+	for k, v := range controls {
+		updates[k] = v
+	}
+	if settings.AccountSchedulingThresholds != nil {
+		thresholds, err := validateAndNormalizeAccountSchedulingThresholds(settings.AccountSchedulingThresholds)
+		if err != nil {
+			return nil, err
+		}
+		blob, err := json.Marshal(thresholds)
+		if err != nil {
+			return nil, err
+		}
+		updates[SettingKeyAccountSchedulingThresholds] = string(blob)
+	}
 
 	// 余额、订阅到期与账号限额通知
 	updates[SettingKeyBalanceLowNotifyEnabled] = strconv.FormatBool(settings.BalanceLowNotifyEnabled)
@@ -2471,6 +2493,9 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 	})
 	// 版本号还取决于自动同步写入的 synced 键，此处只失效缓存，不回填陈旧值。
 	s.InvalidateOpenAICodexClientVersionCache()
+	// V04：调度阈值与 OpenAI 调度开关缓存一并失效，避免旧值跨保存泄漏。
+	accountSchedulingThresholdsCache.Store(&cachedAccountSchedulingThresholds{})
+	openAISchedulerControlsCache.Store(nil)
 	openAIAdvancedSchedulerSettingSF.Forget(openAIAdvancedSchedulerSettingKey)
 	openAIAdvancedSchedulerSettingCache.Store(&cachedOpenAIAdvancedSchedulerSetting{
 		enabled:   settings.OpenAIAdvancedSchedulerEnabled,
@@ -3912,6 +3937,8 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	result.PaymentVisibleMethodAlipayEnabled = settings[SettingPaymentVisibleMethodAlipayEnabled] == "true"
 	result.PaymentVisibleMethodWxpayEnabled = settings[SettingPaymentVisibleMethodWxpayEnabled] == "true"
 	result.OpenAIAdvancedSchedulerEnabled = settings[openAIAdvancedSchedulerSettingKey] == "true"
+	result.OpenAISchedulerSettings = parseOpenAISchedulerSettings(settings)
+	result.AccountSchedulingThresholds, _ = parseAccountSchedulingThresholdsSetting(settings[SettingKeyAccountSchedulingThresholds])
 
 	// 余额、订阅到期与账号限额通知
 	result.BalanceLowNotifyEnabled = settings[SettingKeyBalanceLowNotifyEnabled] == "true"

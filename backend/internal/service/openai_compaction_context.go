@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/tidwall/gjson"
 )
 
 // OpenAICompactionContext is the request-scoped protocol decision shared by
@@ -36,8 +38,26 @@ func ParseOpenAICompactionContext(body []byte, headers http.Header, path string)
 			}
 		}
 	}
-	ctx.NativeResponses = ctx.RemoteCompactionV2 && ctx.CompactionTrigger != ""
+	// A trigger on the streaming Responses wire is sufficient evidence of v2,
+	// even when an intermediate gateway stripped the client's beta header.
+	legacy := strings.HasSuffix(strings.TrimRight(strings.TrimSpace(path), "/"), "/responses/compact")
+	ctx.NativeResponses = !legacy && ctx.CompactionTrigger != "" && (ctx.RemoteCompactionV2 || gjson.GetBytes(body, "stream").Bool())
 	if ctx.NativeResponses {
+		ctx.RemoteCompactionV2 = true
+	}
+	if ctx.NativeResponses {
+		ctx.SessionBeta = "responses=experimental,remote_compaction_v2"
+	}
+	return ctx
+}
+
+// ParseOpenAIWSCompactionContext treats a WebSocket response.create as a
+// streaming wire even when the client omits the redundant stream field.
+func ParseOpenAIWSCompactionContext(body []byte, headers http.Header) OpenAICompactionContext {
+	ctx := ParseOpenAICompactionContext(body, headers, "/v1/responses")
+	if ctx.CompactionTrigger != "" {
+		ctx.NativeResponses = true
+		ctx.RemoteCompactionV2 = true
 		ctx.SessionBeta = "responses=experimental,remote_compaction_v2"
 	}
 	return ctx
@@ -84,4 +104,33 @@ func compactionTriggerFromBody(body []byte) string {
 		return true
 	})
 	return strings.TrimSpace(trigger)
+}
+
+type openAIForwardModelContextKey struct{}
+
+type openAIForwardModel struct {
+	model                  string
+	useCompactModelMapping bool
+}
+
+// WithOpenAIForwardModel records the model present in the forwarded request
+// body after channel mapping and whether the legacy /responses/compact-only
+// model mapping applies. Native remote compaction v2 keeps this false, so
+// channel restriction checks follow the same model chain used by Forward.
+func WithOpenAIForwardModel(ctx context.Context, forwardModel string, useCompactModelMapping bool) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, openAIForwardModelContextKey{}, openAIForwardModel{
+		model:                  forwardModel,
+		useCompactModelMapping: useCompactModelMapping,
+	})
+}
+
+func openAIForwardModelFromContext(ctx context.Context) (openAIForwardModel, bool) {
+	if ctx == nil {
+		return openAIForwardModel{}, false
+	}
+	forwardModel, ok := ctx.Value(openAIForwardModelContextKey{}).(openAIForwardModel)
+	return forwardModel, ok
 }

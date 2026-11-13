@@ -352,7 +352,8 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						zap.String("platform", platform),
 						zap.Error(err),
 					)
-					h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "No available accounts: "+err.Error(), streamStarted)
+					diagnosis := classifySelectionFailureError(err, classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, selectionModel, reqModel, platform))
+					h.handleStreamingAwareError(c, diagnosis.Status, diagnosis.ErrType, diagnosis.Message, streamStarted)
 					return
 				}
 				action := fs.HandleSelectionExhausted(c.Request.Context())
@@ -474,7 +475,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						h.handleFailoverExhausted(c, failoverErr, service.PlatformGemini, true)
 						return
 					}
-					action := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, failoverErr)
+					action := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, failoverErr, account)
 					switch action {
 					case FailoverContinue:
 						continue
@@ -674,7 +675,8 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						zap.Bool("fallback_used", fallbackUsed),
 						zap.Error(err),
 					)
-					h.handleStreamingAwareError(c, http.StatusServiceUnavailable, "api_error", "No available accounts: "+err.Error(), streamStarted)
+					diagnosis := classifySelectionFailureError(err, classifyNoAccountErrorFromGin(c, h.gatewayService, currentAPIKey, selectionModel, reqModel, platform))
+					h.handleStreamingAwareError(c, diagnosis.Status, diagnosis.ErrType, diagnosis.Message, streamStarted)
 					return
 				}
 				action := fs.HandleSelectionExhausted(c.Request.Context())
@@ -980,7 +982,7 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					if wroteDuringForward || streamCont.Active() {
 						streamStarted = true
 					}
-					action := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, failoverErr)
+					action := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, failoverErr, account)
 					if failoverErr.ObservedUsage != nil && fs.LastObservedAccountID == account.ID {
 						lastObservedAccount = account
 					}

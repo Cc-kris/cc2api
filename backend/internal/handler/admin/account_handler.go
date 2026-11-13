@@ -219,6 +219,7 @@ type CheckMixedChannelRequest struct {
 
 // AccountWithConcurrency extends Account with real-time concurrency info
 type AccountWithConcurrency struct {
+	SchedulerScores []service.AccountSchedulerGroupScore `json:"scheduler_scores,omitempty"`
 	*dto.Account
 	CurrentConcurrency int    `json:"current_concurrency"`
 	TestStatus         string `json:"test_status,omitempty"`
@@ -401,6 +402,10 @@ func (h *AccountHandler) List(c *gin.Context) {
 		_ = g.Wait()
 	}
 
+	var schedulerScores map[int64][]service.AccountSchedulerGroupScore
+	if c.Query("include_scheduler_score") == "true" && h.rateLimitService != nil {
+		schedulerScores = h.rateLimitService.PreviewOpenAISchedulerScores(c.Request.Context(), accounts, h.concurrencyService)
+	}
 	// Build response with concurrency info
 	result := make([]AccountWithConcurrency, len(accounts))
 	for i := range accounts {
@@ -408,6 +413,7 @@ func (h *AccountHandler) List(c *gin.Context) {
 		item := AccountWithConcurrency{
 			Account:            dto.AccountFromService(acc),
 			CurrentConcurrency: concurrencyCounts[acc.ID],
+			SchedulerScores:    schedulerScores[acc.ID],
 		}
 
 		// 添加窗口费用（仅当启用时）

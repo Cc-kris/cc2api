@@ -407,6 +407,13 @@
           </div>
           <div v-if="poolModeEnabled" class="mt-3 space-y-3">
             <div>
+              <label class="input-label">
+                {{ t('admin.accounts.poolModeRetryStatusCodes') }}
+                <input v-model="poolModeRetryStatusCodesInput" type="text" class="input mt-1"
+                  :aria-invalid="poolModeRetryStatusCodesInvalid" :placeholder="DEFAULT_POOL_MODE_RETRY_STATUS_CODES.join(', ')" />
+              </label>
+              <p v-if="poolModeRetryStatusCodesInvalid" role="alert" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ t('admin.accounts.poolModeRetryStatusCodesInvalid') }}</p>
+              <p class="input-hint">{{ t('admin.accounts.poolModeRetryStatusCodesHint', { default: DEFAULT_POOL_MODE_RETRY_STATUS_CODES.join(', ') }) }}</p>
               <label class="input-label">{{ t('admin.accounts.poolModeRetryCount') }}</label>
               <input
                 v-model.number="poolModeRetryCount"
@@ -1199,6 +1206,13 @@
           </div>
           <div v-if="poolModeEnabled" class="mt-3 space-y-3">
             <div>
+              <label class="input-label">
+                {{ t('admin.accounts.poolModeRetryStatusCodes') }}
+                <input v-model="poolModeRetryStatusCodesInput" type="text" class="input mt-1"
+                  :aria-invalid="poolModeRetryStatusCodesInvalid" :placeholder="DEFAULT_POOL_MODE_RETRY_STATUS_CODES.join(', ')" />
+              </label>
+              <p v-if="poolModeRetryStatusCodesInvalid" role="alert" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ t('admin.accounts.poolModeRetryStatusCodesInvalid') }}</p>
+              <p class="input-hint">{{ t('admin.accounts.poolModeRetryStatusCodesHint', { default: DEFAULT_POOL_MODE_RETRY_STATUS_CODES.join(', ') }) }}</p>
               <label class="input-label">{{ t('admin.accounts.poolModeRetryCount') }}</label>
               <input
                 v-model.number="poolModeRetryCount"
@@ -1419,6 +1433,14 @@
 
               <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
+                  <label class="input-label">
+                    {{ t('admin.accounts.tempUnschedulable.scope') }}
+                    <select v-model="rule.scope" class="input mt-1" :aria-label="t('admin.accounts.tempUnschedulable.scope')">
+                      <option value="account">{{ t('admin.accounts.tempUnschedulable.scopeAccount') }}</option>
+                      <option value="model">{{ t('admin.accounts.tempUnschedulable.scopeModel') }}</option>
+                    </select>
+                  </label>
+                  <p class="input-hint">{{ t('admin.accounts.tempUnschedulable.scopeHint') }}</p>
                   <label class="input-label">{{ t('admin.accounts.tempUnschedulable.errorCode') }}</label>
                   <input
                     v-model.number="rule.error_code"
@@ -2557,6 +2579,7 @@ interface ModelMapping {
 }
 
 interface TempUnschedRuleForm {
+  scope?: 'account' | 'model'
   error_code: number | null
   keywords: string
   duration_minutes: number | null
@@ -2600,10 +2623,48 @@ const modelMappings = ref<ModelMapping[]>([])
 const openAICompactModelMappings = ref<ModelMapping[]>([])
 const modelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')
 const allowedModels = ref<string[]>([])
-const DEFAULT_POOL_MODE_RETRY_COUNT = 3
+const DEFAULT_POOL_MODE_RETRY_COUNT = 2
 const MAX_POOL_MODE_RETRY_COUNT = 10
+const DEFAULT_POOL_MODE_RETRY_STATUS_CODES = [400, 401, 403, 429, 502, 503, 504, 529]
 const poolModeEnabled = ref(false)
 const poolModeRetryCount = ref(DEFAULT_POOL_MODE_RETRY_COUNT)
+const poolModeRetryStatusCodesInput = ref('')
+const poolModeRetryStatusCodesInvalid = computed(() => poolModeEnabled.value && poolModeRetryStatusCodesInput.value.trim() !== '[]' &&
+  poolModeRetryStatusCodesInput.value.split(/[,\s]+/).filter(Boolean).some(token =>
+    !/^\d{3}$/.test(token) || Number(token) < 100 || Number(token) > 599))
+
+function parsePoolModeRetryStatusCodes(input: string): number[] {
+  if (!input || !input.trim()) return []
+  const seen = new Set<number>()
+  const out: number[] = []
+  for (const token of input.split(/[,\s]+/)) {
+    const trimmed = token.trim()
+    if (!trimmed) continue
+    const n = Number(trimmed)
+    if (!Number.isFinite(n) || !Number.isInteger(n)) continue
+    if (n < 100 || n > 599) continue
+    if (seen.has(n)) continue
+    seen.add(n)
+    out.push(n)
+  }
+  return out.sort((a, b) => a - b)
+}
+
+function formatPoolModeRetryStatusCodes(value: unknown): string {
+  if (!Array.isArray(value)) return ''
+  if (value.length === 0) return '[]'
+  const out: number[] = []
+  const seen = new Set<number>()
+  for (const v of value) {
+    const n = typeof v === 'string' ? Number(v.trim()) : Number(v)
+    if (!Number.isFinite(n) || !Number.isInteger(n)) continue
+    if (n < 100 || n > 599) continue
+    if (seen.has(n)) continue
+    seen.add(n)
+    out.push(n)
+  }
+  return out.sort((a, b) => a - b).join(', ')
+}
 const customErrorCodesEnabled = ref(false)
 const selectedErrorCodes = ref<number[]>([])
 const customErrorCodeInput = ref<number | null>(null)
@@ -3137,6 +3198,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     poolModeRetryCount.value = normalizePoolModeRetryCount(
       Number(credentials.pool_mode_retry_count ?? DEFAULT_POOL_MODE_RETRY_COUNT)
     )
+    poolModeRetryStatusCodesInput.value = formatPoolModeRetryStatusCodes(credentials.pool_mode_retry_status_codes)
 
     // Load custom error codes
     customErrorCodesEnabled.value = credentials.custom_error_codes_enabled === true
@@ -3165,6 +3227,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     poolModeEnabled.value = bedrockCreds.pool_mode === true
     const retryCount = bedrockCreds.pool_mode_retry_count
     poolModeRetryCount.value = (typeof retryCount === 'number' && retryCount >= 0) ? retryCount : DEFAULT_POOL_MODE_RETRY_COUNT
+    poolModeRetryStatusCodesInput.value = formatPoolModeRetryStatusCodes(bedrockCreds.pool_mode_retry_status_codes)
 
     // Load quota limits for bedrock
     editQuotaLimit.value = typeof bedrockExtra.quota_limit === 'number' ? bedrockExtra.quota_limit : null
@@ -3208,6 +3271,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     }
     poolModeEnabled.value = false
     poolModeRetryCount.value = DEFAULT_POOL_MODE_RETRY_COUNT
+    poolModeRetryStatusCodesInput.value = ''
     customErrorCodesEnabled.value = false
     selectedErrorCodes.value = []
   }
@@ -3445,14 +3509,15 @@ const removeErrorCode = (code: number) => {
 
 const addTempUnschedRule = (preset?: TempUnschedRuleForm) => {
   if (preset) {
-    tempUnschedRules.value.push({ ...preset })
+    tempUnschedRules.value.push({ scope: 'account', ...preset })
     return
   }
   tempUnschedRules.value.push({
     error_code: null,
     keywords: '',
     duration_minutes: 30,
-    description: ''
+    description: '',
+    scope: 'account'
   })
 }
 
@@ -3475,6 +3540,7 @@ const buildTempUnschedRules = (rules: TempUnschedRuleForm[]) => {
     keywords: string[]
     duration_minutes: number
     description: string
+    scope: 'account' | 'model'
   }> = []
 
   for (const rule of rules) {
@@ -3494,7 +3560,8 @@ const buildTempUnschedRules = (rules: TempUnschedRuleForm[]) => {
       error_code: Math.trunc(errorCode),
       keywords,
       duration_minutes: Math.trunc(duration),
-      description: rule.description.trim()
+      description: rule.description.trim(),
+      scope: rule.scope === 'model' ? 'model' : 'account'
     })
   }
 
@@ -3533,7 +3600,8 @@ function loadTempUnschedRules(credentials?: Record<string, unknown>) {
       error_code: toPositiveNumber(entry.error_code),
       keywords: formatTempUnschedKeywords(entry.keywords),
       duration_minutes: toPositiveNumber(entry.duration_minutes),
-      description: typeof entry.description === 'string' ? entry.description : ''
+      description: typeof entry.description === 'string' ? entry.description : '',
+      scope: entry.scope === 'model' ? 'model' : 'account'
     }
   })
 }
@@ -3765,6 +3833,10 @@ const submitUpdateAccount = async (accountID: number, updatePayload: Record<stri
 }
 
 const handleSubmit = async () => {
+  if (poolModeRetryStatusCodesInvalid.value) {
+    appStore.showError(t('admin.accounts.poolModeRetryStatusCodesInvalid'))
+    return
+  }
   if (!props.account) return
   const accountID = props.account.id
 
@@ -3872,9 +3944,16 @@ const handleSubmit = async () => {
       if (poolModeEnabled.value) {
         newCredentials.pool_mode = true
         newCredentials.pool_mode_retry_count = normalizePoolModeRetryCount(poolModeRetryCount.value)
+        const parsedRetryStatusCodes = parsePoolModeRetryStatusCodes(poolModeRetryStatusCodesInput.value)
+        if (parsedRetryStatusCodes.length > 0 || poolModeRetryStatusCodesInput.value.trim() === '[]') {
+          newCredentials.pool_mode_retry_status_codes = parsedRetryStatusCodes
+        } else {
+          delete newCredentials.pool_mode_retry_status_codes
+        }
       } else {
         delete newCredentials.pool_mode
         delete newCredentials.pool_mode_retry_count
+        delete newCredentials.pool_mode_retry_status_codes
       }
 
       // Add custom error codes if enabled
@@ -4006,9 +4085,16 @@ const handleSubmit = async () => {
       if (poolModeEnabled.value) {
         newCredentials.pool_mode = true
         newCredentials.pool_mode_retry_count = normalizePoolModeRetryCount(poolModeRetryCount.value)
+        const parsedRetryStatusCodes = parsePoolModeRetryStatusCodes(poolModeRetryStatusCodesInput.value)
+        if (parsedRetryStatusCodes.length > 0 || poolModeRetryStatusCodesInput.value.trim() === '[]') {
+          newCredentials.pool_mode_retry_status_codes = parsedRetryStatusCodes
+        } else {
+          delete newCredentials.pool_mode_retry_status_codes
+        }
       } else {
         delete newCredentials.pool_mode
         delete newCredentials.pool_mode_retry_count
+        delete newCredentials.pool_mode_retry_status_codes
       }
 
       // Model mapping

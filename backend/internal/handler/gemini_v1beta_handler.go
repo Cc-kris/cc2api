@@ -46,9 +46,19 @@ func (h *GatewayHandler) GeminiV1BetaListModels(c *gin.Context) {
 		return
 	}
 
-	// 强制 antigravity 模式：返回 antigravity 支持的模型列表
+	platform := service.PlatformGemini
+	if hasForcePlatform && strings.TrimSpace(forcePlatform) != "" {
+		platform = forcePlatform
+	}
+	visibility := h.geminiModelVisibility(c, apiKey, platform)
+	if visibility.configured && !visibility.hasWildcard() {
+		c.JSON(http.StatusOK, visibility.finiteList())
+		return
+	}
+
+	// 强制 antigravity 模式也必须遵守当前分组的模型范围。
 	if forcePlatform == service.PlatformAntigravity {
-		c.JSON(http.StatusOK, antigravity.FallbackGeminiModelsList())
+		writeVisibleGeminiFallback(c, visibility, antigravity.FallbackGeminiModelsList())
 		return
 	}
 
@@ -58,7 +68,7 @@ func (h *GatewayHandler) GeminiV1BetaListModels(c *gin.Context) {
 		hasAntigravity, _ := h.geminiCompatService.HasAntigravityAccounts(c.Request.Context(), apiKey.GroupID)
 		if hasAntigravity {
 			// antigravity 账户使用静态模型列表
-			c.JSON(http.StatusOK, gemini.FallbackModelsList())
+			writeVisibleGeminiFallback(c, visibility, gemini.FallbackModelsList())
 			return
 		}
 		markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
@@ -72,10 +82,10 @@ func (h *GatewayHandler) GeminiV1BetaListModels(c *gin.Context) {
 		return
 	}
 	if shouldFallbackGeminiModels(res) {
-		c.JSON(http.StatusOK, gemini.FallbackModelsList())
+		writeVisibleGeminiFallback(c, visibility, gemini.FallbackModelsList())
 		return
 	}
-	writeUpstreamResponse(c, res)
+	writeVisibleGeminiUpstream(c, visibility, res)
 }
 
 // GeminiV1BetaGetModel proxies:
@@ -102,6 +112,20 @@ func (h *GatewayHandler) GeminiV1BetaGetModel(c *gin.Context) {
 	// 见 service/upstream_path_guard.go。
 	if !service.IsSafeGeminiModelPathSegment(modelName) {
 		googleError(c, http.StatusBadRequest, "Invalid model in URL")
+		return
+	}
+
+	platform := service.PlatformGemini
+	if hasForcePlatform && strings.TrimSpace(forcePlatform) != "" {
+		platform = forcePlatform
+	}
+	visibility := h.geminiModelVisibility(c, apiKey, platform)
+	if !visibility.allows(modelName) {
+		googleError(c, http.StatusNotFound, "Model is not available in this group")
+		return
+	}
+	if visibility.hasExplicitModel(modelName) {
+		c.JSON(http.StatusOK, gemini.FallbackModel(modelName))
 		return
 	}
 
@@ -402,7 +426,8 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		if err != nil {
 			if len(fs.FailedAccountIDs) == 0 {
 				markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
-				googleError(c, http.StatusServiceUnavailable, "No available Gemini accounts: "+err.Error())
+				diagnosis := classifySelectionFailureError(err, classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, modelName, modelName, service.PlatformGemini))
+				googleError(c, diagnosis.Status, diagnosis.Message)
 				return
 			}
 			action := fs.HandleSelectionExhausted(c.Request.Context())
@@ -516,7 +541,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
 				appendBillableUsageAttemptFromFailover(c, account, modelName, failoverErr)
-				failoverAction := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, failoverErr)
+				failoverAction := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, failoverErr, account)
 				switch failoverAction {
 				case FailoverContinue:
 					continue

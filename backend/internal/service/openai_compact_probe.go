@@ -23,8 +23,8 @@ func normalizeAccountTestMode(mode string) string {
 	}
 }
 
-func createOpenAICompactProbePayload(model string) map[string]any {
-	return map[string]any{
+func createOpenAICompactProbePayload(model string, oauth ...bool) map[string]any {
+	payload := map[string]any{
 		"model":        strings.TrimSpace(model),
 		"instructions": "You are a helpful coding assistant.",
 		"input": []any{
@@ -33,8 +33,24 @@ func createOpenAICompactProbePayload(model string) map[string]any {
 				"role":    "user",
 				"content": "Respond with OK.",
 			},
+			map[string]any{"type": "compaction_trigger"},
 		},
+		"stream": true,
 	}
+	if len(oauth) > 0 && oauth[0] {
+		payload["store"] = false
+	}
+	return payload
+}
+
+func openAICompactProbeFoundCompactionItem(body []byte) bool {
+	if _, found := findRawCompactionItemFromSSE(string(body)); found {
+		return true
+	}
+	if final, ok := extractCodexFinalResponse(string(body)); ok && responsesOutputHasCompactionItem(final) {
+		return true
+	}
+	return responsesOutputHasCompactionItem(body)
 }
 
 func shouldMarkOpenAICompactUnsupported(status int, body []byte) bool {
@@ -85,8 +101,12 @@ func buildOpenAICompactProbeExtraUpdates(resp *http.Response, body []byte, probe
 		}
 		errMsg = truncateString(sanitizeUpstreamErrorMessage(errMsg), 2048)
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			updates["openai_compact_supported"] = true
+			supported := openAICompactProbeFoundCompactionItem(body)
+			updates["openai_compact_supported"] = supported
 			updates["openai_compact_last_error"] = ""
+			if !supported {
+				updates["openai_compact_last_error"] = "upstream returned 2xx without a compaction output item (native remote compaction v2 unsupported)"
+			}
 		} else {
 			if shouldMarkOpenAICompactUnsupported(resp.StatusCode, body) {
 				updates["openai_compact_supported"] = false

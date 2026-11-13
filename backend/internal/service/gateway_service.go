@@ -543,10 +543,11 @@ type AccountWaitPlan struct {
 }
 
 type AccountSelectionResult struct {
-	Account     *Account
-	Acquired    bool
-	ReleaseFunc func()
-	WaitPlan    *AccountWaitPlan // nil means no wait allowed
+	stickySessionHit bool
+	Account          *Account
+	Acquired         bool
+	ReleaseFunc      func()
+	WaitPlan         *AccountWaitPlan // nil means no wait allowed
 }
 
 // ClaudeUsage 表示Claude API返回的usage信息
@@ -628,6 +629,11 @@ const (
 
 type GatewayFailureReason string
 
+const (
+	GatewayFailureReasonPoolStatus GatewayFailureReason = "pool_status"
+	GatewayFailureReasonPreOutput  GatewayFailureReason = "pre_output_failure"
+)
+
 // UpstreamFailoverError indicates an upstream error that should trigger account failover.
 type UpstreamFailoverError struct {
 	StatusCode               int
@@ -636,12 +642,15 @@ type UpstreamFailoverError struct {
 	ForceCacheBilling        bool        // Antigravity 粘性会话切换时设为 true
 	RetryableOnSameAccount   bool        // 临时性错误（如 Google 间歇性 400、空响应），应在同一账号上重试 N 次再切换
 	SafeToFailoverAfterWrite bool
-	Stage                    GatewayFailureStage
-	Scope                    GatewayFailureScope
-	Reason                   GatewayFailureReason
-	NextAccountAction        NextAccountAction
-	ClientStatusCode         int
-	ClientMessage            string
+	// SameAccountRetryBudgetExhausted prevents a handler retry from starting
+	// another service-level retry loop after that account's budget was consumed.
+	SameAccountRetryBudgetExhausted bool
+	Stage                           GatewayFailureStage
+	Scope                           GatewayFailureScope
+	Reason                          GatewayFailureReason
+	NextAccountAction               NextAccountAction
+	ClientStatusCode                int
+	ClientMessage                   string
 
 	// 流式续写中断时的已观测用量快照（仅在观测到 token 时非 nil）。
 	// 只用于财务成本证据（上游尝试记录）和「续写耗尽按最后一个有用量的尝试收费」，
@@ -679,7 +688,7 @@ func (e *UpstreamFailoverError) ShouldReportAccountScheduleFailure() bool {
 // TempUnscheduleRetryableError 对 RetryableOnSameAccount 类型的 failover 错误触发临时封禁。
 // 由 handler 层在同账号重试全部用尽、切换账号时调用。
 func (s *GatewayService) TempUnscheduleRetryableError(ctx context.Context, accountID int64, failoverErr *UpstreamFailoverError) {
-	if failoverErr == nil || !failoverErr.RetryableOnSameAccount {
+	if failoverErr == nil || !failoverErr.RetryableOnSameAccount || failoverErr.Reason == GatewayFailureReasonPoolStatus || failoverErr.Reason == GatewayFailureReasonPreOutput {
 		return
 	}
 	// 根据状态码选择封禁策略
@@ -2183,6 +2192,9 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 		for len(available) > 0 {
 			// 1. 取优先级最小的集合
 			candidates := filterByMinPriority(available)
+			if cfg.PreferSoonestReset {
+				candidates = filterBySoonestReset(candidates)
+			}
 			// 2. 取负载率最低的集合
 			candidates = filterByMinLoadRate(candidates)
 			// 3. LRU 选择最久未用的账号
@@ -2529,14 +2541,14 @@ func (s *GatewayService) isAccountSchedulableForSelection(account *Account) bool
 	if account == nil {
 		return false
 	}
-	return account.IsSchedulable()
+	return account.IsSchedulable() && (s.rateLimitService == nil || !s.rateLimitService.ApplyAccountSchedulingThreshold(context.Background(), account))
 }
 
 func (s *GatewayService) isAccountSchedulableForModelSelection(ctx context.Context, account *Account, requestedModel string) bool {
 	if account == nil {
 		return false
 	}
-	return account.IsSchedulableForModelWithContext(ctx, requestedModel)
+	return account.IsSchedulableForModelWithContext(ctx, requestedModel) && (s.rateLimitService == nil || (!s.rateLimitService.ApplyAccountSchedulingThreshold(ctx, account) && !s.rateLimitService.ApplyModelSchedulingThreshold(ctx, account, requestedModel)))
 }
 
 // isAccountInGroup checks if the account belongs to the specified group.
@@ -4879,6 +4891,7 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	reqModel := parsed.Model
 	reqStream := parsed.Stream
 	originalModel := reqModel
+	ctx = upstreamErrorModelContext(ctx, []string{originalModel})
 
 	// === DEBUG: 打印客户端原始请求（headers + body 摘要）===
 	if c != nil {
@@ -5239,6 +5252,9 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		}
 
 		// 检查是否需要通用重试；上游 400 已先经过签名/预算整流，仍失败时进入同账号重试与 failover
+		if account.IsPoolMode() && resp.StatusCode >= 400 && account.IsPoolModeRetryableStatus(resp.StatusCode) && !peekUserContentRejection(resp) {
+			return nil, poolModeStatusFailover(resp, account)
+		}
 		if resp.StatusCode >= 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) && !peekUserContentRejection(resp) {
 			if attempt < maxRetryAttempts {
 				elapsed := time.Since(retryStart)
@@ -5300,6 +5316,9 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	defer func() { _ = resp.Body.Close() }()
 
 	// 处理重试耗尽的情况
+	if account.IsPoolMode() && resp.StatusCode >= 400 && account.IsPoolModeRetryableStatus(resp.StatusCode) && !peekUserContentRejection(resp) {
+		return nil, poolModeStatusFailover(resp, account)
+	}
 	if resp.StatusCode >= 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) && !peekUserContentRejection(resp) {
 		if s.shouldFailoverUpstreamError(ctx, resp.StatusCode) {
 			respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
@@ -5589,6 +5608,9 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 		}
 
 		// 透传分支禁止 400 请求体降级重试（该重试会改写请求体）
+		if account.IsPoolMode() && resp.StatusCode >= 400 && account.IsPoolModeRetryableStatus(resp.StatusCode) && !peekUserContentRejection(resp) {
+			return nil, poolModeStatusFailover(resp, account)
+		}
 		if resp.StatusCode >= 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) && !peekUserContentRejection(resp) {
 			if attempt < maxRetryAttempts {
 				elapsed := time.Since(retryStart)
@@ -5641,6 +5663,9 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if account.IsPoolMode() && resp.StatusCode >= 400 && account.IsPoolModeRetryableStatus(resp.StatusCode) && !peekUserContentRejection(resp) {
+		return nil, poolModeStatusFailover(resp, account)
+	}
 	if resp.StatusCode >= 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) && !peekUserContentRejection(resp) {
 		if s.shouldFailoverUpstreamError(ctx, resp.StatusCode) {
 			respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
@@ -5823,6 +5848,10 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 	cacheMaxBodySize int,
 ) (*streamingResult, error) {
 	observeUpstreamResponseHeaders(c, resp.Header) // V03-T17：记下直接上游响应头，记账时解析 upstream_request_id
+	// 首输出前非空校验：在语义输出（首个有效事件）之前只做前缀检查，之后的续写/计费仍归原有流处理器（V04）。
+	if err := s.guardAnthropicFirstOutput(ctx, resp, c, account); err != nil {
+		return &streamingResult{usage: &ClaudeUsage{}}, err
+	}
 	if s.rateLimitService != nil {
 		s.rateLimitService.UpdateSessionWindow(ctx, account, resp.Header)
 	}
@@ -5947,6 +5976,16 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 	}
 	lastDataAt := time.Now()
 	inPartialEvent := false
+	handleIdleTimeout := func() (*streamingResult, error) {
+		if clientDisconnected {
+			return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: true}, fmt.Errorf("stream usage incomplete after timeout")
+		}
+		logger.LegacyPrintf("service.gateway", "[Anthropic passthrough] Stream data interval timeout: account=%d model=%s interval=%s", account.ID, model, streamInterval)
+		if s.rateLimitService != nil {
+			s.rateLimitService.HandleStreamTimeout(ctx, account, model)
+		}
+		return &streamingResult{usage: usage, firstTokenMs: firstTokenMs}, fmt.Errorf("stream data interval timeout")
+	}
 
 	for {
 		select {
@@ -5970,6 +6009,9 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 			if ev.err != nil {
 				if sawTerminalEvent {
 					return completedStreamResult(), nil
+				}
+				if errors.Is(ev.err, errStreamPrefixIdleTimeout) {
+					return handleIdleTimeout()
 				}
 				if clientDisconnected {
 					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: true}, fmt.Errorf("stream usage incomplete after disconnect: %w", ev.err)
@@ -6028,14 +6070,7 @@ func (s *GatewayService) handleStreamingResponseAnthropicAPIKeyPassthrough(
 			if time.Since(lastRead) < streamInterval {
 				continue
 			}
-			if clientDisconnected {
-				return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: true}, fmt.Errorf("stream usage incomplete after timeout")
-			}
-			logger.LegacyPrintf("service.gateway", "[Anthropic passthrough] Stream data interval timeout: account=%d model=%s interval=%s", account.ID, model, streamInterval)
-			if s.rateLimitService != nil {
-				s.rateLimitService.HandleStreamTimeout(ctx, account, model)
-			}
-			return &streamingResult{usage: usage, firstTokenMs: firstTokenMs}, fmt.Errorf("stream data interval timeout")
+			return handleIdleTimeout()
 
 		case <-keepaliveCh:
 			if clientDisconnected || inPartialEvent {
@@ -6582,6 +6617,9 @@ func (s *GatewayService) executeBedrockUpstream(
 			return nil, fmt.Errorf("upstream request failed: %s", safeErr)
 		}
 
+		if account.IsPoolMode() && resp.StatusCode >= 400 && account.IsPoolModeRetryableStatus(resp.StatusCode) && !peekUserContentRejection(resp) {
+			return nil, poolModeStatusFailover(resp, account)
+		}
 		if resp.StatusCode >= 400 && s.shouldRetryUpstreamError(account, resp.StatusCode) && !peekUserContentRejection(resp) {
 			if attempt < maxRetryAttempts {
 				elapsed := time.Since(retryStart)
@@ -8047,6 +8085,10 @@ func partialStreamUsageResult(resp *http.Response, streamResult *streamingResult
 
 func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http.Response, c *gin.Context, account *Account, startTime time.Time, originalModel, mappedModel string, mimicClaudeCode bool) (*streamingResult, error) {
 	observeUpstreamResponseHeaders(c, resp.Header) // V03-T17：记下直接上游响应头，记账时解析 upstream_request_id
+	// 首输出前非空校验：在语义输出（首个有效事件）之前只做前缀检查，之后的续写/计费仍归原有流处理器（V04）。
+	if err := s.guardAnthropicFirstOutput(ctx, resp, c, account); err != nil {
+		return &streamingResult{usage: &ClaudeUsage{}}, err
+	}
 	// 更新5h窗口状态
 	s.rateLimitService.UpdateSessionWindow(ctx, account, resp.Header)
 
@@ -8322,6 +8364,21 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 		return []string{block}, string(newData), usagePatch, nil
 	}
 
+	handleIdleTimeout := func() (*streamingResult, error) {
+		if clientDisconnected {
+			return resultWithBilling(true), fmt.Errorf("stream usage incomplete after timeout")
+		}
+		logger.LegacyPrintf("service.gateway", "Stream data interval timeout: account=%d model=%s interval=%s", account.ID, originalModel, streamInterval)
+		if s.rateLimitService != nil {
+			s.rateLimitService.HandleStreamTimeout(ctx, account, originalModel)
+		}
+		if foErr := interruptForContinuation(fmt.Sprintf("upstream stream idle for %s", streamInterval)); foErr != nil {
+			return nil, foErr
+		}
+		sendErrorEvent("stream_timeout", fmt.Sprintf("upstream stream idle for %s", streamInterval))
+		return resultWithBilling(false), fmt.Errorf("stream data interval timeout")
+	}
+
 	for {
 		select {
 		case ev, ok := <-events:
@@ -8338,6 +8395,9 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 			if ev.err != nil {
 				if sawTerminalEvent {
 					return resultWithBilling(clientDisconnected), nil
+				}
+				if errors.Is(ev.err, errStreamPrefixIdleTimeout) {
+					return handleIdleTimeout()
 				}
 				if !errors.Is(ev.err, context.Canceled) && !errors.Is(ev.err, context.DeadlineExceeded) && !errors.Is(ev.err, bufio.ErrTooLong) {
 					if foErr := interruptForContinuation("upstream stream disconnected: " + sanitizeStreamError(ev.err)); foErr != nil {
@@ -8444,19 +8504,7 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 			if time.Since(lastRead) < streamInterval {
 				continue
 			}
-			if clientDisconnected {
-				return resultWithBilling(true), fmt.Errorf("stream usage incomplete after timeout")
-			}
-			logger.LegacyPrintf("service.gateway", "Stream data interval timeout: account=%d model=%s interval=%s", account.ID, originalModel, streamInterval)
-			// 处理流超时，可能标记账户为临时不可调度或错误状态
-			if s.rateLimitService != nil {
-				s.rateLimitService.HandleStreamTimeout(ctx, account, originalModel)
-			}
-			if foErr := interruptForContinuation(fmt.Sprintf("upstream stream idle for %s", streamInterval)); foErr != nil {
-				return nil, foErr
-			}
-			sendErrorEvent("stream_timeout", fmt.Sprintf("upstream stream idle for %s", streamInterval))
-			return resultWithBilling(false), fmt.Errorf("stream data interval timeout")
+			return handleIdleTimeout()
 
 		case <-keepaliveCh:
 			if clientDisconnected {
@@ -9269,9 +9317,12 @@ func detachUpstreamContextWithTimeout(ctx context.Context, maxLifetime time.Dura
 	detachedCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), maxLifetime)
 	lifecycle := &detachedUpstreamLifecycle{cancel: cancel}
 	if ctx.Err() != nil {
-		// AfterFunc on an already-canceled parent runs asynchronously. Propagate
-		// this known pre-request cancellation synchronously so a fast transport
-		// cannot race the callback and accidentally start a billable drain.
+		// Before output, a canceled parent (including a request timeout or a
+		// deadline exceeded) must prevent the caller from opening a new
+		// billable upstream request. Propagate synchronously: AfterFunc on an
+		// already-canceled parent is invoked asynchronously and can lose the
+		// race against a fast transport that already started. Once response
+		// bytes have arrived, cancelBeforeResponse deliberately does nothing.
 		cancel()
 	} else {
 		lifecycle.stopParentCancel = context.AfterFunc(ctx, lifecycle.cancelBeforeResponse)

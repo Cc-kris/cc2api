@@ -36,6 +36,9 @@ type RateLimitService struct {
 	teamBlockStore        OpenAITeamBlockStore
 	usageCacheMu          sync.RWMutex
 	usageCache            map[int64]*geminiUsageCacheEntry
+	// Serialize persistence and remember only successfully persisted Team blocks.
+	teamDedupeMu sync.Mutex
+	teamDedupe   map[string]time.Time
 }
 
 type AccountRuntimeBlocker interface {
@@ -150,7 +153,8 @@ const (
 
 // CheckErrorPolicy 检查自定义错误码和临时不可调度规则。
 // 自定义错误码开启时覆盖后续所有逻辑（包括临时不可调度）。
-func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Account, statusCode int, responseBody []byte) ErrorPolicyResult {
+func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Account, statusCode int, responseBody []byte, requestedModel ...string) ErrorPolicyResult {
+	ctx = upstreamErrorModelContext(ctx, requestedModel)
 	if account.IsCustomErrorCodesEnabled() {
 		if account.ShouldHandleErrorCode(statusCode) {
 			return ErrorPolicyMatched
@@ -169,12 +173,16 @@ func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Accoun
 
 // HandleUpstreamError 处理上游错误响应，标记账号状态
 // 返回是否应该停止该账号的调度
-func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte) (shouldDisable bool) {
+func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte, requestedModel ...string) (shouldDisable bool) {
+	ctx = upstreamErrorModelContext(ctx, requestedModel)
 	if teamAlreadyHandled, _ := ctx.Value(openAITeamDeactivationHandledContextKey{}).(bool); teamAlreadyHandled {
 		return true
 	}
 	if s.HandleOpenAITeamWorkspaceDeactivation(ctx, account, statusCode, headers, responseBody) {
 		return true
+	}
+	if account.Platform == PlatformOpenAI && (isOpenAIUpstreamCapacityShedEvent(responseBody) || statusCode == 529) {
+		return false
 	}
 	customErrorCodesEnabled := account.IsCustomErrorCodesEnabled()
 
@@ -189,6 +197,10 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 	if !account.ShouldHandleErrorCode(statusCode) {
 		slog.Info("account_error_code_skipped", "account_id", account.ID, "status_code", statusCode)
 		return false
+	}
+
+	if s.handleModelScopedUpstreamError(ctx, account, statusCode, responseBody) {
+		return true
 	}
 
 	// 先尝试临时不可调度规则（401除外）
@@ -375,8 +387,20 @@ func (s *RateLimitService) HandleOpenAITeamWorkspaceDeactivation(ctx context.Con
 	if teamID == "" {
 		return false
 	}
+	s.teamDedupeMu.Lock()
+	defer s.teamDedupeMu.Unlock()
+	now := time.Now()
+	if until, ok := s.teamDedupe[teamID]; ok && now.Before(until) {
+		return true
+	}
+	// Expired entries must not accumulate when many Teams deactivate over time.
+	for id, until := range s.teamDedupe {
+		if !now.Before(until) {
+			delete(s.teamDedupe, id)
+		}
+	}
 	requestID := openAITeamBlockRequestID(headers, teamID, account.ID, responseBody)
-	until := time.Now().Add(openAITeamBlockTTL)
+	until := now.Add(openAITeamBlockTTL)
 	if s.teamBlockStore == nil {
 		slog.Error("openai_team_workspace_store_unavailable", "account_id", account.ID, "team_id", teamID, "request_id", requestID)
 		return true
@@ -386,6 +410,10 @@ func (s *RateLimitService) HandleOpenAITeamWorkspaceDeactivation(ctx context.Con
 		slog.Error("openai_team_workspace_block_failed", "account_id", account.ID, "team_id", teamID, "request_id", requestID, "error", err)
 		return true
 	}
+	if s.teamDedupe == nil {
+		s.teamDedupe = make(map[string]time.Time)
+	}
+	s.teamDedupe[teamID] = until
 	slog.Warn("openai_team_workspace_deactivated", "account_id", account.ID, "team_id", teamID, "request_id", requestID, "event_created", created, "block_until", until)
 	return true
 }
@@ -1795,6 +1823,9 @@ func (s *RateLimitService) CompleteOpenAITeamProbe(ctx context.Context, lease *O
 	if succeeded {
 		cleared, err := s.teamBlockStore.ClearTeamAfterProbe(ctx, *lease)
 		if err == nil && cleared {
+			s.teamDedupeMu.Lock()
+			delete(s.teamDedupe, strings.TrimSpace(lease.TeamID))
+			s.teamDedupeMu.Unlock()
 			if runtimeBlocker, ok := s.runtimeBlocker.(OpenAITeamRuntimeBlocker); ok {
 				runtimeBlocker.ClearOpenAITeamScheduling(lease.TeamID)
 			}
@@ -1915,7 +1946,8 @@ func (s *RateLimitService) GetTempUnschedStatus(ctx context.Context, accountID i
 	return state, nil
 }
 
-func (s *RateLimitService) HandleTempUnschedulable(ctx context.Context, account *Account, statusCode int, responseBody []byte) bool {
+func (s *RateLimitService) HandleTempUnschedulable(ctx context.Context, account *Account, statusCode int, responseBody []byte, requestedModel ...string) bool {
+	ctx = upstreamErrorModelContext(ctx, requestedModel)
 	if account == nil {
 		return false
 	}
@@ -2025,6 +2057,21 @@ func (s *RateLimitService) triggerTempUnschedulable(ctx context.Context, account
 
 	now := time.Now()
 	until := now.Add(time.Duration(rule.DurationMinutes) * time.Minute)
+	if normalizeTempUnschedScope(rule.Scope) == TempUnschedScopeModel {
+		model := upstreamErrorModel(ctx, account)
+		if model == "" {
+			return false
+		} // Never turn a model rule into an account-wide pause.
+		if err := s.accountRepo.SetModelRateLimit(ctx, account.ID, model, until); err != nil {
+			slog.Warn("model_temp_unsched_set_failed", "account_id", account.ID, "model", model, "error", err)
+			return false
+		}
+		s.notifyModelCooldownPersisted(ctx, account.ID)
+		if outcome, _ := ctx.Value(upstreamErrorOutcomeKey{}).(*upstreamErrorOutcome); outcome != nil {
+			outcome.modelOnly = true
+		}
+		return true
+	}
 
 	state := &TempUnschedState{
 		UntilUnix:       until.Unix(),
@@ -2032,6 +2079,7 @@ func (s *RateLimitService) triggerTempUnschedulable(ctx context.Context, account
 		StatusCode:      statusCode,
 		MatchedKeyword:  matchedKeyword,
 		RuleIndex:       ruleIndex,
+		Scope:           TempUnschedScopeAccount,
 		ErrorMessage:    truncateTempUnschedMessage(responseBody, tempUnschedMessageMaxBytes),
 	}
 

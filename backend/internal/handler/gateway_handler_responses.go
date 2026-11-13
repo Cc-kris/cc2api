@@ -188,7 +188,8 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		if err != nil {
 			if len(fs.FailedAccountIDs) == 0 {
 				markOpsRoutingCapacityLimitedIfNoAvailable(c, err)
-				h.responsesErrorResponse(c, http.StatusServiceUnavailable, "api_error", "No available accounts: "+err.Error())
+				diagnosis := classifySelectionFailureError(err, classifyNoAccountErrorFromGin(c, h.gatewayService, apiKey, selectionModel, reqModel, platformForModelDiagnosis(apiKey, service.PlatformAnthropic)))
+				h.responsesErrorResponse(c, diagnosis.Status, diagnosis.ErrType, diagnosis.Message)
 				return
 			}
 			action := fs.HandleSelectionExhausted(c.Request.Context())
@@ -266,7 +267,7 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 					h.handleResponsesFailoverExhausted(c, failoverErr, true)
 					return
 				}
-				action := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, failoverErr)
+				action := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, failoverErr, account)
 				switch action {
 				case FailoverContinue:
 					continue

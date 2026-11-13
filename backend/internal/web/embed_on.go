@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -380,8 +381,18 @@ func normalizeFrontendRoutePath(path string) string {
 }
 
 func redirectFrontendRouteToLogin(c *gin.Context) {
+	location := frontendLoginPath
+	path := normalizeFrontendRoutePath(c.Request.URL.Path)
+	// Navigation requests cannot send the SPA's localStorage bearer token. Keep
+	// the login boundary, but preserve deep links for the client-side auth guard.
+	// Landing URLs retain the existing default-home behavior after login.
+	if path != "/" && path != "/home" && path != "/index.html" &&
+		!strings.HasPrefix(path, "//") && !strings.ContainsAny(path, "\\\r\n") {
+		location += "?" + url.Values{"redirect": {c.Request.URL.RequestURI()}}.Encode()
+	}
 	c.Header("X-Robots-Tag", robotsNoIndexHeader)
-	c.Redirect(http.StatusFound, frontendLoginPath)
+	c.Header("Cache-Control", "no-store")
+	c.Redirect(http.StatusFound, location)
 	c.Abort()
 }
 

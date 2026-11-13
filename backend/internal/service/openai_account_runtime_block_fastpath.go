@@ -40,20 +40,25 @@ func isOpenAIAccount(account *Account) bool {
 	return account != nil && (account.Platform == PlatformOpenAI || account.Platform == PlatformGrok)
 }
 
-func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte, _ ...string) bool {
+func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte, requestedModel ...string) bool {
 	if account != nil && account.Platform == PlatformGrok && isGrokContentPolicyRejection(statusCode, responseBody) {
 		return false
 	}
 	stateCtx, cancel := openAIAccountStateContext(ctx)
 	defer cancel()
 
-	if statusCode == http.StatusTooManyRequests {
+	if statusCode == http.StatusTooManyRequests && (account == nil || !account.IsPoolMode()) {
 		s.markOpenAIOAuth429RateLimited(stateCtx, account, headers, responseBody)
 	}
 	if s == nil || account == nil || s.rateLimitService == nil {
 		return false
 	}
-	shouldDisable := s.rateLimitService.HandleUpstreamError(stateCtx, account, statusCode, headers, responseBody)
+	outcome := &upstreamErrorOutcome{}
+	stateCtx = context.WithValue(stateCtx, upstreamErrorOutcomeKey{}, outcome)
+	shouldDisable := s.rateLimitService.HandleUpstreamError(stateCtx, account, statusCode, headers, responseBody, requestedModel...)
+	if outcome.modelOnly {
+		return shouldDisable
+	}
 	if shouldDisable {
 		if (s.rateLimitService.settingService == nil || s.rateLimitService.settingService.IsOpenAITeamLinkedResolverEnabled(stateCtx)) && account.Platform == PlatformOpenAI && IsOpenAITeamWorkspaceDeactivated(statusCode, responseBody) && strings.TrimSpace(account.GetChatGPTAccountID()) != "" {
 			teamID := account.GetChatGPTAccountID()

@@ -294,7 +294,9 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		PaymentVisibleMethodWxpaySource:         settings.PaymentVisibleMethodWxpaySource,
 		PaymentVisibleMethodAlipayEnabled:       settings.PaymentVisibleMethodAlipayEnabled,
 		PaymentVisibleMethodWxpayEnabled:        settings.PaymentVisibleMethodWxpayEnabled,
+		AccountSchedulingThresholds:             settings.AccountSchedulingThresholds,
 		OpenAIAdvancedSchedulerEnabled:          settings.OpenAIAdvancedSchedulerEnabled,
+		OpenAISchedulerSettings:                 settings.OpenAISchedulerSettings,
 		BalanceLowNotifyEnabled:                 settings.BalanceLowNotifyEnabled,
 		BalanceLowNotifyThreshold:               settings.BalanceLowNotifyThreshold,
 		BalanceLowNotifyRechargeURL:             settings.BalanceLowNotifyRechargeURL,
@@ -652,7 +654,9 @@ type UpdateSettingsRequest struct {
 	PaymentVisibleMethodWxpayEnabled  *bool   `json:"payment_visible_method_wxpay_enabled"`
 
 	// OpenAI account scheduling
-	OpenAIAdvancedSchedulerEnabled *bool `json:"openai_advanced_scheduler_enabled"`
+	AccountSchedulingThresholds    map[string]int `json:"account_scheduling_thresholds"`
+	OpenAIAdvancedSchedulerEnabled *bool          `json:"openai_advanced_scheduler_enabled"`
+	service.OpenAISchedulerSettingsUpdate
 
 	// 余额不足、订阅到期与账号限额提醒
 	BalanceLowNotifyEnabled         *bool                   `json:"balance_low_notify_enabled"`
@@ -1932,6 +1936,13 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.PaymentVisibleMethodWxpayEnabled
 		}(),
+		AccountSchedulingThresholds: func() map[string]int {
+			if req.AccountSchedulingThresholds != nil {
+				return req.AccountSchedulingThresholds
+			}
+			return previousSettings.AccountSchedulingThresholds
+		}(),
+		OpenAISchedulerSettings: req.OpenAISchedulerSettingsUpdate.Merge(previousSettings.OpenAISchedulerSettings),
 		OpenAIAdvancedSchedulerEnabled: func() bool {
 			if req.OpenAIAdvancedSchedulerEnabled != nil {
 				return *req.OpenAIAdvancedSchedulerEnabled
@@ -2363,7 +2374,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		PaymentVisibleMethodWxpaySource:         updatedSettings.PaymentVisibleMethodWxpaySource,
 		PaymentVisibleMethodAlipayEnabled:       updatedSettings.PaymentVisibleMethodAlipayEnabled,
 		PaymentVisibleMethodWxpayEnabled:        updatedSettings.PaymentVisibleMethodWxpayEnabled,
+		AccountSchedulingThresholds:             updatedSettings.AccountSchedulingThresholds,
 		OpenAIAdvancedSchedulerEnabled:          updatedSettings.OpenAIAdvancedSchedulerEnabled,
+		OpenAISchedulerSettings:                 updatedSettings.OpenAISchedulerSettings,
 		BalanceLowNotifyEnabled:                 updatedSettings.BalanceLowNotifyEnabled,
 		BalanceLowNotifyThreshold:               updatedSettings.BalanceLowNotifyThreshold,
 		BalanceLowNotifyRechargeURL:             updatedSettings.BalanceLowNotifyRechargeURL,

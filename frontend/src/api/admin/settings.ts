@@ -4,6 +4,7 @@
  */
 
 import { apiClient } from "../client";
+import type { OpenAISchedulerSettings } from '@/utils/openaiSchedulerSettings';
 import type {
   CustomEndpoint,
   CustomMenuItem,
@@ -355,7 +356,7 @@ export function deriveWeChatConnectStoredMode(
 /**
  * System settings interface
  */
-export interface SystemSettings {
+export interface SystemSettings extends OpenAISchedulerSettings {
   // Registration settings
   registration_enabled: boolean;
   email_verify_enabled: boolean;
@@ -607,6 +608,7 @@ export interface SystemSettings {
   payment_visible_method_alipay_enabled?: boolean;
   payment_visible_method_wxpay_enabled?: boolean;
   openai_advanced_scheduler_enabled?: boolean;
+  account_scheduling_thresholds?: Record<string, number>;
 
   // 余额、订阅到期与账号限额通知
   balance_low_notify_enabled: boolean;
@@ -654,7 +656,7 @@ export interface LocalResponseCacheStats {
   counters: Record<string, number>;
 }
 
-export interface UpdateSettingsRequest {
+export interface UpdateSettingsRequest extends OpenAISchedulerSettings {
   registration_enabled?: boolean;
   email_verify_enabled?: boolean;
   registration_email_suffix_whitelist?: string[];
@@ -876,6 +878,7 @@ export interface UpdateSettingsRequest {
   payment_visible_method_alipay_enabled?: boolean;
   payment_visible_method_wxpay_enabled?: boolean;
   openai_advanced_scheduler_enabled?: boolean;
+  account_scheduling_thresholds?: Record<string, number>;
   // 余额、订阅到期与账号限额通知
   balance_low_notify_enabled?: boolean;
   balance_low_notify_threshold?: number;

@@ -98,7 +98,7 @@
             {{ t('admin.accounts.tempUnschedulable.errorMessage') }}
           </p>
           <div class="mt-2 rounded bg-gray-50 p-2 text-xs text-gray-700 dark:bg-dark-700 dark:text-gray-300">
-            {{ state?.error_message || '-' }}
+            {{ thresholdDescription || state?.error_message || '-' }}
           </div>
         </div>
       </div>
@@ -149,6 +149,7 @@ import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
 import type { Account, TempUnschedulableStatus } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import { parseSchedulingThresholdReason } from '@/utils/schedulingThreshold'
 import { formatDateTime } from '@/utils/format'
 
 const props = defineProps<{
@@ -169,6 +170,10 @@ const resetting = ref(false)
 const status = ref<TempUnschedulableStatus | null>(null)
 
 const state = computed(() => status.value?.state || null)
+const thresholdDescription = computed(() => {
+  const reason = parseSchedulingThresholdReason(props.account?.temp_unschedulable_reason)
+  return reason ? t('admin.accounts.status.usageThresholdDetail', { window: reason.window || '-', used: reason.used_percent ?? '-', threshold: reason.threshold_percent ?? '-' }) : ''
+})
 
 const isActive = computed(() => {
   if (!status.value?.active || !state.value) return false

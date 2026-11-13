@@ -1,7 +1,7 @@
 package service
 
-// 移植自上游 fcd3bc127（V02-T28）。CCAI 只在 OpenAI handler 上接入；GatewayService 的实现
-// 随文件带过来（接口和测试需要），Anthropic/Gemini handler 本版不调用它。
+// 移植自上游 fcd3bc127（V02-T28）。V04 起 Anthropic/Gemini handler 也会调用，
+// 因此实现按平台枚举持久化可见账号，而不是只看 OpenAI handler 的临时列表。
 
 import (
 	"context"
@@ -39,10 +39,10 @@ type ModelAvailabilityDiagnoser interface {
 	) ModelAvailabilityDiagnosis
 }
 
-// DiagnoseModelAvailabilityForPlatform inspects schedulable accounts of the
-// given platform and returns whether the requested model is configured to be
-// served by any of them. It deliberately ignores schedulability, rate limits,
-// quotas, and runtime blocks — those are transient.
+// DiagnoseModelAvailabilityForPlatform inspects persistently active,
+// scheduling-enabled accounts of the given platform and checks model mappings.
+// It deliberately ignores transient cooldowns, quotas, and runtime blocks; the
+// persisted enabled flag is still an eligibility requirement (V04).
 //
 // Safe to call on the error path: returns {true,true} on any internal failure
 // or when the inputs preclude meaningful diagnosis (empty model, etc.), so
@@ -69,7 +69,18 @@ func (s *GatewayService) DiagnoseModelAvailabilityForPlatform(
 
 	// hasForcePlatform=false so Anthropic/Gemini also surface mixed-scheduled
 	// Antigravity accounts, matching what selection would consider.
-	accounts, _, err := s.listSchedulableAccounts(ctx, groupID, platform, false)
+	if s.accountRepo == nil {
+		return ModelAvailabilityDiagnosis{HasAccountsInPool: true, HasModelSupport: true}
+	}
+	var accounts []Account
+	var err error
+	if groupID == nil {
+		// Preserve the existing simple/ungrouped selection scope. A missing
+		// group must not silently turn every unsupported model into a 503.
+		accounts, _, err = s.listSchedulableAccounts(ctx, nil, platform, false)
+	} else {
+		accounts, err = s.accountRepo.ListByGroup(ctx, *groupID)
+	}
 	if err != nil {
 		// Conservative fallback: pretend everything is fine so the caller
 		// returns 503 (we don't want to flip to 404 just because a lookup
@@ -77,8 +88,19 @@ func (s *GatewayService) DiagnoseModelAvailabilityForPlatform(
 		return ModelAvailabilityDiagnosis{HasAccountsInPool: true, HasModelSupport: true}
 	}
 
+	// Only persisted active + scheduling-enabled accounts on the requested
+	// platform (plus mixed-scheduled Antigravity) count as an actionable pool:
+	// a paused/retired account is not something the operator can fix by
+	// editing model_mapping, so it must not produce a 404 (V04).
+	mixed := platform == PlatformAnthropic || platform == PlatformGemini
 	diag := ModelAvailabilityDiagnosis{}
 	for i := range accounts {
+		if !accounts[i].IsActive() || !accounts[i].Schedulable {
+			continue
+		}
+		if isPlatformFilteredForSelection(&accounts[i], platform, mixed) {
+			continue
+		}
 		diag.HasAccountsInPool = true
 		if s.isModelSupportedByAccountWithContext(ctx, &accounts[i], requestedModel) {
 			diag.HasModelSupport = true

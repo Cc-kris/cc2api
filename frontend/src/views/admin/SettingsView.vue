@@ -3794,6 +3794,28 @@
                 </div>
                 <Toggle v-model="form.openai_advanced_scheduler_enabled" />
               </div>
+              <fieldset v-if="form.openai_advanced_scheduler_enabled" class="space-y-4 rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+                <legend class="text-sm font-medium">{{ t('admin.settings.scheduling.schedulerControls') }}</legend>
+                <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('admin.settings.scheduling.schedulerHint') }}</p>
+                <div class="flex min-h-11 items-center justify-between gap-4"><label for="scheduler-sticky">{{ t('admin.settings.scheduling.stickyWeighted') }}</label><Toggle id="scheduler-sticky" v-model="schedulerStickyWeighted" /></div>
+                <div class="flex min-h-11 items-center justify-between gap-4"><label for="scheduler-subscription">{{ t('admin.settings.scheduling.subscriptionPriority') }}</label><Toggle id="scheduler-subscription" v-model="schedulerSubscriptionPriority" /></div>
+                <div class="grid gap-4 sm:grid-cols-3">
+                  <div v-for="key in schedulerOverrideKeys" :key="key">
+                    <label :for="key" class="mb-1 block text-sm font-medium">{{ t(`admin.settings.scheduling.${key.replace('openai_advanced_scheduler_', '')}`) }}</label>
+                    <input :id="key" v-model="schedulerOverrides[key]" type="number" :min="key.endsWith('lb_top_k') ? 1 : 0" :max="key.endsWith('lb_top_k') ? 100 : undefined" :step="key.endsWith('lb_top_k') ? 1 : 'any'" class="input" :placeholder="t('admin.settings.scheduling.inheritConfig')" />
+                  </div>
+                </div>
+              </fieldset>
+              <fieldset class="space-y-3 border-t border-gray-100 pt-4 dark:border-dark-700">
+                <legend class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t('admin.settings.scheduling.thresholdTitle') }}</legend>
+                <p id="scheduling-threshold-hint" class="text-sm text-gray-500 dark:text-gray-400">{{ t('admin.settings.scheduling.thresholdHint') }}</p>
+                <div class="grid gap-4 sm:grid-cols-3">
+                  <div v-for="platform in ['openai', 'anthropic', 'grok']" :key="platform">
+                    <label :for="`scheduling-threshold-${platform}`" class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">{{ platform === 'openai' ? 'OpenAI' : platform === 'anthropic' ? 'Anthropic' : 'Grok' }} (%)</label>
+                    <input :id="`scheduling-threshold-${platform}`" v-model.number="form.account_scheduling_thresholds[platform]" type="number" min="1" max="100" step="1" required class="input" aria-describedby="scheduling-threshold-hint" />
+                  </div>
+                </div>
+              </fieldset>
             </div>
           </div>
 
@@ -7377,6 +7399,10 @@ import {
   parseRegistrationEmailSuffixWhitelistInput,
 } from "@/utils/registrationEmailPolicy";
 
+import { defaultSchedulerOverrides, schedulerOverrideKeys, schedulerOverridesValid } from '@/utils/openaiSchedulerSettings';
+const schedulerOverrides = reactive(defaultSchedulerOverrides());
+const schedulerStickyWeighted = ref(false);
+const schedulerSubscriptionPriority = ref(false);
 const { t, locale } = useI18n();
 const appStore = useAppStore();
 const adminSettingsStore = useAdminSettingsStore();
@@ -7638,6 +7664,7 @@ type SettingsForm = Omit<
   google_oauth_client_secret: string;
   force_email_on_third_party_signup: boolean;
   openai_advanced_scheduler_enabled: boolean;
+  account_scheduling_thresholds: Record<string, number>;
   // 系统全局平台限额 map；form 内始终归一化为全平台对象（模板非空绑定依赖此不变量）
   default_platform_quotas: DefaultPlatformQuotasMap;
 };
@@ -7837,6 +7864,7 @@ const form = reactive<SettingsForm>({
   // 分组隔离
   allow_ungrouped_key_scheduling: false,
   openai_advanced_scheduler_enabled: false,
+  account_scheduling_thresholds: { openai: 100, anthropic: 100, grok: 100 },
   // Gateway forwarding behavior
   enable_fingerprint_unification: true,
   enable_metadata_passthrough: false,
@@ -8620,6 +8648,10 @@ async function loadSettings(): Promise<boolean> {
           }))
         : defaultLoginAgreementDocuments();
     Object.assign(authSourceDefaults, buildAuthSourceDefaultsState(settings));
+    for (const key of schedulerOverrideKeys) schedulerOverrides[key] = String((settings as unknown as Record<string, unknown>)[key] ?? '');
+    schedulerStickyWeighted.value = settings.openai_advanced_scheduler_sticky_weighted_enabled ?? false;
+    schedulerSubscriptionPriority.value = settings.openai_advanced_scheduler_subscription_priority_enabled ?? false;
+    form.account_scheduling_thresholds = { openai: 100, anthropic: 100, grok: 100, ...settings.account_scheduling_thresholds };
     form.default_platform_quotas = normalizePlatformQuotasMap(settings.default_platform_quotas);
     form.backend_mode_enabled = settings.backend_mode_enabled;
     form.registration_domain_limit_enabled = settings.registration_domain_limit_enabled ?? false;
@@ -8802,6 +8834,14 @@ function findDuplicateDefaultSubscription(
 }
 
 async function saveSettings() {
+  if (!schedulerOverridesValid(schedulerOverrides)) {
+    appStore.showError(t('admin.settings.scheduling.schedulerInvalid'));
+    return;
+  }
+  if (Object.values(form.account_scheduling_thresholds).some(value => !Number.isInteger(value) || value < 1 || value > 100)) {
+    appStore.showError(t('admin.settings.scheduling.thresholdInvalid'));
+    return;
+  }
   saving.value = true;
   xSearchPriceSaveError.value = false;
   let settingsUpdateRequested = false;
@@ -9239,6 +9279,7 @@ async function saveSettings() {
         form.payment_cancel_rate_limit_window_mode,
       payment_alipay_force_qrcode: form.payment_alipay_force_qrcode,
       openai_advanced_scheduler_enabled: form.openai_advanced_scheduler_enabled,
+      account_scheduling_thresholds: { ...form.account_scheduling_thresholds },
       // 余额、订阅到期与账号限额通知
       balance_low_notify_enabled: form.balance_low_notify_enabled,
       balance_low_notify_threshold:
@@ -9308,6 +9349,10 @@ async function saveSettings() {
       payload.openai_team_linked_change_reason = openAITeamLinkedChangeReason.value.trim();
     }
 
+    Object.assign(payload, schedulerOverrides, {
+      openai_advanced_scheduler_sticky_weighted_enabled: schedulerStickyWeighted.value,
+      openai_advanced_scheduler_subscription_priority_enabled: schedulerSubscriptionPriority.value
+    });
     settingsUpdateRequested = true;
     const updated = await adminAPI.settings.updateSettings(payload);
     for (const [key, value] of Object.entries(updated)) {
@@ -9325,6 +9370,10 @@ async function saveSettings() {
     confirmedOpenAITeamLinkedResolverEnabled.value =
       updated.openai_team_linked_resolver_enabled !== false;
     Object.assign(authSourceDefaults, buildAuthSourceDefaultsState(updated));
+    for (const key of schedulerOverrideKeys) schedulerOverrides[key] = String((updated as unknown as Record<string, unknown>)[key] ?? '');
+    schedulerStickyWeighted.value = updated.openai_advanced_scheduler_sticky_weighted_enabled ?? false;
+    schedulerSubscriptionPriority.value = updated.openai_advanced_scheduler_subscription_priority_enabled ?? false;
+    form.account_scheduling_thresholds = { openai: 100, anthropic: 100, grok: 100, ...updated.account_scheduling_thresholds };
     form.default_platform_quotas = normalizePlatformQuotasMap(updated.default_platform_quotas);
     const updateXSearchPrice = (adminAPI.settings as typeof adminAPI.settings & { updateXSearchPrice?: (price: string) => Promise<{ price_per_request: string }> }).updateXSearchPrice;
     if (updateXSearchPrice) {

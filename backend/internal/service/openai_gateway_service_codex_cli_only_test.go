@@ -284,8 +284,12 @@ func TestOpenAIGatewayService_Forward_LogsInstructionsRequiredDetails(t *testing
 
 	_, err := svc.Forward(context.Background(), c, account, body)
 	require.Error(t, err)
-	require.Equal(t, http.StatusBadGateway, rec.Code)
-	require.Contains(t, err.Error(), "upstream error: 400")
+	// V04-R11 keeps deterministic client errors as 400; diagnostic coverage
+	// remains unchanged and the original structured error must survive.
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), `"code":"missing_required_parameter"`)
+	require.Contains(t, rec.Body.String(), `"param":"instructions"`)
+	require.Contains(t, err.Error(), "upstream rejected request: 400")
 
 	require.True(t, logSink.ContainsMessageAtLevel("OpenAI 上游返回 Instructions are required，已记录请求详情用于排查", "warn"))
 	require.True(t, logSink.ContainsFieldValue("request_user_agent", "codex_cli_rs/0.1.0"))

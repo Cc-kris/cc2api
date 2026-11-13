@@ -28,7 +28,7 @@ func TestNormalizeAccountTestMode(t *testing.T) {
 
 func TestBuildOpenAICompactProbeExtraUpdates_SuccessMarksSupported(t *testing.T) {
 	now := time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC)
-	updates := buildOpenAICompactProbeExtraUpdates(&http.Response{StatusCode: http.StatusOK}, []byte(`{"id":"cmp_1"}`), nil, now)
+	updates := buildOpenAICompactProbeExtraUpdates(&http.Response{StatusCode: http.StatusOK}, []byte(`{"id":"cmp_1","output":[{"type":"compaction","encrypted_content":"probe-state"}]}`), nil, now)
 
 	if got := updates["openai_compact_supported"]; got != true {
 		t.Fatalf("openai_compact_supported = %v, want true", got)

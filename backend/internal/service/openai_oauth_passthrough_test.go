@@ -809,10 +809,11 @@ func TestOpenAIGatewayService_OpenAIPassthrough_429And529TriggerFailover(t *test
 			accountType: AccountTypeOAuth,
 			statusCode:  529,
 			body:        `{"error":{"message":"server overloaded","type":"server_error"}}`,
-			assertRepo: func(t *testing.T, repo *openAIPassthroughFailoverRepo, start time.Time) {
+			assertRepo: func(t *testing.T, repo *openAIPassthroughFailoverRepo, _ time.Time) {
+				// V04-R10: capacity overload switches accounts without cooling
+				// a healthy account. The 429 quota cases retain their assertions.
 				require.Empty(t, repo.rateLimitCalls)
-				require.Len(t, repo.overloadCalls, 1)
-				require.WithinDuration(t, start.Add(10*time.Minute), repo.overloadCalls[0], 5*time.Second)
+				require.Empty(t, repo.overloadCalls)
 			},
 		},
 		{
@@ -834,10 +835,11 @@ func TestOpenAIGatewayService_OpenAIPassthrough_429And529TriggerFailover(t *test
 			accountType: AccountTypeAPIKey,
 			statusCode:  529,
 			body:        `{"error":{"message":"server overloaded","type":"server_error"}}`,
-			assertRepo: func(t *testing.T, repo *openAIPassthroughFailoverRepo, start time.Time) {
+			assertRepo: func(t *testing.T, repo *openAIPassthroughFailoverRepo, _ time.Time) {
+				// V04-R10: capacity overload switches accounts without cooling
+				// a healthy account. The 429 quota cases retain their assertions.
 				require.Empty(t, repo.rateLimitCalls)
-				require.Len(t, repo.overloadCalls, 1)
-				require.WithinDuration(t, start.Add(10*time.Minute), repo.overloadCalls[0], 5*time.Second)
+				require.Empty(t, repo.overloadCalls)
 			},
 		},
 	}

@@ -1,11 +1,15 @@
 package handler
 
-// 移植自上游 fcd3bc127（V02-T28），只接在 OpenAI handler 上；Anthropic/Gemini handler 不改。
+// 移植自上游 fcd3bc127（V02-T28）。V04 起同时服务于 Anthropic/Gemini/OpenAI 各入口，
+// 并新增 429 冷却诊断（AC16）；CCAI 的 classifyOpenAINoAccountError 保留为 OpenAI 专用入口，
+// 优先使用实际选号分组与平台。
 
 import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -32,6 +36,36 @@ type noAccountErrorClassification struct {
 	ErrType       string
 	Message       string
 	ModelNotFound bool // true when this is a 404 model_not_found classification
+}
+
+var selectionModelRateLimitedPattern = regexp.MustCompile(`(?:model_rate_limited|rate_limited)=(\d+)`)
+
+// Model support diagnosed from persistent configuration is authoritative over
+// transient cooldown hints attached to the selection error (AC16). A group
+// with accounts that do serve the model is merely rate-limited, so surface
+// 429 rather than the generic 503; an unsupported model keeps its 404.
+func classifySelectionFailureError(err error, fallback noAccountErrorClassification) noAccountErrorClassification {
+	if err == nil || fallback.ModelNotFound {
+		return fallback
+	}
+	match := selectionModelRateLimitedPattern.FindStringSubmatch(strings.ToLower(err.Error()))
+	if len(match) != 2 {
+		return fallback
+	}
+	count, parseErr := strconv.Atoi(match[1])
+	if parseErr != nil || count <= 0 {
+		return fallback
+	}
+	return noAccountErrorClassification{Status: http.StatusTooManyRequests, ErrType: "rate_limit_error", Message: "All available accounts are currently rate-limited. Please retry later."}
+}
+
+// platformForModelDiagnosis prefers the API key's group platform and falls
+// back to the platform the request was routed to.
+func platformForModelDiagnosis(key *service.APIKey, fallback string) string {
+	if key != nil && key.Group != nil && key.Group.Platform != "" {
+		return key.Group.Platform
+	}
+	return fallback
 }
 
 // classifyNoAccountError decides between 404 model_not_found and 503
@@ -112,7 +146,12 @@ func classifyNoAccountErrorFromGin(
 	if c != nil && c.Request != nil {
 		ctx = c.Request.Context()
 	}
-	return classifyNoAccountError(ctx, diag, apiKey, routingModel, displayModel, platform)
+	result := classifyNoAccountError(ctx, diag, apiKey, routingModel, displayModel, platform)
+	if c != nil && result.ModelNotFound {
+		// 404 表示永久配置问题，不当成容量受限上报（V04）。
+		c.Set(opsRoutingCapacityLimitedKey, false)
+	}
+	return result
 }
 
 // classifyOpenAINoAccountError 是 CCAI OpenAI handler 的入口：groupID 用实际选号的分组

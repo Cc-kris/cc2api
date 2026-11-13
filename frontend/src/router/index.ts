@@ -14,6 +14,7 @@ import { getSetupStatus } from '@/api/setup'
 import { canAccessAdminPath, resolveAdminHomePath } from '@/utils/adminAccess'
 import { FINANCE_MODULE_ENABLED } from '@/utils/featureFlags'
 import { resolveCompletedSetupRedirectPath } from './setupRedirect'
+import { resolveLoginRedirect } from './loginRedirect'
 import { resolveDocumentTitle } from './title'
 
 /**
@@ -857,8 +858,10 @@ router.beforeEach(async (to, _from, next) => {
         next()
         return
       }
-      // Admin users go to admin dashboard, regular users go to user dashboard
-      next(authStore.isAdmin ? '/admin/dashboard' : resolveAdminHomePath(authStore.user?.role))
+      // Resume server-redirected deep links; the destination runs through this
+      // guard again, including role, feature and backend-mode restrictions.
+      const fallback = authStore.isAdmin ? '/admin/dashboard' : resolveAdminHomePath(authStore.user?.role)
+      next(resolveLoginRedirect(to.query.redirect, fallback, to.hash))
       return
     }
     // Backend mode: block public pages for unauthenticated users (except login, key-usage, setup)

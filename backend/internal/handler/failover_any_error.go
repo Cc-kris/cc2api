@@ -44,7 +44,7 @@ func anyErrorSameAccountRetryLimit(ctx context.Context, cfg *config.Config, fail
 
 // anyErrorSameAccountRetryLimitEnabled 在已确认开关生效时计算同账号重试次数。
 func anyErrorSameAccountRetryLimitEnabled(cfg *config.Config, failoverErr *service.UpstreamFailoverError) int {
-	if cfg == nil || failoverErr == nil || isDeterministicAccountError(failoverErr) {
+	if cfg == nil || failoverErr == nil || failoverErr.SafeToFailoverAfterWrite || failoverErr.SameAccountRetryBudgetExhausted || failoverErr.Reason == service.GatewayFailureReasonPoolStatus || isDeterministicAccountError(failoverErr) {
 		return 0
 	}
 	n := cfg.Gateway.FailoverSameAccountRetries
@@ -60,10 +60,30 @@ func anyErrorSameAccountRetryLimitEnabled(cfg *config.Config, failoverErr *servi
 // sameAccountRetryLimit 合并池模式重试与 FailoverOnAnyError 重试：
 // 上游已标记 RetryableOnSameAccount 时沿用账号池模式配置，否则使用全局配置。
 func sameAccountRetryLimit(ctx context.Context, cfg *config.Config, account *service.Account, failoverErr *service.UpstreamFailoverError) int {
-	if failoverErr != nil && failoverErr.RetryableOnSameAccount {
-		return account.GetPoolModeRetryCount()
+	// Once output is committed, continue on a different account rather than
+	// spending the pre-output retry budget on the same broken stream.
+	if failoverErr != nil && (failoverErr.SafeToFailoverAfterWrite || failoverErr.SameAccountRetryBudgetExhausted) {
+		return 0
 	}
-	return anyErrorSameAccountRetryLimit(ctx, cfg, failoverErr)
+	if isPoolHTTPStatusFailure(account, failoverErr) {
+		if failoverErr.RetryableOnSameAccount && account.IsPoolModeRetryableStatus(failoverErr.StatusCode) {
+			return account.GetPoolModeRetryCount()
+		}
+		return 0
+	}
+	limit := anyErrorSameAccountRetryLimit(ctx, cfg, failoverErr)
+	if failoverErr != nil && failoverErr.RetryableOnSameAccount && account != nil {
+		limit = max(limit, account.GetPoolModeRetryCount())
+	}
+	return limit
+}
+
+// Legacy HTTP forwarders leave Reason empty for excluded pool statuses. Keep
+// their status policy separate from any-error retries without suppressing
+// explicitly classified stream/pre-output/auth failures.
+func isPoolHTTPStatusFailure(account *service.Account, failure *service.UpstreamFailoverError) bool {
+	return account != nil && account.IsPoolMode() && failure != nil && failure.StatusCode >= 400 &&
+		(failure.Reason == service.GatewayFailureReasonPoolStatus || (failure.Reason == "" && failure.Stage == "" && len(failure.ResponseBody) > 0))
 }
 
 // shouldRespectOAuth429StormStop 在 FailoverOnAnyError 模式下关闭 429 风暴提前终止，
