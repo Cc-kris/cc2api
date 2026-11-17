@@ -717,7 +717,12 @@ func TestOpenAIResponses_RejectsHTTPContinuationPreviousResponseID(t *testing.T)
 	require.Contains(t, w.Body.String(), "previous_response_id")
 }
 
-func TestOpenAIResponses_FunctionCallOutputHTTPGuidanceDoesNotSuggestPreviousResponseReuse(t *testing.T) {
+// v0.3.16: 该用例原断言「缺 call_id 的 function_call_output 返回 400 且提示
+// Responses WebSocket v2」。线上事故（2026-11-17）表明把请求拦在选号之前会
+// 制造不可重试、不计费的 400，因此改为放行给上游裁定。
+// 现在断言的是：请求不再被本地预校验以“WebSocket v2”话术拒绝，而是走到
+// 选号/转发阶段（无可用上游时表现为 502）。
+func TestOpenAIResponses_FunctionCallOutputNotRejectedByLocalPreValidation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	w := httptest.NewRecorder()
@@ -741,9 +746,9 @@ func TestOpenAIResponses_FunctionCallOutputHTTPGuidanceDoesNotSuggestPreviousRes
 	h := newOpenAIHandlerForPreviousResponseIDValidation(t, nil)
 	h.Responses(c)
 
-	require.Equal(t, http.StatusBadRequest, w.Code)
-	require.Contains(t, w.Body.String(), "Responses WebSocket v2")
-	require.NotContains(t, w.Body.String(), "reuse previous_response_id")
+	require.NotEqual(t, http.StatusBadRequest, w.Code)
+	require.NotContains(t, w.Body.String(), "Responses WebSocket v2")
+	require.NotContains(t, w.Body.String(), "function_call_output requires call_id")
 }
 
 func TestOpenAIResponsesWebSocket_SetsClientTransportWSWhenUpgradeValid(t *testing.T) {
