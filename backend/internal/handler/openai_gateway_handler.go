@@ -1364,14 +1364,12 @@ func (h *OpenAIGatewayHandler) validateFunctionCallOutputRequest(c *gin.Context,
 		)
 		return true
 	}
-	if validation.HasItemReferenceForAllCallIDs {
-		return true
+	if !validation.HasItemReferenceForAllCallIDs {
+		reqLog.Warn("openai.request_validation_observed",
+			zap.String("reason", "function_call_output_missing_item_reference"),
+			zap.String("action", "pass_through"),
+		)
 	}
-
-	reqLog.Warn("openai.request_validation_observed",
-		zap.String("reason", "function_call_output_missing_item_reference"),
-		zap.String("action", "pass_through"),
-	)
 	return true
 }
 
