@@ -1354,21 +1354,25 @@ func (h *OpenAIGatewayHandler) validateFunctionCallOutputRequest(c *gin.Context,
 	}
 
 	if validation.HasFunctionCallOutputMissingCallID {
-		reqLog.Warn("openai.request_validation_failed",
+		// v0.3.16: 只观测不拦截。上游是第三方中继（apikey 账号）时，其容忍度
+		// 与我们这份预校验并不一致，拦截会把本可成功的请求变成 400，且发生在
+		// 选号之前，既不重试也不计费（见 v0.3.15 事故：WS 被上游 1013 拒绝后
+		// 客户端回退 HTTP，被此处拦下）。判定权交回上游。
+		reqLog.Warn("openai.request_validation_observed",
 			zap.String("reason", "function_call_output_missing_call_id"),
+			zap.String("action", "pass_through"),
 		)
-		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "function_call_output requires call_id on HTTP requests; continuation via previous_response_id is only supported on Responses WebSocket v2")
-		return false
+		return true
 	}
 	if validation.HasItemReferenceForAllCallIDs {
 		return true
 	}
 
-	reqLog.Warn("openai.request_validation_failed",
+	reqLog.Warn("openai.request_validation_observed",
 		zap.String("reason", "function_call_output_missing_item_reference"),
+		zap.String("action", "pass_through"),
 	)
-	h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "function_call_output requires item_reference ids matching each call_id on HTTP requests; continuation via previous_response_id is only supported on Responses WebSocket v2")
-	return false
+	return true
 }
 
 func (h *OpenAIGatewayHandler) acquireResponsesUserSlot(
