@@ -377,7 +377,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 			resp.Body = io.NopCloser(bytes.NewReader(respBody))
 			break
 		}
-		retryBody, changed, trimErr := trimGrokInvalidEncryptedContentRetryBody(responsesBody)
+		retryBody, changed, trimErr := trimOpenAIEncryptedContentRetryBody(responsesBody)
 		if trimErr != nil {
 			return nil, fmt.Errorf("prepare Grok invalid encrypted_content retry: %w", trimErr)
 		}

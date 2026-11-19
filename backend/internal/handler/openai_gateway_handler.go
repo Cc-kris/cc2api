@@ -2815,6 +2815,12 @@ func (h *OpenAIGatewayHandler) ensureForwardErrorResponse(c *gin.Context, stream
 	// 这里改成：Writer 已写过时强制走 streamStarted 分支，让
 	// handleStreamingAwareError 通过 SSE 发协议合规的 response.failed。
 	if c.Writer.Written() {
+		// A synchronous client error is already a complete response. Appending
+		// an SSE terminal event would make its JSON body invalid.
+		contentType := c.Writer.Header().Get("Content-Type")
+		if strings.EqualFold(strings.TrimSpace(strings.SplitN(contentType, ";", 2)[0]), "application/json") {
+			return false
+		}
 		streamStarted = true
 	}
 	h.handleStreamingAwareError(c, http.StatusBadGateway, "upstream_error", "Upstream request failed", streamStarted)

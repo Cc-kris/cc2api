@@ -3428,7 +3428,6 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 
 			upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(respBody))
 			upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
-			upstreamCode := extractUpstreamErrorCode(respBody)
 			if !rejectedFieldRetryTried {
 				if next, _, changed, normErr := normalizeOpenAIResponsesRejectedFieldRetryBody(resp.StatusCode, body, respBody); normErr != nil {
 					return nil, normErr
@@ -3441,12 +3440,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 					continue
 				}
 			}
-			invalidEncryptedContentError := upstreamCode == "invalid_encrypted_content" ||
-				(upstreamCode == "thinking_signature_invalid" &&
-					strings.Contains(upstreamMsg, "The encrypted content") &&
-					strings.Contains(upstreamMsg, "could not be verified") &&
-					strings.Contains(upstreamMsg, "could not be decrypted or parsed"))
-			if !httpInvalidEncryptedContentRetryTried && resp.StatusCode == http.StatusBadRequest && invalidEncryptedContentError {
+			if !httpInvalidEncryptedContentRetryTried && isOpenAIHTTPInvalidEncryptedContent(resp.StatusCode, respBody) {
 				invalidDigests := collectOpenAIEncryptedContentDigestsRaw(lineageEntryBody)
 				if trimOpenAIEncryptedReasoningItems(reqBody) {
 					body, err = json.Marshal(reqBody)
@@ -3733,6 +3727,15 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		return nil, err
 	}
 
+	lineageGroupID := getOpenAIGroupIDFromContext(c)
+	lineageEntryBody := body
+	lineageSessionHash := ""
+	if stateStore := s.getOpenAIWSStateStore(); stateStore != nil && stateStore.HasAnySessionInvalidEncryptedContent() {
+		lineageSessionHash = s.GenerateSessionHash(c, lineageEntryBody)
+		if invalidDigests := stateStore.GetSessionInvalidEncryptedContentDigests(lineageGroupID, lineageSessionHash); len(invalidDigests) > 0 {
+			body, _ = s.stripSessionInvalidEncryptedContentLogged(body, invalidDigests, "invalid_encrypted_lineage_strip", account.ID, 0)
+		}
+	}
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 	syncOpenAIResponsesInstructionsEcho(c, body)
 	upstreamReq, err := s.buildUpstreamRequestOpenAIPassthrough(upstreamCtx, c, account, body, token)
@@ -3783,9 +3786,23 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			return nil, readErr
 		}
 		resp.Body = io.NopCloser(bytes.NewReader(errBody))
-		if next, _, changed, normErr := normalizeOpenAIResponsesRejectedFieldRetryBody(resp.StatusCode, body, errBody); normErr != nil {
+		next, _, changed, normErr := normalizeOpenAIResponsesRejectedFieldRetryBody(resp.StatusCode, body, errBody)
+		if normErr != nil {
 			return nil, normErr
-		} else if changed {
+		}
+		if !changed && isOpenAIHTTPInvalidEncryptedContent(resp.StatusCode, errBody) {
+			next, changed, normErr = trimOpenAIEncryptedContentRetryBody(body)
+			if normErr != nil {
+				return nil, fmt.Errorf("prepare passthrough invalid encrypted_content retry: %w", normErr)
+			}
+			if changed {
+				if lineageSessionHash == "" {
+					lineageSessionHash = s.GenerateSessionHash(c, lineageEntryBody)
+				}
+				s.markOpenAIWSInvalidEncryptedContentLineage(lineageGroupID, lineageSessionHash, collectOpenAIEncryptedContentDigestsRaw(body))
+			}
+		}
+		if changed {
 			body = next
 			// Closing the previous response releases its adopted upstream context.
 			// Each retry therefore needs a fresh lifecycle from the original client
@@ -6947,6 +6964,23 @@ func (s *OpenAIGatewayService) validateUpstreamBaseURL(raw string) (string, erro
 // - 其他情况：追加 /v1/responses
 func buildOpenAIResponsesURL(base string) string {
 	return buildOpenAIEndpointURL(base, "/v1/responses")
+}
+
+func isOpenAIHTTPInvalidEncryptedContent(status int, body []byte) bool {
+	if status != http.StatusBadRequest {
+		return false
+	}
+	switch extractUpstreamErrorCode(body) {
+	case "invalid_encrypted_content":
+		return true
+	case "thinking_signature_invalid":
+		msg := extractUpstreamErrorMessage(body)
+		return strings.Contains(msg, "The encrypted content") &&
+			strings.Contains(msg, "could not be verified") &&
+			strings.Contains(msg, "could not be decrypted or parsed")
+	default:
+		return false
+	}
 }
 
 func trimOpenAIEncryptedReasoningItems(reqBody map[string]any) bool {

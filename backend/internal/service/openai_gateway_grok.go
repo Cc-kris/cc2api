@@ -88,9 +88,6 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 		return nil, err
 	}
 
-	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
-	defer releaseUpstreamCtx()
-
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
@@ -99,7 +96,11 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 	upstreamStart := time.Now()
 	var resp *http.Response
 	for attempt := 0; ; attempt++ {
+		// The transport cancels the adopted context when the response body closes.
+		// Each attempt must derive its own lifecycle from the client context.
+		upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 		upstreamReq, buildErr := buildGrokResponsesRequest(upstreamCtx, c, account, patchedBody, token, cacheIdentity, s.cfg)
+		releaseUpstreamCtx()
 		if buildErr != nil {
 			return nil, buildErr
 		}
@@ -113,7 +114,7 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 		// xAI can reject encrypted reasoning copied from a response produced under
 		// another account or cache identity. Retry once with the same routing and
 		// credential after removing only the rejected encrypted reasoning payload.
-		if attempt > 0 || resp.StatusCode != http.StatusBadRequest {
+		if attempt > 0 || !isGrokEncryptedContentRecoveryStatus(resp.StatusCode) {
 			break
 		}
 		respBody := s.readUpstreamErrorBody(resp)
@@ -125,7 +126,7 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 			break
 		}
 
-		retryBody, changed, trimErr := trimGrokInvalidEncryptedContentRetryBody(patchedBody)
+		retryBody, changed, trimErr := trimOpenAIEncryptedContentRetryBody(patchedBody)
 		if trimErr != nil {
 			return nil, fmt.Errorf("prepare Grok invalid encrypted_content retry: %w", trimErr)
 		}
@@ -141,6 +142,7 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 
 	if resp.StatusCode >= 400 {
 		respBody := s.readUpstreamErrorBody(resp)
+		_ = resp.Body.Close()
 		resp.Body = io.NopCloser(bytes.NewReader(respBody))
 		upstreamMsg := sanitizeUpstreamErrorMessage(extractUpstreamErrorMessage(respBody))
 		if upstreamMsg == "" {
@@ -219,8 +221,12 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 	}, nil
 }
 
+func isGrokEncryptedContentRecoveryStatus(statusCode int) bool {
+	return statusCode == http.StatusBadRequest || statusCode == http.StatusUnprocessableEntity
+}
+
 func isGrokInvalidEncryptedContentResponse(statusCode int, body []byte) bool {
-	if statusCode != http.StatusBadRequest {
+	if !isGrokEncryptedContentRecoveryStatus(statusCode) {
 		return false
 	}
 
@@ -246,20 +252,18 @@ func isGrokInvalidEncryptedContentResponse(statusCode int, body []byte) bool {
 		return false
 	}
 
-	if strings.EqualFold(code, "invalid_encrypted_content") {
+	switch strings.ToLower(code) {
+	case "invalid_encrypted_content", "invalid_compaction", "compaction_decode_error":
 		return true
-	}
-	// Keep the official xAI flat-code gate so unrelated 400s are not retried.
-	if !strings.EqualFold(code, "invalid-argument") && code != "" {
+	case "invalid-argument", "":
+		// Generic or absent codes require specific decryption or compaction text.
+		return strings.Contains(normalizedMessage, "decode the compaction blob") ||
+			(strings.Contains(normalizedMessage, "encrypted_content") &&
+				(strings.Contains(normalizedMessage, "decrypt") ||
+					(code != "" && strings.Contains(normalizedMessage, "unmodified"))))
+	default:
 		return false
 	}
-	// Nested OpenAI-style envelopes may omit top-level code; require decrypt text.
-	if code == "" && !strings.Contains(normalizedMessage, "decrypt") {
-		return false
-	}
-	return strings.Contains(normalizedMessage, "encrypted_content") &&
-		(strings.Contains(normalizedMessage, "decrypt") ||
-			strings.Contains(normalizedMessage, "unmodified"))
 }
 
 // requestHasGrokEncryptedReasoning reports whether the outbound Responses body
@@ -345,21 +349,22 @@ func stripAnthropicThinkingSignatures(body []byte) ([]byte, bool) {
 	return out, true
 }
 
-func trimGrokInvalidEncryptedContentRetryBody(body []byte) ([]byte, bool, error) {
+func trimOpenAIEncryptedContentRetryBody(body []byte) ([]byte, bool, error) {
 	input := gjson.GetBytes(body, "input")
 	items := input.Array()
 	if input.IsObject() {
 		items = []gjson.Result{input}
 	}
 
-	hasEncryptedReasoning := false
+	hasEncryptedItem := false
 	for _, item := range items {
-		if strings.TrimSpace(item.Get("type").String()) == "reasoning" && item.Get("encrypted_content").Exists() {
-			hasEncryptedReasoning = true
+		itemType := strings.TrimSpace(item.Get("type").String())
+		if (itemType == "reasoning" || isOpenAICompactionType(itemType)) && item.Get("encrypted_content").Exists() {
+			hasEncryptedItem = true
 			break
 		}
 	}
-	if !hasEncryptedReasoning {
+	if !hasEncryptedItem {
 		return body, false, nil
 	}
 

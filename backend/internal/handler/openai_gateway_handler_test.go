@@ -186,6 +186,20 @@ func TestOpenAIEnsureForwardErrorResponse_WritesFallbackWhenNotWritten(t *testin
 // 形式追加给客户端（streamStarted 强制 true）。
 // 这是 case B 修复：旧实现遇到 Writer.Written 直接 return false，
 // 客户端只能拿到 silent EOF；Codex CLI 报 "stream closed before response.completed"。
+func TestOpenAIEnsureForwardErrorResponse_LeavesCommittedJSONAlone(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, EndpointResponses, nil)
+	c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "invalid_encrypted_content"}})
+	original := w.Body.String()
+
+	h := &OpenAIGatewayHandler{}
+	require.False(t, h.ensureForwardErrorResponse(c, false))
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Equal(t, original, w.Body.String())
+}
+
 func TestOpenAIEnsureForwardErrorResponse_AppendsSSEAfterWritten(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

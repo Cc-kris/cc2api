@@ -530,6 +530,13 @@ type ChatCompletionsToAnthropicStreamState struct {
 	CurrentToolHadDelta bool
 	HasToolCall         bool
 
+	// Accumulated reasoning text and whether any visible text was streamed.
+	// Used at finalize to mirror the buffered reasoning-only fallback
+	// (chatMessageToAnthropicBlocks): with no text and no tool calls, the
+	// reasoning is surfaced as a text block so the turn is consumable.
+	reasoningText strings.Builder
+	sawText       bool
+
 	// Tool calls keyed by the upstream tool_call index. The Anthropic block
 	// index is assigned when the tool block is announced (content_block_start),
 	// which is deferred until the tool's name has arrived. Argument fragments
@@ -606,6 +613,7 @@ func ChatCompletionsChunkToAnthropicEvents(
 		// Reasoning content → thinking block.
 		reasoning := choice.Delta.reasoningText()
 		if reasoning != nil && *reasoning != "" {
+			_, _ = state.reasoningText.WriteString(*reasoning)
 			events = append(events, ensureCCAnthropicThinkingBlock(state)...)
 			events = append(events, ccAnthropicDelta(state, &AnthropicDelta{
 				Type:     "thinking_delta",
@@ -615,6 +623,7 @@ func ChatCompletionsChunkToAnthropicEvents(
 
 		// Text content → text block (closes any open thinking block first).
 		if choice.Delta.Content != nil && *choice.Delta.Content != "" {
+			state.sawText = true
 			events = append(events, closeCCAnthropicBlockIfOpen(state, "thinking")...)
 			events = append(events, ensureCCAnthropicTextBlock(state)...)
 			events = append(events, ccAnthropicDelta(state, &AnthropicDelta{
@@ -647,6 +656,19 @@ func FinalizeChatCompletionsAnthropicStream(state *ChatCompletionsToAnthropicStr
 	var events []AnthropicStreamEvent
 	if !state.MessageStartSent {
 		events = append(events, ensureCCAnthropicMessageStart(state)...)
+	}
+
+	// Reasoning-only fallback (streaming counterpart of the buffered path in
+	// chatMessageToAnthropicBlocks): no visible text and no tool calls means
+	// the reasoning becomes the visible text block.
+	if !state.sawText && !state.HasToolCall && strings.TrimSpace(state.reasoningText.String()) != "" {
+		events = append(events, closeCCAnthropicBlockIfOpen(state, "thinking")...)
+		events = append(events, ensureCCAnthropicTextBlock(state)...)
+		events = append(events, ccAnthropicDelta(state, &AnthropicDelta{
+			Type: "text_delta",
+			Text: state.reasoningText.String(),
+		})...)
+		state.sawText = true
 	}
 
 	// Announce tools whose name never arrived so their buffered arguments are
