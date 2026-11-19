@@ -1223,6 +1223,12 @@ func ChatCompletionsResponseToResponses(resp *ChatCompletionsResponse, model str
 	return out
 }
 
+// generateResponsesToolCallItemID gives restored calls IDs valid for their
+// Responses item type, while reasoning/message IDs retain their existing form.
+func generateResponsesToolCallItemID(itemType string) string {
+	return retypedResponsesToolCallItemID("fc_"+strings.TrimPrefix(generateItemID(), "item_"), itemType)
+}
+
 func chatMessageToResponsesOutput(message ChatMessage, customTools, functionTools map[string]bool, toolSearch bool, namespaceTools map[string]NamespacedToolName) []ResponsesOutput {
 	var outputs []ResponsesOutput
 	reasoning := message.reasoningText()
@@ -1262,7 +1268,7 @@ func chatMessageToResponsesOutput(message ChatMessage, customTools, functionTool
 		if customName, ok := customToolCallName(toolCall.Function.Name, customTools, functionTools, namespaceTools); ok {
 			outputs = append(outputs, ResponsesOutput{
 				Type:   "custom_tool_call",
-				ID:     generateItemID(),
+				ID:     generateResponsesToolCallItemID("custom_tool_call"),
 				CallID: toolCall.ID,
 				Name:   customName,
 				Input:  extractCustomToolCallInput(arguments),
@@ -1273,7 +1279,7 @@ func chatMessageToResponsesOutput(message ChatMessage, customTools, functionTool
 		if toolSearch && toolCall.Function.Name == toolSearchProxyName {
 			outputs = append(outputs, ResponsesOutput{
 				Type:      "tool_search_call",
-				ID:        generateItemID(),
+				ID:        generateResponsesToolCallItemID("tool_search_call"),
 				CallID:    toolCall.ID,
 				Arguments: arguments,
 				Status:    "completed",
@@ -1283,7 +1289,7 @@ func chatMessageToResponsesOutput(message ChatMessage, customTools, functionTool
 		if ns, ok := namespaceTools[toolCall.Function.Name]; ok {
 			outputs = append(outputs, ResponsesOutput{
 				Type:      "function_call",
-				ID:        generateItemID(),
+				ID:        generateResponsesToolCallItemID("function_call"),
 				CallID:    toolCall.ID,
 				Name:      ns.Name,
 				Namespace: ns.Namespace,
@@ -1294,7 +1300,7 @@ func chatMessageToResponsesOutput(message ChatMessage, customTools, functionTool
 		}
 		outputs = append(outputs, ResponsesOutput{
 			Type:      "function_call",
-			ID:        generateItemID(),
+			ID:        generateResponsesToolCallItemID("function_call"),
 			CallID:    toolCall.ID,
 			Name:      toolCall.Function.Name,
 			Arguments: arguments,
@@ -1552,7 +1558,7 @@ func ChatCompletionsChunkToResponsesEvents(
 				copyCall.Function.Arguments = ""
 				state.ToolCalls[idx] = &copyCall
 				stored = &copyCall
-				state.ToolItemIDs[idx] = generateItemID()
+				state.ToolItemIDs[idx] = generateResponsesToolCallItemID("function_call")
 				state.ToolOutputIndex[idx] = state.allocOutputIndex()
 			} else {
 				if toolCall.ID != "" {
@@ -1808,8 +1814,6 @@ func announceChatToolItem(
 	state.toolAnnounced[idx] = true
 	customName, isCustom := customToolCallName(stored.Function.Name, state.CustomTools, state.FunctionTools, state.NamespaceTools)
 	isToolSearch := !isCustom && state.ToolSearchDeclared && stored.Function.Name == toolSearchProxyName
-	state.toolIsCustom[idx] = isCustom
-	state.toolIsToolSearch[idx] = isToolSearch
 	itemType := "function_call"
 	if isCustom {
 		itemType = "custom_tool_call"
@@ -1817,6 +1821,9 @@ func announceChatToolItem(
 	if isToolSearch {
 		itemType = "tool_search_call"
 	}
+	state.ToolItemIDs[idx] = retypedResponsesToolCallItemID(state.ToolItemIDs[idx], itemType)
+	state.toolIsCustom[idx] = isCustom
+	state.toolIsToolSearch[idx] = isToolSearch
 	// namespace 子工具的调用仍按 function_call 生命周期下发，但 added/done 项要
 	// 还原为裸子工具名 + namespace 字段（codex 按 namespace+name 路由）。
 	itemName, itemNamespace := stored.Function.Name, ""
@@ -1959,7 +1966,9 @@ func (state *ChatCompletionsToResponsesStreamState) chatOutput() []ResponsesOutp
 	if state.Reasoning.Len() > 0 {
 		outputs = append(outputs, ResponsesOutput{
 			Type: "reasoning",
-			ID:   generateItemID(),
+			// Clients replay response.completed.output as history. Keep the
+			// lifecycle ID used by output_item.done and the reasoning cache.
+			ID: state.ReasoningItemID,
 			Summary: []ResponsesSummary{{
 				Type: "summary_text",
 				Text: state.Reasoning.String(),
@@ -1990,7 +1999,7 @@ func (state *ChatCompletionsToResponsesStreamState) chatOutput() []ResponsesOutp
 		if state.toolIsCustom[i] {
 			outputs = append(outputs, ResponsesOutput{
 				Type:   "custom_tool_call",
-				ID:     generateItemID(),
+				ID:     state.ToolItemIDs[i],
 				CallID: toolCall.ID,
 				Name:   customNameForStreamTool(state, toolCall.Function.Name),
 				Input:  extractCustomToolCallInput(arguments),
@@ -2001,7 +2010,7 @@ func (state *ChatCompletionsToResponsesStreamState) chatOutput() []ResponsesOutp
 		if state.toolIsToolSearch[i] {
 			outputs = append(outputs, ResponsesOutput{
 				Type:      "tool_search_call",
-				ID:        generateItemID(),
+				ID:        state.ToolItemIDs[i],
 				CallID:    toolCall.ID,
 				Arguments: arguments,
 				Status:    "completed",
@@ -2014,7 +2023,7 @@ func (state *ChatCompletionsToResponsesStreamState) chatOutput() []ResponsesOutp
 		}
 		outputs = append(outputs, ResponsesOutput{
 			Type:      "function_call",
-			ID:        generateItemID(),
+			ID:        state.ToolItemIDs[i],
 			CallID:    toolCall.ID,
 			Name:      name,
 			Namespace: namespace,

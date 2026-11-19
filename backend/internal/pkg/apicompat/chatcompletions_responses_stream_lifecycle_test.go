@@ -145,6 +145,66 @@ func TestStream_ReasoningThenToolCallDoesNotSynthesizeVisibleText(t *testing.T) 
 	}
 }
 
+// The terminal response is the history replayed by clients. Its reasoning ID
+// must match the added/done events, whose ID is used by the gateway cache.
+func TestStream_ReasoningIdentitySurvivesCompletedOutput(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		tail string
+	}{
+		{"reasoning_only", `{"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`},
+		{"with_message", `{"choices":[{"index":0,"delta":{"content":"answer"},"finish_reason":"stop"}]}`},
+		{"with_tool", `{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"lookup","arguments":"{\"n\":1}"}}]},"finish_reason":"tool_calls"}]}`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			events := collectStreamEvents(t, []string{
+				`{"choices":[{"index":0,"delta":{"reasoning_content":"cached "}}]}`,
+				`{"choices":[{"index":0,"delta":{"reasoning_content":"reasoning"}}]}`,
+				tt.tail,
+			})
+			added := map[int]ResponsesOutput{}
+			done := map[int]ResponsesOutput{}
+			var completed *ResponsesResponse
+			var reasoningID string
+			for _, event := range events {
+				switch event.Type {
+				case "response.output_item.added":
+					require.NotNil(t, event.Item)
+					added[event.OutputIndex] = *event.Item
+					if event.Item.Type == "reasoning" {
+						reasoningID = event.Item.ID
+					}
+				case "response.output_item.done":
+					require.NotNil(t, event.Item)
+					done[event.OutputIndex] = *event.Item
+				case "response.completed":
+					completed = event.Response
+				}
+				if strings.HasPrefix(event.Type, "response.reasoning_summary_") {
+					require.NotEmpty(t, reasoningID)
+					require.Equal(t, reasoningID, event.ItemID)
+				}
+			}
+			require.NotNil(t, completed)
+			require.NotEmpty(t, reasoningID)
+			require.Len(t, completed.Output, len(done))
+			for index, item := range completed.Output {
+				require.Equal(t, added[index].ID, item.ID, "added/completed item identity at index %d", index)
+				require.Equal(t, done[index].ID, item.ID, "done/completed item identity at index %d", index)
+				require.Equal(t, done[index].Type, item.Type)
+				if item.Type == "reasoning" {
+					require.Equal(t, reasoningID, item.ID)
+					require.Equal(t, done[index].Summary, item.Summary)
+					require.Equal(t, "cached reasoning", item.Summary[0].Text)
+				} else if item.Type == "function_call" {
+					require.Equal(t, "call_a", item.CallID)
+					require.Equal(t, done[index].Arguments, item.Arguments)
+				}
+			}
+		})
+	}
+}
+
 // TestStream_ToolCallLifecycleComplete guards that a tool call is fully closed
 // (function_call_arguments.done + output_item.done with full arguments), which
 // codex needs to execute the call.

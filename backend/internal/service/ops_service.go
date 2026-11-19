@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -235,6 +236,8 @@ func (s *OpsService) prepareErrorLogInput(ctx context.Context, entry *OpsInsertE
 		entry.ErrorType = "api_error"
 	}
 
+	entry.ErrorMessage = redactGeminiCredentialText(entry.ErrorMessage)
+
 	// Sanitize + truncate error_body to avoid storing sensitive data.
 	if strings.TrimSpace(entry.ErrorBody) != "" {
 		sanitized, _ := sanitizeErrorBodyForStorage(entry.ErrorBody, opsMaxStoredErrorBodyBytes)
@@ -380,6 +383,10 @@ func (s *OpsService) GetErrorLogByID(ctx context.Context, id int64) (*OpsErrorLo
 		}
 		return nil, infraerrors.InternalServer("OPS_ERROR_LOAD_FAILED", "Failed to load ops error log").WithCause(err)
 	}
+	if detail == nil {
+		return nil, nil
+	}
+	redactOpsErrorLogDetailCredentials(detail)
 	return detail, nil
 }
 
@@ -616,7 +623,14 @@ func sanitizeAndTrimJSONPayload(raw []byte, maxBytes int) (jsonString string, tr
 	}
 
 	decoded = redactSensitiveJSON(decoded)
-
+	credentialRedacted, err := json.Marshal(redactGeminiCredentialJSON(decoded, 0))
+	if err != nil {
+		return "", false, bytesLen
+	}
+	decoded = nil
+	if err := json.Unmarshal(credentialRedacted, &decoded); err != nil {
+		return "", false, bytesLen
+	}
 	encoded, err := json.Marshal(decoded)
 	if err != nil {
 		return "", false, bytesLen
@@ -905,6 +919,47 @@ func shallowCopyMap(m map[string]any) map[string]any {
 		out[k] = v
 	}
 	return out
+}
+
+// redactOpsErrorLogDetailCredentials is a read-time backstop for records written
+// before credential-shaped text was redacted at ingestion. It does not truncate
+// diagnostic payloads; the unified detail endpoint applies its own preview limit.
+func redactOpsErrorLogDetailCredentials(detail *OpsErrorLogDetail) {
+	if detail == nil {
+		return
+	}
+	detail.Message = redactGeminiCredentialText(detail.Message)
+	detail.ErrorBody = redactGeminiCredentialText(detail.ErrorBody)
+	detail.UpstreamErrorMessage = redactGeminiCredentialText(detail.UpstreamErrorMessage)
+	detail.UpstreamErrorDetail = redactGeminiCredentialText(detail.UpstreamErrorDetail)
+	detail.UpstreamErrors = redactGeminiCredentialText(detail.UpstreamErrors)
+	redactOpsErrorLogDetailTextFields(reflect.ValueOf(detail).Elem())
+}
+
+// redactOpsErrorLogDetailTextFields covers classification reasons and other
+// diagnostic strings from legacy rows without touching identity, status, or IDs.
+func redactOpsErrorLogDetailTextFields(value reflect.Value) {
+	switch value.Kind() {
+	case reflect.Pointer:
+		if !value.IsNil() {
+			redactOpsErrorLogDetailTextFields(value.Elem())
+		}
+	case reflect.Struct:
+		for i := 0; i < value.NumField(); i++ {
+			field := value.Field(i)
+			if !field.CanSet() {
+				continue
+			}
+			switch field.Kind() {
+			case reflect.String:
+				if strings.Contains(field.String(), "AQ.Ab") || strings.Contains(field.String(), "AIza") {
+					field.SetString(redactGeminiCredentialText(field.String()))
+				}
+			case reflect.Struct, reflect.Pointer:
+				redactOpsErrorLogDetailTextFields(field)
+			}
+		}
+	}
 }
 
 func sanitizeErrorBodyForStorage(raw string, maxBytes int) (sanitized string, truncated bool) {

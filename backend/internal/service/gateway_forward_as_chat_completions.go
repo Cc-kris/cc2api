@@ -118,21 +118,25 @@ func (s *GatewayService) ForwardAsChatCompletions(
 		proxyURL = account.Proxy.URL()
 	}
 
-	// 10. Build upstream request
-	upstreamCtx, releaseUpstreamCtx := detachStreamUpstreamContext(ctx, reqStream)
-	upstreamReq, err := s.buildUpstreamRequest(upstreamCtx, c, account, anthropicBody, token, tokenType, mappedModel, reqStream, shouldMimicClaudeCode)
-	releaseUpstreamCtx()
-	if err != nil {
-		return nil, fmt.Errorf("build upstream request: %w", err)
-	}
-
-	// 11. Send request
+	// 10–11. Rebuild each attempt with its own upstream context and the native
+	// Messages same-account retry budget; pool retries remain handler-owned.
 	upstreamStart := time.Now()
-	resp, err := s.httpUpstream.DoWithTLS(upstreamReq, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
+	resp, err := s.doAnthropicCompatUpstream(ctx, c, account, func() (*http.Response, error) {
+		upstreamCtx, releaseUpstreamCtx := detachStreamUpstreamContext(ctx, reqStream)
+		upstreamReq, buildErr := s.buildUpstreamRequest(upstreamCtx, c, account, anthropicBody, token, tokenType, mappedModel, reqStream, shouldMimicClaudeCode)
+		releaseUpstreamCtx()
+		if buildErr != nil {
+			return nil, fmt.Errorf("build upstream request: %w", buildErr)
+		}
+		return s.httpUpstream.DoWithTLS(upstreamReq, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
+	})
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 	if err != nil {
 		if resp != nil && resp.Body != nil {
 			_ = resp.Body.Close()
+		}
+		if errors.Is(err, context.Canceled) || ctx.Err() != nil || c.Request.Context().Err() != nil {
+			return nil, err
 		}
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
 		setOpsUpstreamError(c, 0, safeErr, "")
@@ -152,10 +156,8 @@ func (s *GatewayService) ForwardAsChatCompletions(
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	// Pool responses use only the handler's retry budget, just like /messages.
-	// Preserve the pool reason even for excluded statuses so they cannot acquire
-	// an unrelated retry budget or cool down the local account.
-	if resp.StatusCode >= 400 && account.IsPoolMode() {
+	// Only configured pool retry statuses bypass service retries, as in /messages.
+	if resp.StatusCode >= 400 && account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode) && !peekUserContentRejection(resp) {
 		return nil, poolModeStatusFailover(resp, account)
 	}
 
@@ -173,7 +175,7 @@ func (s *GatewayService) ForwardAsChatCompletions(
 		if s.rateLimitService != nil {
 			shouldDisable = s.rateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, mappedModel)
 		}
-		if shouldDisable || s.shouldFailoverUpstreamError(ctx, resp.StatusCode) {
+		if shouldDisable || (s.shouldFailoverUpstreamError(ctx, resp.StatusCode) && !isUserContentRejectionBody(respBody)) {
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				Platform:           account.Platform,
 				AccountID:          account.ID,
@@ -190,7 +192,11 @@ func (s *GatewayService) ForwardAsChatCompletions(
 			}
 		}
 
-		writeGatewayCCError(c, mapUpstreamStatusCode(resp.StatusCode), "server_error", upstreamMsg)
+		statusCode := mapUpstreamStatusCode(resp.StatusCode)
+		if s.shouldRetryUpstreamError(account, resp.StatusCode) && !isUserContentRejectionBody(respBody) {
+			statusCode = http.StatusBadGateway
+		}
+		writeGatewayCCError(c, statusCode, "server_error", upstreamMsg)
 		return nil, fmt.Errorf("upstream error: %d %s", resp.StatusCode, upstreamMsg)
 	}
 

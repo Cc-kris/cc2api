@@ -4,7 +4,6 @@ package service
 
 import (
 	"context"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -81,10 +80,10 @@ func TestAnthropicCompatAccountErrorPolicy(t *testing.T) {
 						account.Credentials[key] = value
 					}
 					repo := &rateLimitAccountRepoStub{}
-					upstream := &anthropicHTTPUpstreamRecorder{resp: &http.Response{
-						StatusCode: tc.status, Header: http.Header{},
-						Body: io.NopCloser(strings.NewReader(`{"type":"error","error":{"type":"invalid_request_error","message":"Service moved"}}`)),
-					}}
+					upstream := &compatRetryUpstream{
+						status: tc.status,
+						body:   `{"type":"error","error":{"type":"invalid_request_error","message":"Service moved"}}`,
+					}
 					svc := &GatewayService{
 						cfg: &config.Config{}, httpUpstream: upstream,
 						rateLimitService: NewRateLimitService(repo, nil, &config.Config{}, nil, nil),
@@ -121,7 +120,11 @@ func TestAnthropicCompatAccountErrorPolicy(t *testing.T) {
 						require.Empty(t, rec.Body.String())
 					} else {
 						require.NotErrorAs(t, err, &failoverErr)
-						require.Equal(t, tc.status, rec.Code)
+						wantStatus := tc.status
+						if svc.shouldRetryUpstreamError(account, tc.status) {
+							wantStatus = http.StatusBadGateway // native service retry exhaustion
+						}
+						require.Equal(t, wantStatus, rec.Code)
 						require.Contains(t, rec.Body.String(), "Service moved")
 					}
 				})

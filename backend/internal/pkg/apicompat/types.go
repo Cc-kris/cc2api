@@ -67,6 +67,9 @@ type AnthropicContentBlock struct {
 	// so multi-turn Claude clients can round-trip it back on subsequent turns.
 	Signature string `json:"signature,omitempty"`
 
+	// type=redacted_thinking
+	Data string `json:"data,omitempty"`
+
 	// type=image
 	Source *AnthropicImageSource `json:"source,omitempty"`
 

@@ -86,6 +86,25 @@ func (e ResponsesStreamEvent) MarshalJSON() ([]byte, error) {
 		}
 		return json.Marshal(m)
 
+	case "response.created", "response.completed", "response.done", "response.failed", "response.incomplete":
+		// Lifecycle events use the same required sequence field as item events.
+		// In particular, the initial created event must retain sequence_number:0;
+		// the default struct alias would drop it through omitempty.
+		m := e.wireBase()
+		if e.Response != nil {
+			m["response"] = e.Response
+		}
+		if e.Usage != nil {
+			m["usage"] = e.Usage
+		}
+		if e.Code != "" {
+			m["code"] = e.Code
+		}
+		if e.Param != "" {
+			m["param"] = e.Param
+		}
+		return json.Marshal(m)
+
 	case "response.custom_tool_call_input.delta", "response.custom_tool_call_input.done":
 		m := e.wireBase()
 		e.putItemID(m)
@@ -104,8 +123,7 @@ func (e ResponsesStreamEvent) MarshalJSON() ([]byte, error) {
 		return json.Marshal(m)
 
 	default:
-		// response.created / completed / done / failed / incomplete and any
-		// event type not shaped above keep the default struct marshalling.
+		// Unknown event types keep default struct marshalling.
 		type alias ResponsesStreamEvent
 		return json.Marshal(alias(e))
 	}

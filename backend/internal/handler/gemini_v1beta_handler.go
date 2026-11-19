@@ -21,6 +21,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
 	"github.com/google/uuid"
 
 	"github.com/gin-gonic/gin"
@@ -553,7 +554,7 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 				}
 			}
 			// ForwardNative already wrote the response
-			reqLog.Error("gemini.forward_failed", zap.Int64("account_id", account.ID), zap.Error(err))
+			logGeminiForwardFailed(c, account.ID, err)
 			return
 		}
 
@@ -642,6 +643,15 @@ func parseGeminiModelAction(rest string) (model string, action string, err error
 	}
 
 	return "", "", &pathParseError{"invalid model action path"}
+}
+
+func logGeminiForwardFailed(c *gin.Context, accountID int64, err error) error {
+	if err == nil {
+		return nil
+	}
+	safeMessage := logredact.RedactText(err.Error())
+	requestLogger(c, "handler.gemini_v1beta.models").Error("gemini.forward_failed", zap.Int64("account_id", accountID), zap.String("error", safeMessage))
+	return errors.New(safeMessage)
 }
 
 func (h *GatewayHandler) handleGeminiFailoverExhausted(c *gin.Context, failoverErr *service.UpstreamFailoverError) {

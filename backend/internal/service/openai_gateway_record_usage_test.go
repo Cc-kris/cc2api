@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 
 type openAIRecordUsageLogRepoStub struct {
 	UsageLogRepository
+	mu sync.Mutex
 
 	inserted   bool
 	err        error
@@ -60,6 +62,8 @@ func equalOptionalInt64(left, right *int64) bool {
 }
 
 func (s *openAIRecordUsageLogRepoStub) Create(ctx context.Context, log *UsageLog) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.calls++
 	s.lastLog = log
 	s.lastCtxErr = ctx.Err()

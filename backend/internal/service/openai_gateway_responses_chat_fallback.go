@@ -90,6 +90,23 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 	// 被 flush / 跨实例漂移后同 id 的 encrypted-only 副本无法再取明文的情况。
 	s.recacheReasoningItemsFromInput(responsesReq.Input)
 
+	effectiveTools, err := apicompat.EffectiveResponsesTools(&responsesReq)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"type":    "invalid_request_error",
+				"message": err.Error(),
+			},
+		})
+		return nil, fmt.Errorf("collect responses tools for chat completions: %w", err)
+	}
+	toolMapping := openAIResponsesChatToolMapping{
+		customTools:    apicompat.CustomToolNames(effectiveTools),
+		functionTools:  apicompat.FunctionToolNames(effectiveTools),
+		toolSearch:     apicompat.HasToolSearchTool(effectiveTools),
+		namespaceTools: apicompat.NamespaceToolNames(effectiveTools),
+	}
+
 	chatReq, err := apicompat.ResponsesToChatCompletionsRequestWithOptions(&responsesReq, &apicompat.ResponsesToChatOptions{
 		ReasoningContentByID: s.reasoningContentByID,
 	})
@@ -245,9 +262,18 @@ func (s *OpenAIGatewayService) forwardResponsesViaRawChatCompletions(
 	}
 
 	if clientStream {
-		return s.streamChatCompletionsAsResponses(c, resp, originalModel, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
+		return s.streamChatCompletionsAsResponses(c, resp, originalModel, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime, toolMapping)
 	}
-	return s.bufferChatCompletionsAsResponses(c, resp, originalModel, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
+	return s.bufferChatCompletionsAsResponses(c, resp, originalModel, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime, toolMapping)
+}
+
+// openAIResponsesChatToolMapping preserves the reversible tool lowering across
+// the real Chat Completions fallback response paths.
+type openAIResponsesChatToolMapping struct {
+	customTools    map[string]bool
+	functionTools  map[string]bool
+	toolSearch     bool
+	namespaceTools map[string]apicompat.NamespacedToolName
 }
 
 func (s *OpenAIGatewayService) bufferChatCompletionsAsResponses(
@@ -259,6 +285,7 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsResponses(
 	reasoningEffort *string,
 	serviceTier *string,
 	startTime time.Time,
+	toolMapping openAIResponsesChatToolMapping,
 ) (*OpenAIForwardResult, error) {
 	requestID := resp.Header.Get("x-request-id")
 	respBody, err := ReadUpstreamResponseBody(resp.Body, s.cfg, c, openAITooLargeError)
@@ -284,7 +311,8 @@ func (s *OpenAIGatewayService) bufferChatCompletionsAsResponses(
 		})
 		return nil, fmt.Errorf("parse chat completions response: %w", err)
 	}
-	responsesResp := apicompat.ChatCompletionsResponseToResponses(&ccResp, originalModel, nil, nil, false, nil)
+	responsesResp := apicompat.ChatCompletionsResponseToResponses(&ccResp, originalModel,
+		toolMapping.customTools, toolMapping.functionTools, toolMapping.toolSearch, toolMapping.namespaceTools)
 	s.cacheReasoningItemsFromOutput(responsesResp.Output)
 
 	usage := OpenAIUsage{}
@@ -323,6 +351,7 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 	reasoningEffort *string,
 	serviceTier *string,
 	startTime time.Time,
+	toolMapping openAIResponsesChatToolMapping,
 ) (*OpenAIForwardResult, error) {
 	requestID := resp.Header.Get("x-request-id")
 	headersWritten := false
@@ -342,6 +371,10 @@ func (s *OpenAIGatewayService) streamChatCompletionsAsResponses(
 	}
 
 	state := apicompat.NewChatCompletionsToResponsesStreamState(originalModel)
+	state.CustomTools = toolMapping.customTools
+	state.FunctionTools = toolMapping.functionTools
+	state.ToolSearchDeclared = toolMapping.toolSearch
+	state.NamespaceTools = toolMapping.namespaceTools
 	var usage OpenAIUsage
 	var tierObserver openAIResponseServiceTierObserver
 	var firstTokenMs *int

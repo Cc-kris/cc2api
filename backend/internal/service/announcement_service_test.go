@@ -19,7 +19,14 @@ func (s *announcementRepoStub) Create(_ context.Context, a *Announcement) error 
 	if a.ID == 0 {
 		a.ID = 1
 	}
-	s.item = a
+	// The repository persists a separate value; async translation updates must
+	// not mutate the same pointer returned synchronously by Create.
+	stored := *a
+	stored.Translations = make(map[string]AnnouncementTranslation, len(a.Translations))
+	for locale, translation := range a.Translations {
+		stored.Translations[locale] = translation
+	}
+	s.item = &stored
 	return nil
 }
 

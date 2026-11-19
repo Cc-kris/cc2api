@@ -2,6 +2,7 @@ package apicompat
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -120,6 +121,34 @@ func TestWire_CustomToolCallInputIndexPresentAtZero(t *testing.T) {
 	require.EqualValues(t, 0, done["output_index"])
 	require.Equal(t, "dir", done["input"])
 	require.NotContains(t, done, "delta")
+}
+
+func TestResponsesStreamWire_FullSequenceIncludesCreatedZero(t *testing.T) {
+	state := NewAnthropicEventToResponsesState()
+	index := 0
+	input := []*AnthropicStreamEvent{
+		{Type: "message_start", Message: &AnthropicResponse{ID: "msg_1", Model: "claude-sonnet-4-5"}},
+		{Type: "content_block_start", Index: &index, ContentBlock: &AnthropicContentBlock{Type: "text"}},
+		{Type: "content_block_delta", Index: &index, Delta: &AnthropicDelta{Type: "text_delta", Text: "ok"}},
+		{Type: "content_block_stop", Index: &index},
+		{Type: "message_stop"},
+	}
+	var actual []ResponsesStreamEvent
+	for _, event := range input {
+		actual = append(actual, AnthropicEventToResponsesEvents(event, state)...)
+	}
+	require.NotEmpty(t, actual)
+	require.Equal(t, "response.created", actual[0].Type)
+	for i, event := range actual {
+		sse, err := ResponsesEventToSSE(event)
+		require.NoError(t, err)
+		data := strings.TrimSpace(strings.SplitN(sse, "\n", 2)[1])
+		data = strings.TrimPrefix(data, "data: ")
+		var wire map[string]any
+		require.NoError(t, json.Unmarshal([]byte(data), &wire), "sequence %d", i)
+		require.Contains(t, wire, "sequence_number", "event %d (%s)", i, event.Type)
+		require.EqualValues(t, i, wire["sequence_number"], "event %d (%s)", i, event.Type)
+	}
 }
 
 // TestWire_UnknownEventFallsBackToDefault ensures non-streamed event types keep

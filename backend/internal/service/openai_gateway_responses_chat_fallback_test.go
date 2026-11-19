@@ -5,6 +5,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -379,6 +380,92 @@ func TestForwardResponses_ChatFallbackCachesStreamedReasoning(t *testing.T) {
 	for itemID, content := range sets {
 		require.NotEmpty(t, itemID)
 		require.Equal(t, "think first", content)
+	}
+}
+
+// A client can replay only the completed output's reasoning ID, not the
+// output_item.done event. Round-trip that public ID through the actual fallback
+// cache lookup with two assistant tool messages and an opaque ciphertext marker.
+func TestForwardResponses_ChatFallbackCompletedReasoningIDRestoresNextTurn(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"model":"deepseek-reasoner","input":"hello","stream":true}`)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			`data: {"id":"chatcmpl_roundtrip","choices":[{"index":0,"delta":{"reasoning_content":"cached reasoning"}}]}`,
+			"",
+			`data: {"id":"chatcmpl_roundtrip","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_a","type":"function","function":{"name":"lookup","arguments":"{\"n\":1}"}}]},"finish_reason":"tool_calls"}]}`,
+			"",
+			"data: [DONE]",
+			"",
+		}, "\n"))),
+	}}
+	cache := &reasoningRecordingCache{}
+	svc := &OpenAIGatewayService{cfg: rawChatCompletionsTestConfig(), httpUpstream: upstream, cache: cache}
+	_, err := svc.Forward(context.Background(), c, forceChatResponsesFallbackAccount(), body)
+	require.NoError(t, err)
+	var completedID string
+	for _, line := range strings.Split(rec.Body.String(), "\n") {
+		if strings.HasPrefix(line, "data: ") {
+			data := strings.TrimPrefix(line, "data: ")
+			if gjson.Get(data, "type").String() == "response.completed" {
+				completedID = gjson.Get(data, "response.output.0.id").String()
+				require.Equal(t, "reasoning", gjson.Get(data, "response.output.0.type").String())
+			}
+		}
+	}
+	require.NotEmpty(t, completedID)
+	stored := cache.snapshotSets()
+	require.Equal(t, "cached reasoning", stored[completedID], "completed output ID must address the cached streamed reasoning")
+	// The recording stub separates writes and configured reads. Seed its reads
+	// from the actual first-turn writes, matching a real Redis round trip.
+	cache.getResp = stored
+	for _, tt := range []struct {
+		name, id, want string
+	}{
+		{"completed_id", completedID, "cached reasoning"},
+		{"unknown_id", "item_unknown_for_cache", ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			replayed, err := json.Marshal(map[string]any{
+				"model": "deepseek-reasoner", "stream": false,
+				"input": []any{
+					map[string]any{"role": "user", "content": "hello"},
+					map[string]any{"type": "reasoning", "id": tt.id, "summary": []any{}, "encrypted_content": "synthetic-opaque-no-plaintext"},
+					map[string]any{"type": "function_call", "call_id": "call_a", "name": "lookup", "arguments": `{"n":1}`},
+					map[string]any{"type": "function_call_output", "call_id": "call_a", "output": "result A"},
+					map[string]any{"type": "function_call", "call_id": "call_b", "name": "lookup", "arguments": `{"n":2}`},
+					map[string]any{"type": "function_call_output", "call_id": "call_b", "output": "result B"},
+				},
+			})
+			require.NoError(t, err)
+			nextRecorder := httptest.NewRecorder()
+			nextContext, _ := gin.CreateTestContext(nextRecorder)
+			nextContext.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(replayed))
+			nextContext.Request.Header.Set("Content-Type", "application/json")
+			upstream.resp = &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(`{"id":"chatcmpl_round2","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`)),
+			}
+			_, err = svc.Forward(context.Background(), nextContext, forceChatResponsesFallbackAccount(), replayed)
+			require.NoError(t, err)
+			var calls []string
+			for _, message := range gjson.GetBytes(upstream.lastBody, "messages").Array() {
+				if message.Get("role").String() != "assistant" {
+					continue
+				}
+				require.Equal(t, tt.want, message.Get("reasoning_content").String())
+				calls = append(calls, message.Get("tool_calls.0.id").String())
+			}
+			require.Equal(t, []string{"call_a", "call_b"}, calls)
+			require.NotContains(t, string(upstream.lastBody), "synthetic-opaque-no-plaintext", "opaque ciphertext must not be interpreted as reasoning text")
+		})
 	}
 }
 

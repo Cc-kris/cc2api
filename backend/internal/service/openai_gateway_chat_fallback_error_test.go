@@ -40,7 +40,7 @@ func TestResponsesChatFallback_MalformedEventDoesNotFinalizeSuccess(t *testing.T
 	}
 
 	_, err := (&OpenAIGatewayService{}).streamChatCompletionsAsResponses(
-		c, resp, "gpt-test", "gpt-test", "provider-model", nil, nil, time.Now(),
+		c, resp, "gpt-test", "gpt-test", "provider-model", nil, nil, time.Now(), openAIResponsesChatToolMapping{},
 	)
 
 	require.ErrorContains(t, err, "parse chat completions stream event")

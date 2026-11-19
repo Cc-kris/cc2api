@@ -101,7 +101,7 @@ func namespaceToolMapping() apicompat.ResponsesClientToolMapping {
 }
 
 func TestHandleResponsesBufferedStreamingResponse_RestoresNamespaceTool(t *testing.T) {
-	t.Parallel()
+	// Gin mode is process-global; keep mode-changing tests out of the parallel phase.
 	gin.SetMode(gin.TestMode)
 
 	rec := httptest.NewRecorder()
@@ -118,7 +118,7 @@ func TestHandleResponsesBufferedStreamingResponse_RestoresNamespaceTool(t *testi
 }
 
 func TestHandleResponsesStreamingResponse_RestoresNamespaceTool(t *testing.T) {
-	t.Parallel()
+	// Gin mode is process-global; keep mode-changing tests out of the parallel phase.
 	gin.SetMode(gin.TestMode)
 
 	rec := httptest.NewRecorder()
@@ -145,7 +145,7 @@ func TestExtractResponsesReasoningEffortFromBody(t *testing.T) {
 }
 
 func TestHandleResponsesBufferedStreamingResponse_PreservesMessageStartCacheUsage(t *testing.T) {
-	t.Parallel()
+	// Gin mode is process-global; keep mode-changing tests out of the parallel phase.
 	gin.SetMode(gin.TestMode)
 
 	rec := httptest.NewRecorder()
@@ -178,7 +178,7 @@ func TestHandleResponsesBufferedStreamingResponse_PreservesMessageStartCacheUsag
 }
 
 func TestHandleResponsesStreamingResponse_PreservesMessageStartCacheUsage(t *testing.T) {
-	t.Parallel()
+	// Gin mode is process-global; keep mode-changing tests out of the parallel phase.
 	gin.SetMode(gin.TestMode)
 
 	rec := httptest.NewRecorder()

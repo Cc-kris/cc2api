@@ -45,7 +45,16 @@ func TestAnthropicCompatibilityPoolFailoverPreservesPolicy(t *testing.T) {
 				var failover *UpstreamFailoverError
 				require.True(t, errors.As(err, &failover), "%v", err)
 				require.Equal(t, tc.retryable, failover.RetryableOnSameAccount)
-				require.Equal(t, GatewayFailureReasonPoolStatus, failover.Reason)
+				// Native Messages only assigns pool_status when the received
+				// status is configured for pool retry. Nonmatching/disabled
+				// pool statuses retain ordinary failover and state policy.
+				nativePoolRetry := a.IsPoolMode() && a.IsPoolModeRetryableStatus(tc.status)
+				require.Equal(t, tc.retryable, nativePoolRetry)
+				if nativePoolRetry {
+					require.Equal(t, GatewayFailureReasonPoolStatus, failover.Reason)
+				} else {
+					require.Empty(t, failover.Reason)
+				}
 				require.Equal(t, tc.status, failover.StatusCode)
 				require.JSONEq(t, `{"error":{"message":"busy"}}`, string(failover.ResponseBody))
 				require.Equal(t, 1, upstream.calls)

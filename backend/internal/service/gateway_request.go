@@ -158,6 +158,9 @@ func ParseGatewayRequest(body []byte, protocol string) (*ParsedRequest, error) {
 		}
 		parsed.Model = modelResult.String()
 	}
+	if err := ValidateHaiku55Request(body, parsed.Model); err != nil {
+		return nil, err
+	}
 
 	// stream: 需要严格类型校验，非 bool 返回错误
 	streamResult := gjson.Get(jsonStr, "stream")
@@ -1209,6 +1212,20 @@ func sanitizeAnthropicBodyForBetaTokens(body []byte, anthropicBetaHeader string)
 	}
 
 	changed := false
+
+	// context_management：仅接受 context-management beta。
+	if b, deleted := stripAnthropicBodyFieldUnlessBeta(
+		body, "context_management", anthropicBetaHeader, claude.BetaContextManagement,
+	); deleted {
+		body, changed = b, true
+	}
+
+	// thinking.block_binding：仅接受 thinking-binding-controls beta。
+	if b, deleted := stripAnthropicBodyFieldUnlessBeta(
+		body, "thinking.block_binding", anthropicBetaHeader, claude.BetaThinkingBindingControls,
+	); deleted {
+		body, changed = b, true
+	}
 
 	// fallbacks：server-side refusal fallback，仅接受 server-side-fallback beta。
 	if b, deleted := stripAnthropicBodyFieldUnlessBeta(

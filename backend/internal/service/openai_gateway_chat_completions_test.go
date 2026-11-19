@@ -204,7 +204,6 @@ func TestApplyOpenAIStructuredOutputCompatibility(t *testing.T) {
 
 func TestForwardAsChatCompletions_ForceNonStrictStructuredOutput(t *testing.T) {
 	t.Parallel()
-	gin.SetMode(gin.TestMode)
 
 	body := []byte(`{
 		"model":"gpt-5.5",
@@ -261,7 +260,6 @@ func TestForwardAsChatCompletions_ForceNonStrictStructuredOutput(t *testing.T) {
 
 func TestForwardAsChatCompletions_ForceNonStrictStructuredOutputRawChat(t *testing.T) {
 	t.Parallel()
-	gin.SetMode(gin.TestMode)
 
 	body := []byte(`{
 		"model":"gpt-5.5",

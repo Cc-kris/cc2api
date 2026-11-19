@@ -5865,7 +5865,7 @@ func (s *GatewayService) buildUpstreamRequestAnthropicAPIKeyPassthrough(
 	}
 
 	// 能力维度 sanitize：API-key 透传路径按客户端 anthropic-beta（再过一遍 BetaPolicy
-	// filter）决定 body 中 fallbacks / fallback_credit_token 的去留。
+	// filter）决定 body 中 beta 专有字段的去留。
 	// 客户端不带 anthropic-beta 时 finalBeta 为空，字段同样必须剥除（上游无条件调用）。
 	finalBeta := ""
 	if c != nil && c.Request != nil {
@@ -5900,6 +5900,10 @@ func (s *GatewayService) buildUpstreamRequestAnthropicAPIKeyPassthrough(
 	req.Header.Del("x-api-key")
 	req.Header.Del("x-goog-api-key")
 	req.Header.Del("cookie")
+	req.Header.Del("anthropic-beta")
+	if finalBeta != "" {
+		setHeaderRaw(req.Header, "anthropic-beta", finalBeta)
+	}
 	setHeaderRaw(req.Header, "x-api-key", token)
 
 	if getHeaderRaw(req.Header, "content-type") == "" {
@@ -6958,6 +6962,16 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 		body = syncBillingHeaderVersion(body, billingUA)
 	}
 
+	// 先计算最终 outgoing beta，再按该值清理 body；不能使用未过滤的客户端 beta。
+	policyFilterSet := s.getBetaPolicyFilterSet(ctx, c, account, modelID)
+	effectiveDropSet := mergeDropSets(policyFilterSet)
+	finalBetaHeader, finalBetaShouldSet := s.computeFinalAnthropicBeta(
+		tokenType, mimicClaudeCode, modelID, clientHeaders, body, effectiveDropSet,
+	)
+	if sanitized, changed := sanitizeAnthropicBodyForBetaTokens(body, finalBetaHeader); changed {
+		body = sanitized
+	}
+
 	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -7003,57 +7017,13 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 		applyClaudeOAuthHeaderDefaults(req)
 	}
 
-	// Build effective drop set: merge static defaults with dynamic beta policy filter rules
-	policyFilterSet := s.getBetaPolicyFilterSet(ctx, c, account, modelID)
-	effectiveDropSet := mergeDropSets(policyFilterSet)
-
-	// 处理 anthropic-beta header（OAuth 账号需要包含 oauth beta）
-	if tokenType == "oauth" {
-		if mimicClaudeCode {
-			// 非 Claude Code 客户端：按 opencode 的策略处理：
-			// - 强制 Claude Code 指纹相关请求头（尤其是 user-agent/x-stainless/x-app）
-			// - 保留 incoming beta 的同时，确保 OAuth 所需 beta 存在
-			applyClaudeCodeMimicHeaders(req, reqStream, mimicUserAgent)
-
-			incomingBeta := ""
-			// 客户端显式请求的兼容性 beta（structured outputs / tool changes）不能
-			// 被 mimic 的固定 beta 集覆盖丢掉；未知 beta 仍然排除，policy drop 优先。
-			// 缺失的伴随 token 不推断补齐。
-			clientBeta := getHeaderRaw(clientHeaders, "anthropic-beta")
-			for _, token := range []string{
-				claude.BetaStructuredOutputs,
-				claude.BetaMidConversationToolChanges,
-				claude.BetaInlineTools,
-			} {
-				if containsBetaToken(clientBeta, token) {
-					if incomingBeta != "" {
-						incomingBeta += ","
-					}
-					incomingBeta += token
-				}
-			}
-			// Claude Code OAuth credentials are scoped to Claude Code.
-			// 所有模型统一使用完整 Claude Code beta，Haiku 不再旁路：真实 CLI 对
-			// Haiku 也发送同样的 beta 集，旁路会让伪装流量与真实流量可区分。
-			requiredBetas := claude.FullClaudeCodeMimicryBetas()
-			setHeaderRaw(req.Header, "anthropic-beta", mergeAnthropicBetaDropping(requiredBetas, incomingBeta, effectiveDropSet))
-		} else {
-			// Claude Code 客户端：尽量透传原始 header，仅补齐 oauth beta
-			clientBetaHeader := getHeaderRaw(req.Header, "anthropic-beta")
-			setHeaderRaw(req.Header, "anthropic-beta", stripBetaTokensWithSet(s.getBetaHeader(modelID, clientBetaHeader), effectiveDropSet))
-		}
-	} else {
-		// API-key accounts: apply beta policy filter to strip controlled tokens
-		if existingBeta := getHeaderRaw(req.Header, "anthropic-beta"); existingBeta != "" {
-			setHeaderRaw(req.Header, "anthropic-beta", stripBetaTokensWithSet(existingBeta, effectiveDropSet))
-		} else if s.cfg != nil && s.cfg.Gateway.InjectBetaForAPIKey {
-			// API-key：仅在请求显式使用 beta 特性且客户端未提供时，按需补齐（默认关闭）
-			if requestNeedsBetaFeatures(body) {
-				if beta := defaultAPIKeyBetaHeader(body); beta != "" {
-					setHeaderRaw(req.Header, "anthropic-beta", beta)
-				}
-			}
-		}
+	// OAuth mimicry 必须强制使用 CLI 指纹 headers；beta 使用预先计算的最终值。
+	if tokenType == "oauth" && mimicClaudeCode {
+		applyClaudeCodeMimicHeaders(req, reqStream, mimicUserAgent)
+	}
+	req.Header.Del("anthropic-beta")
+	if finalBetaShouldSet {
+		setHeaderRaw(req.Header, "anthropic-beta", finalBetaHeader)
 	}
 
 	// 同步 X-Claude-Code-Session-Id 头：取 body 中已处理的 metadata.user_id 的 session_id 覆盖
@@ -7065,15 +7035,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 		}
 	}
 
-	// 能力维度 sanitize：按最终发送的 anthropic-beta header 决定 body 中 beta 专有
-	// 字段（fallbacks / fallback_credit_token）的去留，避免 header 与 body 不对称导致
-	// 上游 Pydantic 以 "Extra inputs are not permitted" 拒收。
-	if sanitized, changed := sanitizeAnthropicBodyForBetaTokens(body, getHeaderRaw(req.Header, "anthropic-beta")); changed {
-		body = sanitized
-		_ = req.Body.Close()
-		req.Body = io.NopCloser(bytes.NewReader(body))
-		req.ContentLength = int64(len(body))
-	}
+	// 能力维度 sanitize：body 已在创建请求前按最终 beta 清理并完成。
 
 	// === DEBUG: 打印上游转发请求（headers + body 摘要），与 CLIENT_ORIGINAL 对比 ===
 	s.debugLogGatewaySnapshot("UPSTREAM_FORWARD", req.Header, body, map[string]string{
@@ -7349,6 +7311,85 @@ func mergeAnthropicBetaDropping(required []string, incoming string, drop map[str
 		out = append(out, p)
 	}
 	return strings.Join(out, ",")
+}
+
+// computeFinalAnthropicBeta 计算发往上游的最终 anthropic-beta header。
+// 返回 shouldSet=false 表示不主动设置该 header；这与未启用按需注入的
+// API-key 请求保持一致。body 清理必须使用这里返回的最终值，而不是客户端原值。
+func (s *GatewayService) computeFinalAnthropicBeta(
+	tokenType string,
+	mimicClaudeCode bool,
+	modelID string,
+	clientHeaders http.Header,
+	body []byte,
+	effectiveDropSet map[string]struct{},
+) (string, bool) {
+	clientBeta := getHeaderRaw(clientHeaders, "anthropic-beta")
+	if tokenType == "oauth" {
+		if mimicClaudeCode {
+			// 仅保留客户端显式请求且 mimic 支持的兼容性 beta。
+			incomingBeta := ""
+			for _, token := range []string{
+				claude.BetaStructuredOutputs,
+				claude.BetaMidConversationToolChanges,
+				claude.BetaInlineTools,
+			} {
+				if containsBetaToken(clientBeta, token) {
+					if incomingBeta != "" {
+						incomingBeta += ","
+					}
+					incomingBeta += token
+				}
+			}
+			return mergeAnthropicBetaDropping(claude.FullClaudeCodeMimicryBetas(), incomingBeta, effectiveDropSet), true
+		}
+		return stripBetaTokensWithSet(s.getBetaHeader(modelID, clientBeta), effectiveDropSet), true
+	}
+	if clientBeta != "" {
+		return stripBetaTokensWithSet(clientBeta, effectiveDropSet), true
+	}
+	if s.cfg != nil && s.cfg.Gateway.InjectBetaForAPIKey && requestNeedsBetaFeatures(body) {
+		if beta := defaultAPIKeyBetaHeader(body); beta != "" {
+			return beta, true
+		}
+	}
+	return "", false
+}
+
+// computeFinalCountTokensAnthropicBeta 保留 count_tokens 的 token-counting
+// 补齐和 OAuth mimic 合并客户端 beta 语义，并应用相同的最终 drop set。
+func (s *GatewayService) computeFinalCountTokensAnthropicBeta(
+	tokenType string,
+	mimicClaudeCode bool,
+	modelID string,
+	clientHeaders http.Header,
+	body []byte,
+	effectiveDropSet map[string]struct{},
+) (string, bool) {
+	clientBeta := getHeaderRaw(clientHeaders, "anthropic-beta")
+	if tokenType == "oauth" {
+		if mimicClaudeCode {
+			requiredBetas := append(claude.FullClaudeCodeMimicryBetas(), claude.BetaTokenCounting)
+			return mergeAnthropicBetaDropping(requiredBetas, clientBeta, effectiveDropSet), true
+		}
+		if clientBeta == "" {
+			return claude.CountTokensBetaHeader, true
+		}
+		beta := s.getBetaHeader(modelID, clientBeta)
+		if !containsBetaToken(beta, claude.BetaTokenCounting) {
+			beta += "," + claude.BetaTokenCounting
+		}
+		return stripBetaTokensWithSet(beta, effectiveDropSet), true
+	}
+	if clientBeta != "" {
+		return stripBetaTokensWithSet(clientBeta, effectiveDropSet), true
+	}
+	if s.cfg != nil && s.cfg.Gateway.InjectBetaForAPIKey && requestNeedsBetaFeatures(body) {
+		if beta := defaultAPIKeyBetaHeader(body); beta != "" {
+			return beta, true
+		}
+	}
+	return "", false
 }
 
 // stripBetaTokens removes the given beta tokens from a comma-separated header value.
@@ -10560,6 +10601,15 @@ func (s *GatewayService) buildCountTokensRequestAnthropicAPIKeyPassthrough(
 		targetURL = validatedURL + "/v1/messages/count_tokens?beta=true"
 	}
 	body = sanitizeCountTokensRequestBody(body)
+	finalBeta := ""
+	if c != nil && c.Request != nil {
+		if clientBeta := getHeaderRaw(c.Request.Header, "anthropic-beta"); clientBeta != "" {
+			finalBeta = stripBetaTokensWithSet(clientBeta, mergeDropSets(s.getBetaPolicyFilterSet(ctx, c, account, "")))
+		}
+	}
+	if sanitized, changed := sanitizeAnthropicBodyForBetaTokens(body, finalBeta); changed {
+		body = sanitized
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
 	if err != nil {
@@ -10583,6 +10633,10 @@ func (s *GatewayService) buildCountTokensRequestAnthropicAPIKeyPassthrough(
 	req.Header.Del("x-api-key")
 	req.Header.Del("x-goog-api-key")
 	req.Header.Del("cookie")
+	req.Header.Del("anthropic-beta")
+	if finalBeta != "" {
+		setHeaderRaw(req.Header, "anthropic-beta", finalBeta)
+	}
 	req.Header.Set("x-api-key", token)
 
 	if req.Header.Get("content-type") == "" {
@@ -10659,6 +10713,14 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 	if billingUA := effectiveBillingUserAgent(ctMimicUserAgent, tokenType, mimicClaudeCode, billingFingerprint); billingUA != "" {
 		body = syncBillingHeaderVersion(body, billingUA)
 	}
+	// 最终 beta 必须在 body 清理之前确定，且清理发生在创建出站请求之前。
+	ctEffectiveDropSet := mergeDropSets(s.getBetaPolicyFilterSet(ctx, c, account, modelID))
+	finalBetaHeader, finalBetaShouldSet := s.computeFinalCountTokensAnthropicBeta(
+		tokenType, mimicClaudeCode, modelID, clientHeaders, body, ctEffectiveDropSet,
+	)
+	if sanitized, changed := sanitizeAnthropicBodyForBetaTokens(body, finalBetaHeader); changed {
+		body = sanitized
+	}
 	body = sanitizeCountTokensRequestBody(body)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(body))
@@ -10700,41 +10762,13 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 		applyClaudeOAuthHeaderDefaults(req)
 	}
 
-	// Build effective drop set for count_tokens: merge static defaults with dynamic beta policy filter rules
-	ctEffectiveDropSet := mergeDropSets(s.getBetaPolicyFilterSet(ctx, c, account, modelID))
-
-	// OAuth 账号：处理 anthropic-beta header
-	if tokenType == "oauth" {
-		if mimicClaudeCode {
-			applyClaudeCodeMimicHeaders(req, false, ctMimicUserAgent)
-
-			incomingBeta := getHeaderRaw(req.Header, "anthropic-beta")
-			requiredBetas := append(claude.FullClaudeCodeMimicryBetas(), claude.BetaTokenCounting)
-			setHeaderRaw(req.Header, "anthropic-beta", mergeAnthropicBetaDropping(requiredBetas, incomingBeta, ctEffectiveDropSet))
-		} else {
-			clientBetaHeader := getHeaderRaw(req.Header, "anthropic-beta")
-			if clientBetaHeader == "" {
-				setHeaderRaw(req.Header, "anthropic-beta", claude.CountTokensBetaHeader)
-			} else {
-				beta := s.getBetaHeader(modelID, clientBetaHeader)
-				if !strings.Contains(beta, claude.BetaTokenCounting) {
-					beta = beta + "," + claude.BetaTokenCounting
-				}
-				setHeaderRaw(req.Header, "anthropic-beta", stripBetaTokensWithSet(beta, ctEffectiveDropSet))
-			}
-		}
-	} else {
-		// API-key accounts: apply beta policy filter to strip controlled tokens
-		if existingBeta := getHeaderRaw(req.Header, "anthropic-beta"); existingBeta != "" {
-			setHeaderRaw(req.Header, "anthropic-beta", stripBetaTokensWithSet(existingBeta, ctEffectiveDropSet))
-		} else if s.cfg != nil && s.cfg.Gateway.InjectBetaForAPIKey {
-			// API-key：与 messages 同步的按需 beta 注入（默认关闭）
-			if requestNeedsBetaFeatures(body) {
-				if beta := defaultAPIKeyBetaHeader(body); beta != "" {
-					setHeaderRaw(req.Header, "anthropic-beta", beta)
-				}
-			}
-		}
+	// OAuth mimicry 强制使用 CLI 指纹 headers；beta 使用预先计算的最终值。
+	if tokenType == "oauth" && mimicClaudeCode {
+		applyClaudeCodeMimicHeaders(req, false, ctMimicUserAgent)
+	}
+	req.Header.Del("anthropic-beta")
+	if finalBetaShouldSet {
+		setHeaderRaw(req.Header, "anthropic-beta", finalBetaHeader)
 	}
 
 	// 同步 X-Claude-Code-Session-Id 头：取 body 中已处理的 metadata.user_id 的 session_id 覆盖
@@ -10757,17 +10791,25 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 }
 
 // sanitizeCountTokensRequestBody 删除 count_tokens 端点不接受的生成参数。
-// 本地目前只处理 max_tokens（上游 efa5a2240）：OAuth 伪装会为普通 messages
-// 请求补 max_tokens=128000，count_tokens 只接受输入类字段。
-// temperature/top_p 等字段的过滤属于上游 27600b1d2，本地未移植，不在此处理。
+// count_tokens 只接受输入类字段；包括 max_tokens 在内的生成控制均不转发。
 func sanitizeCountTokensRequestBody(body []byte) []byte {
-	if !gjson.GetBytes(body, "max_tokens").Exists() {
-		return body
+	out := body
+	for _, path := range []string{
+		"max_tokens",
+		"temperature",
+		"top_p",
+		"top_k",
+		"stream",
+		"stop_sequences",
+		"stop",
+	} {
+		if gjson.GetBytes(out, path).Exists() {
+			if next, ok := deleteJSONPathBytes(out, path); ok {
+				out = next
+			}
+		}
 	}
-	if next, ok := deleteJSONPathBytes(body, "max_tokens"); ok {
-		return next
-	}
-	return body
+	return out
 }
 
 // countTokensError 返回 count_tokens 错误响应

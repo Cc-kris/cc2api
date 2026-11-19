@@ -248,20 +248,21 @@ func TestComputeRuleMetricNewIndicators(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
+			localSvc := *svc
 			rule := &OpsAlertRule{
 				MetricType: tt.metricType,
 			}
 			if tt.metricType == "p95_latency_ms" || tt.metricType == "p99_latency_ms" {
 				p95 := 2500
 				p99 := 5000
-				svc.opsRepo = &stubOpsRepo{overview: &OpsDashboardOverview{
+				localSvc.opsRepo = &stubOpsRepo{overview: &OpsDashboardOverview{
 					Duration: OpsPercentiles{
 						P95: &p95,
 						P99: &p99,
 					},
 				}}
 			}
-			gotValue, gotOK := svc.computeRuleMetric(ctx, rule, nil, start, end, platform, tt.groupID)
+			gotValue, gotOK := localSvc.computeRuleMetric(ctx, rule, nil, start, end, platform, tt.groupID)
 			require.Equal(t, tt.wantOK, gotOK)
 			if !tt.wantOK {
 				return

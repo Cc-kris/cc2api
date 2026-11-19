@@ -195,7 +195,11 @@ func TestHandleStreamingResponse_BareErrorSynthesizedFailedCarriesCreatedAt(t *t
 	}
 	require.NotEmpty(t, failed, "必须合成 response.failed: %s", recorder.Body.String())
 	require.EqualValues(t, 1700000000, gjson.Get(failed, "response.created_at").Int())
-	require.EqualValues(t, 2, gjson.Get(failed, "sequence_number").Int())
+	// content_part.added is inserted before the text delta, shifting the
+	// synthesized failure after that delta rather than reusing its sequence.
+	require.EqualValues(t, 3, gjson.Get(failed, "sequence_number").Int())
+	requireMonotonicResponsesSequence(t, sseDataPayloads(recorder.Body.String()))
+	require.Less(t, strings.Index(recorder.Body.String(), `"type":"response.failed"`), strings.Index(recorder.Body.String(), "data: [DONE]"))
 	require.Equal(t, "resp_bare", gjson.Get(failed, "response.id").String())
 }
 

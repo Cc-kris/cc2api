@@ -126,14 +126,23 @@ func TestWriteOpenAICompactSSEBridge_AfterKeepaliveCommitFailureEmitsFailedEvent
 	require.Equal(t, http.StatusBadGateway, status)
 }
 
-// 心跳未提交时非 2xx 行为不变：返回 false，调用方按原 JSON+状态码写回。
-func TestWriteOpenAICompactSSEBridge_BeforeKeepaliveCommitFailureKeepsJSONPath(t *testing.T) {
+// 心跳未提交时，client-stream compact 的错误也必须保持 SSE-only，保留上游状态和详情。
+func TestWriteOpenAICompactSSEBridge_BeforeKeepaliveCommitFailureEmitsOnlySSE(t *testing.T) {
 	c, rec := newCompactBridgeTestContext(t, true)
 	stop := StartOpenAICompactSSEKeepalive(c, time.Hour)
 	stop()
 
-	require.False(t, writeOpenAICompactSSEBridge(c, http.StatusBadGateway, []byte(`{"error":{"message":"fast fail"}}`)))
-	require.Zero(t, rec.Body.Len())
+	body := []byte(`{"error":{"code":"content_policy","message":"W4 independent compact failure","type":"invalid_request_error"}}`)
+	require.True(t, writeOpenAICompactSSEBridge(c, http.StatusBadRequest, body))
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Equal(t, "text/event-stream", rec.Header().Get("Content-Type"))
+	require.NotContains(t, rec.Body.String(), string(body))
+	events := parseCompactBridgeSSE(t, rec.Body.String())
+	require.Len(t, events, 1)
+	require.Equal(t, "response.failed", events[0][0])
+	require.Equal(t, "W4 independent compact failure", gjson.Get(events[0][1], "response.error.message").String())
+	require.Positive(t, gjson.Get(events[0][1], "response.created_at").Int())
+	require.True(t, ResponsesTerminalEventWritten(c), "outer handler must not append a generic failure")
 }
 
 // 未被显式拦截的写回路径（直接操作 c.Writer）也必须与心跳互斥：包装器在

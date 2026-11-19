@@ -55,6 +55,67 @@ func (s *geminiCompatHTTPUpstreamStub) DoWithTLS(req *http.Request, proxyURL str
 	return s.Do(req, proxyURL, accountID, accountConcurrency)
 }
 
+func TestWriteGeminiNativeUpstreamError_RedactsLogsErrorsAndOpsContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logSink, restoreLogs := captureStructuredLog(t)
+	defer restoreLogs()
+
+	credential := syntheticGeminiCredential()
+	upstreamMessage := fmt.Sprintf("provider rejected credential [%s] for model gemini-test", credential)
+	body := []byte(fmt.Sprintf(`{"error":{"code":400,"message":%q,"status":"INVALID_ARGUMENT"}}`, upstreamMessage))
+	svc := &GeminiMessagesCompatService{cfg: &config.Config{}}
+	svc.cfg.Gateway.LogUpstreamErrorBody = true
+	svc.cfg.Gateway.LogUpstreamErrorBodyMaxBytes = 4096
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+
+	err := svc.writeGeminiNativeUpstreamError(c, &Account{ID: 25, Platform: PlatformGemini}, &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+	}, body, "req-w6", false)
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), credential)
+	require.Contains(t, err.Error(), "gemini upstream error: 400")
+	require.Contains(t, err.Error(), "provider rejected credential [AQ.***]")
+	require.False(t, logSink.ContainsMessage(credential))
+	require.True(t, logSink.ContainsMessage("native upstream error 400"))
+	require.True(t, logSink.ContainsMessage("INVALID_ARGUMENT"))
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Equal(t, body, rec.Body.Bytes(), "client passthrough must remain unchanged")
+
+	status, ok := c.Get(OpsUpstreamStatusCodeKey)
+	require.True(t, ok)
+	require.Equal(t, http.StatusBadRequest, status)
+	opsMessage, ok := c.Get(OpsUpstreamErrorMessageKey)
+	require.True(t, ok)
+	require.NotContains(t, opsMessage, credential)
+	opsDetail, ok := c.Get(OpsUpstreamErrorDetailKey)
+	require.True(t, ok)
+	sanitizedDetail, _ := sanitizeErrorBodyForStorage(fmt.Sprint(opsDetail), opsMaxStoredErrorBodyBytes)
+	require.NotContains(t, sanitizedDetail, credential)
+	eventsValue, ok := c.Get(OpsUpstreamErrorsKey)
+	require.True(t, ok)
+	events, ok := eventsValue.([]*OpsUpstreamErrorEvent)
+	require.True(t, ok)
+	require.Len(t, events, 1)
+	require.NotContains(t, events[0].Message, credential)
+	require.NotContains(t, redactGeminiCredentialText(events[0].Detail), credential)
+}
+
+func TestWriteGeminiNativeUpstreamError_RedactsErrorsWhenBodyLoggingDisabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	credential := syntheticGeminiCredential()
+	body := []byte(fmt.Sprintf(`{"error":{"code":400,"message":"provider rejected %s","status":"INVALID_ARGUMENT"}}`, credential))
+	svc := &GeminiMessagesCompatService{cfg: &config.Config{}}
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+
+	err := svc.writeGeminiNativeUpstreamError(c, &Account{}, &http.Response{StatusCode: http.StatusBadRequest, Header: http.Header{}}, body, "", false)
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), credential)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
 func TestGeminiForwardAsChatCompletions_OAuthRoutesToGeminiAndReturnsChatFormat(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

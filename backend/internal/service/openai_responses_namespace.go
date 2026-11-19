@@ -196,6 +196,11 @@ func stripOpenAIResponsesInputNamespaces(body []byte, keepToolCallNamespaces boo
 	if !bytes.Contains(body, []byte(`"namespace"`)) {
 		return body, nil
 	}
+	// Query an item rather than materializing the whole input array. On the
+	// namespace-free path gjson returns an empty result without copying input.
+	if !gjson.GetBytes(body, "input.#(namespace)").Exists() {
+		return body, nil
+	}
 	input := gjson.GetBytes(body, "input")
 	if !input.IsArray() {
 		return body, nil

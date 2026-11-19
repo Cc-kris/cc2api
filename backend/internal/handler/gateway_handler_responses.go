@@ -242,6 +242,10 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		if channelMapping.Mapped {
 			forwardBody = h.gatewayService.ReplaceModelInBody(body, channelMapping.MappedModel)
 		}
+		streamCont := service.StreamContinuationFromContext(c)
+		if streamCont == nil && reqStream && anyErrorFailoverEnabled(c.Request.Context(), h.cfg) {
+			streamCont = service.AttachStreamContinuation(c)
+		}
 		result, err := h.gatewayService.ForwardAsResponses(c.Request.Context(), c, account, forwardBody, parsedReq)
 		forwardDurationMs := time.Since(forwardStart).Milliseconds()
 		upstreamLatencyMs, _ := getContextInt64(c, service.OpsUpstreamLatencyMsKey)
@@ -262,10 +266,13 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
 				appendBillableUsageAttemptFromFailover(c, account, reqModel, failoverErr)
-				// Can't failover if streaming content already sent
-				if c.Writer.Size() != writerSizeBeforeForward {
+				wroteDuringForward := c.Writer.Size() != writerSizeBeforeForward
+				if wroteDuringForward && !failoverErr.SafeToFailoverAfterWrite {
 					h.handleResponsesFailoverExhausted(c, failoverErr, true)
 					return
+				}
+				if wroteDuringForward || streamCont.Active() {
+					streamStarted = true
 				}
 				action := fs.HandleFailoverError(c.Request.Context(), h.gatewayService, account.ID, account.Platform, failoverErr, account)
 				switch action {
@@ -351,5 +358,8 @@ func (h *GatewayHandler) handleResponsesFailoverExhausted(c *gin.Context, lastEr
 		h.responsesErrorResponse(c, http.StatusBadGateway, "upstream_error", service.OpenAISilentRefusalClientMessage())
 		return
 	}
+	// Keep the native Messages failover-exhausted HTTP status policy; only the
+	// error envelope is specific to the client protocol.
+	statusCode, _, _ = h.mapUpstreamError(statusCode)
 	h.responsesErrorResponse(c, statusCode, "server_error", "All available accounts exhausted")
 }

@@ -55,6 +55,7 @@ func (s *GatewayService) ForwardAsResponses(
 	// 3. Convert Responses → Anthropic
 	anthropicReq, err := apicompat.ResponsesToAnthropicRequest(&responsesReq)
 	if err != nil {
+		writeResponsesError(c, http.StatusBadRequest, "invalid_request", err.Error())
 		return nil, fmt.Errorf("convert responses to anthropic: %w", err)
 	}
 
@@ -93,6 +94,9 @@ func (s *GatewayService) ForwardAsResponses(
 	if err != nil {
 		return nil, fmt.Errorf("marshal anthropic request: %w", err)
 	}
+	if sc := StreamContinuationFromContext(c); sc.Active() {
+		anthropicBody = sc.BuildAnthropicContinuationBody(anthropicBody)
+	}
 
 	// 6. Apply Claude Code mimicry for OAuth accounts (non-Claude-Code endpoints).
 	// OpenAI Responses 协议进来的请求永远不是 Claude Code 客户端，所以对 OAuth 账号
@@ -121,21 +125,25 @@ func (s *GatewayService) ForwardAsResponses(
 		proxyURL = account.Proxy.URL()
 	}
 
-	// 10. Build upstream request
-	upstreamCtx, releaseUpstreamCtx := detachStreamUpstreamContext(ctx, reqStream)
-	upstreamReq, err := s.buildUpstreamRequest(upstreamCtx, c, account, anthropicBody, token, tokenType, mappedModel, reqStream, shouldMimicClaudeCode)
-	releaseUpstreamCtx()
-	if err != nil {
-		return nil, fmt.Errorf("build upstream request: %w", err)
-	}
-
-	// 11. Send request
+	// 10–11. Rebuild each attempt with its own upstream context and the native
+	// Messages same-account retry budget; pool retries remain handler-owned.
 	upstreamStart := time.Now()
-	resp, err := s.httpUpstream.DoWithTLS(upstreamReq, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
+	resp, err := s.doAnthropicCompatUpstream(ctx, c, account, func() (*http.Response, error) {
+		upstreamCtx, releaseUpstreamCtx := detachStreamUpstreamContext(ctx, reqStream)
+		upstreamReq, buildErr := s.buildUpstreamRequest(upstreamCtx, c, account, anthropicBody, token, tokenType, mappedModel, reqStream, shouldMimicClaudeCode)
+		releaseUpstreamCtx()
+		if buildErr != nil {
+			return nil, fmt.Errorf("build upstream request: %w", buildErr)
+		}
+		return s.httpUpstream.DoWithTLS(upstreamReq, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
+	})
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 	if err != nil {
 		if resp != nil && resp.Body != nil {
 			_ = resp.Body.Close()
+		}
+		if errors.Is(err, context.Canceled) || ctx.Err() != nil || c.Request.Context().Err() != nil {
+			return nil, err
 		}
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
 		setOpsUpstreamError(c, 0, safeErr, "")
@@ -155,10 +163,8 @@ func (s *GatewayService) ForwardAsResponses(
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	// Pool responses use only the handler's retry budget, just like /messages.
-	// Preserve the pool reason even for excluded statuses so they cannot acquire
-	// an unrelated retry budget or cool down the local account.
-	if resp.StatusCode >= 400 && account.IsPoolMode() {
+	// Only configured pool retry statuses bypass service retries, as in /messages.
+	if resp.StatusCode >= 400 && account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode) && !peekUserContentRejection(resp) {
 		return nil, poolModeStatusFailover(resp, account)
 	}
 
@@ -176,7 +182,7 @@ func (s *GatewayService) ForwardAsResponses(
 		if s.rateLimitService != nil {
 			shouldDisable = s.rateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, mappedModel)
 		}
-		if shouldDisable || s.shouldFailoverUpstreamError(ctx, resp.StatusCode) {
+		if shouldDisable || (s.shouldFailoverUpstreamError(ctx, resp.StatusCode) && !isUserContentRejectionBody(respBody)) {
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				Platform:           account.Platform,
 				AccountID:          account.ID,
@@ -193,8 +199,12 @@ func (s *GatewayService) ForwardAsResponses(
 			}
 		}
 
-		// Non-failover error: return Responses-formatted error to client
-		writeResponsesError(c, mapUpstreamStatusCode(resp.StatusCode), "server_error", upstreamMsg)
+		// Native Messages uses 502 for a retry-exhausted, non-failover error.
+		statusCode := mapUpstreamStatusCode(resp.StatusCode)
+		if s.shouldRetryUpstreamError(account, resp.StatusCode) && !isUserContentRejectionBody(respBody) {
+			statusCode = http.StatusBadGateway
+		}
+		writeResponsesError(c, statusCode, "server_error", upstreamMsg)
 		return nil, fmt.Errorf("upstream error: %d %s", resp.StatusCode, upstreamMsg)
 	}
 
@@ -469,6 +479,8 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 	firstChunk := true
 	// 客户端断开后停止向下游写入，继续读完上游以合并 message_delta 的最终 usage（上游 94c7d6b02）。
 	clientDisconnected := false
+	streamCont := StreamContinuationFromContext(c)
+	streamCont.BeginAttempt()
 
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
@@ -489,6 +501,45 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 			FirstTokenMs:     firstTokenMs,
 			ClientDisconnect: clientDisconnected,
 		}
+	}
+
+	writeEvent := func(evt apicompat.ResponsesStreamEvent) bool {
+		payload, err := json.Marshal(evt)
+		if err != nil {
+			logger.L().Warn("forward_as_responses stream: failed to marshal event",
+				zap.Error(err),
+				zap.String("request_id", requestID),
+			)
+			return true
+		}
+		payload = reverseToolNamesIfPresent(c, payload)
+		payloads, _, err := clientToolRestorer.RestoreEvent(payload)
+		if err != nil {
+			logger.L().Warn("forward_as_responses stream: failed to restore client tools",
+				zap.Error(err),
+				zap.String("request_id", requestID),
+			)
+			return true
+		}
+		for _, restored := range payloads {
+			eventType := gjson.GetBytes(restored, "type").String()
+			if streamCont != nil {
+				startsOutput := eventType != "response.created" && eventType != "response.in_progress"
+				rewritten, keep := streamCont.RewriteResponsesData(string(restored), startsOutput)
+				if !keep {
+					continue
+				}
+				restored = []byte(rewritten)
+			}
+			if _, err := fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", eventType, restored); err != nil {
+				clientDisconnected = true
+				logger.L().Info("forward_as_responses stream: client disconnected, continuing to drain upstream for billing",
+					zap.String("request_id", requestID),
+				)
+				return false
+			}
+		}
+		return true
 	}
 
 	// processEvent handles a single parsed Anthropic SSE event.
@@ -514,32 +565,8 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 		// Convert to Responses events
 		events := apicompat.AnthropicEventToResponsesEvents(event, state)
 		for _, evt := range events {
-			payload, err := json.Marshal(evt)
-			if err != nil {
-				logger.L().Warn("forward_as_responses stream: failed to marshal event",
-					zap.Error(err),
-					zap.String("request_id", requestID),
-				)
-				continue
-			}
-			payload = reverseToolNamesIfPresent(c, payload)
-			payloads, _, err := clientToolRestorer.RestoreEvent(payload)
-			if err != nil {
-				logger.L().Warn("forward_as_responses stream: failed to restore client tools",
-					zap.Error(err),
-					zap.String("request_id", requestID),
-				)
-				continue
-			}
-			for _, restored := range payloads {
-				eventType := gjson.GetBytes(restored, "type").String()
-				if _, err := fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", eventType, restored); err != nil {
-					clientDisconnected = true
-					logger.L().Info("forward_as_responses stream: client disconnected, continuing to drain upstream for billing",
-						zap.String("request_id", requestID),
-					)
-					return
-				}
+			if !writeEvent(evt) {
+				return
 			}
 		}
 		if len(events) > 0 {
@@ -553,18 +580,8 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 		}
 		if finalEvents := apicompat.FinalizeAnthropicResponsesStream(state); len(finalEvents) > 0 {
 			for _, evt := range finalEvents {
-				payload, err := json.Marshal(evt)
-				if err != nil {
-					continue
-				}
-				payload = reverseToolNamesIfPresent(c, payload)
-				payloads, _, err := clientToolRestorer.RestoreEvent(payload)
-				if err != nil {
-					continue
-				}
-				for _, restored := range payloads {
-					eventType := gjson.GetBytes(restored, "type").String()
-					fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", eventType, restored) //nolint:errcheck
+				if !writeEvent(evt) {
+					return resultWithUsage(), nil
 				}
 			}
 			c.Writer.Flush()
@@ -573,6 +590,15 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 	}
 
 	// Read Anthropic SSE events
+	interruptForContinuation := func(message string) *UpstreamFailoverError {
+		if streamCont == nil || clientDisconnected || !streamCont.Active() || !streamCont.Recoverable() {
+			return nil
+		}
+		foErr := streamCont.NewStreamInterruptedFailover(message)
+		attachObservedClaudeUsage(foErr, &usage, originalModel, mappedModel)
+		return foErr
+	}
+	sawMessageStop := false
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "event: ") {
@@ -599,16 +625,42 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 			)
 			continue
 		}
+		if event.Type == "content_block_delta" && event.Index != nil && *event.Index < 0 {
+			continue
+		}
+		if eventType == "error" || event.Type == "error" {
+			foErr := &UpstreamFailoverError{
+				StatusCode:   http.StatusBadGateway,
+				ResponseBody: []byte(payload),
+			}
+			if s.shouldFailoverUpstreamError(c.Request.Context(), http.StatusBadGateway) {
+				if continuationErr := interruptForContinuation("upstream sent error event mid-stream"); continuationErr != nil {
+					return nil, continuationErr
+				}
+			}
+			return nil, foErr
+		}
+		if event.Type == "message_stop" {
+			sawMessageStop = true
+		}
 
 		processEvent(&event)
 	}
 
-	if err := scanner.Err(); err != nil {
+	if err := scanner.Err(); err != nil && !sawMessageStop {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			logger.L().Warn("forward_as_responses stream: read error",
 				zap.Error(err),
 				zap.String("request_id", requestID),
 			)
+			if foErr := interruptForContinuation("upstream stream disconnected: " + sanitizeStreamError(err)); foErr != nil {
+				return nil, foErr
+			}
+		}
+	}
+	if !sawMessageStop {
+		if foErr := interruptForContinuation("upstream stream ended without message_stop"); foErr != nil {
+			return nil, foErr
 		}
 	}
 

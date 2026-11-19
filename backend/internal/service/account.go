@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -527,7 +528,23 @@ func stringMappingFromRaw(raw any) map[string]string {
 	}
 }
 
+// Account snapshots are copied by value, so a mutex cannot live inside Account.
+// Stripe by object identity to protect only lazy model-mapping cache operations;
+// immutable prepared copies retain their existing cached mapping fast path.
+var accountModelMappingLocks [64]sync.Mutex
+
+func (a *Account) modelMappingLock() *sync.Mutex {
+	return &accountModelMappingLocks[(reflect.ValueOf(a).Pointer()>>4)%uintptr(len(accountModelMappingLocks))]
+}
+
 func (a *Account) GetModelMapping() map[string]string {
+	mu := a.modelMappingLock()
+	mu.Lock()
+	defer mu.Unlock()
+	return a.getModelMappingLocked()
+}
+
+func (a *Account) getModelMappingLocked() map[string]string {
 	credentialsPtr := mapPtr(a.Credentials)
 	rawMapping, _ := a.Credentials["model_mapping"].(map[string]any)
 	rawPtr := mapPtr(rawMapping)

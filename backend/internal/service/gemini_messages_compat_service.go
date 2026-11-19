@@ -1904,7 +1904,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 				maxBytes = 2048
 			}
 			upstreamDetail = truncateString(string(respBody), maxBytes)
-			logger.LegacyPrintf("service.gemini_messages_compat", "[Gemini] native upstream error %d: %s", resp.StatusCode, truncateForLog(respBody, s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes))
+			logger.LegacyPrintf("service.gemini_messages_compat", "[Gemini] native upstream error %d: %s", resp.StatusCode, sanitizeUpstreamErrorLogBody(respBody, s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes))
 		}
 		setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -2155,7 +2155,7 @@ func (s *GeminiMessagesCompatService) writeGeminiNativeUpstreamError(c *gin.Cont
 	upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
 	upstreamDetail := s.upstreamErrorDetail(respBody)
 	if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
-		logger.LegacyPrintf("service.gemini_messages_compat", "[Gemini] native upstream error %d: %s", resp.StatusCode, truncateForLog(respBody, s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes))
+		logger.LegacyPrintf("service.gemini_messages_compat", "[Gemini] native upstream error %d: %s", resp.StatusCode, sanitizeUpstreamErrorLogBody(respBody, s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes))
 	}
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -2206,7 +2206,15 @@ func sanitizeUpstreamErrorMessage(msg string) string {
 	if msg == "" {
 		return msg
 	}
-	return sensitiveQueryParamRegex.ReplaceAllString(msg, `$1***`)
+	return redactGeminiCredentialText(sensitiveQueryParamRegex.ReplaceAllString(msg, `$1***`))
+}
+
+// sanitizeUpstreamErrorLogBody keeps provider diagnostics while masking credentials
+// embedded in otherwise unstructured error messages. Redact before serializing JSON
+// so quoted credentials cannot evade text-level matching.
+func sanitizeUpstreamErrorLogBody(body []byte, maxBytes int) string {
+	body = []byte(redactGeminiCredentialText(string(body)))
+	return truncateForLog(body, maxBytes)
 }
 
 func (s *GeminiMessagesCompatService) writeGeminiMappedError(c *gin.Context, account *Account, upstreamStatus int, upstreamRequestID string, body []byte) error {
@@ -2233,7 +2241,7 @@ func (s *GeminiMessagesCompatService) writeGeminiMappedError(c *gin.Context, acc
 	})
 
 	if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
-		logger.LegacyPrintf("service.gemini_messages_compat", "[Gemini] upstream error %d: %s", upstreamStatus, truncateForLog(body, s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes))
+		logger.LegacyPrintf("service.gemini_messages_compat", "[Gemini] upstream error %d: %s", upstreamStatus, sanitizeUpstreamErrorLogBody(body, s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes))
 	}
 
 	if status, errType, errMsg, matched := applyErrorPassthroughRule(
