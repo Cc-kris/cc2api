@@ -43,9 +43,9 @@ const sOpts = computed(() => [{ value: '', label: t('admin.accounts.allStatus') 
 const privacyOpts = computed(() => [
   { value: '', label: t('admin.accounts.allPrivacyModes') },
   { value: '__unset__', label: t('admin.accounts.privacyUnset') },
-  { value: 'training_off', label: 'Privacy' },
-  { value: 'training_set_cf_blocked', label: 'CF' },
-  { value: 'training_set_failed', label: 'Fail' }
+  { value: 'training_off', label: t('admin.accounts.privacyTrainingOff') },
+  { value: 'training_set_cf_blocked', label: t('admin.accounts.privacyCfBlocked') },
+  { value: 'training_set_failed', label: t('admin.accounts.privacyFailed') }
 ])
 const gOpts = computed(() => [
   { value: '', label: t('admin.accounts.allGroups') },

@@ -41,6 +41,7 @@
           :class="[instanceId]"
           :style="dropdownStyle"
           role="listbox"
+          tabindex="-1"
           @click.stop
           @mousedown.stop
           @keydown="onDropdownKeyDown"
@@ -164,6 +165,11 @@ const dropdownRef = ref<HTMLElement | null>(null)
 const optionsListRef = ref<HTMLElement | null>(null)
 const dropdownPosition = ref<'bottom' | 'top'>('bottom')
 const triggerRect = ref<DOMRect | null>(null)
+const viewportWidth = ref(0)
+const viewportHeight = ref(0)
+const dropdownWidth = ref(0)
+const dropdownGutter = 8
+let dropdownResizeObserver: ResizeObserver | undefined
 
 // i18n placeholders
 const placeholderText = computed(() => props.placeholder ?? t('common.selectOption'))
@@ -180,15 +186,20 @@ const dropdownStyle = computed(() => {
   if (!triggerRect.value) return {}
 
   const rect = triggerRect.value
+  const availableWidth = Math.max(0, viewportWidth.value - dropdownGutter * 2)
+  const minWidth = Math.min(rect.width, availableWidth)
+  const width = Math.min(Math.max(dropdownWidth.value, minWidth), availableWidth)
+  const left = Math.max(dropdownGutter, Math.min(rect.left, viewportWidth.value - dropdownGutter - width))
   const style: Record<string, string> = {
     position: 'fixed',
-    left: `${rect.left}px`,
-    minWidth: `${rect.width}px`,
+    left: `${left}px`,
+    minWidth: `${minWidth}px`,
+    maxWidth: `${availableWidth}px`,
     zIndex: '100000020'
   }
 
   if (dropdownPosition.value === 'top') {
-    style.bottom = `${window.innerHeight - rect.top + 4}px`
+    style.bottom = `${viewportHeight.value - rect.top + 4}px`
   } else {
     style.top = `${rect.bottom + 4}px`
   }
@@ -292,6 +303,8 @@ const handleOptionMouseEnter = (option: any, index: number) => {
 // Update trigger rect periodically while open to follow scroll/resize
 const updateTriggerRect = () => {
   if (containerRef.value) {
+    viewportWidth.value = window.innerWidth
+    viewportHeight.value = window.innerHeight
     triggerRect.value = containerRef.value.getBoundingClientRect()
   }
 }
@@ -301,7 +314,8 @@ const calculateDropdownPosition = () => {
   updateTriggerRect()
 
   nextTick(() => {
-    if (!dropdownRef.value || !triggerRect.value) return
+    if (!isOpen.value || !dropdownRef.value || !triggerRect.value) return
+    dropdownWidth.value = dropdownRef.value.getBoundingClientRect().width
     const dropdownHeight = dropdownRef.value.offsetHeight || 240
     const spaceBelow = window.innerHeight - triggerRect.value.bottom
     const spaceAbove = triggerRect.value.top
@@ -321,7 +335,14 @@ const toggle = () => {
 
 watch(isOpen, (open) => {
   if (open) {
+    dropdownWidth.value = 0
     calculateDropdownPosition()
+    nextTick(() => {
+      if (!isOpen.value || !dropdownRef.value || typeof ResizeObserver === 'undefined') return
+      // Labels and slots can change size while open (locale, search, async options).
+      dropdownResizeObserver = new ResizeObserver(calculateDropdownPosition)
+      dropdownResizeObserver.observe(dropdownRef.value)
+    })
     // Reset focused index to current selection or first item
     if (filteredOptions.value.length === 0) {
       focusedIndex.value = -1
@@ -333,13 +354,17 @@ watch(isOpen, (open) => {
         : initialIdx
     }
 
-    if (isSearchable.value) {
-      nextTick(() => searchInputRef.value?.focus())
-    }
+    nextTick(() => {
+      if (!isOpen.value) return
+      if (isSearchable.value) searchInputRef.value?.focus()
+      else dropdownRef.value?.focus({ preventScroll: true })
+    })
     // Add scroll listener to update position
     window.addEventListener('scroll', updateTriggerRect, { capture: true, passive: true })
     window.addEventListener('resize', calculateDropdownPosition)
   } else {
+    dropdownResizeObserver?.disconnect()
+    dropdownResizeObserver = undefined
     searchQuery.value = ''
     focusedIndex.value = -1
     window.removeEventListener('scroll', updateTriggerRect, { capture: true })
@@ -423,6 +448,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  dropdownResizeObserver?.disconnect()
   document.removeEventListener('click', handleClickOutside)
   window.removeEventListener('scroll', updateTriggerRect, { capture: true })
   window.removeEventListener('resize', calculateDropdownPosition)
@@ -480,7 +506,7 @@ onUnmounted(() => {
 }
 
 .select-dropdown-portal .select-search-input {
-  @apply flex-1 bg-transparent text-sm;
+  @apply min-w-0 flex-1 bg-transparent text-sm;
   @apply text-gray-900 dark:text-gray-100;
   @apply placeholder:text-gray-400 dark:placeholder:text-dark-400;
   @apply focus:outline-none;
@@ -524,7 +550,8 @@ onUnmounted(() => {
 }
 
 .select-dropdown-portal .select-option-label {
-  @apply flex-1 min-w-0 truncate text-left;
+  @apply min-w-0 flex-1 whitespace-normal break-words text-left;
+  overflow-wrap: anywhere;
 }
 
 .select-dropdown-portal .select-empty {

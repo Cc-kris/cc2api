@@ -119,6 +119,19 @@ type ClaudeContentItem struct {
 	Input any    `json:"input,omitempty"`
 }
 
+// MarshalJSON keeps signature present on thinking blocks for strict clients.
+func (c ClaudeContentItem) MarshalJSON() ([]byte, error) {
+	type claudeContentItem ClaudeContentItem
+	if c.Type != "thinking" {
+		return json.Marshal(claudeContentItem(c))
+	}
+	return json.Marshal(struct {
+		Thinking  string `json:"thinking"`
+		Signature string `json:"signature"`
+		claudeContentItem
+	}{Thinking: c.Thinking, Signature: c.Signature, claudeContentItem: claudeContentItem(c)})
+}
+
 // ClaudeUsage Claude 用量统计
 type ClaudeUsage struct {
 	InputTokens              int `json:"input_tokens"`

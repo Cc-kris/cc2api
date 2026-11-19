@@ -3,12 +3,34 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGeminiForwardFailedLog_RedactsCredential(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logSink, restore := captureHandlerStructuredLog(t)
+	defer restore()
+
+	credential := "AQ." + "Ab" + strings.Repeat("Handler_W6-", 5) + "Z"
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1beta/models/gemini-test:generateContent", nil)
+	err := logGeminiForwardFailed(c, 25, errors.New("gemini upstream error: 400 message=provider rejected credential ["+credential+"]"))
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), credential)
+	require.True(t, logSink.ContainsMessageAtLevel("gemini.forward_failed", "error"))
+	require.True(t, logSink.ContainsFieldValue("error", "AQ.***"))
+	require.True(t, logSink.ContainsFieldValue("error", "provider rejected"))
+	require.False(t, logSink.ContainsFieldValue("error", credential))
+}
 
 // TestGeminiV1BetaHandler_PlatformRoutingInvariant 文档化并验证 Handler 层的平台路由逻辑不变量
 // 该测试确保 gemini 和 antigravity 平台的路由逻辑符合预期

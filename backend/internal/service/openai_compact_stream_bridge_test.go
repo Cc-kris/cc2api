@@ -34,6 +34,29 @@ func newCompactBridgeTestService() *OpenAIGatewayService {
 	}
 }
 
+func TestHandleErrorResponsePassthroughCompactClientStreamWritesOnlyFailedSSE(t *testing.T) {
+	c, rec := newCompactBridgeTestContext(t, true)
+	svc := newCompactBridgeTestService()
+	upstreamBody := []byte(`{"error":{"code":"content_policy","message":"W4 independent compact failure","type":"invalid_request_error"}}`)
+	resp := &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(string(upstreamBody))),
+	}
+
+	err := svc.handleErrorResponsePassthrough(context.Background(), resp, c, &Account{ID: 413, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, nil)
+	require.Error(t, err)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Equal(t, "text/event-stream", rec.Header().Get("Content-Type"))
+	require.NotContains(t, rec.Body.String(), string(upstreamBody))
+	events := parseCompactBridgeSSE(t, rec.Body.String())
+	require.Len(t, events, 1)
+	require.Equal(t, "response.failed", events[0][0])
+	require.Equal(t, "W4 independent compact failure", gjson.Get(events[0][1], "response.error.message").String())
+	require.Positive(t, gjson.Get(events[0][1], "response.created_at").Int())
+	require.True(t, ResponsesTerminalEventWritten(c))
+}
+
 // parseCompactBridgeSSE 把合成的 SSE 文本拆成 (eventType, dataJSON) 序列。
 func parseCompactBridgeSSE(t *testing.T, body string) [][2]string {
 	t.Helper()
@@ -150,7 +173,7 @@ func TestBuildOpenAICompactSSEPayload_RejectsNonJSONObject(t *testing.T) {
 	}
 }
 
-func TestWriteOpenAICompactSSEBridge_RequiresMarkAndSuccessStatus(t *testing.T) {
+func TestWriteOpenAICompactSSEBridge_RequiresClientStreamMark(t *testing.T) {
 	finalResponse := []byte(`{"id":"resp_1","output":[{"type":"compaction","encrypted_content":"x"}]}`)
 
 	// 未标记 client stream：不写出，走原 JSON 路径。
@@ -158,10 +181,12 @@ func TestWriteOpenAICompactSSEBridge_RequiresMarkAndSuccessStatus(t *testing.T) 
 	require.False(t, writeOpenAICompactSSEBridge(c, http.StatusOK, finalResponse))
 	require.Zero(t, rec.Body.Len())
 
-	// 标记但上游非 2xx：错误响应保持 JSON 原样（Codex 依赖 HTTP 状态码走重试）。
+	// 标记但上游非 2xx：返回保留上游状态与详情的单一 response.failed SSE。
 	c, rec = newCompactBridgeTestContext(t, true)
-	require.False(t, writeOpenAICompactSSEBridge(c, http.StatusBadGateway, finalResponse))
-	require.Zero(t, rec.Body.Len())
+	require.True(t, writeOpenAICompactSSEBridge(c, http.StatusBadGateway, finalResponse))
+	require.Equal(t, http.StatusBadGateway, rec.Code)
+	require.Contains(t, rec.Body.String(), "event: response.failed")
+	require.NotContains(t, rec.Body.String(), `"encrypted_content"`)
 
 	// 标记且 2xx：合成 SSE。
 	c, rec = newCompactBridgeTestContext(t, true)

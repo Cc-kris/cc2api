@@ -49,12 +49,11 @@ func openAICompactClientWantsStream(c *gin.Context) bool {
 
 // writeOpenAICompactSSEBridge 将 unary compact 的最终 JSON 响应按 Codex remote
 // compact v2 的消费协议合成为最小 Responses SSE 流写回客户端。仅当请求被标记
-// 为 body-signal 客户端流式、状态码为 2xx 且 body 是合法 JSON 对象时生效；
-// 返回 false 表示未写出任何内容，调用方应按原路径写回。
+// 为 body-signal 客户端流式且响应可合成时生效；返回 false 表示未写出任何内容。
+// 非 2xx 同样只回传一个 response.failed，不能先写原始 JSON 再让外层补通用错误。
 //
 // 若下游心跳已把响应头提交为 200（见 openAICompactSSEKeepalive），则本函数
-// 必须接管一切写回：非 2xx 或不可合成的响应降级为 response.failed 终止事件，
-// 不能再返回 false（否则调用方的 JSON 写回会与已提交的 SSE 流交错）。
+// 必须接管一切写回：不可合成的响应降级为 response.failed 终止事件。
 func writeOpenAICompactSSEBridge(c *gin.Context, statusCode int, finalResponse []byte) bool {
 	if c == nil || !openAICompactClientWantsStream(c) {
 		return false
@@ -63,11 +62,8 @@ func writeOpenAICompactSSEBridge(c *gin.Context, statusCode int, finalResponse [
 	// goroutine 建立 happens-before，可安全接管 ResponseWriter。
 	committed := StopOpenAICompactSSEKeepaliveCommitted(c)
 	if statusCode < 200 || statusCode >= 300 {
-		if committed {
-			writeOpenAICompactSSEFailure(c, statusCode, finalResponse)
-			return true
-		}
-		return false
+		writeOpenAICompactSSEFailure(c, statusCode, finalResponse)
+		return true
 	}
 	payload, ok := buildOpenAICompactSSEPayload(finalResponse)
 	if !ok {
@@ -91,8 +87,7 @@ func writeOpenAICompactSSEBridge(c *gin.Context, statusCode int, finalResponse [
 }
 
 // writeOpenAICompactSSEFailure 从上游错误 body 提取错误消息后，以
-// response.failed 终止事件回传。仅用于心跳已提交 200、无法再按 HTTP 状态码
-// 回传错误的场景。
+// response.failed 终止事件回传。心跳提交后保留 200，否则保留上游 HTTP 状态码。
 func writeOpenAICompactSSEFailure(c *gin.Context, statusCode int, errorBody []byte) {
 	message := ""
 	if len(errorBody) > 0 {
@@ -101,7 +96,14 @@ func writeOpenAICompactSSEFailure(c *gin.Context, statusCode int, errorBody []by
 	if message == "" {
 		message = "Upstream compact request failed with HTTP " + strconv.Itoa(statusCode)
 	}
-	writeOpenAICompactSSEFailureMessage(c, statusCode, "upstream_error", message)
+	code := strings.TrimSpace(gjson.GetBytes(errorBody, "error.code").String())
+	if code == "" {
+		code = strings.TrimSpace(gjson.GetBytes(errorBody, "response.error.code").String())
+	}
+	if code == "" {
+		code = "upstream_error"
+	}
+	writeOpenAICompactSSEFailureMessage(c, statusCode, code, message)
 }
 
 // writeOpenAICompactSSEFailureMessage 写出 response.failed 终止事件。Codex 对
@@ -113,6 +115,17 @@ func writeOpenAICompactSSEFailureMessage(c *gin.Context, statusCode int, errType
 		return
 	}
 	SetOpsUpstreamError(c, statusCode, message, errType)
+	if ResponsesTerminalEventWritten(c) {
+		return
+	}
+	if !c.Writer.Written() {
+		header := c.Writer.Header()
+		header.Set("Content-Type", "text/event-stream")
+		header.Set("Cache-Control", "no-cache")
+		header.Set("Connection", "keep-alive")
+		header.Set("X-Accel-Buffering", "no")
+		c.Writer.WriteHeader(statusCode)
+	}
 	payload, err := json.Marshal(map[string]any{
 		"type":            "response.failed",
 		"sequence_number": 0,
@@ -137,6 +150,7 @@ func writeOpenAICompactSSEFailureMessage(c *gin.Context, statusCode int, errType
 	_, _ = c.Writer.Write(payload)
 	_, _ = c.Writer.Write([]byte("\n\n"))
 	c.Writer.Flush()
+	c.Set(openAIResponsesTerminalWrittenKey, true)
 }
 
 // buildOpenAICompactSSEPayload 把 compact 的 Response JSON 转成 SSE 事件序列：

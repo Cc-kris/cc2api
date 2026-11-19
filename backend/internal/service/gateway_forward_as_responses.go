@@ -38,17 +38,24 @@ func (s *GatewayService) ForwardAsResponses(
 	beginUpstreamResponseModelObservation(c) // V03-R11：每次转发尝试重置上游响应模型观测（本路径未接观测时保持为空，避免沿用上次尝试的值）
 	startTime := time.Now()
 
-	// 1. Parse Responses request
+	// 1. Lower Codex client-side tools to function tools understood by Anthropic.
+	adaptedBody, clientToolMapping, err := adaptResponsesClientToolsForAnthropic(body)
+	if err != nil {
+		return nil, fmt.Errorf("adapt responses client tools: %w", err)
+	}
+
+	// 2. Parse Responses request
 	var responsesReq apicompat.ResponsesRequest
-	if err := json.Unmarshal(body, &responsesReq); err != nil {
+	if err := json.Unmarshal(adaptedBody, &responsesReq); err != nil {
 		return nil, fmt.Errorf("parse responses request: %w", err)
 	}
 	originalModel := responsesReq.Model
 	clientStream := responsesReq.Stream
 
-	// 2. Convert Responses → Anthropic
+	// 3. Convert Responses → Anthropic
 	anthropicReq, err := apicompat.ResponsesToAnthropicRequest(&responsesReq)
 	if err != nil {
+		writeResponsesError(c, http.StatusBadRequest, "invalid_request", err.Error())
 		return nil, fmt.Errorf("convert responses to anthropic: %w", err)
 	}
 
@@ -87,6 +94,9 @@ func (s *GatewayService) ForwardAsResponses(
 	if err != nil {
 		return nil, fmt.Errorf("marshal anthropic request: %w", err)
 	}
+	if sc := StreamContinuationFromContext(c); sc.Active() {
+		anthropicBody = sc.BuildAnthropicContinuationBody(anthropicBody)
+	}
 
 	// 6. Apply Claude Code mimicry for OAuth accounts (non-Claude-Code endpoints).
 	// OpenAI Responses 协议进来的请求永远不是 Claude Code 客户端，所以对 OAuth 账号
@@ -115,21 +125,25 @@ func (s *GatewayService) ForwardAsResponses(
 		proxyURL = account.Proxy.URL()
 	}
 
-	// 10. Build upstream request
-	upstreamCtx, releaseUpstreamCtx := detachStreamUpstreamContext(ctx, reqStream)
-	upstreamReq, err := s.buildUpstreamRequest(upstreamCtx, c, account, anthropicBody, token, tokenType, mappedModel, reqStream, shouldMimicClaudeCode)
-	releaseUpstreamCtx()
-	if err != nil {
-		return nil, fmt.Errorf("build upstream request: %w", err)
-	}
-
-	// 11. Send request
+	// 10–11. Rebuild each attempt with its own upstream context and the native
+	// Messages same-account retry budget; pool retries remain handler-owned.
 	upstreamStart := time.Now()
-	resp, err := s.httpUpstream.DoWithTLS(upstreamReq, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
+	resp, err := s.doAnthropicCompatUpstream(ctx, c, account, func() (*http.Response, error) {
+		upstreamCtx, releaseUpstreamCtx := detachStreamUpstreamContext(ctx, reqStream)
+		upstreamReq, buildErr := s.buildUpstreamRequest(upstreamCtx, c, account, anthropicBody, token, tokenType, mappedModel, reqStream, shouldMimicClaudeCode)
+		releaseUpstreamCtx()
+		if buildErr != nil {
+			return nil, fmt.Errorf("build upstream request: %w", buildErr)
+		}
+		return s.httpUpstream.DoWithTLS(upstreamReq, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
+	})
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 	if err != nil {
 		if resp != nil && resp.Body != nil {
 			_ = resp.Body.Close()
+		}
+		if errors.Is(err, context.Canceled) || ctx.Err() != nil || c.Request.Context().Err() != nil {
+			return nil, err
 		}
 		safeErr := sanitizeUpstreamErrorMessage(err.Error())
 		setOpsUpstreamError(c, 0, safeErr, "")
@@ -149,10 +163,8 @@ func (s *GatewayService) ForwardAsResponses(
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	// Pool responses use only the handler's retry budget, just like /messages.
-	// Preserve the pool reason even for excluded statuses so they cannot acquire
-	// an unrelated retry budget or cool down the local account.
-	if resp.StatusCode >= 400 && account.IsPoolMode() {
+	// Only configured pool retry statuses bypass service retries, as in /messages.
+	if resp.StatusCode >= 400 && account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode) && !peekUserContentRejection(resp) {
 		return nil, poolModeStatusFailover(resp, account)
 	}
 
@@ -165,7 +177,12 @@ func (s *GatewayService) ForwardAsResponses(
 		upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(respBody))
 		upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
 
-		if s.shouldFailoverUpstreamError(ctx, resp.StatusCode) {
+		// 与原生 Messages 路径共用账号错误策略；即非默认 failover 状态码也执行一次。
+		shouldDisable := false
+		if s.rateLimitService != nil {
+			shouldDisable = s.rateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, mappedModel)
+		}
+		if shouldDisable || (s.shouldFailoverUpstreamError(ctx, resp.StatusCode) && !isUserContentRejectionBody(respBody)) {
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				Platform:           account.Platform,
 				AccountID:          account.ID,
@@ -175,17 +192,19 @@ func (s *GatewayService) ForwardAsResponses(
 				Kind:               "failover",
 				Message:            upstreamMsg,
 			})
-			if s.rateLimitService != nil {
-				s.rateLimitService.HandleUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
-			}
 			return nil, &UpstreamFailoverError{
-				StatusCode:   resp.StatusCode,
-				ResponseBody: respBody,
+				StatusCode:             resp.StatusCode,
+				ResponseBody:           respBody,
+				RetryableOnSameAccount: false,
 			}
 		}
 
-		// Non-failover error: return Responses-formatted error to client
-		writeResponsesError(c, mapUpstreamStatusCode(resp.StatusCode), "server_error", upstreamMsg)
+		// Native Messages uses 502 for a retry-exhausted, non-failover error.
+		statusCode := mapUpstreamStatusCode(resp.StatusCode)
+		if s.shouldRetryUpstreamError(account, resp.StatusCode) && !isUserContentRejectionBody(respBody) {
+			statusCode = http.StatusBadGateway
+		}
+		writeResponsesError(c, statusCode, "server_error", upstreamMsg)
 		return nil, fmt.Errorf("upstream error: %d %s", resp.StatusCode, upstreamMsg)
 	}
 
@@ -193,12 +212,69 @@ func (s *GatewayService) ForwardAsResponses(
 	var result *ForwardResult
 	var handleErr error
 	if clientStream {
-		result, handleErr = s.handleResponsesStreamingResponse(resp, c, originalModel, mappedModel, reasoningEffort, startTime)
+		result, handleErr = s.handleResponsesStreamingResponse(resp, c, originalModel, mappedModel, reasoningEffort, startTime, clientToolMapping)
 	} else {
-		result, handleErr = s.handleResponsesBufferedStreamingResponse(resp, c, originalModel, mappedModel, reasoningEffort, startTime)
+		result, handleErr = s.handleResponsesBufferedStreamingResponse(resp, c, originalModel, mappedModel, reasoningEffort, startTime, clientToolMapping)
 	}
 
 	return result, handleErr
+}
+
+func adaptResponsesClientToolsForAnthropic(body []byte) ([]byte, apicompat.ResponsesClientToolMapping, error) {
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
+	var requestBody map[string]any
+	if err := decoder.Decode(&requestBody); err != nil {
+		return body, apicompat.ResponsesClientToolMapping{}, err
+	}
+	additionalToolsChanged, err := liftResponsesAdditionalTools(requestBody)
+	if err != nil {
+		return body, apicompat.ResponsesClientToolMapping{}, err
+	}
+
+	mapping, changed, err := apicompat.AdaptResponsesClientTools(requestBody)
+	if err != nil {
+		return body, apicompat.ResponsesClientToolMapping{}, err
+	}
+	changed = changed || additionalToolsChanged
+	if !changed {
+		return body, mapping, nil
+	}
+	rebuilt, err := json.Marshal(requestBody)
+	if err != nil {
+		return body, apicompat.ResponsesClientToolMapping{}, err
+	}
+	return rebuilt, mapping, nil
+}
+
+func liftResponsesAdditionalTools(requestBody map[string]any) (bool, error) {
+	input, ok := requestBody["input"].([]any)
+	if !ok {
+		return false, nil
+	}
+
+	tools, _ := requestBody["tools"].([]any)
+	kept := make([]any, 0, len(input))
+	changed := false
+	for _, raw := range input {
+		item, ok := raw.(map[string]any)
+		if !ok || strings.TrimSpace(fmt.Sprint(item["type"])) != "additional_tools" {
+			kept = append(kept, raw)
+			continue
+		}
+		additional, ok := item["tools"].([]any)
+		if !ok {
+			return false, fmt.Errorf("additional_tools.tools must be an array")
+		}
+		tools = append(tools, additional...)
+		changed = true
+	}
+	if !changed {
+		return false, nil
+	}
+	requestBody["tools"] = tools
+	requestBody["input"] = kept
+	return true, nil
 }
 
 // ExtractResponsesReasoningEffortFromBody reads Responses API reasoning.effort
@@ -243,6 +319,7 @@ func (s *GatewayService) handleResponsesBufferedStreamingResponse(
 	mappedModel string,
 	reasoningEffort *string,
 	startTime time.Time,
+	clientToolMapping apicompat.ResponsesClientToolMapping,
 ) (*ForwardResult, error) {
 	requestID := resp.Header.Get("x-request-id")
 
@@ -306,7 +383,7 @@ func (s *GatewayService) handleResponsesBufferedStreamingResponse(
 		}
 		if event.Type == "content_block_delta" && event.Delta != nil && finalResp != nil && event.Index != nil {
 			idx := *event.Index
-			if idx < len(finalResp.Content) {
+			if idx >= 0 && idx < len(finalResp.Content) {
 				switch event.Delta.Type {
 				case "text_delta":
 					finalResp.Content[idx].Text += event.Delta.Text
@@ -352,6 +429,10 @@ func (s *GatewayService) handleResponsesBufferedStreamingResponse(
 	}
 	if respBytes, err := json.Marshal(responsesResp); err == nil {
 		respBytes = reverseToolNamesIfPresent(c, respBytes)
+		respBytes, _, err = apicompat.RestoreResponsesClientToolPayload(respBytes, clientToolMapping)
+		if err != nil {
+			return nil, fmt.Errorf("restore responses client tools: %w", err)
+		}
 		c.Data(http.StatusOK, "application/json; charset=utf-8", respBytes)
 	} else {
 		c.JSON(http.StatusOK, responsesResp)
@@ -377,6 +458,7 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 	mappedModel string,
 	reasoningEffort *string,
 	startTime time.Time,
+	clientToolMapping apicompat.ResponsesClientToolMapping,
 ) (*ForwardResult, error) {
 	requestID := resp.Header.Get("x-request-id")
 
@@ -391,11 +473,14 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 
 	state := apicompat.NewAnthropicEventToResponsesState()
 	state.Model = originalModel
+	clientToolRestorer := apicompat.NewResponsesClientToolStreamRestorer(clientToolMapping)
 	var usage ClaudeUsage
 	var firstTokenMs *int
 	firstChunk := true
 	// 客户端断开后停止向下游写入，继续读完上游以合并 message_delta 的最终 usage（上游 94c7d6b02）。
 	clientDisconnected := false
+	streamCont := StreamContinuationFromContext(c)
+	streamCont.BeginAttempt()
 
 	scanner := bufio.NewScanner(resp.Body)
 	maxLineSize := defaultMaxLineSize
@@ -416,6 +501,45 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 			FirstTokenMs:     firstTokenMs,
 			ClientDisconnect: clientDisconnected,
 		}
+	}
+
+	writeEvent := func(evt apicompat.ResponsesStreamEvent) bool {
+		payload, err := json.Marshal(evt)
+		if err != nil {
+			logger.L().Warn("forward_as_responses stream: failed to marshal event",
+				zap.Error(err),
+				zap.String("request_id", requestID),
+			)
+			return true
+		}
+		payload = reverseToolNamesIfPresent(c, payload)
+		payloads, _, err := clientToolRestorer.RestoreEvent(payload)
+		if err != nil {
+			logger.L().Warn("forward_as_responses stream: failed to restore client tools",
+				zap.Error(err),
+				zap.String("request_id", requestID),
+			)
+			return true
+		}
+		for _, restored := range payloads {
+			eventType := gjson.GetBytes(restored, "type").String()
+			if streamCont != nil {
+				startsOutput := eventType != "response.created" && eventType != "response.in_progress"
+				rewritten, keep := streamCont.RewriteResponsesData(string(restored), startsOutput)
+				if !keep {
+					continue
+				}
+				restored = []byte(rewritten)
+			}
+			if _, err := fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", eventType, restored); err != nil {
+				clientDisconnected = true
+				logger.L().Info("forward_as_responses stream: client disconnected, continuing to drain upstream for billing",
+					zap.String("request_id", requestID),
+				)
+				return false
+			}
+		}
+		return true
 	}
 
 	// processEvent handles a single parsed Anthropic SSE event.
@@ -441,20 +565,7 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 		// Convert to Responses events
 		events := apicompat.AnthropicEventToResponsesEvents(event, state)
 		for _, evt := range events {
-			sse, err := apicompat.ResponsesEventToSSE(evt)
-			if err != nil {
-				logger.L().Warn("forward_as_responses stream: failed to marshal event",
-					zap.Error(err),
-					zap.String("request_id", requestID),
-				)
-				continue
-			}
-			out := string(reverseToolNamesIfPresent(c, []byte(sse)))
-			if _, err := fmt.Fprint(c.Writer, out); err != nil {
-				clientDisconnected = true
-				logger.L().Info("forward_as_responses stream: client disconnected, continuing to drain upstream for billing",
-					zap.String("request_id", requestID),
-				)
+			if !writeEvent(evt) {
 				return
 			}
 		}
@@ -469,12 +580,9 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 		}
 		if finalEvents := apicompat.FinalizeAnthropicResponsesStream(state); len(finalEvents) > 0 {
 			for _, evt := range finalEvents {
-				sse, err := apicompat.ResponsesEventToSSE(evt)
-				if err != nil {
-					continue
+				if !writeEvent(evt) {
+					return resultWithUsage(), nil
 				}
-				out := string(reverseToolNamesIfPresent(c, []byte(sse)))
-				fmt.Fprint(c.Writer, out) //nolint:errcheck
 			}
 			c.Writer.Flush()
 		}
@@ -482,6 +590,15 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 	}
 
 	// Read Anthropic SSE events
+	interruptForContinuation := func(message string) *UpstreamFailoverError {
+		if streamCont == nil || clientDisconnected || !streamCont.Active() || !streamCont.Recoverable() {
+			return nil
+		}
+		foErr := streamCont.NewStreamInterruptedFailover(message)
+		attachObservedClaudeUsage(foErr, &usage, originalModel, mappedModel)
+		return foErr
+	}
+	sawMessageStop := false
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "event: ") {
@@ -508,16 +625,42 @@ func (s *GatewayService) handleResponsesStreamingResponse(
 			)
 			continue
 		}
+		if event.Type == "content_block_delta" && event.Index != nil && *event.Index < 0 {
+			continue
+		}
+		if eventType == "error" || event.Type == "error" {
+			foErr := &UpstreamFailoverError{
+				StatusCode:   http.StatusBadGateway,
+				ResponseBody: []byte(payload),
+			}
+			if s.shouldFailoverUpstreamError(c.Request.Context(), http.StatusBadGateway) {
+				if continuationErr := interruptForContinuation("upstream sent error event mid-stream"); continuationErr != nil {
+					return nil, continuationErr
+				}
+			}
+			return nil, foErr
+		}
+		if event.Type == "message_stop" {
+			sawMessageStop = true
+		}
 
 		processEvent(&event)
 	}
 
-	if err := scanner.Err(); err != nil {
+	if err := scanner.Err(); err != nil && !sawMessageStop {
 		if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			logger.L().Warn("forward_as_responses stream: read error",
 				zap.Error(err),
 				zap.String("request_id", requestID),
 			)
+			if foErr := interruptForContinuation("upstream stream disconnected: " + sanitizeStreamError(err)); foErr != nil {
+				return nil, foErr
+			}
+		}
+	}
+	if !sawMessageStop {
+		if foErr := interruptForContinuation("upstream stream ended without message_stop"); foErr != nil {
+			return nil, foErr
 		}
 	}
 

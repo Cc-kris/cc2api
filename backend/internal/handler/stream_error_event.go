@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -21,12 +22,13 @@ type responsesFailedError struct {
 // responsesFailedBody 对齐 apicompat.makeResponsesCompletedEvent 输出的 response 子对象字段集。
 // Output 用空 slice（不是 nil）确保 marshal 为 `[]` 而非 `null`。
 type responsesFailedBody struct {
-	ID     string               `json:"id"`
-	Object string               `json:"object"`
-	Model  string               `json:"model,omitempty"`
-	Status string               `json:"status"`
-	Output []any                `json:"output"`
-	Error  responsesFailedError `json:"error"`
+	ID        string               `json:"id"`
+	Object    string               `json:"object"`
+	CreatedAt int64                `json:"created_at"`
+	Model     string               `json:"model,omitempty"`
+	Status    string               `json:"status"`
+	Output    []any                `json:"output"`
+	Error     responsesFailedError `json:"error"`
 }
 
 // responsesFailedEvent 是写入 SSE data 行的顶层结构。
@@ -116,6 +118,9 @@ func writeCodexImageContinuationCompleted(c *gin.Context, stream bool) {
 // 此时 caller 也无法回退到 JSON（HTTP 200 已固化），通常意味着连接已经损坏，
 // 应当让请求处理函数 return，由上层关闭连接。
 func writeResponsesFailedSSE(c *gin.Context, errType, message string) bool {
+	if service.ResponsesTerminalEventWritten(c) {
+		return true
+	}
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
 		return false
@@ -124,11 +129,12 @@ func writeResponsesFailedSSE(c *gin.Context, errType, message string) bool {
 	payload, err := json.Marshal(responsesFailedEvent{
 		Type: "response.failed",
 		Response: responsesFailedBody{
-			ID:     synthesizeResponseID(c),
-			Object: "response",
-			Model:  requestModel(c),
-			Status: "failed",
-			Output: []any{},
+			ID:        synthesizeResponseID(c),
+			Object:    "response",
+			CreatedAt: time.Now().Unix(),
+			Model:     requestModel(c),
+			Status:    "failed",
+			Output:    []any{},
 			Error: responsesFailedError{
 				Code:    mapResponsesErrorCode(errType),
 				Message: message,

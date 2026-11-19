@@ -1169,7 +1169,7 @@
               form.platform === 'openai'
                 ? 'sk-proj-...'
                 : form.platform === 'gemini'
-                  ? 'AIza...'
+                  ? 'AQ.Ab...'
                   : form.platform === 'grok'
                     ? 'xai-...'
                   : form.platform === 'seedace'
@@ -3269,7 +3269,7 @@
     :show="showGeminiHelpDialog"
     :title="t('admin.accounts.gemini.helpDialog.title')"
     @close="showGeminiHelpDialog = false"
-    max-width="max-w-3xl"
+    width="wide"
   >
     <div class="space-y-6">
       <!-- Setup Guide Section -->

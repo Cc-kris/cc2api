@@ -67,7 +67,6 @@ func (e *countingEstimator) EstimateInflightReservation(context.Context, *servic
 }
 
 func newInflightTestGinContext() *gin.Context {
-	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
 	return c

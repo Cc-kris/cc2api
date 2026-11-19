@@ -2383,6 +2383,9 @@ export default {
         failoverOnAnyError: 'Fail over on any error',
         failoverOnAnyErrorOn: 'Enabled — any upstream error (including mid-stream disconnects) fails over to other accounts in this group; an error is returned only after all accounts fail',
         failoverOnAnyErrorOff: 'Disabled — upstream errors follow the default rules',
+        longContextPricing: 'Enable long-context tiered pricing',
+        modelPricingJson: 'Per-model pricing rules (JSON)',
+        modelPricingHint: 'Ranges use (min, max]; prices and overlapping ranges are checked before saving.',
       },
       enterGroupName: 'Enter group name',
       optionalDescription: 'Optional description',
@@ -4227,7 +4230,7 @@ export default {
         modelPassthroughDesc:
           'All model requests are forwarded directly to the Gemini API without model restrictions or mappings.',
         baseUrlHint: 'Leave default for official Gemini API',
-        apiKeyHint: 'Your Gemini API Key (starts with AIza)',
+        apiKeyHint: 'New AI Studio keys start with AQ. (legacy keys start with AIza); for a third-party upstream, use the key it provides',
         tier: {
           label: 'Account Tier',
           hint: 'Tip: The system will try to auto-detect the tier first; if auto-detection is unavailable or fails, your selected tier is used as a fallback (simulated quota).',

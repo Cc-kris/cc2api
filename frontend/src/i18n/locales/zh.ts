@@ -2442,6 +2442,9 @@ export default {
         failoverOnAnyError: '任意错误换号',
         failoverOnAnyErrorOn: '已启用 — 任意上游错误（含流式中途断开）都会切换分组内其他账号，全部失败才返回错误',
         failoverOnAnyErrorOff: '未启用 — 按原有规则处理上游错误',
+        longContextPricing: '启用长上下文阶梯价格',
+        modelPricingJson: '逐模型价格规则 JSON',
+        modelPricingHint: '区间使用 (min,max]；保存前会检查价格和重叠。',
         exclusiveLabel: '专属分组',
         exclusiveHint: '专属分组，可以手动指定给用户',
         platformLabel: '平台限制',
@@ -3462,7 +3465,7 @@ export default {
         expiresAt: '过期时间',
         actions: '操作'
       },
-      allPrivacyModes: '全部Privacy状态',
+      allPrivacyModes: '全部隐私状态',
       privacyUnset: '未设置',
       privacyTrainingOff: '已关闭训练数据共享',
       privacyCfBlocked: '被 Cloudflare 拦截，训练可能仍开启',
@@ -4373,7 +4376,7 @@ export default {
         modelPassthrough: 'Gemini 直接转发模型',
         modelPassthroughDesc: '所有模型请求将直接转发至 Gemini API，不进行模型限制或映射。',
         baseUrlHint: '留空使用官方 Gemini API',
-        apiKeyHint: '您的 Gemini API Key（以 AIza 开头）',
+        apiKeyHint: 'AI Studio 新建的 Key 以 AQ. 开头（旧版以 AIza 开头）；第三方上游填写其提供的 Key',
         tier: {
           label: '账号等级',
           hint: '提示：系统会优先尝试自动识别账号等级；若自动识别不可用或失败，则使用你选择的等级作为回退（本地模拟配额）。',

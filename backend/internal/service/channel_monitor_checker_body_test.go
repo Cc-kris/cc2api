@@ -362,3 +362,14 @@ func TestRunCheckForModel_ReplaceMode_EmptyResponseIsFailed(t *testing.T) {
 		t.Errorf("failure message should hint replace-mode, got %q", res.Message)
 	}
 }
+
+func TestSanitizeErrorMessage_RedactsGeminiAuthKey(t *testing.T) {
+	authKey := "AQ." + "Ab" + strings.Repeat("Xy9_-z", 8)
+	got := sanitizeErrorMessage(`{"error":{"message":"API key not valid: ` + authKey + `"}}`)
+	if strings.Contains(got, authKey) {
+		t.Fatalf("Gemini auth key leaked: %q", got)
+	}
+	if !strings.Contains(got, "AQ.***REDACTED***") {
+		t.Fatalf("expected redaction marker, got %q", got)
+	}
+}

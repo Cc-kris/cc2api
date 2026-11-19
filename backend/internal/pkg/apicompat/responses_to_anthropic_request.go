@@ -1,9 +1,12 @@
 package apicompat
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 )
 
 // ResponsesToAnthropicRequest converts a Responses API request into an
@@ -11,7 +14,11 @@ import (
 // enables Anthropic platform groups to accept OpenAI Responses API requests
 // by converting them to the native /v1/messages format before forwarding upstream.
 func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, error) {
-	system, messages, err := convertResponsesInputToAnthropic(req.Instructions, req.Input)
+	if req == nil {
+		return nil, fmt.Errorf("responses request is nil")
+	}
+	isHaiku55 := claude.IsHaiku55(req.Model)
+	system, messages, err := convertResponsesInputToAnthropicSigned(req.Instructions, req.Input, isHaiku55)
 	if err != nil {
 		return nil, err
 	}
@@ -49,6 +56,38 @@ func ResponsesToAnthropicRequest(req *ResponsesRequest) (*AnthropicRequest, erro
 			return nil, fmt.Errorf("convert tool_choice: %w", err)
 		}
 		out.ToolChoice = tc
+	}
+
+	// Haiku 5.5 uses adaptive thinking at every reasoning effort. Unlike Opus
+	// and Sonnet 5.5, it accepts forced tool_choice. V05 requires default
+	// sampling only; this deliberately does not import V06 sampling policy.
+	if isHaiku55 {
+		if req.Temperature != nil && req.TopP != nil {
+			return nil, fmt.Errorf("claude-haiku-5-5 does not allow temperature and top_p together; omit both")
+		}
+		if req.Temperature != nil && *req.Temperature != 1 {
+			return nil, fmt.Errorf("claude-haiku-5-5 does not support non-default temperature")
+		}
+		if req.TopP != nil && (*req.TopP < 0.99 || *req.TopP > 1) {
+			return nil, fmt.Errorf("claude-haiku-5-5 does not support non-default top_p")
+		}
+		effort := "medium"
+		if req.Reasoning != nil && req.Reasoning.Effort != "" {
+			effort = req.Reasoning.Effort
+		}
+		if effort == "none" {
+			out.Thinking = &AnthropicThinking{Type: "disabled"}
+			out.OutputConfig = &AnthropicOutputConfig{Effort: "low"}
+			return out, nil
+		}
+		switch effort {
+		case "low", "medium", "high", "xhigh", "max":
+		default:
+			return nil, fmt.Errorf("%s does not support reasoning effort %q; use low, medium, high, xhigh, max or none", req.Model, effort)
+		}
+		out.Thinking = &AnthropicThinking{Type: "adaptive"}
+		out.OutputConfig = &AnthropicOutputConfig{Effort: effort}
+		return out, nil
 	}
 
 	// reasoning.effort → output_config.effort + thinking
@@ -101,6 +140,10 @@ func mapResponsesEffortToAnthropic(effort string) string {
 // a Responses API instructions + input array. Returns the system as raw JSON
 // (for Anthropic's polymorphic system field) and a list of Anthropic messages.
 func convertResponsesInputToAnthropic(instructions string, inputRaw json.RawMessage) (json.RawMessage, []AnthropicMessage, error) {
+	return convertResponsesInputToAnthropicSigned(instructions, inputRaw, false)
+}
+
+func convertResponsesInputToAnthropicSigned(instructions string, inputRaw json.RawMessage, preserveThinking bool) (json.RawMessage, []AnthropicMessage, error) {
 	var systemParts []string
 	if strings.TrimSpace(instructions) != "" {
 		systemParts = append(systemParts, strings.TrimSpace(instructions))
@@ -152,11 +195,7 @@ func convertResponsesInputToAnthropic(instructions string, inputRaw json.RawMess
 
 		case item.Type == "function_call_output":
 			// function_call_output → user message with tool_result block
-			outputContent := item.Output
-			if outputContent == "" {
-				outputContent = "(empty)"
-			}
-			contentJSON, _ := json.Marshal(outputContent)
+			contentJSON := responsesFunctionOutputToAnthropicContent(item)
 			block := AnthropicContentBlock{
 				Type:      "tool_result",
 				ToolUseID: fromResponsesCallIDToAnthropic(item.CallID),
@@ -168,34 +207,61 @@ func convertResponsesInputToAnthropic(instructions string, inputRaw json.RawMess
 				Content: blockJSON,
 			})
 
+		case item.Type == "reasoning":
+			// Only replay the signed envelope emitted by this bridge. Arbitrary
+			// OpenAI ciphertext cannot be passed off as an Anthropic signature.
+			if preserveThinking && strings.HasPrefix(item.EncryptedContent, anthropicThinkingEnvelopePrefix) {
+				raw, err := base64.RawStdEncoding.DecodeString(strings.TrimPrefix(item.EncryptedContent, anthropicThinkingEnvelopePrefix))
+				if err != nil {
+					return nil, nil, fmt.Errorf("invalid Anthropic thinking envelope: %w", err)
+				}
+				var block AnthropicContentBlock
+				if err := json.Unmarshal(raw, &block); err != nil {
+					return nil, nil, fmt.Errorf("invalid Anthropic thinking block: %w", err)
+				}
+				if (block.Type != "thinking" || block.Signature == "") && (block.Type != "redacted_thinking" || block.Data == "") {
+					return nil, nil, fmt.Errorf("invalid Anthropic signed thinking block")
+				}
+				content, err := json.Marshal([]AnthropicContentBlock{block})
+				if err != nil {
+					return nil, nil, err
+				}
+				messages = append(messages, AnthropicMessage{Role: "assistant", Content: content})
+			}
+
 		case item.Role == "user":
 			content, err := convertResponsesUserToAnthropicContent(item.Content)
 			if err != nil {
 				return nil, nil, err
 			}
-			messages = append(messages, AnthropicMessage{
-				Role:    "user",
-				Content: content,
-			})
+			if anthropicContentIsEmpty(content) {
+				continue
+			}
+			messages = append(messages, AnthropicMessage{Role: "user", Content: content})
 
 		case item.Role == "assistant":
 			content, err := convertResponsesAssistantToAnthropicContent(item.Content)
 			if err != nil {
 				return nil, nil, err
 			}
-			messages = append(messages, AnthropicMessage{
-				Role:    "assistant",
-				Content: content,
-			})
+			if anthropicContentIsEmpty(content) || anthropicContentIsOnlyBlankText(content) {
+				continue
+			}
+			messages = append(messages, AnthropicMessage{Role: "assistant", Content: content})
 
 		default:
-			// Unknown role/type — attempt as user message
-			if item.Content != nil {
-				messages = append(messages, AnthropicMessage{
-					Role:    "user",
-					Content: item.Content,
-				})
+			// Preserve only supported text/images instead of forwarding unknown blocks.
+			if item.Content == nil {
+				continue
 			}
+			content, err := convertResponsesUserToAnthropicContent(item.Content)
+			if err != nil {
+				return nil, nil, err
+			}
+			if anthropicContentIsEmpty(content) {
+				continue
+			}
+			messages = append(messages, AnthropicMessage{Role: "user", Content: content})
 		}
 	}
 
@@ -214,6 +280,43 @@ func convertResponsesInputToAnthropic(instructions string, inputRaw json.RawMess
 	}
 
 	return system, messages, nil
+}
+
+func responsesFunctionOutputToAnthropicContent(item ResponsesInputItem) json.RawMessage {
+	if len(item.outputRaw) == 0 {
+		output := item.Output
+		if output == "" {
+			output = "(empty)"
+		}
+		content, _ := json.Marshal(output)
+		return content
+	}
+	var parts []ResponsesContentPart
+	if err := json.Unmarshal(item.outputRaw, &parts); err == nil {
+		blocks := make([]AnthropicContentBlock, 0, len(parts))
+		for _, part := range parts {
+			switch part.Type {
+			case "input_text", "output_text", "text":
+				if part.Text != "" {
+					blocks = append(blocks, AnthropicContentBlock{Type: "text", Text: part.Text})
+				}
+			case "input_image":
+				if source := dataURIToAnthropicImageSource(part.ImageURL); source != nil {
+					blocks = append(blocks, AnthropicContentBlock{Type: "image", Source: source})
+				}
+			}
+		}
+		if len(blocks) > 0 {
+			content, _ := json.Marshal(blocks)
+			return content
+		}
+		if len(parts) == 0 {
+			content, _ := json.Marshal("(empty)")
+			return content
+		}
+	}
+	content, _ := json.Marshal(item.Output)
+	return content
 }
 
 // normalizeAnthropicToolPairing rebuilds the message sequence so it satisfies
@@ -356,6 +459,28 @@ func extractTextFromContent(raw json.RawMessage) string {
 	return ""
 }
 
+func anthropicContentIsEmpty(content json.RawMessage) bool {
+	trimmed := strings.TrimSpace(string(content))
+	switch trimmed {
+	case "", "null", `""`, "[]":
+		return true
+	}
+	return false
+}
+
+func anthropicContentIsOnlyBlankText(content json.RawMessage) bool {
+	blocks := parseContentBlocks(content)
+	if len(blocks) == 0 {
+		return false
+	}
+	for _, b := range blocks {
+		if b.Type != "text" || strings.TrimSpace(b.Text) != "" {
+			return false
+		}
+	}
+	return true
+}
+
 // convertResponsesUserToAnthropicContent converts a Responses user message
 // content field into Anthropic content blocks JSON.
 func convertResponsesUserToAnthropicContent(raw json.RawMessage) (json.RawMessage, error) {
@@ -391,6 +516,14 @@ func convertResponsesUserToAnthropicContent(raw json.RawMessage) (json.RawMessag
 			if src != nil {
 				blocks = append(blocks, AnthropicContentBlock{
 					Type:   "image",
+					Source: src,
+				})
+			}
+		case "input_file":
+			src := dataURIToAnthropicFileSource(p.FileData)
+			if src != nil {
+				blocks = append(blocks, AnthropicContentBlock{
+					Type:   "document",
 					Source: src,
 				})
 			}
@@ -481,6 +614,12 @@ func dataURIToAnthropicImageSource(dataURI string) *AnthropicImageSource {
 	}
 }
 
+// dataURIToAnthropicFileSource parses a data URI into a document source.
+// file_id-only parts are not convertible here and stay dropped.
+func dataURIToAnthropicFileSource(fileData string) *AnthropicImageSource {
+	return dataURIToAnthropicImageSource(fileData)
+}
+
 // mergeConsecutiveMessages merges consecutive messages with the same role
 // because Anthropic requires alternating user/assistant turns.
 func mergeConsecutiveMessages(messages []AnthropicMessage) []AnthropicMessage {
@@ -556,6 +695,9 @@ func convertResponsesToAnthropicTools(tools []ResponsesTool) []AnthropicTool {
 }
 
 // normalizeAnthropicInputSchema ensures input_schema is a valid object schema.
+// Codex 会把部分内置工具（例如 codex_app 的 automation_update）的 parameters
+// 根节点声明成对象分支的 oneOf/anyOf，Anthropic 只接受 object 根节点，这里把
+// 顶层联合摊平成单个 object schema。
 func normalizeAnthropicInputSchema(schema json.RawMessage) json.RawMessage {
 	const emptyObjectSchema = `{"type":"object","properties":{}}`
 
@@ -568,6 +710,8 @@ func normalizeAnthropicInputSchema(schema json.RawMessage) json.RawMessage {
 	if err := json.Unmarshal(schema, &m); err != nil {
 		return json.RawMessage(`{"type":"object","properties":{}}`)
 	}
+
+	flattenAnthropicRootUnions(m)
 
 	typeRaw, ok := m["type"]
 	if !ok || strings.TrimSpace(string(typeRaw)) == "" || string(typeRaw) == "null" {
