@@ -2829,6 +2829,39 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			upstreamModel,
 		)
 	}
+	// Codex 客户端 hosted image_generation 注入（官方 sub2api 语义）。
+	// 账号级显式 strip 策略优先：客户端自带的声明直接剔除。
+	if isCodexCLI && account.CodexImageGenerationExplicitToolPolicy() == codexImageGenerationExplicitToolPolicyStrip {
+		if stripOpenAIImageGenerationToolDeclarations(reqBody) {
+			bodyModified = true
+			disablePatch()
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Stripped /responses image_generation tool for Codex client by account policy")
+		}
+	}
+	codexImageGenerationBridgeEnabled := isCodexCLI &&
+		!isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader)) &&
+		imageGenerationAllowed &&
+		account.CodexImageGenerationExplicitToolPolicy() != codexImageGenerationExplicitToolPolicyStrip &&
+		s.isCodexImageGenerationBridgeEnabled(ctx, account, apiKey)
+	// /responses/compact 是会话压缩请求：上游不接受 tool_choice，注入 image_generation
+	// 工具也没有意义，整块豁免。
+	if imageGenerationAllowed && !compactPath && codexImageGenerationBridgeEnabled {
+		if ensureOpenAIResponsesImageGenerationTool(reqBody) {
+			bodyModified = true
+			disablePatch()
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Injected /responses image_generation tool for Codex client")
+		}
+		if ensureOpenAIResponsesImageGenerationToolChoiceAuto(reqBody) {
+			bodyModified = true
+			disablePatch()
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Set /responses image_generation tool_choice=auto for Codex client")
+		}
+		if applyCodexImageGenerationBridgeInstructions(reqBody) {
+			bodyModified = true
+			disablePatch()
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Added Codex image_generation bridge instructions")
+		}
+	}
 	if err := validateOpenAIResponsesImageModel(reqBody, upstreamModel); err != nil {
 		setOpsUpstreamError(c, http.StatusBadRequest, err.Error(), "")
 		writeOpenAIJSONResponse(c, http.StatusBadRequest, gin.H{

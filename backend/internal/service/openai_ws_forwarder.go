@@ -2891,6 +2891,40 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				normalized = updated
 			}
 		}
+		// Codex 客户端 hosted image_generation 注入（与 HTTP 路径同源，官方
+		// sub2api 在 WS ingress 也做同样处理）。WS 每轮 response.create 都要
+		// 重放注入结果，否则第二轮就退回“本机没有 image_gen”。
+		wsIsCodexCLI := openai.IsCodexOfficialClientByHeaders(c.GetHeader("User-Agent"), c.GetHeader("originator")) ||
+			(s.cfg != nil && s.cfg.Gateway.ForceCodexCLI)
+		if wsIsCodexCLI && groupAllowsImageGeneration &&
+			account.CodexImageGenerationExplicitToolPolicy() != codexImageGenerationExplicitToolPolicyStrip &&
+			!isOpenAIResponsesLiteWebSocketPayload(normalized) &&
+			s.isCodexImageGenerationBridgeEnabled(ctx, account, getAPIKeyFromContext(c)) {
+			payloadMap := make(map[string]any)
+			if decodeErr := decodeOpenAIJSONUseNumber(normalized, &payloadMap); decodeErr != nil {
+				return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", decodeErr)
+			}
+			bridgeModified := false
+			if ensureOpenAIResponsesImageGenerationTool(payloadMap) {
+				bridgeModified = true
+			}
+			if ensureOpenAIResponsesImageGenerationToolChoiceAuto(payloadMap) {
+				bridgeModified = true
+			}
+			if normalizeOpenAIResponsesImageGenerationTools(payloadMap) {
+				bridgeModified = true
+			}
+			if applyCodexImageGenerationBridgeInstructions(payloadMap) {
+				bridgeModified = true
+			}
+			if bridgeModified {
+				rebuilt, marshalErr := json.Marshal(payloadMap)
+				if marshalErr != nil {
+					return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", marshalErr)
+				}
+				normalized = rebuilt
+			}
+		}
 		imageIntent := IsImageGenerationIntent(openAIResponsesEndpoint, originalModel, normalized)
 		imageBillingModel := ""
 		imageSizeTier := ""

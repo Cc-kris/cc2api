@@ -102,7 +102,7 @@ func TestOpenAIGatewayServiceForward_DisabledGroupAllowsTextOnlyResponses(t *tes
 	require.NotNil(t, upstream.lastReq)
 }
 
-func TestOpenAIGatewayServiceForward_CodexImageBridgeDoesNotInjectOrDirectToImages(t *testing.T) {
+func TestOpenAIGatewayServiceForward_CodexImageBridgeInjectsHostedToolInstructions(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	upstream := &httpUpstreamRecorder{
@@ -123,88 +123,71 @@ func TestOpenAIGatewayServiceForward_CodexImageBridgeDoesNotInjectOrDirectToImag
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, upstream.lastReq)
+	// 官方语义：桥接不再改写到 /v1/images/generations，而是保留 /responses 并注入 hosted 工具。
 	require.Contains(t, upstream.lastReq.URL.Path, "/v1/responses")
 	require.NotContains(t, upstream.lastReq.URL.Path, "/v1/images/generations")
 	imageTools := gjson.GetBytes(upstream.lastBody, `tools.#(type=="image_generation")#`).Array()
 	require.Len(t, imageTools, 1)
 	require.Equal(t, "jpeg", gjson.GetBytes(upstream.lastBody, `tools.#(type=="image_generation").output_format`).String())
 	require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="image_generation").format`).Exists())
+	// 桥接注入：tool_choice=auto 与 instructions 说明。
+	require.Equal(t, "auto", gjson.GetBytes(upstream.lastBody, "tool_choice").String())
 	instructions := gjson.GetBytes(upstream.lastBody, "instructions").String()
-	require.NotContains(t, instructions, "image_generation")
+	require.Contains(t, instructions, codexImageGenerationBridgeMarker)
 	require.Equal(t, 0, result.ImageCount)
 }
 
 func TestOpenAIGatewayService_CodexImageGenerationRouteIsChannelOwned(t *testing.T) {
 	groupID := int64(4242)
-	orchestratorID := int64(7)
 	channel := &Channel{
 		ID: 1, Status: StatusActive, GroupIDs: []int64{groupID},
 		ModelMapping: map[string]map[string]string{PlatformOpenAI: {"gpt-5.6": "gpt-image-2"}},
 		FeaturesConfig: map[string]any{featureKeyCodexImageGenerationBridge: map[string]any{
-			PlatformOpenAI: true, "orchestrator_group_id": orchestratorID,
+			PlatformOpenAI: true,
 		}},
 	}
 	svc := newOpenAIImageGenerationControlTestService(&httpUpstreamRecorder{})
 	svc.cfg.Gateway.CodexImageGenerationBridgeEnabled = false
 	svc.channelService = newOpenAIImageGenerationControlChannelService(groupID, channel)
+
+	// 桥接不再改写路由：模型映射照常解析，但路由永不激活生图扩展，
+	// 生图能力改为由客户端自带的 image_generation 工具 + 分组允许开关决定。
 	route := svc.ResolveCodexImageGenerationRoute(context.Background(), &groupID, "gpt-5.6")
-	require.True(t, route.Enabled)
+	require.False(t, route.Enabled)
 	require.Equal(t, "gpt-image-2", route.Mapping.MappedModel)
-	require.Equal(t, orchestratorID, *route.OrchestratorGroupID)
+	require.Nil(t, route.OrchestratorGroupID)
+
+	// 模型清单始终使用分组自身账号，不再重定向到编排组。
 	manifestGroupID, err := svc.ResolveCodexModelsManifestGroupID(context.Background(), &groupID)
 	require.NoError(t, err)
-	require.Equal(t, orchestratorID, *manifestGroupID)
-	bridgeGroup, err := svc.IsCodexImageGenerationBridgeGroup(context.Background(), &groupID)
-	require.NoError(t, err)
-	require.True(t, bridgeGroup)
+	require.NotNil(t, manifestGroupID)
+	require.Equal(t, groupID, *manifestGroupID)
 
-	t.Run("enabled image mapping reports missing orchestrator as configuration error", func(t *testing.T) {
-		invalidChannel := channel.Clone()
-		invalidChannel.FeaturesConfig = map[string]any{featureKeyCodexImageGenerationBridge: map[string]any{
-			PlatformOpenAI: true,
-		}}
-		invalidService := newOpenAIImageGenerationControlTestService(&httpUpstreamRecorder{})
-		invalidService.channelService = newOpenAIImageGenerationControlChannelService(groupID, invalidChannel)
-		invalidRoute := invalidService.ResolveCodexImageGenerationRoute(context.Background(), &groupID, "gpt-5.6")
-		require.False(t, invalidRoute.Enabled)
-		require.Equal(t, "Codex image orchestration group is not configured", invalidRoute.ConfigurationError)
+	t.Run("bridge flag no longer grants a route", func(t *testing.T) {
+		enabledService := newOpenAIImageGenerationControlTestService(&httpUpstreamRecorder{})
+		enabledService.cfg.Gateway.CodexImageGenerationBridgeEnabled = true
+		enabledService.channelService = newOpenAIImageGenerationControlChannelService(groupID, channel)
+		require.False(t, enabledService.ResolveCodexImageGenerationRoute(context.Background(), &groupID, "gpt-5.6").Enabled)
 	})
 
-	// Deprecated global/account values cannot grant or deny the route.
-	svc.cfg.Gateway.CodexImageGenerationBridgeEnabled = true
-	channel.FeaturesConfig[featureKeyCodexImageGenerationBridge] = map[string]any{PlatformOpenAI: false, "orchestrator_group_id": orchestratorID}
-	svc.channelService = newOpenAIImageGenerationControlChannelService(groupID, channel)
-	route = svc.ResolveCodexImageGenerationRoute(context.Background(), &groupID, "gpt-5.6")
-	require.False(t, route.Enabled)
-
-	t.Run("ordinary groups and non image mappings stay ordinary", func(t *testing.T) {
+	t.Run("ordinary groups keep their own manifest group", func(t *testing.T) {
 		plainService := newOpenAIImageGenerationControlTestService(&httpUpstreamRecorder{})
 		plainService.cfg.Gateway.CodexImageGenerationBridgeEnabled = true
-		require.False(t, plainService.ResolveCodexImageGenerationRoute(context.Background(), &groupID, "gpt-5.6").Enabled)
+
 		manifestGroupID, err := plainService.ResolveCodexModelsManifestGroupID(context.Background(), &groupID)
 		require.NoError(t, err)
 		require.Equal(t, groupID, *manifestGroupID)
-		bridgeGroup, err := plainService.IsCodexImageGenerationBridgeGroup(context.Background(), &groupID)
-		require.NoError(t, err)
-		require.False(t, bridgeGroup)
 
 		textChannel := &Channel{
 			ID: 2, Status: StatusActive, GroupIDs: []int64{groupID},
 			ModelMapping: map[string]map[string]string{PlatformOpenAI: {"gpt-5.6": "gpt-5.5"}},
 			FeaturesConfig: map[string]any{featureKeyCodexImageGenerationBridge: map[string]any{
-				PlatformOpenAI: true, "orchestrator_group_id": orchestratorID,
+				PlatformOpenAI: true,
 			}},
 		}
 		plainService.channelService = newOpenAIImageGenerationControlChannelService(groupID, textChannel)
 		require.False(t, plainService.ResolveCodexImageGenerationRoute(context.Background(), &groupID, "gpt-5.6").Enabled)
-		bridgeGroup, err = plainService.IsCodexImageGenerationBridgeGroup(context.Background(), &groupID)
-		require.NoError(t, err)
-		require.False(t, bridgeGroup)
 		require.False(t, plainService.ResolveCodexImageGenerationRoute(context.Background(), &groupID, "gpt-image-2").Enabled)
-
-		textChannel.Status = StatusDisabled
-		plainService.channelService = newOpenAIImageGenerationControlChannelService(groupID, textChannel)
-		require.False(t, plainService.ResolveCodexImageGenerationRoute(context.Background(), &groupID, "gpt-5.6").Enabled)
 	})
 }
 
@@ -233,23 +216,6 @@ func TestOpenAIGatewayServiceHandleResponsesImageOutputs_NonStreaming(t *testing
 	require.Equal(t, 7, result.usage.InputTokens)
 	require.Equal(t, 3, result.usage.OutputTokens)
 	require.Equal(t, 2, result.usage.ImageOutputTokens)
-}
-
-func TestChannelCodexImageGenerationOrchestratorGroupID(t *testing.T) {
-	channel := &Channel{FeaturesConfig: map[string]any{
-		featureKeyCodexImageGenerationBridge: map[string]any{
-			PlatformOpenAI:          true,
-			"orchestrator_group_id": float64(7),
-		},
-	}}
-	require.NotNil(t, channel.CodexImageGenerationOrchestratorGroupID())
-	require.Equal(t, int64(7), *channel.CodexImageGenerationOrchestratorGroupID())
-
-	channel.FeaturesConfig[featureKeyCodexImageGenerationBridge] = map[string]any{
-		PlatformOpenAI:          true,
-		"orchestrator_group_id": "14",
-	}
-	require.Equal(t, int64(14), *channel.CodexImageGenerationOrchestratorGroupID())
 }
 
 func TestOpenAIGatewayServiceHandleResponsesImageOutputs_Streaming(t *testing.T) {

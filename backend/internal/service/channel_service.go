@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -586,52 +585,13 @@ func (s *ChannelService) ResolveCodexImageGenerationRoute(ctx context.Context, g
 		return result
 	}
 	result.Mapping = resolveMapping(lk, *groupID, model)
-	if lk.platform != PlatformOpenAI {
-		return result
-	}
-	bridgeEnabled := lk.channel.CodexImageGenerationBridgeOverride(PlatformOpenAI)
-	if bridgeEnabled == nil || !*bridgeEnabled ||
-		!result.Mapping.Mapped || isOpenAIImageGenerationModel(model) ||
-		!isOpenAIImageGenerationModel(result.Mapping.MappedModel) {
-		return result
-	}
-	result.OrchestratorGroupID = lk.channel.CodexImageGenerationOrchestratorGroupID()
-	if result.OrchestratorGroupID == nil {
-		result.ConfigurationError = "Codex image orchestration group is not configured"
-		return result
-	}
-	result.Enabled = true
 	return result
 }
 
-// ResolveCodexModelsManifestGroupID returns the text orchestrator group for a
-// channel-owned Codex image bridge. Ordinary groups continue to use their own
-// accounts for model discovery.
+// ResolveCodexModelsManifestGroupID returns the group whose accounts should be
+// used for Codex model discovery. Codex image bridges no longer reroute model
+// discovery to a separate orchestrator group, so the group itself is used.
 func (s *ChannelService) ResolveCodexModelsManifestGroupID(ctx context.Context, groupID *int64) (*int64, error) {
-	if groupID == nil {
-		return nil, nil
-	}
-	lk, err := s.lookupGroupChannel(ctx, *groupID)
-	if err != nil {
-		return nil, fmt.Errorf("codex models channel configuration is unavailable: %w", err)
-	}
-	if lk == nil || lk.platform != PlatformOpenAI {
-		return groupID, nil
-	}
-	bridgeEnabled := lk.channel.CodexImageGenerationBridgeOverride(PlatformOpenAI)
-	if bridgeEnabled == nil || !*bridgeEnabled {
-		return groupID, nil
-	}
-	for source, target := range lk.channel.ModelMapping[PlatformOpenAI] {
-		if isOpenAIImageGenerationModel(source) || !isOpenAIImageGenerationModel(target) {
-			continue
-		}
-		orchestratorGroupID := lk.channel.CodexImageGenerationOrchestratorGroupID()
-		if orchestratorGroupID == nil {
-			return nil, errors.New("codex image orchestration group is not configured")
-		}
-		return orchestratorGroupID, nil
-	}
 	return groupID, nil
 }
 
@@ -943,53 +903,6 @@ func (s *ChannelService) applyUpdateInput(ctx context.Context, channel *Channel,
 }
 
 func (s *ChannelService) validateCodexImageGenerationBridge(ctx context.Context, channel *Channel) error {
-	if channel == nil {
-		return nil
-	}
-	enabled := channel.CodexImageGenerationBridgeOverride(PlatformOpenAI)
-	if enabled == nil || !*enabled {
-		return nil
-	}
-
-	hasTextToImageMapping := false
-	for source, target := range channel.ModelMapping[PlatformOpenAI] {
-		if !isOpenAIImageGenerationModel(source) && isOpenAIImageGenerationModel(target) {
-			hasTextToImageMapping = true
-			break
-		}
-	}
-	if !hasTextToImageMapping {
-		return fmt.Errorf("codex image generation bridge requires an OpenAI text-to-image model mapping")
-	}
-	orchestratorGroupID := channel.CodexImageGenerationOrchestratorGroupID()
-	if orchestratorGroupID == nil {
-		return fmt.Errorf("codex image generation bridge requires orchestrator_group_id")
-	}
-	for _, groupID := range channel.GroupIDs {
-		if groupID == *orchestratorGroupID {
-			return fmt.Errorf("codex image generation orchestrator group cannot belong to the image channel")
-		}
-	}
-	if s.groupRepo == nil {
-		return fmt.Errorf("codex image generation orchestrator group cannot be validated")
-	}
-	group, err := s.groupRepo.GetByIDLite(ctx, *orchestratorGroupID)
-	if err != nil || group == nil {
-		return fmt.Errorf("codex image generation orchestrator group not found")
-	}
-	if !group.IsActive() || group.Platform != PlatformOpenAI {
-		return fmt.Errorf("codex image generation orchestrator group must be an active OpenAI group")
-	}
-	if group.AllowImageGeneration {
-		return fmt.Errorf("codex image generation orchestrator group must be text-only")
-	}
-	existingChannelID, lookupErr := s.repo.GetChannelIDByGroupID(ctx, *orchestratorGroupID)
-	if lookupErr != nil {
-		return fmt.Errorf("validate codex image generation orchestrator group channel: %w", lookupErr)
-	}
-	if existingChannelID > 0 && existingChannelID != channel.ID {
-		return fmt.Errorf("codex image generation orchestrator group cannot belong to another channel")
-	}
 	return nil
 }
 
