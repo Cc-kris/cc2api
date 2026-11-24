@@ -165,6 +165,50 @@ WHERE features_config ? 'codex_image_generation_bridge';
 
 辅助验证：`backend/internal/service` 单测覆盖 T2 移植的每个 helper（正/反用例各 ≥1）。
 
+### 4.1 真机 Codex 实证（2026-11-24，codex-cli 0.166.0，macOS）
+
+用真实 codex 客户端对着本地栈（网关 18082 → mock 上游 19001，帧记录含全部请求头）跑通，得到两条**必须写进发布说明**的事实：
+
+**（1）`x-openai-internal-codex-responses-lite` 不是常量，而是模型目录的逐模型开关。**
+
+codex 内嵌字段 `use_responses_lite`（模型目录 `models.json` 每项一个）决定该模型是否带 lite 头。当前官方目录取值：
+
+| 模型 | `use_responses_lite` | 实测是否发 lite 头 |
+|---|---|---|
+| gpt-5.6-sol / gpt-5.6-terra / gpt-5.6-luna | true | 是 |
+| gpt-5.5 / gpt-5.4 / gpt-5.4-mini / gpt-5.2 / codex-auto-review | false | 否 |
+
+推论：**同一份网关配置下，用户换模型就会改变桥接是否生效**。用 luna/sol/terra 的用户永远看不到注入（官方设计上就被 `!isOpenAIResponsesLiteHeader` 排除，官方 `openai_gateway_forward.go:379` 同样是这个条件，非 fork 差异）；用 5.5/5.4 的用户才会命中注入。
+
+**（2）真机 A/B 对照（同 key、同分组、同 bridge=true，唯一变量=模型）**
+
+| 模型 | lite 头 | 上游帧工具增量 | 帧内 `tools[type=image_generation]` | 帧内 `<sub2api-codex-image-generation>` 指令 | 网关日志 |
+|---|---|---|---|---|---|
+| gpt-5.6-luna | 有 | 0 | 无 | 无 | 无 `Injected` 行 |
+| gpt-5.5 | 无 | **+1** | **有** | **有** | `[OpenAI] Injected /responses image_generation tool for Codex client` |
+
+**（3）端到端出图闭环（gpt-5.5）**
+
+`codex exec "DRAW 一只红色方块的示意图"` 的 rollout 中记录到 `response_item` → `{"type":"image_generation_call","status":"completed","result":"<base64 png>"}`，即注入的 hosted 工具被模型调用、结果被客户端接收。
+
+**（4）客户端另有原生出图路径**
+
+codex 二进制内同时存在 `/v1/images/generations`、`/images/edits` 调用；其 `exec` 命名空间自带 `image_gen__imagegen` 工具说明。实测客户端侧 `POST /v1/images/generations`（`model=gpt-image-2`）经网关可正常转发并返回 200。故「codex 能出图」与「网关注入了 hosted 工具」是两条独立通路，验收时不可互相替代：
+- 验证桥接逻辑 → 必须看上游帧里 `tools[type=image_generation]` + marker 指令（TC-E2E-01/WS-01）；
+- 验证用户可见出图 → 客户端原生路径也能出图，**不足以证明注入生效**。
+
+### 4.2 E2E 执行环境与复现
+
+| 项 | 值 |
+|---|---|
+| 被测网关 | 本地 18082（分支 `fix/codex-image-bridge-upstream`），rundir `e2e_bridge/`，日志 `e2e_bridge/server.log` |
+| mock 上游 | `e2e/codex-image-bridge/mock`（`go run . -listen 127.0.0.1:19001`），帧文件 `e2e_bridge/frames.jsonl` |
+| mock 已支持 | 记录**全部**请求头（原只记 UA/originator，无法判断 lite）、`usage.total_tokens`、`POST /v1/images/generations` 回 1x1 PNG |
+| 真机客户端 | `codex` 0.166.0，`CODEX_HOME` 独立目录 + `model_catalog_json` 指向完整目录，`features.image_generation = true` |
+| 用例结果 | `run_e2e.py` **15 通过 / 0 失败**（HTTP-01~09、WS-01~05，含 HTTP-04/WS-04 lite 不注入、HTTP-09 strip 策略） |
+
+复现要点：真机跑注入用例必须选 `use_responses_lite=false` 的模型（如 `-m gpt-5.5`）；直接改 `models.json` 里某模型的该字段无效——codex 启动时会用官方目录覆盖回写。
+
 ---
 
 ## 五、风险与回滚
@@ -176,6 +220,7 @@ WHERE features_config ? 'codex_image_generation_bridge';
 | fork 现有 `image_generation_intent.go` 有 13 个同名函数与官方实现不同（`IsImageGenerationIntent` 44L vs 7L、`GroupAllowsImageGeneration` 7L vs 24L 等） | **高** | 这些是**计费与权限**相关，必须逐个比对官方实现后决定取谁；不能整文件覆盖 |
 | 前端一次性删编排组会让已保存的旧配置在 UI 上无法回显 | 低 | 旧值留在 DB，UI 不读即可；如需彻底清理另起迁移 |
 | 生图计费口径变化（`resolveOpenAIResponsesImageBillingConfigDetailed` 同名但 39L vs 4L） | 中 | T3 前先比对这两份实现，确认计费字段不丢 |
+| **换模型即静默改变桥接是否生效**：`use_responses_lite=true` 的模型（gpt-5.6-sol/terra/luna）请求带 lite 头，注入被官方条件排除；只有 `use_responses_lite=false`（gpt-5.5/5.4/5.4-mini/5.2）才注入。用户报"生图桥接无效"时先看模型 | **中** | 发布说明写清适用模型范围；排障第一步查上游帧是否带 lite 头 |
 
 **回滚**：每个 Tn 独立 commit，任意步骤出问题 `git revert` 该 commit 即可回到上一可用状态；分支基线与线上 `146e08aa8` 完全一致，回退成本为零。
 

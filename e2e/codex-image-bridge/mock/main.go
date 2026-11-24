@@ -16,6 +16,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -41,10 +42,13 @@ func record(kind, path string, header http.Header, raw []byte) {
 	rec := map[string]any{
 		"kind": kind,
 		"path": path,
-		"header": map[string]string{
-			"user-agent": header.Get("User-Agent"),
-			"originator": header.Get("originator"),
-		},
+		"header": func() map[string]string {
+			m := map[string]string{}
+			for k, v := range header {
+				m[strings.ToLower(k)] = strings.Join(v, ",")
+			}
+			return m
+		}(),
 		"body": body,
 	}
 	b, _ := json.Marshal(rec)
@@ -64,7 +68,7 @@ func imageFrames(id string) []map[string]any {
 		{"type": "response.output_item.done", "item": item},
 		{"type": "response.completed", "response": map[string]any{
 			"id": id, "model": "gpt-5.6-luna", "output": []any{item},
-			"usage": map[string]any{"input_tokens": 5, "output_tokens": 1},
+			"usage": map[string]any{"input_tokens": 5, "output_tokens": 1, "total_tokens": 6},
 		}},
 	}
 }
@@ -74,7 +78,7 @@ func textFrames(id string) []map[string]any {
 		{"type": "response.created", "response": map[string]any{"id": id, "model": "gpt-5.6-luna"}},
 		{"type": "response.completed", "response": map[string]any{
 			"id": id, "model": "gpt-5.6-luna",
-			"usage": map[string]any{"input_tokens": 5, "output_tokens": 1},
+			"usage": map[string]any{"input_tokens": 5, "output_tokens": 1, "total_tokens": 6},
 		}},
 	}
 }
@@ -138,6 +142,13 @@ func main() {
 					}
 				}
 			}
+		}
+		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/images/generations") {
+			raw, _ := io.ReadAll(r.Body)
+			record("images", r.URL.Path, r.Header, raw)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"created":1700000000,"data":[{"b64_json":"` + tinyPNG + `"}]}`))
+			return
 		}
 		if r.Method == http.MethodPost {
 			raw, _ := io.ReadAll(r.Body)
