@@ -159,3 +159,8 @@ output/
 !docs/sub2api-image-bridge-scenario-comparison-20260619.md
 !docs/sub2api-model-square-technical-design-20260722.md
 !docs/sub2api-finance-loss-report-remediation-plan-20260723.md
+
+# E2E: 官方源码镜像（含独立 .git，15M pack）与运行产物不入库
+/e2e/upstream/
+/e2e/**/frames.jsonl
+/e2e/**/server.log
