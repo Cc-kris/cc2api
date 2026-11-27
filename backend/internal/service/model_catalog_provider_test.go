@@ -24,17 +24,48 @@ func (failingPricingRemoteClient) FetchHashText(context.Context, string) (string
 }
 
 func TestPricingProviderForPlatform(t *testing.T) {
-	tests := map[string]string{
-		"openai": "openai", "anthropic": "anthropic", "gemini": "google",
-		"antigravity": "anthropic", "grok": "xai",
+	// 单 provider 平台保持原样，gemini 必须同时命中价格表里的
+	// "gemini" 与 "vertex_ai-*"：只映射成 "google" 会得到空目录。
+	tests := map[string][]string{
+		"openai":      {"openai"},
+		"anthropic":   {"anthropic"},
+		"gemini":      {"gemini", "vertex_ai-language-models", "vertex_ai-embedding-models"},
+		"antigravity": {"anthropic"},
+		"grok":        {"xai"},
 	}
 	for platform, expected := range tests {
-		actual, ok := PricingProviderForPlatform(platform)
-		require.True(t, ok)
-		require.Equal(t, expected, actual)
+		actual, ok := PricingProvidersForPlatform(platform)
+		require.True(t, ok, platform)
+		require.Equal(t, expected, actual, platform)
 	}
-	_, ok := PricingProviderForPlatform("unknown")
+	_, ok := PricingProvidersForPlatform("unknown")
 	require.False(t, ok)
+
+	// 兼容入口：多 provider 时以逗号连接。
+	merged, ok := PricingProviderForPlatform(" GEMINI ")
+	require.True(t, ok)
+	require.Equal(t, "gemini,vertex_ai-language-models,vertex_ai-embedding-models", merged)
+	single, ok := PricingProviderForPlatform("openai")
+	require.True(t, ok)
+	require.Equal(t, "openai", single)
+}
+
+func TestPricingServiceModelCatalogSnapshotAggregatesMultipleProviders(t *testing.T) {
+	updatedAt := time.Date(2026, 11, 27, 3, 0, 0, 0, time.UTC)
+	pricing := &PricingService{
+		pricingData: map[string]*LiteLLMModelPricing{
+			"gemini-4-argon":     {LiteLLMProvider: "gemini"},
+			"gemini-2.5-flash":   {LiteLLMProvider: "vertex_ai-language-models"},
+			"text-embedding-004": {LiteLLMProvider: "vertex_ai-embedding-models"},
+			"gpt-5.6":            {LiteLLMProvider: "openai"},
+		},
+		localHash: "catalog-checksum", lastUpdated: updatedAt,
+	}
+	catalog := NewPricingServiceModelCatalog(pricing)
+	snapshot, err := catalog.SnapshotForPlatform("gemini")
+	require.NoError(t, err)
+	require.Equal(t, "gemini,vertex_ai-language-models,vertex_ai-embedding-models", snapshot.Provider)
+	require.Equal(t, []string{"gemini-2.5-flash", "gemini-4-argon", "text-embedding-004"}, snapshot.Models)
 }
 
 func TestNaturalModelLessOrdersNumbersCaseAndUnicodeDeterministically(t *testing.T) {

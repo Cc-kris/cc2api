@@ -2,6 +2,7 @@ package admin
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -527,14 +528,16 @@ func (h *ChannelHandler) GetModelDefaultPricing(c *gin.Context) {
 	})
 }
 
-// platformToLiteLLMProvider maps a channel platform name to the corresponding
-// LiteLLM provider string used as the key in the pricing catalog.
-var platformToLiteLLMProvider = map[string]string{
-	service.PlatformAnthropic:   "anthropic",
-	service.PlatformOpenAI:      "openai",
-	service.PlatformGemini:      "google",
-	service.PlatformAntigravity: "anthropic",
-	service.PlatformGrok:        "xai",
+// platformToLiteLLMProvider maps a channel platform name to every LiteLLM
+// provider string that may price models of that platform. 与
+// service.PricingProvidersForPlatform 保持同一份口径：Gemini 系模型在上游价格
+// 目录里分散于 "gemini" 与 "vertex_ai-*"，只取 "google" 会得到空列表。
+var platformToLiteLLMProvider = map[string][]string{
+	service.PlatformAnthropic:   {"anthropic"},
+	service.PlatformOpenAI:      {"openai"},
+	service.PlatformGemini:      {"gemini", "vertex_ai-language-models", "vertex_ai-embedding-models"},
+	service.PlatformAntigravity: {"anthropic"},
+	service.PlatformGrok:        {"xai"},
 }
 
 // SyncPricingModels 返回 LiteLLM 定价目录中指定平台的最新模型列表
@@ -547,14 +550,29 @@ func (h *ChannelHandler) SyncPricingModels(c *gin.Context) {
 		return
 	}
 
-	provider, ok := platformToLiteLLMProvider[platform]
-	if !ok {
+	providers, ok := platformToLiteLLMProvider[platform]
+	if !ok || len(providers) == 0 {
 		response.ErrorFrom(c, infraerrors.BadRequest("UNSUPPORTED_PLATFORM",
 			fmt.Sprintf("unsupported platform: %s", platform)).
 			WithMetadata(map[string]string{"param": "platform"}))
 		return
 	}
 
-	models := h.pricingService.ListModelNamesByProvider(provider)
+	models := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, provider := range providers {
+		for _, name := range h.pricingService.ListModelNamesByProvider(provider) {
+			key := strings.ToLower(strings.TrimSpace(name))
+			if key == "" {
+				continue
+			}
+			if _, dup := seen[key]; dup {
+				continue
+			}
+			seen[key] = struct{}{}
+			models = append(models, name)
+		}
+	}
+	sort.Strings(models)
 	response.Success(c, gin.H{"models": models})
 }
